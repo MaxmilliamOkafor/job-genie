@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
@@ -159,10 +158,6 @@ const Jobs = () => {
           isSearching={isScraping}
           onGoogleSearchComplete={refetch}
         />
-
-        {/* Live Jobs Panel */}
-        <LiveJobsPanel onJobsFetched={refetch} />
-
         {/* Filters Bar - only show when jobs exist */}
         {jobs.length > 0 && (
           <JobFiltersBar jobs={jobs} onFiltersChange={handleFiltersChange} />

@@ -252,18 +252,25 @@ export function useJobScraper() {
     }
   }, [user]);
 
-  // Polling for live updates (cost-free alternative to realtime)
+  // Polling for live updates (cost-free alternative to realtime) - fetches ALL jobs
   useEffect(() => {
     if (!user) return;
 
     const pollJobs = async () => {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('posted_date', { ascending: false });
+      const PAGE_SIZE = 1000;
+      const allJobs: Job[] = [];
+      let fetched = 0;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('posted_date', { ascending: false })
+          .range(fetched, fetched + PAGE_SIZE - 1);
 
-      if (!error && data) {
+        if (error || !data || data.length === 0) break;
+        
         const formattedJobs: Job[] = data.map((job: any) => ({
           id: job.id,
           title: job.title,
@@ -279,7 +286,15 @@ export function useJobScraper() {
           status: job.status || 'pending',
           applied_at: job.applied_at,
         }));
-        setJobs(formattedJobs);
+        
+        allJobs.push(...formattedJobs);
+        fetched += data.length;
+        
+        if (data.length < PAGE_SIZE) break;
+      }
+      
+      if (allJobs.length > 0) {
+        setJobs(allJobs);
       }
     };
 
