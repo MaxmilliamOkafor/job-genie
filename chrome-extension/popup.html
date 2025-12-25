@@ -3,91 +3,129 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoApply AI</title>
+  <title>QuantumHire AI</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>🚀 AutoApply AI</h1>
-      <p class="subtitle">Job Application Assistant</p>
+  <div class="popup-container">
+    <header class="popup-header">
+      <div class="logo">
+        <span class="logo-icon">🚀</span>
+        <span class="logo-text">QuantumHire AI</span>
+      </div>
+      <span id="status-badge" class="status-badge">Ready</span>
     </header>
-
-    <div id="not-connected" class="section">
-      <p class="info">Connect to your AutoApply AI account to auto-fill job applications and get tailored resumes.</p>
-      
-      <div class="form-group">
-        <label for="user-email">Email</label>
-        <input type="email" id="user-email" placeholder="your@email.com">
-      </div>
-      
-      <div class="form-group">
-        <label for="user-password">Password</label>
-        <input type="password" id="user-password" placeholder="••••••••">
-      </div>
-      
-      <button id="connect-btn" class="btn primary">Connect Account</button>
-      
-      <p class="hint">Use the same credentials as your AutoApply AI dashboard.</p>
-    </div>
-
-    <div id="connected" class="section hidden">
-      <div class="status connected">
-        <span class="dot"></span>
-        <span>Connected as <strong id="user-name">User</strong></span>
-      </div>
-
-      <div class="profile-summary" id="profile-summary">
-        <p>Loading profile...</p>
-      </div>
-
-      <div class="current-job" id="current-job">
-        <p class="loading">Detecting job page...</p>
-      </div>
-
-      <div class="actions">
-        <button id="tailor-btn" class="btn primary full">
-          ✨ Tailor for This Job
-        </button>
-      </div>
-
-      <div class="actions">
-        <button id="autofill-btn" class="btn secondary">
-          📝 Auto-Fill
-        </button>
-        <button id="refresh-btn" class="btn secondary">
-          🔄 Refresh
-        </button>
-      </div>
-
-      <div id="tailored-result" class="tailored-result hidden">
-        <div class="match-score">
-          Match: <strong id="match-score-value">--</strong>%
+    
+    <main class="popup-content">
+      <!-- Connection Status -->
+      <section id="connection-section" class="section">
+        <div id="not-connected" class="connection-status">
+          <p class="status-message warning">⚠️ Not connected</p>
+          <p class="help-text">Sign in to enable auto-fill</p>
+          <div class="login-form">
+            <input type="email" id="user-email" placeholder="Email" class="input-field">
+            <input type="password" id="user-password" placeholder="Password" class="input-field">
+            <button id="connect-btn" class="btn primary">Connect Account</button>
+          </div>
         </div>
+        <div id="connected" class="connection-status hidden">
+          <div class="user-header">
+            <p class="status-message success">✅ Connected</p>
+            <button id="disconnect-btn" class="btn-small">Disconnect</button>
+          </div>
+          <p id="user-name" class="user-name"></p>
+          <div id="profile-summary" class="profile-summary"></div>
+          <button id="refresh-btn" class="btn secondary">🔄 Refresh Profile</button>
+        </div>
+      </section>
+      
+      <!-- Current Page Status -->
+      <section id="current-job" class="section job-section">
+        <p class="not-job-page">📄 Checking page...</p>
+      </section>
+      
+      <!-- Action Buttons -->
+      <section class="section actions-section">
+        <button id="autofill-btn" class="btn primary" disabled>📝 Auto-Fill Application</button>
+        <button id="tailor-btn" class="btn secondary" disabled>✨ Tailor for This Job</button>
+      </section>
+      
+      <!-- Tailored Result -->
+      <section id="tailored-result" class="section hidden">
         <div class="tabs">
           <button class="tab active" data-tab="resume">Resume</button>
           <button class="tab" data-tab="cover">Cover Letter</button>
         </div>
-        <div class="tab-content" id="resume-content">
-          <textarea id="resume-text" readonly></textarea>
+        <div id="resume-content" class="tab-content">
+          <textarea id="resume-text" readonly placeholder="Tailored resume..."></textarea>
           <button class="copy-btn" data-target="resume-text">📋 Copy</button>
         </div>
-        <div class="tab-content hidden" id="cover-content">
-          <textarea id="cover-text" readonly></textarea>
+        <div id="cover-content" class="tab-content hidden">
+          <textarea id="cover-text" readonly placeholder="Tailored cover letter..."></textarea>
           <button class="copy-btn" data-target="cover-text">📋 Copy</button>
         </div>
-      </div>
-
-      <button id="disconnect-btn" class="btn danger">Disconnect</button>
-    </div>
-
-    <div id="status-message" class="status-message hidden"></div>
-
-    <footer>
-      <a href="#" id="open-app">Open Dashboard</a>
+      </section>
+      
+      <!-- How It Works -->
+      <section class="section workflow-section">
+        <h3 class="section-title">How to Apply</h3>
+        <div class="workflow-steps">
+          <div class="workflow-step">
+            <span class="step-number">1</span>
+            <div class="step-content">
+              <strong>Find Jobs on LinkedIn/Indeed</strong>
+              <p>Look for <span class="highlight">"Apply"</span> not Easy Apply</p>
+            </div>
+          </div>
+          <div class="workflow-step">
+            <span class="step-number">2</span>
+            <div class="step-content">
+              <strong>Click "Apply"</strong>
+              <p>Opens the company's career page</p>
+            </div>
+          </div>
+          <div class="workflow-step">
+            <span class="step-number">3</span>
+            <div class="step-content">
+              <strong>Auto-Fill & Tailor</strong>
+              <p>Panel activates on ATS pages</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Supported ATS -->
+      <section class="section">
+        <h3 class="section-title">Supported Platforms</h3>
+        <div class="ats-grid">
+          <span class="ats-badge">Greenhouse</span>
+          <span class="ats-badge">Lever</span>
+          <span class="ats-badge">Workday</span>
+          <span class="ats-badge">Ashby</span>
+          <span class="ats-badge">iCIMS</span>
+          <span class="ats-badge">SmartRecruiters</span>
+          <span class="ats-badge">Jobvite</span>
+          <span class="ats-badge">Taleo</span>
+        </div>
+      </section>
+      
+      <!-- Queue Status -->
+      <section id="queue-status" class="section hidden">
+        <div class="queue-info">
+          <span>📋 <span id="queue-count">0</span> jobs in queue</span>
+          <button id="view-queue-btn" class="btn-small">View Queue</button>
+        </div>
+      </section>
+      
+      <!-- Status Message -->
+      <p id="status-message" class="status-message hidden"></p>
+    </main>
+    
+    <footer class="popup-footer">
+      <a href="#" id="open-app" class="footer-link">Open Dashboard</a>
     </footer>
   </div>
-
+  
   <script src="popup.js"></script>
 </body>
 </html>
