@@ -1,4 +1,4 @@
-// AutoApply AI - Popup Script
+// QuantumHire AI - Popup Script
 
 // DOM Elements
 const notConnectedSection = document.getElementById('not-connected');
@@ -8,14 +8,18 @@ const disconnectBtn = document.getElementById('disconnect-btn');
 const autofillBtn = document.getElementById('autofill-btn');
 const refreshBtn = document.getElementById('refresh-btn');
 const tailorBtn = document.getElementById('tailor-btn');
+const addToQueueBtn = document.getElementById('add-to-queue-btn');
 const statusMessage = document.getElementById('status-message');
 const userName = document.getElementById('user-name');
 const profileSummary = document.getElementById('profile-summary');
 const currentJob = document.getElementById('current-job');
 const tailoredResult = document.getElementById('tailored-result');
+const queueStatus = document.getElementById('queue-status');
+const queueCount = document.getElementById('queue-count');
 const openAppLink = document.getElementById('open-app');
+const viewQueueBtn = document.getElementById('view-queue-btn');
 
-// Supabase config (pre-filled)
+// Supabase config
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
@@ -24,18 +28,17 @@ function showStatus(message, type = 'success') {
   statusMessage.textContent = message;
   statusMessage.className = `status-message ${type}`;
   statusMessage.classList.remove('hidden');
-  setTimeout(() => {
-    statusMessage.classList.add('hidden');
-  }, 3000);
+  setTimeout(() => statusMessage.classList.add('hidden'), 3000);
 }
 
 // Load saved connection
 async function loadConnection() {
-  const data = await chrome.storage.local.get(['supabaseUrl', 'supabaseKey', 'userProfile', 'accessToken']);
+  const data = await chrome.storage.local.get(['accessToken', 'userProfile', 'jobQueue']);
   
   if (data.accessToken && data.userProfile) {
     showConnectedState(data.userProfile);
     detectCurrentJob();
+    updateQueueCount(data.jobQueue || []);
   } else {
     showNotConnectedState();
   }
@@ -61,20 +64,42 @@ function showNotConnectedState() {
   connectedSection.classList.add('hidden');
 }
 
+// Update queue count
+function updateQueueCount(queue) {
+  if (queue && queue.length > 0) {
+    queueStatus.classList.remove('hidden');
+    queueCount.textContent = queue.length;
+  } else {
+    queueStatus.classList.add('hidden');
+  }
+}
+
+// Detect ATS platform
+function detectATS(url) {
+  if (url.includes('greenhouse.io')) return { name: 'Greenhouse', icon: '🌿' };
+  if (url.includes('lever.co')) return { name: 'Lever', icon: '🔧' };
+  if (url.includes('workday.com') || url.includes('myworkdayjobs.com')) return { name: 'Workday', icon: '📊' };
+  if (url.includes('ashbyhq.com')) return { name: 'Ashby', icon: '💼' };
+  if (url.includes('smartrecruiters.com')) return { name: 'SmartRecruiters', icon: '🎯' };
+  if (url.includes('icims.com')) return { name: 'iCIMS', icon: '📋' };
+  if (url.includes('linkedin.com')) return { name: 'LinkedIn', icon: '💼' };
+  if (url.includes('workable.com')) return { name: 'Workable', icon: '⚙️' };
+  return null;
+}
+
 // Detect current job on page
 async function detectCurrentJob() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const ats = detectATS(tab.url || '');
     
-    // Check if we're on a supported job site
-    const supportedSites = ['greenhouse', 'lever', 'workday', 'myworkdayjobs', 'ashby', 'linkedin', 'smartrecruiters', 'icims', 'jobvite'];
-    const isJobSite = supportedSites.some(site => tab.url?.includes(site));
-    
-    if (!isJobSite) {
+    if (!ats) {
       currentJob.innerHTML = `
         <p class="not-job-page">📄 Navigate to a job application page to tailor your resume.</p>
+        <p class="ats-hint">Supported: Greenhouse, Lever, Workday, Ashby, SmartRecruiters, iCIMS, LinkedIn</p>
       `;
       tailorBtn.disabled = true;
+      addToQueueBtn.disabled = true;
       return;
     }
     
@@ -83,18 +108,22 @@ async function detectCurrentJob() {
     
     if (response && response.title) {
       currentJob.innerHTML = `
-        <p class="job-detected">📋 Detected Job:</p>
+        <div class="ats-badge">${ats.icon} ${ats.name}</div>
         <p class="job-title">${response.title}</p>
         <p class="job-company">${response.company}</p>
         ${response.location ? `<p class="job-location">📍 ${response.location}</p>` : ''}
       `;
-      currentJob.dataset.job = JSON.stringify(response);
+      currentJob.dataset.job = JSON.stringify({ ...response, url: tab.url, ats: ats.name });
       tailorBtn.disabled = false;
+      addToQueueBtn.disabled = false;
     } else {
       currentJob.innerHTML = `
-        <p class="not-job-page">Could not detect job details. Try refreshing the page.</p>
+        <div class="ats-badge">${ats.icon} ${ats.name}</div>
+        <p class="not-job-page">Could not detect job details. Try refreshing.</p>
       `;
+      currentJob.dataset.job = JSON.stringify({ url: tab.url, ats: ats.name });
       tailorBtn.disabled = true;
+      addToQueueBtn.disabled = false;
     }
   } catch (error) {
     console.error('Job detection error:', error);
@@ -102,7 +131,40 @@ async function detectCurrentJob() {
       <p class="not-job-page">📄 Navigate to a job application page to tailor your resume.</p>
     `;
     tailorBtn.disabled = true;
+    addToQueueBtn.disabled = true;
   }
+}
+
+// Add to queue
+async function addToQueue() {
+  const jobData = currentJob.dataset.job ? JSON.parse(currentJob.dataset.job) : null;
+  
+  if (!jobData || !jobData.url) {
+    showStatus('No job URL detected', 'error');
+    return;
+  }
+  
+  const data = await chrome.storage.local.get(['jobQueue']);
+  const queue = data.jobQueue || [];
+  
+  // Check for duplicates
+  if (queue.some(j => j.url === jobData.url)) {
+    showStatus('Job already in queue', 'warning');
+    return;
+  }
+  
+  queue.push({
+    id: Date.now().toString(),
+    url: jobData.url,
+    title: jobData.title || 'Unknown',
+    company: jobData.company || 'Unknown',
+    ats: jobData.ats,
+    addedAt: new Date().toISOString(),
+  });
+  
+  await chrome.storage.local.set({ jobQueue: queue });
+  updateQueueCount(queue);
+  showStatus('Added to queue!', 'success');
 }
 
 // Connect to Supabase
@@ -119,7 +181,6 @@ async function connect() {
   connectBtn.disabled = true;
   
   try {
-    // Sign in to Supabase
     const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: {
@@ -131,12 +192,11 @@ async function connect() {
     
     if (!authResponse.ok) {
       const error = await authResponse.json();
-      throw new Error(error.error_description || error.message || 'Invalid email or password');
+      throw new Error(error.error_description || error.message || 'Invalid credentials');
     }
     
     const authData = await authResponse.json();
     
-    // Fetch user profile
     const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${authData.user.id}&select=*`, {
       headers: {
         'apikey': SUPABASE_KEY,
@@ -144,14 +204,11 @@ async function connect() {
       },
     });
     
-    if (!profileResponse.ok) {
-      throw new Error('Failed to fetch profile');
-    }
+    if (!profileResponse.ok) throw new Error('Failed to fetch profile');
     
     const profiles = await profileResponse.json();
     const profile = profiles[0] || { email: authData.user.email };
     
-    // Save to storage
     await chrome.storage.local.set({
       supabaseUrl: SUPABASE_URL,
       supabaseKey: SUPABASE_KEY,
@@ -161,7 +218,7 @@ async function connect() {
       userProfile: profile,
     });
     
-    showStatus('Connected successfully!', 'success');
+    showStatus('Connected!', 'success');
     showConnectedState(profile);
     detectCurrentJob();
     
@@ -187,18 +244,16 @@ async function refreshProfile() {
   refreshBtn.disabled = true;
   
   try {
-    const data = await chrome.storage.local.get(['supabaseUrl', 'supabaseKey', 'accessToken', 'userId']);
+    const data = await chrome.storage.local.get(['accessToken', 'userId']);
     
-    const profileResponse = await fetch(`${data.supabaseUrl}/rest/v1/profiles?user_id=eq.${data.userId}&select=*`, {
+    const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${data.userId}&select=*`, {
       headers: {
-        'apikey': data.supabaseKey,
+        'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${data.accessToken}`,
       },
     });
     
-    if (!profileResponse.ok) {
-      throw new Error('Failed to fetch profile');
-    }
+    if (!profileResponse.ok) throw new Error('Failed to fetch profile');
     
     const profiles = await profileResponse.json();
     const profile = profiles[0] || {};
@@ -216,7 +271,7 @@ async function refreshProfile() {
   }
 }
 
-// Trigger autofill on current page
+// Trigger autofill
 async function triggerAutofill() {
   autofillBtn.textContent = '⏳ ...';
   autofillBtn.disabled = true;
@@ -239,7 +294,7 @@ async function triggerAutofill() {
   }
 }
 
-// Tailor resume for current job
+// Tailor resume for job
 async function tailorForJob() {
   const jobData = currentJob.dataset.job ? JSON.parse(currentJob.dataset.job) : null;
   
@@ -257,11 +312,8 @@ async function tailorForJob() {
       job: jobData,
     });
     
-    if (response.error) {
-      throw new Error(response.error);
-    }
+    if (response.error) throw new Error(response.error);
     
-    // Show results
     tailoredResult.classList.remove('hidden');
     
     document.getElementById('resume-text').value = response.tailoredResume || 'No resume generated';
@@ -285,7 +337,12 @@ async function tailorForJob() {
 // Open app dashboard
 openAppLink.addEventListener('click', async (e) => {
   e.preventDefault();
-  chrome.tabs.create({ url: 'https://preview--autoapply-ai-nexus.lovable.app/' });
+  chrome.tabs.create({ url: 'https://preview--autoapply-ai-nexus.lovable.app/jobs' });
+});
+
+// View queue in app
+viewQueueBtn?.addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://preview--autoapply-ai-nexus.lovable.app/jobs' });
 });
 
 // Tab switching
@@ -317,6 +374,7 @@ disconnectBtn.addEventListener('click', disconnect);
 autofillBtn.addEventListener('click', triggerAutofill);
 refreshBtn.addEventListener('click', refreshProfile);
 tailorBtn.addEventListener('click', tailorForJob);
+addToQueueBtn?.addEventListener('click', addToQueue);
 
 // Initialize
 loadConnection();

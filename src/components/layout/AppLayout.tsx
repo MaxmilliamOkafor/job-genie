@@ -5,16 +5,18 @@ import {
   Briefcase, 
   User, 
   Settings, 
-  Zap,
+  FileText,
   Menu,
   X
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import quantumHireIcon from '@/assets/quantumhire-icon.png';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
+  { path: '/applications', label: 'Applications', icon: FileText },
   { path: '/profile', label: 'Profile', icon: User },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -29,10 +31,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="container flex h-16 items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <Zap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold">AutoApply AI</span>
+            <img src={quantumHireIcon} alt="QuantumHire AI" className="h-9 w-9 rounded-lg" />
+            <span className="text-xl font-bold">QuantumHire AI</span>
           </Link>
 
           {/* Desktop Navigation */}
