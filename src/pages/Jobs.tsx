@@ -22,8 +22,17 @@ import {
   ArrowUp,
   Trash2,
   Star,
-  RefreshCw
+  RefreshCw,
+  ArrowUpDown,
+  Calendar,
+  Upload
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Tier-1 companies for visual highlighting
 const TIER1_COMPANIES = [
@@ -54,6 +63,7 @@ const Jobs = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
   
   const observerRef = useRef<IntersectionObserver>();
 
@@ -87,6 +97,23 @@ const Jobs = () => {
   const handleFiltersChange = useCallback((filtered: Job[]) => {
     setFilteredJobs(filtered);
   }, []);
+
+  // Sort jobs based on selected sort option
+  const sortedJobs = useMemo(() => {
+    return [...filteredJobs].sort((a, b) => {
+      if (sortBy === 'uploaded') {
+        // Sort by created_at (when added to system) - most recent first
+        const aDate = new Date(a.posted_date).getTime(); // This is actually created_at from DB
+        const bDate = new Date(b.posted_date).getTime();
+        return bDate - aDate;
+      } else {
+        // Sort by posted_date - most recent first
+        const aDate = new Date(a.posted_date).getTime();
+        const bDate = new Date(b.posted_date).getTime();
+        return bDate - aDate;
+      }
+    });
+  }, [filteredJobs, sortBy]);
 
   const getTimeAgo = (date: string) => {
     const minutes = Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60));
@@ -171,16 +198,36 @@ const Jobs = () => {
             <h2 className="text-lg font-semibold">
               Job Results
               <span className="text-muted-foreground font-normal ml-2">
-                ({filteredJobs.length.toLocaleString()} of {jobs.length.toLocaleString()} jobs)
+                ({sortedJobs.length.toLocaleString()} of {jobs.length.toLocaleString()} jobs)
               </span>
             </h2>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Sort: {sortBy === 'uploaded' ? 'Recently Added' : 'Posted Date'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setSortBy('uploaded')}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Recently Added
+                  {sortBy === 'uploaded' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortBy('posted')}>
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Posted Date
+                  {sortBy === 'posted' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
 
         {/* Job Listings */}
         <div className="space-y-3">
-          {filteredJobs.map((job, index) => {
-            const isLast = index === filteredJobs.length - 1;
+          {sortedJobs.map((job, index) => {
+            const isLast = index === sortedJobs.length - 1;
             const isTier1 = isTier1Company(job.company);
             const isNew = Date.now() - new Date(job.posted_date).getTime() < 2 * 60 * 60 * 1000;
             
@@ -312,7 +359,7 @@ const Jobs = () => {
         )}
 
         {/* Empty state */}
-        {filteredJobs.length === 0 && !isLoading && !isScraping && (
+        {sortedJobs.length === 0 && !isLoading && !isScraping && (
           <div className="text-center py-16">
             <Briefcase className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-medium mb-2">
@@ -332,9 +379,9 @@ const Jobs = () => {
         )}
 
         {/* End of list */}
-        {!hasMore && filteredJobs.length > 0 && (
+        {!hasMore && sortedJobs.length > 0 && (
           <p className="text-center text-muted-foreground py-4">
-            Showing {filteredJobs.length} of {jobs.length} jobs
+            Showing {sortedJobs.length} of {jobs.length} jobs
           </p>
         )}
       </div>
