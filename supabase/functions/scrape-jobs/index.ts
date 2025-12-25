@@ -77,10 +77,10 @@ function parseKeywords(keywordString: string): string[] {
   return parts.filter((k, idx) => parts.indexOf(k) === idx);
 }
 
-// Generate realistic job listings
+// Generate job listings (NOTE: still synthetic data, but links are valid/reachable)
 function generateJobs(keywords: string[], count: number, offset: number): JobListing[] {
   const jobs: JobListing[] = [];
-  
+
   const titles = [
     'Senior Software Engineer', 'Staff Engineer', 'Principal Engineer',
     'Engineering Manager', 'Tech Lead', 'Full Stack Developer',
@@ -92,37 +92,50 @@ function generateJobs(keywords: string[], count: number, offset: number): JobLis
     'Customer Success Manager', 'Solutions Engineer', 'Support Engineer',
     'Project Manager', 'Technical Program Manager', 'Scrum Master'
   ];
-  
+
   const companies = [
     'Google', 'Microsoft', 'Amazon', 'Apple', 'Netflix', 'Spotify',
-    'Stripe', 'Airbnb', 'Uber', 'Lyft', 'DoorDash', 'Coinbase',
-    'Databricks', 'Snowflake', 'MongoDB', 'Elastic', 'HashiCorp',
-    'Cloudflare', 'Twilio', 'Slack', 'Zoom', 'Figma', 'Notion',
-    'Linear', 'Vercel', 'Supabase', 'PlanetScale', 'Railway',
-    'OpenAI', 'Anthropic', 'Scale AI', 'Anyscale', 'Weights & Biases',
-    'Hugging Face', 'Cohere', 'Stability AI', 'Midjourney', 'Character AI',
-    'Meta', 'Tesla', 'SpaceX', 'Palantir', 'Plaid', 'Ramp', 'Brex',
-    'Square', 'Robinhood', 'Chime', 'Affirm', 'Klarna', 'Revolut'
+    'Stripe', 'Airbnb', 'Uber', 'Databricks', 'Snowflake', 'Cloudflare',
+    'Twilio', 'Figma', 'Notion', 'Vercel', 'OpenAI',
+    'Meta', 'Tesla', 'Palantir', 'Robinhood', 'Ramp'
   ];
-  
+
+  const companyCareers: Record<string, string> = {
+    Google: 'https://careers.google.com/jobs/results/',
+    Microsoft: 'https://jobs.careers.microsoft.com/global/en/search',
+    Amazon: 'https://www.amazon.jobs/en/search',
+    Apple: 'https://jobs.apple.com/en-us/search',
+    Netflix: 'https://jobs.netflix.com/search',
+    Spotify: 'https://www.lifeatspotify.com/jobs',
+    Stripe: 'https://stripe.com/jobs/search',
+    Airbnb: 'https://careers.airbnb.com/positions/',
+    Uber: 'https://www.uber.com/us/en/careers/list/',
+    Databricks: 'https://www.databricks.com/company/careers/open-positions',
+    Snowflake: 'https://careers.snowflake.com/us/en/search-results',
+    Cloudflare: 'https://www.cloudflare.com/careers/jobs/',
+    Twilio: 'https://www.twilio.com/company/jobs',
+    Figma: 'https://www.figma.com/careers/',
+    Notion: 'https://www.notion.so/careers',
+    Vercel: 'https://vercel.com/careers',
+    OpenAI: 'https://openai.com/careers/search/',
+    Meta: 'https://www.metacareers.com/jobs/',
+    Tesla: 'https://www.tesla.com/careers/search',
+    Palantir: 'https://www.palantir.com/careers/',
+    Robinhood: 'https://careers.robinhood.com/',
+    Ramp: 'https://ramp.com/careers',
+  };
+
   const locations = [
     'San Francisco, CA', 'New York, NY', 'Seattle, WA', 'Austin, TX',
     'London, UK', 'Dublin, Ireland', 'Berlin, Germany', 'Amsterdam, NL',
-    'Toronto, Canada', 'Singapore', 'Remote', 'Hybrid - NYC',
-    'Hybrid - SF', 'Hybrid - London', 'Remote - US', 'Remote - EU',
-    'Los Angeles, CA', 'Boston, MA', 'Chicago, IL', 'Denver, CO',
-    'Miami, FL', 'Atlanta, GA', 'Portland, OR', 'Palo Alto, CA'
+    'Toronto, Canada', 'Remote', 'Hybrid'
   ];
-  
-  const allPlatforms = [...PLATFORM_TIERS.tier1, ...PLATFORM_TIERS.tier2, ...PLATFORM_TIERS.tier3];
-  
+
   const requirements = [
     'Python', 'Java', 'TypeScript', 'React', 'Node.js', 'AWS', 'GCP',
     'Kubernetes', 'Docker', 'PostgreSQL', 'MongoDB', 'Redis', 'Kafka',
     'Machine Learning', 'Deep Learning', 'NLP', 'System Design',
-    'Distributed Systems', 'Microservices', 'CI/CD', 'Terraform',
-    'Go', 'Rust', 'C++', 'Scala', 'GraphQL', 'REST APIs', 'gRPC',
-    'TensorFlow', 'PyTorch', 'Spark', 'Airflow', 'dbt', 'Snowflake'
+    'Distributed Systems', 'Microservices', 'CI/CD', 'Terraform'
   ];
 
   for (let i = 0; i < count; i++) {
@@ -130,48 +143,50 @@ function generateJobs(keywords: string[], count: number, offset: number): JobLis
     const company = companies[Math.floor(Math.random() * companies.length)];
     const location = locations[Math.floor(Math.random() * locations.length)];
     const salary = `$${150 + Math.floor(Math.random() * 150)}k - $${200 + Math.floor(Math.random() * 200)}k`;
-    
+
     // Prioritize tier 1 platforms
     const platformIndex = Math.random();
     let platform: string;
-    if (platformIndex < 0.5) {
+    if (platformIndex < 0.6) {
       platform = PLATFORM_TIERS.tier1[Math.floor(Math.random() * PLATFORM_TIERS.tier1.length)];
-    } else if (platformIndex < 0.8) {
+    } else if (platformIndex < 0.85) {
       platform = PLATFORM_TIERS.tier2[Math.floor(Math.random() * PLATFORM_TIERS.tier2.length)];
     } else {
       platform = PLATFORM_TIERS.tier3[Math.floor(Math.random() * PLATFORM_TIERS.tier3.length)];
     }
-    
+
     const hoursAgo = Math.floor(Math.random() * 72); // Last 3 days
     const postedDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
-    
+
     const jobRequirements = Array.from(
       { length: 4 + Math.floor(Math.random() * 4) },
       () => requirements[Math.floor(Math.random() * requirements.length)]
     ).filter((v, idx, a) => a.indexOf(v) === idx);
+
+    const base = companyCareers[company] ?? `https://www.google.com/search?q=${encodeURIComponent(`${company} ${title} careers`)}`;
 
     const job: JobListing = {
       title,
       company,
       location,
       salary,
-      description: `We're looking for a ${title} to join our team at ${company}. You'll work on cutting-edge technology and help us scale our platform to millions of users.`,
+      description: `We're looking for a ${title} to join our team at ${company}.`,
       requirements: jobRequirements,
       platform,
-      url: `https://careers.${company.toLowerCase().replace(/\s/g, '').replace(/[^a-z0-9]/g, '')}.com/jobs/${offset + i}`,
+      url: base,
       posted_date: postedDate,
       match_score: 0,
     };
-    
+
     job.match_score = calculateMatchScore(job, keywords, []);
     jobs.push(job);
   }
-  
-  // Sort by match score descending, then by platform tier
+
+  // Sort by platform tier, then match score
   return jobs.sort((a, b) => {
     const tierA = PLATFORM_TIERS.tier1.includes(a.platform) ? 0 : PLATFORM_TIERS.tier2.includes(a.platform) ? 1 : 2;
     const tierB = PLATFORM_TIERS.tier1.includes(b.platform) ? 0 : PLATFORM_TIERS.tier2.includes(b.platform) ? 1 : 2;
-    
+
     if (tierA !== tierB) return tierA - tierB;
     return b.match_score - a.match_score;
   });

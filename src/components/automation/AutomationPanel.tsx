@@ -57,12 +57,19 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
   useEffect(() => {
     const checkEmailConnection = async () => {
       if (!user) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('email_integrations')
         .select('is_connected')
         .eq('user_id', user.id)
-        .single();
-      setEmailConnected(data?.is_connected || false);
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Email integration lookup failed:', error);
+        setEmailConnected(false);
+        return;
+      }
+
+      setEmailConnected(Boolean(data?.is_connected));
     };
     checkEmailConnection();
   }, [user]);

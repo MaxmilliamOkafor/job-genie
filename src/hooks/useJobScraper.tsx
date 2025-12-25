@@ -17,48 +17,103 @@ export function useJobScraper() {
   // Fetch existing jobs from database
   const fetchExistingJobs = useCallback(async (append = false) => {
     if (!user) return;
-    
+
     setIsLoading(true);
     try {
-      const { data, error, count } = await supabase
-        .from('jobs')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user.id)
-        .order('posted_date', { ascending: false })
-        .range(append ? jobs.length : 0, append ? jobs.length + 49 : 49);
-
-      if (error) throw error;
-
-      const formattedJobs: Job[] = (data || []).map(job => ({
-        id: job.id,
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        salary: job.salary || '',
-        description: job.description || '',
-        requirements: job.requirements || [],
-        platform: job.platform || '',
-        url: job.url || '',
-        posted_date: job.posted_date || job.created_at || new Date().toISOString(),
-        match_score: job.match_score || 0,
-        status: job.status || 'pending',
-        applied_at: job.applied_at,
-      }));
-
-      const dedupe = (list: Job[]) => {
-        const map = new Map<string, Job>();
-        for (const j of list) map.set(j.id, j);
-        return Array.from(map.values());
-      };
+      const PAGE_SIZE = 1000; // backend max per query
+      const MAX_INITIAL = 2000;
 
       if (append) {
+        const from = jobs.length;
+        const to = from + 199; // append in smaller chunks
+
+        const { data, error, count } = await supabase
+          .from('jobs')
+          .select('*', { count: 'exact' })
+          .eq('user_id', user.id)
+          .order('posted_date', { ascending: false })
+          .range(from, to);
+
+        if (error) throw error;
+
+        const formattedJobs: Job[] = (data || []).map(job => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary || '',
+          description: job.description || '',
+          requirements: job.requirements || [],
+          platform: job.platform || '',
+          url: job.url || '',
+          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
+          match_score: job.match_score || 0,
+          status: job.status || 'pending',
+          applied_at: job.applied_at,
+        }));
+
+        const dedupe = (list: Job[]) => {
+          const map = new Map<string, Job>();
+          for (const j of list) map.set(j.id, j);
+          return Array.from(map.values());
+        };
+
         setJobs(prev => dedupe([...prev, ...formattedJobs]));
-      } else {
-        setJobs(dedupe(formattedJobs));
+        const newTotal = jobs.length + formattedJobs.length;
+        setHasMore((count || 0) > newTotal);
+        return;
       }
-      
-      const newTotal = append ? jobs.length + formattedJobs.length : formattedJobs.length;
-      setHasMore((count || 0) > newTotal);
+
+      // Initial load: try to pull up to 2000 without scrolling
+      const collected: Job[] = [];
+      let fetched = 0;
+      let totalCount: number | null = null;
+
+      while (fetched < MAX_INITIAL) {
+        const from = fetched;
+        const to = Math.min(fetched + PAGE_SIZE - 1, MAX_INITIAL - 1);
+
+        const { data, error, count } = await supabase
+          .from('jobs')
+          .select('*', { count: 'exact' })
+          .eq('user_id', user.id)
+          .order('posted_date', { ascending: false })
+          .range(from, to);
+
+        if (error) throw error;
+        totalCount = count ?? totalCount;
+
+        const pageJobs: Job[] = (data || []).map(job => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary || '',
+          description: job.description || '',
+          requirements: job.requirements || [],
+          platform: job.platform || '',
+          url: job.url || '',
+          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
+          match_score: job.match_score || 0,
+          status: job.status || 'pending',
+          applied_at: job.applied_at,
+        }));
+
+        collected.push(...pageJobs);
+        fetched += pageJobs.length;
+
+        if (pageJobs.length === 0) break;
+        if (totalCount !== null && fetched >= totalCount) break;
+        if (pageJobs.length < (to - from + 1)) break;
+      }
+
+      // Dedupe just in case
+      const map = new Map<string, Job>();
+      for (const j of collected) map.set(j.id, j);
+      const final = Array.from(map.values());
+
+      setJobs(final);
+      setHasMore((totalCount || 0) > final.length);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
@@ -105,15 +160,27 @@ export function useJobScraper() {
   // Start continuous scraping
   const startContinuousScraping = useCallback((keywordString: string) => {
     setKeywords(keywordString);
-    
-    // Initial scrape
-    scrapeJobs(keywordString, false);
-    
+
+    (async () => {
+      // Initial scrape
+      await scrapeJobs(keywordString, false);
+
+      // Aggressively prefill up to ~2000 jobs so the list is usable immediately
+      const TARGET = 2000;
+      let guard = 0;
+      while (offsetRef.current < TARGET && guard < 20) {
+        guard += 1;
+        await scrapeJobs(keywordString, true);
+        // tiny pause to avoid hammering
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    })();
+
     // Set up interval for continuous updates every 10 minutes
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    
+
     intervalRef.current = setInterval(() => {
       scrapeJobs(keywordString, true);
     }, 600000); // Every 10 minutes
