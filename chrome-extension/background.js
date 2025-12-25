@@ -47,6 +47,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+  
+  if (message.action === 'batchApplyToJob') {
+    handleBatchApplyToJob(message.url, message.tailoredData, message.atsCredentials)
+      .then(sendResponse)
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
 });
 
 // Get tailored application from edge function
@@ -143,3 +150,56 @@ setInterval(refreshAccessToken, 50 * 60 * 1000);
 
 // Also refresh on startup
 chrome.runtime.onStartup.addListener(refreshAccessToken);
+
+// ============= BATCH APPLY FUNCTIONS =============
+
+// Handle batch apply to a single job
+async function handleBatchApplyToJob(url, tailoredData, atsCredentials) {
+  console.log('QuantumHire AI: Batch applying to', url);
+  
+  return new Promise((resolve) => {
+    // Create a new tab with the job URL
+    chrome.tabs.create({ url: url, active: false }, (tab) => {
+      const tabId = tab.id;
+      
+      // Listen for tab to finish loading
+      const onUpdated = (updatedTabId, changeInfo) => {
+        if (updatedTabId === tabId && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          
+          // Wait a bit for dynamic content to load
+          setTimeout(() => {
+            // Send autofill message to the tab
+            chrome.tabs.sendMessage(tabId, {
+              action: 'autofill',
+              tailoredData: tailoredData,
+              atsCredentials: atsCredentials,
+              batchMode: true
+            }, (response) => {
+              // Close the tab after a delay
+              setTimeout(() => {
+                chrome.tabs.remove(tabId).catch(() => {});
+              }, 3000);
+              
+              if (chrome.runtime.lastError) {
+                console.log('QuantumHire AI: Autofill message error', chrome.runtime.lastError);
+                resolve({ success: false, error: 'Could not communicate with page' });
+              } else {
+                resolve({ success: true, response: response });
+              }
+            });
+          }, 2000);
+        }
+      };
+      
+      chrome.tabs.onUpdated.addListener(onUpdated);
+      
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        chrome.tabs.remove(tabId).catch(() => {});
+        resolve({ success: false, error: 'Page load timeout' });
+      }, 30000);
+    });
+  });
+}

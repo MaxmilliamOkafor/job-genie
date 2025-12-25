@@ -242,13 +242,35 @@
         </div>
       </div>
 
-      <!-- Queue Status -->
+      <!-- Queue Status with Batch Apply -->
       <div class="queue-status" id="queue-status">
         <div class="queue-info">
           <span class="queue-icon">📋</span>
           <span class="queue-text"><span id="queue-count">0</span> jobs in queue</span>
         </div>
-        <button id="view-queue-btn" class="btn small ghost">View Queue</button>
+        <div class="queue-actions">
+          <button id="batch-apply-btn" class="btn small primary">⚡ Batch Apply</button>
+          <button id="view-queue-btn" class="btn small ghost">View</button>
+        </div>
+      </div>
+
+      <!-- Batch Apply Progress -->
+      <div id="batch-progress-section" class="batch-progress-section hidden">
+        <div class="batch-header">
+          <span class="batch-title">🚀 Batch Auto-Apply</span>
+          <button id="cancel-batch-btn" class="btn small danger">Cancel</button>
+        </div>
+        <div class="batch-stats">
+          <span id="batch-current">0</span> / <span id="batch-total">0</span> jobs
+        </div>
+        <div class="batch-progress-bar">
+          <div class="batch-progress-fill" id="batch-progress-fill"></div>
+        </div>
+        <div class="batch-current-job" id="batch-current-job">
+          <span class="batch-job-label">Processing:</span>
+          <span class="batch-job-title" id="batch-job-title">-</span>
+        </div>
+        <div class="batch-log" id="batch-log"></div>
       </div>
 
       <!-- Quick Actions -->
