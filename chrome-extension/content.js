@@ -462,113 +462,162 @@ function fillField(element, value) {
   }
 }
 
-// ============= ENHANCED DROPDOWN FILLING =============
+// ============= ENHANCED DROPDOWN / CHECKBOX / RADIO FILLING =============
 
 function fillDropdown(selectElement, answerValue) {
   if (!selectElement || selectElement.tagName !== 'SELECT') return false;
-  
+
   const options = Array.from(selectElement.options);
   const answerLower = String(answerValue).toLowerCase().trim();
-  
+
   // Strategy 1: Exact match
-  let match = options.find(o => {
+  let match = options.find((o) => {
     const optText = o.text.toLowerCase().trim();
-    const optVal = o.value.toLowerCase().trim();
+    const optVal = String(o.value || '').toLowerCase().trim();
     return optText === answerLower || optVal === answerLower;
   });
-  
+
   // Strategy 2: Partial match
   if (!match) {
-    match = options.find(o => {
+    match = options.find((o) => {
       const optText = o.text.toLowerCase().trim();
-      const optVal = o.value.toLowerCase().trim();
+      const optVal = String(o.value || '').toLowerCase().trim();
       return optText.includes(answerLower) || answerLower.includes(optText) || optVal.includes(answerLower);
     });
   }
-  
+
   // Strategy 3: Yes/No variations
   if (!match && (answerLower === 'yes' || answerLower === 'no')) {
-    match = options.find(o => {
+    match = options.find((o) => {
       const optText = o.text.toLowerCase().trim();
-      const optVal = o.value.toLowerCase().trim();
+      const optVal = String(o.value || '').toLowerCase().trim();
       if (answerLower === 'yes') {
         return optText === 'yes' || optVal === 'yes' || optVal === '1' || optVal === 'true' || optText === 'true' || optText.includes('i agree') || optText.includes('i confirm');
-      } else {
-        return optText === 'no' || optVal === 'no' || optVal === '0' || optVal === 'false' || optText === 'false';
       }
+      return optText === 'no' || optVal === 'no' || optVal === '0' || optVal === 'false' || optText === 'false';
     });
   }
-  
-  // Strategy 4: First non-empty option for "Select..." defaults
+
+  // Strategy 4: Single-option default
   if (!match && options.length > 1) {
-    const validOptions = options.filter(o => o.value && o.value !== '' && !o.text.toLowerCase().includes('select'));
-    if (validOptions.length === 1) {
-      match = validOptions[0]; // Only one real option
-    }
+    const validOptions = options.filter((o) => o.value && o.value !== '' && !o.text.toLowerCase().includes('select'));
+    if (validOptions.length === 1) match = validOptions[0];
   }
-  
-  if (match && match.value !== '' && !match.value.toLowerCase().includes('select')) {
+
+  if (match && match.value !== '' && !String(match.value).toLowerCase().includes('select')) {
     selectElement.focus();
     selectElement.click();
-    
+
     // Set value using native setter for React compatibility
     const nativeSelectSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
-    if (nativeSelectSetter) {
-      nativeSelectSetter.call(selectElement, match.value);
-    } else {
-      selectElement.value = match.value;
-    }
-    
+    if (nativeSelectSetter) nativeSelectSetter.call(selectElement, match.value);
+    else selectElement.value = match.value;
+
     // Fire all events for framework compatibility
     selectElement.dispatchEvent(new Event('change', { bubbles: true }));
     selectElement.dispatchEvent(new Event('input', { bubbles: true }));
     selectElement.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
     selectElement.dispatchEvent(new Event('focusout', { bubbles: true }));
-    
-    // For custom dropdowns (React Select, etc.)
-    const customDropdownTrigger = selectElement.closest('[class*="select"]')?.querySelector('[class*="control"], [class*="trigger"]');
-    if (customDropdownTrigger) {
-      customDropdownTrigger.click();
-      setTimeout(() => {
-        const optionElements = document.querySelectorAll('[class*="option"]');
-        optionElements.forEach(opt => {
-          if (opt.textContent.toLowerCase().includes(answerLower)) {
-            opt.click();
-          }
-        });
-      }, 100);
-    }
-    
+
     console.log(`QuantumHire AI: Dropdown filled: "${match.text}" for value "${answerValue}"`);
     selectElement.classList.add('quantumhire-filled');
     return true;
   }
-  
-  console.log(`QuantumHire AI: No dropdown match for "${answerValue}". Options:`, options.map(o => o.text));
+
+  console.log(`QuantumHire AI: No dropdown match for "${answerValue}". Options:`, options.map((o) => o.text));
   return false;
 }
 
-// ============= ENHANCED CHECKBOX FILLING =============
+function getComboboxLabel(el) {
+  const byLabelledby = el.getAttribute('aria-labelledby');
+  if (byLabelledby) {
+    const labelEl = document.getElementById(byLabelledby);
+    if (labelEl?.innerText) return labelEl.innerText.trim();
+  }
+
+  const labelled = el.closest('label') || document.querySelector(`label[for="${el.id}"]`);
+  if (labelled?.innerText) return labelled.innerText.trim();
+
+  return (el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || '').trim();
+}
+
+async function fillComboBox(comboboxEl, answerValue) {
+  if (!comboboxEl) return false;
+  const answerLower = String(answerValue).toLowerCase().trim();
+
+  try {
+    // Open list
+    comboboxEl.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+    comboboxEl.focus?.();
+    comboboxEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    comboboxEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    // Find listbox (prefer aria-controls)
+    const controls = comboboxEl.getAttribute('aria-controls');
+    let listRoot = controls ? document.getElementById(controls) : null;
+
+    if (!listRoot) {
+      const expanded = comboboxEl.getAttribute('aria-expanded') === 'true';
+      const nearby = comboboxEl.closest('div, section, fieldset, form') || document.body;
+      listRoot = expanded
+        ? document.querySelector('[role="listbox"], [role="tree"], [id*="listbox"], [class*="menu"], [class*="dropdown"]')
+        : nearby.querySelector('[role="listbox"], [role="tree"], [id*="listbox"], [class*="menu"], [class*="dropdown"]');
+    }
+
+    const optionEls = Array.from((listRoot || document).querySelectorAll('[role="option"], [role="menuitem"], li, div'))
+      .filter((o) => (o.offsetParent !== null) && (o.innerText || '').trim().length > 0);
+
+    // Try exact then partial
+    let option = optionEls.find((o) => o.innerText.toLowerCase().trim() === answerLower);
+    if (!option) option = optionEls.find((o) => o.innerText.toLowerCase().includes(answerLower) || answerLower.includes(o.innerText.toLowerCase().trim()));
+
+    // Yes/No normalization
+    if (!option && (answerLower === 'yes' || answerLower === 'no')) {
+      option = optionEls.find((o) => {
+        const t = o.innerText.toLowerCase();
+        if (answerLower === 'yes') return t === 'yes' || t.includes('i agree') || t.includes('agree') || t.includes('true');
+        return t === 'no' || t.includes('false');
+      });
+    }
+
+    if (!option) return false;
+
+    option.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+
+    comboboxEl.classList.add('quantumhire-filled');
+    console.log(`QuantumHire AI: Combobox selected: "${option.innerText}"`);
+    return true;
+  } catch (e) {
+    console.error('QuantumHire AI: Combobox fill error', e);
+    return false;
+  }
+}
 
 function fillCheckbox(checkbox, shouldCheck = true) {
   if (!checkbox || checkbox.type !== 'checkbox') return false;
-  
+
   try {
-    if (checkbox.checked === shouldCheck) return true; // Already in desired state
-    
+    if (checkbox.checked === shouldCheck) return true;
+
     checkbox.focus();
+
+    // Prefer clicking the label or wrapper (many ATS ignore programmatic checked=)
+    const label = checkbox.closest('label') || document.querySelector(`label[for="${checkbox.id}"]`);
+    if (label) {
+      label.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    } else {
+      checkbox.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    }
+
+    // Also set checked as a fallback
     checkbox.checked = shouldCheck;
-    
-    // Fire events for React/Angular/Vue compatibility
     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
     checkbox.dispatchEvent(new Event('input', { bubbles: true }));
-    checkbox.dispatchEvent(new Event('click', { bubbles: true }));
-    checkbox.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    
-    // For custom checkbox implementations
-    const label = checkbox.closest('label') || document.querySelector(`label[for="${checkbox.id}"]`);
-    if (label) label.click();
-    
+
     console.log(`QuantumHire AI: Checkbox ${shouldCheck ? 'checked' : 'unchecked'}: ${checkbox.name || checkbox.id}`);
     checkbox.classList.add('quantumhire-filled');
     return true;
@@ -578,27 +627,45 @@ function fillCheckbox(checkbox, shouldCheck = true) {
   }
 }
 
-// ============= ENHANCED RADIO BUTTON FILLING =============
+function fillAriaCheckbox(ariaCheckboxEl, shouldCheck = true) {
+  if (!ariaCheckboxEl) return false;
+
+  try {
+    const ariaChecked = ariaCheckboxEl.getAttribute('aria-checked');
+    const isChecked = ariaChecked === 'true' || ariaCheckboxEl.classList.contains('is-checked') || ariaCheckboxEl.classList.contains('checked');
+    if (isChecked === shouldCheck) return true;
+
+    ariaCheckboxEl.focus?.();
+    ariaCheckboxEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    ariaCheckboxEl.classList.add('quantumhire-filled');
+    return true;
+  } catch (e) {
+    console.error('QuantumHire AI: aria-checkbox error', e);
+    return false;
+  }
+}
 
 function fillRadioButton(radioGroup, answerValue) {
   if (!radioGroup || radioGroup.length === 0) return false;
-  
+
   const answerLower = String(answerValue).toLowerCase().trim();
-  
+
   for (const radio of radioGroup) {
     const label = document.querySelector(`label[for="${radio.id}"]`);
     const radioText = (label?.innerText?.trim() || radio.value).toLowerCase();
-    
-    if (radioText.includes(answerLower) || answerLower.includes(radioText) ||
-        (answerLower === 'yes' && (radioText === 'yes' || radioText.includes('i agree'))) ||
-        (answerLower === 'no' && radioText === 'no')) {
-      
+
+    if (
+      radioText.includes(answerLower) ||
+      answerLower.includes(radioText) ||
+      (answerLower === 'yes' && (radioText === 'yes' || radioText.includes('i agree'))) ||
+      (answerLower === 'no' && radioText === 'no')
+    ) {
       radio.focus();
       radio.checked = true;
       radio.dispatchEvent(new Event('change', { bubbles: true }));
       radio.dispatchEvent(new Event('input', { bubbles: true }));
       radio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      
+
       console.log(`QuantumHire AI: Radio selected: "${radioText}"`);
       radio.classList.add('quantumhire-filled');
       return true;
@@ -611,44 +678,61 @@ function fillRadioButton(radioGroup, answerValue) {
 
 function detectAllQuestions() {
   const questions = [];
-  
+
   // Detect SELECT dropdowns
-  document.querySelectorAll('select').forEach(select => {
-    if (select.offsetParent === null) return; // Skip hidden
-    
+  document.querySelectorAll('select').forEach((select) => {
+    if (select.offsetParent === null) return;
+
     let label = '';
     const labelEl = document.querySelector(`label[for="${select.id}"]`) || select.closest('label');
     if (labelEl) label = labelEl.innerText.replace(/\*$/, '').trim();
     if (!label) label = select.getAttribute('aria-label') || select.name || select.id || '';
-    
-    if (label) {
-      questions.push({ type: 'select', element: select, label, id: select.id || select.name });
-    }
+
+    if (label) questions.push({ type: 'select', element: select, label, id: select.id || select.name });
   });
-  
+
+  // Detect ARIA combobox dropdowns (Workday and many ATS)
+  document.querySelectorAll('[role="combobox"], [aria-haspopup="listbox"], [data-automation-id*="dropdown"], [data-automation-id*="select"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (el.offsetParent === null) return;
+
+    // Avoid duplicates: skip native selects already captured
+    if (el.tagName === 'SELECT') return;
+
+    const label = getComboboxLabel(el);
+    if (label) questions.push({ type: 'combobox', element: el, label: label.replace(/\*$/, '').trim(), id: el.id || el.getAttribute('name') || label });
+  });
+
   // Detect CHECKBOX inputs
-  document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+  document.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
     if (checkbox.offsetParent === null) return;
-    
+
     let label = '';
     const labelEl = document.querySelector(`label[for="${checkbox.id}"]`) || checkbox.closest('label');
     if (labelEl) label = labelEl.innerText.trim();
     if (!label) label = checkbox.getAttribute('aria-label') || checkbox.name || '';
-    
-    if (label) {
-      questions.push({ type: 'checkbox', element: checkbox, label, id: checkbox.id || checkbox.name });
-    }
+
+    if (label) questions.push({ type: 'checkbox', element: checkbox, label, id: checkbox.id || checkbox.name });
   });
-  
+
+  // Detect custom/ARIA checkboxes
+  document.querySelectorAll('[role="checkbox"][aria-checked]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (el.offsetParent === null) return;
+
+    const label = (el.getAttribute('aria-label') || el.innerText || '').trim();
+    if (label) questions.push({ type: 'aria-checkbox', element: el, label: label.replace(/\*$/, '').trim(), id: el.id || label });
+  });
+
   // Detect RADIO buttons (group by name)
   const radioGroups = {};
-  document.querySelectorAll('input[type="radio"]').forEach(radio => {
+  document.querySelectorAll('input[type="radio"]').forEach((radio) => {
     if (radio.offsetParent === null) return;
     const name = radio.name;
     if (!radioGroups[name]) radioGroups[name] = [];
     radioGroups[name].push(radio);
   });
-  
+
   Object.entries(radioGroups).forEach(([name, radios]) => {
     let label = '';
     const container = radios[0].closest('fieldset, [role="radiogroup"], .form-group, .question, [class*="question"]');
@@ -657,28 +741,28 @@ function detectAllQuestions() {
       if (legend) label = legend.innerText.replace(/\*$/, '').trim();
     }
     if (!label) label = name;
-    
+
     questions.push({ type: 'radio', elements: radios, label, id: name });
   });
-  
+
   // Detect TEXT inputs and TEXTAREAS that look like questions
-  document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], input[type="url"], textarea').forEach(input => {
+  document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], input[type="url"], textarea').forEach((input) => {
     if (input.offsetParent === null) return;
-    
+
     let label = '';
     const labelEl = document.querySelector(`label[for="${input.id}"]`) || input.closest('label');
     if (labelEl) label = labelEl.innerText.replace(/\*$/, '').trim();
     if (!label) label = input.getAttribute('aria-label') || input.placeholder || input.name || '';
-    
-    // Check if it looks like a question (has question mark or specific keywords)
-    const isQuestion = label.includes('?') || 
-                       /years.*experience|how many|salary|expectation|linkedin|github|portfolio|website/i.test(label);
-    
+
+    const isQuestion =
+      label.includes('?') ||
+      /years.*experience|how many|salary|expectation|linkedin|github|portfolio|website|optional|if applicable|not applicable|n\/a/i.test(label);
+
     if (label && isQuestion) {
-      questions.push({ type: 'text', element: input, label, id: input.id || input.name });
+      questions.push({ type: 'text', element: input, label, id: input.id || input.name || label });
     }
   });
-  
+
   return questions;
 }
 
@@ -688,18 +772,35 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
   const questions = detectAllQuestions();
   let filledCount = 0;
   const errors = [];
-  
+
+  const isRequiredEl = (el) => {
+    if (!el) return false;
+    if (el.hasAttribute?.('required')) return true;
+    if (el.getAttribute?.('aria-required') === 'true') return true;
+    // Workday often marks required in aria-invalid + "Required" text, but we keep this conservative.
+    return false;
+  };
+
+  const shouldAutoNA = (q) => {
+    const labelLower = (q.label || '').toLowerCase();
+    if (!/optional|if applicable|not applicable|n\/a|na\b/.test(labelLower)) return false;
+
+    // Only auto-fill for free text fields and only when NOT required
+    if (q.type !== 'text') return false;
+    return !isRequiredEl(q.element);
+  };
+
   for (const q of questions) {
     try {
+      const labelLower = (q.label || '').toLowerCase();
+
       // First try knockout answer bank
-      let knockoutMatch = matchKnockoutQuestion(q.label, userProfile);
+      const knockoutMatch = matchKnockoutQuestion(q.label, userProfile);
       let answer = knockoutMatch?.answer;
-      let selectValue = knockoutMatch?.selectValue;
-      
+      const selectValue = knockoutMatch?.selectValue;
+
       // Special handling for specific question types
       if (!answer) {
-        const labelLower = q.label.toLowerCase();
-        
         // Salary questions
         if (labelLower.match(/salary|pay range|compensation|expected.*pay|desired pay/)) {
           answer = getSalaryAnswer(q.label, jobData, userProfile);
@@ -716,32 +817,39 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
         else if (labelLower.match(/highest.*education|education.*level/)) answer = userProfile?.highest_education || "Bachelor's Degree";
         // Use AI answer if available
         else if (aiAnswers && aiAnswers[q.id]) answer = aiAnswers[q.id];
+        // Non-essential questions: auto N/A
+        else if (shouldAutoNA(q)) answer = 'N/A';
       }
-      
+
       if (!answer) continue;
-      
+
       // Fill based on question type
       if (q.type === 'select') {
-        if (fillDropdown(q.element, selectValue || answer)) filledCount++;
+        const ok = fillDropdown(q.element, selectValue || answer);
+        if (ok) filledCount++;
         else errors.push({ question: q.label, error: 'No matching dropdown option' });
-      }
-      else if (q.type === 'checkbox') {
-        const shouldCheck = ['yes', 'true', 'agree', 'i agree', 'accept', 'confirm'].some(v => answer.toLowerCase().includes(v));
+      } else if (q.type === 'combobox') {
+        const ok = await fillComboBox(q.element, selectValue || answer);
+        if (ok) filledCount++;
+        else errors.push({ question: q.label, error: 'No matching combobox option' });
+      } else if (q.type === 'checkbox') {
+        const shouldCheck = ['yes', 'true', 'agree', 'i agree', 'accept', 'confirm'].some((v) => String(answer).toLowerCase().includes(v));
         if (fillCheckbox(q.element, shouldCheck)) filledCount++;
-      }
-      else if (q.type === 'radio') {
+      } else if (q.type === 'aria-checkbox') {
+        const shouldCheck = ['yes', 'true', 'agree', 'i agree', 'accept', 'confirm'].some((v) => String(answer).toLowerCase().includes(v));
+        if (fillAriaCheckbox(q.element, shouldCheck)) filledCount++;
+      } else if (q.type === 'radio') {
         if (fillRadioButton(q.elements, answer)) filledCount++;
         else errors.push({ question: q.label, error: 'No matching radio option' });
-      }
-      else if (q.type === 'text') {
+      } else if (q.type === 'text') {
         if (fillField(q.element, answer)) filledCount++;
       }
     } catch (error) {
       console.error(`QuantumHire AI: Error filling "${q.label}"`, error);
-      errors.push({ question: q.label, error: error.message });
+      errors.push({ question: q.label, error: error?.message || 'Unknown error' });
     }
   }
-  
+
   console.log(`QuantumHire AI: Filled ${filledCount}/${questions.length} questions. Errors:`, errors);
   return { filledCount, totalQuestions: questions.length, errors };
 }
@@ -1610,103 +1718,139 @@ function addPanelStyles() {
   const style = document.createElement('style');
   style.id = 'quantumhire-styles';
   style.textContent = `
+    /* Theme tokens (HSL so it adapts cleanly in dark/light) */
+    #quantumhire-panel {
+      --qh-bg-0: 222 47% 11%;
+      --qh-bg-1: 222 47% 16%;
+      --qh-card: 222 47% 18%;
+      --qh-card-2: 222 47% 14%;
+      --qh-border: 215 28% 17%;
+      --qh-text: 213 31% 91%;
+      --qh-muted: 215 20% 65%;
+      --qh-muted-2: 215 25% 45%;
+      --qh-brand: 158 64% 42%;
+      --qh-brand-2: 160 84% 63%;
+      --qh-info: 217 91% 60%;
+      --qh-warn: 45 93% 58%;
+      --qh-danger: 0 84% 60%;
+      --qh-violet: 239 84% 67%;
+      --qh-shadow: 0 0% 0%;
+    }
+
+    @media (prefers-color-scheme: light) {
+      #quantumhire-panel {
+        --qh-bg-0: 210 40% 98%;
+        --qh-bg-1: 210 35% 96%;
+        --qh-card: 0 0% 100%;
+        --qh-card-2: 210 40% 98%;
+        --qh-border: 214 32% 91%;
+        --qh-text: 222 47% 11%;
+        --qh-muted: 215 16% 40%;
+        --qh-muted-2: 215 16% 55%;
+        --qh-shadow: 222 47% 11%;
+      }
+    }
+
     #quantumhire-panel {
       position: fixed;
       bottom: 20px;
       right: 20px;
       width: 340px;
-      background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+      background: linear-gradient(145deg, hsl(var(--qh-bg-0)) 0%, hsl(var(--qh-bg-1)) 100%);
       border-radius: 16px;
-      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1);
+      box-shadow: 0 25px 80px hsl(var(--qh-shadow) / 0.28), 0 0 0 1px hsl(var(--qh-border) / 0.9);
       z-index: 2147483647;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #e2e8f0;
+      color: hsl(var(--qh-text));
       overflow: hidden;
+      backdrop-filter: blur(8px);
     }
-    
-    .qh-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: rgba(0, 0, 0, 0.4); }
+
+    .qh-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: hsl(var(--qh-card-2) / 0.7); border-bottom: 1px solid hsl(var(--qh-border) / 0.8); }
     .qh-brand { display: flex; align-items: center; gap: 8px; }
     .qh-logo { font-size: 18px; }
-    .qh-title { font-weight: 700; font-size: 14px; background: linear-gradient(135deg, #10b981 0%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .qh-title { font-weight: 800; font-size: 14px; background: linear-gradient(135deg, hsl(var(--qh-brand)) 0%, hsl(var(--qh-brand-2)) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .qh-controls { display: flex; align-items: center; gap: 8px; }
-    .qh-platform-badge { font-size: 9px; font-weight: 700; padding: 3px 8px; background: rgba(99, 102, 241, 0.3); border-radius: 4px; color: #a5b4fc; }
-    .qh-minimize { background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
-    .qh-minimize:hover { background: rgba(255,255,255,0.1); color: #fff; }
-    
+    .qh-platform-badge { font-size: 9px; font-weight: 800; padding: 3px 8px; background: hsl(var(--qh-violet) / 0.12); border: 1px solid hsl(var(--qh-violet) / 0.22); border-radius: 999px; color: hsl(var(--qh-violet)); }
+    .qh-minimize { background: transparent; border: none; color: hsl(var(--qh-muted)); font-size: 20px; cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+    .qh-minimize:hover { background: hsl(var(--qh-border) / 0.5); color: hsl(var(--qh-text)); }
+
     .qh-body { padding: 14px; }
-    
-    .qh-job-info { background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-    .qh-job-title { font-weight: 600; font-size: 14px; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .qh-job-company { font-size: 12px; color: #a5b4fc; }
-    .qh-job-location { font-size: 10px; color: #94a3b8; margin-top: 4px; }
-    
-    .qh-automation-controls { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+
+    .qh-job-info { background: linear-gradient(135deg, hsl(var(--qh-violet) / 0.10) 0%, hsl(var(--qh-violet) / 0.06) 100%); border: 1px solid hsl(var(--qh-violet) / 0.18); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .qh-job-title { font-weight: 650; font-size: 14px; color: hsl(var(--qh-text)); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qh-job-company { font-size: 12px; color: hsl(var(--qh-muted)); }
+    .qh-job-location { font-size: 10px; color: hsl(var(--qh-muted-2)); margin-top: 4px; }
+
+    .qh-automation-controls { background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
     .qh-speed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .qh-speed-label { font-size: 11px; color: #94a3b8; }
+    .qh-speed-label { font-size: 11px; color: hsl(var(--qh-muted-2)); }
     .qh-speed-buttons { display: flex; gap: 4px; }
-    .qh-speed-btn { padding: 4px 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; color: #94a3b8; font-size: 10px; font-weight: 600; cursor: pointer; }
-    .qh-speed-btn:hover { background: rgba(255,255,255,0.15); color: #e2e8f0; }
-    .qh-speed-btn.active { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); color: #a5b4fc; }
+    .qh-speed-btn { padding: 4px 10px; background: hsl(var(--qh-border) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.9); border-radius: 999px; color: hsl(var(--qh-muted)); font-size: 10px; font-weight: 700; cursor: pointer; }
+    .qh-speed-btn:hover { background: hsl(var(--qh-border) / 0.55); color: hsl(var(--qh-text)); }
+    .qh-speed-btn.active { background: hsl(var(--qh-violet) / 0.14); border-color: hsl(var(--qh-violet) / 0.28); color: hsl(var(--qh-violet)); }
+
     .qh-control-row { display: flex; gap: 4px; }
-    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 6px 8px; border: none; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; }
-    .qh-control-btn.pause { background: rgba(251,191,36,0.2); color: #fbbf24; }
-    .qh-control-btn.pause.paused { background: rgba(16,185,129,0.2); color: #10b981; }
-    .qh-control-btn.skip { background: rgba(148,163,184,0.15); color: #94a3b8; }
-    .qh-control-btn.quit { background: rgba(239,68,68,0.15); color: #f87171; }
-    
-    .qh-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; margin-bottom: 12px; font-size: 11px; }
+    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 6px 8px; border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; background: hsl(var(--qh-card) / 0.35); color: hsl(var(--qh-text)); }
+    .qh-control-btn.pause { border-color: hsl(var(--qh-warn) / 0.35); color: hsl(var(--qh-warn)); }
+    .qh-control-btn.pause.paused { border-color: hsl(var(--qh-brand) / 0.35); color: hsl(var(--qh-brand)); }
+    .qh-control-btn.skip { color: hsl(var(--qh-muted)); }
+    .qh-control-btn.quit { border-color: hsl(var(--qh-danger) / 0.28); color: hsl(var(--qh-danger)); }
+
+    .qh-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: hsl(var(--qh-brand) / 0.10); border: 1px solid hsl(var(--qh-brand) / 0.18); border-radius: 10px; margin-bottom: 12px; font-size: 11px; }
     .qh-status-icon { font-size: 10px; }
-    
+
     .qh-actions { display: flex; flex-direction: column; gap: 8px; }
-    .qh-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; border-radius: 10px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .qh-btn.primary { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35); }
-    .qh-btn.primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45); }
-    .qh-btn.secondary { flex: 1; background: rgba(255, 255, 255, 0.08); color: #94a3b8; border: 1px solid rgba(255, 255, 255, 0.1); justify-content: center; font-size: 11px; }
-    .qh-btn.secondary:hover { background: rgba(255, 255, 255, 0.12); color: #e2e8f0; }
-    .qh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .qh-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease; background: hsl(var(--qh-card) / 0.25); color: hsl(var(--qh-text)); }
+    .qh-btn.primary { background: linear-gradient(135deg, hsl(var(--qh-brand)) 0%, hsl(var(--qh-brand-2)) 100%); color: hsl(var(--qh-bg-0)); border-color: transparent; box-shadow: 0 10px 30px hsl(var(--qh-brand) / 0.20); }
+    .qh-btn.primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 36px hsl(var(--qh-brand) / 0.26); }
+    .qh-btn.secondary { justify-content: center; font-size: 11px; color: hsl(var(--qh-muted)); }
+    .qh-btn.secondary:hover { background: hsl(var(--qh-card) / 0.40); color: hsl(var(--qh-text)); }
+    .qh-btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .qh-btn-row { display: flex; gap: 6px; }
     .qh-btn-content { display: flex; flex-direction: column; align-items: flex-start; }
-    .qh-btn-title { font-weight: 600; font-size: 13px; }
-    .qh-btn-subtitle { font-size: 9px; opacity: 0.8; }
-    
-    .qh-results { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }
+    .qh-btn-title { font-weight: 800; font-size: 13px; }
+    .qh-btn-subtitle { font-size: 9px; opacity: 0.85; }
+
+    .qh-results { margin-top: 12px; padding-top: 12px; border-top: 1px solid hsl(var(--qh-border) / 0.8); }
     .qh-results.hidden { display: none; }
-    .qh-match-score { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 10px; margin-bottom: 10px; }
-    .qh-score-label { font-size: 11px; color: #94a3b8; }
-    .qh-score-value { font-size: 20px; font-weight: 700; color: #10b981; }
-    
-    .qh-pdf-preview { background: rgba(0, 0, 0, 0.3); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
-    .qh-pdf-header { font-size: 11px; font-weight: 600; color: #a5b4fc; margin-bottom: 8px; }
+
+    .qh-match-score { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: linear-gradient(135deg, hsl(var(--qh-brand) / 0.16) 0%, hsl(var(--qh-brand) / 0.06) 100%); border: 1px solid hsl(var(--qh-brand) / 0.18); border-radius: 12px; margin-bottom: 10px; }
+    .qh-score-label { font-size: 11px; color: hsl(var(--qh-muted-2)); }
+    .qh-score-value { font-size: 20px; font-weight: 900; color: hsl(var(--qh-brand)); }
+
+    .qh-pdf-preview { background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+    .qh-pdf-header { font-size: 11px; font-weight: 800; color: hsl(var(--qh-violet)); margin-bottom: 8px; }
     .qh-pdf-cards { display: flex; flex-direction: column; gap: 6px; }
-    .qh-pdf-card { display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; }
-    .qh-pdf-card.uploaded { border-color: rgba(16, 185, 129, 0.5); background: rgba(16, 185, 129, 0.1); }
+    .qh-pdf-card { display: flex; align-items: center; gap: 8px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; }
+    .qh-pdf-card.uploaded { border-color: hsl(var(--qh-brand) / 0.30); background: hsl(var(--qh-brand) / 0.08); }
     .qh-pdf-icon { font-size: 16px; }
     .qh-pdf-info { flex: 1; }
-    .qh-pdf-name { font-size: 10px; font-weight: 500; color: #e2e8f0; }
-    .qh-pdf-size { font-size: 9px; color: #64748b; }
-    .qh-pdf-download-btn { padding: 5px 7px; background: rgba(255, 255, 255, 0.1); border: none; border-radius: 5px; cursor: pointer; font-size: 11px; }
-    .qh-pdf-download-btn:hover { background: rgba(99, 102, 241, 0.3); }
-    
+    .qh-pdf-name { font-size: 10px; font-weight: 650; color: hsl(var(--qh-text)); }
+    .qh-pdf-size { font-size: 9px; color: hsl(var(--qh-muted-2)); }
+    .qh-pdf-download-btn { padding: 5px 7px; background: hsl(var(--qh-card) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; cursor: pointer; font-size: 11px; color: hsl(var(--qh-text)); }
+    .qh-pdf-download-btn:hover { background: hsl(var(--qh-violet) / 0.12); border-color: hsl(var(--qh-violet) / 0.20); }
+
     .qh-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
-    .qh-tab { flex: 1; padding: 6px 10px; background: rgba(255, 255, 255, 0.08); border: none; color: #94a3b8; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; }
-    .qh-tab:hover { background: rgba(255, 255, 255, 0.12); }
-    .qh-tab.active { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .qh-tab { flex: 1; padding: 6px 10px; background: hsl(var(--qh-card) / 0.20); border: 1px solid hsl(var(--qh-border) / 0.75); color: hsl(var(--qh-muted)); border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .qh-tab:hover { background: hsl(var(--qh-card) / 0.35); color: hsl(var(--qh-text)); }
+    .qh-tab.active { background: hsl(var(--qh-brand) / 0.12); border-color: hsl(var(--qh-brand) / 0.22); color: hsl(var(--qh-brand)); }
     .qh-tab-content { position: relative; }
     .qh-tab-content.hidden { display: none; }
-    .qh-tab-content textarea { width: 100%; height: 100px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 8px; color: #e2e8f0; font-size: 10px; font-family: inherit; resize: none; }
-    .qh-copy-btn { width: 100%; margin-top: 6px; padding: 6px; background: rgba(255, 255, 255, 0.1); border: none; border-radius: 6px; color: #e2e8f0; font-size: 10px; cursor: pointer; }
-    .qh-copy-btn:hover { background: rgba(255, 255, 255, 0.2); }
-    
-    .quantumhire-toast { position: fixed; bottom: 100px; right: 20px; padding: 12px 16px; background: linear-gradient(145deg, #1e293b 0%, #334155 100%); border-radius: 10px; display: flex; align-items: center; gap: 10px; z-index: 2147483648; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); animation: slideIn 0.3s ease; max-width: 300px; }
-    .quantumhire-toast.success { border-left: 3px solid #10b981; }
-    .quantumhire-toast.error { border-left: 3px solid #ef4444; }
-    .quantumhire-toast.warning { border-left: 3px solid #f59e0b; }
-    .quantumhire-toast.info { border-left: 3px solid #3b82f6; }
-    .quantumhire-toast-message { color: #fff; font-size: 12px; line-height: 1.4; }
-    .quantumhire-toast-close { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; }
+    .qh-tab-content textarea { width: 100%; height: 100px; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 12px; padding: 8px; color: hsl(var(--qh-text)); font-size: 10px; font-family: inherit; resize: none; }
+    .qh-copy-btn { width: 100%; margin-top: 6px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 10px; color: hsl(var(--qh-text)); font-size: 10px; cursor: pointer; }
+    .qh-copy-btn:hover { background: hsl(var(--qh-card) / 0.40); }
+
+    .quantumhire-toast { position: fixed; bottom: 100px; right: 20px; padding: 12px 16px; background: linear-gradient(145deg, hsl(var(--qh-card)) 0%, hsl(var(--qh-card-2)) 100%); border-radius: 12px; display: flex; align-items: center; gap: 10px; z-index: 2147483648; box-shadow: 0 16px 44px hsl(var(--qh-shadow) / 0.20); animation: slideIn 0.3s ease; max-width: 320px; border: 1px solid hsl(var(--qh-border) / 0.8); color: hsl(var(--qh-text)); }
+    .quantumhire-toast.success { border-left: 3px solid hsl(var(--qh-brand)); }
+    .quantumhire-toast.error { border-left: 3px solid hsl(var(--qh-danger)); }
+    .quantumhire-toast.warning { border-left: 3px solid hsl(var(--qh-warn)); }
+    .quantumhire-toast.info { border-left: 3px solid hsl(var(--qh-info)); }
+    .quantumhire-toast-message { color: hsl(var(--qh-text)); font-size: 12px; line-height: 1.4; }
+    .quantumhire-toast-close { background: none; border: none; color: hsl(var(--qh-muted-2)); cursor: pointer; font-size: 16px; }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    
-    .quantumhire-filled { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6) !important; }
+
+    .quantumhire-filled { box-shadow: 0 0 0 2px hsl(var(--qh-brand) / 0.55) !important; }
     #quantumhire-panel.minimized .qh-body { display: none; }
   `;
   document.head.appendChild(style);
