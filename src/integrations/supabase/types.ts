@@ -307,6 +307,9 @@ export type Database = {
           cover_letter: string | null
           created_at: string | null
           current_salary: string | null
+          cv_file_name: string | null
+          cv_file_path: string | null
+          cv_uploaded_at: string | null
           disability: boolean | null
           driving_license: boolean | null
           education: Json | null
@@ -348,6 +351,9 @@ export type Database = {
           cover_letter?: string | null
           created_at?: string | null
           current_salary?: string | null
+          cv_file_name?: string | null
+          cv_file_path?: string | null
+          cv_uploaded_at?: string | null
           disability?: boolean | null
           driving_license?: boolean | null
           education?: Json | null
@@ -389,6 +395,9 @@ export type Database = {
           cover_letter?: string | null
           created_at?: string | null
           current_salary?: string | null
+          cv_file_name?: string | null
+          cv_file_path?: string | null
+          cv_uploaded_at?: string | null
           disability?: boolean | null
           driving_license?: boolean | null
           education?: Json | null

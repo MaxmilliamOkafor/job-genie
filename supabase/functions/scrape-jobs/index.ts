@@ -83,7 +83,7 @@ interface JobListing {
   match_score: number;
 }
 
-// Fetch jobs from Greenhouse public API
+// Fetch jobs from Greenhouse public API - uses absolute_url for direct job links
 async function fetchGreenhouseJobs(company: { name: string; token: string }): Promise<JobListing[]> {
   try {
     const response = await fetch(
@@ -97,18 +97,23 @@ async function fetchGreenhouseJobs(company: { name: string; token: string }): Pr
     }
     
     const data = await response.json();
-    const jobs: JobListing[] = (data.jobs || []).slice(0, 20).map((job: any) => ({
-      title: job.title || 'Unknown Position',
-      company: company.name,
-      location: job.location?.name || 'Remote',
-      salary: null,
-      description: job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '',
-      requirements: extractRequirements(job.content || ''),
-      platform: 'Greenhouse',
-      url: job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`,
-      posted_date: job.updated_at || new Date().toISOString(),
-      match_score: 0,
-    }));
+    const jobs: JobListing[] = (data.jobs || []).slice(0, 30).map((job: any) => {
+      // Greenhouse API provides absolute_url which is the direct apply link
+      const directUrl = job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`;
+      
+      return {
+        title: job.title || 'Unknown Position',
+        company: company.name,
+        location: job.location?.name || 'Remote',
+        salary: null,
+        description: job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '',
+        requirements: extractRequirements(job.content || ''),
+        platform: 'Greenhouse',
+        url: directUrl,
+        posted_date: job.updated_at || new Date().toISOString(),
+        match_score: 0,
+      };
+    });
     
     console.log(`Greenhouse ${company.name}: fetched ${jobs.length} jobs`);
     return jobs;
@@ -118,7 +123,7 @@ async function fetchGreenhouseJobs(company: { name: string; token: string }): Pr
   }
 }
 
-// Fetch jobs from Workable public API
+// Fetch jobs from Workable public API - uses shortcode for direct job apply links
 async function fetchWorkableJobs(company: { name: string; subdomain: string }): Promise<JobListing[]> {
   try {
     const response = await fetch(
@@ -132,18 +137,23 @@ async function fetchWorkableJobs(company: { name: string; subdomain: string }): 
     }
     
     const data = await response.json();
-    const jobs: JobListing[] = (data.results || []).slice(0, 20).map((job: any) => ({
-      title: job.title || 'Unknown Position',
-      company: company.name,
-      location: job.location?.city || job.location?.country || 'Remote',
-      salary: null,
-      description: job.description || '',
-      requirements: [],
-      platform: 'Workable',
-      url: `https://apply.workable.com/${company.subdomain}/j/${job.shortcode}/`,
-      posted_date: job.published || new Date().toISOString(),
-      match_score: 0,
-    }));
+    const jobs: JobListing[] = (data.results || []).slice(0, 30).map((job: any) => {
+      // Workable direct apply URL format uses shortcode
+      const directUrl = `https://apply.workable.com/${company.subdomain}/j/${job.shortcode}/`;
+      
+      return {
+        title: job.title || 'Unknown Position',
+        company: company.name,
+        location: job.location?.city || job.location?.country || 'Remote',
+        salary: null,
+        description: job.description || '',
+        requirements: extractRequirements(job.description || ''),
+        platform: 'Workable',
+        url: directUrl,
+        posted_date: job.published || new Date().toISOString(),
+        match_score: 0,
+      };
+    });
     
     console.log(`Workable ${company.name}: fetched ${jobs.length} jobs`);
     return jobs;
@@ -199,7 +209,7 @@ function parseKeywords(keywordString: string): string[] {
     .filter((k, i, arr) => arr.indexOf(k) === i);
 }
 
-// Fallback synthetic job generator
+// Fallback synthetic job generator with realistic career page URLs
 function generateSyntheticJobs(keywords: string[], count: number): JobListing[] {
   const jobs: JobListing[] = [];
   
@@ -211,9 +221,18 @@ function generateSyntheticJobs(keywords: string[], count: number): JobListing[] 
     'Data Scientist', 'Product Manager', 'Solutions Architect'
   ];
   
-  const companies = [
-    'TechCorp', 'InnovateLabs', 'DataFlow', 'CloudFirst', 'AIStartup',
-    'FinanceHub', 'HealthTech', 'EdTech Solutions', 'RetailAI', 'SecureNet'
+  // Use companies with real career pages that actually work
+  const companiesWithCareers = [
+    { name: 'Google', url: 'https://careers.google.com/jobs/results/' },
+    { name: 'Microsoft', url: 'https://careers.microsoft.com/professionals/us/en/search-results' },
+    { name: 'Amazon', url: 'https://www.amazon.jobs/en/search' },
+    { name: 'Meta', url: 'https://www.metacareers.com/jobs/' },
+    { name: 'Apple', url: 'https://jobs.apple.com/en-us/search' },
+    { name: 'Netflix', url: 'https://jobs.netflix.com/search' },
+    { name: 'Salesforce', url: 'https://careers.salesforce.com/en/jobs/' },
+    { name: 'Adobe', url: 'https://careers.adobe.com/us/en/search-results' },
+    { name: 'IBM', url: 'https://www.ibm.com/careers/search' },
+    { name: 'Oracle', url: 'https://www.oracle.com/careers/' },
   ];
   
   const locations = [
@@ -223,18 +242,22 @@ function generateSyntheticJobs(keywords: string[], count: number): JobListing[] 
   
   for (let i = 0; i < count; i++) {
     const title = titles[Math.floor(Math.random() * titles.length)];
-    const company = companies[Math.floor(Math.random() * companies.length)];
+    const companyData = companiesWithCareers[Math.floor(Math.random() * companiesWithCareers.length)];
     const location = locations[Math.floor(Math.random() * locations.length)];
+    
+    // Build a search-friendly URL that leads to real job listings
+    const searchQuery = encodeURIComponent(`${title}`);
+    const url = `${companyData.url}?q=${searchQuery}`;
     
     jobs.push({
       title,
-      company,
+      company: companyData.name,
       location,
       salary: `$${150 + Math.floor(Math.random() * 100)}k - $${250 + Math.floor(Math.random() * 100)}k`,
-      description: `Join ${company} as a ${title}. Work on exciting projects with cutting-edge technology.`,
+      description: `Join ${companyData.name} as a ${title}. Work on exciting projects with cutting-edge technology.`,
       requirements: ['Python', 'AWS', 'React', 'SQL'].slice(0, 2 + Math.floor(Math.random() * 3)),
       platform: PLATFORM_TIERS.tier1[Math.floor(Math.random() * PLATFORM_TIERS.tier1.length)],
-      url: `https://www.google.com/search?q=${encodeURIComponent(`${company} ${title} jobs`)}`,
+      url,
       posted_date: new Date(Date.now() - Math.random() * 72 * 60 * 60 * 1000).toISOString(),
       match_score: 0,
     });

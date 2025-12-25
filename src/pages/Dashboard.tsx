@@ -195,7 +195,10 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+              <Link 
+                to="/profile" 
+                className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
+              >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-sm font-bold text-primary">1</span>
                 </div>
@@ -205,8 +208,11 @@ const Dashboard = () => {
                     Import your CV for AI-tailored applications
                   </p>
                 </div>
-              </div>
-              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+              </Link>
+              <Link 
+                to="/settings" 
+                className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
+              >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-sm font-bold text-primary">2</span>
                 </div>
@@ -216,8 +222,11 @@ const Dashboard = () => {
                     Enable automatic email sending & detection
                   </p>
                 </div>
-              </div>
-              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+              </Link>
+              <Link 
+                to="/jobs" 
+                className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
+              >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-sm font-bold text-primary">3</span>
                 </div>
@@ -227,7 +236,7 @@ const Dashboard = () => {
                     Let AI apply to jobs while you relax
                   </p>
                 </div>
-              </div>
+              </Link>
             </div>
           </CardContent>
         </Card>
