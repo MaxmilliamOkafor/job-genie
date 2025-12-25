@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
@@ -53,7 +53,6 @@ const Jobs = () => {
   } = useJobScraper();
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [showScrollBottom, setShowScrollBottom] = useState(true);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
@@ -64,23 +63,26 @@ const Jobs = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isBatchApplying, setIsBatchApplying] = useState(false);
+  
+  // Ref to scroll job list to bottom
+  const scrollToJobListBottomRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
       const scrollY = window.scrollY;
-      const windowHeight = window.innerHeight;
-      const docHeight = document.documentElement.scrollHeight;
       setShowScrollTop(scrollY > 400);
-      // Show scroll bottom when not near bottom
-      setShowScrollBottom(scrollY < docHeight - windowHeight - 400);
     };
     window.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initial check
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-  const scrollToBottom = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  const scrollToJobListBottom = () => {
+    if (scrollToJobListBottomRef.current) {
+      scrollToJobListBottomRef.current();
+    }
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -395,6 +397,7 @@ const Jobs = () => {
             selectedJobs={selectedJobs}
             onSelectionChange={setSelectedJobs}
             selectionMode={selectionMode}
+            scrollRef={scrollToJobListBottomRef}
           />
         )}
 
@@ -447,12 +450,13 @@ const Jobs = () => {
 
       {/* Scroll Navigation Buttons */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
-        {showScrollBottom && hasMore && (
+        {hasMore && (
           <Button
-            onClick={scrollToBottom}
+            onClick={scrollToJobListBottom}
             className="rounded-full h-12 w-12 p-0 shadow-lg"
             size="icon"
             variant="outline"
+            title="Scroll to load more jobs"
           >
             <ArrowDown className="h-5 w-5" />
           </Button>
