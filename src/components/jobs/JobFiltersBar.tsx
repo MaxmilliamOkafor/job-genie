@@ -44,7 +44,7 @@ const EXPERIENCE_LEVELS = ['Entry Level', 'Mid Level', 'Senior', 'Lead', 'Execut
 
 export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('today');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'applied'>('all');
   const [locationFilter, setLocationFilter] = useState('');
