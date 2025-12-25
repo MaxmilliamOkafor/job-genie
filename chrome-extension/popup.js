@@ -55,25 +55,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Setup Event Listeners
 function setupEventListeners() {
-  loginForm?.addEventListener('submit', handleConnect);
-  disconnectBtn?.addEventListener('click', handleDisconnect);
-  refreshBtn?.addEventListener('click', refreshProfile);
-  applyNowBtn?.addEventListener('click', handleApplyWithAI);
-  addQueueBtn?.addEventListener('click', handleAddToQueue);
+  // Login form
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleConnect);
+  }
+  
+  // Disconnect and refresh
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener('click', handleDisconnect);
+  }
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', refreshProfile);
+  }
+  
+  // Apply and queue buttons
+  if (applyNowBtn) {
+    applyNowBtn.addEventListener('click', handleApplyWithAI);
+  }
+  if (addQueueBtn) {
+    addQueueBtn.addEventListener('click', handleAddToQueue);
+  }
   
   // Auto-fill toggle
-  autofillToggle?.addEventListener('change', handleAutofillToggle);
+  if (autofillToggle) {
+    autofillToggle.addEventListener('change', handleAutofillToggle);
+  }
   
-  // Credentials toggle
-  credentialsToggle?.addEventListener('click', () => {
-    credentialsBody.classList.toggle('hidden');
-    const arrow = credentialsToggle.querySelector('.toggle-arrow');
-    arrow.textContent = credentialsBody.classList.contains('hidden') ? '▼' : '▲';
-  });
+  // Credentials toggle (expand/collapse)
+  if (credentialsToggle) {
+    credentialsToggle.addEventListener('click', () => {
+      credentialsBody.classList.toggle('hidden');
+      const arrow = credentialsToggle.querySelector('.toggle-arrow');
+      if (arrow) {
+        arrow.textContent = credentialsBody.classList.contains('hidden') ? '▼' : '▲';
+      }
+    });
+  }
   
   // Credentials save/clear
-  saveCredentialsBtn?.addEventListener('click', saveCredentials);
-  clearCredentialsBtn?.addEventListener('click', clearCredentials);
+  if (saveCredentialsBtn) {
+    saveCredentialsBtn.addEventListener('click', saveCredentials);
+  }
+  if (clearCredentialsBtn) {
+    clearCredentialsBtn.addEventListener('click', clearCredentials);
+  }
+  
+  // Password visibility toggle
+  const togglePasswordBtn = document.getElementById('toggle-password-btn');
+  if (togglePasswordBtn) {
+    togglePasswordBtn.addEventListener('click', () => {
+      const type = atsPasswordInput.type === 'password' ? 'text' : 'password';
+      atsPasswordInput.type = type;
+      togglePasswordBtn.textContent = type === 'password' ? '👁️' : '🙈';
+    });
+  }
   
   // Tab switching
   document.querySelectorAll('.content-tab').forEach(tab => {
