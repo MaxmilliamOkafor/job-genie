@@ -1,15 +1,14 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { JobFilters } from '@/components/jobs/JobFilters';
-import { CSVUpload } from '@/components/jobs/CSVUpload';
+import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useJobs, Job } from '@/hooks/useJobs';
+import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
-import { toast } from 'sonner';
 import { 
   Briefcase, 
   MapPin, 
@@ -20,88 +19,28 @@ import {
   CheckCircle,
   Loader2,
   Sparkles,
-  Plus
+  RefreshCw
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-
-// Sample job data generator
-const generateSampleJobs = (count: number): Omit<Job, 'id'>[] => {
-  const titles = [
-    'Senior Software Engineer', 'Staff Engineer', 'Principal Engineer',
-    'Engineering Manager', 'Tech Lead', 'Full Stack Developer',
-    'Backend Engineer', 'Frontend Engineer', 'Platform Engineer',
-    'ML Engineer', 'Data Engineer', 'DevOps Engineer', 'SRE',
-    'Solutions Architect', 'Cloud Architect', 'AI/ML Specialist'
-  ];
-  
-  const companies = [
-    'Google', 'Microsoft', 'Amazon', 'Apple', 'Netflix', 'Spotify',
-    'Stripe', 'Airbnb', 'Uber', 'Lyft', 'DoorDash', 'Coinbase',
-    'Databricks', 'Snowflake', 'MongoDB', 'Elastic', 'HashiCorp',
-    'Cloudflare', 'Twilio', 'Slack', 'Zoom', 'Figma', 'Notion',
-    'Linear', 'Vercel', 'Supabase', 'PlanetScale', 'Railway'
-  ];
-  
-  const locations = [
-    'San Francisco, CA', 'New York, NY', 'Seattle, WA', 'Austin, TX',
-    'London, UK', 'Dublin, Ireland', 'Berlin, Germany', 'Amsterdam, NL',
-    'Toronto, Canada', 'Singapore', 'Remote', 'Hybrid - NYC',
-    'Hybrid - SF', 'Hybrid - London'
-  ];
-  
-  const platforms = ['Workday', 'Greenhouse', 'Lever', 'Ashby', 'iCIMS'];
-  
-  const requirements = [
-    'Python', 'Java', 'TypeScript', 'React', 'Node.js', 'AWS', 'GCP',
-    'Kubernetes', 'Docker', 'PostgreSQL', 'MongoDB', 'Redis', 'Kafka',
-    'Machine Learning', 'Deep Learning', 'NLP', 'System Design',
-    'Distributed Systems', 'Microservices', 'CI/CD', 'Terraform'
-  ];
-
-  return Array.from({ length: count }, (_, i) => {
-    const title = titles[Math.floor(Math.random() * titles.length)];
-    const company = companies[Math.floor(Math.random() * companies.length)];
-    const location = locations[Math.floor(Math.random() * locations.length)];
-    const salary = `$${150 + Math.floor(Math.random() * 150)}k - $${200 + Math.floor(Math.random() * 200)}k`;
-    const matchScore = 60 + Math.floor(Math.random() * 40);
-    const hoursAgo = Math.floor(Math.random() * 168);
-    const postedDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
-    
-    const jobRequirements = Array.from(
-      { length: 4 + Math.floor(Math.random() * 4) },
-      () => requirements[Math.floor(Math.random() * requirements.length)]
-    ).filter((v, i, a) => a.indexOf(v) === i);
-
-    return {
-      title,
-      company,
-      location,
-      salary,
-      description: `We're looking for a ${title} to join our team at ${company}. You'll work on cutting-edge technology and help us scale our platform to millions of users.`,
-      requirements: jobRequirements,
-      platform: platforms[Math.floor(Math.random() * platforms.length)],
-      url: `https://careers.${company.toLowerCase().replace(/\s/g, '')}.com/jobs/${i}`,
-      posted_date: postedDate,
-      match_score: matchScore,
-      status: 'pending' as const,
-      applied_at: null,
-    };
-  });
-};
 
 const Jobs = () => {
-  const { jobs, isLoading, hasMore, loadMore, addBulkJobs, updateJobStatus } = useJobs();
+  const { 
+    jobs, 
+    isLoading, 
+    isScraping, 
+    hasMore, 
+    loadMore, 
+    startContinuousScraping,
+    updateJobStatus 
+  } = useJobScraper();
   const { profile } = useProfile();
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
-  const [isGenerating, setIsGenerating] = useState(false);
   const observerRef = useRef<IntersectionObserver>();
-  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Infinite scroll observer
   const lastJobRef = useCallback((node: HTMLDivElement | null) => {
-    if (isLoading) return;
+    if (isLoading || isScraping) return;
     if (observerRef.current) observerRef.current.disconnect();
     
     observerRef.current = new IntersectionObserver(entries => {
@@ -111,7 +50,7 @@ const Jobs = () => {
     });
     
     if (node) observerRef.current.observe(node);
-  }, [isLoading, hasMore, loadMore]);
+  }, [isLoading, isScraping, hasMore, loadMore]);
 
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
@@ -137,21 +76,8 @@ const Jobs = () => {
     });
   }, [jobs, search, location, dateFilter]);
 
-  const handleCSVUpload = (urls: string[]) => {
-    toast.success(`Processing ${urls.length} job URLs...`);
-  };
-
-  const handleGenerateSampleJobs = async () => {
-    setIsGenerating(true);
-    try {
-      const sampleJobs = generateSampleJobs(100);
-      await addBulkJobs(sampleJobs);
-      toast.success('Generated 100 sample jobs!');
-    } catch (error) {
-      toast.error('Failed to generate jobs');
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleKeywordSearch = (keywords: string) => {
+    startContinuousScraping(keywords);
   };
 
   const handleJobApplied = (jobId: string) => {
@@ -173,6 +99,15 @@ const Jobs = () => {
     return 'text-muted-foreground bg-muted';
   };
 
+  const getPlatformColor = (platform: string) => {
+    const tier1 = ['Workday', 'Greenhouse', 'Lever', 'SAP SuccessFactors', 'iCIMS'];
+    const tier2 = ['Ashby', 'Oracle Taleo', 'Workable', 'BambooHR', 'Bullhorn'];
+    
+    if (tier1.includes(platform)) return 'border-green-500/30 bg-green-500/5';
+    if (tier2.includes(platform)) return 'border-primary/30 bg-primary/5';
+    return '';
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -181,17 +116,22 @@ const Jobs = () => {
             <h1 className="text-3xl font-bold">Jobs</h1>
             <p className="text-muted-foreground mt-1">
               {jobs.length} jobs loaded • {filteredJobs.filter(j => j.status === 'pending').length} ready to apply
+              {isScraping && <span className="ml-2 text-primary animate-pulse">• Scraping...</span>}
             </p>
           </div>
-          <Button onClick={handleGenerateSampleJobs} disabled={isGenerating}>
-            {isGenerating ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4 mr-2" />
-            )}
-            Generate 100 Jobs
-          </Button>
+          {isScraping && (
+            <div className="flex items-center gap-2 text-sm text-primary">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Auto-updating every minute
+            </div>
+          )}
         </div>
+
+        {/* Bulk Keyword Search */}
+        <BulkKeywordSearch 
+          onSearch={handleKeywordSearch} 
+          isSearching={isScraping} 
+        />
 
         {/* Automation Panel */}
         <AutomationPanel 
@@ -209,10 +149,8 @@ const Jobs = () => {
           onDateFilterChange={setDateFilter}
         />
 
-        <CSVUpload onUpload={handleCSVUpload} />
-
-        {/* Job Listings with Infinite Scroll */}
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Job Listings - Single Column */}
+        <div className="space-y-3">
           {filteredJobs.map((job, index) => {
             const isLast = index === filteredJobs.length - 1;
             return (
@@ -221,26 +159,34 @@ const Jobs = () => {
                 ref={isLast ? lastJobRef : null}
                 className={`overflow-hidden transition-all hover:shadow-lg hover:border-primary/30 ${
                   job.status === 'applied' ? 'border-green-500/30 bg-green-500/5' : ''
-                }`}
+                } ${getPlatformColor(job.platform || '')}`}
               >
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold truncate">{job.title}</h3>
+                        <h3 className="font-semibold text-lg">{job.title}</h3>
                         {job.status === 'applied' && (
                           <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{job.company}</p>
+                      <p className="text-muted-foreground">{job.company}</p>
                     </div>
-                    <Badge className={`${getMatchScoreColor(job.match_score)} flex-shrink-0`}>
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      {job.match_score}%
-                    </Badge>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Badge className={`${getMatchScoreColor(job.match_score)}`}>
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        {job.match_score}%
+                      </Badge>
+                      {job.platform && (
+                        <Badge variant="outline" className="text-xs">
+                          <Briefcase className="h-3 w-3 mr-1" />
+                          {job.platform}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3 mt-3 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3.5 w-3.5" />
                       {job.location}
@@ -259,14 +205,14 @@ const Jobs = () => {
 
                   {job.requirements && job.requirements.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
-                      {job.requirements.slice(0, 4).map((req, i) => (
+                      {job.requirements.slice(0, 6).map((req, i) => (
                         <Badge key={i} variant="secondary" className="text-xs">
                           {req}
                         </Badge>
                       ))}
-                      {job.requirements.length > 4 && (
+                      {job.requirements.length > 6 && (
                         <Badge variant="outline" className="text-xs">
-                          +{job.requirements.length - 4}
+                          +{job.requirements.length - 6}
                         </Badge>
                       )}
                     </div>
@@ -275,15 +221,14 @@ const Jobs = () => {
                   <div className="flex items-center gap-2 mt-4">
                     {job.status === 'pending' ? (
                       <Button 
-                        size="sm" 
-                        className="flex-1"
+                        size="sm"
                         onClick={() => handleJobApplied(job.id)}
                       >
                         <Zap className="h-4 w-4 mr-1" />
                         Quick Apply
                       </Button>
                     ) : (
-                      <Button size="sm" variant="secondary" className="flex-1" disabled>
+                      <Button size="sm" variant="secondary" disabled>
                         <CheckCircle className="h-4 w-4 mr-1" />
                         Applied
                       </Button>
@@ -294,19 +239,11 @@ const Jobs = () => {
                         variant="outline"
                         onClick={() => window.open(job.url!, '_blank')}
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-4 w-4 mr-1" />
+                        View Job
                       </Button>
                     )}
                   </div>
-
-                  {job.platform && (
-                    <div className="mt-3 pt-3 border-t">
-                      <Badge variant="outline" className="text-xs">
-                        <Briefcase className="h-3 w-3 mr-1" />
-                        {job.platform}
-                      </Badge>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             );
@@ -314,18 +251,27 @@ const Jobs = () => {
         </div>
 
         {/* Loading indicator */}
-        {isLoading && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {[...Array(4)].map((_, i) => (
+        {(isLoading || isScraping) && (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
               <Card key={i}>
                 <CardContent className="p-4">
-                  <Skeleton className="h-5 w-3/4 mb-2" />
-                  <Skeleton className="h-4 w-1/2 mb-4" />
-                  <div className="flex gap-2">
-                    <Skeleton className="h-4 w-20" />
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <Skeleton className="h-6 w-3/4 mb-2" />
+                      <Skeleton className="h-4 w-1/3" />
+                    </div>
+                    <div className="flex gap-2">
+                      <Skeleton className="h-6 w-16" />
+                      <Skeleton className="h-6 w-20" />
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mb-3">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-4 w-24" />
                     <Skeleton className="h-4 w-16" />
                   </div>
-                  <div className="flex gap-1.5 mt-3">
+                  <div className="flex gap-1.5">
                     <Skeleton className="h-5 w-16" />
                     <Skeleton className="h-5 w-14" />
                     <Skeleton className="h-5 w-18" />
@@ -337,20 +283,27 @@ const Jobs = () => {
         )}
 
         {/* Load more trigger */}
-        <div ref={loadMoreRef} className="h-10" />
+        <div className="h-20 flex items-center justify-center">
+          {hasMore && !isLoading && !isScraping && (
+            <Button variant="outline" onClick={loadMore}>
+              <Loader2 className="h-4 w-4 mr-2" />
+              Load More Jobs
+            </Button>
+          )}
+        </div>
 
-        {filteredJobs.length === 0 && !isLoading && (
+        {filteredJobs.length === 0 && !isLoading && !isScraping && (
           <div className="text-center py-12">
             <Briefcase className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
-              No jobs match your filters. Try adjusting your search or generate sample jobs.
+              No jobs found. Enter keywords above to start scraping jobs from ATS platforms.
             </p>
           </div>
         )}
 
         {!hasMore && jobs.length > 0 && (
           <p className="text-center text-muted-foreground py-4">
-            All jobs loaded
+            All {jobs.length} jobs loaded
           </p>
         )}
       </div>

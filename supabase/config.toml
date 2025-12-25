@@ -1,1 +1,13 @@
 project_id = "wntpldomgjutwufphnpg"
+
+[functions.tailor-application]
+verify_jwt = true
+
+[functions.process-email]
+verify_jwt = true
+
+[functions.background-apply]
+verify_jwt = true
+
+[functions.scrape-jobs]
+verify_jwt = false

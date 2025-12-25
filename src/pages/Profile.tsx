@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,31 +6,118 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { maxmilliamProfile } from '@/data/userProfile';
-import { UserProfile } from '@/types';
-import { User, Briefcase, GraduationCap, Award, Download } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useProfile, type Profile } from '@/hooks/useProfile';
+import { 
+  User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
+  Shield, CheckCircle, Globe, FileText, Languages 
+} from 'lucide-react';
 import { toast } from 'sonner';
 
-const Profile = () => {
-  const [profile, setProfile] = useState<UserProfile>(maxmilliamProfile);
+// Default ATS answers that pass knockout questions
+const DEFAULT_ATS_ANSWERS = {
+  willing_to_relocate: true,
+  visa_required: false,
+  veteran_status: false,
+  disability: false,
+  security_clearance: true,
+  driving_license: true,
+  over18: true,
+  legalToWork: true,
+  backgroundCheckConsent: true,
+  drugTestConsent: true,
+  nonCompeteAgreement: false,
+  immediateStart: true,
+  flexibleSchedule: true,
+  travelWillingness: true,
+  remoteWorkCapable: true,
+};
 
-  const handleLoadCV = () => {
-    setProfile(maxmilliamProfile);
-    toast.success('CV data loaded successfully!');
+const Profile = () => {
+  const { profile, isLoading, updateProfile, loadCVData } = useProfile();
+  const [editMode, setEditMode] = useState(false);
+  const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
+  const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
+
+  useEffect(() => {
+    if (profile) {
+      setLocalProfile(profile);
+    }
+  }, [profile]);
+
+  const handleLoadCV = async () => {
+    await loadCVData();
   };
+
+  const handleSave = async () => {
+    await updateProfile(localProfile);
+    setEditMode(false);
+  };
+
+  const updateLocalField = (field: keyof Profile, value: any) => {
+    setLocalProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  const addSkill = () => {
+    if (!newSkill.name.trim()) return;
+    const skills = [...(localProfile.skills || []), newSkill];
+    updateLocalField('skills', skills);
+    setNewSkill({ name: '', years: 7, category: 'technical' });
+  };
+
+  const removeSkill = (index: number) => {
+    const skills = [...(localProfile.skills || [])];
+    skills.splice(index, 1);
+    updateLocalField('skills', skills);
+  };
+
+  const addCertification = (cert: string) => {
+    if (!cert.trim()) return;
+    const certs = [...(localProfile.certifications || []), cert];
+    updateLocalField('certifications', certs);
+  };
+
+  const removeCertification = (index: number) => {
+    const certs = [...(localProfile.certifications || [])];
+    certs.splice(index, 1);
+    updateLocalField('certifications', certs);
+  };
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-4xl mx-auto">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Profile</h1>
             <p className="text-muted-foreground mt-1">Your CV data for auto-applications</p>
           </div>
-          <Button onClick={handleLoadCV} className="gap-2">
-            <Download className="h-4 w-4" />
-            Load My CV Data
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleLoadCV} variant="outline" className="gap-2">
+              <Download className="h-4 w-4" />
+              Load Sample CV
+            </Button>
+            {editMode ? (
+              <Button onClick={handleSave} className="gap-2">
+                <Save className="h-4 w-4" />
+                Save Changes
+              </Button>
+            ) : (
+              <Button onClick={() => setEditMode(true)} variant="secondary">
+                Edit Profile
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Personal Info */}
@@ -44,27 +131,399 @@ const Profile = () => {
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div>
               <Label>First Name</Label>
-              <Input value={profile.firstName} readOnly className="mt-1" />
+              <Input 
+                value={localProfile.first_name || ''} 
+                onChange={(e) => updateLocalField('first_name', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
             </div>
             <div>
               <Label>Last Name</Label>
-              <Input value={profile.lastName} readOnly className="mt-1" />
+              <Input 
+                value={localProfile.last_name || ''} 
+                onChange={(e) => updateLocalField('last_name', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
             </div>
             <div>
               <Label>Email</Label>
-              <Input value={profile.email} readOnly className="mt-1" />
+              <Input 
+                value={localProfile.email || ''} 
+                onChange={(e) => updateLocalField('email', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
             </div>
             <div>
               <Label>Phone</Label>
-              <Input value={profile.phone} readOnly className="mt-1" />
+              <Input 
+                value={localProfile.phone || ''} 
+                onChange={(e) => updateLocalField('phone', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
             </div>
             <div>
-              <Label>Location</Label>
-              <Input value={`${profile.city}, ${profile.country}`} readOnly className="mt-1" />
+              <Label>City</Label>
+              <Input 
+                value={localProfile.city || ''} 
+                onChange={(e) => updateLocalField('city', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
             </div>
             <div>
-              <Label>Experience</Label>
-              <Input value={profile.totalExperience} readOnly className="mt-1" />
+              <Label>Country</Label>
+              <Input 
+                value={localProfile.country || ''} 
+                onChange={(e) => updateLocalField('country', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>Total Experience</Label>
+              <Input 
+                value={localProfile.total_experience || ''} 
+                onChange={(e) => updateLocalField('total_experience', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>Notice Period</Label>
+              <Input 
+                value={localProfile.notice_period || ''} 
+                onChange={(e) => updateLocalField('notice_period', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>LinkedIn</Label>
+              <Input 
+                value={localProfile.linkedin || ''} 
+                onChange={(e) => updateLocalField('linkedin', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>GitHub</Label>
+              <Input 
+                value={localProfile.github || ''} 
+                onChange={(e) => updateLocalField('github', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>Portfolio</Label>
+              <Input 
+                value={localProfile.portfolio || ''} 
+                onChange={(e) => updateLocalField('portfolio', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>Highest Education</Label>
+              <Input 
+                value={localProfile.highest_education || ''} 
+                onChange={(e) => updateLocalField('highest_education', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>Current Salary</Label>
+              <Input 
+                value={localProfile.current_salary || ''} 
+                onChange={(e) => updateLocalField('current_salary', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+            <div>
+              <Label>Expected Salary</Label>
+              <Input 
+                value={localProfile.expected_salary || ''} 
+                onChange={(e) => updateLocalField('expected_salary', e.target.value)}
+                readOnly={!editMode} 
+                className="mt-1" 
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ATS Knockout Questions */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-green-500" />
+              ATS Knockout Questions (Auto-Pass Answers)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              These answers are optimized to pass ATS screening. Toggle to adjust.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Are you 18 years or older?</span>
+                </div>
+                <Badge variant="secondary">Yes</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-green-500" />
+                  <span>Legally authorized to work?</span>
+                </div>
+                <Badge variant="secondary">Yes</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span>Willing to relocate?</span>
+                <Switch 
+                  checked={localProfile.willing_to_relocate ?? true}
+                  onCheckedChange={(v) => updateLocalField('willing_to_relocate', v)}
+                  disabled={!editMode}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span>Requires visa sponsorship?</span>
+                <Switch 
+                  checked={localProfile.visa_required ?? false}
+                  onCheckedChange={(v) => updateLocalField('visa_required', v)}
+                  disabled={!editMode}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span>Veteran status?</span>
+                <Switch 
+                  checked={localProfile.veteran_status ?? false}
+                  onCheckedChange={(v) => updateLocalField('veteran_status', v)}
+                  disabled={!editMode}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span>Have a disability?</span>
+                <Switch 
+                  checked={localProfile.disability ?? false}
+                  onCheckedChange={(v) => updateLocalField('disability', v)}
+                  disabled={!editMode}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span>Security clearance?</span>
+                <Switch 
+                  checked={localProfile.security_clearance ?? true}
+                  onCheckedChange={(v) => updateLocalField('security_clearance', v)}
+                  disabled={!editMode}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <span>Driving license?</span>
+                <Switch 
+                  checked={localProfile.driving_license ?? true}
+                  onCheckedChange={(v) => updateLocalField('driving_license', v)}
+                  disabled={!editMode}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Consent to background check?</span>
+                </div>
+                <Badge variant="secondary">Yes</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Consent to drug test?</span>
+                </div>
+                <Badge variant="secondary">Yes</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Willing to travel?</span>
+                </div>
+                <Badge variant="secondary">Yes</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Remote work capable?</span>
+                </div>
+                <Badge variant="secondary">Yes</Badge>
+              </div>
+            </div>
+            <div className="mt-4">
+              <Label>Race/Ethnicity (EEO)</Label>
+              {editMode ? (
+                <Select 
+                  value={localProfile.race_ethnicity || ''}
+                  onValueChange={(v) => updateLocalField('race_ethnicity', v)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Decline to self-identify">Decline to self-identify</SelectItem>
+                    <SelectItem value="White">White</SelectItem>
+                    <SelectItem value="Black or African American">Black or African American</SelectItem>
+                    <SelectItem value="Hispanic or Latino">Hispanic or Latino</SelectItem>
+                    <SelectItem value="Asian">Asian</SelectItem>
+                    <SelectItem value="Native American">Native American</SelectItem>
+                    <SelectItem value="Two or More Races">Two or More Races</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={localProfile.race_ethnicity || ''} readOnly className="mt-1" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Skills - Editable */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5" />
+              Skills ({(localProfile.skills || []).length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editMode && (
+              <div className="flex gap-2 mb-4">
+                <Input 
+                  placeholder="Skill name" 
+                  value={newSkill.name}
+                  onChange={(e) => setNewSkill(prev => ({ ...prev, name: e.target.value }))}
+                  className="flex-1"
+                />
+                <Input 
+                  type="number"
+                  placeholder="Years"
+                  value={newSkill.years}
+                  onChange={(e) => setNewSkill(prev => ({ ...prev, years: parseInt(e.target.value) || 7 }))}
+                  className="w-20"
+                />
+                <Select 
+                  value={newSkill.category}
+                  onValueChange={(v: any) => setNewSkill(prev => ({ ...prev, category: v }))}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="technical">Technical</SelectItem>
+                    <SelectItem value="tools">Tools</SelectItem>
+                    <SelectItem value="soft">Soft Skills</SelectItem>
+                    <SelectItem value="languages">Languages</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={addSkill} size="icon">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {(localProfile.skills || []).map((skill: any, i: number) => (
+                <Badge 
+                  key={i} 
+                  variant="secondary"
+                  className="flex items-center gap-1"
+                >
+                  {skill.name} • {skill.years}y
+                  {editMode && (
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                      onClick={() => removeSkill(i)}
+                    />
+                  )}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Skills not in your profile will default to 7 years for automation
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Certifications */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Certifications
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editMode && (
+              <div className="flex gap-2 mb-4">
+                <Input 
+                  placeholder="Add certification" 
+                  id="newCert"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      addCertification((e.target as HTMLInputElement).value);
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={() => {
+                    const input = document.getElementById('newCert') as HTMLInputElement;
+                    addCertification(input.value);
+                    input.value = '';
+                  }}
+                  size="icon"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {(localProfile.certifications || []).map((cert: string, i: number) => (
+                <Badge 
+                  key={i} 
+                  variant="outline"
+                  className="flex items-center gap-1"
+                >
+                  {cert}
+                  {editMode && (
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                      onClick={() => removeCertification(i)}
+                    />
+                  )}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Languages */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Languages className="h-5 w-5" />
+              Languages
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {(localProfile.languages || []).map((lang: any, i: number) => (
+                <Badge key={i} variant="secondary">
+                  {lang.name} - {lang.proficiency}
+                </Badge>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -78,7 +537,7 @@ const Profile = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {profile.workExperience.map((exp) => (
+            {(localProfile.work_experience || []).map((exp: any) => (
               <div key={exp.id} className="border rounded-lg p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -88,7 +547,7 @@ const Profile = () => {
                   <Badge variant="outline">{exp.startDate} - {exp.endDate}</Badge>
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {exp.skills.slice(0, 6).map((skill, i) => (
+                  {(exp.skills || []).slice(0, 6).map((skill: string, i: number) => (
                     <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
                   ))}
                 </div>
@@ -106,32 +565,13 @@ const Profile = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {profile.education.map((edu) => (
+            {(localProfile.education || []).map((edu: any) => (
               <div key={edu.id} className="border rounded-lg p-4">
                 <h3 className="font-semibold">{edu.degree}</h3>
                 <p className="text-muted-foreground">{edu.institution}</p>
                 <p className="text-sm text-muted-foreground mt-1">GPA: {edu.gpa}</p>
               </div>
             ))}
-          </CardContent>
-        </Card>
-
-        {/* Skills */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5" />
-              Skills ({profile.skills.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {profile.skills.map((skill, i) => (
-                <Badge key={i} variant="secondary">
-                  {skill.name} • {skill.years}y
-                </Badge>
-              ))}
-            </div>
           </CardContent>
         </Card>
 
@@ -142,10 +582,46 @@ const Profile = () => {
           </CardHeader>
           <CardContent>
             <Textarea 
-              value={profile.coverLetter} 
-              readOnly 
+              value={localProfile.cover_letter || ''} 
+              onChange={(e) => updateLocalField('cover_letter', e.target.value)}
+              readOnly={!editMode} 
               className="min-h-[300px] font-mono text-sm"
             />
+          </CardContent>
+        </Card>
+
+        {/* ATS Strategy */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              ATS Strategy
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea 
+              value={localProfile.ats_strategy || ''} 
+              onChange={(e) => updateLocalField('ats_strategy', e.target.value)}
+              readOnly={!editMode} 
+              className="min-h-[150px] text-sm"
+              placeholder="Instructions for how the AI should answer ATS questions..."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Excluded Companies */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Excluded Companies</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {(localProfile.excluded_companies || []).map((company: string, i: number) => (
+                <Badge key={i} variant="destructive" className="text-xs">
+                  {company}
+                </Badge>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
