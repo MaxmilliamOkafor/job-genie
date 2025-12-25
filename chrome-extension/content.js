@@ -135,6 +135,147 @@ const CAPTCHA_SELECTORS = {
   ]
 };
 
+// ============= KNOCKOUT QUESTION ANSWER BANK =============
+// Auto-answers for common US job application questions (Ireland-based applicant)
+
+const KNOCKOUT_ANSWER_BANK = {
+  // Work Authorization & Visa
+  'legal documentation.*identity.*eligibility.*employed.*united states': {
+    answer: 'No',
+    flag: true,
+    reason: 'EU citizen - requires visa sponsorship for US employment'
+  },
+  'require.*sponsorship.*work.*us|sponsor.*visa|need.*sponsorship': {
+    answer: 'Yes',
+    flag: true,
+    reason: 'H1B or equivalent visa sponsorship required'
+  },
+  'authorized.*work.*united states|legally.*work.*us|work authorization': {
+    answer: 'No',
+    flag: true,
+    reason: 'Requires visa sponsorship - EU citizen'
+  },
+  'citizen.*united states|us citizen': {
+    answer: 'No',
+    flag: true,
+    reason: 'EU/Irish citizen'
+  },
+  
+  // Age & Background
+  'age 18|over 18|at least 18|18 years|eighteen': {
+    answer: 'Yes',
+    flag: false
+  },
+  'background check|criminal background|background investigation': {
+    answer: 'Yes',
+    flag: false
+  },
+  'drug screening|drug test|substance test': {
+    answer: 'Yes',
+    flag: false
+  },
+  
+  // Previous Employment
+  'employed by.*company|worked.*before|previous.*employee': {
+    answer: 'No',
+    flag: false
+  },
+  'referred by|employee referral|know anyone': {
+    answer: 'No',
+    flag: false
+  },
+  
+  // Driver's License
+  'driver.*license|driving license|valid license': {
+    answer: 'Yes - EU License (Irish)',
+    flag: false
+  },
+  
+  // Availability & Relocation
+  'willing.*relocate|open.*relocation|relocate.*position': {
+    answer: 'Yes',
+    flag: false
+  },
+  'available.*start|start date|earliest.*start|when.*start': {
+    answer: 'Immediate availability',
+    flag: false
+  },
+  'notice period|current.*notice': {
+    answer: '2 weeks',
+    flag: false
+  },
+  
+  // Job Functions & Accommodations
+  'essential functions|perform.*duties|physical requirements': {
+    answer: 'Yes',
+    flag: false
+  },
+  'reasonable accommodation|disability accommodation': {
+    answer: 'Not required',
+    flag: false
+  },
+  
+  // Legal Agreements
+  'terms and conditions|agree.*terms|certification|certify': {
+    answer: 'Yes',
+    flag: false
+  },
+  'non-compete|non-disclosure|nda|confidentiality': {
+    answer: 'Yes',
+    flag: false
+  },
+  
+  // EEO & Demographics (usually optional)
+  'veteran status|military service': {
+    answer: 'I am not a veteran',
+    flag: false
+  },
+  'disability status|disabled': {
+    answer: 'I do not wish to answer',
+    flag: false
+  },
+  'race|ethnicity|ethnic background': {
+    answer: 'I do not wish to answer',
+    flag: false
+  },
+  'gender|sex': {
+    answer: 'I do not wish to answer',
+    flag: false
+  }
+};
+
+// Helper function to match question against answer bank
+function matchKnockoutQuestion(questionText) {
+  const lowerQuestion = questionText.toLowerCase();
+  
+  for (const [pattern, response] of Object.entries(KNOCKOUT_ANSWER_BANK)) {
+    const regex = new RegExp(pattern, 'i');
+    if (regex.test(lowerQuestion)) {
+      return response;
+    }
+  }
+  return null;
+}
+
+// Get salary answer based on job data
+function getSalaryAnswer(questionText, jobData, userProfile) {
+  const expectedSalary = userProfile?.expected_salary;
+  const currentSalary = userProfile?.current_salary;
+  
+  // Try to extract salary from job description
+  const jdSalaryMatch = jobData?.description?.match(/\$[\d,]+\s*[-–]\s*\$[\d,]+/);
+  
+  if (jdSalaryMatch) {
+    return jdSalaryMatch[0];
+  } else if (expectedSalary) {
+    return expectedSalary;
+  } else if (currentSalary) {
+    return `Market rate for ${jobData?.title || 'this role'} - Negotiable`;
+  }
+  
+  return `Market rate for ${jobData?.title || 'the role'} - Negotiable`;
+}
+
 // ============= STATE MANAGEMENT =============
 
 let applicationState = {
@@ -566,15 +707,43 @@ async function getAIAnswers(questions, jobData) {
   }
 }
 
-function fillQuestionsWithAnswers(questions, answers) {
+function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
   const answerMap = new Map(answers.map(a => [a.id, a]));
   let filledCount = 0;
+  const flaggedQuestions = [];
   
   for (const q of questions) {
-    const answerObj = answerMap.get(q.id);
-    if (!answerObj?.answer) continue;
+    // First check knockout answer bank
+    const knockoutMatch = matchKnockoutQuestion(q.label);
+    let answer = null;
+    let shouldFlag = false;
     
-    const answer = answerObj.answer;
+    if (knockoutMatch) {
+      answer = knockoutMatch.answer;
+      shouldFlag = knockoutMatch.flag;
+      if (shouldFlag) {
+        flaggedQuestions.push({
+          question: q.label,
+          answer: answer,
+          reason: knockoutMatch.reason
+        });
+      }
+      console.log(`QuantumHire AI: Knockout match for "${q.label}" → "${answer}"${shouldFlag ? ' [FLAGGED]' : ''}`);
+    } else {
+      // Check for salary questions
+      if (q.label.toLowerCase().match(/salary|pay range|compensation|expected.*pay/)) {
+        answer = getSalaryAnswer(q.label, jobData, userProfile);
+        console.log(`QuantumHire AI: Salary answer for "${q.label}" → "${answer}"`);
+      } else {
+        // Use AI-generated answer
+        const answerObj = answerMap.get(q.id);
+        if (answerObj?.answer) {
+          answer = answerObj.answer;
+        }
+      }
+    }
+    
+    if (!answer) continue;
     
     if (q.type === 'radio' && q.elements) {
       // Handle radio buttons
@@ -611,7 +780,13 @@ function fillQuestionsWithAnswers(questions, answers) {
     }
   }
   
-  return filledCount;
+  // Log flagged questions for manual review
+  if (flaggedQuestions.length > 0) {
+    console.log('QuantumHire AI: ⚠️ Flagged questions requiring manual review:', flaggedQuestions);
+    showToast(`⚠️ ${flaggedQuestions.length} question(s) flagged for review (visa/sponsorship)`, 'warning');
+  }
+  
+  return { filledCount, flaggedQuestions };
 }
 
 // ============= PDF GENERATION & FILE UPLOAD =============
@@ -752,34 +927,56 @@ function parseAchievements(achievements) {
   }));
 }
 
-async function uploadPDFFile(fileInput, pdfBase64, fileName) {
-  if (!fileInput || !pdfBase64) return false;
+// PDF upload with retry logic
+async function uploadPDFFile(fileInput, pdfBase64, fileName, maxRetries = 3) {
+  if (!fileInput || !pdfBase64) return { success: false, error: 'Missing input or PDF data' };
   
-  try {
-    // Convert base64 to Blob
-    const binaryString = atob(pdfBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`QuantumHire AI: PDF upload attempt ${attempt}/${maxRetries} for ${fileName}`);
+      
+      // Convert base64 to Blob
+      const binaryString = atob(pdfBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      
+      // Create DataTransfer and set files
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(pdfFile);
+      fileInput.files = dataTransfer.files;
+      
+      // Dispatch events
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      // Verify upload
+      if (fileInput.files.length > 0 && fileInput.files[0].name === fileName) {
+        console.log(`QuantumHire AI: ✅ PDF uploaded successfully: ${fileName} (${pdfFile.size} bytes)`);
+        showToast(`✅ PDF uploaded: ${fileName}`, 'success');
+        return { success: true, fileName, size: pdfFile.size };
+      } else {
+        throw new Error('File not set correctly');
+      }
+    } catch (error) {
+      lastError = error;
+      console.error(`QuantumHire AI: PDF upload attempt ${attempt} failed:`, error);
+      
+      if (attempt < maxRetries) {
+        showToast(`Retrying PDF upload... (${attempt + 1}/${maxRetries})`, 'info');
+        await new Promise(r => setTimeout(r, 500 * attempt)); // Exponential backoff
+      }
     }
-    const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
-    const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-    
-    // Create DataTransfer and set files
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(pdfFile);
-    fileInput.files = dataTransfer.files;
-    
-    // Dispatch events
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-    
-    console.log(`QuantumHire AI: Uploaded PDF: ${fileName} (${pdfFile.size} bytes)`);
-    return true;
-  } catch (error) {
-    console.error('QuantumHire AI: PDF upload error', error);
-    return false;
   }
+  
+  console.error('QuantumHire AI: PDF upload failed after all retries');
+  showToast(`❌ PDF upload failed: ${fileName}`, 'error');
+  return { success: false, error: lastError?.message || 'Upload failed' };
 }
 
 // Legacy text upload (fallback)
@@ -841,14 +1038,15 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     applicationState.status = 'paused';
     applicationState.pauseReason = 'captcha';
     
-    showToast('⚠️ CAPTCHA detected - Please complete verification then click CONTINUE', 'warning');
+    const captchaMessage = '⚠️ CAPTCHA detected - Please complete verification then click CONTINUE';
+    showToast(captchaMessage, 'warning');
     
     return {
       success: false,
       status: 'paused',
       pauseReason: 'captcha',
       captchaType: captchas[0].type,
-      message: 'Human verification required. Please complete the CAPTCHA.'
+      message: captchaMessage
     };
   }
   
@@ -924,7 +1122,7 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     }
   }
   
-  // Step 2: Answer screening questions with AI
+  // Step 2: Answer screening questions with AI + Knockout Bank
   if (!options.skipQuestions) {
     const questions = detectApplicationQuestions();
     
@@ -934,67 +1132,97 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
       const jobData = tailoredData?.jobData || extractJobDetails();
       const answers = await getAIAnswers(questions, jobData);
       
-      if (answers.length > 0) {
-        results.questions = fillQuestionsWithAnswers(questions, answers);
-      }
+      const questionResult = fillQuestionsWithAnswers(questions, answers, jobData, profile);
+      results.questions = questionResult.filledCount;
+      results.flaggedQuestions = questionResult.flaggedQuestions;
     }
   }
   
-  // Step 3: Generate and Upload PDFs
+  // Step 3: MANDATORY PDF Generation and Upload
   if (tailoredData && !options.skipFileUpload) {
     const fileInputs = document.querySelectorAll('input[type="file"]');
     const jobData = tailoredData.jobData || extractJobDetails();
     
+    // ALWAYS generate PDFs when tailored data is available
+    console.log('QuantumHire AI: 📄 Generating PDFs for mandatory upload...');
+    
+    let resumePdfGenerated = false;
+    let coverPdfGenerated = false;
+    
+    // Pre-generate PDFs
+    let resumePdfResult = null;
+    let coverPdfResult = null;
+    
+    if (tailoredData.tailoredResume) {
+      resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
+      resumePdfGenerated = resumePdfResult?.success;
+      if (resumePdfGenerated) {
+        console.log(`QuantumHire AI: ✅ Resume PDF generated: ${resumePdfResult.fileName}`);
+      }
+    }
+    
+    if (tailoredData.tailoredCoverLetter) {
+      coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
+      coverPdfGenerated = coverPdfResult?.success;
+      if (coverPdfGenerated) {
+        console.log(`QuantumHire AI: ✅ Cover Letter PDF generated: ${coverPdfResult.fileName}`);
+      }
+    }
+    
+    // Upload to file inputs
     for (const input of fileInputs) {
       if (input.files?.length > 0) continue; // Already has file
       
       const label = findLabelForInput(input).toLowerCase();
       const inputName = (input.name || input.id || '').toLowerCase();
       
-      // Resume upload - generate actual PDF
+      // Resume upload - MANDATORY
       if (inputName.includes('resume') || inputName.includes('cv') || 
-          label.includes('resume') || label.includes('cv')) {
-        if (tailoredData.tailoredResume) {
-          // Try to generate proper PDF first
-          const pdfResult = await generatePDF('resume', profile, jobData, tailoredData);
-          
-          if (pdfResult.success && pdfResult.pdf) {
-            if (await uploadPDFFile(input, pdfResult.pdf, pdfResult.fileName)) {
-              results.files++;
-              results.resumePdf = pdfResult; // Store for preview
-              console.log('QuantumHire AI: Resume PDF uploaded successfully');
-            }
-          } else {
-            // Fallback to text file
-            const fileName = tailoredData.fileName || 'Resume';
-            if (await uploadFile(input, tailoredData.tailoredResume, `${fileName}.txt`)) {
-              results.files++;
-            }
+          label.includes('resume') || label.includes('cv') ||
+          label.includes('attach')) {
+        if (resumePdfResult?.success && resumePdfResult.pdf) {
+          const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
+          if (uploadResult.success) {
+            results.files++;
+            results.resumePdf = resumePdfResult;
+            results.resumeUploaded = true;
+          }
+        } else if (tailoredData.tailoredResume) {
+          // Last resort fallback to text file
+          const fileName = `${profile.first_name || 'User'}${profile.last_name || ''}_CV_${(jobData?.title || 'Job').replace(/\s+/g, '')}.txt`;
+          if (await uploadFile(input, tailoredData.tailoredResume, fileName)) {
+            results.files++;
+            showToast('⚠️ Uploaded as text file (PDF generation failed)', 'warning');
           }
         }
       }
       
-      // Cover letter upload - generate actual PDF
+      // Cover letter upload - MANDATORY
       else if (inputName.includes('cover') || label.includes('cover letter')) {
-        if (tailoredData.tailoredCoverLetter) {
-          // Try to generate proper PDF first
-          const pdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
-          
-          if (pdfResult.success && pdfResult.pdf) {
-            if (await uploadPDFFile(input, pdfResult.pdf, pdfResult.fileName)) {
-              results.files++;
-              results.coverPdf = pdfResult; // Store for preview
-              console.log('QuantumHire AI: Cover letter PDF uploaded successfully');
-            }
-          } else {
-            // Fallback to text file
-            const fileName = (tailoredData.fileName || 'CoverLetter').replace('CV', 'CoverLetter');
-            if (await uploadFile(input, tailoredData.tailoredCoverLetter, `${fileName}.txt`)) {
-              results.files++;
-            }
+        if (coverPdfResult?.success && coverPdfResult.pdf) {
+          const uploadResult = await uploadPDFFile(input, coverPdfResult.pdf, coverPdfResult.fileName);
+          if (uploadResult.success) {
+            results.files++;
+            results.coverPdf = coverPdfResult;
+            results.coverUploaded = true;
+          }
+        } else if (tailoredData.tailoredCoverLetter) {
+          // Last resort fallback to text file
+          const fileName = `${profile.first_name || 'User'}${profile.last_name || ''}_CoverLetter_${(jobData?.title || 'Job').replace(/\s+/g, '')}.txt`;
+          if (await uploadFile(input, tailoredData.tailoredCoverLetter, fileName)) {
+            results.files++;
+            showToast('⚠️ Uploaded as text file (PDF generation failed)', 'warning');
           }
         }
       }
+    }
+    
+    // Store generated PDFs for preview even if no file input found
+    if (resumePdfResult?.success) {
+      results.resumePdf = resumePdfResult;
+    }
+    if (coverPdfResult?.success) {
+      results.coverPdf = coverPdfResult;
     }
   }
   
@@ -1012,13 +1240,33 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
   // Save session state
   await saveSessionState();
   
+  // Build detailed message
+  let message = `Page ${pageInfo.current}/${pageInfo.total}: `;
+  const parts = [];
+  
+  if (results.fields > 0) parts.push(`${results.fields} fields`);
+  if (results.questions > 0) parts.push(`${results.questions}/${results.questions} questions auto-answered`);
+  if (results.files > 0) {
+    const uploadParts = [];
+    if (results.resumeUploaded) uploadParts.push('CV');
+    if (results.coverUploaded) uploadParts.push('Cover Letter');
+    parts.push(`${uploadParts.join(' + ')} ✅ UPLOADED`);
+  }
+  
+  message += parts.join(', ');
+  
+  // Add flagged questions warning
+  if (results.flaggedQuestions?.length > 0) {
+    message += ` | ⚠️ ${results.flaggedQuestions.length} flagged for review`;
+  }
+  
   return {
     success: totalFilled > 0,
     status: 'in_progress',
     ...results,
     page: { current: pageInfo.current, total: pageInfo.total, name: pageInfo.name },
     platform: platform.name,
-    message: `Page ${pageInfo.current}/${pageInfo.total}: Filled ${results.fields} fields, ${results.questions} questions${results.files > 0 ? `, ${results.files} files` : ''}`
+    message
   };
 }
 
@@ -1148,9 +1396,9 @@ function createFloatingPanel() {
       </div>
       
       <div class="qh-captcha-alert hidden" id="qh-captcha-alert">
-        <div class="qh-alert-header">⚠️ Human Verification Required</div>
-        <div class="qh-alert-body">Complete the CAPTCHA above, then click Continue</div>
-        <button id="qh-continue-btn" class="qh-btn primary">✓ Continue After Verification</button>
+        <div class="qh-alert-header">⚠️ CAPTCHA detected</div>
+        <div class="qh-alert-body">Please complete verification then click CONTINUE</div>
+        <button id="qh-continue-btn" class="qh-btn primary">CONTINUE</button>
       </div>
       
       <div class="qh-results hidden" id="qh-results">
