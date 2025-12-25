@@ -36,7 +36,8 @@ const Jobs = () => {
     loadMore, 
     startContinuousScraping,
     updateJobStatus,
-    clearAndRefresh
+    clearAndRefresh,
+    refetch
   } = useJobScraper();
   const { profile } = useProfile();
   const [search, setSearch] = useState('');
@@ -202,7 +203,8 @@ const Jobs = () => {
         <BulkKeywordSearch 
           onSearch={handleKeywordSearch}
           onFilterChange={setSearch}
-          isSearching={isScraping} 
+          isSearching={isScraping}
+          onGoogleSearchComplete={refetch}
         />
 
         <JobFilters
