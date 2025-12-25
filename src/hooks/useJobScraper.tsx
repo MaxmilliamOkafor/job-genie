@@ -165,15 +165,36 @@ export function useJobScraper() {
       // Initial scrape
       await scrapeJobs(keywordString, false);
 
-      // Aggressively prefill up to ~2000 jobs so the list is usable immediately
-      const TARGET = 2000;
+      // Continue fetching while there are more jobs available
+      let hasMoreJobs = true;
       let guard = 0;
-      while (offsetRef.current < TARGET && guard < 20) {
+      const MAX_BATCHES = 10; // Limit batches to prevent infinite loops
+      
+      while (hasMoreJobs && guard < MAX_BATCHES) {
         guard += 1;
-        await scrapeJobs(keywordString, true);
-        // tiny pause to avoid hammering
+        
+        const { data } = await supabase.functions.invoke('scrape-jobs', {
+          body: {
+            keywords: keywordString,
+            offset: offsetRef.current,
+            limit: 200,
+            user_id: user?.id,
+          },
+        });
+        
+        if (data?.success) {
+          offsetRef.current = data.nextOffset;
+          hasMoreJobs = data.hasMore && data.jobs?.length > 0;
+          await fetchExistingJobs(true);
+        } else {
+          hasMoreJobs = false;
+        }
+        
+        // Small pause between batches
         await new Promise((r) => setTimeout(r, 250));
       }
+      
+      setIsScraping(false);
     })();
 
     // Set up interval for continuous updates every 10 minutes
@@ -184,7 +205,7 @@ export function useJobScraper() {
     intervalRef.current = setInterval(() => {
       scrapeJobs(keywordString, true);
     }, 600000); // Every 10 minutes
-  }, [scrapeJobs]);
+  }, [scrapeJobs, user, fetchExistingJobs]);
 
   // Stop continuous scraping
   const stopScraping = useCallback(() => {
