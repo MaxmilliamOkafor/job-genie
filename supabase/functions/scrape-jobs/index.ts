@@ -209,61 +209,21 @@ function parseKeywords(keywordString: string): string[] {
     .filter((k, i, arr) => arr.indexOf(k) === i);
 }
 
-// Fallback synthetic job generator with realistic career page URLs
-function generateSyntheticJobs(keywords: string[], count: number): JobListing[] {
-  const jobs: JobListing[] = [];
+// Validate that a job URL is a direct job link (not a general careers page)
+function isValidDirectJobUrl(url: string): boolean {
+  if (!url) return false;
   
-  const titles = [
-    'Senior Software Engineer', 'Staff Engineer', 'Principal Engineer',
-    'Engineering Manager', 'Tech Lead', 'Full Stack Developer',
-    'Backend Engineer', 'Frontend Engineer', 'Platform Engineer',
-    'ML Engineer', 'Data Engineer', 'DevOps Engineer', 'SRE',
-    'Data Scientist', 'Product Manager', 'Solutions Architect'
-  ];
-  
-  // Use companies with real career pages that actually work
-  const companiesWithCareers = [
-    { name: 'Google', url: 'https://careers.google.com/jobs/results/' },
-    { name: 'Microsoft', url: 'https://careers.microsoft.com/professionals/us/en/search-results' },
-    { name: 'Amazon', url: 'https://www.amazon.jobs/en/search' },
-    { name: 'Meta', url: 'https://www.metacareers.com/jobs/' },
-    { name: 'Apple', url: 'https://jobs.apple.com/en-us/search' },
-    { name: 'Netflix', url: 'https://jobs.netflix.com/search' },
-    { name: 'Salesforce', url: 'https://careers.salesforce.com/en/jobs/' },
-    { name: 'Adobe', url: 'https://careers.adobe.com/us/en/search-results' },
-    { name: 'IBM', url: 'https://www.ibm.com/careers/search' },
-    { name: 'Oracle', url: 'https://www.oracle.com/careers/' },
-  ];
-  
-  const locations = [
-    'San Francisco, CA', 'New York, NY', 'Seattle, WA', 'Austin, TX',
-    'Remote', 'London, UK', 'Berlin, Germany', 'Toronto, Canada'
-  ];
-  
-  for (let i = 0; i < count; i++) {
-    const title = titles[Math.floor(Math.random() * titles.length)];
-    const companyData = companiesWithCareers[Math.floor(Math.random() * companiesWithCareers.length)];
-    const location = locations[Math.floor(Math.random() * locations.length)];
-    
-    // Build a search-friendly URL that leads to real job listings
-    const searchQuery = encodeURIComponent(`${title}`);
-    const url = `${companyData.url}?q=${searchQuery}`;
-    
-    jobs.push({
-      title,
-      company: companyData.name,
-      location,
-      salary: `$${150 + Math.floor(Math.random() * 100)}k - $${250 + Math.floor(Math.random() * 100)}k`,
-      description: `Join ${companyData.name} as a ${title}. Work on exciting projects with cutting-edge technology.`,
-      requirements: ['Python', 'AWS', 'React', 'SQL'].slice(0, 2 + Math.floor(Math.random() * 3)),
-      platform: PLATFORM_TIERS.tier1[Math.floor(Math.random() * PLATFORM_TIERS.tier1.length)],
-      url,
-      posted_date: new Date(Date.now() - Math.random() * 72 * 60 * 60 * 1000).toISOString(),
-      match_score: 0,
-    });
+  // Greenhouse direct job URLs always contain /jobs/ with a job ID
+  if (url.includes('greenhouse.io') && url.includes('/jobs/')) {
+    return true;
   }
   
-  return jobs;
+  // Workable direct job URLs use /j/ with a shortcode
+  if (url.includes('workable.com') && url.includes('/j/')) {
+    return true;
+  }
+  
+  return false;
 }
 
 serve(async (req) => {
@@ -279,8 +239,8 @@ serve(async (req) => {
     const parsedKeywords = parseKeywords(keywords);
     let allJobs: JobListing[] = [];
     
-    // HYBRID APPROACH: Try real APIs first, then fill with synthetic
-    const greenhousePromises = GREENHOUSE_COMPANIES.slice(0, 15).map(c => fetchGreenhouseJobs(c));
+    // Fetch ONLY real jobs from APIs - no synthetic fallback
+    const greenhousePromises = GREENHOUSE_COMPANIES.map(c => fetchGreenhouseJobs(c));
     const workablePromises = WORKABLE_COMPANIES.map(c => fetchWorkableJobs(c));
     
     const [greenhouseResults, workableResults] = await Promise.all([
@@ -302,22 +262,17 @@ serve(async (req) => {
     
     console.log(`Fetched ${allJobs.length} real jobs from APIs`);
     
-    // Fill remaining with synthetic jobs if needed
-    const targetCount = Math.max(limit, 100);
-    if (allJobs.length < targetCount) {
-      const syntheticCount = targetCount - allJobs.length;
-      const syntheticJobs = generateSyntheticJobs(parsedKeywords, syntheticCount);
-      allJobs.push(...syntheticJobs);
-      console.log(`Added ${syntheticCount} synthetic jobs`);
-    }
+    // Filter out jobs with invalid URLs (career pages instead of direct job links)
+    const validJobs = allJobs.filter(job => isValidDirectJobUrl(job.url));
+    console.log(`${validJobs.length} jobs have valid direct apply URLs`);
     
     // Calculate match scores
-    for (const job of allJobs) {
+    for (const job of validJobs) {
       job.match_score = calculateMatchScore(job, parsedKeywords);
     }
     
     // Sort by platform tier then match score
-    allJobs.sort((a, b) => {
+    validJobs.sort((a, b) => {
       const tierA = PLATFORM_TIERS.tier1.includes(a.platform) ? 0 : PLATFORM_TIERS.tier2.includes(a.platform) ? 1 : 2;
       const tierB = PLATFORM_TIERS.tier1.includes(b.platform) ? 0 : PLATFORM_TIERS.tier2.includes(b.platform) ? 1 : 2;
       if (tierA !== tierB) return tierA - tierB;
@@ -325,7 +280,7 @@ serve(async (req) => {
     });
     
     // Slice for pagination
-    const paginatedJobs = allJobs.slice(offset, offset + limit);
+    const paginatedJobs = validJobs.slice(offset, offset + limit);
     
     // Save to database if user_id provided
     if (user_id && paginatedJobs.length > 0) {
@@ -361,9 +316,9 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         jobs: paginatedJobs,
-        hasMore: offset + limit < allJobs.length,
+        hasMore: offset + limit < validJobs.length,
         nextOffset: offset + limit,
-        realJobsCount: allJobs.filter(j => j.platform === 'Greenhouse' || j.platform === 'Workable').length,
+        totalValidJobs: validJobs.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
