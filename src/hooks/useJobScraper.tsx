@@ -66,7 +66,7 @@ export function useJobScraper() {
     }
   }, [user, jobs.length]);
 
-  // Scrape new jobs from edge function
+  // Scrape new jobs from edge function (larger batches)
   const scrapeJobs = useCallback(async (keywordString: string, append = false) => {
     if (!user) return;
     
@@ -76,7 +76,7 @@ export function useJobScraper() {
         body: {
           keywords: keywordString,
           offset: append ? offsetRef.current : 0,
-          limit: 50,
+          limit: 200, // Fetch larger batches
           user_id: user.id,
         },
       });
@@ -109,14 +109,14 @@ export function useJobScraper() {
     // Initial scrape
     scrapeJobs(keywordString, false);
     
-    // Set up interval for continuous updates
+    // Set up interval for continuous updates every 10 minutes
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
     
     intervalRef.current = setInterval(() => {
       scrapeJobs(keywordString, true);
-    }, 60000); // Every minute
+    }, 600000); // Every 10 minutes
   }, [scrapeJobs]);
 
   // Stop continuous scraping
