@@ -2,15 +2,15 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
+import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
+import { Job } from '@/hooks/useJobs';
 import { 
   Briefcase, 
   MapPin, 
@@ -22,11 +22,9 @@ import {
   ArrowUp,
   Trash2,
   Star,
-  Search,
-  TrendingUp,
+  Sparkles,
   Calendar,
-  Building2,
-  Sparkles
+  TrendingUp
 } from 'lucide-react';
 
 // Tier-1 companies for visual highlighting
@@ -56,12 +54,7 @@ const Jobs = () => {
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | 'week'>('today');
-  const [platformFilter, setPlatformFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'applied'>('all');
+  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   
   const observerRef = useRef<IntersectionObserver>();
 
@@ -84,76 +77,31 @@ const Jobs = () => {
     if (node) observerRef.current.observe(node);
   }, [isLoading, isSearching, hasMore, loadMore]);
 
-  // Calculate time-based job counts
+  // Calculate stats for header cards
   const jobStats = useMemo(() => {
     const now = Date.now();
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
     
-    const todayJobs = jobs.filter(j => new Date(j.posted_date).getTime() > oneDayAgo);
-    const weekJobs = jobs.filter(j => new Date(j.posted_date).getTime() > oneWeekAgo);
-    const appliedJobs = jobs.filter(j => j.status === 'applied');
-    const pendingJobs = jobs.filter(j => j.status === 'pending');
-    
-    // Platform breakdown
-    const platforms: Record<string, number> = {};
-    jobs.forEach(j => {
-      if (j.platform) {
-        platforms[j.platform] = (platforms[j.platform] || 0) + 1;
-      }
-    });
-    
     return {
       total: jobs.length,
-      today: todayJobs.length,
-      week: weekJobs.length,
-      applied: appliedJobs.length,
-      pending: pendingJobs.length,
-      platforms,
+      today: jobs.filter(j => new Date(j.posted_date).getTime() > oneDayAgo).length,
+      week: jobs.filter(j => new Date(j.posted_date).getTime() > oneWeekAgo).length,
+      applied: jobs.filter(j => j.status === 'applied').length,
     };
   }, [jobs]);
 
-  // Filter jobs
-  const filteredJobs = useMemo(() => {
-    const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
-    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-    
-    return jobs.filter(job => {
-      // Time filter
-      if (timeFilter === 'today') {
-        const jobTime = new Date(job.posted_date).getTime();
-        if (jobTime < oneDayAgo) return false;
-      } else if (timeFilter === 'week') {
-        const jobTime = new Date(job.posted_date).getTime();
-        if (jobTime < oneWeekAgo) return false;
-      }
-      
-      // Search filter
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = 
-          job.title.toLowerCase().includes(searchLower) ||
-          job.company.toLowerCase().includes(searchLower) ||
-          job.location.toLowerCase().includes(searchLower);
-        if (!matchesSearch) return false;
-      }
-      
-      // Platform filter
-      if (platformFilter !== 'all' && job.platform !== platformFilter) return false;
-      
-      // Status filter
-      if (statusFilter !== 'all' && job.status !== statusFilter) return false;
-      
-      return true;
-    }).sort((a, b) => b.match_score - a.match_score);
-  }, [jobs, timeFilter, searchTerm, platformFilter, statusFilter]);
-
   const handleJobApplied = (jobId: string) => updateJobStatus(jobId, 'applied');
 
+  const handleFiltersChange = useCallback((filtered: Job[]) => {
+    setFilteredJobs(filtered);
+  }, []);
+
   const getTimeAgo = (date: string) => {
-    const hours = Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60));
-    if (hours < 1) return 'Just now';
+    const minutes = Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60));
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
@@ -165,10 +113,6 @@ const Jobs = () => {
     if (score >= 65) return 'text-primary bg-primary/10 border-primary/30';
     return 'text-muted-foreground bg-muted border-border';
   };
-
-  const uniquePlatforms = useMemo(() => 
-    [...new Set(jobs.map(j => j.platform).filter(Boolean))] as string[],
-  [jobs]);
 
   return (
     <AppLayout>
@@ -202,10 +146,7 @@ const Jobs = () => {
           {/* Stats Cards */}
           {jobs.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card 
-                className={`cursor-pointer transition-all ${timeFilter === 'today' ? 'ring-2 ring-primary' : 'hover:border-primary/50'}`}
-                onClick={() => setTimeFilter('today')}
-              >
+              <Card className="transition-all hover:border-primary/50">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <Sparkles className="h-3.5 w-3.5 text-green-500" />
@@ -216,10 +157,7 @@ const Jobs = () => {
                 </CardContent>
               </Card>
               
-              <Card 
-                className={`cursor-pointer transition-all ${timeFilter === 'week' ? 'ring-2 ring-primary' : 'hover:border-primary/50'}`}
-                onClick={() => setTimeFilter('week')}
-              >
+              <Card className="transition-all hover:border-primary/50">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <Calendar className="h-3.5 w-3.5" />
@@ -230,10 +168,7 @@ const Jobs = () => {
                 </CardContent>
               </Card>
               
-              <Card 
-                className={`cursor-pointer transition-all ${timeFilter === 'all' ? 'ring-2 ring-primary' : 'hover:border-primary/50'}`}
-                onClick={() => setTimeFilter('all')}
-              >
+              <Card className="transition-all hover:border-primary/50">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <TrendingUp className="h-3.5 w-3.5" />
@@ -244,10 +179,7 @@ const Jobs = () => {
                 </CardContent>
               </Card>
               
-              <Card 
-                className={`cursor-pointer transition-all ${statusFilter === 'applied' ? 'ring-2 ring-green-500' : 'hover:border-green-500/50'}`}
-                onClick={() => setStatusFilter(statusFilter === 'applied' ? 'all' : 'applied')}
-              >
+              <Card className="transition-all hover:border-green-500/50">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <CheckCircle className="h-3.5 w-3.5 text-green-500" />
@@ -266,60 +198,7 @@ const Jobs = () => {
 
         {/* Filters Bar */}
         {jobs.length > 0 && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search jobs, companies, locations..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                
-                <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <Building2 className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Platform" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Platforms</SelectItem>
-                    {uniquePlatforms.map(platform => (
-                      <SelectItem key={platform} value={platform}>
-                        {platform} ({jobStats.platforms[platform] || 0})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'pending' | 'applied')}>
-                  <SelectTrigger className="w-full sm:w-[150px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Pending ({jobStats.pending})</SelectItem>
-                    <SelectItem value="applied">Applied ({jobStats.applied})</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Active Filters */}
-              <div className="flex flex-wrap gap-2 mt-3">
-                <Badge variant={timeFilter === 'today' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setTimeFilter('today')}>
-                  Today ({jobStats.today})
-                </Badge>
-                <Badge variant={timeFilter === 'week' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setTimeFilter('week')}>
-                  This Week ({jobStats.week})
-                </Badge>
-                <Badge variant={timeFilter === 'all' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setTimeFilter('all')}>
-                  All Time ({jobStats.total})
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+          <JobFiltersBar jobs={jobs} onFiltersChange={handleFiltersChange} />
         )}
 
         {/* Automation Panel */}
@@ -335,7 +214,7 @@ const Jobs = () => {
         {jobs.length > 0 && (
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
-              {timeFilter === 'today' ? "Today's Jobs" : timeFilter === 'week' ? "This Week's Jobs" : "All Jobs"}
+              Job Results
               <span className="text-muted-foreground font-normal ml-2">
                 ({filteredJobs.length.toLocaleString()} results)
               </span>
@@ -490,9 +369,9 @@ const Jobs = () => {
                 : 'Click "Start Live" above to fetch fresh jobs from top tech companies.'}
             </p>
             {jobs.length > 0 && (
-              <Button variant="outline" onClick={() => { setTimeFilter('all'); setSearchTerm(''); setPlatformFilter('all'); setStatusFilter('all'); }} className="mt-4">
-                Reset Filters
-              </Button>
+              <p className="text-sm text-muted-foreground mt-4">
+                Use the filters above to find jobs
+              </p>
             )}
           </div>
         )}

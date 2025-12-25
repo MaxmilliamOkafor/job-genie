@@ -304,16 +304,28 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
           </div>
         )}
 
-        {/* ATS Platforms Info */}
+        {/* ATS Platforms Info - Clickable */}
         <div className="bg-background/30 rounded-lg p-4 border border-border/50">
           <h4 className="font-medium mb-2 flex items-center gap-2">
             <Globe className="h-4 w-4 text-primary" />
             Priority ATS Platforms
           </h4>
           <div className="flex flex-wrap gap-2">
-            {['Greenhouse', 'SmartRecruiters', 'Lever', 'Workday', 'Ashby', 'Workable'].map(platform => (
-              <Badge key={platform} variant="outline" className="text-xs">
-                {platform}
+            {[
+              { name: 'Greenhouse', url: 'https://www.greenhouse.com' },
+              { name: 'SmartRecruiters', url: 'https://www.smartrecruiters.com' },
+              { name: 'Lever', url: 'https://www.lever.co' },
+              { name: 'Workday', url: 'https://www.workday.com' },
+              { name: 'Ashby', url: 'https://www.ashbyhq.com' },
+              { name: 'Workable', url: 'https://www.workable.com' },
+            ].map(platform => (
+              <Badge 
+                key={platform.name} 
+                variant="outline" 
+                className="text-xs cursor-pointer hover:bg-primary/10 hover:border-primary transition-colors"
+                onClick={() => window.open(platform.url, '_blank')}
+              >
+                {platform.name}
               </Badge>
             ))}
           </div>
