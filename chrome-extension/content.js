@@ -614,13 +614,179 @@ function fillQuestionsWithAnswers(questions, answers) {
   return filledCount;
 }
 
-// ============= FILE UPLOAD =============
+// ============= PDF GENERATION & FILE UPLOAD =============
 
+const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+
+async function generatePDF(type, profileData, jobData, tailoredData) {
+  console.log(`QuantumHire AI: Generating ${type} PDF...`);
+  
+  try {
+    const requestBody = {
+      type: type, // 'resume' or 'cover_letter'
+      personalInfo: {
+        name: `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim(),
+        email: profileData.email,
+        phone: profileData.phone,
+        location: jobData?.location || profileData.city || '',
+        linkedin: profileData.linkedin,
+        github: profileData.github,
+        portfolio: profileData.portfolio,
+      },
+      fileName: `${profileData.first_name || 'User'}${profileData.last_name || ''}_${type === 'resume' ? 'CV' : 'CoverLetter'}_${(jobData?.title || 'Job').replace(/\s+/g, '')}.pdf`
+    };
+    
+    if (type === 'resume') {
+      // Parse tailored resume to extract sections
+      const resumeText = tailoredData?.tailoredResume || '';
+      requestBody.summary = extractSection(resumeText, 'summary', 'professional summary');
+      requestBody.experience = parseExperience(resumeText, profileData.work_experience);
+      requestBody.education = parseEducation(profileData.education);
+      requestBody.skills = parseSkills(resumeText, profileData.skills);
+      requestBody.certifications = profileData.certifications || [];
+      requestBody.achievements = parseAchievements(profileData.achievements);
+    } else {
+      // Cover letter
+      const coverText = tailoredData?.tailoredCoverLetter || '';
+      requestBody.coverLetter = {
+        recipientCompany: jobData?.company || 'Company',
+        jobTitle: jobData?.title || 'Position',
+        jobId: jobData?.jobId || '',
+        paragraphs: coverText.split('\n\n').filter(p => p.trim().length > 20)
+      };
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'PDF generation failed');
+    }
+    
+    const result = await response.json();
+    console.log(`QuantumHire AI: PDF generated successfully: ${result.fileName}`);
+    
+    return {
+      success: true,
+      pdf: result.pdf, // base64
+      fileName: result.fileName,
+      size: result.size
+    };
+  } catch (error) {
+    console.error('QuantumHire AI: PDF generation error', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function extractSection(text, ...keywords) {
+  const lines = text.split('\n');
+  let capture = false;
+  let section = [];
+  
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (keywords.some(kw => lower.includes(kw))) {
+      capture = true;
+      continue;
+    }
+    if (capture) {
+      if (line.match(/^[A-Z][A-Z\s]+$/) || line.match(/^#{1,3}\s/)) {
+        break; // Next section
+      }
+      section.push(line.trim());
+    }
+  }
+  
+  return section.filter(l => l).join(' ').substring(0, 500);
+}
+
+function parseExperience(resumeText, fallbackExperience) {
+  // Try to parse from tailored text or use fallback
+  if (fallbackExperience && Array.isArray(fallbackExperience)) {
+    return fallbackExperience.map(exp => ({
+      company: exp.company || '',
+      title: exp.title || '',
+      dates: exp.dates || `${exp.start_date || ''} – ${exp.end_date || 'Present'}`,
+      bullets: Array.isArray(exp.description) ? exp.description : 
+               (exp.description || '').split('\n').filter(b => b.trim())
+    }));
+  }
+  return [];
+}
+
+function parseEducation(education) {
+  if (!education || !Array.isArray(education)) return [];
+  return education.map(edu => ({
+    degree: edu.degree || '',
+    school: edu.school || edu.institution || '',
+    dates: edu.dates || `${edu.start_date || ''} – ${edu.end_date || ''}`,
+    gpa: edu.gpa || ''
+  }));
+}
+
+function parseSkills(resumeText, fallbackSkills) {
+  if (fallbackSkills && Array.isArray(fallbackSkills)) {
+    const primary = fallbackSkills
+      .filter(s => s.proficiency === 'expert' || s.proficiency === 'advanced')
+      .map(s => s.name);
+    const secondary = fallbackSkills
+      .filter(s => s.proficiency !== 'expert' && s.proficiency !== 'advanced')
+      .map(s => s.name);
+    return { primary, secondary };
+  }
+  return { primary: [], secondary: [] };
+}
+
+function parseAchievements(achievements) {
+  if (!achievements || !Array.isArray(achievements)) return [];
+  return achievements.map(a => ({
+    title: a.title || '',
+    date: a.date || '',
+    description: a.description || ''
+  }));
+}
+
+async function uploadPDFFile(fileInput, pdfBase64, fileName) {
+  if (!fileInput || !pdfBase64) return false;
+  
+  try {
+    // Convert base64 to Blob
+    const binaryString = atob(pdfBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+    const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+    
+    // Create DataTransfer and set files
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(pdfFile);
+    fileInput.files = dataTransfer.files;
+    
+    // Dispatch events
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    console.log(`QuantumHire AI: Uploaded PDF: ${fileName} (${pdfFile.size} bytes)`);
+    return true;
+  } catch (error) {
+    console.error('QuantumHire AI: PDF upload error', error);
+    return false;
+  }
+}
+
+// Legacy text upload (fallback)
 async function uploadFile(fileInput, content, fileName) {
   if (!fileInput || !content) return false;
   
   try {
-    // Create text file (PDF generation requires server-side processing)
     const blob = new Blob([content], { type: 'text/plain' });
     const file = new File([blob], fileName.replace('.pdf', '.txt'), { type: 'text/plain' });
     
@@ -774,9 +940,10 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     }
   }
   
-  // Step 3: Upload files
+  // Step 3: Generate and Upload PDFs
   if (tailoredData && !options.skipFileUpload) {
     const fileInputs = document.querySelectorAll('input[type="file"]');
+    const jobData = tailoredData.jobData || extractJobDetails();
     
     for (const input of fileInputs) {
       if (input.files?.length > 0) continue; // Already has file
@@ -784,23 +951,47 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
       const label = findLabelForInput(input).toLowerCase();
       const inputName = (input.name || input.id || '').toLowerCase();
       
-      // Resume upload
+      // Resume upload - generate actual PDF
       if (inputName.includes('resume') || inputName.includes('cv') || 
           label.includes('resume') || label.includes('cv')) {
         if (tailoredData.tailoredResume) {
-          const fileName = tailoredData.fileName || 'Resume';
-          if (await uploadFile(input, tailoredData.tailoredResume, `${fileName}.pdf`)) {
-            results.files++;
+          // Try to generate proper PDF first
+          const pdfResult = await generatePDF('resume', profile, jobData, tailoredData);
+          
+          if (pdfResult.success && pdfResult.pdf) {
+            if (await uploadPDFFile(input, pdfResult.pdf, pdfResult.fileName)) {
+              results.files++;
+              results.resumePdf = pdfResult; // Store for preview
+              console.log('QuantumHire AI: Resume PDF uploaded successfully');
+            }
+          } else {
+            // Fallback to text file
+            const fileName = tailoredData.fileName || 'Resume';
+            if (await uploadFile(input, tailoredData.tailoredResume, `${fileName}.txt`)) {
+              results.files++;
+            }
           }
         }
       }
       
-      // Cover letter upload
+      // Cover letter upload - generate actual PDF
       else if (inputName.includes('cover') || label.includes('cover letter')) {
         if (tailoredData.tailoredCoverLetter) {
-          const fileName = (tailoredData.fileName || 'CoverLetter').replace('CV', 'CoverLetter');
-          if (await uploadFile(input, tailoredData.tailoredCoverLetter, `${fileName}.pdf`)) {
-            results.files++;
+          // Try to generate proper PDF first
+          const pdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
+          
+          if (pdfResult.success && pdfResult.pdf) {
+            if (await uploadPDFFile(input, pdfResult.pdf, pdfResult.fileName)) {
+              results.files++;
+              results.coverPdf = pdfResult; // Store for preview
+              console.log('QuantumHire AI: Cover letter PDF uploaded successfully');
+            }
+          } else {
+            // Fallback to text file
+            const fileName = (tailoredData.fileName || 'CoverLetter').replace('CV', 'CoverLetter');
+            if (await uploadFile(input, tailoredData.tailoredCoverLetter, `${fileName}.txt`)) {
+              results.files++;
+            }
           }
         }
       }
@@ -967,23 +1158,64 @@ function createFloatingPanel() {
           <span class="qh-score-label">ATS Match</span>
           <span class="qh-score-value" id="qh-score">0%</span>
         </div>
+        
+        <!-- PDF Preview Section -->
+        <div class="qh-pdf-preview" id="qh-pdf-preview">
+          <div class="qh-pdf-header">📄 Generated PDFs</div>
+          <div class="qh-pdf-cards">
+            <div class="qh-pdf-card" id="qh-resume-pdf-card">
+              <div class="qh-pdf-icon">📄</div>
+              <div class="qh-pdf-info">
+                <div class="qh-pdf-name" id="qh-resume-pdf-name">Resume.pdf</div>
+                <div class="qh-pdf-size" id="qh-resume-pdf-size">-</div>
+              </div>
+              <div class="qh-pdf-actions">
+                <button class="qh-pdf-preview-btn" data-type="resume" title="Preview">👁️</button>
+                <button class="qh-pdf-download-btn" data-type="resume" title="Download">⬇️</button>
+              </div>
+            </div>
+            <div class="qh-pdf-card" id="qh-cover-pdf-card">
+              <div class="qh-pdf-icon">📝</div>
+              <div class="qh-pdf-info">
+                <div class="qh-pdf-name" id="qh-cover-pdf-name">CoverLetter.pdf</div>
+                <div class="qh-pdf-size" id="qh-cover-pdf-size">-</div>
+              </div>
+              <div class="qh-pdf-actions">
+                <button class="qh-pdf-preview-btn" data-type="cover" title="Preview">👁️</button>
+                <button class="qh-pdf-download-btn" data-type="cover" title="Download">⬇️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div class="qh-tabs">
-          <button class="qh-tab active" data-tab="resume">Resume</button>
-          <button class="qh-tab" data-tab="cover">Cover Letter</button>
+          <button class="qh-tab active" data-tab="resume">Resume Text</button>
+          <button class="qh-tab" data-tab="cover">Cover Letter Text</button>
         </div>
         <div class="qh-tab-content" id="qh-resume-tab">
           <textarea id="qh-resume" readonly></textarea>
           <div class="qh-tab-actions">
             <button class="qh-copy-btn" data-target="qh-resume">📋 Copy</button>
-            <button class="qh-download-btn" data-type="resume">⬇️ PDF</button>
+            <button class="qh-regenerate-btn" data-type="resume">🔄 Regenerate PDF</button>
           </div>
         </div>
         <div class="qh-tab-content hidden" id="qh-cover-tab">
           <textarea id="qh-cover" readonly></textarea>
           <div class="qh-tab-actions">
             <button class="qh-copy-btn" data-target="qh-cover">📋 Copy</button>
-            <button class="qh-download-btn" data-type="cover">⬇️ PDF</button>
+            <button class="qh-regenerate-btn" data-type="cover">🔄 Regenerate PDF</button>
           </div>
+        </div>
+      </div>
+      
+      <!-- PDF Preview Modal -->
+      <div class="qh-pdf-modal hidden" id="qh-pdf-modal">
+        <div class="qh-modal-header">
+          <span id="qh-modal-title">PDF Preview</span>
+          <button class="qh-modal-close">×</button>
+        </div>
+        <div class="qh-modal-body">
+          <iframe id="qh-pdf-iframe" style="width:100%;height:400px;border:none;"></iframe>
         </div>
       </div>
     </div>
@@ -993,8 +1225,10 @@ function createFloatingPanel() {
   addPanelStyles();
   setupPanelEvents(panel);
   
-  // Store job data
+  // Store job data and PDF data
   panel.dataset.job = JSON.stringify(jobData);
+  panel.dataset.resumePdf = '';
+  panel.dataset.coverPdf = '';
 }
 
 function addPanelStyles() {
@@ -1332,7 +1566,7 @@ function addPanelStyles() {
       margin-top: 8px;
     }
     
-    .qh-copy-btn, .qh-download-btn {
+    .qh-copy-btn, .qh-download-btn, .qh-regenerate-btn {
       flex: 1;
       padding: 6px 10px;
       background: rgba(255, 255, 255, 0.1);
@@ -1343,8 +1577,140 @@ function addPanelStyles() {
       cursor: pointer;
     }
     
-    .qh-copy-btn:hover, .qh-download-btn:hover {
+    .qh-copy-btn:hover, .qh-download-btn:hover, .qh-regenerate-btn:hover {
       background: rgba(255, 255, 255, 0.2);
+    }
+    
+    /* PDF Preview Section */
+    .qh-pdf-preview {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .qh-pdf-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: #a5b4fc;
+      margin-bottom: 10px;
+    }
+    
+    .qh-pdf-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .qh-pdf-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    
+    .qh-pdf-card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    
+    .qh-pdf-card.uploaded {
+      border-color: rgba(16, 185, 129, 0.5);
+      background: rgba(16, 185, 129, 0.1);
+    }
+    
+    .qh-pdf-icon {
+      font-size: 20px;
+    }
+    
+    .qh-pdf-info {
+      flex: 1;
+    }
+    
+    .qh-pdf-name {
+      font-size: 11px;
+      font-weight: 500;
+      color: #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 150px;
+    }
+    
+    .qh-pdf-size {
+      font-size: 10px;
+      color: #64748b;
+    }
+    
+    .qh-pdf-actions {
+      display: flex;
+      gap: 4px;
+    }
+    
+    .qh-pdf-preview-btn, .qh-pdf-download-btn {
+      padding: 6px 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    
+    .qh-pdf-preview-btn:hover, .qh-pdf-download-btn:hover {
+      background: rgba(99, 102, 241, 0.3);
+    }
+    
+    /* PDF Modal */
+    .qh-pdf-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      border-radius: 16px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .qh-pdf-modal.hidden {
+      display: none;
+    }
+    
+    .qh-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .qh-modal-header span {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    
+    .qh-modal-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    
+    .qh-modal-close:hover {
+      color: #fff;
+    }
+    
+    .qh-modal-body {
+      flex: 1;
+      padding: 10px;
+      overflow: auto;
     }
     
     .quantumhire-toast {
@@ -1425,6 +1791,49 @@ function setupPanelEvents(panel) {
       });
       
       if (tailoredData.error) throw new Error(tailoredData.error);
+      
+      updateStatus(statusEl, '📄', 'Generating PDFs...');
+      
+      // Generate PDFs
+      const profileData = await chrome.storage.local.get(['userProfile']);
+      const profile = profileData.userProfile || {};
+      
+      let resumePdfResult = null;
+      let coverPdfResult = null;
+      
+      // Generate Resume PDF
+      try {
+        resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
+        if (resumePdfResult.success) {
+          panel.dataset.resumePdf = resumePdfResult.pdf;
+          panel.querySelector('#qh-resume-pdf-name').textContent = resumePdfResult.fileName;
+          panel.querySelector('#qh-resume-pdf-size').textContent = formatFileSize(resumePdfResult.size);
+          panel.querySelector('#qh-resume-pdf-card').classList.add('uploaded');
+        }
+      } catch (e) {
+        console.error('Resume PDF generation failed:', e);
+      }
+      
+      // Generate Cover Letter PDF
+      try {
+        coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
+        if (coverPdfResult.success) {
+          panel.dataset.coverPdf = coverPdfResult.pdf;
+          panel.querySelector('#qh-cover-pdf-name').textContent = coverPdfResult.fileName;
+          panel.querySelector('#qh-cover-pdf-size').textContent = formatFileSize(coverPdfResult.size);
+          panel.querySelector('#qh-cover-pdf-card').classList.add('uploaded');
+        }
+      } catch (e) {
+        console.error('Cover letter PDF generation failed:', e);
+      }
+      
+      // Add PDF data to tailored data for upload
+      if (resumePdfResult?.success) {
+        tailoredData.resumePdf = resumePdfResult;
+      }
+      if (coverPdfResult?.success) {
+        tailoredData.coverPdf = coverPdfResult;
+      }
       
       updateStatus(statusEl, '📝', 'Auto-filling form...');
       
@@ -1522,24 +1931,114 @@ function setupPanelEvents(panel) {
     });
   });
   
-  // Download buttons
-  panel.querySelectorAll('.qh-download-btn').forEach(btn => {
+  // PDF Preview buttons
+  panel.querySelectorAll('.qh-pdf-preview-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const type = btn.dataset.type;
-      const content = type === 'resume' 
-        ? panel.querySelector('#qh-resume').value
-        : panel.querySelector('#qh-cover').value;
+      const pdfBase64 = type === 'resume' ? panel.dataset.resumePdf : panel.dataset.coverPdf;
       
-      if (!content) return;
+      if (!pdfBase64) {
+        showToast('PDF not generated yet', 'error');
+        return;
+      }
       
-      const win = window.open('', '_blank');
-      win.document.write(`<!DOCTYPE html><html><head><title>${type === 'resume' ? 'Resume' : 'Cover Letter'}</title>
-        <style>body{font-family:Georgia,serif;font-size:11pt;line-height:1.5;max-width:8.5in;margin:0.5in auto;padding:0.5in;}pre{white-space:pre-wrap;font-family:inherit;}</style>
-        </head><body><pre>${content.replace(/</g, '&lt;')}</pre></body></html>`);
-      win.document.close();
-      setTimeout(() => win.print(), 100);
+      // Show modal with PDF
+      const modal = panel.querySelector('#qh-pdf-modal');
+      const iframe = panel.querySelector('#qh-pdf-iframe');
+      const title = panel.querySelector('#qh-modal-title');
+      
+      title.textContent = type === 'resume' ? 'Resume Preview' : 'Cover Letter Preview';
+      iframe.src = `data:application/pdf;base64,${pdfBase64}`;
+      modal.classList.remove('hidden');
     });
   });
+  
+  // PDF Download buttons
+  panel.querySelectorAll('.qh-pdf-download-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      const pdfBase64 = type === 'resume' ? panel.dataset.resumePdf : panel.dataset.coverPdf;
+      const fileName = type === 'resume' 
+        ? panel.querySelector('#qh-resume-pdf-name').textContent 
+        : panel.querySelector('#qh-cover-pdf-name').textContent;
+      
+      if (!pdfBase64) {
+        showToast('PDF not generated yet', 'error');
+        return;
+      }
+      
+      // Download PDF
+      const link = document.createElement('a');
+      link.href = `data:application/pdf;base64,${pdfBase64}`;
+      link.download = fileName || `${type}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showToast(`Downloaded ${fileName}`, 'success');
+    });
+  });
+  
+  // Regenerate PDF buttons
+  panel.querySelectorAll('.qh-regenerate-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const type = btn.dataset.type;
+      const statusEl = panel.querySelector('#qh-status');
+      
+      btn.disabled = true;
+      btn.textContent = '⏳ Generating...';
+      
+      try {
+        const jobData = JSON.parse(panel.dataset.job || '{}');
+        const profileData = await chrome.storage.local.get(['userProfile']);
+        const profile = profileData.userProfile || {};
+        
+        const tailoredData = {
+          tailoredResume: panel.querySelector('#qh-resume').value,
+          tailoredCoverLetter: panel.querySelector('#qh-cover').value,
+        };
+        
+        const pdfType = type === 'resume' ? 'resume' : 'cover_letter';
+        const result = await generatePDF(pdfType, profile, jobData, tailoredData);
+        
+        if (result.success) {
+          if (type === 'resume') {
+            panel.dataset.resumePdf = result.pdf;
+            panel.querySelector('#qh-resume-pdf-name').textContent = result.fileName;
+            panel.querySelector('#qh-resume-pdf-size').textContent = formatFileSize(result.size);
+            panel.querySelector('#qh-resume-pdf-card').classList.add('uploaded');
+          } else {
+            panel.dataset.coverPdf = result.pdf;
+            panel.querySelector('#qh-cover-pdf-name').textContent = result.fileName;
+            panel.querySelector('#qh-cover-pdf-size').textContent = formatFileSize(result.size);
+            panel.querySelector('#qh-cover-pdf-card').classList.add('uploaded');
+          }
+          showToast(`${type === 'resume' ? 'Resume' : 'Cover letter'} PDF regenerated!`, 'success');
+        } else {
+          throw new Error(result.error || 'Generation failed');
+        }
+      } catch (error) {
+        showToast(error.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Regenerate PDF';
+      }
+    });
+  });
+  
+  // Modal close button
+  panel.querySelector('.qh-modal-close')?.addEventListener('click', () => {
+    panel.querySelector('#qh-pdf-modal').classList.add('hidden');
+    panel.querySelector('#qh-pdf-iframe').src = '';
+  });
+}
+
+// Helper function to format file size
+function formatFileSize(bytes) {
+  if (!bytes) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function updateStatus(statusEl, icon, text) {
