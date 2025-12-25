@@ -47,7 +47,7 @@ const DATE_FILTERS = [
 ];
 
 // Total companies we scrape from (Greenhouse + Workable + Lever)
-const TOTAL_COMPANIES = 120;
+const TOTAL_COMPANIES = 50;
 
 export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }: JobSearchPanelProps) {
   const { user } = useAuth();
