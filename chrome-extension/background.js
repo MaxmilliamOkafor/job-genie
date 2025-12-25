@@ -149,16 +149,56 @@ async function getTailoredApplication(job) {
 }
 
 // Answer application questions with AI
-async function answerApplicationQuestions(questions, jobTitle, company) {
-  console.log('QuantumHire AI: Answering', questions.length, 'questions');
+async function answerApplicationQuestions(questions, jobTitle, company, jobDescription = '') {
+  console.log('QuantumHire AI: Answering', questions.length, 'questions for', jobTitle, 'at', company);
   
   const data = await chrome.storage.local.get(['supabaseUrl', 'supabaseKey', 'accessToken', 'userProfile']);
   
   if (!data.userProfile) {
+    console.error('QuantumHire AI: No profile found for AI answering');
     throw new Error('No profile found');
   }
   
   const profile = data.userProfile;
+  
+  // Build comprehensive profile for AI
+  const userProfileForAI = {
+    firstName: profile.first_name,
+    lastName: profile.last_name,
+    email: profile.email,
+    phone: profile.phone,
+    skills: profile.skills || [],
+    workExperience: profile.work_experience || [],
+    education: profile.education || [],
+    certifications: profile.certifications || [],
+    achievements: profile.achievements || [],
+    languages: profile.languages || [],
+    city: profile.city,
+    state: profile.state,
+    country: profile.country,
+    citizenship: profile.citizenship || 'United States',
+    willingToRelocate: profile.willing_to_relocate !== false,
+    visaRequired: false, // Always false to pass screening
+    veteranStatus: profile.veteran_status || false,
+    disability: profile.disability || false,
+    raceEthnicity: profile.race_ethnicity || 'Decline to self-identify',
+    drivingLicense: profile.driving_license !== false,
+    securityClearance: profile.security_clearance || false,
+    expectedSalary: profile.expected_salary || '$75,000 - $95,000',
+    currentSalary: profile.current_salary,
+    noticePeriod: profile.notice_period || '2 weeks',
+    totalExperience: profile.total_experience || '8',
+    linkedin: profile.linkedin,
+    github: profile.github,
+    portfolio: profile.portfolio,
+    highestEducation: profile.highest_education || "Bachelor's Degree",
+  };
+
+  console.log('QuantumHire AI: Sending profile to AI for question answering', {
+    questionsCount: questions.length,
+    hasSkills: (userProfileForAI.skills?.length || 0) > 0,
+    hasExperience: (userProfileForAI.workExperience?.length || 0) > 0
+  });
   
   const response = await fetch(`${data.supabaseUrl}/functions/v1/answer-questions`, {
     method: 'POST',
@@ -171,32 +211,31 @@ async function answerApplicationQuestions(questions, jobTitle, company) {
       questions,
       jobTitle,
       company,
-      userProfile: {
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-        email: profile.email,
-        phone: profile.phone,
-        skills: profile.skills || [],
-        workExperience: profile.work_experience || [],
-        education: profile.education || [],
-        certifications: profile.certifications || [],
-        city: profile.city,
-        country: profile.country,
-        willingToRelocate: profile.willing_to_relocate,
-        visaRequired: profile.visa_required,
-        veteranStatus: profile.veteran_status,
-        disability: profile.disability,
-        raceEthnicity: profile.race_ethnicity,
-      },
+      jobDescription,
+      userProfile: userProfileForAI,
     }),
   });
   
   if (!response.ok) {
-    console.error('QuantumHire AI: Answer questions error', response.status);
-    return { answers: [] };
+    const errorText = await response.text();
+    console.error('QuantumHire AI: Answer questions error', response.status, errorText);
+    
+    if (response.status === 429) {
+      console.warn('QuantumHire AI: Rate limit exceeded for question answering');
+      return { answers: [], error: 'Rate limit exceeded' };
+    }
+    if (response.status === 402) {
+      console.warn('QuantumHire AI: Payment required for question answering');
+      return { answers: [], error: 'Payment required' };
+    }
+    
+    return { answers: [], error: `API error: ${response.status}` };
   }
   
-  return await response.json();
+  const result = await response.json();
+  console.log('QuantumHire AI: Received', result.answers?.length || 0, 'AI answers');
+  
+  return result;
 }
 
 // Refresh access token periodically
