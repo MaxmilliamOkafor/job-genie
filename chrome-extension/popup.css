@@ -6,7 +6,7 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  width: 320px;
+  width: 340px;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: #e4e4e7;
 }
@@ -84,20 +84,6 @@ h1 {
   color: #71717a;
 }
 
-.form-group input[type="checkbox"] {
-  margin-right: 8px;
-  accent-color: #8b5cf6;
-}
-
-.form-group label:has(input[type="checkbox"]) {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  text-transform: none;
-  letter-spacing: normal;
-  cursor: pointer;
-}
-
 .btn {
   width: 100%;
   padding: 12px 16px;
@@ -115,9 +101,14 @@ h1 {
   color: #fff;
 }
 
-.btn.primary:hover {
+.btn.primary:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn.secondary {
@@ -125,7 +116,7 @@ h1 {
   color: #e4e4e7;
 }
 
-.btn.secondary:hover {
+.btn.secondary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.15);
 }
 
@@ -140,6 +131,10 @@ h1 {
   background: rgba(239, 68, 68, 0.1);
 }
 
+.btn.full {
+  width: 100%;
+}
+
 .status {
   display: flex;
   align-items: center;
@@ -148,7 +143,7 @@ h1 {
   background: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(34, 197, 94, 0.2);
   border-radius: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 13px;
 }
 
@@ -169,7 +164,7 @@ h1 {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   padding: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -182,15 +177,59 @@ h1 {
   color: #fff;
 }
 
+.current-job {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.current-job .job-detected {
+  color: #8b5cf6;
+  font-size: 10px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.current-job .job-title {
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.current-job .job-company {
+  color: #a1a1aa;
+}
+
+.current-job .job-location {
+  color: #71717a;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.current-job .not-job-page {
+  color: #71717a;
+}
+
+.current-job .loading {
+  color: #8b5cf6;
+  animation: pulse 1.5s infinite;
+}
+
 .actions {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .actions .btn {
   flex: 1;
   margin-bottom: 0;
+  padding: 10px 12px;
+  font-size: 12px;
 }
 
 .info {
@@ -198,6 +237,13 @@ h1 {
   color: #a1a1aa;
   margin-bottom: 16px;
   line-height: 1.5;
+}
+
+.hint {
+  font-size: 11px;
+  color: #71717a;
+  text-align: center;
+  margin-top: 8px;
 }
 
 .status-message {
@@ -218,6 +264,85 @@ h1 {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+/* Tailored Result Section */
+.tailored-result {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.match-score {
+  text-align: center;
+  padding: 8px;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.match-score strong {
+  color: #22c55e;
+  font-size: 18px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: #a1a1aa;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tab.active {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+}
+
+.tab-content {
+  position: relative;
+}
+
+.tab-content textarea {
+  width: 100%;
+  height: 120px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  color: #e4e4e7;
+  font-size: 10px;
+  font-family: inherit;
+  resize: none;
+  line-height: 1.4;
+}
+
+.copy-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  background: rgba(139, 92, 246, 0.3);
+  border: none;
+  border-radius: 4px;
+  color: #8b5cf6;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  background: rgba(139, 92, 246, 0.5);
 }
 
 footer {
