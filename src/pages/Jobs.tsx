@@ -141,13 +141,6 @@ const Jobs = () => {
           isSearching={isScraping} 
         />
 
-        {/* Automation Panel */}
-        <AutomationPanel 
-          jobs={filteredJobs} 
-          profile={profile} 
-          onJobApplied={handleJobApplied}
-        />
-
         <JobFilters
           showSearch={false}
           search={search}
@@ -156,6 +149,13 @@ const Jobs = () => {
           onLocationChange={setLocation}
           dateFilter={dateFilter}
           onDateFilterChange={setDateFilter}
+        />
+
+        {/* Automation Panel - Right above job listings */}
+        <AutomationPanel 
+          jobs={filteredJobs} 
+          profile={profile} 
+          onJobApplied={handleJobApplied}
         />
 
         {/* Job Listings - Single Column */}
