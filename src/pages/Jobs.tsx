@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 import { JobSearchPanel } from '@/components/jobs/JobSearchPanel';
 import { JobFiltersAdvanced } from '@/components/jobs/JobFiltersAdvanced';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
@@ -8,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
 import { 
@@ -21,7 +23,9 @@ import {
   ArrowUp,
   Trash2,
   Star,
-  Filter
+  Filter,
+  Radio,
+  Search
 } from 'lucide-react';
 
 // Tier-1 companies for visual highlighting
@@ -205,12 +209,31 @@ const Jobs = () => {
           </div>
         </div>
 
-        {/* Search Panel */}
-        <JobSearchPanel 
-          onSearchComplete={refetch}
-          isSearching={isSearching}
-          setIsSearching={setIsSearching}
-        />
+        {/* Search Tabs */}
+        <Tabs defaultValue="live" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="live" className="gap-2">
+              <Radio className="h-4 w-4" />
+              Live Jobs
+            </TabsTrigger>
+            <TabsTrigger value="search" className="gap-2">
+              <Search className="h-4 w-4" />
+              Google Search
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="live" className="mt-4">
+            <LiveJobsPanel onJobsFetched={refetch} />
+          </TabsContent>
+          
+          <TabsContent value="search" className="mt-4">
+            <JobSearchPanel 
+              onSearchComplete={refetch}
+              isSearching={isSearching}
+              setIsSearching={setIsSearching}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* Advanced Filters */}
         {showFilters && validJobs.length > 0 && (
