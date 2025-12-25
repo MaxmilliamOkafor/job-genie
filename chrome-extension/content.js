@@ -10,18 +10,23 @@ const PLATFORM_CONFIG = {
     detect: () => window.location.hostname.includes('workday.com') || window.location.hostname.includes('myworkdayjobs.com'),
     nextButton: '[data-automation-id="bottom-navigation-next-button"], button[data-automation-id="nextButton"], button[data-automation-id="continueButton"]',
     submitButton: '[data-automation-id="bottom-navigation-submit-button"]',
+    // Workday-specific pre-application flow: Apply → Apply Manually
+    preApplyFlow: true,
     selectors: {
-      firstName: 'input[data-automation-id="firstName"]',
-      lastName: 'input[data-automation-id="lastName"]',
-      email: 'input[data-automation-id="email"]',
-      phone: 'input[data-automation-id="phone"]',
-      address: 'input[data-automation-id="addressLine1"]',
-      city: 'input[data-automation-id="city"]',
-      state: 'input[data-automation-id="state"]',
-      zipCode: 'input[data-automation-id="postalCode"]',
-      country: 'select[data-automation-id="country"], input[data-automation-id="country"]',
+      firstName: 'input[data-automation-id="firstName"], input[data-automation-id="legalNameSection_firstName"]',
+      lastName: 'input[data-automation-id="lastName"], input[data-automation-id="legalNameSection_lastName"]',
+      email: 'input[data-automation-id="email"], input[data-automation-id="emailAddress"]',
+      phone: 'input[data-automation-id="phone"], input[data-automation-id="phoneNumber"]',
+      address: 'input[data-automation-id="addressLine1"], input[data-automation-id="addressSection_addressLine1"]',
+      city: 'input[data-automation-id="city"], input[data-automation-id="addressSection_city"]',
+      state: 'input[data-automation-id="state"], input[data-automation-id="addressSection_countryRegion"]',
+      zipCode: 'input[data-automation-id="postalCode"], input[data-automation-id="addressSection_postalCode"]',
+      country: 'select[data-automation-id="country"], input[data-automation-id="country"], button[data-automation-id="countryDropdown"]',
       resume: 'input[type="file"][data-automation-id*="file"], input[type="file"]',
-    }
+    },
+    // Workday dropdown patterns
+    dropdownTrigger: 'button[aria-haspopup="listbox"], [data-automation-id*="dropdown"], [data-automation-id*="select"]',
+    listboxOption: '[data-automation-id*="promptOption"], [role="option"]',
   },
   greenhouse: {
     detect: () => window.location.hostname.includes('greenhouse.io') || window.location.hostname.includes('boards.greenhouse.io'),
@@ -77,6 +82,232 @@ const PLATFORM_CONFIG = {
     selectors: { firstName: 'input[name="firstName"]', lastName: 'input[name="lastName"]', email: 'input[name="email"]', phone: 'input[name="phone"]' }
   }
 };
+
+// ============= WORKDAY PRE-APPLICATION FLOW =============
+// Handles: Click "Apply" → Wait for menu → Select "Apply Manually"
+
+async function handleWorkdayPreApplyFlow() {
+  console.log('QuantumHire AI: Checking Workday pre-apply flow...');
+  
+  // Step 1: Check if we're on a job posting page (not yet in application form)
+  const isJobPostingPage = !document.querySelector('[data-automation-id="applicationForm"], form[data-automation-id]');
+  if (!isJobPostingPage) {
+    console.log('QuantumHire AI: Already in application form, skipping pre-apply');
+    return { success: true, skipped: true };
+  }
+  
+  // Step 2: Find and click "Apply" button
+  const applyButtonSelectors = [
+    'button[data-automation-id="jobPostingApplyButton"]',
+    'a[data-automation-id="jobPostingApplyButton"]',
+    'button[aria-label*="Apply"]',
+    'a[aria-label*="Apply"]',
+  ];
+  
+  let applyButton = null;
+  for (const sel of applyButtonSelectors) {
+    applyButton = document.querySelector(sel);
+    if (applyButton && applyButton.offsetParent !== null) break;
+  }
+  
+  // Fallback: find by text
+  if (!applyButton) {
+    const buttons = document.querySelectorAll('button, a[role="button"], a.css-*');
+    for (const btn of buttons) {
+      const text = btn.innerText?.trim().toLowerCase() || '';
+      if (text === 'apply' || text === 'apply now' || text.includes('apply for')) {
+        if (btn.offsetParent !== null) {
+          applyButton = btn;
+          break;
+        }
+      }
+    }
+  }
+  
+  if (!applyButton) {
+    console.log('QuantumHire AI: No Apply button found (may already be in form)');
+    return { success: true, skipped: true, reason: 'No Apply button found' };
+  }
+  
+  console.log('QuantumHire AI: Clicking Apply button...');
+  showToast('Clicking Apply...', 'info');
+  
+  try {
+    applyButton.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    await new Promise(r => setTimeout(r, 300));
+    applyButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  } catch {
+    applyButton.click();
+  }
+  
+  // Step 3: Wait for Apply Method menu to appear
+  await new Promise(r => setTimeout(r, 1500));
+  
+  // Step 4: Look for "Apply Manually" option
+  const applyManuallySelectors = [
+    '[data-automation-id="applyManually"]',
+    '[data-automation-id*="applyManually"]',
+    'button[data-automation-id*="manual"]',
+    '[role="menuitem"]',
+    '[role="option"]',
+    '.css-1dbjc4n button', // Workday React buttons
+    'button, a',
+  ];
+  
+  let applyManuallyOption = null;
+  
+  for (const sel of applyManuallySelectors) {
+    const candidates = document.querySelectorAll(sel);
+    for (const el of candidates) {
+      const text = el.innerText?.toLowerCase() || el.getAttribute('aria-label')?.toLowerCase() || '';
+      if (text.includes('apply manually') || text.includes('manual')) {
+        if (el.offsetParent !== null) {
+          applyManuallyOption = el;
+          break;
+        }
+      }
+    }
+    if (applyManuallyOption) break;
+  }
+  
+  if (!applyManuallyOption) {
+    // Check if a modal/dialog appeared
+    const dialog = document.querySelector('[role="dialog"], [data-automation-id="dialog"], .wd-popup, .modal');
+    if (dialog) {
+      const options = dialog.querySelectorAll('button, a, [role="button"], [role="menuitem"]');
+      for (const opt of options) {
+        const text = opt.innerText?.toLowerCase() || '';
+        if (text.includes('manually') || text.includes('manual')) {
+          applyManuallyOption = opt;
+          break;
+        }
+      }
+    }
+  }
+  
+  if (!applyManuallyOption) {
+    console.log('QuantumHire AI: Apply Manually option not found, checking if form loaded directly');
+    // Maybe clicking Apply went directly to form (some Workday configs skip the menu)
+    await new Promise(r => setTimeout(r, 1000));
+    const formLoaded = document.querySelector('[data-automation-id="applicationForm"], form input[type="text"], input[data-automation-id]');
+    if (formLoaded) {
+      console.log('QuantumHire AI: Form loaded directly, proceeding');
+      return { success: true, directForm: true };
+    }
+    return { success: false, error: 'Apply Manually option not found' };
+  }
+  
+  console.log('QuantumHire AI: Clicking Apply Manually...');
+  showToast('Selecting Apply Manually...', 'info');
+  
+  try {
+    applyManuallyOption.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    await new Promise(r => setTimeout(r, 200));
+    applyManuallyOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  } catch {
+    applyManuallyOption.click();
+  }
+  
+  // Wait for form to load
+  await new Promise(r => setTimeout(r, 2000));
+  
+  console.log('QuantumHire AI: Workday pre-apply flow complete');
+  showToast('Application form loading...', 'success');
+  
+  return { success: true };
+}
+
+// ============= WORKDAY DROPDOWN FILLING (Enhanced) =============
+// Workday uses custom dropdowns with data-automation-id and aria-haspopup="listbox"
+
+async function fillWorkdayDropdown(dropdownButton, answerValue) {
+  if (!dropdownButton) return false;
+  const answerLower = String(answerValue).toLowerCase().trim();
+  
+  try {
+    console.log(`QuantumHire AI: Filling Workday dropdown with "${answerValue}"`);
+    
+    // Click to open dropdown
+    dropdownButton.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    await new Promise(r => setTimeout(r, 150));
+    
+    dropdownButton.focus();
+    dropdownButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    
+    await new Promise(r => setTimeout(r, 400));
+    
+    // Find listbox
+    const ariaControls = dropdownButton.getAttribute('aria-controls');
+    let listbox = ariaControls ? document.getElementById(ariaControls) : null;
+    
+    if (!listbox) {
+      listbox = document.querySelector('[role="listbox"], [data-automation-id*="promptOption-"]')?.closest('[role="listbox"]');
+    }
+    
+    if (!listbox) {
+      // Try popup/dialog
+      listbox = document.querySelector('[role="dialog"] [role="listbox"], .wd-popup [role="listbox"], [data-automation-id*="dropdown"] + [role="listbox"]');
+    }
+    
+    if (!listbox) {
+      // Last resort: find any visible options
+      const visibleOptions = Array.from(document.querySelectorAll('[role="option"], [data-automation-id*="promptOption"]'))
+        .filter(o => o.offsetParent !== null);
+      if (visibleOptions.length > 0) {
+        listbox = visibleOptions[0].closest('[role="listbox"]') || visibleOptions[0].parentElement;
+      }
+    }
+    
+    if (!listbox) {
+      console.log('QuantumHire AI: Workday listbox not found');
+      return false;
+    }
+    
+    // Get all options
+    const options = Array.from(listbox.querySelectorAll('[role="option"], [data-automation-id*="promptOption"], li, div'))
+      .filter(o => o.offsetParent !== null && o.innerText?.trim());
+    
+    // Try exact match
+    let match = options.find(o => o.innerText.toLowerCase().trim() === answerLower);
+    
+    // Try partial match
+    if (!match) {
+      match = options.find(o => {
+        const optText = o.innerText.toLowerCase().trim();
+        return optText.includes(answerLower) || answerLower.includes(optText);
+      });
+    }
+    
+    // Yes/No variations
+    if (!match && (answerLower === 'yes' || answerLower === 'no')) {
+      match = options.find(o => {
+        const t = o.innerText.toLowerCase().trim();
+        if (answerLower === 'yes') return t === 'yes' || t.includes('i agree') || t === 'true';
+        return t === 'no' || t === 'false';
+      });
+    }
+    
+    if (!match) {
+      console.log(`QuantumHire AI: No Workday option match for "${answerValue}". Options:`, options.map(o => o.innerText.trim()));
+      // Close dropdown
+      document.body.click();
+      return false;
+    }
+    
+    console.log(`QuantumHire AI: Selecting Workday option: "${match.innerText.trim()}"`);
+    
+    match.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    await new Promise(r => setTimeout(r, 100));
+    
+    match.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    
+    dropdownButton.classList.add('quantumhire-filled');
+    return true;
+  } catch (e) {
+    console.error('QuantumHire AI: Workday dropdown error', e);
+    return false;
+  }
+}
 
 // ============= AUTOMATION CONTROL STATE =============
 
@@ -678,6 +909,8 @@ function fillRadioButton(radioGroup, answerValue) {
 
 function detectAllQuestions() {
   const questions = [];
+  const platform = detectPlatform();
+  const isWorkday = platform.name === 'workday';
 
   // Detect SELECT dropdowns
   document.querySelectorAll('select').forEach((select) => {
@@ -700,8 +933,29 @@ function detectAllQuestions() {
     if (el.tagName === 'SELECT') return;
 
     const label = getComboboxLabel(el);
-    if (label) questions.push({ type: 'combobox', element: el, label: label.replace(/\*$/, '').trim(), id: el.id || el.getAttribute('name') || label });
+    if (label) questions.push({ type: isWorkday ? 'workday-dropdown' : 'combobox', element: el, label: label.replace(/\*$/, '').trim(), id: el.id || el.getAttribute('name') || label });
   });
+
+  // Workday-specific: detect button dropdowns with data-automation-id
+  if (isWorkday) {
+    document.querySelectorAll('button[aria-haspopup="listbox"], button[data-automation-id*="selectWidget"], [data-automation-id*="multiselectInputContainer"] button').forEach((btn) => {
+      if (!(btn instanceof HTMLElement)) return;
+      if (btn.offsetParent === null) return;
+      
+      // Get label from parent container
+      let label = '';
+      const container = btn.closest('[data-automation-id*="formField"], [data-automation-id*="FormField"], .css-*');
+      if (container) {
+        const labelEl = container.querySelector('label, [data-automation-id*="formLabel"], [data-automation-id="formLabel"]');
+        if (labelEl) label = labelEl.innerText.replace(/\*$/, '').trim();
+      }
+      if (!label) label = btn.getAttribute('aria-label') || btn.innerText?.split('\n')[0]?.trim() || '';
+      
+      if (label && !questions.find(q => q.element === btn)) {
+        questions.push({ type: 'workday-dropdown', element: btn, label, id: btn.getAttribute('data-automation-id') || label });
+      }
+    });
+  }
 
   // Detect CHECKBOX inputs
   document.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
@@ -828,6 +1082,11 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
         const ok = fillDropdown(q.element, selectValue || answer);
         if (ok) filledCount++;
         else errors.push({ question: q.label, error: 'No matching dropdown option' });
+      } else if (q.type === 'workday-dropdown') {
+        // Use Workday-specific dropdown filler
+        const ok = await fillWorkdayDropdown(q.element, selectValue || answer);
+        if (ok) filledCount++;
+        else errors.push({ question: q.label, error: 'No matching Workday dropdown option' });
       } else if (q.type === 'combobox') {
         const ok = await fillComboBox(q.element, selectValue || answer);
         if (ok) filledCount++;
@@ -1894,6 +2153,23 @@ function setupPanelEvents(panel) {
     automationState.isRunning = true;
     
     try {
+      const platform = detectPlatform();
+      
+      // Step 0: Handle Workday pre-apply flow (Apply → Apply Manually)
+      if (platform.name === 'workday' && platform.config?.preApplyFlow) {
+        updateStatus(statusEl, '🚀', 'Starting Workday application...');
+        const preApplyResult = await handleWorkdayPreApplyFlow();
+        
+        if (!preApplyResult.success && !preApplyResult.skipped) {
+          throw new Error(preApplyResult.error || 'Failed to start Workday application');
+        }
+        
+        if (!preApplyResult.skipped) {
+          // Wait for form to fully load after navigation
+          await new Promise(r => setTimeout(r, 2500));
+        }
+      }
+      
       // Step 1: Tailor resume with AI
       updateStatus(statusEl, '🤖', 'Tailoring resume with AI...');
       const jobData = JSON.parse(panel.dataset.job || '{}');
@@ -1979,13 +2255,36 @@ function setupPanelEvents(panel) {
     const statusEl = panel.querySelector('#qh-status');
     btn.disabled = true;
     
-    updateStatus(statusEl, '📝', 'Quick filling...');
-    const atsData = await chrome.storage.local.get(['atsCredentials']);
-    const result = await autofillForm(null, atsData.atsCredentials);
-    
-    updateStatus(statusEl, result.success ? '✅' : '⚠️', result.message);
-    showToast(result.message, result.success ? 'success' : 'warning');
-    btn.disabled = false;
+    try {
+      const platform = detectPlatform();
+      
+      // Handle Workday pre-apply flow if needed
+      if (platform.name === 'workday' && platform.config?.preApplyFlow) {
+        updateStatus(statusEl, '🚀', 'Starting application...');
+        const preApplyResult = await handleWorkdayPreApplyFlow();
+        
+        if (!preApplyResult.success && !preApplyResult.skipped) {
+          throw new Error(preApplyResult.error || 'Failed to start application');
+        }
+        
+        if (!preApplyResult.skipped) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      
+      updateStatus(statusEl, '📝', 'Quick filling...');
+      const atsData = await chrome.storage.local.get(['atsCredentials']);
+      const result = await autofillForm(null, atsData.atsCredentials);
+      
+      updateStatus(statusEl, result.success ? '✅' : '⚠️', result.message);
+      showToast(result.message, result.success ? 'success' : 'warning');
+    } catch (error) {
+      console.error('Quick fill error:', error);
+      updateStatus(statusEl, '❌', error.message);
+      showToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
   });
   
   // Next Page
