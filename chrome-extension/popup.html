@@ -7,125 +7,249 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="popup-container">
-    <header class="popup-header">
-      <div class="logo">
-        <span class="logo-icon">🚀</span>
-        <span class="logo-text">QuantumHire AI</span>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="logo-row">
+        <img src="icons/icon48.png" alt="QuantumHire" class="logo">
+        <div class="brand">
+          <h1>QuantumHire AI</h1>
+          <span class="tagline">Smart ATS-Optimized Applications</span>
+        </div>
       </div>
-      <span id="status-badge" class="status-badge">Ready</span>
     </header>
-    
-    <main class="popup-content">
-      <!-- Connection Status -->
-      <section id="connection-section" class="section">
-        <div id="not-connected" class="connection-status">
-          <p class="status-message warning">⚠️ Not connected</p>
-          <p class="help-text">Sign in to enable auto-fill</p>
-          <div class="login-form">
-            <input type="email" id="user-email" placeholder="Email" class="input-field">
-            <input type="password" id="user-password" placeholder="Password" class="input-field">
-            <button id="connect-btn" class="btn primary">Connect Account</button>
+
+    <!-- Not Connected State -->
+    <section id="not-connected" class="section">
+      <div class="connect-card">
+        <div class="connect-icon">🔐</div>
+        <h2>Connect Your Account</h2>
+        <p class="connect-desc">Sign in to access your profile and start auto-applying to jobs with AI-tailored resumes.</p>
+        
+        <form id="login-form" class="login-form">
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" placeholder="your@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="••••••••" required>
+          </div>
+          <button type="submit" id="connect-btn" class="btn primary full">
+            <span class="btn-icon">🚀</span>
+            Connect Account
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Connected State -->
+    <section id="connected" class="section hidden">
+      <!-- Profile Card -->
+      <div class="profile-card">
+        <div class="profile-header">
+          <div class="avatar" id="avatar">MO</div>
+          <div class="profile-info">
+            <span class="profile-name" id="profile-name">Max Okafor</span>
+            <span class="profile-email" id="profile-email">maxokafordev@gmail.com</span>
+          </div>
+          <div class="connection-status">
+            <span class="status-dot"></span>
+            <span>Ready</span>
           </div>
         </div>
-        <div id="connected" class="connection-status hidden">
-          <div class="user-header">
-            <p class="status-message success">✅ Connected</p>
-            <button id="disconnect-btn" class="btn-small">Disconnect</button>
+        
+        <div class="profile-stats">
+          <div class="stat">
+            <span class="stat-value" id="skills-count">0</span>
+            <span class="stat-label">Skills</span>
           </div>
-          <p id="user-name" class="user-name"></p>
-          <div id="profile-summary" class="profile-summary"></div>
-          <button id="refresh-btn" class="btn secondary">🔄 Refresh Profile</button>
+          <div class="stat">
+            <span class="stat-value" id="exp-years">0</span>
+            <span class="stat-label">Exp Years</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="certs-count">0</span>
+            <span class="stat-label">Certs</span>
+          </div>
         </div>
-      </section>
-      
-      <!-- Current Page Status -->
-      <section id="current-job" class="section job-section">
-        <p class="not-job-page">📄 Checking page...</p>
-      </section>
-      
-      <!-- Action Buttons -->
-      <section class="section actions-section">
-        <button id="autofill-btn" class="btn primary" disabled>📝 Auto-Fill Application</button>
-        <button id="tailor-btn" class="btn secondary" disabled>✨ Tailor for This Job</button>
-      </section>
-      
-      <!-- Tailored Result -->
-      <section id="tailored-result" class="section hidden">
-        <div class="tabs">
-          <button class="tab active" data-tab="resume">Resume</button>
-          <button class="tab" data-tab="cover">Cover Letter</button>
+        
+        <button id="refresh-btn" class="btn ghost small">
+          <span class="btn-icon">🔄</span>
+          Refresh Profile
+        </button>
+      </div>
+
+      <!-- ATS Credentials Section -->
+      <div class="credentials-card" id="credentials-card">
+        <div class="credentials-header" id="credentials-toggle">
+          <span>🔑 ATS Login Credentials</span>
+          <span class="toggle-arrow">▼</span>
         </div>
-        <div id="resume-content" class="tab-content">
-          <textarea id="resume-text" readonly placeholder="Tailored resume..."></textarea>
-          <button class="copy-btn" data-target="resume-text">📋 Copy</button>
+        <div class="credentials-body hidden" id="credentials-body">
+          <p class="credentials-note">Save your Workday/ATS login for auto-fill. Stored locally on your device only.</p>
+          <div class="form-group">
+            <label for="ats-email">ATS Email</label>
+            <input type="email" id="ats-email" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label for="ats-password">ATS Password</label>
+            <input type="password" id="ats-password" placeholder="••••••••">
+          </div>
+          <div class="credentials-actions">
+            <button id="save-credentials-btn" class="btn small primary">Save Credentials</button>
+            <button id="clear-credentials-btn" class="btn small ghost">Clear</button>
+          </div>
+          <p class="security-note">⚠️ Credentials stored in Chrome local storage. Never synced to cloud.</p>
         </div>
-        <div id="cover-content" class="tab-content hidden">
-          <textarea id="cover-text" readonly placeholder="Tailored cover letter..."></textarea>
-          <button class="copy-btn" data-target="cover-text">📋 Copy</button>
+      </div>
+
+      <!-- Current Job Detection -->
+      <div class="job-card" id="job-card">
+        <div class="job-card-header">
+          <span class="job-badge">🎯 Job Detected</span>
+          <span class="ats-badge" id="ats-badge">ATS</span>
         </div>
-      </section>
-      
-      <!-- How It Works -->
-      <section class="section workflow-section">
-        <h3 class="section-title">How to Apply</h3>
-        <div class="workflow-steps">
-          <div class="workflow-step">
-            <span class="step-number">1</span>
-            <div class="step-content">
-              <strong>Find Jobs on LinkedIn/Indeed</strong>
-              <p>Look for <span class="highlight">"Apply"</span> not Easy Apply</p>
+        <div class="job-details" id="job-details">
+          <span class="job-checking">Checking page...</span>
+        </div>
+      </div>
+
+      <!-- Main Action Buttons -->
+      <button id="apply-now-btn" class="btn action-btn" disabled>
+        <div class="action-content">
+          <span class="action-icon">⚡</span>
+          <div class="action-text">
+            <span class="action-title">Apply with AI</span>
+            <span class="action-subtitle">Tailor resume + Auto-fill form</span>
+          </div>
+        </div>
+      </button>
+
+      <!-- Add to Queue Button -->
+      <button id="add-queue-btn" class="btn queue-btn" disabled>
+        <span class="btn-icon">📋</span>
+        <span>Add to Job Queue</span>
+      </button>
+
+      <!-- Progress Indicator -->
+      <div id="progress-section" class="progress-section hidden">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-steps">
+          <div class="step" id="step-1">
+            <span class="step-icon">📝</span>
+            <span class="step-text">Extracting job details</span>
+          </div>
+          <div class="step" id="step-2">
+            <span class="step-icon">🔍</span>
+            <span class="step-text">Analyzing ATS keywords</span>
+          </div>
+          <div class="step" id="step-3">
+            <span class="step-icon">✨</span>
+            <span class="step-text">Tailoring resume & cover letter</span>
+          </div>
+          <div class="step" id="step-4">
+            <span class="step-icon">📋</span>
+            <span class="step-text">Auto-filling application</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results Section -->
+      <div id="results-section" class="results-section hidden">
+        <!-- Match Score -->
+        <div class="match-card">
+          <div class="match-score-circle">
+            <svg viewBox="0 0 36 36" class="circular-chart">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" id="match-circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="20.35" class="percentage" id="match-score-text">0%</text>
+            </svg>
+          </div>
+          <div class="match-info">
+            <span class="match-title">ATS Match Score</span>
+            <span class="match-subtitle" id="keywords-matched">0 keywords matched</span>
+          </div>
+        </div>
+
+        <!-- Keywords -->
+        <div class="keywords-section">
+          <div class="keywords-header">
+            <span>🏷️ Keywords Matched</span>
+          </div>
+          <div class="keywords-list" id="keywords-list"></div>
+        </div>
+
+        <!-- Tabs for Resume/Cover Letter -->
+        <div class="content-tabs">
+          <button class="content-tab active" data-tab="resume">
+            <span>📄</span> Resume
+          </button>
+          <button class="content-tab" data-tab="cover">
+            <span>✉️</span> Cover Letter
+          </button>
+        </div>
+
+        <div class="content-area">
+          <div class="content-pane active" id="resume-pane">
+            <textarea id="tailored-resume" readonly placeholder="Your tailored resume will appear here..."></textarea>
+            <div class="content-actions">
+              <button class="btn small" id="copy-resume-btn">
+                <span class="btn-icon">📋</span> Copy
+              </button>
+              <button class="btn small primary" id="download-resume-btn">
+                <span class="btn-icon">⬇️</span> Download PDF
+              </button>
             </div>
           </div>
-          <div class="workflow-step">
-            <span class="step-number">2</span>
-            <div class="step-content">
-              <strong>Click "Apply"</strong>
-              <p>Opens the company's career page</p>
-            </div>
-          </div>
-          <div class="workflow-step">
-            <span class="step-number">3</span>
-            <div class="step-content">
-              <strong>Auto-Fill & Tailor</strong>
-              <p>Panel activates on ATS pages</p>
+          <div class="content-pane" id="cover-pane">
+            <textarea id="tailored-cover" readonly placeholder="Your tailored cover letter will appear here..."></textarea>
+            <div class="content-actions">
+              <button class="btn small" id="copy-cover-btn">
+                <span class="btn-icon">📋</span> Copy
+              </button>
+              <button class="btn small primary" id="download-cover-btn">
+                <span class="btn-icon">⬇️</span> Download PDF
+              </button>
             </div>
           </div>
         </div>
-      </section>
-      
-      <!-- Supported ATS -->
-      <section class="section">
-        <h3 class="section-title">Supported Platforms</h3>
-        <div class="ats-grid">
-          <span class="ats-badge">Greenhouse</span>
-          <span class="ats-badge">Lever</span>
-          <span class="ats-badge">Workday</span>
-          <span class="ats-badge">Ashby</span>
-          <span class="ats-badge">iCIMS</span>
-          <span class="ats-badge">SmartRecruiters</span>
-          <span class="ats-badge">Jobvite</span>
-          <span class="ats-badge">Taleo</span>
+
+        <!-- Suggestions -->
+        <div class="suggestions-section" id="suggestions-section">
+          <div class="suggestions-header">
+            <span>💡 Suggestions to Improve</span>
+          </div>
+          <ul class="suggestions-list" id="suggestions-list"></ul>
         </div>
-      </section>
-      
+      </div>
+
       <!-- Queue Status -->
-      <section id="queue-status" class="section hidden">
+      <div class="queue-status" id="queue-status">
         <div class="queue-info">
-          <span>📋 <span id="queue-count">0</span> jobs in queue</span>
-          <button id="view-queue-btn" class="btn-small">View Queue</button>
+          <span class="queue-icon">📋</span>
+          <span class="queue-text"><span id="queue-count">0</span> jobs in queue</span>
         </div>
-      </section>
-      
-      <!-- Status Message -->
-      <p id="status-message" class="status-message hidden"></p>
-    </main>
-    
-    <footer class="popup-footer">
-      <a href="#" id="open-app" class="footer-link">Open Dashboard</a>
-    </footer>
+        <button id="view-queue-btn" class="btn small ghost">View Queue</button>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <button id="open-dashboard-btn" class="btn ghost">
+          <span class="btn-icon">🏠</span> Dashboard
+        </button>
+      </div>
+
+      <!-- Disconnect -->
+      <button id="disconnect-btn" class="btn danger small">Disconnect Account</button>
+    </section>
+
+    <!-- Status Message -->
+    <div id="status-message" class="status-message hidden"></div>
   </div>
-  
+
   <script src="popup.js"></script>
 </body>
 </html>

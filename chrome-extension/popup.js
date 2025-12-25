@@ -1,50 +1,157 @@
 // QuantumHire AI - Popup Script
-// For non-Easy Apply jobs that redirect to company websites
+// Enhanced UI with combined Tailor + Auto-fill + Add to Queue functionality
 
 // DOM Elements
 const notConnectedSection = document.getElementById('not-connected');
 const connectedSection = document.getElementById('connected');
+const loginForm = document.getElementById('login-form');
+const emailInput = document.getElementById('email');
+const passwordInput = document.getElementById('password');
 const connectBtn = document.getElementById('connect-btn');
 const disconnectBtn = document.getElementById('disconnect-btn');
-const autofillBtn = document.getElementById('autofill-btn');
 const refreshBtn = document.getElementById('refresh-btn');
-const tailorBtn = document.getElementById('tailor-btn');
+const applyNowBtn = document.getElementById('apply-now-btn');
+const addQueueBtn = document.getElementById('add-queue-btn');
+const progressSection = document.getElementById('progress-section');
+const resultsSection = document.getElementById('results-section');
+const jobCard = document.getElementById('job-card');
+const jobDetails = document.getElementById('job-details');
+const atsBadge = document.getElementById('ats-badge');
 const statusMessage = document.getElementById('status-message');
-const userName = document.getElementById('user-name');
-const profileSummary = document.getElementById('profile-summary');
-const currentJob = document.getElementById('current-job');
-const tailoredResult = document.getElementById('tailored-result');
 const queueStatus = document.getElementById('queue-status');
-const queueCount = document.getElementById('queue-count');
-const openAppLink = document.getElementById('open-app');
-const viewQueueBtn = document.getElementById('view-queue-btn');
+const queueCountEl = document.getElementById('queue-count');
 
-// Supabase config
+// Credentials elements
+const credentialsToggle = document.getElementById('credentials-toggle');
+const credentialsBody = document.getElementById('credentials-body');
+const atsEmailInput = document.getElementById('ats-email');
+const atsPasswordInput = document.getElementById('ats-password');
+const saveCredentialsBtn = document.getElementById('save-credentials-btn');
+const clearCredentialsBtn = document.getElementById('clear-credentials-btn');
+
+// Config
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+const DASHBOARD_URL = 'https://lovable.dev/projects/47ce3fc9-a939-41ad-bf41-c4c34dc10c2b';
 
-// Dashboard URL
-const DASHBOARD_URL = 'https://preview--autoapply-ai-nexus.lovable.app';
+let currentJob = null;
+let userProfile = null;
+let jobQueue = [];
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  loadConnection();
+  loadCredentials();
+  loadJobQueue();
+  setupEventListeners();
+});
+
+// Setup Event Listeners
+function setupEventListeners() {
+  loginForm?.addEventListener('submit', handleConnect);
+  disconnectBtn?.addEventListener('click', handleDisconnect);
+  refreshBtn?.addEventListener('click', refreshProfile);
+  applyNowBtn?.addEventListener('click', handleApplyWithAI);
+  addQueueBtn?.addEventListener('click', handleAddToQueue);
+  
+  // Credentials toggle
+  credentialsToggle?.addEventListener('click', () => {
+    credentialsBody.classList.toggle('hidden');
+    const arrow = credentialsToggle.querySelector('.toggle-arrow');
+    arrow.textContent = credentialsBody.classList.contains('hidden') ? '▼' : '▲';
+  });
+  
+  // Credentials save/clear
+  saveCredentialsBtn?.addEventListener('click', saveCredentials);
+  clearCredentialsBtn?.addEventListener('click', clearCredentials);
+  
+  // Tab switching
+  document.querySelectorAll('.content-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+  
+  // Copy buttons
+  document.getElementById('copy-resume-btn')?.addEventListener('click', () => copyToClipboard('tailored-resume'));
+  document.getElementById('copy-cover-btn')?.addEventListener('click', () => copyToClipboard('tailored-cover'));
+  
+  // Download buttons
+  document.getElementById('download-resume-btn')?.addEventListener('click', () => downloadAsPDF('resume'));
+  document.getElementById('download-cover-btn')?.addEventListener('click', () => downloadAsPDF('cover'));
+  
+  // Quick actions
+  document.getElementById('open-dashboard-btn')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: DASHBOARD_URL });
+  });
+  
+  document.getElementById('view-queue-btn')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: `${DASHBOARD_URL}?tab=queue` });
+  });
+}
 
 // Show status message
-function showStatus(message, type = 'success') {
+function showStatus(message, type = 'info') {
   statusMessage.textContent = message;
   statusMessage.className = `status-message ${type}`;
   statusMessage.classList.remove('hidden');
-  setTimeout(() => statusMessage.classList.add('hidden'), 3000);
+  
+  setTimeout(() => {
+    statusMessage.classList.add('hidden');
+  }, 4000);
 }
 
 // Load saved connection
 async function loadConnection() {
-  const data = await chrome.storage.local.get(['accessToken', 'userProfile', 'jobQueue']);
+  const data = await chrome.storage.local.get(['userProfile', 'accessToken', 'refreshToken']);
   
   if (data.accessToken && data.userProfile) {
-    showConnectedState(data.userProfile);
+    userProfile = data.userProfile;
+    showConnectedState(userProfile);
     detectCurrentJob();
-    updateQueueCount(data.jobQueue || []);
   } else {
     showNotConnectedState();
   }
+}
+
+// Load ATS credentials
+async function loadCredentials() {
+  const data = await chrome.storage.local.get(['atsCredentials']);
+  if (data.atsCredentials) {
+    atsEmailInput.value = data.atsCredentials.email || '';
+    atsPasswordInput.value = data.atsCredentials.password || '';
+  }
+}
+
+// Save ATS credentials
+async function saveCredentials() {
+  const email = atsEmailInput.value.trim();
+  const password = atsPasswordInput.value;
+  
+  await chrome.storage.local.set({
+    atsCredentials: { email, password }
+  });
+  
+  showStatus('ATS credentials saved locally', 'success');
+}
+
+// Clear ATS credentials
+async function clearCredentials() {
+  await chrome.storage.local.remove(['atsCredentials']);
+  atsEmailInput.value = '';
+  atsPasswordInput.value = '';
+  showStatus('ATS credentials cleared', 'info');
+}
+
+// Load job queue
+async function loadJobQueue() {
+  const data = await chrome.storage.local.get(['jobQueue']);
+  jobQueue = data.jobQueue || [];
+  updateQueueDisplay();
+}
+
+// Update queue display
+function updateQueueDisplay() {
+  queueCountEl.textContent = jobQueue.length;
+  queueStatus.classList.toggle('hidden', jobQueue.length === 0);
 }
 
 // Show connected state
@@ -52,13 +159,20 @@ function showConnectedState(profile) {
   notConnectedSection.classList.add('hidden');
   connectedSection.classList.remove('hidden');
   
-  userName.textContent = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'User';
+  // Update profile display
+  const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'User';
+  document.getElementById('profile-name').textContent = name;
+  document.getElementById('profile-email').textContent = profile.email || '';
   
-  profileSummary.innerHTML = `
-    <p><strong>Email:</strong> ${profile.email || 'Not set'}</p>
-    <p><strong>Phone:</strong> ${profile.phone || 'Not set'}</p>
-    <p><strong>Location:</strong> ${[profile.city, profile.state, profile.country].filter(Boolean).join(', ') || 'Not set'}</p>
-  `;
+  // Avatar initials
+  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  document.getElementById('avatar').textContent = initials || 'U';
+  
+  // Stats
+  const skills = profile.skills || [];
+  document.getElementById('skills-count').textContent = Array.isArray(skills) ? skills.length : 0;
+  document.getElementById('exp-years').textContent = profile.total_experience || '0';
+  document.getElementById('certs-count').textContent = (profile.certifications || []).length;
 }
 
 // Show not connected state
@@ -67,120 +181,23 @@ function showNotConnectedState() {
   connectedSection.classList.add('hidden');
 }
 
-// Update queue count
-function updateQueueCount(queue) {
-  if (queue && queue.length > 0) {
-    queueStatus.classList.remove('hidden');
-    queueCount.textContent = queue.length;
-  } else {
-    queueStatus.classList.add('hidden');
-  }
-}
-
-// Detect ATS platform from URL
-function detectATS(url) {
-  if (url.includes('greenhouse.io')) return { name: 'Greenhouse', icon: '🌿' };
-  if (url.includes('lever.co')) return { name: 'Lever', icon: '🔧' };
-  if (url.includes('workday.com') || url.includes('myworkdayjobs.com')) return { name: 'Workday', icon: '📊' };
-  if (url.includes('ashbyhq.com')) return { name: 'Ashby', icon: '💼' };
-  if (url.includes('smartrecruiters.com')) return { name: 'SmartRecruiters', icon: '🎯' };
-  if (url.includes('icims.com')) return { name: 'iCIMS', icon: '📋' };
-  if (url.includes('jobvite.com')) return { name: 'Jobvite', icon: '📌' };
-  if (url.includes('taleo.net')) return { name: 'Taleo', icon: '🏢' };
-  if (url.includes('successfactors.com')) return { name: 'SuccessFactors', icon: '✅' };
-  return null;
-}
-
-// Check if on a job board (LinkedIn/Indeed) vs company page
-function isJobBoard(url) {
-  return url.includes('linkedin.com') || url.includes('indeed.com');
-}
-
-// Detect current job on page
-async function detectCurrentJob() {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const url = tab.url || '';
-    
-    // Check if on job board
-    if (isJobBoard(url)) {
-      currentJob.innerHTML = `
-        <p class="job-board-notice">⚠️ You're on a job board</p>
-        <p class="ats-hint">Click on a job that says "Apply on company website" to be taken to the company's application page where auto-fill works.</p>
-      `;
-      autofillBtn.disabled = true;
-      tailorBtn.disabled = true;
-      return;
-    }
-    
-    const ats = detectATS(url);
-    
-    if (!ats) {
-      currentJob.innerHTML = `
-        <p class="not-job-page">📄 Not on a supported job page</p>
-        <p class="ats-hint">Supported: Greenhouse, Lever, Workday, Ashby, SmartRecruiters, iCIMS, Jobvite, Taleo</p>
-      `;
-      autofillBtn.disabled = true;
-      tailorBtn.disabled = true;
-      return;
-    }
-    
-    // Try to extract job info from the page
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractJob' });
-      
-      if (response && response.title) {
-        currentJob.innerHTML = `
-          <div class="ats-badge">${ats.icon} ${ats.name}</div>
-          <p class="job-title">${response.title}</p>
-          <p class="job-company">${response.company}</p>
-          ${response.location ? `<p class="job-location">📍 ${response.location}</p>` : ''}
-        `;
-        currentJob.dataset.job = JSON.stringify({ ...response, url: url, ats: ats.name });
-        autofillBtn.disabled = false;
-        tailorBtn.disabled = false;
-      } else {
-        currentJob.innerHTML = `
-          <div class="ats-badge">${ats.icon} ${ats.name}</div>
-          <p class="not-job-page">Could not detect job details. Try refreshing.</p>
-        `;
-        currentJob.dataset.job = JSON.stringify({ url: url, ats: ats.name });
-        autofillBtn.disabled = false;
-        tailorBtn.disabled = true;
-      }
-    } catch (err) {
-      // Content script might not be loaded yet
-      currentJob.innerHTML = `
-        <div class="ats-badge">${ats.icon} ${ats.name}</div>
-        <p class="not-job-page">Refresh the page to enable auto-fill</p>
-      `;
-      autofillBtn.disabled = true;
-      tailorBtn.disabled = true;
-    }
-  } catch (error) {
-    console.error('Job detection error:', error);
-    currentJob.innerHTML = `
-      <p class="not-job-page">📄 Navigate to a company job page to auto-fill</p>
-    `;
-    autofillBtn.disabled = true;
-    tailorBtn.disabled = true;
-  }
-}
-
-// Connect to Supabase
-async function connect() {
-  const email = document.getElementById('user-email').value.trim();
-  const password = document.getElementById('user-password').value;
+// Handle connect
+async function handleConnect(e) {
+  e.preventDefault();
+  
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
   
   if (!email || !password) {
     showStatus('Please enter email and password', 'error');
     return;
   }
   
-  connectBtn.textContent = 'Connecting...';
   connectBtn.disabled = true;
+  connectBtn.innerHTML = '<span class="btn-icon">⏳</span> Connecting...';
   
   try {
+    // Authenticate with Supabase
     const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: {
@@ -191,12 +208,12 @@ async function connect() {
     });
     
     if (!authResponse.ok) {
-      const error = await authResponse.json();
-      throw new Error(error.error_description || error.message || 'Invalid credentials');
+      throw new Error('Invalid credentials');
     }
     
     const authData = await authResponse.json();
     
+    // Fetch profile
     const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${authData.user.id}&select=*`, {
       headers: {
         'apikey': SUPABASE_KEY,
@@ -204,176 +221,482 @@ async function connect() {
       },
     });
     
-    if (!profileResponse.ok) throw new Error('Failed to fetch profile');
-    
     const profiles = await profileResponse.json();
     const profile = profiles[0] || { email: authData.user.email };
     
+    // Save to storage
     await chrome.storage.local.set({
-      supabaseUrl: SUPABASE_URL,
-      supabaseKey: SUPABASE_KEY,
       accessToken: authData.access_token,
       refreshToken: authData.refresh_token,
-      userId: authData.user.id,
       userProfile: profile,
+      userId: authData.user.id,
     });
     
-    showStatus('Connected!', 'success');
+    userProfile = profile;
     showConnectedState(profile);
     detectCurrentJob();
+    showStatus('Connected successfully!', 'success');
     
   } catch (error) {
     console.error('Connection error:', error);
     showStatus(error.message || 'Failed to connect', 'error');
   } finally {
-    connectBtn.textContent = 'Connect Account';
     connectBtn.disabled = false;
+    connectBtn.innerHTML = '<span class="btn-icon">🚀</span> Connect Account';
   }
 }
 
-// Disconnect
-async function disconnect() {
-  await chrome.storage.local.remove(['accessToken', 'refreshToken', 'userId', 'userProfile']);
-  showStatus('Disconnected', 'success');
+// Handle disconnect
+async function handleDisconnect() {
+  await chrome.storage.local.remove(['accessToken', 'refreshToken', 'userProfile', 'userId']);
+  userProfile = null;
+  currentJob = null;
   showNotConnectedState();
+  showStatus('Disconnected', 'info');
 }
 
 // Refresh profile
 async function refreshProfile() {
-  refreshBtn.textContent = '🔄 ...';
   refreshBtn.disabled = true;
+  refreshBtn.innerHTML = '<span class="btn-icon">⏳</span> Refreshing...';
   
   try {
     const data = await chrome.storage.local.get(['accessToken', 'userId']);
     
-    const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${data.userId}&select=*`, {
+    if (!data.accessToken) {
+      throw new Error('Not authenticated');
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${data.userId}&select=*`, {
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${data.accessToken}`,
       },
     });
     
-    if (!profileResponse.ok) throw new Error('Failed to fetch profile');
+    const profiles = await response.json();
+    const profile = profiles[0];
     
-    const profiles = await profileResponse.json();
-    const profile = profiles[0] || {};
-    
-    await chrome.storage.local.set({ userProfile: profile });
-    showConnectedState(profile);
-    showStatus('Profile refreshed!', 'success');
-    
-  } catch (error) {
-    console.error('Refresh error:', error);
-    showStatus('Failed to refresh', 'error');
-  } finally {
-    refreshBtn.textContent = '🔄 Refresh';
-    refreshBtn.disabled = false;
-  }
-}
-
-// Trigger autofill
-async function triggerAutofill() {
-  autofillBtn.textContent = '⏳ Filling...';
-  autofillBtn.disabled = true;
-  
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'autofill' });
-    
-    if (response && response.success) {
-      showStatus(`Filled ${response.fieldsCount} fields!`, 'success');
-    } else {
-      showStatus(response?.message || 'No fields found', 'error');
+    if (profile) {
+      await chrome.storage.local.set({ userProfile: profile });
+      userProfile = profile;
+      showConnectedState(profile);
+      showStatus('Profile refreshed!', 'success');
     }
   } catch (error) {
-    console.error('Autofill error:', error);
-    showStatus('Make sure you\'re on a company job application page', 'error');
+    console.error('Refresh error:', error);
+    showStatus('Failed to refresh profile', 'error');
   } finally {
-    autofillBtn.textContent = '📝 Auto-Fill Application';
-    autofillBtn.disabled = false;
+    refreshBtn.disabled = false;
+    refreshBtn.innerHTML = '<span class="btn-icon">🔄</span> Refresh Profile';
   }
 }
 
-// Tailor resume for job
-async function tailorForJob() {
-  const jobData = currentJob.dataset.job ? JSON.parse(currentJob.dataset.job) : null;
+// Detect ATS from URL
+function detectATS(url) {
+  if (!url) return 'Unknown';
   
-  if (!jobData) {
+  const atsMap = {
+    'greenhouse.io': 'Greenhouse',
+    'lever.co': 'Lever',
+    'workday.com': 'Workday',
+    'myworkdayjobs.com': 'Workday',
+    'ashbyhq.com': 'Ashby',
+    'icims.com': 'iCIMS',
+    'smartrecruiters.com': 'SmartRecruiters',
+    'jobvite.com': 'Jobvite',
+    'bamboohr.com': 'BambooHR',
+    'recruitee.com': 'Recruitee',
+    'breezy.hr': 'Breezy',
+  };
+  
+  for (const [domain, name] of Object.entries(atsMap)) {
+    if (url.includes(domain)) return name;
+  }
+  
+  return 'ATS';
+}
+
+// Detect current job on page
+async function detectCurrentJob() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!tab?.id) {
+      updateJobCard(null);
+      return;
+    }
+    
+    // Detect ATS type
+    const atsType = detectATS(tab.url);
+    atsBadge.textContent = atsType;
+    
+    // Skip job boards - only work on company ATS pages
+    if (tab.url?.includes('linkedin.com') || tab.url?.includes('indeed.com')) {
+      jobDetails.innerHTML = '<span class="no-job">Open a company job page to apply</span>';
+      applyNowBtn.disabled = true;
+      addQueueBtn.disabled = true;
+      return;
+    }
+    
+    // Send message to content script to extract job
+    chrome.tabs.sendMessage(tab.id, { action: 'extractJob' }, (response) => {
+      if (chrome.runtime.lastError || !response) {
+        jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
+        applyNowBtn.disabled = true;
+        addQueueBtn.disabled = true;
+        return;
+      }
+      
+      currentJob = response;
+      updateJobCard(response);
+    });
+    
+  } catch (error) {
+    console.error('Job detection error:', error);
+    jobDetails.innerHTML = '<span class="no-job">Unable to detect job</span>';
+    applyNowBtn.disabled = true;
+    addQueueBtn.disabled = true;
+  }
+}
+
+// Update job card display
+function updateJobCard(job) {
+  if (!job || job.title === 'Unknown Position') {
+    jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
+    applyNowBtn.disabled = true;
+    addQueueBtn.disabled = true;
+    return;
+  }
+  
+  jobDetails.innerHTML = `
+    <div class="job-title">${job.title}</div>
+    <div class="job-company">${job.company}</div>
+    ${job.location ? `<div class="job-location">📍 ${job.location}</div>` : ''}
+  `;
+  
+  applyNowBtn.disabled = false;
+  addQueueBtn.disabled = false;
+}
+
+// Handle Add to Queue
+async function handleAddToQueue() {
+  if (!currentJob) {
     showStatus('No job detected', 'error');
     return;
   }
   
-  tailorBtn.textContent = '⏳ Tailoring...';
-  tailorBtn.disabled = true;
+  // Check if already in queue
+  const exists = jobQueue.some(j => j.url === currentJob.url);
+  if (exists) {
+    showStatus('Job already in queue', 'info');
+    return;
+  }
   
+  // Add to queue with timestamp
+  const queueItem = {
+    ...currentJob,
+    addedAt: new Date().toISOString(),
+    status: 'queued'
+  };
+  
+  jobQueue.push(queueItem);
+  await chrome.storage.local.set({ jobQueue });
+  
+  updateQueueDisplay();
+  showStatus(`Added "${currentJob.title}" to queue!`, 'success');
+  
+  // Also save to Supabase if connected
   try {
-    const response = await chrome.runtime.sendMessage({
-      action: 'getTailoredApplication',
-      job: jobData,
-    });
-    
-    if (response.error) throw new Error(response.error);
-    
-    tailoredResult.classList.remove('hidden');
-    
-    document.getElementById('resume-text').value = response.tailoredResume || 'No resume generated';
-    document.getElementById('cover-text').value = response.tailoredCoverLetter || 'No cover letter generated';
-    
-    if (response.matchScore) {
-      document.getElementById('match-score-value').textContent = response.matchScore;
+    const data = await chrome.storage.local.get(['accessToken', 'userId']);
+    if (data.accessToken && data.userId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${data.accessToken}`,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          user_id: data.userId,
+          title: currentJob.title,
+          company: currentJob.company,
+          location: currentJob.location || '',
+          url: currentJob.url,
+          description: currentJob.description?.substring(0, 5000) || '',
+          requirements: currentJob.requirements || [],
+          platform: currentJob.ats || 'Unknown',
+          status: 'pending'
+        })
+      });
     }
-    
-    showStatus('Application tailored!', 'success');
-    
-  } catch (error) {
-    console.error('Tailor error:', error);
-    showStatus(error.message || 'Failed to tailor', 'error');
-  } finally {
-    tailorBtn.textContent = '✨ Tailor for This Job';
-    tailorBtn.disabled = false;
+  } catch (err) {
+    console.log('Failed to sync to cloud, but saved locally');
   }
 }
 
-// Open app dashboard
-openAppLink.addEventListener('click', async (e) => {
-  e.preventDefault();
-  chrome.tabs.create({ url: `${DASHBOARD_URL}/jobs` });
-});
-
-// View queue in app
-viewQueueBtn?.addEventListener('click', () => {
-  chrome.tabs.create({ url: `${DASHBOARD_URL}/jobs` });
-});
-
-// Tab switching
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
+// Main action: Apply with AI (Tailor + Auto-fill combined)
+async function handleApplyWithAI() {
+  if (!currentJob || !userProfile) {
+    showStatus('No job detected or profile not loaded', 'error');
+    return;
+  }
+  
+  // Show progress section
+  progressSection.classList.remove('hidden');
+  resultsSection.classList.add('hidden');
+  applyNowBtn.disabled = true;
+  applyNowBtn.querySelector('.action-title').textContent = 'Processing...';
+  
+  try {
+    // Step 1: Extracting job details
+    updateProgress(1, 25);
+    await delay(500);
     
-    const tabName = tab.dataset.tab;
-    document.getElementById('resume-content').classList.toggle('hidden', tabName !== 'resume');
-    document.getElementById('cover-content').classList.toggle('hidden', tabName !== 'cover');
+    // Step 2: Analyzing ATS keywords
+    updateProgress(2, 50);
+    await delay(300);
+    
+    // Step 3: Tailoring resume & cover letter
+    updateProgress(3, 75);
+    
+    const data = await chrome.storage.local.get(['accessToken']);
+    
+    // Call the tailor-application edge function
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${data.accessToken}`,
+      },
+      body: JSON.stringify({
+        jobTitle: currentJob.title,
+        company: currentJob.company,
+        description: currentJob.description || '',
+        requirements: currentJob.requirements || [],
+        location: currentJob.location || '',
+        userProfile: {
+          firstName: userProfile.first_name,
+          lastName: userProfile.last_name,
+          email: userProfile.email,
+          phone: userProfile.phone,
+          linkedin: userProfile.linkedin,
+          github: userProfile.github,
+          portfolio: userProfile.portfolio,
+          coverLetter: userProfile.cover_letter || '',
+          workExperience: userProfile.work_experience || [],
+          education: userProfile.education || [],
+          skills: userProfile.skills || [],
+          certifications: userProfile.certifications || [],
+          achievements: userProfile.achievements || [],
+          atsStrategy: userProfile.ats_strategy || 'Match keywords exactly from job description',
+          city: userProfile.city,
+          country: userProfile.country,
+        },
+        includeReferral: false,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Request failed: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Step 4: Auto-filling application
+    updateProgress(4, 90);
+    
+    // Get ATS credentials for login forms
+    const credData = await chrome.storage.local.get(['atsCredentials']);
+    
+    // Send autofill command to content script
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'autofill',
+        tailoredData: result,
+        atsCredentials: credData.atsCredentials || null
+      });
+    }
+    
+    // Complete progress
+    updateProgress(4, 100);
+    await delay(500);
+    
+    // Show results
+    displayResults(result);
+    showStatus('Application tailored and form filled!', 'success');
+    
+  } catch (error) {
+    console.error('Apply error:', error);
+    showStatus(error.message || 'Failed to process application', 'error');
+    progressSection.classList.add('hidden');
+  } finally {
+    applyNowBtn.disabled = false;
+    applyNowBtn.querySelector('.action-title').textContent = 'Apply with AI';
+  }
+}
+
+// Update progress display
+function updateProgress(step, percent) {
+  document.getElementById('progress-fill').style.width = `${percent}%`;
+  
+  for (let i = 1; i <= 4; i++) {
+    const stepEl = document.getElementById(`step-${i}`);
+    stepEl.classList.remove('active', 'complete');
+    
+    if (i < step) {
+      stepEl.classList.add('complete');
+    } else if (i === step) {
+      stepEl.classList.add('active');
+    }
+  }
+}
+
+// Display results
+function displayResults(result) {
+  progressSection.classList.add('hidden');
+  resultsSection.classList.remove('hidden');
+  
+  // Update match score
+  const score = result.matchScore || 0;
+  document.getElementById('match-circle').setAttribute('stroke-dasharray', `${score}, 100`);
+  document.getElementById('match-score-text').textContent = `${score}%`;
+  
+  // Update keywords matched
+  const keywordsMatched = result.keywordsMatched || [];
+  document.getElementById('keywords-matched').textContent = `${keywordsMatched.length} keywords matched`;
+  
+  // Display keyword tags
+  const keywordsList = document.getElementById('keywords-list');
+  keywordsList.innerHTML = '';
+  
+  keywordsMatched.slice(0, 10).forEach(keyword => {
+    const tag = document.createElement('span');
+    tag.className = 'keyword-tag';
+    tag.textContent = keyword;
+    keywordsList.appendChild(tag);
   });
-});
-
-// Copy buttons
-document.querySelectorAll('.copy-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const targetId = btn.dataset.target;
-    const textarea = document.getElementById(targetId);
-    navigator.clipboard.writeText(textarea.value);
-    btn.textContent = '✅ Copied!';
-    setTimeout(() => btn.textContent = '📋 Copy', 2000);
+  
+  // Display missing keywords if available
+  const keywordsMissing = result.keywordsMissing || [];
+  keywordsMissing.slice(0, 5).forEach(keyword => {
+    const tag = document.createElement('span');
+    tag.className = 'keyword-tag missing';
+    tag.textContent = keyword;
+    keywordsList.appendChild(tag);
   });
-});
+  
+  // Display tailored content
+  document.getElementById('tailored-resume').value = result.tailoredResume || '';
+  document.getElementById('tailored-cover').value = result.tailoredCoverLetter || '';
+  
+  // Display suggestions
+  const suggestions = result.suggestedImprovements || [];
+  const suggestionsList = document.getElementById('suggestions-list');
+  suggestionsList.innerHTML = '';
+  
+  if (suggestions.length > 0) {
+    document.getElementById('suggestions-section').classList.remove('hidden');
+    suggestions.forEach(suggestion => {
+      const li = document.createElement('li');
+      li.textContent = suggestion;
+      suggestionsList.appendChild(li);
+    });
+  } else {
+    document.getElementById('suggestions-section').classList.add('hidden');
+  }
+}
 
-// Event listeners
-connectBtn.addEventListener('click', connect);
-disconnectBtn.addEventListener('click', disconnect);
-autofillBtn.addEventListener('click', triggerAutofill);
-refreshBtn.addEventListener('click', refreshProfile);
-tailorBtn.addEventListener('click', tailorForJob);
+// Switch content tabs
+function switchTab(tabName) {
+  document.querySelectorAll('.content-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+  
+  document.getElementById('resume-pane').classList.toggle('active', tabName === 'resume');
+  document.getElementById('cover-pane').classList.toggle('active', tabName !== 'resume');
+}
 
-// Initialize
-loadConnection();
+// Copy to clipboard
+async function copyToClipboard(elementId) {
+  const textarea = document.getElementById(elementId);
+  const btn = document.getElementById(`copy-${elementId.includes('resume') ? 'resume' : 'cover'}-btn`);
+  
+  try {
+    await navigator.clipboard.writeText(textarea.value);
+    btn.innerHTML = '<span class="btn-icon">✅</span> Copied!';
+    setTimeout(() => {
+      btn.innerHTML = '<span class="btn-icon">📋</span> Copy';
+    }, 2000);
+  } catch (error) {
+    showStatus('Failed to copy', 'error');
+  }
+}
+
+// Download as PDF (opens in new tab for printing)
+function downloadAsPDF(type) {
+  const content = type === 'resume' 
+    ? document.getElementById('tailored-resume').value 
+    : document.getElementById('tailored-cover').value;
+  
+  if (!content) {
+    showStatus('No content to download', 'error');
+    return;
+  }
+  
+  // Create a printable HTML page
+  const title = type === 'resume' ? 'Tailored Resume' : 'Cover Letter';
+  const fileName = type === 'resume' 
+    ? `${userProfile?.first_name || 'User'}_Resume_${currentJob?.company || 'Job'}.pdf`
+    : `${userProfile?.first_name || 'User'}_CoverLetter_${currentJob?.company || 'Job'}.pdf`;
+  
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title}</title>
+      <style>
+        body {
+          font-family: 'Times New Roman', serif;
+          font-size: 11pt;
+          line-height: 1.5;
+          max-width: 8.5in;
+          margin: 0.5in auto;
+          padding: 0 0.5in;
+          color: #000;
+        }
+        h1, h2, h3 { font-weight: bold; margin: 0.5em 0; }
+        h1 { font-size: 16pt; text-align: center; }
+        h2 { font-size: 12pt; border-bottom: 1px solid #000; padding-bottom: 2px; }
+        h3 { font-size: 11pt; }
+        p { margin: 0.5em 0; }
+        ul { margin: 0.5em 0; padding-left: 1.5em; }
+        li { margin: 0.25em 0; }
+        @media print {
+          body { margin: 0; padding: 0.5in; }
+        }
+      </style>
+    </head>
+    <body>
+      <pre style="white-space: pre-wrap; font-family: inherit;">${content}</pre>
+      <script>
+        window.onload = function() {
+          window.print();
+        };
+      <\/script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  
+  showStatus(`Opening ${title} for printing/PDF`, 'info');
+}
+
+// Utility: delay
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

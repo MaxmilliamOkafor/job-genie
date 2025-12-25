@@ -361,7 +361,7 @@ function fillField(element, value) {
 }
 
 // Main autofill function
-async function autofillForm(tailoredData = null) {
+async function autofillForm(tailoredData = null, atsCredentials = null) {
   console.log('QuantumHire AI: Starting autofill...');
   
   const data = await chrome.storage.local.get(['userProfile']);
@@ -375,6 +375,14 @@ async function autofillForm(tailoredData = null) {
   console.log('QuantumHire AI: Profile loaded', profile);
   
   let filledCount = 0;
+  
+  // Check if we're on a login page (Workday, etc.)
+  const isLoginPage = detectLoginPage();
+  
+  if (isLoginPage && atsCredentials) {
+    console.log('QuantumHire AI: Detected login page, filling credentials');
+    filledCount += fillLoginCredentials(atsCredentials);
+  }
   
   const fieldValues = {
     firstName: profile.first_name,
@@ -424,6 +432,85 @@ async function autofillForm(tailoredData = null) {
     fieldsCount: filledCount,
     message: filledCount > 0 ? `Successfully filled ${filledCount} fields` : 'No matching form fields found',
   };
+}
+
+// Detect if current page is a login page
+function detectLoginPage() {
+  const loginIndicators = [
+    'input[type="password"]',
+    'input[name*="password"]',
+    'input[id*="password"]',
+    'button[type="submit"]:contains("Sign In")',
+    'button:contains("Log In")',
+    'form[action*="login"]',
+    'form[action*="signin"]',
+  ];
+  
+  // Check for password field - most reliable indicator
+  const hasPasswordField = document.querySelector('input[type="password"]');
+  const hasEmailField = document.querySelector('input[type="email"], input[name*="email"], input[id*="email"]');
+  
+  // If we have both email and password fields but no resume/application fields, it's likely a login page
+  const hasResumeField = document.querySelector('input[type="file"]');
+  
+  return hasPasswordField && hasEmailField && !hasResumeField;
+}
+
+// Fill login credentials for ATS platforms
+function fillLoginCredentials(credentials) {
+  if (!credentials || !credentials.email || !credentials.password) {
+    return 0;
+  }
+  
+  let filled = 0;
+  
+  // Find email/username field
+  const emailSelectors = [
+    'input[type="email"]',
+    'input[name="email"]',
+    'input[id="email"]',
+    'input[name*="username"]',
+    'input[id*="username"]',
+    'input[name*="userId"]',
+    'input[id*="userId"]',
+    'input[data-automation-id="email"]',
+    'input[data-automation-id="userName"]',
+    'input[autocomplete="username"]',
+    'input[autocomplete="email"]',
+  ];
+  
+  for (const selector of emailSelectors) {
+    const emailField = document.querySelector(selector);
+    if (emailField && !emailField.value) {
+      fillField(emailField, credentials.email);
+      emailField.classList.add('quantumhire-filled');
+      filled++;
+      console.log('QuantumHire AI: Filled login email');
+      break;
+    }
+  }
+  
+  // Find password field
+  const passwordSelectors = [
+    'input[type="password"]',
+    'input[name="password"]',
+    'input[id="password"]',
+    'input[data-automation-id="password"]',
+    'input[autocomplete="current-password"]',
+  ];
+  
+  for (const selector of passwordSelectors) {
+    const passwordField = document.querySelector(selector);
+    if (passwordField && !passwordField.value) {
+      fillField(passwordField, credentials.password);
+      passwordField.classList.add('quantumhire-filled');
+      filled++;
+      console.log('QuantumHire AI: Filled login password');
+      break;
+    }
+  }
+  
+  return filled;
 }
 
 // Show toast notification
@@ -842,7 +929,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('QuantumHire AI: Received message', message);
   
   if (message.action === 'autofill') {
-    autofillForm(message.tailoredData).then(sendResponse);
+    autofillForm(message.tailoredData, message.atsCredentials).then(sendResponse);
     return true;
   }
   
