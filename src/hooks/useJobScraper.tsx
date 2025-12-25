@@ -269,6 +269,35 @@ export function useJobScraper() {
     }
   }, [user]);
 
+  // Clear all jobs and re-scrape fresh
+  const clearAndRefresh = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      // Delete all existing jobs for this user
+      const { error } = await supabase
+        .from('jobs')
+        .delete()
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setJobs([]);
+      offsetRef.current = 0;
+      setHasMore(true);
+      
+      toast.success('Cleared old jobs. Starting fresh scrape...');
+      
+      // Start fresh scrape
+      if (keywords) {
+        startContinuousScraping(keywords);
+      }
+    } catch (error) {
+      console.error('Error clearing jobs:', error);
+      toast.error('Failed to clear jobs');
+    }
+  }, [user, keywords, startContinuousScraping]);
+
   return {
     jobs,
     isLoading,
@@ -280,6 +309,7 @@ export function useJobScraper() {
     startContinuousScraping,
     stopScraping,
     updateJobStatus,
+    clearAndRefresh,
     refetch: fetchExistingJobs,
   };
 }
