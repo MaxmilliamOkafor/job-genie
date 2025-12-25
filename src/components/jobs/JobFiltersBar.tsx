@@ -42,6 +42,53 @@ const JOB_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Freelanc
 const WORK_TYPES = ['Remote', 'Hybrid', 'On-site'];
 const EXPERIENCE_LEVELS = ['Entry Level', 'Mid Level', 'Senior', 'Lead', 'Executive'];
 
+const LOCATION_OPTIONS = [
+  { value: 'all', label: 'All Locations' },
+  { value: 'remote', label: 'Remote' },
+  { value: 'hybrid', label: 'Hybrid' },
+  // Europe
+  { value: 'Ireland', label: 'Ireland' },
+  { value: 'Dublin', label: 'Dublin' },
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'Netherlands', label: 'Netherlands' },
+  { value: 'France', label: 'France' },
+  { value: 'Switzerland', label: 'Switzerland' },
+  { value: 'Sweden', label: 'Sweden' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'Belgium', label: 'Belgium' },
+  { value: 'Austria', label: 'Austria' },
+  { value: 'Czech Republic', label: 'Czech Republic' },
+  { value: 'Portugal', label: 'Portugal' },
+  { value: 'Italy', label: 'Italy' },
+  { value: 'Greece', label: 'Greece' },
+  { value: 'Norway', label: 'Norway' },
+  { value: 'Denmark', label: 'Denmark' },
+  { value: 'Luxembourg', label: 'Luxembourg' },
+  { value: 'Malta', label: 'Malta' },
+  { value: 'Cyprus', label: 'Cyprus' },
+  { value: 'Serbia', label: 'Serbia' },
+  // Americas
+  { value: 'United States', label: 'United States' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Mexico', label: 'Mexico' },
+  // Middle East
+  { value: 'United Arab Emirates', label: 'United Arab Emirates' },
+  { value: 'Dubai', label: 'Dubai' },
+  { value: 'Qatar', label: 'Qatar' },
+  { value: 'Turkey', label: 'Turkey' },
+  // Africa
+  { value: 'South Africa', label: 'South Africa' },
+  { value: 'Morocco', label: 'Morocco' },
+  { value: 'Tanzania', label: 'Tanzania' },
+  // Asia Pacific
+  { value: 'Singapore', label: 'Singapore' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'New Zealand', label: 'New Zealand' },
+  { value: 'Thailand', label: 'Thailand' },
+];
+
 export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
@@ -57,17 +104,6 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
     [...new Set(jobs.map(j => j.platform).filter(Boolean))] as string[],
   [jobs]);
 
-  const uniqueLocations = useMemo(() => {
-    const locations = new Set<string>();
-    jobs.forEach(job => {
-      // Extract city/country from location
-      const parts = job.location.split(',').map(p => p.trim());
-      parts.forEach(part => {
-        if (part && part.length > 2) locations.add(part);
-      });
-    });
-    return [...locations].sort().slice(0, 50); // Limit to 50 unique locations
-  }, [jobs]);
 
   // Calculate stats
   const jobStats = useMemo(() => {
@@ -218,21 +254,19 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
           </div>
           
           {/* Location */}
-          <div className="relative w-full lg:w-[180px]">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Location..."
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="pl-10"
-              list="locations-list"
-            />
-            <datalist id="locations-list">
-              {uniqueLocations.map(loc => (
-                <option key={loc} value={loc} />
+          <Select value={locationFilter || 'all'} onValueChange={(v) => setLocationFilter(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-full lg:w-[180px]">
+              <MapPin className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Location" />
+            </SelectTrigger>
+            <SelectContent>
+              {LOCATION_OPTIONS.map(loc => (
+                <SelectItem key={loc.value} value={loc.value}>
+                  {loc.label}
+                </SelectItem>
               ))}
-            </datalist>
-          </div>
+            </SelectContent>
+          </Select>
           
           {/* Platform */}
           <Select value={platformFilter} onValueChange={setPlatformFilter}>
