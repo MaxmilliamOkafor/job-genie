@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
 import { Job } from '@/hooks/useJobs';
+import { toast } from 'sonner';
 import { 
   Briefcase, 
   ArrowUp,
@@ -23,6 +24,11 @@ import {
   Upload,
   Search,
   CheckCircle,
+  CheckSquare,
+  Square,
+  Zap,
+  X,
+  Loader2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -51,6 +57,11 @@ const Jobs = () => {
   const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
   const [searchInput, setSearchInput] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Bulk selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [isBatchApplying, setIsBatchApplying] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 400);
@@ -71,6 +82,82 @@ const Jobs = () => {
   const handleFiltersChange = useCallback((filtered: Job[]) => {
     setFilteredJobs(filtered);
   }, []);
+
+  // Sort jobs based on selected sort option
+  const sortedJobs = useMemo(() => {
+    return [...filteredJobs].sort((a, b) => {
+      const aDate = new Date(a.posted_date).getTime();
+      const bDate = new Date(b.posted_date).getTime();
+      return bDate - aDate;
+    });
+  }, [filteredJobs, sortBy]);
+
+  // Get pending jobs for selection
+  const pendingJobs = useMemo(() => 
+    sortedJobs.filter(job => job.status === 'pending'),
+    [sortedJobs]
+  );
+
+  // Select all pending jobs
+  const handleSelectAll = useCallback(() => {
+    const pendingIds = pendingJobs.map(job => job.id);
+    setSelectedJobs(new Set(pendingIds));
+  }, [pendingJobs]);
+
+  // Clear selection
+  const handleClearSelection = useCallback(() => {
+    setSelectedJobs(new Set());
+  }, []);
+
+  // Toggle selection mode
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode(prev => {
+      if (prev) {
+        setSelectedJobs(new Set());
+      }
+      return !prev;
+    });
+  }, []);
+
+  // Batch apply to selected jobs
+  const handleBatchApply = useCallback(async () => {
+    if (selectedJobs.size === 0) return;
+    
+    setIsBatchApplying(true);
+    const jobsToApply = Array.from(selectedJobs);
+    let successCount = 0;
+    let failCount = 0;
+    
+    // Open tabs for each selected job (up to 10 at a time to avoid browser blocking)
+    const batchSize = 10;
+    for (let i = 0; i < jobsToApply.length; i += batchSize) {
+      const batch = jobsToApply.slice(i, i + batchSize);
+      
+      for (const jobId of batch) {
+        const job = jobs.find(j => j.id === jobId);
+        if (job?.url) {
+          window.open(job.url, '_blank');
+          await updateJobStatus(jobId, 'applied');
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
+      
+      // Small delay between batches
+      if (i + batchSize < jobsToApply.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    setSelectedJobs(new Set());
+    setSelectionMode(false);
+    setIsBatchApplying(false);
+    
+    toast.success(`Opened ${successCount} job${successCount !== 1 ? 's' : ''} for application`, {
+      description: failCount > 0 ? `${failCount} job(s) had no URL` : undefined,
+    });
+  }, [selectedJobs, jobs, updateJobStatus]);
 
   // Server-side search with debounce
   const handleSearch = useCallback(async () => {
@@ -93,14 +180,6 @@ const Jobs = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Sort jobs based on selected sort option
-  const sortedJobs = useMemo(() => {
-    return [...filteredJobs].sort((a, b) => {
-      const aDate = new Date(a.posted_date).getTime();
-      const bDate = new Date(b.posted_date).getTime();
-      return bDate - aDate;
-    });
-  }, [filteredJobs, sortBy]);
 
   return (
     <AppLayout>
@@ -184,6 +263,83 @@ const Jobs = () => {
           />
         )}
 
+        {/* Bulk Selection Bar */}
+        {jobs.length > 0 && (
+          <div className="flex items-center justify-between flex-wrap gap-3 bg-muted/50 p-3 rounded-lg border">
+            <div className="flex items-center gap-3">
+              <Button
+                variant={selectionMode ? "default" : "outline"}
+                size="sm"
+                onClick={toggleSelectionMode}
+              >
+                {selectionMode ? (
+                  <>
+                    <X className="h-4 w-4 mr-2" />
+                    Exit Selection
+                  </>
+                ) : (
+                  <>
+                    <CheckSquare className="h-4 w-4 mr-2" />
+                    Bulk Select
+                  </>
+                )}
+              </Button>
+              
+              {selectionMode && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    disabled={pendingJobs.length === 0}
+                  >
+                    <Square className="h-4 w-4 mr-2" />
+                    Select All ({pendingJobs.length})
+                  </Button>
+                  
+                  {selectedJobs.size > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearSelection}
+                    >
+                      Clear Selection
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {selectedJobs.size > 0 && (
+                <>
+                  <Badge variant="secondary" className="text-sm">
+                    {selectedJobs.size} selected
+                  </Badge>
+                  <Button
+                    size="sm"
+                    onClick={handleBatchApply}
+                    disabled={isBatchApplying}
+                    className="gap-2"
+                  >
+                    {isBatchApplying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Applying...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4" />
+                        Batch Apply ({selectedJobs.size})
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Results Header */}
         {jobs.length > 0 && (
           <div className="flex items-center justify-between">
@@ -225,6 +381,9 @@ const Jobs = () => {
             isLoading={isLoading}
             onLoadMore={loadMore}
             onApply={handleJobApplied}
+            selectedJobs={selectedJobs}
+            onSelectionChange={setSelectedJobs}
+            selectionMode={selectionMode}
           />
         )}
 

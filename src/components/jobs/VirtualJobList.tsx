@@ -1,8 +1,9 @@
-import { useRef, useCallback, memo } from 'react';
+import { useRef, useCallback, memo, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Job } from '@/hooks/useJobs';
 import { 
   MapPin, 
@@ -12,6 +13,9 @@ import {
   Zap,
   CheckCircle,
   Star,
+  CheckSquare,
+  Square,
+  Loader2,
 } from 'lucide-react';
 
 // Tier-1 companies for visual highlighting
@@ -47,39 +51,57 @@ const getMatchScoreColor = (score: number) => {
 
 interface JobCardProps {
   job: Job;
+  isSelected: boolean;
+  onSelect: (jobId: string, selected: boolean) => void;
   onApply: (jobId: string) => void;
+  selectionMode: boolean;
 }
 
-const JobCard = memo(({ job, onApply }: JobCardProps) => {
+const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode }: JobCardProps) => {
   const isTier1 = isTier1Company(job.company);
   const isNew = Date.now() - new Date(job.posted_date).getTime() < 2 * 60 * 60 * 1000;
+  const isPending = job.status === 'pending';
 
   return (
     <Card 
-      className={`overflow-hidden transition-all hover:shadow-lg ${
-        job.status === 'applied' 
-          ? 'border-green-500/40 bg-green-500/5' 
-          : isTier1 
-            ? 'border-primary/40 bg-gradient-to-r from-primary/5 to-transparent' 
-            : 'hover:border-primary/30'
+      className={`overflow-hidden transition-all hover:shadow-lg cursor-pointer ${
+        isSelected
+          ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
+          : job.status === 'applied' 
+            ? 'border-green-500/40 bg-green-500/5' 
+            : isTier1 
+              ? 'border-primary/40 bg-gradient-to-r from-primary/5 to-transparent' 
+              : 'hover:border-primary/30'
       }`}
+      onClick={() => selectionMode && isPending && onSelect(job.id, !isSelected)}
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h3 className="font-semibold text-lg truncate">{job.title}</h3>
-              {isNew && (
-                <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0">NEW</Badge>
-              )}
-              {job.status === 'applied' && (
-                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-              )}
-              {isTier1 && (
-                <Star className="h-4 w-4 text-primary fill-primary flex-shrink-0" />
-              )}
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Selection checkbox */}
+            {selectionMode && isPending && (
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={(checked) => onSelect(job.id, !!checked)}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 flex-shrink-0"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h3 className="font-semibold text-lg truncate">{job.title}</h3>
+                {isNew && (
+                  <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0">NEW</Badge>
+                )}
+                {job.status === 'applied' && (
+                  <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                )}
+                {isTier1 && (
+                  <Star className="h-4 w-4 text-primary fill-primary flex-shrink-0" />
+                )}
+              </div>
+              <p className="text-muted-foreground">{job.company}</p>
             </div>
-            <p className="text-muted-foreground">{job.company}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {job.match_score > 0 && (
@@ -128,22 +150,22 @@ const JobCard = memo(({ job, onApply }: JobCardProps) => {
         )}
 
         <div className="flex items-center gap-2 mt-4">
-          {job.status === 'pending' ? (
-            <Button size="sm" onClick={() => onApply(job.id)}>
+          {!selectionMode && isPending ? (
+            <Button size="sm" onClick={(e) => { e.stopPropagation(); onApply(job.id); }}>
               <Zap className="h-4 w-4 mr-1" />
               Quick Apply
             </Button>
-          ) : (
+          ) : !isPending ? (
             <Button size="sm" variant="secondary" disabled>
               <CheckCircle className="h-4 w-4 mr-1" />
               Applied
             </Button>
-          )}
+          ) : null}
           {job.url && (
             <Button 
               size="sm" 
               variant="outline"
-              onClick={() => window.open(job.url!, '_blank')}
+              onClick={(e) => { e.stopPropagation(); window.open(job.url!, '_blank'); }}
             >
               <ExternalLink className="h-4 w-4 mr-1" />
               View Job
@@ -163,6 +185,9 @@ interface VirtualJobListProps {
   isLoading: boolean;
   onLoadMore: () => void;
   onApply: (jobId: string) => void;
+  selectedJobs: Set<string>;
+  onSelectionChange: (selected: Set<string>) => void;
+  selectionMode: boolean;
 }
 
 export function VirtualJobList({ 
@@ -170,7 +195,10 @@ export function VirtualJobList({
   hasMore, 
   isLoading, 
   onLoadMore, 
-  onApply 
+  onApply,
+  selectedJobs,
+  onSelectionChange,
+  selectionMode,
 }: VirtualJobListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -192,6 +220,16 @@ export function VirtualJobList({
       onLoadMore();
     }
   }, [isLoading, hasMore, onLoadMore]);
+
+  const handleSelect = useCallback((jobId: string, selected: boolean) => {
+    const newSelection = new Set(selectedJobs);
+    if (selected) {
+      newSelection.add(jobId);
+    } else {
+      newSelection.delete(jobId);
+    }
+    onSelectionChange(newSelection);
+  }, [selectedJobs, onSelectionChange]);
 
   const virtualItems = rowVirtualizer.getVirtualItems();
 
@@ -224,7 +262,13 @@ export function VirtualJobList({
               ref={rowVirtualizer.measureElement}
             >
               <div className="pb-3">
-                <JobCard job={job} onApply={onApply} />
+                <JobCard 
+                  job={job} 
+                  isSelected={selectedJobs.has(job.id)}
+                  onSelect={handleSelect}
+                  onApply={onApply}
+                  selectionMode={selectionMode}
+                />
               </div>
             </div>
           );
