@@ -139,20 +139,6 @@ function updateAutofillUI(enabled) {
     toggleLabel.textContent = enabled ? '⚡ Auto-Fill Enabled' : '⚡ Auto-Fill Disabled';
   }
 }
-  
-  // Download buttons
-  document.getElementById('download-resume-btn')?.addEventListener('click', () => downloadAsPDF('resume'));
-  document.getElementById('download-cover-btn')?.addEventListener('click', () => downloadAsPDF('cover'));
-  
-  // Quick actions
-  document.getElementById('open-dashboard-btn')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: DASHBOARD_URL });
-  });
-  
-  document.getElementById('view-queue-btn')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: `${DASHBOARD_URL}?tab=queue` });
-  });
-}
 
 // Show status message
 function showStatus(message, type = 'info') {
