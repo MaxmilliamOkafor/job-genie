@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoApply AI</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 AutoApply AI</h1>
+      <p class="subtitle">Job Application Assistant</p>
+    </header>
+
+    <div id="not-connected" class="section">
+      <p class="info">Connect to your AutoApply AI account to auto-fill job applications.</p>
+      
+      <div class="form-group">
+        <label for="supabase-url">Supabase URL</label>
+        <input type="text" id="supabase-url" placeholder="https://your-project.supabase.co">
+      </div>
+      
+      <div class="form-group">
+        <label for="supabase-key">Anon Key</label>
+        <input type="text" id="supabase-key" placeholder="eyJ...">
+      </div>
+      
+      <div class="form-group">
+        <label for="user-email">Email</label>
+        <input type="email" id="user-email" placeholder="your@email.com">
+      </div>
+      
+      <div class="form-group">
+        <label for="user-password">Password</label>
+        <input type="password" id="user-password" placeholder="••••••••">
+      </div>
+      
+      <button id="connect-btn" class="btn primary">Connect Account</button>
+    </div>
+
+    <div id="connected" class="section hidden">
+      <div class="status connected">
+        <span class="dot"></span>
+        <span>Connected as <strong id="user-name">User</strong></span>
+      </div>
+
+      <div class="profile-summary" id="profile-summary">
+        <p>Loading profile...</p>
+      </div>
+
+      <div class="actions">
+        <button id="autofill-btn" class="btn primary">
+          ✨ Auto-Fill This Page
+        </button>
+        <button id="refresh-btn" class="btn secondary">
+          🔄 Refresh Profile
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="auto-detect" checked>
+          Auto-detect application forms
+        </label>
+      </div>
+
+      <button id="disconnect-btn" class="btn danger">Disconnect</button>
+    </div>
+
+    <div id="status-message" class="status-message hidden"></div>
+
+    <footer>
+      <a href="#" id="open-app">Open AutoApply AI Dashboard</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
