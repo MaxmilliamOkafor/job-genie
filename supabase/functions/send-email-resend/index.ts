@@ -31,9 +31,12 @@ serve(async (req) => {
 
     const { type, userId, applicationId, recipient, subject, body, fromName } = await req.json() as SendEmailRequest;
 
-    console.log(`Sending ${type} email to ${recipient} for user ${userId}`);
+    // Normalize email to lowercase to avoid case-sensitivity issues
+    const normalizedRecipient = recipient.toLowerCase();
 
-    if (!recipient || !subject || !body) {
+    console.log(`Sending ${type} email to ${normalizedRecipient} for user ${userId}`);
+
+    if (!normalizedRecipient || !subject || !body) {
       throw new Error("Missing required fields: recipient, subject, body");
     }
 
@@ -62,7 +65,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: `${senderName} <onboarding@resend.dev>`, // Use your verified domain in production
-        to: [recipient],
+        to: [normalizedRecipient],
         subject: subject,
         html: body,
       }),
@@ -81,7 +84,7 @@ serve(async (req) => {
         user_id: userId,
         application_id: applicationId || null,
         email_type: type === "application" ? "application" : type === "referral" ? "referral" : "follow_up",
-        recipient,
+        recipient: normalizedRecipient,
         subject,
         body,
         delivered: true,
