@@ -13,7 +13,7 @@ const PLATFORM_TIERS = {
   tier3: ['JazzHR', 'Jobvite', 'SmartRecruiters', 'Recruitee', 'Breezy HR'],
 };
 
-// Tier-1 companies with their Greenhouse board tokens
+// Expanded Greenhouse companies - NO LIMIT
 const GREENHOUSE_COMPANIES: { name: string; token: string }[] = [
   { name: 'Stripe', token: 'stripe' },
   { name: 'Airbnb', token: 'airbnb' },
@@ -59,15 +59,95 @@ const GREENHOUSE_COMPANIES: { name: string; token: string }[] = [
   { name: 'Elastic', token: 'elastic' },
   { name: 'MongoDB', token: 'mongodb' },
   { name: 'Snowflake', token: 'snowflake' },
+  // Additional companies
+  { name: 'Asana', token: 'asana' },
+  { name: 'Atlassian', token: 'atlassian' },
+  { name: 'Amplitude', token: 'amplitude' },
+  { name: 'Auth0', token: 'auth0' },
+  { name: 'Block', token: 'block' },
+  { name: 'Carta', token: 'carta' },
+  { name: 'Checkout.com', token: 'checkout' },
+  { name: 'Circle', token: 'circle' },
+  { name: 'ClickUp', token: 'clickup' },
+  { name: 'ConvertKit', token: 'convertkit' },
+  { name: 'CrowdStrike', token: 'crowdstrike' },
+  { name: 'Datadog', token: 'datadog' },
+  { name: 'DigitalOcean', token: 'digitalocean' },
+  { name: 'DocuSign', token: 'docusign' },
+  { name: 'Duolingo', token: 'duolingo' },
+  { name: 'Etsy', token: 'etsy' },
+  { name: 'Eventbrite', token: 'eventbrite' },
+  { name: 'Expedia', token: 'expediagroup' },
+  { name: 'Fastly', token: 'fastly' },
+  { name: 'Grammarly', token: 'grammarly' },
+  { name: 'HubSpot', token: 'hubspot' },
+  { name: 'Intercom', token: 'intercom' },
+  { name: 'Klaviyo', token: 'klaviyo' },
+  { name: 'Loom', token: 'loom' },
+  { name: 'Mailchimp', token: 'mailchimp' },
+  { name: 'Miro', token: 'miro' },
+  { name: 'MixPanel', token: 'mixpanel' },
+  { name: 'monday.com', token: 'mondaycom' },
+  { name: 'Navan', token: 'navan' },
+  { name: 'Oscar Health', token: 'oscarhealth' },
+  { name: 'Pagerduty', token: 'pagerduty' },
+  { name: 'Palantir', token: 'palantir' },
+  { name: 'Postman', token: 'postman' },
+  { name: 'Qualtrics', token: 'qualtrics' },
+  { name: 'Razorpay', token: 'razorpay' },
+  { name: 'Relativity', token: 'relativityspace' },
+  { name: 'Remitly', token: 'remitly' },
+  { name: 'Samsara', token: 'samsara' },
+  { name: 'Segment', token: 'segment' },
+  { name: 'Sentry', token: 'sentry' },
+  { name: 'Shopify', token: 'shopify' },
+  { name: 'Snyk', token: 'snyk' },
+  { name: 'SpaceX', token: 'spacex' },
+  { name: 'Splunk', token: 'splunk' },
+  { name: 'Squarespace', token: 'squarespace' },
+  { name: 'Sumo Logic', token: 'sumologic' },
+  { name: 'TaskRabbit', token: 'taskrabbit' },
+  { name: 'Toast', token: 'toast' },
+  { name: 'Twilio', token: 'twilio' },
+  { name: 'UiPath', token: 'uipath' },
+  { name: 'Unity', token: 'unity' },
+  { name: 'Vanta', token: 'vanta' },
+  { name: 'Verkada', token: 'verkada' },
+  { name: 'Wayfair', token: 'wayfair' },
+  { name: 'Wealthsimple', token: 'wealthsimple' },
+  { name: 'Workiva', token: 'workiva' },
+  { name: 'Zendesk', token: 'zendesk' },
+  { name: 'Zillow', token: 'zillow' },
+  { name: 'Zoom', token: 'zoom' },
+  { name: 'Zscaler', token: 'zscaler' },
 ];
 
-// Workable companies
+// Expanded Workable companies
 const WORKABLE_COMPANIES: { name: string; subdomain: string }[] = [
   { name: 'Revolut', subdomain: 'revolut' },
   { name: 'N26', subdomain: 'n26' },
   { name: 'Monzo', subdomain: 'monzo' },
   { name: 'Wise', subdomain: 'transferwise' },
   { name: 'Klarna', subdomain: 'klarna' },
+  { name: 'Starling Bank', subdomain: 'starlingbank' },
+  { name: 'OakNorth', subdomain: 'oaknorth' },
+  { name: 'GoCardless', subdomain: 'gocardless' },
+  { name: 'Curve', subdomain: 'curve' },
+  { name: 'Thought Machine', subdomain: 'thoughtmachine' },
+];
+
+// Lever companies
+const LEVER_COMPANIES: { name: string; token: string }[] = [
+  { name: 'Netflix', token: 'netflix' },
+  { name: 'Spotify', token: 'spotify' },
+  { name: 'Twitch', token: 'twitch' },
+  { name: 'Cruise', token: 'cruise' },
+  { name: 'Waymo', token: 'waymo' },
+  { name: 'Aurora', token: 'aurora' },
+  { name: 'Zoox', token: 'zoox' },
+  { name: 'Nuro', token: 'nuro' },
+  { name: 'OpenAI', token: 'openai' },
+  { name: 'Anthropic', token: 'anthropic' },
 ];
 
 interface JobListing {
@@ -83,7 +163,7 @@ interface JobListing {
   match_score: number;
 }
 
-// Fetch jobs from Greenhouse public API - uses absolute_url for direct job links
+// Fetch ALL jobs from Greenhouse - NO LIMIT on jobs per company
 async function fetchGreenhouseJobs(company: { name: string; token: string }): Promise<JobListing[]> {
   try {
     const response = await fetch(
@@ -97,8 +177,8 @@ async function fetchGreenhouseJobs(company: { name: string; token: string }): Pr
     }
     
     const data = await response.json();
-    const jobs: JobListing[] = (data.jobs || []).slice(0, 30).map((job: any) => {
-      // Greenhouse API provides absolute_url which is the direct apply link
+    // NO LIMIT - fetch ALL jobs
+    const jobs: JobListing[] = (data.jobs || []).map((job: any) => {
       const directUrl = job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`;
       
       return {
@@ -123,7 +203,7 @@ async function fetchGreenhouseJobs(company: { name: string; token: string }): Pr
   }
 }
 
-// Fetch jobs from Workable public API - uses shortcode for direct job apply links
+// Fetch ALL jobs from Workable - NO LIMIT
 async function fetchWorkableJobs(company: { name: string; subdomain: string }): Promise<JobListing[]> {
   try {
     const response = await fetch(
@@ -137,8 +217,8 @@ async function fetchWorkableJobs(company: { name: string; subdomain: string }): 
     }
     
     const data = await response.json();
-    const jobs: JobListing[] = (data.results || []).slice(0, 30).map((job: any) => {
-      // Workable direct apply URL format uses shortcode
+    // NO LIMIT - fetch ALL jobs
+    const jobs: JobListing[] = (data.results || []).map((job: any) => {
       const directUrl = `https://apply.workable.com/${company.subdomain}/j/${job.shortcode}/`;
       
       return {
@@ -163,6 +243,44 @@ async function fetchWorkableJobs(company: { name: string; subdomain: string }): 
   }
 }
 
+// Fetch ALL jobs from Lever - NO LIMIT
+async function fetchLeverJobs(company: { name: string; token: string }): Promise<JobListing[]> {
+  try {
+    const response = await fetch(
+      `https://api.lever.co/v0/postings/${company.token}?mode=json`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) {
+      console.log(`Lever ${company.name}: ${response.status}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    // NO LIMIT - fetch ALL jobs
+    const jobs: JobListing[] = (data || []).map((job: any) => {
+      return {
+        title: job.text || 'Unknown Position',
+        company: company.name,
+        location: job.categories?.location || 'Remote',
+        salary: null,
+        description: job.descriptionPlain?.slice(0, 500) || '',
+        requirements: extractRequirements(job.descriptionPlain || ''),
+        platform: 'Lever',
+        url: job.hostedUrl || job.applyUrl || '',
+        posted_date: new Date(job.createdAt || Date.now()).toISOString(),
+        match_score: 0,
+      };
+    });
+    
+    console.log(`Lever ${company.name}: fetched ${jobs.length} jobs`);
+    return jobs;
+  } catch (error) {
+    console.error(`Lever ${company.name} error:`, error);
+    return [];
+  }
+}
+
 // Extract requirements from job description
 function extractRequirements(content: string): string[] {
   const techKeywords = [
@@ -176,7 +294,7 @@ function extractRequirements(content: string): string[] {
     content.toLowerCase().includes(kw.toLowerCase())
   );
   
-  return found.slice(0, 6);
+  return found.slice(0, 8);
 }
 
 // Calculate match score
@@ -209,19 +327,13 @@ function parseKeywords(keywordString: string): string[] {
     .filter((k, i, arr) => arr.indexOf(k) === i);
 }
 
-// Validate that a job URL is a direct job link (not a general careers page)
+// Validate that a job URL is a direct job link
 function isValidDirectJobUrl(url: string): boolean {
   if (!url) return false;
   
-  // Greenhouse direct job URLs always contain /jobs/ with a job ID
-  if (url.includes('greenhouse.io') && url.includes('/jobs/')) {
-    return true;
-  }
-  
-  // Workable direct job URLs use /j/ with a shortcode
-  if (url.includes('workable.com') && url.includes('/j/')) {
-    return true;
-  }
+  if (url.includes('greenhouse.io') && url.includes('/jobs/')) return true;
+  if (url.includes('workable.com') && url.includes('/j/')) return true;
+  if (url.includes('lever.co')) return true;
   
   return false;
 }
@@ -232,23 +344,27 @@ serve(async (req) => {
   }
 
   try {
-    const { keywords = '', offset = 0, limit = 100, user_id } = await req.json();
+    const { keywords = '', user_id } = await req.json();
     
-    console.log(`Scraping jobs with keywords: ${keywords}, offset: ${offset}, limit: ${limit}`);
+    console.log(`=== UNLIMITED SCRAPING STARTED ===`);
+    console.log(`Keywords: ${keywords}`);
+    console.log(`Total companies: Greenhouse(${GREENHOUSE_COMPANIES.length}) + Workable(${WORKABLE_COMPANIES.length}) + Lever(${LEVER_COMPANIES.length})`);
     
     const parsedKeywords = parseKeywords(keywords);
     let allJobs: JobListing[] = [];
     
-    // Fetch from ALL companies - no artificial limits
+    // Fetch from ALL companies in parallel - NO LIMITS
     const greenhousePromises = GREENHOUSE_COMPANIES.map(c => fetchGreenhouseJobs(c));
     const workablePromises = WORKABLE_COMPANIES.map(c => fetchWorkableJobs(c));
+    const leverPromises = LEVER_COMPANIES.map(c => fetchLeverJobs(c));
     
-    const [greenhouseResults, workableResults] = await Promise.all([
+    const [greenhouseResults, workableResults, leverResults] = await Promise.all([
       Promise.allSettled(greenhousePromises),
       Promise.allSettled(workablePromises),
+      Promise.allSettled(leverPromises),
     ]);
     
-    // Collect real jobs
+    // Collect ALL jobs
     for (const result of greenhouseResults) {
       if (result.status === 'fulfilled') {
         allJobs.push(...result.value);
@@ -259,66 +375,84 @@ serve(async (req) => {
         allJobs.push(...result.value);
       }
     }
+    for (const result of leverResults) {
+      if (result.status === 'fulfilled') {
+        allJobs.push(...result.value);
+      }
+    }
     
-    console.log(`Fetched ${allJobs.length} real jobs from APIs`);
+    console.log(`Total fetched: ${allJobs.length} jobs from all APIs`);
     
-    // Filter out jobs with invalid URLs (career pages instead of direct job links)
+    // Filter for valid URLs
     const validJobs = allJobs.filter(job => isValidDirectJobUrl(job.url));
-    console.log(`${validJobs.length} jobs have valid direct apply URLs`);
+    console.log(`Valid direct-apply jobs: ${validJobs.length}`);
     
     // Calculate match scores
     for (const job of validJobs) {
       job.match_score = calculateMatchScore(job, parsedKeywords);
     }
     
-    // Sort by platform tier then match score
-    validJobs.sort((a, b) => {
-      const tierA = PLATFORM_TIERS.tier1.includes(a.platform) ? 0 : PLATFORM_TIERS.tier2.includes(a.platform) ? 1 : 2;
-      const tierB = PLATFORM_TIERS.tier1.includes(b.platform) ? 0 : PLATFORM_TIERS.tier2.includes(b.platform) ? 1 : 2;
-      if (tierA !== tierB) return tierA - tierB;
-      return b.match_score - a.match_score;
-    });
+    // Sort by match score
+    validJobs.sort((a, b) => b.match_score - a.match_score);
     
-    // Slice for pagination
-    const paginatedJobs = validJobs.slice(offset, offset + limit);
-    
-    // Save to database if user_id provided
-    if (user_id && paginatedJobs.length > 0) {
+    // Save ALL jobs to database
+    let newJobsCount = 0;
+    if (user_id && validJobs.length > 0) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      const jobsToInsert = paginatedJobs.map(job => ({
-        user_id,
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        salary: job.salary,
-        description: job.description,
-        requirements: job.requirements,
-        platform: job.platform,
-        url: job.url,
-        posted_date: job.posted_date,
-        match_score: job.match_score,
-        status: 'pending',
-      }));
+      // Get existing URLs to dedupe
+      const { data: existingJobs } = await supabase
+        .from('jobs')
+        .select('url')
+        .eq('user_id', user_id);
       
-      const { error } = await supabase.from('jobs').insert(jobsToInsert);
+      const existingUrls = new Set((existingJobs || []).map(j => j.url));
+      const newJobs = validJobs.filter(j => !existingUrls.has(j.url));
+      newJobsCount = newJobs.length;
       
-      if (error) {
-        console.error('Error inserting jobs:', error);
-      } else {
-        console.log(`Inserted ${paginatedJobs.length} jobs for user ${user_id}`);
+      console.log(`New jobs to insert: ${newJobsCount} (${existingUrls.size} already exist)`);
+      
+      if (newJobs.length > 0) {
+        const jobsToInsert = newJobs.map(job => ({
+          user_id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary,
+          description: job.description,
+          requirements: job.requirements,
+          platform: job.platform,
+          url: job.url,
+          posted_date: job.posted_date,
+          match_score: job.match_score,
+          status: 'pending',
+        }));
+        
+        // Insert in batches of 500
+        for (let i = 0; i < jobsToInsert.length; i += 500) {
+          const batch = jobsToInsert.slice(i, i + 500);
+          const { error } = await supabase.from('jobs').insert(batch);
+          
+          if (error) {
+            console.error(`Batch ${i / 500 + 1} insert error:`, error);
+          } else {
+            console.log(`Inserted batch ${i / 500 + 1}: ${batch.length} jobs`);
+          }
+        }
       }
     }
+    
+    console.log(`=== SCRAPING COMPLETE: ${validJobs.length} total, ${newJobsCount} new ===`);
     
     return new Response(
       JSON.stringify({ 
         success: true, 
-        jobs: paginatedJobs,
-        hasMore: offset + limit < validJobs.length,
-        nextOffset: offset + limit,
-        totalValidJobs: validJobs.length,
+        jobs: validJobs,
+        totalFound: validJobs.length,
+        newJobsInserted: newJobsCount,
+        companiesScraped: GREENHOUSE_COMPANIES.length + WORKABLE_COMPANIES.length + LEVER_COMPANIES.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

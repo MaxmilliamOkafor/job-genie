@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, MapPin, Calendar, Loader2, X } from 'lucide-react';
+import { Search, MapPin, Calendar, Loader2, X, Infinity } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,8 +20,8 @@ interface ScrapeState {
   currentPhase: 'idle' | 'searching' | 'processing' | 'saving' | 'complete';
   jobsFound: number;
   jobsSaved: number;
-  platformsSearched: number;
-  totalPlatforms: number;
+  companiesSearched: number;
+  totalCompanies: number;
   startTime: number;
   elapsedTime: number;
 }
@@ -46,7 +46,8 @@ const DATE_FILTERS = [
   { value: 'month', label: 'Last Month' },
 ];
 
-const TOTAL_PLATFORMS = 11; // Number of ATS platforms we search
+// Total companies we scrape from (Greenhouse + Workable + Lever)
+const TOTAL_COMPANIES = 120;
 
 export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }: JobSearchPanelProps) {
   const { user } = useAuth();
@@ -58,8 +59,8 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
     currentPhase: 'idle',
     jobsFound: 0,
     jobsSaved: 0,
-    platformsSearched: 0,
-    totalPlatforms: TOTAL_PLATFORMS,
+    companiesSearched: 0,
+    totalCompanies: TOTAL_COMPANIES,
     startTime: 0,
     elapsedTime: 0,
   });
@@ -82,23 +83,24 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
     };
   }, [isSearching, scrapeState.startTime]);
 
-  // Simulate progress updates (since edge function runs as single request)
+  // Simulate progress updates for company scraping
   const simulateProgress = useCallback(() => {
-    const phases: Array<{ phase: ScrapeState['currentPhase']; platforms: number; duration: number }> = [
-      { phase: 'searching', platforms: 3, duration: 1500 },
-      { phase: 'searching', platforms: 6, duration: 1500 },
-      { phase: 'searching', platforms: 9, duration: 1500 },
-      { phase: 'searching', platforms: 11, duration: 1000 },
-      { phase: 'processing', platforms: 11, duration: 1000 },
+    const phases: Array<{ phase: ScrapeState['currentPhase']; companies: number; duration: number }> = [
+      { phase: 'searching', companies: 20, duration: 2000 },
+      { phase: 'searching', companies: 50, duration: 2000 },
+      { phase: 'searching', companies: 80, duration: 2000 },
+      { phase: 'searching', companies: 100, duration: 2000 },
+      { phase: 'processing', companies: 120, duration: 1500 },
+      { phase: 'saving', companies: 120, duration: 1000 },
     ];
 
     let totalDelay = 0;
-    phases.forEach(({ phase, platforms, duration }) => {
+    phases.forEach(({ phase, companies, duration }) => {
       setTimeout(() => {
         setScrapeState(prev => ({
           ...prev,
           currentPhase: phase,
-          platformsSearched: platforms,
+          companiesSearched: companies,
         }));
       }, totalDelay);
       totalDelay += duration;
@@ -132,8 +134,8 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
       currentPhase: 'searching',
       jobsFound: 0,
       jobsSaved: 0,
-      platformsSearched: 0,
-      totalPlatforms: TOTAL_PLATFORMS,
+      companiesSearched: 0,
+      totalCompanies: TOTAL_COMPANIES,
       startTime: Date.now(),
       elapsedTime: 0,
     });
@@ -142,11 +144,10 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
     simulateProgress();
     
     try {
-      const { data, error } = await supabase.functions.invoke('search-jobs-google', {
+      // Use scrape-jobs which now has NO LIMITS
+      const { data, error } = await supabase.functions.invoke('scrape-jobs', {
         body: {
           keywords: parsedKeywords.join(', '),
-          location: location === 'all' ? '' : location,
-          dateFilter,
           user_id: user.id,
         },
       });
@@ -158,17 +159,17 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
           ...prev,
           currentPhase: 'complete',
           jobsFound: data.totalFound || 0,
-          jobsSaved: data.newJobsSaved || data.totalFound || 0,
-          platformsSearched: TOTAL_PLATFORMS,
+          jobsSaved: data.newJobsInserted || 0,
+          companiesSearched: data.companiesScraped || TOTAL_COMPANIES,
         }));
         
-        toast.success(`Found ${data.totalFound} jobs!`, { id: 'job-search' });
+        toast.success(`Found ${data.totalFound} jobs! (${data.newJobsInserted} new)`, { id: 'job-search' });
         onSearchComplete();
 
-        // Reset to idle after 5 seconds
+        // Reset to idle after 8 seconds
         setTimeout(() => {
           setScrapeState(prev => ({ ...prev, currentPhase: 'idle' }));
-        }, 5000);
+        }, 8000);
       } else {
         throw new Error(data?.error || 'Search failed');
       }
@@ -190,7 +191,13 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
           {/* Keywords textarea */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Keywords</label>
+              <label className="text-sm font-medium flex items-center gap-2">
+                Keywords
+                <Badge variant="outline" className="text-xs bg-primary/10 border-primary/30">
+                  <Infinity className="h-3 w-3 mr-1" />
+                  Unlimited
+                </Badge>
+              </label>
               <div className="flex items-center gap-2">
                 {keywordCount > 0 && (
                   <Badge variant="secondary" className="text-xs">
@@ -254,18 +261,18 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
             {isSearching ? (
               <>
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                Scraping Jobs...
+                Scraping {TOTAL_COMPANIES}+ Companies...
               </>
             ) : (
               <>
                 <Search className="h-5 w-5 mr-2" />
-                Search {keywordCount > 0 ? `${keywordCount} Keywords` : 'Jobs'}
+                Scrape All Jobs {keywordCount > 0 ? `(${keywordCount} Keywords)` : ''}
               </>
             )}
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
-            Searches Greenhouse, Lever, Workday, Ashby, SmartRecruiters & more ATS platforms
+            Scrapes {TOTAL_COMPANIES}+ companies from Greenhouse, Lever, Workable • No limits on jobs found
           </p>
         </CardContent>
       </Card>
@@ -276,8 +283,8 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
         currentPhase={scrapeState.currentPhase}
         jobsFound={scrapeState.jobsFound}
         jobsSaved={scrapeState.jobsSaved}
-        platformsSearched={scrapeState.platformsSearched}
-        totalPlatforms={scrapeState.totalPlatforms}
+        platformsSearched={scrapeState.companiesSearched}
+        totalPlatforms={scrapeState.totalCompanies}
         elapsedTime={scrapeState.elapsedTime}
       />
     </div>
