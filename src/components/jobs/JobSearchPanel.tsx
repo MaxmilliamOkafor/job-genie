@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, MapPin, Calendar, Loader2, X } from 'lucide-react';
+import { Search, MapPin, Calendar, Loader2, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,14 +15,7 @@ interface JobSearchPanelProps {
   setIsSearching: (val: boolean) => void;
 }
 
-const QUICK_ROLES = [
-  'Data Scientist',
-  'Software Engineer',
-  'Product Manager',
-  'Machine Learning Engineer',
-  'Data Engineer',
-  'Full Stack Developer',
-];
+const SAMPLE_KEYWORDS = `Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics`;
 
 const LOCATIONS = [
   { value: 'all', label: 'All Locations' },
@@ -49,15 +42,16 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
   const [keywords, setKeywords] = useState('');
   const [location, setLocation] = useState('Remote');
   const [dateFilter, setDateFilter] = useState('week');
-  const [activeRoles, setActiveRoles] = useState<string[]>(['Data Scientist']);
 
-  const toggleRole = (role: string) => {
-    setActiveRoles(prev => 
-      prev.includes(role) 
-        ? prev.filter(r => r !== role)
-        : [...prev, role]
-    );
+  const parseKeywords = (input: string): string[] => {
+    return input
+      .replace(/["""]/g, '')
+      .split(',')
+      .map(k => k.trim())
+      .filter(k => k.length > 0);
   };
+
+  const keywordCount = parseKeywords(keywords).length;
 
   const handleSearch = async () => {
     if (!user) {
@@ -65,24 +59,20 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
       return;
     }
 
-    const searchTerms = [...activeRoles];
-    if (keywords.trim()) {
-      searchTerms.push(...keywords.split(',').map(k => k.trim()).filter(Boolean));
-    }
-
-    if (searchTerms.length === 0) {
-      toast.error('Please select at least one role or enter keywords');
+    const parsedKeywords = parseKeywords(keywords);
+    if (parsedKeywords.length === 0) {
+      toast.error('Please enter at least one keyword');
       return;
     }
 
     setIsSearching(true);
     
     try {
-      toast.info('Searching for jobs...', { id: 'job-search' });
+      toast.info(`Searching for ${parsedKeywords.length} keywords...`, { id: 'job-search' });
       
       const { data, error } = await supabase.functions.invoke('search-jobs-google', {
         body: {
-          keywords: searchTerms.join(', '),
+          keywords: parsedKeywords.join(', '),
           location: location === 'all' ? '' : location,
           dateFilter,
           user_id: user.id,
@@ -92,7 +82,7 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
       if (error) throw error;
 
       if (data?.success) {
-        toast.success(`Found ${data.totalFound} jobs from tier-1 companies!`, { id: 'job-search' });
+        toast.success(`Found ${data.totalFound} jobs!`, { id: 'job-search' });
         onSearchComplete();
       } else {
         throw new Error(data?.error || 'Search failed');
@@ -105,43 +95,50 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
     }
   };
 
+  const loadSampleKeywords = () => {
+    setKeywords(SAMPLE_KEYWORDS);
+    toast.success('Sample keywords loaded');
+  };
+
+  const clearKeywords = () => {
+    setKeywords('');
+  };
+
   return (
     <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5">
-      <CardContent className="p-6 space-y-5">
-        {/* Quick role selection */}
+      <CardContent className="p-6 space-y-4">
+        {/* Keywords textarea */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-muted-foreground">Quick Select Roles</label>
-          <div className="flex flex-wrap gap-2">
-            {QUICK_ROLES.map(role => (
-              <Badge
-                key={role}
-                variant={activeRoles.includes(role) ? "default" : "outline"}
-                className={`cursor-pointer transition-all text-sm py-1.5 px-3 ${
-                  activeRoles.includes(role) 
-                    ? 'bg-primary hover:bg-primary/90' 
-                    : 'hover:bg-primary/10 hover:border-primary/50'
-                }`}
-                onClick={() => toggleRole(role)}
-              >
-                {role}
-                {activeRoles.includes(role) && <X className="h-3 w-3 ml-1.5" />}
-              </Badge>
-            ))}
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Keywords</label>
+            <div className="flex items-center gap-2">
+              {keywordCount > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {keywordCount} keyword{keywordCount !== 1 ? 's' : ''}
+                </Badge>
+              )}
+              <Button variant="ghost" size="sm" onClick={loadSampleKeywords} className="h-7 text-xs">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Load Sample
+              </Button>
+              {keywords && (
+                <Button variant="ghost" size="sm" onClick={clearKeywords} className="h-7 text-xs">
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
+          <Textarea
+            placeholder="Enter keywords separated by commas, e.g.: Data Scientist, Machine Learning, Python, AWS, Product Manager..."
+            value={keywords}
+            onChange={(e) => setKeywords(e.target.value)}
+            className="min-h-[100px] resize-none bg-background"
+          />
         </div>
 
-        {/* Search inputs row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="md:col-span-2 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Additional keywords (comma-separated)..."
-              value={keywords}
-              onChange={(e) => setKeywords(e.target.value)}
-              className="pl-10 h-11 bg-background"
-            />
-          </div>
-
+        {/* Filters row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
             <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
             <Select value={location} onValueChange={setLocation}>
@@ -174,25 +171,25 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
         {/* Search button */}
         <Button 
           onClick={handleSearch} 
-          disabled={isSearching || activeRoles.length === 0}
+          disabled={isSearching || keywordCount === 0}
           className="w-full h-12 text-base font-medium"
           size="lg"
         >
           {isSearching ? (
             <>
               <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Searching Tier-1 Companies...
+              Searching...
             </>
           ) : (
             <>
               <Search className="h-5 w-5 mr-2" />
-              Search {activeRoles.length > 0 ? `${activeRoles.length} Role${activeRoles.length > 1 ? 's' : ''}` : 'Jobs'}
+              Search {keywordCount > 0 ? `${keywordCount} Keywords` : 'Jobs'}
             </>
           )}
         </Button>
 
         <p className="text-xs text-muted-foreground text-center">
-          Searches Greenhouse, Lever, Workday, Ashby, SmartRecruiters & more
+          Searches Greenhouse, Lever, Workday, Ashby, SmartRecruiters & more ATS platforms
         </p>
       </CardContent>
     </Card>
