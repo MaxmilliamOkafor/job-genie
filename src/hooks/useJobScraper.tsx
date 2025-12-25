@@ -30,6 +30,7 @@ export function useJobScraper() {
           .from('jobs')
           .select('*', { count: 'exact' })
           .eq('user_id', user.id)
+          .neq('status', 'applied')
           .order('created_at', { ascending: false })
           .range(from, to);
 
@@ -76,6 +77,7 @@ export function useJobScraper() {
           .from('jobs')
           .select('*', { count: 'exact' })
           .eq('user_id', user.id)
+          .neq('status', 'applied')
           .order('created_at', { ascending: false })
           .range(from, to);
 
@@ -225,7 +227,7 @@ export function useJobScraper() {
     }
   }, [isLoading, isScraping, keywords, scrapeJobs, fetchExistingJobs]);
 
-  // Update job status
+  // Update job status and remove from list if applied
   const updateJobStatus = useCallback(async (jobId: string, status: Job['status']) => {
     if (!user) return;
 
@@ -243,9 +245,14 @@ export function useJobScraper() {
 
       if (error) throw error;
 
-      setJobs(prev => prev.map(job => 
-        job.id === jobId ? { ...job, ...updates } : job
-      ));
+      // Remove applied jobs from the list to prevent duplicate applications
+      if (status === 'applied') {
+        setJobs(prev => prev.filter(job => job.id !== jobId));
+      } else {
+        setJobs(prev => prev.map(job => 
+          job.id === jobId ? { ...job, ...updates } : job
+        ));
+      }
     } catch (error) {
       console.error('Error updating job status:', error);
       toast.error('Failed to update job');
@@ -266,6 +273,7 @@ export function useJobScraper() {
           .from('jobs')
           .select('*')
           .eq('user_id', user.id)
+          .neq('status', 'applied')
           .order('created_at', { ascending: false })
           .range(fetched, fetched + PAGE_SIZE - 1);
 
