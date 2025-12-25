@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, MapPin, Calendar, Loader2, X, Sparkles } from 'lucide-react';
+import { Search, MapPin, Calendar, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,8 +14,6 @@ interface JobSearchPanelProps {
   isSearching: boolean;
   setIsSearching: (val: boolean) => void;
 }
-
-const SAMPLE_KEYWORDS = `Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics`;
 
 const LOCATIONS = [
   { value: 'all', label: 'All Locations' },
@@ -95,14 +93,7 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
     }
   };
 
-  const loadSampleKeywords = () => {
-    setKeywords(SAMPLE_KEYWORDS);
-    toast.success('Sample keywords loaded');
-  };
-
-  const clearKeywords = () => {
-    setKeywords('');
-  };
+  const clearKeywords = () => setKeywords('');
 
   return (
     <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5">
@@ -117,10 +108,6 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
                   {keywordCount} keyword{keywordCount !== 1 ? 's' : ''}
                 </Badge>
               )}
-              <Button variant="ghost" size="sm" onClick={loadSampleKeywords} className="h-7 text-xs">
-                <Sparkles className="h-3 w-3 mr-1" />
-                Load Sample
-              </Button>
               {keywords && (
                 <Button variant="ghost" size="sm" onClick={clearKeywords} className="h-7 text-xs">
                   <X className="h-3 w-3 mr-1" />
