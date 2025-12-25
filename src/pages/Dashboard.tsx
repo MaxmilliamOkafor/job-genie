@@ -1,50 +1,101 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { JobCard } from '@/components/jobs/JobCard';
-import { KeywordMonitorPanel } from '@/components/jobs/KeywordMonitorPanel';
-import { mockJobs } from '@/data/mockJobs';
-import { KeywordMonitor, Job } from '@/types';
-import { Briefcase, CheckCircle2, MessageCircle, Gift, Zap, Infinity } from 'lucide-react';
-import { toast } from 'sonner';
+import { GmailIntegration } from '@/components/email/GmailIntegration';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/useAuth';
+import { useJobs } from '@/hooks/useJobs';
+import { useProfile } from '@/hooks/useProfile';
+import { Link } from 'react-router-dom';
+import { 
+  Briefcase, 
+  CheckCircle2, 
+  MessageCircle, 
+  Gift, 
+  Zap,
+  ArrowRight,
+  Sparkles,
+  Target,
+  User,
+  LogOut,
+  Infinity
+} from 'lucide-react';
 
 const Dashboard = () => {
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
-  const [monitors, setMonitors] = useState<KeywordMonitor[]>([
-    {
-      id: '1',
-      keywords: ['Python', 'Machine Learning', 'AI'],
-      roles: ['Senior Engineer', 'Staff Engineer'],
-      locations: ['London', 'Remote'],
-      enabled: true,
-      autoApply: true,
-      minMatchScore: 85
-    }
-  ]);
+  const { user, signOut } = useAuth();
+  const { jobs } = useJobs();
+  const { profile, loadCVData } = useProfile();
+  const [stats, setStats] = useState({
+    applied: 0,
+    interviewing: 0,
+    offered: 0,
+    pending: 0,
+  });
 
-  const stats = {
-    applied: jobs.filter(j => j.status === 'applied').length,
-    interviewing: jobs.filter(j => j.status === 'interviewing').length,
-    offered: jobs.filter(j => j.status === 'offered').length,
-    newJobs: jobs.filter(j => j.status === 'new').length,
-  };
+  useEffect(() => {
+    const applied = jobs.filter(j => j.status === 'applied').length;
+    const interviewing = jobs.filter(j => j.status === 'interviewing').length;
+    const offered = jobs.filter(j => j.status === 'offered').length;
+    const pending = jobs.filter(j => j.status === 'pending').length;
+    setStats({ applied, interviewing, offered, pending });
+  }, [jobs]);
 
-  const handleApply = (job: Job) => {
-    setJobs(prev => prev.map(j => 
-      j.id === job.id ? { ...j, status: 'applied' as const, appliedAt: new Date().toISOString() } : j
-    ));
-    toast.success(`Applied to ${job.title} at ${job.company}`);
-  };
-
-  const recentJobs = jobs.filter(j => j.status === 'new').slice(0, 3);
+  const topMatches = jobs
+    .filter(j => j.status === 'pending')
+    .sort((a, b) => b.match_score - a.match_score)
+    .slice(0, 5);
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Your AI-powered job application agent</p>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">
+              Welcome{profile?.first_name ? `, ${profile.first_name}` : ''}!
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Your AI job application agent is ready to help
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/profile">
+                <User className="h-4 w-4 mr-2" />
+                Profile
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
+
+        {/* Quick Actions */}
+        {!profile?.first_name && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Complete your profile</p>
+                    <p className="text-sm text-muted-foreground">
+                      Load your CV data to enable AI-powered applications
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={loadCVData}>
+                  Load CV Data
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -56,10 +107,10 @@ const Dashboard = () => {
             valueClassName="text-primary"
           />
           <StatsCard
-            title="New Jobs"
-            value={stats.newJobs}
+            title="Pending"
+            value={stats.pending}
             subtitle="Ready to apply"
-            icon={<Zap className="h-5 w-5" />}
+            icon={<Target className="h-5 w-5" />}
           />
           <StatsCard
             title="Applied"
@@ -75,25 +126,111 @@ const Dashboard = () => {
             title="Offers"
             value={stats.offered}
             icon={<Gift className="h-5 w-5" />}
-            valueClassName="text-success"
+            valueClassName="text-green-500"
           />
         </div>
 
-        {/* Keyword Monitors */}
-        <KeywordMonitorPanel monitors={monitors} onUpdate={setMonitors} />
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Top Matches */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-primary" />
+                Top Matches Ready to Apply
+              </CardTitle>
+              <CardDescription>
+                Highest scoring jobs for auto-apply
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {topMatches.length > 0 ? (
+                <div className="space-y-3">
+                  {topMatches.map(job => (
+                    <div 
+                      key={job.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{job.title}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {job.company} • {job.location}
+                        </p>
+                      </div>
+                      <Badge className="ml-2 bg-primary/10 text-primary">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        {job.match_score}%
+                      </Badge>
+                    </div>
+                  ))}
+                  <Button variant="outline" className="w-full mt-2" asChild>
+                    <Link to="/jobs">
+                      View All Jobs
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Briefcase className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground">No jobs yet</p>
+                  <Button className="mt-4" asChild>
+                    <Link to="/jobs">
+                      <Zap className="h-4 w-4 mr-2" />
+                      Generate Jobs
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Recent High-Match Jobs */}
-        <div>
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Briefcase className="h-5 w-5" />
-            Top Matches Ready to Apply
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {recentJobs.map(job => (
-              <JobCard key={job.id} job={job} onApply={handleApply} />
-            ))}
-          </div>
+          {/* Gmail Integration */}
+          <GmailIntegration />
         </div>
+
+        {/* Quick Start */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Start Guide</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-primary">1</span>
+                </div>
+                <div>
+                  <p className="font-medium">Load Your Profile</p>
+                  <p className="text-sm text-muted-foreground">
+                    Import your CV for AI-tailored applications
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-primary">2</span>
+                </div>
+                <div>
+                  <p className="font-medium">Connect Gmail</p>
+                  <p className="text-sm text-muted-foreground">
+                    Enable automatic email sending & detection
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-primary">3</span>
+                </div>
+                <div>
+                  <p className="font-medium">Start Automation</p>
+                  <p className="text-sm text-muted-foreground">
+                    Let AI apply to jobs while you relax
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
