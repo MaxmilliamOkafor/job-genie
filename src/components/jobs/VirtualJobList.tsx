@@ -1,4 +1,4 @@
-import { useRef, useCallback, memo, useState } from 'react';
+import { useRef, useCallback, memo, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -188,6 +188,7 @@ interface VirtualJobListProps {
   selectedJobs: Set<string>;
   onSelectionChange: (selected: Set<string>) => void;
   selectionMode: boolean;
+  scrollRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export function VirtualJobList({ 
@@ -199,6 +200,7 @@ export function VirtualJobList({
   selectedJobs,
   onSelectionChange,
   selectionMode,
+  scrollRef,
 }: VirtualJobListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -208,6 +210,20 @@ export function VirtualJobList({
     estimateSize: () => 200, // Estimated row height
     overscan: 5, // Render 5 extra items above/below viewport
   });
+
+  // Expose scroll to bottom function via ref
+  useEffect(() => {
+    if (scrollRef) {
+      scrollRef.current = () => {
+        if (parentRef.current) {
+          parentRef.current.scrollTo({
+            top: parentRef.current.scrollHeight,
+            behavior: 'smooth',
+          });
+        }
+      };
+    }
+  }, [scrollRef]);
 
   // Handle scroll to load more
   const handleScroll = useCallback(() => {
