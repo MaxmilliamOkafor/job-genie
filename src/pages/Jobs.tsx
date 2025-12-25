@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { JobFilters } from '@/components/jobs/JobFilters';
 import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
+import { VerificationCodeDetector } from '@/components/email/VerificationCodeDetector';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -175,12 +176,19 @@ const Jobs = () => {
           onDateFilterChange={setDateFilter}
         />
 
-        {/* Automation Panel - Right above job listings */}
-        <AutomationPanel 
-          jobs={filteredJobs} 
-          profile={profile} 
-          onJobApplied={handleJobApplied}
-        />
+        {/* Automation Panel & Verification Codes */}
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <AutomationPanel 
+              jobs={filteredJobs} 
+              profile={profile} 
+              onJobApplied={handleJobApplied}
+            />
+          </div>
+          <div className="lg:col-span-1">
+            <VerificationCodeDetector />
+          </div>
+        </div>
 
         {/* Job Listings - Single Column */}
         <div className="space-y-3">
