@@ -6,6 +6,7 @@ import {
   User, 
   Settings, 
   FileText,
+  ListChecks,
   Menu,
   X
 } from 'lucide-react';
@@ -17,6 +18,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
   { path: '/applications', label: 'Applications', icon: FileText },
+  { path: '/queue', label: 'Job Queue', icon: ListChecks },
   { path: '/profile', label: 'Profile', icon: User },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
