@@ -239,7 +239,7 @@ serve(async (req) => {
     const parsedKeywords = parseKeywords(keywords);
     let allJobs: JobListing[] = [];
     
-    // Fetch ONLY real jobs from APIs - no synthetic fallback
+    // Fetch from ALL companies - no artificial limits
     const greenhousePromises = GREENHOUSE_COMPANIES.map(c => fetchGreenhouseJobs(c));
     const workablePromises = WORKABLE_COMPANIES.map(c => fetchWorkableJobs(c));
     

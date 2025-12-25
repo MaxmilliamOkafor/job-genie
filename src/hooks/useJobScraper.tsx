@@ -165,35 +165,35 @@ export function useJobScraper() {
       // Initial scrape
       await scrapeJobs(keywordString, false);
 
-      // Continue fetching while there are more jobs available
+      // Continue fetching while there are more jobs available - no artificial limit
       let hasMoreJobs = true;
-      let guard = 0;
-      const MAX_BATCHES = 10; // Limit batches to prevent infinite loops
       
-      while (hasMoreJobs && guard < MAX_BATCHES) {
-        guard += 1;
-        
+      while (hasMoreJobs) {
         const { data } = await supabase.functions.invoke('scrape-jobs', {
           body: {
             keywords: keywordString,
             offset: offsetRef.current,
-            limit: 200,
+            limit: 500, // Larger batches for faster loading
             user_id: user?.id,
           },
         });
         
-        if (data?.success) {
+        if (data?.success && data.jobs?.length > 0) {
           offsetRef.current = data.nextOffset;
-          hasMoreJobs = data.hasMore && data.jobs?.length > 0;
+          hasMoreJobs = data.hasMore;
           await fetchExistingJobs(true);
+          
+          // Update toast with progress
+          toast.info(`Loaded ${offsetRef.current} jobs...`, { id: 'scrape-progress' });
         } else {
           hasMoreJobs = false;
         }
         
         // Small pause between batches
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, 100));
       }
       
+      toast.success(`Finished loading ${offsetRef.current} valid jobs`, { id: 'scrape-progress' });
       setIsScraping(false);
     })();
 
