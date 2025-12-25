@@ -147,14 +147,22 @@ const Jobs = () => {
           <div>
             <h1 className="text-3xl font-bold">Jobs</h1>
             <p className="text-muted-foreground mt-1">
-              {jobs.length} jobs loaded
+              <span className="font-semibold text-foreground">{jobs.length.toLocaleString()}</span> jobs loaded
+              {filteredJobs.length !== jobs.length && (
+                <span className="ml-1">
+                  (<span className="font-semibold text-foreground">{filteredJobs.length.toLocaleString()}</span> matching)
+                </span>
+              )}
               {isScraping && <span className="ml-2 text-primary animate-pulse">• Scraping...</span>}
             </p>
           </div>
           {isScraping && (
-            <div className="flex items-center gap-2 text-sm text-primary">
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              Auto-refreshing every 10 mins
+            <div className="flex items-center gap-3 px-4 py-2 bg-primary/10 rounded-lg border border-primary/20">
+              <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              <div className="text-sm">
+                <p className="font-medium text-primary">Live Scraping Active</p>
+                <p className="text-muted-foreground text-xs">Auto-refresh every 10 mins</p>
+              </div>
             </div>
           )}
         </div>
