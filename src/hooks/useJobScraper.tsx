@@ -253,61 +253,41 @@ export function useJobScraper() {
     }
   }, [user]);
 
-  // Real-time subscription for live updates
+  // Polling for live updates (cost-free alternative to realtime)
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase
-      .channel('jobs-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'jobs',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newJob = payload.new as any;
-            const formattedJob: Job = {
-              id: newJob.id,
-              title: newJob.title,
-              company: newJob.company,
-              location: newJob.location,
-              salary: newJob.salary || '',
-              description: newJob.description || '',
-              requirements: newJob.requirements || [],
-              platform: newJob.platform || '',
-              url: newJob.url || '',
-              posted_date: newJob.posted_date || newJob.created_at || new Date().toISOString(),
-              match_score: newJob.match_score || 0,
-              status: newJob.status || 'pending',
-              applied_at: newJob.applied_at,
-            };
-            setJobs(prev => {
-              // Avoid duplicates
-              if (prev.some(j => j.id === formattedJob.id)) return prev;
-              return [formattedJob, ...prev];
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as any;
-            setJobs(prev => prev.map(job => 
-              job.id === updated.id 
-                ? { ...job, status: updated.status, applied_at: updated.applied_at, match_score: updated.match_score }
-                : job
-            ));
-          } else if (payload.eventType === 'DELETE') {
-            const deleted = payload.old as any;
-            setJobs(prev => prev.filter(job => job.id !== deleted.id));
-          }
-        }
-      )
-      .subscribe();
+    const pollJobs = async () => {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('posted_date', { ascending: false });
 
-    return () => {
-      supabase.removeChannel(channel);
+      if (!error && data) {
+        const formattedJobs: Job[] = data.map((job: any) => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary || '',
+          description: job.description || '',
+          requirements: job.requirements || [],
+          platform: job.platform || '',
+          url: job.url || '',
+          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
+          match_score: job.match_score || 0,
+          status: job.status || 'pending',
+          applied_at: job.applied_at,
+        }));
+        setJobs(formattedJobs);
+      }
     };
+
+    // Poll every 30 seconds
+    const interval = setInterval(pollJobs, 30000);
+
+    return () => clearInterval(interval);
   }, [user]);
 
   // Cleanup on unmount
