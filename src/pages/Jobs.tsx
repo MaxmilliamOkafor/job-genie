@@ -122,14 +122,14 @@ const Jobs = () => {
           <div>
             <h1 className="text-3xl font-bold">Jobs</h1>
             <p className="text-muted-foreground mt-1">
-              {jobs.length} jobs loaded • {filteredJobs.filter(j => j.status === 'pending').length} ready to apply
+              {jobs.length} jobs loaded
               {isScraping && <span className="ml-2 text-primary animate-pulse">• Scraping...</span>}
             </p>
           </div>
           {isScraping && (
             <div className="flex items-center gap-2 text-sm text-primary">
               <RefreshCw className="h-4 w-4 animate-spin" />
-              Auto-updating every minute
+              Auto-refreshing every 10 mins
             </div>
           )}
         </div>
