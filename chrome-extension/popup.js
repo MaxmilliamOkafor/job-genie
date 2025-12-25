@@ -28,6 +28,11 @@ const atsEmailInput = document.getElementById('ats-email');
 const atsPasswordInput = document.getElementById('ats-password');
 const saveCredentialsBtn = document.getElementById('save-credentials-btn');
 const clearCredentialsBtn = document.getElementById('clear-credentials-btn');
+const autofillToggle = document.getElementById('autofill-toggle');
+
+// Default ATS credentials (will be saved to local storage on first load)
+const DEFAULT_ATS_EMAIL = 'Maxokafordev@gmail.com';
+const DEFAULT_ATS_PASSWORD = 'May19315park@';
 
 // Config
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
@@ -40,9 +45,11 @@ let jobQueue = [];
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  initializeDefaults();
   loadConnection();
   loadCredentials();
   loadJobQueue();
+  loadAutofillSetting();
   setupEventListeners();
 });
 
@@ -53,6 +60,9 @@ function setupEventListeners() {
   refreshBtn?.addEventListener('click', refreshProfile);
   applyNowBtn?.addEventListener('click', handleApplyWithAI);
   addQueueBtn?.addEventListener('click', handleAddToQueue);
+  
+  // Auto-fill toggle
+  autofillToggle?.addEventListener('change', handleAutofillToggle);
   
   // Credentials toggle
   credentialsToggle?.addEventListener('click', () => {
@@ -73,6 +83,62 @@ function setupEventListeners() {
   // Copy buttons
   document.getElementById('copy-resume-btn')?.addEventListener('click', () => copyToClipboard('tailored-resume'));
   document.getElementById('copy-cover-btn')?.addEventListener('click', () => copyToClipboard('tailored-cover'));
+  
+  // Download buttons
+  document.getElementById('download-resume-btn')?.addEventListener('click', () => downloadAsPDF('resume'));
+  document.getElementById('download-cover-btn')?.addEventListener('click', () => downloadAsPDF('cover'));
+  
+  // Quick actions
+  document.getElementById('open-dashboard-btn')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: DASHBOARD_URL });
+  });
+  
+  document.getElementById('view-queue-btn')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: `${DASHBOARD_URL}?tab=queue` });
+  });
+}
+
+// Initialize default values on first load
+async function initializeDefaults() {
+  const data = await chrome.storage.local.get(['atsCredentials', 'credentialsInitialized']);
+  
+  // Set default credentials on first load only
+  if (!data.credentialsInitialized) {
+    await chrome.storage.local.set({
+      atsCredentials: {
+        email: DEFAULT_ATS_EMAIL,
+        password: DEFAULT_ATS_PASSWORD
+      },
+      credentialsInitialized: true,
+      autofillEnabled: true
+    });
+    console.log('QuantumHire AI: Default credentials initialized');
+  }
+}
+
+// Load auto-fill setting
+async function loadAutofillSetting() {
+  const data = await chrome.storage.local.get(['autofillEnabled']);
+  const enabled = data.autofillEnabled !== false; // Default to true
+  autofillToggle.checked = enabled;
+  updateAutofillUI(enabled);
+}
+
+// Handle auto-fill toggle
+async function handleAutofillToggle() {
+  const enabled = autofillToggle.checked;
+  await chrome.storage.local.set({ autofillEnabled: enabled });
+  updateAutofillUI(enabled);
+  showStatus(enabled ? 'Auto-fill enabled' : 'Auto-fill disabled', 'info');
+}
+
+// Update UI based on auto-fill setting
+function updateAutofillUI(enabled) {
+  const toggleLabel = document.querySelector('.toggle-label');
+  if (toggleLabel) {
+    toggleLabel.textContent = enabled ? '⚡ Auto-Fill Enabled' : '⚡ Auto-Fill Disabled';
+  }
+}
   
   // Download buttons
   document.getElementById('download-resume-btn')?.addEventListener('click', () => downloadAsPDF('resume'));
@@ -505,20 +571,23 @@ async function handleApplyWithAI() {
     
     const result = await response.json();
     
-    // Step 4: Auto-filling application
+    // Step 4: Auto-filling application (only if enabled)
     updateProgress(4, 90);
     
-    // Get ATS credentials for login forms
-    const credData = await chrome.storage.local.get(['atsCredentials']);
+    // Check if auto-fill is enabled
+    const settingsData = await chrome.storage.local.get(['autofillEnabled', 'atsCredentials']);
+    const autofillEnabled = settingsData.autofillEnabled !== false;
     
-    // Send autofill command to content script
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, {
-        action: 'autofill',
-        tailoredData: result,
-        atsCredentials: credData.atsCredentials || null
-      });
+    if (autofillEnabled) {
+      // Send autofill command to content script
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'autofill',
+          tailoredData: result,
+          atsCredentials: settingsData.atsCredentials || null
+        });
+      }
     }
     
     // Complete progress
@@ -527,7 +596,10 @@ async function handleApplyWithAI() {
     
     // Show results
     displayResults(result);
-    showStatus('Application tailored and form filled!', 'success');
+    const statusMsg = autofillEnabled 
+      ? 'Application tailored and form filled!' 
+      : 'Application tailored! (Auto-fill disabled)';
+    showStatus(statusMsg, 'success');
     
   } catch (error) {
     console.error('Apply error:', error);

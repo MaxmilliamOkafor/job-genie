@@ -80,6 +80,20 @@
         </button>
       </div>
 
+      <!-- Auto-Fill Toggle -->
+      <div class="toggle-card">
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <span class="toggle-label">⚡ Auto-Fill Enabled</span>
+            <span class="toggle-desc">Automatically fill forms on job pages</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autofill-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
       <!-- ATS Credentials Section -->
       <div class="credentials-card" id="credentials-card">
         <div class="credentials-header" id="credentials-toggle">
@@ -87,7 +101,7 @@
           <span class="toggle-arrow">▼</span>
         </div>
         <div class="credentials-body hidden" id="credentials-body">
-          <p class="credentials-note">Save your Workday/ATS login for auto-fill. Stored locally on your device only.</p>
+          <p class="credentials-note">Your Workday/ATS login for auto-fill. Stored locally only.</p>
           <div class="form-group">
             <label for="ats-email">ATS Email</label>
             <input type="email" id="ats-email" placeholder="your@email.com">
@@ -97,10 +111,9 @@
             <input type="password" id="ats-password" placeholder="••••••••">
           </div>
           <div class="credentials-actions">
-            <button id="save-credentials-btn" class="btn small primary">Save Credentials</button>
+            <button id="save-credentials-btn" class="btn small primary">Save</button>
             <button id="clear-credentials-btn" class="btn small ghost">Clear</button>
           </div>
-          <p class="security-note">⚠️ Credentials stored in Chrome local storage. Never synced to cloud.</p>
         </div>
       </div>
 
