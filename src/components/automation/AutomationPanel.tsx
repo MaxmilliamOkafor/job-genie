@@ -46,16 +46,13 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
   const [isVisible, setIsVisible] = useState(true);
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [backgroundCount, setBackgroundCount] = useState(10);
-  const [minMatchScore, setMinMatchScore] = useState(70);
   const [sendReferrals, setSendReferrals] = useState(true);
   const [logs, setLogs] = useState<AutomationLog[]>([]);
   const [currentJobIndex, setCurrentJobIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const eligibleJobs = jobs.filter(
-    job => job.status === 'pending' && job.match_score >= minMatchScore
-  );
+  const eligibleJobs = jobs.filter(job => job.status === 'pending');
 
   const addLog = useCallback((log: Omit<AutomationLog, 'id' | 'timestamp'>) => {
     setLogs(prev => [{
@@ -256,14 +253,12 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         <CardContent className="space-y-4">
           {/* Controls */}
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Minimum Match Score: {minMatchScore}%</Label>
-              <Slider
-                value={[minMatchScore]}
-                onValueChange={([v]) => setMinMatchScore(v)}
-                min={50}
-                max={100}
-                step={5}
+            <div className="flex items-center justify-between">
+              <Label htmlFor="send-referrals">Send Referral Emails</Label>
+              <Switch
+                id="send-referrals"
+                checked={sendReferrals}
+                onCheckedChange={setSendReferrals}
                 disabled={isRunning}
               />
             </div>
@@ -310,7 +305,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div>
               <p className="text-sm font-medium">
-                {eligibleJobs.length} jobs eligible ({minMatchScore}%+ match)
+                {eligibleJobs.length} jobs ready to apply
               </p>
               {isRunning && !backgroundMode && (
                 <p className="text-xs text-muted-foreground">
