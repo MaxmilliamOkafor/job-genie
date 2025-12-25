@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.send-email-resend]
 verify_jwt = false
+
+[functions.search-jobs-google]
+verify_jwt = false
