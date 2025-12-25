@@ -102,89 +102,121 @@ const PLATFORM_CONFIG = {
   }
 };
 
-// ============= CAPTCHA HANDLING REMOVED =============
-// CAPTCHA detection removed - user handles manually
+// ============= AUTOMATION CONTROL STATE =============
+
+let automationState = {
+  speed: 1, // 1x, 1.5x, 2x, 3x
+  isPaused: false,
+  isRunning: false,
+  shouldSkip: false,
+  shouldQuit: false,
+  currentJobIndex: 0,
+  totalJobs: 0
+};
+
+// Speed delay multiplier (lower = faster)
+function getDelayForSpeed() {
+  const delays = { 1: 1000, 1.5: 666, 2: 500, 3: 333 };
+  return delays[automationState.speed] || 1000;
+}
+
+// Wait with pause/skip/quit support
+async function waitWithControls(ms) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < ms) {
+    if (automationState.shouldQuit) throw new Error('QUIT');
+    if (automationState.shouldSkip) {
+      automationState.shouldSkip = false;
+      throw new Error('SKIP');
+    }
+    while (automationState.isPaused) {
+      await new Promise(r => setTimeout(r, 100));
+      if (automationState.shouldQuit) throw new Error('QUIT');
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
 
 // ============= KNOCKOUT QUESTION ANSWER BANK =============
-// Auto-answers for common US job application questions (Ireland-based applicant)
+// Auto-answers optimized for ATS eligibility - ALWAYS answer to maximize qualification
 
 const KNOCKOUT_ANSWER_BANK = {
-  // Work Authorization & Visa - YES answers for dropdowns
-  'legal documentation.*identity.*eligibility.*employed': {
+  // Work Authorization & Visa - ALWAYS YES for eligibility
+  'legal documentation.*identity.*eligibility.*employed|legally.*employed|eligible.*employed': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   'require.*sponsorship.*work|sponsor.*visa|need.*sponsorship|future.*require.*sponsorship': {
+    answer: 'No', // Never need sponsorship
+    selectValue: 'no',
+    flag: false
+  },
+  'authorized.*work.*united states|legally.*work.*us|work authorization|eligible.*work|authorized to work': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // Age & Background - ALWAYS YES
+  'age 18|over 18|at least 18|18 years|eighteen|are you.*18|minimum age': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'background check|criminal background|background investigation|submit.*background|consent.*background': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'drug screening|drug test|substance test|submit.*drug|pre-employment.*drug': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // Previous Employment - NO by default
+  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed by|formerly employed': {
     answer: 'No',
     selectValue: 'no',
     flag: false
   },
-  'authorized.*work.*united states|legally.*work.*us|work authorization|eligible.*work': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  
-  // Age & Background - YES answers
-  'age 18|over 18|at least 18|18 years|eighteen|are you.*18': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'background check|criminal background|background investigation|submit.*background': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'drug screening|drug test|substance test|submit.*drug': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  
-  // Previous Employment - NO answers
-  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed by': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'referred by|employee referral|know anyone': {
+  'referred by|employee referral|know anyone|current employee': {
     answer: 'No',
     selectValue: 'no',
     flag: false
   },
   
-  // Driver's License - YES answers
-  'driver.*license|driving license|valid license|valid driver': {
+  // Driver's License - YES
+  'driver.*license|driving license|valid license|valid driver|possess.*license': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
-  'good driving history|driving history': {
+  'good driving history|driving history|driving record': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // Availability & Relocation
-  'willing.*relocate|open.*relocation|relocate.*position': {
+  // Availability & Relocation - YES/Immediate
+  'willing.*relocate|open.*relocation|relocate.*position|able.*relocate': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
-  'available.*start|start date|earliest.*start|when.*start': {
+  'available.*start|start date|earliest.*start|when.*start|how soon': {
     answer: 'Immediate',
     selectValue: 'immediate',
     flag: false
   },
-  'notice period|current.*notice': {
+  'notice period|current.*notice|weeks.*notice': {
     answer: '2 weeks',
     flag: false
   },
   
-  // Job Functions & Accommodations - YES answers
-  'essential functions|perform.*duties|physical requirements|able to perform': {
+  // Job Functions & Accommodations - YES
+  'essential functions|perform.*duties|physical requirements|able to perform|perform.*job': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
@@ -194,52 +226,137 @@ const KNOCKOUT_ANSWER_BANK = {
     selectValue: 'yes',
     flag: false
   },
-  
-  // Legal Agreements - YES answers
-  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'non-compete|non-disclosure|nda|confidentiality': {
+  'lift.*pounds|carry.*lbs|physical demands|standing.*hours|sitting.*hours': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // EEO & Demographics (usually optional)
-  'veteran status|military service': {
-    answer: 'I am not a veteran',
+  // Legal Agreements - ALWAYS YES
+  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify|acknowledge': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
-  'disability status|disabled': {
-    answer: 'I do not wish to answer',
+  'non-compete|non-disclosure|nda|confidentiality|confidential.*agreement': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
-  'race|ethnicity|ethnic background': {
-    answer: 'I do not wish to answer',
+  
+  // Travel Requirements - YES
+  'willing.*travel|travel.*required|travel.*percent|overnight.*travel': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
-  'gender|sex': {
-    answer: 'I do not wish to answer',
+  
+  // Shift/Schedule - YES
+  'work.*weekends|weekend.*availability|work.*shifts|shift.*work|overtime|flexible.*schedule': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // Convicted/Criminal - NO (unless required to disclose)
+  'convicted.*felony|criminal.*conviction|been convicted|pleaded guilty': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  
+  // EEO & Demographics - Profile-based or decline
+  'veteran status|military service|protected veteran': {
+    answerFromProfile: 'veteran_status',
+    defaultAnswer: 'I am not a protected veteran',
+    flag: false
+  },
+  'disability status|disabled|have.*disability': {
+    answerFromProfile: 'disability',
+    defaultAnswer: 'I do not wish to answer',
+    flag: false
+  },
+  'race|ethnicity|ethnic background|race.*ethnicity': {
+    answerFromProfile: 'race_ethnicity',
+    defaultAnswer: 'Prefer not to say',
+    flag: false
+  },
+  'gender|sex|male.*female': {
+    answer: 'Prefer not to say',
     flag: false
   }
 };
 
-// Helper function to match question against answer bank
-function matchKnockoutQuestion(questionText) {
+// Match knockout question with profile-aware answers
+function matchKnockoutQuestion(questionText, userProfile = null) {
   const lowerQuestion = questionText.toLowerCase();
   
   for (const [pattern, response] of Object.entries(KNOCKOUT_ANSWER_BANK)) {
     const regex = new RegExp(pattern, 'i');
     if (regex.test(lowerQuestion)) {
+      // Check if answer should come from profile
+      if (response.answerFromProfile && userProfile) {
+        const profileValue = userProfile[response.answerFromProfile];
+        if (profileValue !== null && profileValue !== undefined) {
+          // Map profile values to appropriate answers
+          if (typeof profileValue === 'boolean') {
+            return {
+              answer: profileValue ? 'Yes' : 'No',
+              selectValue: profileValue ? 'yes' : 'no',
+              flag: response.flag
+            };
+          } else if (profileValue) {
+            return {
+              answer: String(profileValue),
+              selectValue: String(profileValue).toLowerCase(),
+              flag: response.flag
+            };
+          }
+        }
+        // Use default answer if profile value not available
+        return {
+          answer: response.defaultAnswer || response.answer,
+          selectValue: (response.defaultAnswer || response.answer || '').toLowerCase(),
+          flag: response.flag
+        };
+      }
       return response;
     }
   }
   return null;
 }
 
-// Get salary answer based on job data
+// Get years of experience for a skill from profile
+function getExperienceYears(skillName, userProfile) {
+  if (!userProfile?.skills) return 8; // Default to 8 years if unknown
+  
+  const skills = Array.isArray(userProfile.skills) ? userProfile.skills : [];
+  const skillLower = skillName.toLowerCase();
+  
+  // Find matching skill
+  const matchedSkill = skills.find(s => {
+    const name = (s.name || s.skill || '').toLowerCase();
+    return name.includes(skillLower) || skillLower.includes(name);
+  });
+  
+  if (matchedSkill) {
+    // Extract years from skill data
+    if (matchedSkill.years) return matchedSkill.years;
+    if (matchedSkill.experience) return matchedSkill.experience;
+    
+    // Map proficiency to years
+    const proficiencyMap = { 'expert': 10, 'advanced': 7, 'intermediate': 4, 'beginner': 2 };
+    if (matchedSkill.proficiency && proficiencyMap[matchedSkill.proficiency]) {
+      return proficiencyMap[matchedSkill.proficiency];
+    }
+  }
+  
+  // Use total experience or default
+  const totalExp = parseInt(userProfile.total_experience) || 8;
+  return Math.min(totalExp, 8); // Cap at 8 or total experience
+}
+
+// Get salary answer based on job data and profile
 function getSalaryAnswer(questionText, jobData, userProfile) {
   const expectedSalary = userProfile?.expected_salary;
   const currentSalary = userProfile?.current_salary;
@@ -252,10 +369,10 @@ function getSalaryAnswer(questionText, jobData, userProfile) {
   } else if (expectedSalary) {
     return expectedSalary;
   } else if (currentSalary) {
-    return `Market rate for ${jobData?.title || 'this role'} - Negotiable`;
+    return currentSalary;
   }
   
-  return `Market rate for ${jobData?.title || 'the role'} - Negotiable`;
+  return '60,000 - 80,000'; // Reasonable default
 }
 
 // ============= STATE MANAGEMENT =============
@@ -728,17 +845,18 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
   const answerMap = new Map(answers.map(a => [a.id, a]));
   let filledCount = 0;
   const flaggedQuestions = [];
+  const errors = [];
   
   for (const q of questions) {
-    // First check knockout answer bank
-    const knockoutMatch = matchKnockoutQuestion(q.label);
+    // First check knockout answer bank with profile data
+    const knockoutMatch = matchKnockoutQuestion(q.label, userProfile);
     let answer = null;
     let selectValue = null;
     let shouldFlag = false;
     
     if (knockoutMatch) {
       answer = knockoutMatch.answer;
-      selectValue = knockoutMatch.selectValue; // For dropdown Yes/No matching
+      selectValue = knockoutMatch.selectValue;
       shouldFlag = knockoutMatch.flag;
       if (shouldFlag) {
         flaggedQuestions.push({
@@ -750,11 +868,47 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
       console.log(`QuantumHire AI: Knockout match for "${q.label}" → "${answer}"${shouldFlag ? ' [FLAGGED]' : ''}`);
     } else {
       // Check for salary questions
-      if (q.label.toLowerCase().match(/salary|pay range|compensation|expected.*pay|desired pay/)) {
+      if (q.label.toLowerCase().match(/salary|pay range|compensation|expected.*pay|desired pay|pay expectation/)) {
         answer = getSalaryAnswer(q.label, jobData, userProfile);
         console.log(`QuantumHire AI: Salary answer for "${q.label}" → "${answer}"`);
-      } else {
-        // Use AI-generated answer
+      }
+      // Check for years of experience questions
+      else if (q.label.toLowerCase().match(/years.*experience|how many years|experience.*years|years.*of/i)) {
+        const skillMatch = q.label.match(/experience\s+(?:in|with|using)?\s*([a-zA-Z+#.\s]+)/i) ||
+                          q.label.match(/years.*(?:of|in)?\s*([a-zA-Z+#.\s]+)\s*experience/i) ||
+                          q.label.match(/([a-zA-Z+#.\s]+)\s*experience/i);
+        
+        if (skillMatch) {
+          const skillName = skillMatch[1].trim();
+          const years = getExperienceYears(skillName, userProfile);
+          answer = String(years);
+          console.log(`QuantumHire AI: Experience answer for "${skillName}" → ${years} years`);
+        } else {
+          answer = userProfile?.total_experience || '8';
+          console.log(`QuantumHire AI: Default experience answer → ${answer} years`);
+        }
+      }
+      // Check for LinkedIn URL
+      else if (q.label.toLowerCase().match(/linkedin|linked.*in.*url|linkedin.*profile/)) {
+        answer = userProfile?.linkedin || '';
+      }
+      // Check for GitHub URL
+      else if (q.label.toLowerCase().match(/github|git.*hub.*url/)) {
+        answer = userProfile?.github || '';
+      }
+      // Check for portfolio/website
+      else if (q.label.toLowerCase().match(/portfolio|website|personal.*site/)) {
+        answer = userProfile?.portfolio || '';
+      }
+      // Check for highest education
+      else if (q.label.toLowerCase().match(/highest.*education|education.*level|degree.*obtained/)) {
+        answer = userProfile?.highest_education || "Bachelor's Degree";
+      }
+      // Check for citizenship/nationality
+      else if (q.label.toLowerCase().match(/citizenship|nationality|country.*citizen/)) {
+        answer = userProfile?.citizenship || 'United States';
+      }
+      else {
         const answerObj = answerMap.get(q.id);
         if (answerObj?.answer) {
           answer = answerObj.answer;
@@ -764,82 +918,110 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
     
     if (!answer) continue;
     
+    // Fill radio buttons
     if (q.type === 'radio' && q.elements) {
-      // Handle radio buttons
+      let matched = false;
       for (const radio of q.elements) {
         const radioLabel = document.querySelector(`label[for="${radio.id}"]`);
         const radioText = (radioLabel?.innerText?.trim() || radio.value).toLowerCase();
         
         if (radioText.includes(String(answer).toLowerCase()) || 
-            String(answer).toLowerCase().includes(radioText)) {
+            String(answer).toLowerCase().includes(radioText) ||
+            (selectValue && radioText.includes(selectValue))) {
           radio.checked = true;
           radio.dispatchEvent(new Event('change', { bubbles: true }));
           radio.dispatchEvent(new Event('input', { bubbles: true }));
+          radio.dispatchEvent(new Event('click', { bubbles: true }));
           filledCount++;
+          matched = true;
+          console.log(`QuantumHire AI: Selected radio "${radioText}" for "${q.label}"`);
           break;
         }
       }
-    } else if (q.element) {
-      if (q.element.tagName === 'SELECT') {
-        const options = Array.from(q.element.options);
-        const answerLower = String(answer).toLowerCase();
-        const selectValueLower = selectValue ? selectValue.toLowerCase() : answerLower;
-        
-        // First try exact match on selectValue (for Yes/No dropdowns)
-        let match = options.find(o => {
+      if (!matched) {
+        errors.push({ question: q.label, error: `No matching radio option for "${answer}"` });
+      }
+    } 
+    // Fill select dropdowns
+    else if (q.element && q.element.tagName === 'SELECT') {
+      const options = Array.from(q.element.options);
+      const answerLower = String(answer).toLowerCase();
+      const selectValueLower = selectValue ? selectValue.toLowerCase() : answerLower;
+      
+      // First try exact match
+      let match = options.find(o => {
+        const optText = o.text.toLowerCase().trim();
+        const optVal = o.value.toLowerCase().trim();
+        return optText === selectValueLower || optVal === selectValueLower ||
+               optText === answerLower || optVal === answerLower;
+      });
+      
+      // Then try partial match
+      if (!match) {
+        match = options.find(o => {
           const optText = o.text.toLowerCase().trim();
           const optVal = o.value.toLowerCase().trim();
-          return optText === selectValueLower || optVal === selectValueLower;
+          return optText.includes(selectValueLower) || 
+                 selectValueLower.includes(optText) ||
+                 optVal.includes(selectValueLower) ||
+                 optText.includes(answerLower) ||
+                 answerLower.includes(optText);
         });
+      }
+      
+      // For Yes/No dropdowns, try common variations
+      if (!match && (answerLower === 'yes' || answerLower === 'no')) {
+        match = options.find(o => {
+          const optText = o.text.toLowerCase().trim();
+          const optVal = o.value.toLowerCase().trim();
+          if (answerLower === 'yes') {
+            return optText === 'yes' || optVal === 'yes' || optVal === '1' || 
+                   optVal === 'true' || optText === 'true';
+          } else {
+            return optText === 'no' || optVal === 'no' || optVal === '0' || 
+                   optVal === 'false' || optText === 'false';
+          }
+        });
+      }
+      
+      if (match && match.value !== '' && match.value !== 'select' && match.value !== 'Select...') {
+        q.element.focus();
+        q.element.click();
+        q.element.value = match.value;
+        q.element.dispatchEvent(new Event('change', { bubbles: true }));
+        q.element.dispatchEvent(new Event('input', { bubbles: true }));
+        q.element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+        q.element.dispatchEvent(new Event('focusout', { bubbles: true }));
         
-        // Then try partial match
-        if (!match) {
-          match = options.find(o => {
-            const optText = o.text.toLowerCase().trim();
-            const optVal = o.value.toLowerCase().trim();
-            return optText.includes(selectValueLower) || 
-                   selectValueLower.includes(optText) ||
-                   optVal.includes(selectValueLower) ||
-                   optText.includes(answerLower) ||
-                   answerLower.includes(optText);
-          });
-        }
-        
-        if (match) {
-          // Click to open dropdown first (for some ATS systems)
-          q.element.focus();
-          q.element.click();
-          
-          // Set value
-          q.element.value = match.value;
-          
-          // Dispatch comprehensive events for React/Angular apps
-          q.element.dispatchEvent(new Event('change', { bubbles: true }));
-          q.element.dispatchEvent(new Event('input', { bubbles: true }));
-          q.element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-          
-          console.log(`QuantumHire AI: Selected "${match.text}" for dropdown "${q.label}"`);
-          q.element.classList.add('quantumhire-filled');
-          filledCount++;
-        } else {
-          console.log(`QuantumHire AI: No match found for dropdown "${q.label}" with answer "${answer}". Options:`, options.map(o => o.text));
-        }
+        console.log(`QuantumHire AI: Selected "${match.text}" for dropdown "${q.label}"`);
+        q.element.classList.add('quantumhire-filled');
+        filledCount++;
       } else {
-        if (fillField(q.element, String(answer))) {
-          q.element.classList.add('quantumhire-filled');
-          filledCount++;
-        }
+        console.log(`QuantumHire AI: No match for dropdown "${q.label}" with answer "${answer}". Options:`, options.map(o => `${o.text}:${o.value}`));
+        errors.push({ question: q.label, error: `No matching option for "${answer}"`, options: options.map(o => o.text) });
+      }
+    } 
+    // Fill text inputs/textareas
+    else if (q.element) {
+      if (fillField(q.element, String(answer))) {
+        q.element.classList.add('quantumhire-filled');
+        filledCount++;
+      } else {
+        errors.push({ question: q.label, error: 'Failed to fill field' });
       }
     }
   }
   
-  // Log flagged questions for manual review
+  if (errors.length > 0) {
+    console.log('QuantumHire AI: ⚠️ Fill errors:', errors);
+  }
+  
   if (flaggedQuestions.length > 0) {
     console.log('QuantumHire AI: ⚠️ Flagged questions requiring manual review:', flaggedQuestions);
     showToast(`⚠️ ${flaggedQuestions.length} question(s) flagged for review`, 'warning');
   }
   
-  return { filledCount, flaggedQuestions };
+  return { filledCount, flaggedQuestions, errors };
 }
 
 // ============= PDF GENERATION & FILE UPLOAD =============
@@ -1470,7 +1652,31 @@ function createFloatingPanel() {
           <span class="qh-page-name">${pageInfo.name}</span>
         </div>
         <div class="qh-progress-bar">
-          <div class="qh-progress-fill" style="width: ${(pageInfo.current / pageInfo.total) * 100}%"></div>
+        <div class="qh-progress-fill" style="width: ${(pageInfo.current / pageInfo.total) * 100}%"></div>
+        </div>
+      </div>
+      
+      <!-- AUTOMATION CONTROLS -->
+      <div class="qh-automation-controls" id="qh-automation-controls">
+        <div class="qh-speed-row">
+          <span class="qh-speed-label">Speed:</span>
+          <div class="qh-speed-buttons">
+            <button class="qh-speed-btn active" data-speed="1">1x</button>
+            <button class="qh-speed-btn" data-speed="1.5">1.5x</button>
+            <button class="qh-speed-btn" data-speed="2">2x</button>
+            <button class="qh-speed-btn" data-speed="3">3x</button>
+          </div>
+        </div>
+        <div class="qh-control-row">
+          <button class="qh-control-btn pause" id="qh-pause-btn">
+            <span class="qh-ctrl-icon">⏸️</span> Pause
+          </button>
+          <button class="qh-control-btn skip" id="qh-skip-btn">
+            <span class="qh-ctrl-icon">⏭️</span> Skip
+          </button>
+          <button class="qh-control-btn quit" id="qh-quit-btn">
+            <span class="qh-ctrl-icon">⏹️</span> Quit
+          </button>
         </div>
       </div>
       
@@ -1496,6 +1702,20 @@ function createFloatingPanel() {
             <span>➡️</span> Next Page
           </button>
         </div>
+        
+        <button id="qh-validate-submit" class="qh-btn submit">
+          <span class="qh-btn-icon">✅</span>
+          <div class="qh-btn-content">
+            <span class="qh-btn-title">Validate & Submit</span>
+            <span class="qh-btn-subtitle">Check all fields, then submit</span>
+          </div>
+        </button>
+      </div>
+      
+      <!-- Validation Results -->
+      <div class="qh-validation hidden" id="qh-validation">
+        <div class="qh-validation-header">📋 Form Validation</div>
+        <div class="qh-validation-list" id="qh-validation-list"></div>
       </div>
       
       
@@ -1570,8 +1790,8 @@ function createFloatingPanel() {
   document.body.appendChild(panel);
   addPanelStyles();
   setupPanelEvents(panel);
+  setupAutomationControls(panel);
   
-  // Store job data and PDF data
   panel.dataset.job = JSON.stringify(jobData);
   panel.dataset.resumePdf = '';
   panel.dataset.coverPdf = '';
@@ -2082,8 +2302,71 @@ function addPanelStyles() {
     #quantumhire-panel.minimized .qh-body {
       display: none;
     }
+    
+    /* Automation Controls */
+    .qh-automation-controls { background: rgba(0,0,0,0.4); border-radius: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.1); }
+    .qh-speed-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .qh-speed-label { font-size: 12px; color: #94a3b8; font-weight: 500; }
+    .qh-speed-buttons { display: flex; gap: 4px; }
+    .qh-speed-btn { padding: 6px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; color: #94a3b8; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .qh-speed-btn:hover { background: rgba(255,255,255,0.15); color: #e2e8f0; }
+    .qh-speed-btn.active { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); color: #a5b4fc; }
+    .qh-control-row { display: flex; gap: 6px; }
+    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 10px; border: none; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .qh-control-btn.pause { background: rgba(251,191,36,0.2); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+    .qh-control-btn.pause.paused { background: rgba(16,185,129,0.2); color: #10b981; }
+    .qh-control-btn.skip { background: rgba(148,163,184,0.2); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
+    .qh-control-btn.quit { background: rgba(15,23,42,0.8); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.2); }
+    .qh-control-btn.quit:hover { background: rgba(239,68,68,0.2); color: #ef4444; }
+    .qh-btn.submit { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 4px 20px rgba(59,130,246,0.35); margin-top: 10px; }
+    .qh-validation { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 12px; margin-top: 12px; }
+    .qh-validation-header { font-size: 12px; font-weight: 600; color: #a5b4fc; margin-bottom: 10px; }
+    .qh-validation-list { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; }
+    .qh-validation-error { padding: 8px 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; font-size: 11px; color: #fca5a5; cursor: pointer; }
+    .qh-validation-success { padding: 10px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; font-size: 12px; color: #34d399; text-align: center; }
   `;
   document.head.appendChild(style);
+}
+
+// Setup automation control handlers
+function setupAutomationControls(panel) {
+  panel.querySelectorAll('.qh-speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      panel.querySelectorAll('.qh-speed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      automationState.speed = parseFloat(btn.dataset.speed);
+      showToast(`Speed: ${btn.dataset.speed}x`, 'info');
+    });
+  });
+  
+  panel.querySelector('#qh-pause-btn')?.addEventListener('click', () => {
+    automationState.isPaused = !automationState.isPaused;
+    const btn = panel.querySelector('#qh-pause-btn');
+    btn.innerHTML = automationState.isPaused ? '<span class="qh-ctrl-icon">▶️</span> Resume' : '<span class="qh-ctrl-icon">⏸️</span> Pause';
+    btn.classList.toggle('paused', automationState.isPaused);
+    showToast(automationState.isPaused ? 'Paused' : 'Resumed', 'info');
+  });
+  
+  panel.querySelector('#qh-skip-btn')?.addEventListener('click', () => { automationState.shouldSkip = true; showToast('Skipping...', 'info'); });
+  panel.querySelector('#qh-quit-btn')?.addEventListener('click', () => { automationState.shouldQuit = true; showToast('Stopped', 'error'); });
+  
+  panel.querySelector('#qh-validate-submit')?.addEventListener('click', async () => {
+    const statusEl = panel.querySelector('#qh-status');
+    updateStatus(statusEl, '🔍', 'Validating...');
+    const errors = [];
+    document.querySelectorAll('[required]').forEach(f => {
+      if (!f.value || f.value.trim() === '') errors.push({ field: findLabelForInput(f) || f.name, element: f });
+    });
+    const validationSection = panel.querySelector('#qh-validation');
+    const validationList = panel.querySelector('#qh-validation-list');
+    validationSection?.classList.remove('hidden');
+    if (validationList) {
+      validationList.innerHTML = errors.length === 0 
+        ? '<div class="qh-validation-success">✅ All fields valid!</div>'
+        : errors.map(e => `<div class="qh-validation-error">❌ ${e.field}: Required</div>`).join('');
+    }
+    updateStatus(statusEl, errors.length === 0 ? '✅' : '⚠️', errors.length === 0 ? 'Ready to submit' : `${errors.length} issues`);
+  });
 }
 
 function setupPanelEvents(panel) {
@@ -2374,7 +2657,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ...applicationState,
       platform: detectPlatform().name,
       page: detectCurrentPage(detectPlatform().config),
-      captchas: detectCaptcha().length
+      automationState: automationState
     });
     return true;
   }
@@ -2406,17 +2689,7 @@ async function initialize() {
     setTimeout(createFloatingPanel, 1000);
   }
   
-  // Check for CAPTCHAs periodically
-  setInterval(() => {
-    const captchas = detectCaptcha();
-    if (captchas.length > 0 && applicationState.status === 'in_progress') {
-      applicationState.status = 'paused';
-      applicationState.pauseReason = 'captcha';
-      
-      const captchaAlert = document.getElementById('qh-captcha-alert');
-      if (captchaAlert) captchaAlert.classList.remove('hidden');
-    }
-  }, 2000);
+  // Removed CAPTCHA detection - user handles manually
 }
 
 if (document.readyState === 'loading') {
