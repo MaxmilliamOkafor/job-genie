@@ -1,5 +1,5 @@
 // QuantumHire AI - Background Service Worker
-// Handles authentication and API calls for non-Easy Apply job applications
+// Enhanced: Question answering, batch apply, token refresh
 
 console.log('QuantumHire AI: Background service worker started');
 
@@ -8,7 +8,6 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('QuantumHire AI: Extension installed');
     
-    // Set default settings with Supabase credentials
     chrome.storage.local.set({
       autoDetect: true,
       supabaseUrl: 'https://wntpldomgjutwufphnpg.supabase.co',
@@ -19,7 +18,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 // Handle messages from content scripts or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('QuantumHire AI: Received message', message);
+  console.log('QuantumHire AI: Received message', message.action);
   
   if (message.action === 'getProfile') {
     chrome.storage.local.get(['userProfile'], (data) => {
@@ -29,15 +28,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   if (message.action === 'getTailoredApplication') {
-    getTailoredApplication(message.job).then(sendResponse).catch(err => {
-      console.error('QuantumHire AI: Tailor error', err);
-      sendResponse({ error: err.message });
-    });
+    getTailoredApplication(message.job)
+      .then(sendResponse)
+      .catch(err => {
+        console.error('QuantumHire AI: Tailor error', err);
+        sendResponse({ error: err.message });
+      });
+    return true;
+  }
+  
+  if (message.action === 'answerQuestions') {
+    answerApplicationQuestions(message.questions, message.jobTitle, message.company)
+      .then(sendResponse)
+      .catch(err => {
+        console.error('QuantumHire AI: Answer questions error', err);
+        sendResponse({ answers: [], error: err.message });
+      });
     return true;
   }
   
   if (message.action === 'extractJob') {
-    // Forward to content script
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
         chrome.tabs.sendMessage(tabs[0].id, { action: 'extractJob' }, sendResponse);
@@ -72,6 +82,8 @@ async function getTailoredApplication(job) {
   
   console.log('QuantumHire AI: Calling tailor-application function...');
   
+  const profile = data.userProfile;
+  
   const response = await fetch(`${data.supabaseUrl}/functions/v1/tailor-application`, {
     method: 'POST',
     headers: {
@@ -84,7 +96,29 @@ async function getTailoredApplication(job) {
       company: job.company,
       description: job.description || '',
       requirements: job.requirements || [],
-      userProfile: data.userProfile,
+      location: job.location || '',
+      jobId: job.jobId || null,
+      userProfile: {
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        email: profile.email,
+        phone: profile.phone,
+        linkedin: profile.linkedin,
+        github: profile.github,
+        portfolio: profile.portfolio,
+        coverLetter: profile.cover_letter || '',
+        workExperience: profile.work_experience || [],
+        education: profile.education || [],
+        skills: profile.skills || [],
+        certifications: profile.certifications || [],
+        achievements: profile.achievements || [],
+        atsStrategy: profile.ats_strategy || 'Match keywords from job description',
+        city: profile.city,
+        state: profile.state,
+        country: profile.country,
+        address: profile.address,
+        zipCode: profile.zip_code,
+      },
       includeReferral: false,
     }),
   });
@@ -102,16 +136,67 @@ async function getTailoredApplication(job) {
       throw new Error('Rate limit exceeded. Please try again later.');
     }
     if (response.status === 402) {
-      throw new Error('AI usage limit reached.');
+      throw new Error('AI usage limit reached. Please add credits.');
     }
     
     throw new Error(`API error: ${response.status}`);
   }
   
   const result = await response.json();
-  console.log('QuantumHire AI: Received tailored application', result);
+  console.log('QuantumHire AI: Received tailored application', { matchScore: result.matchScore });
   
   return result;
+}
+
+// Answer application questions with AI
+async function answerApplicationQuestions(questions, jobTitle, company) {
+  console.log('QuantumHire AI: Answering', questions.length, 'questions');
+  
+  const data = await chrome.storage.local.get(['supabaseUrl', 'supabaseKey', 'accessToken', 'userProfile']);
+  
+  if (!data.userProfile) {
+    throw new Error('No profile found');
+  }
+  
+  const profile = data.userProfile;
+  
+  const response = await fetch(`${data.supabaseUrl}/functions/v1/answer-questions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': data.supabaseKey,
+      'Authorization': `Bearer ${data.accessToken || data.supabaseKey}`,
+    },
+    body: JSON.stringify({
+      questions,
+      jobTitle,
+      company,
+      userProfile: {
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        email: profile.email,
+        phone: profile.phone,
+        skills: profile.skills || [],
+        workExperience: profile.work_experience || [],
+        education: profile.education || [],
+        certifications: profile.certifications || [],
+        city: profile.city,
+        country: profile.country,
+        willingToRelocate: profile.willing_to_relocate,
+        visaRequired: profile.visa_required,
+        veteranStatus: profile.veteran_status,
+        disability: profile.disability,
+        raceEthnicity: profile.race_ethnicity,
+      },
+    }),
+  });
+  
+  if (!response.ok) {
+    console.error('QuantumHire AI: Answer questions error', response.status);
+    return { answers: [] };
+  }
+  
+  return await response.json();
 }
 
 // Refresh access token periodically
@@ -153,33 +238,27 @@ chrome.runtime.onStartup.addListener(refreshAccessToken);
 
 // ============= BATCH APPLY FUNCTIONS =============
 
-// Handle batch apply to a single job
 async function handleBatchApplyToJob(url, tailoredData, atsCredentials) {
   console.log('QuantumHire AI: Batch applying to', url);
   
   return new Promise((resolve) => {
-    // Create a new tab with the job URL
     chrome.tabs.create({ url: url, active: false }, (tab) => {
       const tabId = tab.id;
       
-      // Listen for tab to finish loading
       const onUpdated = (updatedTabId, changeInfo) => {
         if (updatedTabId === tabId && changeInfo.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(onUpdated);
           
-          // Wait a bit for dynamic content to load
           setTimeout(() => {
-            // Send autofill message to the tab
             chrome.tabs.sendMessage(tabId, {
               action: 'autofill',
               tailoredData: tailoredData,
               atsCredentials: atsCredentials,
-              batchMode: true
+              options: { batchMode: true }
             }, (response) => {
-              // Close the tab after a delay
               setTimeout(() => {
                 chrome.tabs.remove(tabId).catch(() => {});
-              }, 3000);
+              }, 5000); // Keep tab open longer for form submission
               
               if (chrome.runtime.lastError) {
                 console.log('QuantumHire AI: Autofill message error', chrome.runtime.lastError);
@@ -188,18 +267,18 @@ async function handleBatchApplyToJob(url, tailoredData, atsCredentials) {
                 resolve({ success: true, response: response });
               }
             });
-          }, 2000);
+          }, 3000); // Wait for dynamic content
         }
       };
       
       chrome.tabs.onUpdated.addListener(onUpdated);
       
-      // Timeout after 30 seconds
+      // Timeout after 45 seconds
       setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(onUpdated);
         chrome.tabs.remove(tabId).catch(() => {});
         resolve({ success: false, error: 'Page load timeout' });
-      }, 30000);
+      }, 45000);
     });
   });
 }

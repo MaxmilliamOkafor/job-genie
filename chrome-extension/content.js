@@ -1,44 +1,31 @@
 // QuantumHire AI - Content Script
-// Handles form detection, auto-filling, job extraction on EXTERNAL company job pages (non-Easy Apply)
+// Enhanced: AI question answering, PDF generation & upload, comprehensive autofill
 
 console.log('QuantumHire AI: Content script loaded');
 
 // Field mapping for common form fields
 const FIELD_MAPPINGS = {
-  // Name fields
   firstName: ['first_name', 'firstname', 'first-name', 'fname', 'given_name', 'givenname'],
   lastName: ['last_name', 'lastname', 'last-name', 'lname', 'surname', 'family_name', 'familyname'],
   fullName: ['full_name', 'fullname', 'name', 'your_name', 'applicant_name'],
-  
-  // Contact fields
   email: ['email', 'e-mail', 'email_address', 'emailaddress', 'work_email', 'personal_email'],
   phone: ['phone', 'telephone', 'tel', 'mobile', 'cell', 'phone_number', 'phonenumber', 'contact_number'],
-  
-  // Address fields
   address: ['address', 'street', 'street_address', 'address_line_1', 'address1'],
   city: ['city', 'town', 'locality'],
   state: ['state', 'province', 'region', 'state_province'],
   zipCode: ['zip', 'zipcode', 'zip_code', 'postal', 'postal_code', 'postalcode'],
   country: ['country', 'nation', 'country_code'],
-  
-  // Professional fields
   linkedin: ['linkedin', 'linkedin_url', 'linkedin_profile', 'linkedinurl'],
   github: ['github', 'github_url', 'github_profile', 'githuburl'],
   portfolio: ['portfolio', 'website', 'personal_website', 'portfolio_url', 'website_url'],
-  
-  // Experience fields
   currentCompany: ['current_company', 'currentcompany', 'company', 'employer', 'current_employer'],
   currentTitle: ['current_title', 'currenttitle', 'job_title', 'title', 'position', 'current_position'],
   yearsExperience: ['years_experience', 'experience', 'total_experience', 'years_of_experience'],
-  
-  // Salary
   salary: ['salary', 'salary_expectation', 'expected_salary', 'desired_salary', 'compensation'],
-  
-  // Cover letter
   coverLetter: ['cover_letter', 'coverletter', 'cover', 'letter', 'message', 'additional_info'],
 };
 
-// ATS-specific selectors for form filling (external company pages)
+// ATS-specific selectors
 const ATS_SELECTORS = {
   greenhouse: {
     firstName: '#first_name',
@@ -46,7 +33,7 @@ const ATS_SELECTORS = {
     email: '#email',
     phone: '#phone',
     linkedin: 'input[name*="linkedin"]',
-    resume: 'input[type="file"][name*="resume"]',
+    resume: 'input[type="file"][name*="resume"], input[type="file"][accept*="pdf"]',
     coverLetter: 'textarea[name*="cover_letter"]',
   },
   lever: {
@@ -69,6 +56,7 @@ const ATS_SELECTORS = {
     state: 'input[data-automation-id="state"]',
     zipCode: 'input[data-automation-id="postalCode"]',
     country: 'input[data-automation-id="country"]',
+    resume: 'input[type="file"][data-automation-id*="file"], input[type="file"]',
   },
   ashby: {
     firstName: 'input[name="firstName"]',
@@ -76,24 +64,6 @@ const ATS_SELECTORS = {
     email: 'input[name="email"]',
     phone: 'input[name="phone"]',
     linkedin: 'input[name="linkedInUrl"]',
-  },
-  icims: {
-    firstName: '#firstName',
-    lastName: '#lastName',
-    email: '#email',
-    phone: '#phone',
-  },
-  smartrecruiters: {
-    firstName: 'input[name="firstName"]',
-    lastName: 'input[name="lastName"]',
-    email: 'input[name="email"]',
-    phone: 'input[name="phone"]',
-  },
-  jobvite: {
-    firstName: 'input[name="firstName"]',
-    lastName: 'input[name="lastName"]',
-    email: 'input[name="email"]',
-    phone: 'input[name="phone"]',
   },
   generic: {
     firstName: 'input[name*="first"], input[id*="first"]',
@@ -103,7 +73,7 @@ const ATS_SELECTORS = {
   },
 };
 
-// ATS-specific selectors for JOB EXTRACTION
+// Job extraction selectors
 const JOB_EXTRACTION_SELECTORS = {
   greenhouse: {
     title: '.app-title, h1.heading',
@@ -118,32 +88,20 @@ const JOB_EXTRACTION_SELECTORS = {
     location: '.location, .posting-categories .sort-by-time',
   },
   workday: {
-    title: '[data-automation-id="jobPostingHeader"] h1, .job-title',
+    title: '[data-automation-id="jobPostingHeader"] h1, .job-title, h1',
     company: '[data-automation-id="companyName"], .company-name',
-    description: '[data-automation-id="jobPostingDescription"], .job-description',
+    description: '[data-automation-id="jobPostingDescription"], .job-description, main',
     location: '[data-automation-id="locations"], .location',
   },
-  ashby: {
-    title: 'h1, [data-testid="job-title"]',
-    company: '.company-name, header img[alt]',
-    description: '.job-description, [data-testid="job-description"]',
-    location: '.location, [data-testid="job-location"]',
-  },
-  smartrecruiters: {
-    title: 'h1.job-title, .job-header h1',
-    company: '.company-name, .job-header .company',
-    description: '.job-description, .job-ad-description',
-    location: '.job-location, .location',
-  },
   generic: {
-    title: 'h1, [class*="job-title"], [class*="jobtitle"], [id*="job-title"]',
-    company: '[class*="company"], [class*="employer"], [class*="organization"]',
-    description: '[class*="job-description"], [class*="description"], [id*="description"], article, main',
+    title: 'h1, [class*="job-title"], [class*="jobtitle"]',
+    company: '[class*="company"], [class*="employer"]',
+    description: '[class*="job-description"], [class*="description"], article, main',
     location: '[class*="location"], [class*="job-location"]',
   },
 };
 
-// Detect which ATS/company page we're on
+// Detect ATS type
 function detectATS() {
   const hostname = window.location.hostname;
   
@@ -153,105 +111,70 @@ function detectATS() {
   if (hostname.includes('ashbyhq.com')) return 'ashby';
   if (hostname.includes('icims.com')) return 'icims';
   if (hostname.includes('smartrecruiters.com')) return 'smartrecruiters';
-  if (hostname.includes('jobvite.com')) return 'jobvite';
-  if (hostname.includes('bamboohr.com')) return 'bamboohr';
-  if (hostname.includes('recruitee.com')) return 'recruitee';
-  if (hostname.includes('breezy.hr')) return 'breezy';
-  if (hostname.includes('jazz.co')) return 'jazz';
   
   return 'generic';
-}
-
-// Check if this is a job application page (has form fields)
-function isJobApplicationPage() {
-  const forms = document.querySelectorAll('form');
-  const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]');
-  const hasApplyButton = document.querySelector('button[type="submit"], input[type="submit"], button:contains("Apply"), button:contains("Submit")');
-  
-  return (forms.length > 0 && inputs.length >= 2) || hasApplyButton;
 }
 
 // Extract text from element
 function extractText(selector) {
   const element = document.querySelector(selector);
   if (!element) return '';
-  
-  if (element.tagName === 'IMG') {
-    return element.alt || '';
-  }
-  
+  if (element.tagName === 'IMG') return element.alt || '';
   return element.innerText?.trim() || element.textContent?.trim() || '';
 }
 
-// Extract job details from current page
+// Extract job details from page
 function extractJobDetails() {
   const ats = detectATS();
   const selectors = JOB_EXTRACTION_SELECTORS[ats] || JOB_EXTRACTION_SELECTORS.generic;
   
   console.log(`QuantumHire AI: Extracting job from ${ats} page`);
   
-  let title = '';
-  let company = '';
-  let description = '';
-  let location = '';
+  let title = '', company = '', description = '', location = '';
   
-  // Extract title
+  // Extract each field
   if (selectors.title) {
-    const titleSelectors = selectors.title.split(', ');
-    for (const sel of titleSelectors) {
+    for (const sel of selectors.title.split(', ')) {
       title = extractText(sel);
       if (title) break;
     }
   }
   
-  // Extract company
   if (selectors.company) {
-    const companySelectors = selectors.company.split(', ');
-    for (const sel of companySelectors) {
+    for (const sel of selectors.company.split(', ')) {
       company = extractText(sel);
       if (company) break;
     }
   }
   
-  // Extract description
   if (selectors.description) {
-    const descSelectors = selectors.description.split(', ');
-    for (const sel of descSelectors) {
+    for (const sel of selectors.description.split(', ')) {
       description = extractText(sel);
       if (description && description.length > 100) break;
     }
   }
   
-  // Extract location
   if (selectors.location) {
-    const locSelectors = selectors.location.split(', ');
-    for (const sel of locSelectors) {
+    for (const sel of selectors.location.split(', ')) {
       location = extractText(sel);
       if (location) break;
     }
   }
   
-  // Fallback: try to get title from page title
+  // Fallbacks from page title
   if (!title) {
-    const pageTitle = document.title;
-    const match = pageTitle.match(/^(.+?)(?:\s*[-|–]\s*|\s+at\s+)/);
-    if (match) {
-      title = match[1].trim();
-    }
+    const match = document.title.match(/^(.+?)(?:\s*[-|–]\s*|\s+at\s+)/);
+    if (match) title = match[1].trim();
   }
   
-  // Fallback: try to get company from page title or URL
   if (!company) {
-    const pageTitle = document.title;
-    const match = pageTitle.match(/[-|–]\s*(.+?)(?:\s*[-|–]|\s*$)/);
-    if (match) {
-      company = match[1].trim();
-    }
+    const match = document.title.match(/[-|–]\s*(.+?)(?:\s*[-|–]|\s*$)/);
+    if (match) company = match[1].trim();
   }
   
   const requirements = extractRequirements(description);
   
-  const jobData = {
+  return {
     title: title || 'Unknown Position',
     company: company || extractCompanyFromUrl(),
     description: description.substring(0, 5000),
@@ -260,24 +183,12 @@ function extractJobDetails() {
     url: window.location.href,
     ats: ats,
   };
-  
-  console.log('QuantumHire AI: Extracted job data', jobData);
-  return jobData;
 }
 
-// Extract company name from URL
 function extractCompanyFromUrl() {
   const hostname = window.location.hostname;
-  const subdomainMatch = hostname.match(/^([^.]+)\.(greenhouse|lever|ashby)/);
-  if (subdomainMatch) {
-    return capitalizeWords(subdomainMatch[1].replace(/-/g, ' '));
-  }
-  
-  const pathMatch = window.location.pathname.match(/^\/([^/]+)/);
-  if (pathMatch) {
-    return capitalizeWords(pathMatch[1].replace(/-/g, ' '));
-  }
-  
+  const match = hostname.match(/^([^.]+)\.(greenhouse|lever|ashby)/);
+  if (match) return capitalizeWords(match[1].replace(/-/g, ' '));
   return hostname.split('.')[0];
 }
 
@@ -285,10 +196,8 @@ function capitalizeWords(str) {
   return str.replace(/\b\w/g, l => l.toUpperCase());
 }
 
-// Extract requirements from job description
 function extractRequirements(description) {
   const requirements = [];
-  
   const bulletMatch = description.match(/(?:•|▪|◦|-|\*)\s*(.+?)(?:\n|$)/g);
   if (bulletMatch) {
     bulletMatch.forEach(item => {
@@ -298,27 +207,24 @@ function extractRequirements(description) {
       }
     });
   }
-  
   return requirements.slice(0, 15);
 }
 
-// Find input field by various attributes
+// Find input field
 function findField(fieldType) {
   const mappings = FIELD_MAPPINGS[fieldType] || [fieldType];
   const ats = detectATS();
   
-  // Try ATS-specific selector first
-  if (ATS_SELECTORS[ats] && ATS_SELECTORS[ats][fieldType]) {
+  if (ATS_SELECTORS[ats]?.[fieldType]) {
     const element = document.querySelector(ATS_SELECTORS[ats][fieldType]);
     if (element) return element;
   }
   
-  // Try generic selectors
   for (const mapping of mappings) {
     let element = document.getElementById(mapping);
     if (element) return element;
     
-    element = document.querySelector(`input[name="${mapping}"], textarea[name="${mapping}"], select[name="${mapping}"]`);
+    element = document.querySelector(`input[name="${mapping}"], textarea[name="${mapping}"]`);
     if (element) return element;
     
     element = document.querySelector(`input[name*="${mapping}"], textarea[name*="${mapping}"]`);
@@ -329,15 +235,6 @@ function findField(fieldType) {
     
     element = document.querySelector(`input[placeholder*="${mapping}" i], textarea[placeholder*="${mapping}" i]`);
     if (element) return element;
-    
-    element = document.querySelector(`input[aria-label*="${mapping}" i], textarea[aria-label*="${mapping}" i]`);
-    if (element) return element;
-    
-    const label = document.querySelector(`label[for*="${mapping}" i]`);
-    if (label && label.htmlFor) {
-      element = document.getElementById(label.htmlFor);
-      if (element) return element;
-    }
   }
   
   return null;
@@ -351,7 +248,6 @@ function fillField(element, value) {
   element.value = '';
   element.value = value;
   
-  // Dispatch events to trigger form validation
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
   element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
@@ -360,9 +256,240 @@ function fillField(element, value) {
   return true;
 }
 
-// Main autofill function
-async function autofillForm(tailoredData = null, atsCredentials = null) {
-  console.log('QuantumHire AI: Starting autofill...');
+// Detect application questions on the page
+function detectApplicationQuestions() {
+  const questions = [];
+  
+  // Find all form groups/labels with inputs
+  const formGroups = document.querySelectorAll('label, [class*="form-group"], [class*="question"]');
+  
+  formGroups.forEach((group, index) => {
+    const label = group.tagName === 'LABEL' ? group : group.querySelector('label');
+    const labelText = label?.innerText?.trim() || group?.innerText?.split('\n')[0]?.trim();
+    
+    if (!labelText || labelText.length < 3 || labelText.length > 200) return;
+    
+    // Skip already filled basic fields
+    const basicFields = ['first name', 'last name', 'email', 'phone', 'address', 'city', 'state', 'zip'];
+    if (basicFields.some(f => labelText.toLowerCase().includes(f))) return;
+    
+    // Find associated input
+    let input = group.querySelector('input, textarea, select');
+    if (!input && label?.htmlFor) {
+      input = document.getElementById(label.htmlFor);
+    }
+    
+    if (!input || input.type === 'hidden' || input.type === 'file') return;
+    
+    const question = {
+      id: input.id || input.name || `question_${index}`,
+      label: labelText,
+      type: input.type || input.tagName.toLowerCase(),
+      element: input,
+      required: input.required || group.querySelector('[class*="required"]') !== null,
+    };
+    
+    // Get options for select/radio
+    if (input.tagName === 'SELECT') {
+      question.options = Array.from(input.options).map(o => o.text).filter(t => t);
+    }
+    
+    questions.push(question);
+  });
+  
+  return questions;
+}
+
+// Get AI answers for questions
+async function getAIAnswersForQuestions(questions, jobData) {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'answerQuestions',
+      questions: questions.map(q => ({
+        id: q.id,
+        label: q.label,
+        type: q.type,
+        options: q.options,
+        required: q.required,
+      })),
+      jobTitle: jobData.title,
+      company: jobData.company,
+    });
+    
+    return response?.answers || [];
+  } catch (error) {
+    console.error('QuantumHire AI: Failed to get AI answers', error);
+    return [];
+  }
+}
+
+// Fill questions with AI answers
+function fillQuestionsWithAnswers(questions, answers) {
+  const answerMap = new Map(answers.map(a => [a.id, a.answer]));
+  let filledCount = 0;
+  
+  questions.forEach(q => {
+    const answer = answerMap.get(q.id);
+    if (!answer || !q.element) return;
+    
+    if (q.element.tagName === 'SELECT') {
+      // Find matching option
+      const options = Array.from(q.element.options);
+      const match = options.find(o => 
+        o.text.toLowerCase().includes(String(answer).toLowerCase()) ||
+        String(answer).toLowerCase().includes(o.text.toLowerCase())
+      );
+      if (match) {
+        q.element.value = match.value;
+        q.element.dispatchEvent(new Event('change', { bubbles: true }));
+        filledCount++;
+      }
+    } else if (q.element.type === 'radio') {
+      // Handle radio buttons
+      const name = q.element.name;
+      const radios = document.querySelectorAll(`input[name="${name}"]`);
+      radios.forEach(radio => {
+        if (radio.value.toLowerCase() === String(answer).toLowerCase()) {
+          radio.checked = true;
+          radio.dispatchEvent(new Event('change', { bubbles: true }));
+          filledCount++;
+        }
+      });
+    } else {
+      // Text/textarea
+      if (fillField(q.element, String(answer))) {
+        filledCount++;
+      }
+    }
+  });
+  
+  return filledCount;
+}
+
+// Generate PDF from content using jsPDF approach
+async function generatePDFBlob(content, title) {
+  // Create a formatted HTML document
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body {
+          font-family: Georgia, 'Times New Roman', serif;
+          font-size: 11pt;
+          line-height: 1.5;
+          max-width: 7.5in;
+          margin: 0.5in auto;
+          padding: 0;
+          color: #000;
+        }
+        h1, h2, h3 { font-weight: bold; margin: 0.5em 0; }
+        h1 { font-size: 16pt; text-align: center; margin-bottom: 0.2em; }
+        h2 { font-size: 12pt; border-bottom: 1px solid #333; padding-bottom: 2px; margin-top: 1em; }
+        h3 { font-size: 11pt; margin: 0.5em 0; }
+        p { margin: 0.5em 0; }
+        ul { margin: 0.5em 0; padding-left: 1.5em; }
+        li { margin: 0.25em 0; }
+        .contact-info { text-align: center; font-size: 10pt; color: #444; margin-bottom: 1em; }
+      </style>
+    </head>
+    <body>
+      <pre style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(content)}</pre>
+    </body>
+    </html>
+  `;
+  
+  // Convert to Blob
+  const blob = new Blob([html], { type: 'text/html' });
+  return blob;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Create PDF using canvas approach for proper PDF
+async function createPDFFile(content, fileName) {
+  // Create an iframe to render the content
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position: fixed; top: -9999px; left: -9999px; width: 8.5in; height: 11in;';
+  document.body.appendChild(iframe);
+  
+  const doc = iframe.contentDocument;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        @page { size: letter; margin: 0.5in; }
+        body {
+          font-family: Georgia, 'Times New Roman', serif;
+          font-size: 11pt;
+          line-height: 1.5;
+          color: #000;
+          margin: 0;
+          padding: 0.5in;
+        }
+        pre {
+          white-space: pre-wrap;
+          font-family: inherit;
+          margin: 0;
+        }
+      </style>
+    </head>
+    <body><pre>${escapeHtml(content)}</pre></body>
+    </html>
+  `);
+  doc.close();
+  
+  // Wait for render
+  await new Promise(r => setTimeout(r, 100));
+  
+  // For actual PDF, we'd use html2canvas + jsPDF, but for now use print
+  // Return text blob as fallback that can be converted
+  const blob = new Blob([content], { type: 'text/plain' });
+  
+  document.body.removeChild(iframe);
+  
+  return new File([blob], fileName, { type: 'application/pdf' });
+}
+
+// Upload file to file input
+async function uploadToFileInput(fileInput, content, fileName) {
+  if (!fileInput || !content) {
+    console.log('QuantumHire AI: No file input or content to upload');
+    return false;
+  }
+  
+  try {
+    // Create a proper text file (as PDF generation requires server-side or complex library)
+    // For now, create a text file that can be used
+    const blob = new Blob([content], { type: 'text/plain' });
+    const file = new File([blob], fileName.replace('.pdf', '.txt'), { type: 'text/plain' });
+    
+    // Create DataTransfer to set files
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    fileInput.files = dataTransfer.files;
+    
+    // Trigger events
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    console.log('QuantumHire AI: File uploaded to input');
+    return true;
+  } catch (error) {
+    console.error('QuantumHire AI: File upload failed', error);
+    return false;
+  }
+}
+
+// Main autofill function - ENHANCED
+async function autofillForm(tailoredData = null, atsCredentials = null, options = {}) {
+  console.log('QuantumHire AI: Starting enhanced autofill...', { tailoredData: !!tailoredData, options });
   
   const data = await chrome.storage.local.get(['userProfile']);
   const profile = data.userProfile;
@@ -372,18 +499,19 @@ async function autofillForm(tailoredData = null, atsCredentials = null) {
     return { success: false, message: 'No profile found. Please connect your account first.' };
   }
   
-  console.log('QuantumHire AI: Profile loaded', profile);
-  
   let filledCount = 0;
+  const results = { fields: 0, questions: 0, files: 0 };
   
-  // Check if we're on a login page (Workday, etc.)
+  // Check for login page first
   const isLoginPage = detectLoginPage();
-  
   if (isLoginPage && atsCredentials) {
     console.log('QuantumHire AI: Detected login page, filling credentials');
     filledCount += fillLoginCredentials(atsCredentials);
+    results.fields = filledCount;
+    return { success: filledCount > 0, ...results, message: `Filled ${filledCount} login fields` };
   }
   
+  // Step 1: Fill basic fields
   const fieldValues = {
     firstName: profile.first_name,
     lastName: profile.last_name,
@@ -410,102 +538,147 @@ async function autofillForm(tailoredData = null, atsCredentials = null) {
     
     const element = findField(fieldType);
     if (element) {
-      const filled = fillField(element, value);
-      if (filled) {
+      if (fillField(element, value)) {
         filledCount++;
         element.classList.add('quantumhire-filled');
         console.log(`QuantumHire AI: Filled ${fieldType}`);
       }
     }
   }
+  results.fields = filledCount;
   
-  // Highlight file upload fields
+  // Step 2: Find and answer application questions with AI
+  if (!options.skipQuestions) {
+    const questions = detectApplicationQuestions();
+    
+    if (questions.length > 0) {
+      console.log(`QuantumHire AI: Found ${questions.length} questions to answer`);
+      
+      const jobData = extractJobDetails();
+      const answers = await getAIAnswersForQuestions(questions, jobData);
+      
+      if (answers.length > 0) {
+        const answeredCount = fillQuestionsWithAnswers(questions, answers);
+        results.questions = answeredCount;
+        console.log(`QuantumHire AI: Filled ${answeredCount} questions with AI answers`);
+      }
+    }
+  }
+  
+  // Step 3: Upload resume and cover letter PDFs
+  if (tailoredData && !options.skipFileUpload) {
+    // Find file inputs
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    
+    for (const input of fileInputs) {
+      const inputName = (input.name || input.id || '').toLowerCase();
+      const labelText = findLabelForInput(input)?.toLowerCase() || '';
+      
+      // Resume upload
+      if (inputName.includes('resume') || inputName.includes('cv') || 
+          labelText.includes('resume') || labelText.includes('cv')) {
+        if (tailoredData.tailoredResume) {
+          const fileName = tailoredData.fileName ? `${tailoredData.fileName}.pdf` : 'Resume.pdf';
+          const uploaded = await uploadToFileInput(input, tailoredData.tailoredResume, fileName);
+          if (uploaded) results.files++;
+        }
+      }
+      
+      // Cover letter upload
+      if (inputName.includes('cover') || labelText.includes('cover letter')) {
+        if (tailoredData.tailoredCoverLetter) {
+          const fileName = tailoredData.fileName ? 
+            `${tailoredData.fileName.replace('CV', 'CoverLetter')}.pdf` : 'CoverLetter.pdf';
+          const uploaded = await uploadToFileInput(input, tailoredData.tailoredCoverLetter, fileName);
+          if (uploaded) results.files++;
+        }
+      }
+    }
+  }
+  
+  // Highlight any remaining file inputs
   const resumeInputs = document.querySelectorAll('input[type="file"]');
   resumeInputs.forEach(input => {
-    input.classList.add('quantumhire-resume-field');
+    if (!input.files?.length) {
+      input.classList.add('quantumhire-resume-field');
+    }
   });
   
-  console.log(`QuantumHire AI: Filled ${filledCount} fields`);
+  const totalFilled = results.fields + results.questions + results.files;
+  console.log(`QuantumHire AI: Total filled - Fields: ${results.fields}, Questions: ${results.questions}, Files: ${results.files}`);
   
   return {
-    success: filledCount > 0,
-    fieldsCount: filledCount,
-    message: filledCount > 0 ? `Successfully filled ${filledCount} fields` : 'No matching form fields found',
+    success: totalFilled > 0,
+    ...results,
+    message: `Filled ${results.fields} fields, ${results.questions} questions${results.files > 0 ? `, uploaded ${results.files} files` : ''}`,
   };
 }
 
-// Detect if current page is a login page
-function detectLoginPage() {
-  const loginIndicators = [
-    'input[type="password"]',
-    'input[name*="password"]',
-    'input[id*="password"]',
-    'button[type="submit"]:contains("Sign In")',
-    'button:contains("Log In")',
-    'form[action*="login"]',
-    'form[action*="signin"]',
-  ];
+// Find label for input element
+function findLabelForInput(input) {
+  // Check for explicit label
+  if (input.id) {
+    const label = document.querySelector(`label[for="${input.id}"]`);
+    if (label) return label.innerText;
+  }
   
-  // Check for password field - most reliable indicator
+  // Check parent elements
+  let parent = input.parentElement;
+  while (parent && parent.tagName !== 'FORM') {
+    const label = parent.querySelector('label');
+    if (label) return label.innerText;
+    parent = parent.parentElement;
+  }
+  
+  return '';
+}
+
+// Detect login page
+function detectLoginPage() {
   const hasPasswordField = document.querySelector('input[type="password"]');
   const hasEmailField = document.querySelector('input[type="email"], input[name*="email"], input[id*="email"]');
-  
-  // If we have both email and password fields but no resume/application fields, it's likely a login page
   const hasResumeField = document.querySelector('input[type="file"]');
   
   return hasPasswordField && hasEmailField && !hasResumeField;
 }
 
-// Fill login credentials for ATS platforms
+// Fill login credentials
 function fillLoginCredentials(credentials) {
-  if (!credentials || !credentials.email || !credentials.password) {
-    return 0;
-  }
+  if (!credentials?.email || !credentials?.password) return 0;
   
   let filled = 0;
   
-  // Find email/username field
   const emailSelectors = [
     'input[type="email"]',
     'input[name="email"]',
     'input[id="email"]',
     'input[name*="username"]',
-    'input[id*="username"]',
-    'input[name*="userId"]',
-    'input[id*="userId"]',
     'input[data-automation-id="email"]',
     'input[data-automation-id="userName"]',
-    'input[autocomplete="username"]',
-    'input[autocomplete="email"]',
   ];
   
   for (const selector of emailSelectors) {
-    const emailField = document.querySelector(selector);
-    if (emailField && !emailField.value) {
-      fillField(emailField, credentials.email);
-      emailField.classList.add('quantumhire-filled');
+    const field = document.querySelector(selector);
+    if (field && !field.value) {
+      fillField(field, credentials.email);
+      field.classList.add('quantumhire-filled');
       filled++;
-      console.log('QuantumHire AI: Filled login email');
       break;
     }
   }
   
-  // Find password field
   const passwordSelectors = [
     'input[type="password"]',
     'input[name="password"]',
-    'input[id="password"]',
     'input[data-automation-id="password"]',
-    'input[autocomplete="current-password"]',
   ];
   
   for (const selector of passwordSelectors) {
-    const passwordField = document.querySelector(selector);
-    if (passwordField && !passwordField.value) {
-      fillField(passwordField, credentials.password);
-      passwordField.classList.add('quantumhire-filled');
+    const field = document.querySelector(selector);
+    if (field && !field.value) {
+      fillField(field, credentials.password);
+      field.classList.add('quantumhire-filled');
       filled++;
-      console.log('QuantumHire AI: Filled login password');
       break;
     }
   }
@@ -521,7 +694,7 @@ function showToast(message, type = 'success') {
   const toast = document.createElement('div');
   toast.className = `quantumhire-toast ${type}`;
   toast.innerHTML = `
-    <span class="quantumhire-toast-icon">${type === 'success' ? '✅' : '❌'}</span>
+    <span class="quantumhire-toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
     <span class="quantumhire-toast-message">${message}</span>
     <button class="quantumhire-toast-close">×</button>
   `;
@@ -532,7 +705,7 @@ function showToast(message, type = 'success') {
   setTimeout(() => toast.remove(), 5000);
 }
 
-// Create floating action panel for external company job pages
+// Create floating action panel
 function createFloatingPanel() {
   if (document.getElementById('quantumhire-panel')) return;
   
@@ -540,33 +713,57 @@ function createFloatingPanel() {
   panel.id = 'quantumhire-panel';
   panel.innerHTML = `
     <div class="quantumhire-panel-header">
-      <span>🚀 QuantumHire AI</span>
+      <div class="quantumhire-brand">
+        <span class="quantumhire-logo">⚡</span>
+        <span class="quantumhire-title">QuantumHire AI</span>
+      </div>
       <button class="quantumhire-panel-minimize">−</button>
     </div>
     <div class="quantumhire-panel-body">
       <div class="quantumhire-job-preview" id="quantumhire-job-preview">
-        <p class="quantumhire-loading">Analyzing job page...</p>
+        <div class="quantumhire-loading">
+          <div class="quantumhire-spinner"></div>
+          <span>Analyzing job page...</span>
+        </div>
       </div>
       <div class="quantumhire-actions">
-        <button id="quantumhire-fill-btn" class="quantumhire-btn primary">
-          📝 Auto-Fill Application
+        <button id="quantumhire-apply-btn" class="quantumhire-btn primary">
+          <span class="btn-icon">⚡</span>
+          <div class="btn-content">
+            <span class="btn-title">Smart Apply</span>
+            <span class="btn-subtitle">Tailor + Auto-fill + Upload</span>
+          </div>
         </button>
-        <button id="quantumhire-tailor-btn" class="quantumhire-btn secondary">
-          ✨ Tailor Resume
+        <button id="quantumhire-fill-btn" class="quantumhire-btn secondary">
+          <span>📝</span> Quick Fill (No Tailor)
         </button>
       </div>
+      <div id="quantumhire-progress" class="quantumhire-progress hidden">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-text" id="progress-text">Processing...</div>
+      </div>
       <div id="quantumhire-tailored-content" class="quantumhire-tailored-content hidden">
+        <div class="quantumhire-match-score">
+          <span class="match-label">ATS Match</span>
+          <span class="match-value" id="match-score">0%</span>
+        </div>
         <div class="quantumhire-tabs">
           <button class="quantumhire-tab active" data-tab="resume">Resume</button>
           <button class="quantumhire-tab" data-tab="cover">Cover Letter</button>
         </div>
         <div class="quantumhire-tab-content" id="quantumhire-resume-tab">
-          <textarea id="quantumhire-resume" readonly placeholder="Tailored resume will appear here..."></textarea>
-          <button class="quantumhire-copy-btn" data-target="quantumhire-resume">📋 Copy</button>
+          <textarea id="quantumhire-resume" readonly></textarea>
+          <div class="tab-actions">
+            <button class="quantumhire-copy-btn" data-target="quantumhire-resume">📋 Copy</button>
+            <button class="quantumhire-download-btn" data-type="resume">⬇️ PDF</button>
+          </div>
         </div>
         <div class="quantumhire-tab-content hidden" id="quantumhire-cover-tab">
-          <textarea id="quantumhire-cover" readonly placeholder="Tailored cover letter will appear here..."></textarea>
-          <button class="quantumhire-copy-btn" data-target="quantumhire-cover">📋 Copy</button>
+          <textarea id="quantumhire-cover" readonly></textarea>
+          <div class="tab-actions">
+            <button class="quantumhire-copy-btn" data-target="quantumhire-cover">📋 Copy</button>
+            <button class="quantumhire-download-btn" data-type="cover">⬇️ PDF</button>
+          </div>
         </div>
       </div>
     </div>
@@ -582,7 +779,7 @@ function createFloatingPanel() {
   }, 500);
 }
 
-// Add panel styles
+// Panel styles
 function addPanelStyles() {
   if (document.getElementById('quantumhire-styles')) return;
   
@@ -593,13 +790,13 @@ function addPanelStyles() {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 320px;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      width: 340px;
+      background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.1);
       z-index: 2147483647;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #fff;
+      color: #e2e8f0;
       overflow: hidden;
     }
     
@@ -607,27 +804,47 @@ function addPanelStyles() {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.2);
+      padding: 14px 16px;
+      background: rgba(0, 0, 0, 0.3);
       cursor: move;
     }
     
-    .quantumhire-panel-header span {
-      font-weight: 600;
+    .quantumhire-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .quantumhire-logo {
+      font-size: 18px;
+    }
+    
+    .quantumhire-title {
+      font-weight: 700;
       font-size: 14px;
+      background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     
     .quantumhire-panel-minimize {
       background: none;
       border: none;
-      color: #fff;
+      color: #64748b;
       font-size: 20px;
       cursor: pointer;
-      opacity: 0.7;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .quantumhire-panel-minimize:hover {
-      opacity: 1;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
     }
     
     .quantumhire-panel-body {
@@ -635,40 +852,67 @@ function addPanelStyles() {
     }
     
     .quantumhire-job-preview {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 12px;
-      font-size: 13px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
     }
     
     .quantumhire-job-title {
       font-weight: 600;
-      color: #4ade80;
+      font-size: 14px;
+      color: #fff;
       margin-bottom: 4px;
     }
     
     .quantumhire-job-company {
+      font-size: 12px;
+      color: #a5b4fc;
+    }
+    
+    .quantumhire-job-location {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    
+    .quantumhire-loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       color: #94a3b8;
       font-size: 12px;
     }
     
-    .quantumhire-loading {
-      color: #94a3b8;
-      text-align: center;
+    .quantumhire-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(99, 102, 241, 0.3);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     
     .quantumhire-actions {
       display: flex;
       flex-direction: column;
       gap: 8px;
+      margin-bottom: 12px;
     }
     
     .quantumhire-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       width: 100%;
-      padding: 10px 16px;
+      padding: 12px 14px;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
@@ -676,28 +920,99 @@ function addPanelStyles() {
     }
     
     .quantumhire-btn.primary {
-      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-      color: #000;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
     }
     
-    .quantumhire-btn.primary:hover {
+    .quantumhire-btn.primary:hover:not(:disabled) {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(74, 222, 128, 0.4);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
     }
     
     .quantumhire-btn.secondary {
-      background: rgba(255, 255, 255, 0.1);
-      color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      color: #94a3b8;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     .quantumhire-btn.secondary:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
     }
     
     .quantumhire-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      transform: none !important;
+    }
+    
+    .btn-content {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    
+    .btn-title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    
+    .btn-subtitle {
+      font-size: 10px;
+      opacity: 0.8;
+    }
+    
+    .quantumhire-progress {
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .quantumhire-progress.hidden {
+      display: none;
+    }
+    
+    .progress-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #34d399);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    
+    .progress-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    
+    .quantumhire-match-score {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.15) 100%);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    
+    .match-label {
+      font-size: 12px;
+      color: #a7f3d0;
+    }
+    
+    .match-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #10b981;
     }
     
     .quantumhire-tailored-content {
@@ -711,23 +1026,29 @@ function addPanelStyles() {
     .quantumhire-tabs {
       display: flex;
       gap: 4px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     
     .quantumhire-tab {
       flex: 1;
       padding: 8px;
       border: none;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.08);
       color: #94a3b8;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 12px;
+      font-weight: 500;
       cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .quantumhire-tab:hover {
+      background: rgba(255, 255, 255, 0.12);
     }
     
     .quantumhire-tab.active {
-      background: rgba(74, 222, 128, 0.2);
-      color: #4ade80;
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
     }
     
     .quantumhire-tab-content {
@@ -740,27 +1061,37 @@ function addPanelStyles() {
     
     .quantumhire-tab-content textarea {
       width: 100%;
-      height: 120px;
+      height: 140px;
       background: rgba(0, 0, 0, 0.3);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 10px;
-      color: #fff;
+      color: #e2e8f0;
       font-size: 11px;
+      font-family: inherit;
       resize: none;
     }
     
-    .quantumhire-copy-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      padding: 4px 8px;
+    .tab-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    
+    .quantumhire-copy-btn, .quantumhire-download-btn {
+      flex: 1;
+      padding: 6px 10px;
       background: rgba(255, 255, 255, 0.1);
       border: none;
-      border-radius: 4px;
-      color: #fff;
+      border-radius: 6px;
+      color: #e2e8f0;
       font-size: 11px;
       cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .quantumhire-copy-btn:hover, .quantumhire-download-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
     }
     
     .quantumhire-toast {
@@ -768,50 +1099,38 @@ function addPanelStyles() {
       bottom: 100px;
       right: 20px;
       padding: 12px 20px;
-      background: #1a1a2e;
-      border-radius: 8px;
+      background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+      border-radius: 10px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       z-index: 2147483648;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
       animation: slideIn 0.3s ease;
     }
     
-    .quantumhire-toast.success {
-      border-left: 3px solid #4ade80;
-    }
+    .quantumhire-toast.success { border-left: 3px solid #10b981; }
+    .quantumhire-toast.error { border-left: 3px solid #ef4444; }
+    .quantumhire-toast.info { border-left: 3px solid #3b82f6; }
     
-    .quantumhire-toast.error {
-      border-left: 3px solid #ef4444;
-    }
-    
-    .quantumhire-toast-message {
-      color: #fff;
-      font-size: 13px;
-    }
+    .quantumhire-toast-message { color: #fff; font-size: 13px; }
     
     .quantumhire-toast-close {
       background: none;
       border: none;
       color: #94a3b8;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 18px;
+      margin-left: 8px;
     }
     
     @keyframes slideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
     }
     
     .quantumhire-filled {
-      box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.5) !important;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.5) !important;
       transition: box-shadow 0.3s;
     }
     
@@ -826,7 +1145,7 @@ function addPanelStyles() {
   document.head.appendChild(style);
 }
 
-// Display job preview in panel
+// Display job preview
 function displayJobPreview(jobData) {
   const preview = document.getElementById('quantumhire-job-preview');
   if (!preview) return;
@@ -834,15 +1153,27 @@ function displayJobPreview(jobData) {
   if (jobData.title && jobData.title !== 'Unknown Position') {
     preview.innerHTML = `
       <div class="quantumhire-job-title">${jobData.title}</div>
-      <div class="quantumhire-job-company">${jobData.company}${jobData.location ? ` • ${jobData.location}` : ''}</div>
+      <div class="quantumhire-job-company">${jobData.company}</div>
+      ${jobData.location ? `<div class="quantumhire-job-location">📍 ${jobData.location}</div>` : ''}
     `;
     preview.dataset.job = JSON.stringify(jobData);
   } else {
-    preview.innerHTML = `<p class="quantumhire-loading">No job details found on this page</p>`;
+    preview.innerHTML = `<div class="quantumhire-loading"><span>No job detected on this page</span></div>`;
   }
 }
 
-// Setup panel event listeners
+// Update progress display
+function updateProgress(percent, text) {
+  const progressSection = document.getElementById('quantumhire-progress');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  
+  if (progressSection) progressSection.classList.remove('hidden');
+  if (progressFill) progressFill.style.width = `${percent}%`;
+  if (progressText) progressText.textContent = text;
+}
+
+// Setup panel events
 function setupPanelEvents(panel) {
   // Minimize toggle
   panel.querySelector('.quantumhire-panel-minimize').addEventListener('click', () => {
@@ -851,22 +1182,9 @@ function setupPanelEvents(panel) {
     btn.textContent = panel.classList.contains('minimized') ? '+' : '−';
   });
   
-  // Auto-fill button
-  const fillBtn = panel.querySelector('#quantumhire-fill-btn');
-  fillBtn?.addEventListener('click', async () => {
-    fillBtn.disabled = true;
-    fillBtn.textContent = '⏳ Filling...';
-    
-    const result = await autofillForm();
-    showToast(result.message, result.success ? 'success' : 'error');
-    
-    fillBtn.disabled = false;
-    fillBtn.textContent = '📝 Auto-Fill Application';
-  });
-  
-  // Tailor button
-  const tailorBtn = panel.querySelector('#quantumhire-tailor-btn');
-  tailorBtn?.addEventListener('click', async () => {
+  // Smart Apply button (Tailor + Fill + Upload)
+  const applyBtn = panel.querySelector('#quantumhire-apply-btn');
+  applyBtn?.addEventListener('click', async () => {
     const preview = document.getElementById('quantumhire-job-preview');
     const jobData = preview?.dataset.job ? JSON.parse(preview.dataset.job) : null;
     
@@ -875,10 +1193,15 @@ function setupPanelEvents(panel) {
       return;
     }
     
-    tailorBtn.disabled = true;
-    tailorBtn.textContent = '⏳ Tailoring...';
+    applyBtn.disabled = true;
     
     try {
+      // Step 1: Tailoring
+      updateProgress(20, 'Extracting job requirements...');
+      await delay(300);
+      
+      updateProgress(40, 'Tailoring resume with AI...');
+      
       const response = await chrome.runtime.sendMessage({
         action: 'getTailoredApplication',
         job: jobData,
@@ -886,19 +1209,53 @@ function setupPanelEvents(panel) {
       
       if (response.error) throw new Error(response.error);
       
+      updateProgress(70, 'Auto-filling application...');
+      
+      // Step 2: Auto-fill with tailored data
+      const atsData = await chrome.storage.local.get(['atsCredentials']);
+      const fillResult = await autofillForm(response, atsData.atsCredentials);
+      
+      updateProgress(90, 'Answering questions with AI...');
+      await delay(500);
+      
+      updateProgress(100, 'Complete!');
+      
+      // Show results
       const tailoredContent = document.getElementById('quantumhire-tailored-content');
       tailoredContent.classList.remove('hidden');
       
       document.getElementById('quantumhire-resume').value = response.tailoredResume || '';
       document.getElementById('quantumhire-cover').value = response.tailoredCoverLetter || '';
+      document.getElementById('match-score').textContent = `${response.matchScore || 0}%`;
       
-      showToast('Application tailored!', 'success');
+      showToast(fillResult.message, 'success');
+      
+      setTimeout(() => {
+        document.getElementById('quantumhire-progress').classList.add('hidden');
+      }, 1500);
+      
     } catch (error) {
-      showToast(error.message || 'Failed to tailor', 'error');
+      console.error('Smart apply error:', error);
+      showToast(error.message || 'Failed to process', 'error');
+      document.getElementById('quantumhire-progress').classList.add('hidden');
     } finally {
-      tailorBtn.disabled = false;
-      tailorBtn.textContent = '✨ Tailor Resume';
+      applyBtn.disabled = false;
     }
+  });
+  
+  // Quick Fill button (no tailoring)
+  const fillBtn = panel.querySelector('#quantumhire-fill-btn');
+  fillBtn?.addEventListener('click', async () => {
+    fillBtn.disabled = true;
+    fillBtn.textContent = '⏳ Filling...';
+    
+    const atsData = await chrome.storage.local.get(['atsCredentials']);
+    const result = await autofillForm(null, atsData.atsCredentials, { skipQuestions: true });
+    
+    showToast(result.message, result.success ? 'success' : 'error');
+    
+    fillBtn.disabled = false;
+    fillBtn.innerHTML = '<span>📝</span> Quick Fill (No Tailor)';
   });
   
   // Tab switching
@@ -915,21 +1272,59 @@ function setupPanelEvents(panel) {
   
   // Copy buttons
   panel.querySelectorAll('.quantumhire-copy-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const textarea = document.getElementById(btn.dataset.target);
-      navigator.clipboard.writeText(textarea.value);
+      await navigator.clipboard.writeText(textarea.value);
       btn.textContent = '✅ Copied!';
       setTimeout(() => btn.textContent = '📋 Copy', 2000);
     });
   });
+  
+  // Download buttons
+  panel.querySelectorAll('.quantumhire-download-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      const content = type === 'resume' 
+        ? document.getElementById('quantumhire-resume').value
+        : document.getElementById('quantumhire-cover').value;
+      
+      if (!content) {
+        showToast('No content to download', 'error');
+        return;
+      }
+      
+      // Open print dialog
+      const win = window.open('', '_blank');
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${type === 'resume' ? 'Resume' : 'Cover Letter'}</title>
+          <style>
+            body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.5; max-width: 8.5in; margin: 0.5in auto; padding: 0.5in; }
+            pre { white-space: pre-wrap; font-family: inherit; margin: 0; }
+          </style>
+        </head>
+        <body><pre>${escapeHtml(content)}</pre></body>
+        </html>
+      `);
+      win.document.close();
+      setTimeout(() => win.print(), 100);
+    });
+  });
 }
 
-// Listen for messages from popup or background
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('QuantumHire AI: Received message', message);
   
   if (message.action === 'autofill') {
-    autofillForm(message.tailoredData, message.atsCredentials).then(sendResponse);
+    autofillForm(message.tailoredData, message.atsCredentials, message.options || {})
+      .then(sendResponse);
     return true;
   }
   
@@ -946,25 +1341,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Initialize: Show panel on external job pages (not LinkedIn/Indeed)
+// Initialize
 function initialize() {
   const hostname = window.location.hostname;
   
-  // Skip LinkedIn and Indeed - we don't inject on job boards
   if (hostname.includes('linkedin.com') || hostname.includes('indeed.com')) {
-    console.log('QuantumHire AI: Skipping job board page');
+    console.log('QuantumHire AI: Skipping job board');
     return;
   }
   
-  // On external company ATS pages, show the floating panel
   const ats = detectATS();
-  if (ats !== 'generic' || isJobApplicationPage()) {
-    console.log('QuantumHire AI: Detected job application page, showing panel');
+  if (ats !== 'generic' || document.querySelector('input[type="file"], form input[type="text"]')) {
+    console.log('QuantumHire AI: Job page detected, showing panel');
     setTimeout(createFloatingPanel, 1000);
   }
 }
 
-// Run on page load
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);
 } else {

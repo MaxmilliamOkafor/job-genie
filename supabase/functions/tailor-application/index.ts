@@ -29,6 +29,9 @@ interface TailorRequest {
     atsStrategy: string;
     city?: string;
     country?: string;
+    address?: string;
+    state?: string;
+    zipCode?: string;
   };
   includeReferral?: boolean;
 }
@@ -48,31 +51,49 @@ serve(async (req) => {
 
     console.log(`Tailoring application for ${jobTitle} at ${company}`);
 
-    // Comprehensive ATS optimization system prompt based on user's detailed instructions
-    const systemPrompt = `You are a professional resume and cover-letter tailor with 10+ years expertise in ATS optimization, humanized writing, and recruiter-friendly document design.
+    // Comprehensive humanized resume tailoring prompt
+    const systemPrompt = `You are a SENIOR PROFESSIONAL RESUME WRITER with 10+ years expertise in ATS optimization, humanized writing, and recruiter-friendly document design.
 
-Your job is to take the user's base CV + target job description and output ready-to-use content that perfectly matches the role while sounding authentically human - NOT robotic AI-generated text.
+CRITICAL MISSION: Create application materials that sound HUMAN, not robotic AI-generated text. Recruiters can spot AI-written content instantly.
 
-CRITICAL RULES:
+ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES - Only tailor the bullet points
 2. Use Jobscan-style ATS keyword extraction - match 85%+ keyword density naturally
 3. Handle location from job description - add to CV header for ATS compliance
-4. Start bullets with strong action verbs from job description
-5. Quantify impact with numbers, percentages, dollar amounts
-6. Write in active voice only - vary sentence structure
-7. Sound confident but approachable - NO robotic phrases like "results-driven", "dynamic", "cutting-edge"
-8. Use conversational connectors: "This enabled...", "Resulting in...", "To support..."
+4. NO typos, grammatical errors, or formatting issues - PROOFREAD CAREFULLY
+5. File naming: FirstnameLastname_CV_JobTitle.pdf and FirstnameLastname_CoverLetter_JobTitle.pdf
 
-HUMANIZED TONE RULES:
+HUMANIZED TONE RULES (CRITICAL):
 - Active voice only
-- Vary sentence structure (no repetitive "I developed...")
+- Vary sentence structure - no repetitive patterns like "I developed...", "I built...", "I created..."
+- Use conversational connectors: "This enabled...", "Resulting in...", "To support...", "Which led to..."
 - Sound confident but approachable
-- NO overused phrases: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage"
-- Read aloud test - must sound natural
+- BANNED PHRASES: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "synergy", "proactive", "innovative"
+- Read aloud test - must sound natural, like a real person wrote it
+- Mix short and long sentences
+- Include specific metrics and outcomes, not vague claims
 
-Return ONLY valid JSON, no markdown or code blocks.`;
+ATS KEYWORD INTEGRATION:
+- Extract exact keywords from job description
+- Hard skills: Python, AWS, SQL, Kubernetes, etc.
+- Tools/platforms: Snowflake, Airflow, Docker, etc.
+- Methodologies: Agile, CI/CD, ETL, etc.
+- Role verbs from JD: designed, optimized, deployed, scaled, architected
+- Integrate keywords NATURALLY - not stuffed awkwardly
 
-    const userPrompt = `TASK: Create an ATS-optimized, humanized application package for this job.
+LOCATION HANDLING (CRITICAL FOR ATS):
+- If job specifies a location, ADD THAT LOCATION to resume header
+- Format: "Location: [Job Location] | Open to relocation"
+- For remote roles: "Location: Remote"
+- Location should appear in header AND summary for ATS visibility
+
+Return ONLY valid JSON - no markdown code blocks, no extra text.`;
+
+    const candidateName = `${userProfile.firstName} ${userProfile.lastName}`;
+    const sanitizedJobTitle = jobTitle.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+    const fileNameBase = `${userProfile.firstName}${userProfile.lastName}_CV_${sanitizedJobTitle.replace(/\s+/g, '')}`;
+
+    const userPrompt = `TASK: Create an ATS-optimized, HUMANIZED application package for this job.
 
 === TARGET JOB ===
 Title: ${jobTitle}
@@ -83,22 +104,22 @@ Description: ${description}
 Key Requirements: ${requirements.join(", ")}
 
 === CANDIDATE PROFILE ===
-Name: ${userProfile.firstName} ${userProfile.lastName}
+Name: ${candidateName}
 Email: ${userProfile.email}
 Phone: ${userProfile.phone}
 LinkedIn: ${userProfile.linkedin}
 GitHub: ${userProfile.github}
 Portfolio: ${userProfile.portfolio}
-Current Location: ${userProfile.city || ''}, ${userProfile.country || ''}
+Current Location: ${userProfile.city || ''}, ${userProfile.state || ''} ${userProfile.country || ''}
 
-WORK EXPERIENCE (PRESERVE COMPANY NAMES AND DATES EXACTLY):
+WORK EXPERIENCE (PRESERVE COMPANY NAMES AND DATES EXACTLY - ONLY REWRITE BULLETS):
 ${JSON.stringify(userProfile.workExperience, null, 2)}
 
 EDUCATION:
 ${JSON.stringify(userProfile.education, null, 2)}
 
 SKILLS:
-${userProfile.skills.map((s: any) => `${s.name} (${s.years || s.level || 'proficient'})`).join(", ")}
+${userProfile.skills?.map((s: any) => typeof s === 'string' ? s : `${s.name} (${s.years || s.level || 'proficient'})`).join(", ") || 'Not specified'}
 
 CERTIFICATIONS:
 ${userProfile.certifications?.join(", ") || 'None listed'}
@@ -106,59 +127,79 @@ ${userProfile.certifications?.join(", ") || 'None listed'}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
-=== INSTRUCTIONS ===
+=== DETAILED INSTRUCTIONS ===
 
-1) EXTRACT ATS KEYWORDS from job description:
-   - Hard skills (Python, AWS, SQL, etc.)
-   - Tools/platforms (Snowflake, Airflow, Docker, etc.)
-   - Methodologies (Agile, CI/CD, ETL, etc.)
-   - Action verbs from JD (designed, optimized, deployed, scaled)
+1) EXTRACT ATS KEYWORDS (Jobscan method):
+   - Identify ALL hard skills, tools, platforms mentioned in JD
+   - Note methodologies and frameworks required
+   - Capture action verbs used in JD
+   - Mark required vs. preferred keywords
 
 2) LOCATION HANDLING:
-   - Extract location from job description
-   - Add to CV header: "Location: [Job City/Country] | Open to relocation" OR "Remote - [Candidate Location]"
-   - Location should appear 2-3x (header + summary)
+   - If job requires specific location: Add "${location || 'Job Location'}" to resume header
+   - Format: "Location: ${location || '[City, Country]'} | Open to relocation"
+   - Include location mention in summary
 
 3) TAILOR WORK EXPERIENCE:
-   - KEEP company names and dates EXACTLY as provided
-   - Rewrite 3-5 bullets per role with JD keywords naturally integrated
-   - Start each bullet with strong action verb
-   - Include 1-2 target keywords naturally per bullet
-   - Quantify: numbers, %, $ saved, time reduced
+   CRITICAL: Keep exact company name + dates for each role
+   For each role, write 3-5 bullets that:
+   - Start with strong action verb FROM the job description
+   - Include 1-2 JD keywords naturally per bullet
+   - Quantify with numbers, %, $, time saved
+   - Show OUTCOME not just task
+   - Vary sentence structure - no repetitive patterns
+   
+   Example transformation:
+   BEFORE: "Built Kafka pipelines"
+   AFTER: "Designed Kafka and Airflow pipelines processing 10M+ daily events into Snowflake, enabling real-time analytics that reduced decision latency by 40%"
 
-4) REWRITE SUMMARY:
-   - 4-6 lines max
-   - Lead with: "Senior [Job Title] with [X] years experience in [3 key JD keywords]"
-   - Include 4-6 high-priority keywords
+4) REWRITE SUMMARY (4-6 lines max):
+   - Lead: "Senior ${jobTitle} with [X] years experience in [3 key JD keywords]"
+   - Include 4-6 high-priority keywords naturally
+   - Mention a key achievement with metric
    - End with location availability
 
 5) CREATE COVER LETTER:
-   - Address to "Hiring Team at ${company}"
-   - Reference Job ID if available: ${jobId || 'N/A'}
-   - Paragraph 1: Hook - why this role at this company
-   - Paragraph 2: Proof - specific achievement matching JD need
-   - Paragraph 3: Skills match - list 5 key JD skills from experience
-   - Paragraph 4: Close - enthusiasm + availability
-   - SIGN with candidate name
+   
+   ${candidateName}
+   ${userProfile.email} | ${userProfile.phone}
+   
+   Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+   
+   Hiring Team
+   ${company}
+   ${jobId ? `Re: ${jobTitle} - Job ID: ${jobId}` : `Re: ${jobTitle}`}
+   
+   Dear Hiring Team,
+   
+   [PARA 1 - HOOK: Why this role at ${company}? Lead with a specific achievement that matches their need]
+   
+   [PARA 2 - PROOF: Detail 1-2 experiences that directly map to JD requirements with metrics]
+   
+   [PARA 3 - SKILLS: List 5-6 key technical skills from JD that you possess]
+   
+   [PARA 4 - CLOSE: Express enthusiasm, mention availability]
+   
+   Sincerely,
+   ${candidateName}
 
 ${includeReferral ? `
 6) CREATE REFERRAL EMAIL:
-   - Subject line for referral request
-   - Professional but warm tone
-   - Mention specific role and why interested
-   - Ask if they can refer or connect you with hiring team
+   Subject: Referral Request - ${jobTitle} at ${company}
+   Body: Professional but warm request for referral, mentioning the specific role
 ` : ''}
 
-=== REQUIRED JSON OUTPUT ===
+=== REQUIRED JSON OUTPUT (NO MARKDOWN) ===
 {
-  "tailoredResume": "[Full resume in clean markdown - COMPANY NAMES/DATES PRESERVED, bullets tailored with JD keywords, location added to header]",
-  "tailoredCoverLetter": "[Full cover letter addressing ${company} for ${jobTitle}${jobId ? `, Job ID: ${jobId}` : ''}]",
-  "matchScore": [number 0-100 based on keyword match and experience alignment],
-  "keywordsMatched": ["list", "of", "matched", "JD", "keywords"],
-  "keywordsMissing": ["keywords", "from", "JD", "not", "in", "profile"],
-  "locationAdded": "[Location added to resume header]",
-  "suggestedImprovements": ["actionable", "suggestions", "for", "candidate"]${includeReferral ? `,
-  "referralEmail": "[Subject line + full email body for referral request]"` : ''}
+  "tailoredResume": "[COMPLETE RESUME with location in header, tailored summary, work experience with preserved company/dates but rewritten bullets, education, skills prioritized by JD, certifications]",
+  "tailoredCoverLetter": "[COMPLETE COVER LETTER addressing ${company} for ${jobTitle}${jobId ? ` (Job ID: ${jobId})` : ''}]",
+  "matchScore": [0-100 based on keyword match],
+  "keywordsMatched": ["exact", "keywords", "from", "JD", "found", "in", "profile"],
+  "keywordsMissing": ["JD", "keywords", "not", "in", "profile"],
+  "locationAdded": "${location || 'Location from job description'}",
+  "suggestedImprovements": ["actionable suggestions for candidate"],
+  "fileName": "${fileNameBase}"${includeReferral ? `,
+  "referralEmail": "[Subject + email body]"` : ''}
 }`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -204,7 +245,6 @@ ${includeReferral ? `
     // Parse JSON from response - handle markdown code blocks
     let result;
     try {
-      // Remove markdown code blocks if present
       let cleanContent = content;
       if (content.includes('```json')) {
         cleanContent = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
@@ -212,7 +252,6 @@ ${includeReferral ? `
         cleanContent = content.replace(/```\s*/g, '');
       }
       
-      // Try to extract JSON from the response
       const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         result = JSON.parse(jsonMatch[0]);
@@ -221,7 +260,7 @@ ${includeReferral ? `
       }
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
-      console.error("Raw content:", content?.substring(0, 500));
+      console.error("Raw content:", content?.substring(0, 1000));
       
       // Fallback with basic structure
       result = {
@@ -231,9 +270,16 @@ ${includeReferral ? `
         keywordsMatched: requirements.slice(0, 5),
         keywordsMissing: [],
         locationAdded: location || "Not specified",
-        suggestedImprovements: ["Please retry for better results"]
+        suggestedImprovements: ["Please retry for better results"],
+        fileName: fileNameBase
       };
     }
+
+    // Ensure fileName is set
+    result.fileName = result.fileName || fileNameBase;
+    result.company = company;
+    result.jobTitle = jobTitle;
+    result.jobId = jobId;
 
     console.log(`Successfully tailored application. Match score: ${result.matchScore}`);
 
