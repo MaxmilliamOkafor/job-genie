@@ -14,17 +14,7 @@
     </header>
 
     <div id="not-connected" class="section">
-      <p class="info">Connect to your AutoApply AI account to auto-fill job applications.</p>
-      
-      <div class="form-group">
-        <label for="supabase-url">Supabase URL</label>
-        <input type="text" id="supabase-url" placeholder="https://your-project.supabase.co">
-      </div>
-      
-      <div class="form-group">
-        <label for="supabase-key">Anon Key</label>
-        <input type="text" id="supabase-key" placeholder="eyJ...">
-      </div>
+      <p class="info">Connect to your AutoApply AI account to auto-fill job applications and get tailored resumes.</p>
       
       <div class="form-group">
         <label for="user-email">Email</label>
@@ -37,6 +27,8 @@
       </div>
       
       <button id="connect-btn" class="btn primary">Connect Account</button>
+      
+      <p class="hint">Use the same credentials as your AutoApply AI dashboard.</p>
     </div>
 
     <div id="connected" class="section hidden">
@@ -49,20 +41,41 @@
         <p>Loading profile...</p>
       </div>
 
+      <div class="current-job" id="current-job">
+        <p class="loading">Detecting job page...</p>
+      </div>
+
       <div class="actions">
-        <button id="autofill-btn" class="btn primary">
-          ✨ Auto-Fill This Page
-        </button>
-        <button id="refresh-btn" class="btn secondary">
-          🔄 Refresh Profile
+        <button id="tailor-btn" class="btn primary full">
+          ✨ Tailor for This Job
         </button>
       </div>
 
-      <div class="form-group">
-        <label>
-          <input type="checkbox" id="auto-detect" checked>
-          Auto-detect application forms
-        </label>
+      <div class="actions">
+        <button id="autofill-btn" class="btn secondary">
+          📝 Auto-Fill
+        </button>
+        <button id="refresh-btn" class="btn secondary">
+          🔄 Refresh
+        </button>
+      </div>
+
+      <div id="tailored-result" class="tailored-result hidden">
+        <div class="match-score">
+          Match: <strong id="match-score-value">--</strong>%
+        </div>
+        <div class="tabs">
+          <button class="tab active" data-tab="resume">Resume</button>
+          <button class="tab" data-tab="cover">Cover Letter</button>
+        </div>
+        <div class="tab-content" id="resume-content">
+          <textarea id="resume-text" readonly></textarea>
+          <button class="copy-btn" data-target="resume-text">📋 Copy</button>
+        </div>
+        <div class="tab-content hidden" id="cover-content">
+          <textarea id="cover-text" readonly></textarea>
+          <button class="copy-btn" data-target="cover-text">📋 Copy</button>
+        </div>
       </div>
 
       <button id="disconnect-btn" class="btn danger">Disconnect</button>
@@ -71,7 +84,7 @@
     <div id="status-message" class="status-message hidden"></div>
 
     <footer>
-      <a href="#" id="open-app">Open AutoApply AI Dashboard</a>
+      <a href="#" id="open-app">Open Dashboard</a>
     </footer>
   </div>
 
