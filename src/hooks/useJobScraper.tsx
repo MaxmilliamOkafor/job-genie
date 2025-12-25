@@ -45,13 +45,20 @@ export function useJobScraper() {
         applied_at: job.applied_at,
       }));
 
+      const dedupe = (list: Job[]) => {
+        const map = new Map<string, Job>();
+        for (const j of list) map.set(j.id, j);
+        return Array.from(map.values());
+      };
+
       if (append) {
-        setJobs(prev => [...prev, ...formattedJobs]);
+        setJobs(prev => dedupe([...prev, ...formattedJobs]));
       } else {
-        setJobs(formattedJobs);
+        setJobs(dedupe(formattedJobs));
       }
       
-      setHasMore((count || 0) > (append ? jobs.length + formattedJobs.length : formattedJobs.length));
+      const newTotal = append ? jobs.length + formattedJobs.length : formattedJobs.length;
+      setHasMore((count || 0) > newTotal);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {

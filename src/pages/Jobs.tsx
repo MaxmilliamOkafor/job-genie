@@ -53,11 +53,17 @@ const Jobs = () => {
   }, [isLoading, isScraping, hasMore, loadMore]);
 
   const filteredJobs = useMemo(() => {
+    const terms = search
+      .replace(/[“”"]/g, '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
     return jobs.filter(job => {
-      const searchMatch = !search || 
-        job.title.toLowerCase().includes(search.toLowerCase()) ||
-        job.company.toLowerCase().includes(search.toLowerCase()) ||
-        job.requirements?.some(r => r.toLowerCase().includes(search.toLowerCase()));
+      const haystack = `${job.title} ${job.company} ${(job.requirements || []).join(' ')}`.toLowerCase();
+      const searchMatch = terms.length === 0
+        ? true
+        : terms.some((t) => haystack.includes(t.toLowerCase()));
 
       const locationMatch = location === 'all' || 
         job.location.toLowerCase().includes(location.toLowerCase());
@@ -77,6 +83,7 @@ const Jobs = () => {
   }, [jobs, search, location, dateFilter]);
 
   const handleKeywordSearch = (keywords: string) => {
+    setSearch(keywords);
     startContinuousScraping(keywords);
   };
 
@@ -100,8 +107,8 @@ const Jobs = () => {
   };
 
   const getPlatformColor = (platform: string) => {
-    const tier1 = ['Workday', 'Greenhouse', 'Lever', 'SAP SuccessFactors', 'iCIMS'];
-    const tier2 = ['Ashby', 'Oracle Taleo', 'Workable', 'BambooHR', 'Bullhorn'];
+    const tier1 = ['Workday', 'Greenhouse', 'Workable', 'SAP SuccessFactors', 'iCIMS', 'LinkedIn (Direct)'];
+    const tier2 = ['Oracle Taleo', 'BambooHR', 'Bullhorn'];
     
     if (tier1.includes(platform)) return 'border-green-500/30 bg-green-500/5';
     if (tier2.includes(platform)) return 'border-primary/30 bg-primary/5';
@@ -127,9 +134,10 @@ const Jobs = () => {
           )}
         </div>
 
-        {/* Bulk Keyword Search */}
+        {/* Bulk Keyword Search (also filters the list) */}
         <BulkKeywordSearch 
-          onSearch={handleKeywordSearch} 
+          onSearch={handleKeywordSearch}
+          onFilterChange={setSearch}
           isSearching={isScraping} 
         />
 
@@ -141,6 +149,7 @@ const Jobs = () => {
         />
 
         <JobFilters
+          showSearch={false}
           search={search}
           onSearchChange={setSearch}
           location={location}

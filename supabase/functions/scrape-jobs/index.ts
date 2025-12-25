@@ -8,16 +8,15 @@ const corsHeaders = {
 
 // ATS Platform priority tiers
 const PLATFORM_TIERS = {
-  tier1: ['Workday', 'Greenhouse', 'Lever', 'SAP SuccessFactors', 'iCIMS'],
-  tier2: ['Ashby', 'Oracle Taleo', 'Workable', 'BambooHR', 'Bullhorn'],
+  tier1: ['Workday', 'Greenhouse', 'Workable', 'SAP SuccessFactors', 'iCIMS', 'LinkedIn (Direct)'],
+  tier2: ['Oracle Taleo', 'BambooHR', 'Bullhorn'],
   tier3: ['JazzHR', 'Jobvite', 'SmartRecruiters', 'Recruitee', 'Breezy HR'],
 };
 
-// Job board APIs and scraping endpoints
+// Job board APIs and scraping endpoints (placeholder)
 const JOB_SOURCES = [
   { name: 'Greenhouse', baseUrl: 'https://boards-api.greenhouse.io/v1/boards' },
-  { name: 'Lever', baseUrl: 'https://api.lever.co/v0/postings' },
-  { name: 'Ashby', baseUrl: 'https://api.ashbyhq.com/posting-api/job-board' },
+  { name: 'Workable', baseUrl: 'https://apply.workable.com/api/v3/accounts' },
 ];
 
 interface JobListing {
@@ -64,10 +63,18 @@ function calculateMatchScore(job: JobListing, keywords: string[], userSkills: st
 
 // Parse comma-separated keywords
 function parseKeywords(keywordString: string): string[] {
-  return keywordString
+  const normalized = (keywordString || '')
+    .replace(/[“”"]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const parts = normalized
     .split(',')
-    .map(k => k.trim())
-    .filter(k => k.length > 0);
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0);
+
+  // De-dupe while keeping order
+  return parts.filter((k, idx) => parts.indexOf(k) === idx);
 }
 
 // Generate realistic job listings

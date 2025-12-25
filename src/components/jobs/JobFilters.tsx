@@ -3,6 +3,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, MapPin, Calendar } from 'lucide-react';
 
 interface JobFiltersProps {
+  /** When false, hides the inline search input (useful when bulk keyword search is the only search bar). */
+  showSearch?: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   location: string;
@@ -12,6 +14,7 @@ interface JobFiltersProps {
 }
 
 export function JobFilters({
+  showSearch = true,
   search,
   onSearchChange,
   location,
@@ -21,15 +24,17 @@ export function JobFilters({
 }: JobFiltersProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-3">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by title, company, or keywords..."
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {showSearch && (
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by title, company, or keywords..."
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      )}
       
       <div className="flex gap-3">
         <div className="relative w-40">
