@@ -42,6 +42,9 @@ export interface Profile {
   achievements: any[];
   excluded_companies: string[];
   ats_strategy: string | null;
+  cv_file_path: string | null;
+  cv_file_name: string | null;
+  cv_uploaded_at: string | null;
 }
 
 export function useProfile() {
@@ -78,6 +81,9 @@ export function useProfile() {
           languages: Array.isArray(data.languages) ? data.languages : [],
           achievements: Array.isArray(data.achievements) ? data.achievements : [],
           excluded_companies: (data.excluded_companies as string[]) || [],
+          cv_file_path: data.cv_file_path || null,
+          cv_file_name: data.cv_file_name || null,
+          cv_uploaded_at: data.cv_uploaded_at || null,
         });
       }
     } catch (error) {

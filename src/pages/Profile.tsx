@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useProfile, type Profile } from '@/hooks/useProfile';
+import { CVUpload } from '@/components/profile/CVUpload';
 import { 
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
   Shield, CheckCircle, Globe, FileText, Languages 
@@ -120,7 +121,33 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Personal Info */}
+        {/* CV Upload */}
+        <CVUpload
+          cvFileName={localProfile.cv_file_name}
+          cvFilePath={localProfile.cv_file_path}
+          cvUploadedAt={localProfile.cv_uploaded_at}
+          onUploadComplete={(path, fileName) => {
+            updateLocalField('cv_file_path', path);
+            updateLocalField('cv_file_name', fileName);
+            updateLocalField('cv_uploaded_at', new Date().toISOString());
+            // Auto-save when CV is uploaded
+            updateProfile({
+              cv_file_path: path,
+              cv_file_name: fileName,
+              cv_uploaded_at: new Date().toISOString(),
+            });
+          }}
+          onDelete={() => {
+            updateLocalField('cv_file_path', null);
+            updateLocalField('cv_file_name', null);
+            updateLocalField('cv_uploaded_at', null);
+            updateProfile({
+              cv_file_path: null,
+              cv_file_name: null,
+              cv_uploaded_at: null,
+            });
+          }}
+        />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
