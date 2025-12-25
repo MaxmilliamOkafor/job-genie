@@ -181,18 +181,12 @@ const Jobs = () => {
                       </div>
                       <p className="text-muted-foreground">{job.company}</p>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Badge className={`${getMatchScoreColor(job.match_score)}`}>
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        {job.match_score}%
+                    {job.platform && (
+                      <Badge variant="outline" className="text-xs flex-shrink-0">
+                        <Briefcase className="h-3 w-3 mr-1" />
+                        {job.platform}
                       </Badge>
-                      {job.platform && (
-                        <Badge variant="outline" className="text-xs">
-                          <Briefcase className="h-3 w-3 mr-1" />
-                          {job.platform}
-                        </Badge>
-                      )}
-                    </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground">
