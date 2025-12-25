@@ -137,167 +137,480 @@ async function waitWithControls(ms) {
   }
 }
 
-// ============= KNOCKOUT QUESTION ANSWER BANK =============
-// Auto-answers optimized for ATS eligibility - ALWAYS answer to maximize qualification
+// ============= COMPREHENSIVE KNOCKOUT QUESTION ANSWER BANK =============
+// Auto-answers optimized for ATS eligibility across ALL major platforms
+// Greenhouse, Lever, Workday, iCIMS, Taleo, Ashby, SmartRecruiters, BambooHR, JazzHR
 
 const KNOCKOUT_ANSWER_BANK = {
-  // Work Authorization & Visa - ALWAYS YES for eligibility
-  'legal documentation.*identity.*eligibility.*employed|legally.*employed|eligible.*employed': {
+  // ============= WORK AUTHORIZATION (CRITICAL - ALWAYS PASS) =============
+  'legal documentation.*identity.*eligibility|legally authorized|eligib.*employed|right to work|authorization to work|authorised to work': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
-  'require.*sponsorship.*work|sponsor.*visa|need.*sponsorship|future.*require.*sponsorship': {
-    answer: 'No', // Never need sponsorship
-    selectValue: 'no',
-    flag: false
-  },
-  'authorized.*work.*united states|legally.*work.*us|work authorization|eligible.*work|authorized to work': {
+  'authorized.*work.*united states|authorized.*work.*us|work.*authorization.*us|legally.*work.*us|eligible.*work.*us|can you work.*us': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
-  
-  // Age & Background - ALWAYS YES
-  'age 18|over 18|at least 18|18 years|eighteen|are you.*18|minimum age': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'background check|criminal background|background investigation|submit.*background|consent.*background': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'drug screening|drug test|substance test|submit.*drug|pre-employment.*drug': {
+  'authorized.*work.*canada|authorized.*work.*uk|authorized.*work.*europe|work.*authorization': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // Previous Employment - NO by default
-  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed by|formerly employed': {
+  // ============= VISA SPONSORSHIP (CRITICAL - ALWAYS NO) =============
+  'require.*sponsorship|need.*sponsorship|sponsorship.*required|sponsor.*visa|visa.*sponsor|future.*sponsorship|now or.*future.*sponsor|employment.*sponsorship': {
     answer: 'No',
     selectValue: 'no',
     flag: false
   },
-  'referred by|employee referral|know anyone|current employee': {
+  'sponsor.*h1b|h-1b.*sponsor|h1-b.*sponsor|need.*h1b|require.*h1b|tn.*visa|l1.*visa|o1.*visa': {
     answer: 'No',
     selectValue: 'no',
     flag: false
   },
-  
-  // Driver's License - YES
-  'driver.*license|driving license|valid license|valid driver|possess.*license': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'good driving history|driving history|driving record': {
+  'work.*without.*sponsorship|employment.*without.*sponsorship': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // Availability & Relocation - YES/Immediate
-  'willing.*relocate|open.*relocation|relocate.*position|able.*relocate': {
+  // ============= AGE VERIFICATION (ALWAYS YES) =============
+  'age 18|over 18|18 years|eighteen|at least 18|older than 18|minimum age|legal age|are you.*18|21 years|over 21|at least 21': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
-  'available.*start|start date|earliest.*start|when.*start|how soon': {
-    answer: 'Immediate',
-    selectValue: 'immediate',
+  
+  // ============= BACKGROUND & DRUG SCREENING (ALWAYS YES) =============
+  'background check|criminal background|background investigation|submit.*background|consent.*background|background screening|pre-employment.*background': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
-  'notice period|current.*notice|weeks.*notice': {
+  'drug screen|drug test|substance test|submit.*drug|pre-employment.*drug|toxicology|controlled substance': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'motor vehicle|mvr.*check|driving record.*check': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'credit check|credit history|financial background': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // ============= DRIVER'S LICENSE (ALWAYS YES) =============
+  'driver.*license|driving license|valid license|valid driver|possess.*license|current.*license|unrestricted.*license': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'good driving|driving history|driving record|clean driving|safe driving': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'own.*vehicle|reliable.*transportation|access.*vehicle|means.*transportation|personal.*transportation': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // ============= RELOCATION & AVAILABILITY =============
+  'willing.*relocate|open.*relocation|relocate.*position|able.*relocate|consider.*relocating|move.*location': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'available.*start|start date|earliest.*start|when.*start|how soon|soonest.*start|when.*begin': {
+    answer: 'Immediately',
+    selectValue: 'immediately',
+    flag: false
+  },
+  'immediate.*start|start immediately|available immediately': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'notice period|current.*notice|weeks.*notice|days.*notice|resignation.*period': {
     answer: '2 weeks',
     flag: false
   },
-  
-  // Job Functions & Accommodations - YES
-  'essential functions|perform.*duties|physical requirements|able to perform|perform.*job': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'reasonable accommodation|disability accommodation|with or without.*accommodation': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'lift.*pounds|carry.*lbs|physical demands|standing.*hours|sitting.*hours': {
+  'currently employed|presently working|actively working': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // Legal Agreements - ALWAYS YES
-  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify|acknowledge': {
+  // ============= JOB FUNCTIONS & PHYSICAL REQUIREMENTS =============
+  'essential functions|perform.*duties|physical requirements|able to perform|perform.*job|job.*functions': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
-  'non-compete|non-disclosure|nda|confidentiality|confidential.*agreement': {
+  'reasonable accommodation|disability accommodation|with or without.*accommodation|request.*accommodation': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'lift.*pounds|carry.*lbs|physical demands|standing.*hours|sitting.*hours|walk.*hours|bend.*lift|push.*pull': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'work.*environment|outdoor.*work|indoor.*work|office.*environment|warehouse.*environment|manufacturing.*environment': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // Travel Requirements - YES
-  'willing.*travel|travel.*required|travel.*percent|overnight.*travel': {
+  // ============= TRAVEL & SCHEDULE FLEXIBILITY =============
+  'willing.*travel|travel.*required|travel.*percent|overnight.*travel|domestic.*travel|international.*travel|business.*travel': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'travel.*frequency|how much.*travel|percentage.*travel|amount.*travel': {
+    answer: 'Up to 50%',
+    flag: false
+  },
+  'work.*weekends|weekend.*availability|weekend.*work|saturday.*sunday': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'work.*shifts|shift.*work|rotating.*shifts|night.*shift|evening.*shift|flexible.*hours': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'overtime|extra.*hours|additional.*hours|extended.*hours': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'on-call|on call|standby|pager.*duty|after.*hours.*support': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'flexible.*schedule|flexible.*working|hybrid.*work|remote.*work|work.*from.*home': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'full-time|full time|permanent.*position|permanent.*role': {
     answer: 'Yes',
     selectValue: 'yes',
     flag: false
   },
   
-  // Shift/Schedule - YES
-  'work.*weekends|weekend.*availability|work.*shifts|shift.*work|overtime|flexible.*schedule': {
-    answer: 'Yes',
-    selectValue: 'yes',
+  // ============= PREVIOUS EMPLOYMENT =============
+  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed|formerly employed|worked.*previously': {
+    answer: 'No',
+    selectValue: 'no',
     flag: false
   },
-  
-  // Convicted/Criminal - NO (unless required to disclose)
-  'convicted.*felony|criminal.*conviction|been convicted|pleaded guilty': {
+  'referred by|employee referral|know anyone|current employee.*refer|referral.*source': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'applied.*before|previously.*applied|past.*application|former.*applicant': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'interview.*before|interviewed.*previously': {
     answer: 'No',
     selectValue: 'no',
     flag: false
   },
   
-  // EEO & Demographics - Profile-based or decline
-  'veteran status|military service|protected veteran': {
+  // ============= LEGAL & AGREEMENTS =============
+  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify|acknowledge|attestation': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'non-compete|non-disclosure|nda|confidentiality|confidential.*agreement|proprietary.*agreement': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'agree.*policy|accept.*terms|consent.*processing|consent.*data|privacy.*consent|gdpr.*consent': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'truthful.*information|accurate.*information|certify.*accurate|information.*true': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'at-will.*employment|at will.*employment|employment.*at-will': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // ============= CRIMINAL HISTORY =============
+  'convicted.*felony|criminal.*conviction|been convicted|pleaded guilty|pending.*charges|criminal.*record|arrest.*record': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'misdemeanor|criminal.*offense|criminal.*history': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  
+  // ============= SECURITY CLEARANCE =============
+  'security clearance|clearance.*level|active.*clearance|current.*clearance|secret.*clearance|top secret|ts/sci|public trust': {
+    answerFromProfile: 'security_clearance',
+    defaultAnswer: 'No, but willing to obtain',
+    flag: false
+  },
+  'obtain.*clearance|eligible.*clearance|pass.*clearance|clearance.*investigation': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // ============= EEO & DEMOGRAPHICS (Profile-based) =============
+  'veteran status|military service|protected veteran|veteran.*self|served.*military|us.*veteran|armed forces': {
     answerFromProfile: 'veteran_status',
     defaultAnswer: 'I am not a protected veteran',
+    selectValue: 'i am not a protected veteran',
     flag: false
   },
-  'disability status|disabled|have.*disability': {
+  'disability status|disabled|have.*disability|disability.*self|individual.*disability': {
     answerFromProfile: 'disability',
     defaultAnswer: 'I do not wish to answer',
+    selectValue: 'i do not wish to answer',
     flag: false
   },
-  'race|ethnicity|ethnic background|race.*ethnicity': {
+  'race|ethnicity|ethnic background|race.*ethnicity|racial.*identity': {
     answerFromProfile: 'race_ethnicity',
-    defaultAnswer: 'Prefer not to say',
+    defaultAnswer: 'Decline to self-identify',
+    selectValue: 'decline',
     flag: false
   },
-  'gender|sex|male.*female': {
-    answer: 'Prefer not to say',
+  'gender|sex|male.*female|gender.*identity': {
+    answer: 'Prefer not to answer',
+    selectValue: 'prefer not to answer',
+    flag: false
+  },
+  'sexual orientation|lgbtq|lgbtqia': {
+    answer: 'Prefer not to answer',
+    selectValue: 'prefer not to answer',
+    flag: false
+  },
+  
+  // ============= GREENHOUSE SPECIFIC PATTERNS =============
+  'are you legally.*18|confirm.*legal age|minimum.*working age': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'linkedin.*profile|linkedin url|linkedin.*url': {
+    answerFromProfile: 'linkedin',
+    flag: false
+  },
+  'github.*profile|github url|github.*url': {
+    answerFromProfile: 'github',
+    flag: false
+  },
+  'portfolio.*url|website.*url|personal.*website': {
+    answerFromProfile: 'portfolio',
+    flag: false
+  },
+  
+  // ============= WORKDAY SPECIFIC PATTERNS =============
+  'have you ever worked for|previously.*employed.*by|past.*employment.*with': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'current.*employment.*status|employment.*status|work.*status': {
+    answer: 'Currently Employed',
+    selectValue: 'employed',
+    flag: false
+  },
+  
+  // ============= LEVER SPECIFIC PATTERNS =============
+  'how did you hear|where did you find|source.*application|how.*learn.*position': {
+    answer: 'Company Website',
+    selectValue: 'company website',
+    flag: false
+  },
+  'why.*interested|interest.*role|interest.*position|attracted.*role': {
+    answer: 'I am passionate about this opportunity and believe my skills align perfectly with the requirements.',
+    flag: false
+  },
+  
+  // ============= ICIMS SPECIFIC PATTERNS =============
+  'shift.*preference|preferred.*shift|work.*schedule.*preference': {
+    answer: 'Flexible/Any',
+    selectValue: 'flexible',
+    flag: false
+  },
+  
+  // ============= TALEO SPECIFIC PATTERNS =============
+  'country.*residence|residing.*country|current.*country': {
+    answerFromProfile: 'country',
+    defaultAnswer: 'United States',
+    flag: false
+  },
+  
+  // ============= EDUCATION VERIFICATION =============
+  'highest.*degree|degree.*obtained|education.*level|completed.*degree|highest.*education': {
+    answerFromProfile: 'highest_education',
+    defaultAnswer: "Bachelor's Degree",
+    flag: false
+  },
+  'bachelor.*degree|undergraduate.*degree|college.*degree|university.*degree': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'master.*degree|graduate.*degree|advanced.*degree|mba|ms degree|ma degree': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'gpa|grade point|academic.*average': {
+    answer: '3.5',
+    flag: false
+  },
+  
+  // ============= CERTIFICATIONS & LICENSES =============
+  'certification.*required|required.*certification|professional.*certification|industry.*certification': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'license.*required|professional.*license|state.*license': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // ============= SKILLS & EXPERIENCE LEVEL =============
+  'proficiency.*level|skill.*level|expertise.*level|experience.*level': {
+    answer: 'Expert',
+    selectValue: 'expert',
+    flag: false
+  },
+  'years.*total.*experience|total.*years.*experience|overall.*experience': {
+    answerFromProfile: 'total_experience',
+    defaultAnswer: '8',
+    flag: false
+  },
+  
+  // ============= COMPENSATION & SALARY =============
+  'salary.*expectation|expected.*salary|desired.*salary|salary.*requirement|compensation.*expectation|pay.*expectation|desired.*pay|pay.*range|salary.*range': {
+    answerFromProfile: 'expected_salary',
+    defaultAnswer: '$75,000 - $95,000',
+    flag: false
+  },
+  'current.*salary|present.*salary|current.*compensation|base.*salary': {
+    answerFromProfile: 'current_salary',
+    defaultAnswer: 'Prefer not to disclose',
+    flag: false
+  },
+  'hourly.*rate|rate.*per hour|hourly.*expectation': {
+    answer: 'Negotiable based on total compensation',
+    flag: false
+  },
+  'bonus.*eligible|variable.*compensation|commission': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // ============= LANGUAGE REQUIREMENTS =============
+  'english.*proficiency|speak.*english|english.*fluent|english.*language': {
+    answer: 'Fluent/Native',
+    selectValue: 'fluent',
+    flag: false
+  },
+  'spanish.*proficiency|speak.*spanish|spanish.*language': {
+    answer: 'Intermediate',
+    selectValue: 'intermediate',
+    flag: false
+  },
+  'language.*proficiency|fluent.*language|speak.*language': {
+    answer: 'English (Fluent)',
+    flag: false
+  },
+  
+  // ============= CONTACT PREFERENCES =============
+  'contact.*method|preferred.*contact|best way.*reach|how.*contact': {
+    answer: 'Email',
+    selectValue: 'email',
+    flag: false
+  },
+  'best.*time.*call|call.*time|when.*call': {
+    answer: 'Anytime during business hours',
+    flag: false
+  },
+  
+  // ============= ADDITIONAL COMMON PATTERNS =============
+  'conflict.*interest|competing.*interest|outside.*employment': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'relative.*employee|family.*works|related.*anyone': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'government.*employee|public.*sector|federal.*employee': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'union.*member|belong.*union|represented.*union': {
+    answer: 'No',
+    selectValue: 'no',
+    flag: false
+  },
+  'equipment.*use|tools.*own|required.*equipment|personal.*tools': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'computer.*proficient|technology.*skills|software.*skills': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   }
 };
 
 // Match knockout question with profile-aware answers
 function matchKnockoutQuestion(questionText, userProfile = null) {
-  const lowerQuestion = questionText.toLowerCase();
+  const lowerQuestion = questionText.toLowerCase().trim();
   
   for (const [pattern, response] of Object.entries(KNOCKOUT_ANSWER_BANK)) {
     const regex = new RegExp(pattern, 'i');
     if (regex.test(lowerQuestion)) {
       // Check if answer should come from profile
       if (response.answerFromProfile && userProfile) {
-        const profileValue = userProfile[response.answerFromProfile];
-        if (profileValue !== null && profileValue !== undefined) {
+        const profileField = response.answerFromProfile;
+        const profileValue = userProfile[profileField] || 
+                            userProfile[profileField.replace(/_/g, '')] ||
+                            userProfile[toCamelCase(profileField)];
+        
+        if (profileValue !== null && profileValue !== undefined && profileValue !== '') {
           // Map profile values to appropriate answers
           if (typeof profileValue === 'boolean') {
             return {
@@ -315,15 +628,24 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
         }
         // Use default answer if profile value not available
         return {
-          answer: response.defaultAnswer || response.answer,
-          selectValue: (response.defaultAnswer || response.answer || '').toLowerCase(),
+          answer: response.defaultAnswer || response.answer || 'Yes',
+          selectValue: (response.defaultAnswer || response.answer || 'yes').toLowerCase(),
           flag: response.flag
         };
       }
-      return response;
+      return {
+        answer: response.answer,
+        selectValue: response.selectValue || (response.answer ? response.answer.toLowerCase() : 'yes'),
+        flag: response.flag || false
+      };
     }
   }
   return null;
+}
+
+// Helper to convert snake_case to camelCase
+function toCamelCase(str) {
+  return str.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
 }
 
 // Get years of experience for a skill from profile
@@ -819,8 +1141,10 @@ function detectApplicationQuestions() {
   return questions;
 }
 
-async function getAIAnswers(questions, jobData) {
+async function getAIAnswers(questions, jobData, userProfile) {
   try {
+    console.log('QuantumHire AI: Requesting AI answers for', questions.length, 'questions');
+    
     const response = await chrome.runtime.sendMessage({
       action: 'answerQuestions',
       questions: questions.map(q => ({
@@ -832,11 +1156,19 @@ async function getAIAnswers(questions, jobData) {
       })),
       jobTitle: jobData.title,
       company: jobData.company,
+      jobDescription: jobData.description || '',
     });
     
+    if (response?.error) {
+      console.warn('QuantumHire AI: AI returned error:', response.error);
+      showToast(`AI: ${response.error}`, 'warning');
+    }
+    
+    console.log('QuantumHire AI: Received', response?.answers?.length || 0, 'AI answers');
     return response?.answers || [];
   } catch (error) {
     console.error('QuantumHire AI: AI answer error', error);
+    showToast('AI answering unavailable, using smart defaults', 'info');
     return [];
   }
 }
