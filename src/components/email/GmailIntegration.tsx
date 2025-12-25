@@ -1,19 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Mail, Check, X, AlertCircle, Calendar, UserPlus, Loader2 } from 'lucide-react';
+import { Mail, Check, X, Calendar, UserPlus, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-
-// Gmail OAuth configuration (you'll need to set these up)
-const GMAIL_CLIENT_ID = import.meta.env.VITE_GMAIL_CLIENT_ID;
-const GMAIL_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.readonly',
-].join(' ');
 
 interface EmailDetection {
   id: string;
@@ -33,14 +26,7 @@ export function GmailIntegration() {
   const [detections, setDetections] = useState<EmailDetection[]>([]);
   const [isScanning, setIsScanning] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      checkConnection();
-      fetchDetections();
-    }
-  }, [user]);
-
-  const checkConnection = async () => {
+  const checkConnection = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -59,13 +45,13 @@ export function GmailIntegration() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
-  const fetchDetections = async () => {
+  const fetchDetections = useCallback(async () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('email_detections')
         .select('*')
         .eq('user_id', user.id)
@@ -81,7 +67,55 @@ export function GmailIntegration() {
     } catch (error) {
       console.error('Error fetching detections:', error);
     }
-  };
+  }, [user]);
+
+  // Handle OAuth callback
+  const handleOAuthCallback = useCallback(async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+
+    if (code && state && user && state === user.id) {
+      setIsConnecting(true);
+      
+      try {
+        // Clear URL params
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        const redirectUri = `${window.location.origin}${window.location.pathname}`;
+
+        const { data, error } = await supabase.functions.invoke('gmail-oauth', {
+          body: {
+            type: 'exchange_code',
+            userId: user.id,
+            code,
+            redirectUri,
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.success) {
+          setIsConnected(true);
+          setEmail(data.email);
+          toast.success('Gmail connected successfully!');
+        }
+      } catch (error) {
+        console.error('OAuth callback error:', error);
+        toast.error('Failed to complete Gmail connection');
+      } finally {
+        setIsConnecting(false);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      checkConnection();
+      fetchDetections();
+      handleOAuthCallback();
+    }
+  }, [user, checkConnection, fetchDetections, handleOAuthCallback]);
 
   const connectGmail = async () => {
     if (!user) {
@@ -89,55 +123,49 @@ export function GmailIntegration() {
       return;
     }
 
-    // For now, we'll simulate a connection since full OAuth requires Google Cloud Console setup
-    // Show user what's needed for real Gmail integration
     setIsConnecting(true);
 
     try {
-      // Check if already connected
-      const { data: existing } = await supabase
-        .from('email_integrations')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
 
-      if (existing?.is_connected) {
-        setIsConnected(true);
-        setEmail(existing.email);
-        toast.info('Gmail already connected');
-        return;
-      }
-
-      // For demo purposes, create a simulated connection
-      // In production, this would use real Google OAuth
-      const userEmail = user.email || 'user@gmail.com';
-
-      const { error } = await supabase
-        .from('email_integrations')
-        .upsert({
-          user_id: user.id,
-          email: userEmail,
-          is_connected: true,
-          access_token: 'demo_token', // In production, this would be real OAuth token
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id'
-        });
+      const { data, error } = await supabase.functions.invoke('gmail-oauth', {
+        body: {
+          type: 'get_auth_url',
+          userId: user.id,
+          redirectUri,
+        }
+      });
 
       if (error) throw error;
 
-      setIsConnected(true);
-      setEmail(userEmail);
-      toast.success('Gmail connected successfully!');
-      
-      // Note: For full functionality, you'd need to set up Google OAuth
-      toast.info('Note: Full Gmail integration requires Google OAuth setup in Settings', { duration: 5000 });
-      
+      if (data.authUrl) {
+        // Redirect to Google OAuth
+        window.location.href = data.authUrl;
+      }
     } catch (error) {
-      console.error('Error connecting Gmail:', error);
-      toast.error('Failed to connect Gmail. Please try again.');
-    } finally {
+      console.error('Error starting OAuth:', error);
+      toast.error('Failed to start Gmail connection. Make sure Google OAuth is configured.');
       setIsConnecting(false);
+    }
+  };
+
+  const disconnectGmail = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('email_integrations')
+        .update({ is_connected: false, access_token: null, refresh_token: null })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setIsConnected(false);
+      setEmail(null);
+      toast.success('Gmail disconnected');
+    } catch (error) {
+      console.error('Error disconnecting:', error);
+      toast.error('Failed to disconnect Gmail');
     }
   };
 
@@ -146,9 +174,10 @@ export function GmailIntegration() {
 
     setIsScanning(true);
     try {
+      // First check if token needs refresh
       const { data: integration } = await supabase
         .from('email_integrations')
-        .select('access_token')
+        .select('access_token, token_expiry')
         .eq('user_id', user.id)
         .single();
 
@@ -157,11 +186,27 @@ export function GmailIntegration() {
         return;
       }
 
+      // Check if token is expired
+      let accessToken = integration.access_token;
+      if (integration.token_expiry && new Date(integration.token_expiry) < new Date()) {
+        // Refresh the token
+        const { data: refreshData, error: refreshError } = await supabase.functions.invoke('gmail-oauth', {
+          body: { type: 'refresh_token', userId: user.id }
+        });
+
+        if (refreshError || !refreshData.access_token) {
+          toast.error('Session expired. Please reconnect Gmail.');
+          setIsConnected(false);
+          return;
+        }
+        accessToken = refreshData.access_token;
+      }
+
       const { data, error } = await supabase.functions.invoke('process-email', {
         body: {
           type: 'detect_responses',
           userId: user.id,
-          accessToken: integration.access_token,
+          accessToken,
         }
       });
 
@@ -246,14 +291,19 @@ export function GmailIntegration() {
                   <p className="text-sm text-muted-foreground">{email}</p>
                 </div>
               </div>
-              <Button variant="outline" onClick={scanEmails} disabled={isScanning}>
-                {isScanning ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Mail className="h-4 w-4 mr-2" />
-                )}
-                Scan Emails
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={disconnectGmail}>
+                  Disconnect
+                </Button>
+                <Button variant="outline" onClick={scanEmails} disabled={isScanning}>
+                  {isScanning ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4 mr-2" />
+                  )}
+                  Scan Emails
+                </Button>
+              </div>
             </div>
 
             {detections.length > 0 && (
