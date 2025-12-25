@@ -1,31 +1,28 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
+import { VirtualJobList } from '@/components/jobs/VirtualJobList';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
 import { Job } from '@/hooks/useJobs';
 import { 
   Briefcase, 
-  MapPin, 
-  DollarSign, 
-  Clock, 
-  ExternalLink, 
-  Zap,
-  CheckCircle,
   ArrowUp,
   Trash2,
-  Star,
   RefreshCw,
   ArrowUpDown,
   Calendar,
-  Upload
+  Upload,
+  Search,
+  CheckCircle,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -34,38 +31,26 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// Tier-1 companies for visual highlighting
-const TIER1_COMPANIES = [
-  'google', 'meta', 'apple', 'amazon', 'microsoft', 'netflix', 'stripe', 'airbnb',
-  'uber', 'lyft', 'dropbox', 'salesforce', 'adobe', 'linkedin', 'twitter', 'snap',
-  'shopify', 'square', 'paypal', 'coinbase', 'robinhood', 'plaid', 'figma', 'notion',
-  'slack', 'zoom', 'datadog', 'snowflake', 'databricks', 'mongodb', 'openai', 'anthropic',
-  'revolut', 'stripe', 'canva', 'linear', 'vercel', 'mercury', 'deel',
-];
-
-const isTier1Company = (company: string): boolean => {
-  const normalized = company.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return TIER1_COMPANIES.some(t1 => normalized.includes(t1) || t1.includes(normalized));
-};
-
 const Jobs = () => {
   const { 
     jobs, 
     isLoading, 
     isScraping,
     hasMore,
+    totalCount,
     loadMore, 
     updateJobStatus,
     clearAndRefresh,
-    refetch
+    refetch,
+    searchJobs,
   } = useJobScraper();
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
-  
-  const observerRef = useRef<IntersectionObserver>();
+  const [searchInput, setSearchInput] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 400);
@@ -74,17 +59,6 @@ const Jobs = () => {
   }, []);
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  const lastJobRef = useCallback((node: HTMLDivElement | null) => {
-    if (isLoading || isScraping) return;
-    if (observerRef.current) observerRef.current.disconnect();
-    
-    observerRef.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) loadMore();
-    });
-    
-    if (node) observerRef.current.observe(node);
-  }, [isLoading, isScraping, hasMore, loadMore]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -98,39 +72,35 @@ const Jobs = () => {
     setFilteredJobs(filtered);
   }, []);
 
+  // Server-side search with debounce
+  const handleSearch = useCallback(async () => {
+    if (!searchInput.trim()) {
+      await refetch();
+      return;
+    }
+    setIsSearching(true);
+    await searchJobs(searchInput);
+    setIsSearching(false);
+  }, [searchInput, searchJobs, refetch]);
+
+  // Debounced search on input change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput.length >= 2 || searchInput.length === 0) {
+        handleSearch();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   // Sort jobs based on selected sort option
   const sortedJobs = useMemo(() => {
     return [...filteredJobs].sort((a, b) => {
-      if (sortBy === 'uploaded') {
-        // Sort by created_at (when added to system) - most recent first
-        const aDate = new Date(a.posted_date).getTime(); // This is actually created_at from DB
-        const bDate = new Date(b.posted_date).getTime();
-        return bDate - aDate;
-      } else {
-        // Sort by posted_date - most recent first
-        const aDate = new Date(a.posted_date).getTime();
-        const bDate = new Date(b.posted_date).getTime();
-        return bDate - aDate;
-      }
+      const aDate = new Date(a.posted_date).getTime();
+      const bDate = new Date(b.posted_date).getTime();
+      return bDate - aDate;
     });
   }, [filteredJobs, sortBy]);
-
-  const getTimeAgo = (date: string) => {
-    const minutes = Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60));
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return `${Math.floor(days / 7)}w ago`;
-  };
-
-  const getMatchScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-500 bg-green-500/10 border-green-500/30';
-    if (score >= 65) return 'text-primary bg-primary/10 border-primary/30';
-    return 'text-muted-foreground bg-muted border-border';
-  };
 
   return (
     <AppLayout>
@@ -178,7 +148,29 @@ const Jobs = () => {
           isSearching={isScraping}
           onGoogleSearchComplete={refetch}
         />
-        {/* Filters Bar - only show when jobs exist */}
+
+        {/* Server-side Search */}
+        {jobs.length > 0 && (
+          <div className="flex gap-2">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search jobs by title, company, or location..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            {isSearching && (
+              <div className="flex items-center text-sm text-muted-foreground">
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Searching...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filters Bar */}
         {jobs.length > 0 && (
           <JobFiltersBar jobs={jobs} onFiltersChange={handleFiltersChange} />
         )}
@@ -192,13 +184,14 @@ const Jobs = () => {
           />
         )}
 
-        {/* Results Header - only show after jobs found */}
+        {/* Results Header */}
         {jobs.length > 0 && (
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
               Job Results
               <span className="text-muted-foreground font-normal ml-2">
-                ({sortedJobs.length.toLocaleString()} of {jobs.length.toLocaleString()} jobs)
+                ({sortedJobs.length.toLocaleString()} shown
+                {totalCount > sortedJobs.length && ` of ${totalCount.toLocaleString()} total`})
               </span>
             </h2>
             <DropdownMenu>
@@ -208,7 +201,7 @@ const Jobs = () => {
                   Sort: {sortBy === 'uploaded' ? 'Recently Added' : 'Posted Date'}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
                 <DropdownMenuItem onClick={() => setSortBy('uploaded')}>
                   <Upload className="h-4 w-4 mr-2" />
                   Recently Added
@@ -224,121 +217,21 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Job Listings */}
-        <div className="space-y-3">
-          {sortedJobs.map((job, index) => {
-            const isLast = index === sortedJobs.length - 1;
-            const isTier1 = isTier1Company(job.company);
-            const isNew = Date.now() - new Date(job.posted_date).getTime() < 2 * 60 * 60 * 1000;
-            
-            return (
-              <Card 
-                key={job.id} 
-                ref={isLast ? lastJobRef : null}
-                className={`overflow-hidden transition-all hover:shadow-lg ${
-                  job.status === 'applied' 
-                    ? 'border-green-500/40 bg-green-500/5' 
-                    : isTier1 
-                      ? 'border-primary/40 bg-gradient-to-r from-primary/5 to-transparent' 
-                      : 'hover:border-primary/30'
-                }`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="font-semibold text-lg truncate">{job.title}</h3>
-                        {isNew && (
-                          <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0">NEW</Badge>
-                        )}
-                        {job.status === 'applied' && (
-                          <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                        )}
-                        {isTier1 && (
-                          <Star className="h-4 w-4 text-primary fill-primary flex-shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-muted-foreground">{job.company}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {job.match_score > 0 && (
-                        <Badge className={`text-xs ${getMatchScoreColor(job.match_score)}`}>
-                          {job.match_score}% match
-                        </Badge>
-                      )}
-                      {job.platform && (
-                        <Badge variant="outline" className="text-xs">
-                          {job.platform}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
+        {/* Virtual Job Listings - only renders visible items */}
+        {sortedJobs.length > 0 && (
+          <VirtualJobList
+            jobs={sortedJobs}
+            hasMore={hasMore}
+            isLoading={isLoading}
+            onLoadMore={loadMore}
+            onApply={handleJobApplied}
+          />
+        )}
 
-                  <div className="flex flex-wrap gap-4 mt-3 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {job.location}
-                    </span>
-                    {job.salary && (
-                      <span className="flex items-center gap-1 text-green-600">
-                        <DollarSign className="h-3.5 w-3.5" />
-                        {job.salary}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      {getTimeAgo(job.posted_date)}
-                    </span>
-                  </div>
-
-                  {job.requirements && job.requirements.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {job.requirements.slice(0, 6).map((req, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">
-                          {req}
-                        </Badge>
-                      ))}
-                      {job.requirements.length > 6 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{job.requirements.length - 6}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 mt-4">
-                    {job.status === 'pending' ? (
-                      <Button size="sm" onClick={() => handleJobApplied(job.id)}>
-                        <Zap className="h-4 w-4 mr-1" />
-                        Quick Apply
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="secondary" disabled>
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Applied
-                      </Button>
-                    )}
-                    {job.url && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => window.open(job.url!, '_blank')}
-                      >
-                        <ExternalLink className="h-4 w-4 mr-1" />
-                        View Job
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Loading */}
-        {(isLoading || isScraping) && (
+        {/* Loading state for initial load */}
+        {(isLoading || isScraping) && jobs.length === 0 && (
           <div className="space-y-3">
-            {[...Array(3)].map((_, i) => (
+            {[...Array(5)].map((_, i) => (
               <Card key={i}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
@@ -367,22 +260,18 @@ const Jobs = () => {
             </h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               {jobs.length > 0 
-                ? 'Try adjusting your filters or selecting a different time range.'
-                : 'Click "Start Live" above to fetch fresh jobs from top tech companies.'}
+                ? 'Try adjusting your filters or search query.'
+                : 'Use the search above to find jobs from top tech companies.'}
             </p>
-            {jobs.length > 0 && (
-              <p className="text-sm text-muted-foreground mt-4">
-                Use the filters above to find jobs
-              </p>
-            )}
           </div>
         )}
 
-        {/* End of list */}
-        {!hasMore && sortedJobs.length > 0 && (
-          <p className="text-center text-muted-foreground py-4">
-            Showing {sortedJobs.length} of {jobs.length} jobs
-          </p>
+        {/* Stats footer */}
+        {totalCount > 0 && (
+          <div className="text-center text-sm text-muted-foreground py-4 border-t">
+            Loaded {jobs.length.toLocaleString()} of {totalCount.toLocaleString()} jobs
+            {hasMore && ' • Scroll down to load more'}
+          </div>
         )}
       </div>
 
