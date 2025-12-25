@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
+import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,9 +23,6 @@ import {
   ArrowUp,
   Trash2,
   Star,
-  Sparkles,
-  Calendar,
-  TrendingUp,
   RefreshCw
 } from 'lucide-react';
 
@@ -57,7 +55,6 @@ const Jobs = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [prevStats, setPrevStats] = useState({ total: 0, today: 0, week: 0, applied: 0 });
   
   const observerRef = useRef<IntersectionObserver>();
 
@@ -80,28 +77,16 @@ const Jobs = () => {
     if (node) observerRef.current.observe(node);
   }, [isLoading, isSearching, hasMore, loadMore]);
 
-  // Calculate stats for header cards
-  const jobStats = useMemo(() => {
-    const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
-    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-    
-    const newStats = {
-      total: jobs.length,
-      today: jobs.filter(j => new Date(j.posted_date).getTime() > oneDayAgo).length,
-      week: jobs.filter(j => new Date(j.posted_date).getTime() > oneWeekAgo).length,
-      applied: jobs.filter(j => j.status === 'applied').length,
-    };
-    
-    // Track changes for animation
-    setPrevStats(newStats);
-    return newStats;
-  }, [jobs]);
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refetch();
     setTimeout(() => setIsRefreshing(false), 500);
+  };
+
+  const handleBulkSearch = (keywords: string) => {
+    setIsSearching(true);
+    // Trigger search - the scraper will handle this
+    setTimeout(() => setIsSearching(false), 1000);
   };
 
   const handleJobApplied = (jobId: string) => updateJobStatus(jobId, 'applied');
@@ -130,107 +115,55 @@ const Jobs = () => {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header with Stats */}
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-3">
-                <Briefcase className="h-8 w-8 text-primary" />
-                Job Search
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Find and apply to jobs from top tech companies
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {jobs.length > 0 && (
-                <>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={clearAndRefresh}
-                    disabled={isSearching}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Clear All
-                  </Button>
-                </>
-              )}
-            </div>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <Briefcase className="h-8 w-8 text-primary" />
+              Job Search
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Find and apply to jobs from top tech companies
+            </p>
           </div>
-
-          {/* Stats Cards */}
-          {jobs.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card className="transition-all hover:border-primary/50 group">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <Sparkles className="h-3.5 w-3.5 text-green-500 animate-pulse" />
-                    Today
-                  </div>
-                  <div className="text-2xl font-bold text-green-500 transition-all duration-300 group-hover:scale-105">
-                    {jobStats.today.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">new jobs</div>
-                </CardContent>
-              </Card>
-              
-              <Card className="transition-all hover:border-primary/50 group">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    This Week
-                  </div>
-                  <div className="text-2xl font-bold transition-all duration-300 group-hover:scale-105">
-                    {jobStats.week.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">jobs</div>
-                </CardContent>
-              </Card>
-              
-              <Card className="transition-all hover:border-primary/50 group">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    All Time
-                  </div>
-                  <div className="text-2xl font-bold transition-all duration-300 group-hover:scale-105">
-                    {jobStats.total.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">total jobs</div>
-                </CardContent>
-              </Card>
-              
-              <Card className="transition-all hover:border-green-500/50 group">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                    Applied
-                  </div>
-                  <div className="text-2xl font-bold text-green-500 transition-all duration-300 group-hover:scale-105">
-                    {jobStats.applied}
-                  </div>
-                  <div className="text-xs text-muted-foreground">applications</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {jobs.length > 0 && (
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={clearAndRefresh}
+                  disabled={isSearching}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear All
+                </Button>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Bulk Keyword Search */}
+        <BulkKeywordSearch 
+          onSearch={handleBulkSearch}
+          isSearching={isSearching}
+          onGoogleSearchComplete={refetch}
+        />
 
         {/* Live Jobs Panel */}
         <LiveJobsPanel onJobsFetched={refetch} />
 
-        {/* Filters Bar */}
+        {/* Filters Bar - only show when jobs exist */}
         {jobs.length > 0 && (
           <JobFiltersBar jobs={jobs} onFiltersChange={handleFiltersChange} />
         )}
@@ -244,13 +177,13 @@ const Jobs = () => {
           />
         )}
 
-        {/* Results Header */}
+        {/* Results Header - only show after jobs found */}
         {jobs.length > 0 && (
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
               Job Results
               <span className="text-muted-foreground font-normal ml-2">
-                ({filteredJobs.length.toLocaleString()} results)
+                ({filteredJobs.length.toLocaleString()} of {jobs.length.toLocaleString()} jobs)
               </span>
             </h2>
           </div>
