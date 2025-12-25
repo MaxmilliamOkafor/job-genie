@@ -102,102 +102,80 @@ const PLATFORM_CONFIG = {
   }
 };
 
-// ============= CAPTCHA/VERIFICATION DETECTION =============
-
-const CAPTCHA_SELECTORS = {
-  recaptcha: [
-    '.g-recaptcha',
-    'iframe[src*="recaptcha"]',
-    '#recaptcha',
-    '[data-sitekey]',
-    '.grecaptcha-badge'
-  ],
-  hcaptcha: [
-    '.h-captcha',
-    'iframe[src*="hcaptcha"]',
-    '[data-hcaptcha-sitekey]'
-  ],
-  cloudflare: [
-    '.cf-turnstile',
-    'iframe[src*="challenges.cloudflare"]',
-    '#cf-wrapper'
-  ],
-  arkose: [
-    'iframe[src*="arkoselabs"]',
-    '#fc-iframe-wrap',
-    '.funcaptcha'
-  ],
-  generic: [
-    '[class*="captcha"]',
-    '[id*="captcha"]',
-    'iframe[title*="CAPTCHA"]',
-    'iframe[title*="verification"]'
-  ]
-};
+// ============= CAPTCHA HANDLING REMOVED =============
+// CAPTCHA detection removed - user handles manually
 
 // ============= KNOCKOUT QUESTION ANSWER BANK =============
 // Auto-answers for common US job application questions (Ireland-based applicant)
 
 const KNOCKOUT_ANSWER_BANK = {
-  // Work Authorization & Visa
-  'legal documentation.*identity.*eligibility.*employed.*united states': {
-    answer: 'No',
-    flag: true,
-    reason: 'EU citizen - requires visa sponsorship for US employment'
-  },
-  'require.*sponsorship.*work.*us|sponsor.*visa|need.*sponsorship': {
+  // Work Authorization & Visa - YES answers for dropdowns
+  'legal documentation.*identity.*eligibility.*employed': {
     answer: 'Yes',
-    flag: true,
-    reason: 'H1B or equivalent visa sponsorship required'
-  },
-  'authorized.*work.*united states|legally.*work.*us|work authorization': {
-    answer: 'No',
-    flag: true,
-    reason: 'Requires visa sponsorship - EU citizen'
-  },
-  'citizen.*united states|us citizen': {
-    answer: 'No',
-    flag: true,
-    reason: 'EU/Irish citizen'
-  },
-  
-  // Age & Background
-  'age 18|over 18|at least 18|18 years|eighteen': {
-    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
-  'background check|criminal background|background investigation': {
-    answer: 'Yes',
+  'require.*sponsorship.*work|sponsor.*visa|need.*sponsorship|future.*require.*sponsorship': {
+    answer: 'No',
+    selectValue: 'no',
     flag: false
   },
-  'drug screening|drug test|substance test': {
+  'authorized.*work.*united states|legally.*work.*us|work authorization|eligible.*work': {
     answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
   
-  // Previous Employment
-  'employed by.*company|worked.*before|previous.*employee': {
+  // Age & Background - YES answers
+  'age 18|over 18|at least 18|18 years|eighteen|are you.*18': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'background check|criminal background|background investigation|submit.*background': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'drug screening|drug test|substance test|submit.*drug': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  
+  // Previous Employment - NO answers
+  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed by': {
     answer: 'No',
+    selectValue: 'no',
     flag: false
   },
   'referred by|employee referral|know anyone': {
     answer: 'No',
+    selectValue: 'no',
     flag: false
   },
   
-  // Driver's License
-  'driver.*license|driving license|valid license': {
-    answer: 'Yes - EU License (Irish)',
+  // Driver's License - YES answers
+  'driver.*license|driving license|valid license|valid driver': {
+    answer: 'Yes',
+    selectValue: 'yes',
+    flag: false
+  },
+  'good driving history|driving history': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
   
   // Availability & Relocation
   'willing.*relocate|open.*relocation|relocate.*position': {
     answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
   'available.*start|start date|earliest.*start|when.*start': {
-    answer: 'Immediate availability',
+    answer: 'Immediate',
+    selectValue: 'immediate',
     flag: false
   },
   'notice period|current.*notice': {
@@ -205,23 +183,27 @@ const KNOCKOUT_ANSWER_BANK = {
     flag: false
   },
   
-  // Job Functions & Accommodations
-  'essential functions|perform.*duties|physical requirements': {
+  // Job Functions & Accommodations - YES answers
+  'essential functions|perform.*duties|physical requirements|able to perform': {
     answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
-  'reasonable accommodation|disability accommodation': {
-    answer: 'Not required',
+  'reasonable accommodation|disability accommodation|with or without.*accommodation': {
+    answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
   
-  // Legal Agreements
-  'terms and conditions|agree.*terms|certification|certify': {
+  // Legal Agreements - YES answers
+  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify': {
     answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
   'non-compete|non-disclosure|nda|confidentiality': {
     answer: 'Yes',
+    selectValue: 'yes',
     flag: false
   },
   
@@ -303,31 +285,7 @@ function detectPlatform() {
   return { name: 'generic', config: null };
 }
 
-function detectCaptcha() {
-  const detectedCaptchas = [];
-  
-  for (const [type, selectors] of Object.entries(CAPTCHA_SELECTORS)) {
-    for (const selector of selectors) {
-      const elements = document.querySelectorAll(selector);
-      if (elements.length > 0) {
-        // Check if visible
-        for (const el of elements) {
-          const rect = el.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            detectedCaptchas.push({
-              type,
-              selector,
-              element: el,
-              visible: true
-            });
-          }
-        }
-      }
-    }
-  }
-  
-  return detectedCaptchas;
-}
+// detectCaptcha removed - CAPTCHA handling disabled
 
 function detectLoginPage() {
   const hasPasswordField = document.querySelector('input[type="password"]');
@@ -775,10 +733,12 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
     // First check knockout answer bank
     const knockoutMatch = matchKnockoutQuestion(q.label);
     let answer = null;
+    let selectValue = null;
     let shouldFlag = false;
     
     if (knockoutMatch) {
       answer = knockoutMatch.answer;
+      selectValue = knockoutMatch.selectValue; // For dropdown Yes/No matching
       shouldFlag = knockoutMatch.flag;
       if (shouldFlag) {
         flaggedQuestions.push({
@@ -790,7 +750,7 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
       console.log(`QuantumHire AI: Knockout match for "${q.label}" → "${answer}"${shouldFlag ? ' [FLAGGED]' : ''}`);
     } else {
       // Check for salary questions
-      if (q.label.toLowerCase().match(/salary|pay range|compensation|expected.*pay/)) {
+      if (q.label.toLowerCase().match(/salary|pay range|compensation|expected.*pay|desired pay/)) {
         answer = getSalaryAnswer(q.label, jobData, userProfile);
         console.log(`QuantumHire AI: Salary answer for "${q.label}" → "${answer}"`);
       } else {
@@ -814,6 +774,7 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
             String(answer).toLowerCase().includes(radioText)) {
           radio.checked = true;
           radio.dispatchEvent(new Event('change', { bubbles: true }));
+          radio.dispatchEvent(new Event('input', { bubbles: true }));
           filledCount++;
           break;
         }
@@ -821,14 +782,47 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
     } else if (q.element) {
       if (q.element.tagName === 'SELECT') {
         const options = Array.from(q.element.options);
-        const match = options.find(o => 
-          o.text.toLowerCase().includes(String(answer).toLowerCase()) ||
-          String(answer).toLowerCase().includes(o.text.toLowerCase())
-        );
+        const answerLower = String(answer).toLowerCase();
+        const selectValueLower = selectValue ? selectValue.toLowerCase() : answerLower;
+        
+        // First try exact match on selectValue (for Yes/No dropdowns)
+        let match = options.find(o => {
+          const optText = o.text.toLowerCase().trim();
+          const optVal = o.value.toLowerCase().trim();
+          return optText === selectValueLower || optVal === selectValueLower;
+        });
+        
+        // Then try partial match
+        if (!match) {
+          match = options.find(o => {
+            const optText = o.text.toLowerCase().trim();
+            const optVal = o.value.toLowerCase().trim();
+            return optText.includes(selectValueLower) || 
+                   selectValueLower.includes(optText) ||
+                   optVal.includes(selectValueLower) ||
+                   optText.includes(answerLower) ||
+                   answerLower.includes(optText);
+          });
+        }
+        
         if (match) {
+          // Click to open dropdown first (for some ATS systems)
+          q.element.focus();
+          q.element.click();
+          
+          // Set value
           q.element.value = match.value;
+          
+          // Dispatch comprehensive events for React/Angular apps
           q.element.dispatchEvent(new Event('change', { bubbles: true }));
+          q.element.dispatchEvent(new Event('input', { bubbles: true }));
+          q.element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+          
+          console.log(`QuantumHire AI: Selected "${match.text}" for dropdown "${q.label}"`);
+          q.element.classList.add('quantumhire-filled');
           filledCount++;
+        } else {
+          console.log(`QuantumHire AI: No match found for dropdown "${q.label}" with answer "${answer}". Options:`, options.map(o => o.text));
         }
       } else {
         if (fillField(q.element, String(answer))) {
@@ -842,7 +836,7 @@ function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
   // Log flagged questions for manual review
   if (flaggedQuestions.length > 0) {
     console.log('QuantumHire AI: ⚠️ Flagged questions requiring manual review:', flaggedQuestions);
-    showToast(`⚠️ ${flaggedQuestions.length} question(s) flagged for review (visa/sponsorship)`, 'warning');
+    showToast(`⚠️ ${flaggedQuestions.length} question(s) flagged for review`, 'warning');
   }
   
   return { filledCount, flaggedQuestions };
@@ -854,6 +848,12 @@ const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 
 async function generatePDF(type, profileData, jobData, tailoredData) {
   console.log(`QuantumHire AI: Generating ${type} PDF...`);
+  
+  // Build filename in format: MaxOkafor_CV.pdf or MaxOkafor_CoverLetter.pdf
+  const firstName = (profileData.first_name || 'User').replace(/\s+/g, '');
+  const lastName = (profileData.last_name || '').replace(/\s+/g, '');
+  const fileType = type === 'resume' ? 'CV' : 'CoverLetter';
+  const fileName = `${firstName}${lastName}_${fileType}.pdf`;
   
   try {
     const requestBody = {
@@ -867,7 +867,7 @@ async function generatePDF(type, profileData, jobData, tailoredData) {
         github: profileData.github,
         portfolio: profileData.portfolio,
       },
-      fileName: `${profileData.first_name || 'User'}${profileData.last_name || ''}_${type === 'resume' ? 'CV' : 'CoverLetter'}_${(jobData?.title || 'Job').replace(/\s+/g, '')}.pdf`
+      fileName: fileName
     };
     
     if (type === 'resume') {
@@ -1038,28 +1038,7 @@ async function uploadPDFFile(fileInput, pdfBase64, fileName, maxRetries = 3) {
   return { success: false, error: lastError?.message || 'Upload failed' };
 }
 
-// Legacy text upload (fallback)
-async function uploadFile(fileInput, content, fileName) {
-  if (!fileInput || !content) return false;
-  
-  try {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const file = new File([blob], fileName.replace('.pdf', '.txt'), { type: 'text/plain' });
-    
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(file);
-    fileInput.files = dataTransfer.files;
-    
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-    
-    console.log('QuantumHire AI: Uploaded file:', fileName);
-    return true;
-  } catch (error) {
-    console.error('QuantumHire AI: File upload error', error);
-    return false;
-  }
-}
+// Legacy fallback removed - PDF only uploads now
 
 function findLabelForInput(input) {
   if (input.id) {
@@ -1090,31 +1069,12 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
   applicationState.status = 'in_progress';
   applicationState.startTime = applicationState.startTime || Date.now();
   
-  // Store tailored data in state for resume after CAPTCHA
+  // Store tailored data in state
   if (tailoredData) {
     applicationState.tailoredData = tailoredData;
   }
   
-  // Check for CAPTCHA - only if not explicitly skipping
-  if (!options.skipCaptchaCheck) {
-    const captchas = detectCaptcha();
-    if (captchas.length > 0) {
-      console.log('QuantumHire AI: CAPTCHA detected!', captchas);
-      applicationState.status = 'paused';
-      applicationState.pauseReason = 'captcha';
-      
-      // Show persistent CAPTCHA alert
-      showCaptchaAlert();
-      
-      return {
-        success: false,
-        status: 'paused',
-        pauseReason: 'captcha',
-        captchaType: captchas[0].type,
-        message: '⚠️ Human Verification Required\n\nComplete the CAPTCHA above, then click Continue'
-      };
-    }
-  }
+  // CAPTCHA detection removed - user handles manually
   
   // Check for login page
   const isLogin = detectLoginPage();
@@ -1310,14 +1270,9 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
             results.resumeUploaded = true;
             resumeUploaded = true;
           }
-        } else if (tailoredData.tailoredResume) {
-          // Fallback to text file
-          const fileName = `${profile.first_name || 'User'}${profile.last_name || ''}_CV_${(jobData?.title || 'Job').replace(/\s+/g, '')}.txt`;
-          if (await uploadFile(input, tailoredData.tailoredResume, fileName)) {
-            results.files++;
-            resumeUploaded = true;
-            showToast('⚠️ Uploaded as text file (PDF generation failed)', 'warning');
-          }
+        } else {
+          console.log('QuantumHire AI: Resume PDF not available for upload');
+          showToast('⚠️ Resume PDF generation failed', 'warning');
         }
         continue;
       }
@@ -1341,13 +1296,8 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
             results.coverUploaded = true;
             coverUploaded = true;
           }
-        } else if (tailoredData.tailoredCoverLetter) {
-          const fileName = `${profile.first_name || 'User'}${profile.last_name || ''}_CoverLetter_${(jobData?.title || 'Job').replace(/\s+/g, '')}.txt`;
-          if (await uploadFile(input, tailoredData.tailoredCoverLetter, fileName)) {
-            results.files++;
-            coverUploaded = true;
-            showToast('⚠️ Uploaded as text file (PDF generation failed)', 'warning');
-          }
+        } else {
+          console.log('QuantumHire AI: Cover letter PDF not available for upload');
         }
       }
     }
@@ -1483,144 +1433,7 @@ function showToast(message, type = 'success') {
   }
 }
 
-// ============= CAPTCHA ALERT =============
-
-function showCaptchaAlert() {
-  const existingAlert = document.getElementById('quantumhire-captcha-overlay');
-  if (existingAlert) existingAlert.remove();
-  
-  const overlay = document.createElement('div');
-  overlay.id = 'quantumhire-captcha-overlay';
-  overlay.innerHTML = `
-    <div class="qh-captcha-modal">
-      <div class="qh-captcha-icon">⚠️</div>
-      <div class="qh-captcha-title">Human Verification Required</div>
-      <div class="qh-captcha-message">Complete the CAPTCHA above, then click Continue</div>
-      <button id="qh-captcha-continue-btn" class="qh-captcha-btn">
-        <span>▶️</span> CONTINUE
-      </button>
-      <button id="qh-captcha-cancel-btn" class="qh-captcha-cancel">Cancel</button>
-    </div>
-  `;
-  
-  // Add styles
-  const style = document.createElement('style');
-  style.textContent = `
-    #quantumhire-captcha-overlay {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 2147483647;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    
-    .qh-captcha-modal {
-      background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-      border: 2px solid #f59e0b;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(245, 158, 11, 0.3);
-      text-align: center;
-      min-width: 280px;
-      animation: pulseGlow 2s infinite;
-    }
-    
-    @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(245, 158, 11, 0.3); }
-      50% { box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 50px rgba(245, 158, 11, 0.5); }
-    }
-    
-    .qh-captcha-icon {
-      font-size: 48px;
-      margin-bottom: 12px;
-    }
-    
-    .qh-captcha-title {
-      color: #f59e0b;
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    
-    .qh-captcha-message {
-      color: #94a3b8;
-      font-size: 14px;
-      margin-bottom: 20px;
-      line-height: 1.4;
-    }
-    
-    .qh-captcha-btn {
-      width: 100%;
-      padding: 14px 24px;
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      border: none;
-      border-radius: 10px;
-      color: white;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: all 0.2s;
-    }
-    
-    .qh-captcha-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
-    }
-    
-    .qh-captcha-cancel {
-      margin-top: 12px;
-      padding: 8px 16px;
-      background: transparent;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 8px;
-      color: #64748b;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    
-    .qh-captcha-cancel:hover {
-      border-color: rgba(255, 255, 255, 0.4);
-      color: #94a3b8;
-    }
-  `;
-  
-  document.head.appendChild(style);
-  document.body.appendChild(overlay);
-  
-  // Handle continue button
-  document.getElementById('qh-captcha-continue-btn').addEventListener('click', async () => {
-    overlay.remove();
-    showToast('Resuming application...', 'info');
-    
-    // Resume autofill with stored tailored data
-    const atsData = await chrome.storage.local.get(['atsCredentials']);
-    const result = await autofillForm(
-      applicationState.tailoredData,
-      atsData.atsCredentials,
-      { skipCaptchaCheck: true }
-    );
-    
-    if (result.success) {
-      showToast(result.message, 'success');
-    } else if (result.status === 'paused') {
-      // Another CAPTCHA found
-      showCaptchaAlert();
-    } else {
-      showToast(result.message || 'Completed', 'info');
-    }
-  });
-  
-  // Handle cancel button
-  document.getElementById('qh-captcha-cancel-btn').addEventListener('click', () => {
-    overlay.remove();
-    applicationState.status = 'idle';
-    showToast('Application paused', 'info');
-  });
-}
+// CAPTCHA Alert removed - user handles CAPTCHA manually
 
 // ============= FLOATING PANEL =============
 
@@ -1685,11 +1498,6 @@ function createFloatingPanel() {
         </div>
       </div>
       
-      <div class="qh-captcha-alert hidden" id="qh-captcha-alert">
-        <div class="qh-alert-header">⚠️ CAPTCHA detected</div>
-        <div class="qh-alert-body">Please complete verification then click CONTINUE</div>
-        <button id="qh-continue-btn" class="qh-btn primary">CONTINUE</button>
-      </div>
       
       <div class="qh-results hidden" id="qh-results">
         <div class="qh-match-score">
@@ -1994,31 +1802,6 @@ function addPanelStyles() {
     .qh-btn-subtitle {
       font-size: 10px;
       opacity: 0.8;
-    }
-    
-    .qh-captcha-alert {
-      background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(234, 88, 12, 0.2) 100%);
-      border: 1px solid rgba(245, 158, 11, 0.4);
-      border-radius: 10px;
-      padding: 14px;
-      margin-top: 12px;
-    }
-    
-    .qh-captcha-alert.hidden {
-      display: none;
-    }
-    
-    .qh-alert-header {
-      font-weight: 600;
-      font-size: 13px;
-      color: #fbbf24;
-      margin-bottom: 6px;
-    }
-    
-    .qh-alert-body {
-      font-size: 11px;
-      color: #fcd34d;
-      margin-bottom: 12px;
     }
     
     .qh-results {
@@ -2379,20 +2162,15 @@ function setupPanelEvents(panel) {
       const atsData = await chrome.storage.local.get(['atsCredentials']);
       const result = await autofillForm(tailoredData, atsData.atsCredentials);
       
-      if (result.status === 'paused' && result.pauseReason === 'captcha') {
-        panel.querySelector('#qh-captcha-alert').classList.remove('hidden');
-        updateStatus(statusEl, '⚠️', 'Waiting for human verification...');
-      } else {
-        updateStatus(statusEl, '✅', result.message);
-        
-        // Show results
-        panel.querySelector('#qh-results').classList.remove('hidden');
-        panel.querySelector('#qh-resume').value = tailoredData.tailoredResume || '';
-        panel.querySelector('#qh-cover').value = tailoredData.tailoredCoverLetter || '';
-        panel.querySelector('#qh-score').textContent = `${tailoredData.matchScore || 0}%`;
-        
-        showToast(result.message, 'success');
-      }
+      updateStatus(statusEl, '✅', result.message);
+      
+      // Show results
+      panel.querySelector('#qh-results').classList.remove('hidden');
+      panel.querySelector('#qh-resume').value = tailoredData.tailoredResume || '';
+      panel.querySelector('#qh-cover').value = tailoredData.tailoredCoverLetter || '';
+      panel.querySelector('#qh-score').textContent = `${tailoredData.matchScore || 0}%`;
+      
+      showToast(result.message, 'success');
       
     } catch (error) {
       console.error('Smart apply error:', error);
@@ -2427,24 +2205,6 @@ function setupPanelEvents(panel) {
         showToast('Next button not found', 'error');
       }
     }
-  });
-  
-  // Continue after CAPTCHA
-  panel.querySelector('#qh-continue-btn')?.addEventListener('click', async () => {
-    panel.querySelector('#qh-captcha-alert').classList.add('hidden');
-    const statusEl = panel.querySelector('#qh-status');
-    updateStatus(statusEl, '▶️', 'Resuming application...');
-    
-    // Resume autofill with skipCaptchaCheck
-    const atsData = await chrome.storage.local.get(['atsCredentials']);
-    const result = await autofillForm(
-      applicationState.tailoredData, 
-      atsData.atsCredentials, 
-      { skipCaptchaCheck: true }
-    );
-    
-    updateStatus(statusEl, '✅', result.message);
-    showToast('Resumed successfully!', 'success');
   });
   
   // Tab switching
