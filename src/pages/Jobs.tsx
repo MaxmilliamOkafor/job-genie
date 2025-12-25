@@ -44,15 +44,16 @@ const Jobs = () => {
   const { 
     jobs, 
     isLoading, 
+    isScraping,
     hasMore,
     loadMore, 
     updateJobStatus,
     clearAndRefresh,
-    refetch
+    refetch,
+    startContinuousScraping
   } = useJobScraper();
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
@@ -67,7 +68,7 @@ const Jobs = () => {
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   const lastJobRef = useCallback((node: HTMLDivElement | null) => {
-    if (isLoading || isSearching) return;
+    if (isLoading || isScraping) return;
     if (observerRef.current) observerRef.current.disconnect();
     
     observerRef.current = new IntersectionObserver(entries => {
@@ -75,7 +76,7 @@ const Jobs = () => {
     });
     
     if (node) observerRef.current.observe(node);
-  }, [isLoading, isSearching, hasMore, loadMore]);
+  }, [isLoading, isScraping, hasMore, loadMore]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -84,9 +85,8 @@ const Jobs = () => {
   };
 
   const handleBulkSearch = (keywords: string) => {
-    setIsSearching(true);
-    // Trigger search - the scraper will handle this
-    setTimeout(() => setIsSearching(false), 1000);
+    // Start scraping with the keywords - this will fetch and update jobs
+    startContinuousScraping(keywords);
   };
 
   const handleJobApplied = (jobId: string) => updateJobStatus(jobId, 'applied');
@@ -142,7 +142,7 @@ const Jobs = () => {
                   variant="outline" 
                   size="sm"
                   onClick={clearAndRefresh}
-                  disabled={isSearching}
+                  disabled={isScraping}
                   className="text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
@@ -156,7 +156,7 @@ const Jobs = () => {
         {/* Bulk Keyword Search */}
         <BulkKeywordSearch 
           onSearch={handleBulkSearch}
-          isSearching={isSearching}
+          isSearching={isScraping}
           onGoogleSearchComplete={refetch}
         />
 
@@ -301,7 +301,7 @@ const Jobs = () => {
         </div>
 
         {/* Loading */}
-        {(isLoading || isSearching) && (
+        {(isLoading || isScraping) && (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
               <Card key={i}>
@@ -324,7 +324,7 @@ const Jobs = () => {
         )}
 
         {/* Empty state */}
-        {filteredJobs.length === 0 && !isLoading && !isSearching && (
+        {filteredJobs.length === 0 && !isLoading && !isScraping && (
           <div className="text-center py-16">
             <Briefcase className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-medium mb-2">
