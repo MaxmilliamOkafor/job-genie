@@ -499,30 +499,57 @@ function findField(fieldType, platformConfig = null) {
   // Try platform-specific selector first
   if (platformConfig?.selectors?.[fieldType]) {
     const element = document.querySelector(platformConfig.selectors[fieldType]);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
   }
   
   // Try generic mappings
   const mappings = FIELD_MAPPINGS[fieldType] || [fieldType];
   
   for (const mapping of mappings) {
+    // ID-based lookup
     let element = document.getElementById(mapping);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
     
+    // Name-based lookup (exact)
     element = document.querySelector(`input[name="${mapping}"], textarea[name="${mapping}"], select[name="${mapping}"]`);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
     
+    // Name-based lookup (partial)
     element = document.querySelector(`input[name*="${mapping}"], textarea[name*="${mapping}"]`);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
     
+    // ID-based lookup (partial)
     element = document.querySelector(`input[id*="${mapping}"], textarea[id*="${mapping}"]`);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
     
+    // Placeholder-based lookup
     element = document.querySelector(`input[placeholder*="${mapping}" i], textarea[placeholder*="${mapping}" i]`);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
     
+    // Aria-label-based lookup
     element = document.querySelector(`input[aria-label*="${mapping}" i], textarea[aria-label*="${mapping}" i]`);
-    if (element) return element;
+    if (element && element.offsetParent !== null) return element;
+    
+    // Data-automation-id lookup (for Workday)
+    element = document.querySelector(`input[data-automation-id*="${mapping}"], textarea[data-automation-id*="${mapping}"]`);
+    if (element && element.offsetParent !== null) return element;
+    
+    // Label-based lookup (find label, then its associated input)
+    const labels = document.querySelectorAll(`label`);
+    for (const label of labels) {
+      if (label.innerText?.toLowerCase().includes(mapping.toLowerCase())) {
+        const forId = label.getAttribute('for');
+        if (forId) {
+          element = document.getElementById(forId);
+          if (element && element.offsetParent !== null) return element;
+        }
+        // Check for input inside or next to label
+        element = label.querySelector('input, textarea, select');
+        if (element && element.offsetParent !== null) return element;
+        element = label.parentElement?.querySelector('input, textarea, select');
+        if (element && element.offsetParent !== null) return element;
+      }
+    }
   }
   
   return null;
@@ -532,33 +559,65 @@ function fillField(element, value) {
   if (!element || !value) return false;
   
   try {
+    // Skip if already has value and not empty
+    if (element.value && element.value.trim() !== '') {
+      console.log('QuantumHire AI: Field already filled, skipping');
+      return false;
+    }
+    
     // Handle different input types
     if (element.tagName === 'SELECT') {
       const options = Array.from(element.options);
-      const match = options.find(o => 
-        o.text.toLowerCase().includes(String(value).toLowerCase()) ||
-        o.value.toLowerCase().includes(String(value).toLowerCase())
+      const valueStr = String(value).toLowerCase();
+      
+      // Try exact match first
+      let match = options.find(o => 
+        o.text.toLowerCase() === valueStr || o.value.toLowerCase() === valueStr
       );
+      
+      // Then partial match
+      if (!match) {
+        match = options.find(o => 
+          o.text.toLowerCase().includes(valueStr) || valueStr.includes(o.text.toLowerCase()) ||
+          o.value.toLowerCase().includes(valueStr)
+        );
+      }
+      
       if (match) {
         element.value = match.value;
         element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('input', { bubbles: true }));
         return true;
       }
       return false;
     }
     
-    element.focus();
-    element.value = '';
+    // For Workday and React apps - use native input setter
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    const nativeTextareaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
     
-    // Type character by character for better compatibility
-    for (const char of String(value)) {
-      element.value += char;
-      element.dispatchEvent(new InputEvent('input', { bubbles: true, data: char }));
+    element.focus();
+    
+    // Clear existing value
+    if (element.tagName === 'TEXTAREA' && nativeTextareaValueSetter) {
+      nativeTextareaValueSetter.call(element, String(value));
+    } else if (nativeInputValueSetter) {
+      nativeInputValueSetter.call(element, String(value));
+    } else {
+      element.value = String(value);
     }
     
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+    // Dispatch all necessary events for React/Angular/Vue apps
+    element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
     element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-    element.blur();
+    element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    
+    // For Workday specifically
+    if (element.getAttribute('data-automation-id')) {
+      element.dispatchEvent(new Event('focusout', { bubbles: true }));
+    }
     
     return true;
   } catch (e) {
@@ -1031,23 +1090,30 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
   applicationState.status = 'in_progress';
   applicationState.startTime = applicationState.startTime || Date.now();
   
-  // Check for CAPTCHA
-  const captchas = detectCaptcha();
-  if (captchas.length > 0 && !options.skipCaptchaCheck) {
-    console.log('QuantumHire AI: CAPTCHA detected!', captchas);
-    applicationState.status = 'paused';
-    applicationState.pauseReason = 'captcha';
-    
-    const captchaMessage = '⚠️ CAPTCHA detected - Please complete verification then click CONTINUE';
-    showToast(captchaMessage, 'warning');
-    
-    return {
-      success: false,
-      status: 'paused',
-      pauseReason: 'captcha',
-      captchaType: captchas[0].type,
-      message: captchaMessage
-    };
+  // Store tailored data in state for resume after CAPTCHA
+  if (tailoredData) {
+    applicationState.tailoredData = tailoredData;
+  }
+  
+  // Check for CAPTCHA - only if not explicitly skipping
+  if (!options.skipCaptchaCheck) {
+    const captchas = detectCaptcha();
+    if (captchas.length > 0) {
+      console.log('QuantumHire AI: CAPTCHA detected!', captchas);
+      applicationState.status = 'paused';
+      applicationState.pauseReason = 'captcha';
+      
+      // Show persistent CAPTCHA alert
+      showCaptchaAlert();
+      
+      return {
+        success: false,
+        status: 'paused',
+        pauseReason: 'captcha',
+        captchaType: captchas[0].type,
+        message: '⚠️ Human Verification Required\n\nComplete the CAPTCHA above, then click Continue'
+      };
+    }
   }
   
   // Check for login page
@@ -1057,16 +1123,29 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     const loginFilled = fillLoginCredentials(atsCredentials);
     
     if (loginFilled > 0) {
-      // Auto-click sign in button if found
-      const signInBtn = document.querySelector(
-        'button[type="submit"], input[type="submit"], button:contains("Sign In"), button:contains("Log In")'
-      );
+      // Try to auto-click sign in button
+      const signInSelectors = [
+        'button[type="submit"]',
+        'input[type="submit"]',
+        '[data-automation-id="click_filter"]',
+        'button[data-automation-id="signInSubmitButton"]',
+        'button.btn-primary[type="submit"]'
+      ];
+      
+      for (const selector of signInSelectors) {
+        const signInBtn = document.querySelector(selector);
+        if (signInBtn && signInBtn.offsetParent !== null) {
+          console.log('QuantumHire AI: Found sign in button, clicking...');
+          setTimeout(() => signInBtn.click(), 500);
+          break;
+        }
+      }
       
       return {
         success: true,
         status: 'login_filled',
         fields: loginFilled,
-        message: `Filled ${loginFilled} login fields. Click Sign In to continue.`
+        message: `Filled ${loginFilled} login fields. Signing in...`
       };
     }
   }
@@ -1140,7 +1219,6 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
   
   // Step 3: MANDATORY PDF Generation and Upload
   if (tailoredData && !options.skipFileUpload) {
-    const fileInputs = document.querySelectorAll('input[type="file"]');
     const jobData = tailoredData.jobData || extractJobDetails();
     
     // ALWAYS generate PDFs when tailored data is available
@@ -1169,49 +1247,122 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
       }
     }
     
+    // Find ALL file inputs on the page with expanded detection
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    
+    // Also look for custom upload components (Workday, Greenhouse, etc.)
+    const uploadButtons = document.querySelectorAll([
+      '[data-automation-id*="file"]',
+      '[data-automation-id*="upload"]',
+      '[data-automation-id*="resume"]',
+      '[data-automation-id*="attachment"]',
+      'button[class*="upload"]',
+      'div[class*="dropzone"]',
+      'label[class*="upload"]',
+      '.file-upload',
+      '.resume-upload',
+      '.attachment-upload'
+    ].join(', '));
+    
+    console.log(`QuantumHire AI: Found ${fileInputs.length} file inputs, ${uploadButtons.length} upload components`);
+    
+    // Track what we've uploaded
+    let resumeUploaded = false;
+    let coverUploaded = false;
+    
     // Upload to file inputs
     for (const input of fileInputs) {
-      if (input.files?.length > 0) continue; // Already has file
+      if (input.files?.length > 0) {
+        console.log('QuantumHire AI: Input already has file, skipping');
+        continue;
+      }
       
       const label = findLabelForInput(input).toLowerCase();
       const inputName = (input.name || input.id || '').toLowerCase();
+      const inputAccept = (input.accept || '').toLowerCase();
+      const parentText = (input.closest('div, label, section')?.innerText || '').toLowerCase().substring(0, 200);
       
-      // Resume upload - MANDATORY
-      if (inputName.includes('resume') || inputName.includes('cv') || 
-          label.includes('resume') || label.includes('cv') ||
-          label.includes('attach')) {
+      console.log(`QuantumHire AI: Checking file input - name: "${inputName}", label: "${label.substring(0, 50)}"`);
+      
+      // Resume upload detection - expanded patterns
+      const isResumeField = !resumeUploaded && (
+        inputName.includes('resume') || 
+        inputName.includes('cv') ||
+        inputName.includes('file') ||
+        label.includes('resume') || 
+        label.includes('cv') ||
+        label.includes('attach') ||
+        label.includes('upload your') ||
+        parentText.includes('resume') ||
+        parentText.includes('cv') ||
+        parentText.includes('attach your') ||
+        inputAccept.includes('pdf') ||
+        inputAccept.includes('doc')
+      );
+      
+      if (isResumeField) {
         if (resumePdfResult?.success && resumePdfResult.pdf) {
+          console.log('QuantumHire AI: Uploading resume PDF...');
           const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
           if (uploadResult.success) {
             results.files++;
             results.resumePdf = resumePdfResult;
             results.resumeUploaded = true;
+            resumeUploaded = true;
           }
         } else if (tailoredData.tailoredResume) {
-          // Last resort fallback to text file
+          // Fallback to text file
           const fileName = `${profile.first_name || 'User'}${profile.last_name || ''}_CV_${(jobData?.title || 'Job').replace(/\s+/g, '')}.txt`;
           if (await uploadFile(input, tailoredData.tailoredResume, fileName)) {
             results.files++;
+            resumeUploaded = true;
             showToast('⚠️ Uploaded as text file (PDF generation failed)', 'warning');
           }
         }
+        continue;
       }
       
-      // Cover letter upload - MANDATORY
-      else if (inputName.includes('cover') || label.includes('cover letter')) {
+      // Cover letter upload detection - expanded patterns  
+      const isCoverField = !coverUploaded && (
+        inputName.includes('cover') ||
+        label.includes('cover letter') ||
+        label.includes('cover_letter') ||
+        label.includes('coverletter') ||
+        parentText.includes('cover letter')
+      );
+      
+      if (isCoverField) {
         if (coverPdfResult?.success && coverPdfResult.pdf) {
+          console.log('QuantumHire AI: Uploading cover letter PDF...');
           const uploadResult = await uploadPDFFile(input, coverPdfResult.pdf, coverPdfResult.fileName);
           if (uploadResult.success) {
             results.files++;
             results.coverPdf = coverPdfResult;
             results.coverUploaded = true;
+            coverUploaded = true;
           }
         } else if (tailoredData.tailoredCoverLetter) {
-          // Last resort fallback to text file
           const fileName = `${profile.first_name || 'User'}${profile.last_name || ''}_CoverLetter_${(jobData?.title || 'Job').replace(/\s+/g, '')}.txt`;
           if (await uploadFile(input, tailoredData.tailoredCoverLetter, fileName)) {
             results.files++;
+            coverUploaded = true;
             showToast('⚠️ Uploaded as text file (PDF generation failed)', 'warning');
+          }
+        }
+      }
+    }
+    
+    // If we have a resume but couldn't find a specific resume input, try the first empty file input
+    if (!resumeUploaded && resumePdfResult?.success && fileInputs.length > 0) {
+      for (const input of fileInputs) {
+        if (!input.files?.length) {
+          console.log('QuantumHire AI: Uploading resume to first available file input...');
+          const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
+          if (uploadResult.success) {
+            results.files++;
+            results.resumePdf = resumePdfResult;
+            results.resumeUploaded = true;
+            break;
           }
         }
       }
@@ -1330,6 +1481,145 @@ function showToast(message, type = 'success') {
   if (type !== 'warning') {
     setTimeout(() => toast.remove(), 5000);
   }
+}
+
+// ============= CAPTCHA ALERT =============
+
+function showCaptchaAlert() {
+  const existingAlert = document.getElementById('quantumhire-captcha-overlay');
+  if (existingAlert) existingAlert.remove();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'quantumhire-captcha-overlay';
+  overlay.innerHTML = `
+    <div class="qh-captcha-modal">
+      <div class="qh-captcha-icon">⚠️</div>
+      <div class="qh-captcha-title">Human Verification Required</div>
+      <div class="qh-captcha-message">Complete the CAPTCHA above, then click Continue</div>
+      <button id="qh-captcha-continue-btn" class="qh-captcha-btn">
+        <span>▶️</span> CONTINUE
+      </button>
+      <button id="qh-captcha-cancel-btn" class="qh-captcha-cancel">Cancel</button>
+    </div>
+  `;
+  
+  // Add styles
+  const style = document.createElement('style');
+  style.textContent = `
+    #quantumhire-captcha-overlay {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 2147483647;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
+    .qh-captcha-modal {
+      background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+      border: 2px solid #f59e0b;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(245, 158, 11, 0.3);
+      text-align: center;
+      min-width: 280px;
+      animation: pulseGlow 2s infinite;
+    }
+    
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(245, 158, 11, 0.3); }
+      50% { box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 50px rgba(245, 158, 11, 0.5); }
+    }
+    
+    .qh-captcha-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    
+    .qh-captcha-title {
+      color: #f59e0b;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .qh-captcha-message {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+    
+    .qh-captcha-btn {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    
+    .qh-captcha-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+    }
+    
+    .qh-captcha-cancel {
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #64748b;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    
+    .qh-captcha-cancel:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+      color: #94a3b8;
+    }
+  `;
+  
+  document.head.appendChild(style);
+  document.body.appendChild(overlay);
+  
+  // Handle continue button
+  document.getElementById('qh-captcha-continue-btn').addEventListener('click', async () => {
+    overlay.remove();
+    showToast('Resuming application...', 'info');
+    
+    // Resume autofill with stored tailored data
+    const atsData = await chrome.storage.local.get(['atsCredentials']);
+    const result = await autofillForm(
+      applicationState.tailoredData,
+      atsData.atsCredentials,
+      { skipCaptchaCheck: true }
+    );
+    
+    if (result.success) {
+      showToast(result.message, 'success');
+    } else if (result.status === 'paused') {
+      // Another CAPTCHA found
+      showCaptchaAlert();
+    } else {
+      showToast(result.message || 'Completed', 'info');
+    }
+  });
+  
+  // Handle cancel button
+  document.getElementById('qh-captcha-cancel-btn').addEventListener('click', () => {
+    overlay.remove();
+    applicationState.status = 'idle';
+    showToast('Application paused', 'info');
+  });
 }
 
 // ============= FLOATING PANEL =============
