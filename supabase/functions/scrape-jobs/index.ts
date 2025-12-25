@@ -83,6 +83,23 @@ interface JobListing {
   match_score: number;
 }
 
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
+}
+
 // Fetch jobs from Greenhouse public API - uses absolute_url for direct job links
 async function fetchGreenhouseJobs(company: { name: string; token: string }): Promise<JobListing[]> {
   try {
@@ -232,9 +249,16 @@ serve(async (req) => {
   }
 
   try {
-    const { keywords = '', offset = 0, limit = 100, user_id } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
-    console.log(`Scraping jobs with keywords: ${keywords}, offset: ${offset}, limit: ${limit}`);
+    // Verify JWT and get authenticated user ID
+    const user_id = await verifyAndGetUserId(req, supabase);
+    
+    const { keywords = '', offset = 0, limit = 100 } = await req.json();
+    
+    console.log(`Scraping jobs with keywords: ${keywords}, offset: ${offset}, limit: ${limit} for user ${user_id}`);
     
     const parsedKeywords = parseKeywords(keywords);
     let allJobs: JobListing[] = [];
@@ -282,12 +306,8 @@ serve(async (req) => {
     // Slice for pagination
     const paginatedJobs = validJobs.slice(offset, offset + limit);
     
-    // Save to database if user_id provided
-    if (user_id && paginatedJobs.length > 0) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
+    // Save to database
+    if (paginatedJobs.length > 0) {
       const jobsToInsert = paginatedJobs.map(job => ({
         user_id,
         title: job.title,
@@ -324,9 +344,10 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in scrape-jobs:', error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

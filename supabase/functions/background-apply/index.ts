@@ -7,11 +7,27 @@ const corsHeaders = {
 };
 
 interface BackgroundApplyRequest {
-  userId: string;
   jobIds: string[];
   userProfile: any;
   sendConfirmationEmail: boolean;
   userEmail?: string;
+}
+
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
 }
 
 serve(async (req) => {
@@ -23,9 +39,11 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    const { userId, jobIds, userProfile, sendConfirmationEmail, userEmail } = await req.json() as BackgroundApplyRequest;
+    // Verify JWT and get authenticated user ID
+    const userId = await verifyAndGetUserId(req, supabase);
+
+    const { jobIds, userProfile, sendConfirmationEmail, userEmail } = await req.json() as BackgroundApplyRequest;
 
     console.log(`Starting background apply for ${jobIds.length} jobs for user ${userId}`);
 
@@ -48,7 +66,7 @@ serve(async (req) => {
       try {
         console.log(`Processing job: ${job.title} at ${job.company}`);
 
-        // Call tailor-application function
+        // Call tailor-application function with auth header
         const tailorResponse = await fetch(`${supabaseUrl}/functions/v1/tailor-application`, {
           method: "POST",
           headers: {
@@ -179,9 +197,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Error in background-apply:", error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

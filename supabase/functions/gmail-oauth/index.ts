@@ -8,9 +8,25 @@ const corsHeaders = {
 
 interface OAuthRequest {
   type: "get_auth_url" | "exchange_code" | "refresh_token";
-  userId: string;
   code?: string;
   redirectUri?: string;
+}
+
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
 }
 
 serve(async (req) => {
@@ -30,7 +46,11 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const { type, userId, code, redirectUri } = await req.json() as OAuthRequest;
+    
+    // Verify JWT and get authenticated user ID
+    const userId = await verifyAndGetUserId(req, supabase);
+    
+    const { type, code, redirectUri } = await req.json() as OAuthRequest;
 
     console.log(`Gmail OAuth request: ${type} for user ${userId}`);
 
@@ -197,9 +217,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Error in gmail-oauth:", error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

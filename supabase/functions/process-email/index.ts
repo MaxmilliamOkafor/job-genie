@@ -8,12 +8,28 @@ const corsHeaders = {
 
 interface SendEmailRequest {
   type: "send_application" | "send_referral" | "detect_responses";
-  userId: string;
   applicationId?: string;
   recipient?: string;
   subject?: string;
   body?: string;
   accessToken?: string;
+}
+
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
 }
 
 serve(async (req) => {
@@ -26,7 +42,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { type, userId, applicationId, recipient, subject, body, accessToken } = await req.json() as SendEmailRequest;
+    // Verify JWT and get authenticated user ID
+    const userId = await verifyAndGetUserId(req, supabase);
+
+    const { type, applicationId, recipient, subject, body, accessToken } = await req.json() as SendEmailRequest;
 
     console.log(`Processing email request: ${type} for user ${userId}`);
 
@@ -130,19 +149,19 @@ serve(async (req) => {
         const from = headers.find((h: any) => h.name === "From")?.value || "";
         
         // Get body
-        let body = "";
+        let emailBody = "";
         if (msgData.payload?.body?.data) {
-          body = atob(msgData.payload.body.data.replace(/-/g, "+").replace(/_/g, "/"));
+          emailBody = atob(msgData.payload.body.data.replace(/-/g, "+").replace(/_/g, "/"));
         } else if (msgData.payload?.parts) {
           const textPart = msgData.payload.parts.find((p: any) => p.mimeType === "text/plain");
           if (textPart?.body?.data) {
-            body = atob(textPart.body.data.replace(/-/g, "+").replace(/_/g, "/"));
+            emailBody = atob(textPart.body.data.replace(/-/g, "+").replace(/_/g, "/"));
           }
         }
 
         // Detect email type using keywords
         const lowerSubject = subject.toLowerCase();
-        const lowerBody = body.toLowerCase();
+        const lowerBody = emailBody.toLowerCase();
         
         let detectionType: string | null = null;
         
@@ -172,7 +191,7 @@ serve(async (req) => {
               user_id: userId,
               email_subject: subject,
               email_from: from,
-              email_body: body.substring(0, 1000),
+              email_body: emailBody.substring(0, 1000),
               detection_type: detectionType,
             }).select().single();
 
@@ -195,9 +214,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Error in process-email:", error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
