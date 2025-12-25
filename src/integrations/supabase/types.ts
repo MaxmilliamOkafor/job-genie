@@ -14,7 +14,459 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      applications: {
+        Row: {
+          applied_at: string | null
+          created_at: string | null
+          email_sent: boolean | null
+          email_sent_at: string | null
+          id: string
+          job_id: string
+          referral_contacts: string[] | null
+          referral_email: string | null
+          status: Database["public"]["Enums"]["application_status"] | null
+          tailored_cover_letter: string | null
+          tailored_resume: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string | null
+          email_sent?: boolean | null
+          email_sent_at?: string | null
+          id?: string
+          job_id: string
+          referral_contacts?: string[] | null
+          referral_email?: string | null
+          status?: Database["public"]["Enums"]["application_status"] | null
+          tailored_cover_letter?: string | null
+          tailored_resume?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string | null
+          email_sent?: boolean | null
+          email_sent_at?: string | null
+          id?: string
+          job_id?: string
+          referral_contacts?: string[] | null
+          referral_email?: string | null
+          status?: Database["public"]["Enums"]["application_status"] | null
+          tailored_cover_letter?: string | null
+          tailored_resume?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_settings: {
+        Row: {
+          apply_within_minutes: number | null
+          auto_apply_enabled: boolean | null
+          background_apply_count: number | null
+          background_apply_enabled: boolean | null
+          created_at: string | null
+          id: string
+          min_match_score: number | null
+          platforms: string[] | null
+          send_referral_emails: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          apply_within_minutes?: number | null
+          auto_apply_enabled?: boolean | null
+          background_apply_count?: number | null
+          background_apply_enabled?: boolean | null
+          created_at?: string | null
+          id?: string
+          min_match_score?: number | null
+          platforms?: string[] | null
+          send_referral_emails?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          apply_within_minutes?: number | null
+          auto_apply_enabled?: boolean | null
+          background_apply_count?: number | null
+          background_apply_enabled?: boolean | null
+          created_at?: string | null
+          id?: string
+          min_match_score?: number | null
+          platforms?: string[] | null
+          send_referral_emails?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_detections: {
+        Row: {
+          application_id: string | null
+          created_at: string | null
+          detected_at: string | null
+          detection_type: Database["public"]["Enums"]["email_detection_type"]
+          email_body: string | null
+          email_from: string
+          email_subject: string
+          id: string
+          is_read: boolean | null
+          user_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          detection_type: Database["public"]["Enums"]["email_detection_type"]
+          email_body?: string | null
+          email_from: string
+          email_subject: string
+          id?: string
+          is_read?: boolean | null
+          user_id: string
+        }
+        Update: {
+          application_id?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          detection_type?: Database["public"]["Enums"]["email_detection_type"]
+          email_body?: string | null
+          email_from?: string
+          email_subject?: string
+          id?: string
+          is_read?: boolean | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_detections_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_integrations: {
+        Row: {
+          access_token: string | null
+          created_at: string | null
+          email: string
+          id: string
+          is_connected: boolean | null
+          refresh_token: string | null
+          token_expiry: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          created_at?: string | null
+          email: string
+          id?: string
+          is_connected?: boolean | null
+          refresh_token?: string | null
+          token_expiry?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          is_connected?: boolean | null
+          refresh_token?: string | null
+          token_expiry?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jobs: {
+        Row: {
+          applied_at: string | null
+          company: string
+          created_at: string | null
+          description: string | null
+          id: string
+          location: string
+          match_score: number | null
+          platform: string | null
+          posted_date: string | null
+          requirements: string[] | null
+          salary: string | null
+          status: Database["public"]["Enums"]["application_status"] | null
+          title: string
+          updated_at: string | null
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          company: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          location: string
+          match_score?: number | null
+          platform?: string | null
+          posted_date?: string | null
+          requirements?: string[] | null
+          salary?: string | null
+          status?: Database["public"]["Enums"]["application_status"] | null
+          title: string
+          updated_at?: string | null
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          company?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          location?: string
+          match_score?: number | null
+          platform?: string | null
+          posted_date?: string | null
+          requirements?: string[] | null
+          salary?: string | null
+          status?: Database["public"]["Enums"]["application_status"] | null
+          title?: string
+          updated_at?: string | null
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      keyword_monitors: {
+        Row: {
+          auto_apply: boolean | null
+          created_at: string | null
+          enabled: boolean | null
+          id: string
+          keywords: string[]
+          locations: string[] | null
+          min_match_score: number | null
+          name: string
+          roles: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_apply?: boolean | null
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          keywords: string[]
+          locations?: string[] | null
+          min_match_score?: number | null
+          name: string
+          roles?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_apply?: boolean | null
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          keywords?: string[]
+          locations?: string[] | null
+          min_match_score?: number | null
+          name?: string
+          roles?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          achievements: Json | null
+          address: string | null
+          ats_strategy: string | null
+          authorized_countries: string[] | null
+          certifications: string[] | null
+          citizenship: string | null
+          city: string | null
+          country: string | null
+          cover_letter: string | null
+          created_at: string | null
+          current_salary: string | null
+          disability: boolean | null
+          driving_license: boolean | null
+          education: Json | null
+          email: string | null
+          excluded_companies: string[] | null
+          expected_salary: string | null
+          first_name: string | null
+          github: string | null
+          highest_education: string | null
+          id: string
+          languages: Json | null
+          last_name: string | null
+          linkedin: string | null
+          notice_period: string | null
+          phone: string | null
+          portfolio: string | null
+          race_ethnicity: string | null
+          security_clearance: boolean | null
+          skills: Json | null
+          state: string | null
+          total_experience: string | null
+          updated_at: string | null
+          user_id: string
+          veteran_status: boolean | null
+          visa_required: boolean | null
+          willing_to_relocate: boolean | null
+          work_experience: Json | null
+          zip_code: string | null
+        }
+        Insert: {
+          achievements?: Json | null
+          address?: string | null
+          ats_strategy?: string | null
+          authorized_countries?: string[] | null
+          certifications?: string[] | null
+          citizenship?: string | null
+          city?: string | null
+          country?: string | null
+          cover_letter?: string | null
+          created_at?: string | null
+          current_salary?: string | null
+          disability?: boolean | null
+          driving_license?: boolean | null
+          education?: Json | null
+          email?: string | null
+          excluded_companies?: string[] | null
+          expected_salary?: string | null
+          first_name?: string | null
+          github?: string | null
+          highest_education?: string | null
+          id?: string
+          languages?: Json | null
+          last_name?: string | null
+          linkedin?: string | null
+          notice_period?: string | null
+          phone?: string | null
+          portfolio?: string | null
+          race_ethnicity?: string | null
+          security_clearance?: boolean | null
+          skills?: Json | null
+          state?: string | null
+          total_experience?: string | null
+          updated_at?: string | null
+          user_id: string
+          veteran_status?: boolean | null
+          visa_required?: boolean | null
+          willing_to_relocate?: boolean | null
+          work_experience?: Json | null
+          zip_code?: string | null
+        }
+        Update: {
+          achievements?: Json | null
+          address?: string | null
+          ats_strategy?: string | null
+          authorized_countries?: string[] | null
+          certifications?: string[] | null
+          citizenship?: string | null
+          city?: string | null
+          country?: string | null
+          cover_letter?: string | null
+          created_at?: string | null
+          current_salary?: string | null
+          disability?: boolean | null
+          driving_license?: boolean | null
+          education?: Json | null
+          email?: string | null
+          excluded_companies?: string[] | null
+          expected_salary?: string | null
+          first_name?: string | null
+          github?: string | null
+          highest_education?: string | null
+          id?: string
+          languages?: Json | null
+          last_name?: string | null
+          linkedin?: string | null
+          notice_period?: string | null
+          phone?: string | null
+          portfolio?: string | null
+          race_ethnicity?: string | null
+          security_clearance?: boolean | null
+          skills?: Json | null
+          state?: string | null
+          total_experience?: string | null
+          updated_at?: string | null
+          user_id?: string
+          veteran_status?: boolean | null
+          visa_required?: boolean | null
+          willing_to_relocate?: boolean | null
+          work_experience?: Json | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
+      sent_emails: {
+        Row: {
+          application_id: string | null
+          body: string
+          created_at: string | null
+          delivered: boolean | null
+          email_type: Database["public"]["Enums"]["email_type"]
+          id: string
+          recipient: string
+          sent_at: string | null
+          subject: string
+          user_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          body: string
+          created_at?: string | null
+          delivered?: boolean | null
+          email_type: Database["public"]["Enums"]["email_type"]
+          id?: string
+          recipient: string
+          sent_at?: string | null
+          subject: string
+          user_id: string
+        }
+        Update: {
+          application_id?: string | null
+          body?: string
+          created_at?: string | null
+          delivered?: boolean | null
+          email_type?: Database["public"]["Enums"]["email_type"]
+          id?: string
+          recipient?: string
+          sent_at?: string | null
+          subject?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sent_emails_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +475,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      application_status:
+        | "pending"
+        | "applied"
+        | "interviewing"
+        | "offered"
+        | "rejected"
+      email_detection_type: "interview" | "rejection" | "offer" | "follow_up"
+      email_type: "application" | "referral" | "follow_up"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +609,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      application_status: [
+        "pending",
+        "applied",
+        "interviewing",
+        "offered",
+        "rejected",
+      ],
+      email_detection_type: ["interview", "rejection", "offer", "follow_up"],
+      email_type: ["application", "referral", "follow_up"],
+    },
   },
 } as const
