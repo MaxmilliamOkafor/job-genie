@@ -20,7 +20,8 @@ import {
   CheckCircle,
   Loader2,
   RefreshCw,
-  ArrowUp
+  ArrowUp,
+  Trash2
 } from 'lucide-react';
 
 const DEFAULT_KEYWORDS = 'Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics, Continuous Integration, User Experience (UX) & User Interface (UI)';
@@ -34,7 +35,8 @@ const Jobs = () => {
     keywords,
     loadMore, 
     startContinuousScraping,
-    updateJobStatus 
+    updateJobStatus,
+    clearAndRefresh
   } = useJobScraper();
   const { profile } = useProfile();
   const [search, setSearch] = useState('');
@@ -70,12 +72,23 @@ const Jobs = () => {
     if (node) observerRef.current.observe(node);
   }, [isLoading, isScraping, hasMore, loadMore]);
 
+  // Filter to only show jobs with valid direct apply URLs
+  const validJobs = useMemo(() => {
+    return jobs.filter(job => {
+      if (!job.url) return false;
+      // Only show Greenhouse and Workable jobs with direct apply links
+      const isGreenhouseValid = job.url.includes('greenhouse.io') && job.url.includes('/jobs/');
+      const isWorkableValid = job.url.includes('workable.com') && job.url.includes('/j/');
+      return isGreenhouseValid || isWorkableValid;
+    });
+  }, [jobs]);
+
   // Auto-start scraping so the page fills without manual searching
   useEffect(() => {
-    if (!keywords && jobs.length < 2000) {
+    if (!keywords && validJobs.length === 0) {
       startContinuousScraping(DEFAULT_KEYWORDS);
     }
-  }, [keywords, jobs.length, startContinuousScraping]);
+  }, [keywords, validJobs.length, startContinuousScraping]);
 
   const filteredJobs = useMemo(() => {
     const terms = search
@@ -84,7 +97,7 @@ const Jobs = () => {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    return jobs.filter(job => {
+    return validJobs.filter(job => {
       const haystack = `${job.title} ${job.company} ${(job.requirements || []).join(' ')}`.toLowerCase();
       const searchMatch = terms.length === 0
         ? true
@@ -105,7 +118,7 @@ const Jobs = () => {
 
       return searchMatch && locationMatch && dateMatch;
     });
-  }, [jobs, search, location, dateFilter]);
+  }, [validJobs, search, location, dateFilter]);
 
   const handleKeywordSearch = (keywords: string) => {
     setSearch(keywords);
@@ -147,24 +160,42 @@ const Jobs = () => {
           <div>
             <h1 className="text-3xl font-bold">Jobs</h1>
             <p className="text-muted-foreground mt-1">
-              <span className="font-semibold text-foreground">{jobs.length.toLocaleString()}</span> jobs loaded
-              {filteredJobs.length !== jobs.length && (
+              <span className="font-semibold text-foreground">{validJobs.length.toLocaleString()}</span> valid jobs
+              {filteredJobs.length !== validJobs.length && (
                 <span className="ml-1">
                   (<span className="font-semibold text-foreground">{filteredJobs.length.toLocaleString()}</span> matching)
+                </span>
+              )}
+              {jobs.length > validJobs.length && (
+                <span className="ml-1 text-muted-foreground/60">
+                  ({jobs.length - validJobs.length} invalid hidden)
                 </span>
               )}
               {isScraping && <span className="ml-2 text-primary animate-pulse">• Scraping...</span>}
             </p>
           </div>
-          {isScraping && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-primary/10 rounded-lg border border-primary/20">
-              <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-              <div className="text-sm">
-                <p className="font-medium text-primary">Live Scraping Active</p>
-                <p className="text-muted-foreground text-xs">Auto-refresh every 10 mins</p>
+          <div className="flex items-center gap-2">
+            {jobs.length > validJobs.length && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={clearAndRefresh}
+                disabled={isScraping}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear & Refresh
+              </Button>
+            )}
+            {isScraping && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-primary/10 rounded-lg border border-primary/20">
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                <div className="text-sm">
+                  <p className="font-medium text-primary">Live Scraping Active</p>
+                  <p className="text-muted-foreground text-xs">Auto-refresh every 10 mins</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Bulk Keyword Search (also filters the list) */}
@@ -336,9 +367,9 @@ const Jobs = () => {
           </div>
         )}
 
-        {!hasMore && jobs.length > 0 && (
+        {!hasMore && validJobs.length > 0 && (
           <p className="text-center text-muted-foreground py-4">
-            All {jobs.length} jobs loaded
+            All {validJobs.length} valid jobs loaded
           </p>
         )}
       </div>
