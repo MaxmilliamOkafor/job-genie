@@ -1,17 +1,15 @@
-// QuantumHire AI - Advanced Content Script
-// Multi-page workflow handling, CAPTCHA detection, session persistence
+// QuantumHire AI - Advanced Content Script v2.0
+// Automatic multi-page workflow, smart form filling, PDF generation & upload
 
-console.log('QuantumHire AI: Advanced content script loaded');
+console.log('QuantumHire AI: Advanced content script v2.0 loaded');
 
 // ============= PLATFORM DETECTION & CONFIGURATION =============
 
 const PLATFORM_CONFIG = {
   workday: {
     detect: () => window.location.hostname.includes('workday.com') || window.location.hostname.includes('myworkdayjobs.com'),
-    pages: ['Sign In', 'My Information', 'My Experience', 'Application Questions', 'Voluntary Disclosures', 'Self Identify', 'Review'],
-    nextButton: '[data-automation-id="bottom-navigation-next-button"], button[data-automation-id="nextButton"]',
+    nextButton: '[data-automation-id="bottom-navigation-next-button"], button[data-automation-id="nextButton"], button[data-automation-id="continueButton"]',
     submitButton: '[data-automation-id="bottom-navigation-submit-button"]',
-    progressIndicator: '[data-automation-id="progressBar"], .wd-progressBar',
     selectors: {
       firstName: 'input[data-automation-id="firstName"]',
       lastName: 'input[data-automation-id="lastName"]',
@@ -27,9 +25,8 @@ const PLATFORM_CONFIG = {
   },
   greenhouse: {
     detect: () => window.location.hostname.includes('greenhouse.io') || window.location.hostname.includes('boards.greenhouse.io'),
-    pages: ['Application', 'Resume', 'Questions', 'Review'],
     nextButton: 'button[type="submit"], input[type="submit"]',
-    submitButton: '#submit_app, button:contains("Submit")',
+    submitButton: '#submit_app, button[type="submit"]',
     selectors: {
       firstName: '#first_name',
       lastName: '#last_name',
@@ -42,7 +39,6 @@ const PLATFORM_CONFIG = {
   },
   lever: {
     detect: () => window.location.hostname.includes('lever.co') || window.location.hostname.includes('jobs.lever.co'),
-    pages: ['Application', 'Additional Info'],
     nextButton: 'button[type="submit"]',
     submitButton: 'button[type="submit"]',
     selectors: {
@@ -58,77 +54,51 @@ const PLATFORM_CONFIG = {
   },
   icims: {
     detect: () => window.location.hostname.includes('icims.com'),
-    pages: ['Personal Info', 'Work History', 'Education', 'References', 'EEO', 'Review'],
-    nextButton: 'button.next, input[value="Next"]',
+    nextButton: 'button.next, input[value="Next"], button:contains("Next")',
     submitButton: 'button.submit, input[value="Submit"]',
-    selectors: {
-      firstName: '#firstName',
-      lastName: '#lastName',
-      email: '#email',
-      phone: '#phone',
-    }
+    selectors: { firstName: '#firstName', lastName: '#lastName', email: '#email', phone: '#phone' }
   },
   taleo: {
     detect: () => window.location.hostname.includes('taleo.net'),
-    pages: ['Login', 'Personal', 'Experience', 'Education', 'Skills', 'Questions', 'Review'],
     nextButton: 'input[type="submit"][value*="Next"], button:contains("Next")',
     submitButton: 'input[type="submit"][value*="Submit"]',
     selectors: {}
   },
   ashby: {
     detect: () => window.location.hostname.includes('ashbyhq.com'),
-    pages: ['Application'],
     nextButton: 'button[type="submit"]',
     submitButton: 'button[type="submit"]',
-    selectors: {
-      firstName: 'input[name="firstName"]',
-      lastName: 'input[name="lastName"]',
-      email: 'input[name="email"]',
-      phone: 'input[name="phone"]',
-      linkedin: 'input[name="linkedInUrl"]',
-    }
+    selectors: { firstName: 'input[name="firstName"]', lastName: 'input[name="lastName"]', email: 'input[name="email"]', phone: 'input[name="phone"]', linkedin: 'input[name="linkedInUrl"]' }
   },
   smartrecruiters: {
     detect: () => window.location.hostname.includes('smartrecruiters.com'),
-    pages: ['Apply', 'Questions', 'Review'],
     nextButton: 'button[type="submit"]',
     submitButton: 'button[type="submit"]',
-    selectors: {
-      firstName: 'input[name="firstName"]',
-      lastName: 'input[name="lastName"]',
-      email: 'input[name="email"]',
-      phone: 'input[name="phone"]',
-    }
+    selectors: { firstName: 'input[name="firstName"]', lastName: 'input[name="lastName"]', email: 'input[name="email"]', phone: 'input[name="phone"]' }
   }
 };
 
 // ============= AUTOMATION CONTROL STATE =============
 
 let automationState = {
-  speed: 1, // 1x, 1.5x, 2x, 3x
+  speed: 1,
   isPaused: false,
   isRunning: false,
   shouldSkip: false,
   shouldQuit: false,
-  currentJobIndex: 0,
-  totalJobs: 0
+  autoMode: true // Auto-advance through pages
 };
 
-// Speed delay multiplier (lower = faster)
 function getDelayForSpeed() {
   const delays = { 1: 1000, 1.5: 666, 2: 500, 3: 333 };
   return delays[automationState.speed] || 1000;
 }
 
-// Wait with pause/skip/quit support
 async function waitWithControls(ms) {
   const startTime = Date.now();
   while (Date.now() - startTime < ms) {
     if (automationState.shouldQuit) throw new Error('QUIT');
-    if (automationState.shouldSkip) {
-      automationState.shouldSkip = false;
-      throw new Error('SKIP');
-    }
+    if (automationState.shouldSkip) { automationState.shouldSkip = false; throw new Error('SKIP'); }
     while (automationState.isPaused) {
       await new Promise(r => setTimeout(r, 100));
       if (automationState.shouldQuit) throw new Error('QUIT');
@@ -138,462 +108,139 @@ async function waitWithControls(ms) {
 }
 
 // ============= COMPREHENSIVE KNOCKOUT QUESTION ANSWER BANK =============
-// Auto-answers optimized for ATS eligibility across ALL major platforms
-// Greenhouse, Lever, Workday, iCIMS, Taleo, Ashby, SmartRecruiters, BambooHR, JazzHR
 
 const KNOCKOUT_ANSWER_BANK = {
-  // ============= WORK AUTHORIZATION (CRITICAL - ALWAYS PASS) =============
-  'legal documentation.*identity.*eligibility|legally authorized|eligib.*employed|right to work|authorization to work|authorised to work': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'authorized.*work.*united states|authorized.*work.*us|work.*authorization.*us|legally.*work.*us|eligible.*work.*us|can you work.*us': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'authorized.*work.*canada|authorized.*work.*uk|authorized.*work.*europe|work.*authorization': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // WORK AUTHORIZATION
+  'legal documentation.*identity.*eligibility|legally authorized|eligib.*employed|right to work|authorization to work|authorised to work': { answer: 'Yes', selectValue: 'yes' },
+  'authorized.*work.*united states|authorized.*work.*us|work.*authorization.*us|legally.*work.*us|eligible.*work.*us|can you work.*us': { answer: 'Yes', selectValue: 'yes' },
+  'authorized.*work.*canada|authorized.*work.*uk|authorized.*work.*europe|work.*authorization': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= VISA SPONSORSHIP (CRITICAL - ALWAYS NO) =============
-  'require.*sponsorship|need.*sponsorship|sponsorship.*required|sponsor.*visa|visa.*sponsor|future.*sponsorship|now or.*future.*sponsor|employment.*sponsorship': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'sponsor.*h1b|h-1b.*sponsor|h1-b.*sponsor|need.*h1b|require.*h1b|tn.*visa|l1.*visa|o1.*visa': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'work.*without.*sponsorship|employment.*without.*sponsorship': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // VISA SPONSORSHIP
+  'require.*sponsorship|need.*sponsorship|sponsorship.*required|sponsor.*visa|visa.*sponsor|future.*sponsorship|now or.*future.*sponsor|employment.*sponsorship': { answer: 'No', selectValue: 'no' },
+  'sponsor.*h1b|h-1b.*sponsor|h1-b.*sponsor|need.*h1b|require.*h1b|tn.*visa|l1.*visa|o1.*visa': { answer: 'No', selectValue: 'no' },
+  'work.*without.*sponsorship|employment.*without.*sponsorship': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= AGE VERIFICATION (ALWAYS YES) =============
-  'age 18|over 18|18 years|eighteen|at least 18|older than 18|minimum age|legal age|are you.*18|21 years|over 21|at least 21': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // AGE VERIFICATION
+  'age 18|over 18|18 years|eighteen|at least 18|older than 18|minimum age|legal age|are you.*18|21 years|over 21|at least 21': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= BACKGROUND & DRUG SCREENING (ALWAYS YES) =============
-  'background check|criminal background|background investigation|submit.*background|consent.*background|background screening|pre-employment.*background': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'drug screen|drug test|substance test|submit.*drug|pre-employment.*drug|toxicology|controlled substance': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'motor vehicle|mvr.*check|driving record.*check': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'credit check|credit history|financial background': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // BACKGROUND & DRUG SCREENING
+  'background check|criminal background|background investigation|submit.*background|consent.*background|background screening|pre-employment.*background': { answer: 'Yes', selectValue: 'yes' },
+  'drug screen|drug test|substance test|submit.*drug|pre-employment.*drug|toxicology|controlled substance': { answer: 'Yes', selectValue: 'yes' },
+  'motor vehicle|mvr.*check|driving record.*check': { answer: 'Yes', selectValue: 'yes' },
+  'credit check|credit history|financial background': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= DRIVER'S LICENSE (ALWAYS YES) =============
-  'driver.*license|driving license|valid license|valid driver|possess.*license|current.*license|unrestricted.*license': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'good driving|driving history|driving record|clean driving|safe driving': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'own.*vehicle|reliable.*transportation|access.*vehicle|means.*transportation|personal.*transportation': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // DRIVER'S LICENSE
+  'driver.*license|driving license|valid license|valid driver|possess.*license|current.*license|unrestricted.*license': { answer: 'Yes', selectValue: 'yes' },
+  'good driving|driving history|driving record|clean driving|safe driving': { answer: 'Yes', selectValue: 'yes' },
+  'own.*vehicle|reliable.*transportation|access.*vehicle|means.*transportation|personal.*transportation': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= RELOCATION & AVAILABILITY =============
-  'willing.*relocate|open.*relocation|relocate.*position|able.*relocate|consider.*relocating|move.*location': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'available.*start|start date|earliest.*start|when.*start|how soon|soonest.*start|when.*begin': {
-    answer: 'Immediately',
-    selectValue: 'immediately',
-    flag: false
-  },
-  'immediate.*start|start immediately|available immediately': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'notice period|current.*notice|weeks.*notice|days.*notice|resignation.*period': {
-    answer: '2 weeks',
-    flag: false
-  },
-  'currently employed|presently working|actively working': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // RELOCATION & AVAILABILITY
+  'willing.*relocate|open.*relocation|relocate.*position|able.*relocate|consider.*relocating|move.*location': { answer: 'Yes', selectValue: 'yes' },
+  'available.*start|start date|earliest.*start|when.*start|how soon|soonest.*start|when.*begin': { answer: 'Immediately', selectValue: 'immediately' },
+  'immediate.*start|start immediately|available immediately': { answer: 'Yes', selectValue: 'yes' },
+  'notice period|current.*notice|weeks.*notice|days.*notice|resignation.*period': { answer: '2 weeks' },
+  'currently employed|presently working|actively working': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= JOB FUNCTIONS & PHYSICAL REQUIREMENTS =============
-  'essential functions|perform.*duties|physical requirements|able to perform|perform.*job|job.*functions': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'reasonable accommodation|disability accommodation|with or without.*accommodation|request.*accommodation': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'lift.*pounds|carry.*lbs|physical demands|standing.*hours|sitting.*hours|walk.*hours|bend.*lift|push.*pull': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'work.*environment|outdoor.*work|indoor.*work|office.*environment|warehouse.*environment|manufacturing.*environment': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // JOB FUNCTIONS & PHYSICAL REQUIREMENTS
+  'essential functions|perform.*duties|physical requirements|able to perform|perform.*job|job.*functions': { answer: 'Yes', selectValue: 'yes' },
+  'reasonable accommodation|disability accommodation|with or without.*accommodation|request.*accommodation': { answer: 'Yes', selectValue: 'yes' },
+  'lift.*pounds|carry.*lbs|physical demands|standing.*hours|sitting.*hours|walk.*hours|bend.*lift|push.*pull': { answer: 'Yes', selectValue: 'yes' },
+  'work.*environment|outdoor.*work|indoor.*work|office.*environment|warehouse.*environment|manufacturing.*environment': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= TRAVEL & SCHEDULE FLEXIBILITY =============
-  'willing.*travel|travel.*required|travel.*percent|overnight.*travel|domestic.*travel|international.*travel|business.*travel': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'travel.*frequency|how much.*travel|percentage.*travel|amount.*travel': {
-    answer: 'Up to 50%',
-    flag: false
-  },
-  'work.*weekends|weekend.*availability|weekend.*work|saturday.*sunday': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'work.*shifts|shift.*work|rotating.*shifts|night.*shift|evening.*shift|flexible.*hours': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'overtime|extra.*hours|additional.*hours|extended.*hours': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'on-call|on call|standby|pager.*duty|after.*hours.*support': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'flexible.*schedule|flexible.*working|hybrid.*work|remote.*work|work.*from.*home': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'full-time|full time|permanent.*position|permanent.*role': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // TRAVEL & SCHEDULE
+  'willing.*travel|travel.*required|travel.*percent|overnight.*travel|domestic.*travel|international.*travel|business.*travel': { answer: 'Yes', selectValue: 'yes' },
+  'travel.*frequency|how much.*travel|percentage.*travel|amount.*travel': { answer: 'Up to 50%' },
+  'work.*weekends|weekend.*availability|weekend.*work|saturday.*sunday': { answer: 'Yes', selectValue: 'yes' },
+  'work.*shifts|shift.*work|rotating.*shifts|night.*shift|evening.*shift|flexible.*hours': { answer: 'Yes', selectValue: 'yes' },
+  'overtime|extra.*hours|additional.*hours|extended.*hours': { answer: 'Yes', selectValue: 'yes' },
+  'on-call|on call|standby|pager.*duty|after.*hours.*support': { answer: 'Yes', selectValue: 'yes' },
+  'flexible.*schedule|flexible.*working|hybrid.*work|remote.*work|work.*from.*home': { answer: 'Yes', selectValue: 'yes' },
+  'full-time|full time|permanent.*position|permanent.*role': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= PREVIOUS EMPLOYMENT =============
-  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed|formerly employed|worked.*previously': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'referred by|employee referral|know anyone|current employee.*refer|referral.*source': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'applied.*before|previously.*applied|past.*application|former.*applicant': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'interview.*before|interviewed.*previously': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
+  // PREVIOUS EMPLOYMENT
+  'employed by.*llc|employed by.*company|worked.*before|previous.*employee|ever been employed|formerly employed|worked.*previously': { answer: 'No', selectValue: 'no' },
+  'referred by|employee referral|know anyone|current employee.*refer|referral.*source': { answer: 'No', selectValue: 'no' },
+  'applied.*before|previously.*applied|past.*application|former.*applicant': { answer: 'No', selectValue: 'no' },
+  'interview.*before|interviewed.*previously': { answer: 'No', selectValue: 'no' },
   
-  // ============= LEGAL & AGREEMENTS =============
-  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify|acknowledge|attestation': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'non-compete|non-disclosure|nda|confidentiality|confidential.*agreement|proprietary.*agreement': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'agree.*policy|accept.*terms|consent.*processing|consent.*data|privacy.*consent|gdpr.*consent': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'truthful.*information|accurate.*information|certify.*accurate|information.*true': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'at-will.*employment|at will.*employment|employment.*at-will': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // LEGAL & AGREEMENTS
+  'terms and conditions|agree.*terms|certification|certify|read and agree|responding.*yes.*certify|acknowledge|attestation': { answer: 'Yes', selectValue: 'yes' },
+  'non-compete|non-disclosure|nda|confidentiality|confidential.*agreement|proprietary.*agreement': { answer: 'Yes', selectValue: 'yes' },
+  'agree.*policy|accept.*terms|consent.*processing|consent.*data|privacy.*consent|gdpr.*consent': { answer: 'Yes', selectValue: 'yes' },
+  'truthful.*information|accurate.*information|certify.*accurate|information.*true': { answer: 'Yes', selectValue: 'yes' },
+  'at-will.*employment|at will.*employment|employment.*at-will': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= CRIMINAL HISTORY =============
-  'convicted.*felony|criminal.*conviction|been convicted|pleaded guilty|pending.*charges|criminal.*record|arrest.*record': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'misdemeanor|criminal.*offense|criminal.*history': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
+  // CRIMINAL HISTORY
+  'convicted.*felony|criminal.*conviction|been convicted|pleaded guilty|pending.*charges|criminal.*record|arrest.*record': { answer: 'No', selectValue: 'no' },
+  'misdemeanor|criminal.*offense|criminal.*history': { answer: 'No', selectValue: 'no' },
   
-  // ============= SECURITY CLEARANCE =============
-  'security clearance|clearance.*level|active.*clearance|current.*clearance|secret.*clearance|top secret|ts/sci|public trust': {
-    answerFromProfile: 'security_clearance',
-    defaultAnswer: 'No, but willing to obtain',
-    flag: false
-  },
-  'obtain.*clearance|eligible.*clearance|pass.*clearance|clearance.*investigation': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // SECURITY CLEARANCE
+  'security clearance|clearance.*level|active.*clearance|current.*clearance|secret.*clearance|top secret|ts/sci|public trust': { answerFromProfile: 'security_clearance', defaultAnswer: 'No, but willing to obtain' },
+  'obtain.*clearance|eligible.*clearance|pass.*clearance|clearance.*investigation': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= EEO & DEMOGRAPHICS (Profile-based) =============
-  'veteran status|military service|protected veteran|veteran.*self|served.*military|us.*veteran|armed forces': {
-    answerFromProfile: 'veteran_status',
-    defaultAnswer: 'I am not a protected veteran',
-    selectValue: 'i am not a protected veteran',
-    flag: false
-  },
-  'disability status|disabled|have.*disability|disability.*self|individual.*disability': {
-    answerFromProfile: 'disability',
-    defaultAnswer: 'I do not wish to answer',
-    selectValue: 'i do not wish to answer',
-    flag: false
-  },
-  'race|ethnicity|ethnic background|race.*ethnicity|racial.*identity': {
-    answerFromProfile: 'race_ethnicity',
-    defaultAnswer: 'Decline to self-identify',
-    selectValue: 'decline',
-    flag: false
-  },
-  'gender|sex|male.*female|gender.*identity': {
-    answer: 'Prefer not to answer',
-    selectValue: 'prefer not to answer',
-    flag: false
-  },
-  'sexual orientation|lgbtq|lgbtqia': {
-    answer: 'Prefer not to answer',
-    selectValue: 'prefer not to answer',
-    flag: false
-  },
+  // EEO & DEMOGRAPHICS
+  'veteran status|military service|protected veteran|veteran.*self|served.*military|us.*veteran|armed forces': { answerFromProfile: 'veteran_status', defaultAnswer: 'I am not a protected veteran', selectValue: 'i am not a protected veteran' },
+  'disability status|disabled|have.*disability|disability.*self|individual.*disability': { answerFromProfile: 'disability', defaultAnswer: 'I do not wish to answer', selectValue: 'i do not wish to answer' },
+  'race|ethnicity|ethnic background|race.*ethnicity|racial.*identity': { answerFromProfile: 'race_ethnicity', defaultAnswer: 'Decline to self-identify', selectValue: 'decline' },
+  'gender|sex|male.*female|gender.*identity': { answer: 'Prefer not to answer', selectValue: 'prefer not to answer' },
+  'sexual orientation|lgbtq|lgbtqia': { answer: 'Prefer not to answer', selectValue: 'prefer not to answer' },
   
-  // ============= GREENHOUSE SPECIFIC PATTERNS =============
-  'are you legally.*18|confirm.*legal age|minimum.*working age': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'linkedin.*profile|linkedin url|linkedin.*url': {
-    answerFromProfile: 'linkedin',
-    flag: false
-  },
-  'github.*profile|github url|github.*url': {
-    answerFromProfile: 'github',
-    flag: false
-  },
-  'portfolio.*url|website.*url|personal.*website': {
-    answerFromProfile: 'portfolio',
-    flag: false
-  },
+  // GREENHOUSE SPECIFIC
+  'are you legally.*18|confirm.*legal age|minimum.*working age': { answer: 'Yes', selectValue: 'yes' },
+  'linkedin.*profile|linkedin url|linkedin.*url': { answerFromProfile: 'linkedin' },
+  'github.*profile|github url|github.*url': { answerFromProfile: 'github' },
+  'portfolio.*url|website.*url|personal.*website': { answerFromProfile: 'portfolio' },
   
-  // ============= WORKDAY SPECIFIC PATTERNS =============
-  'have you ever worked for|previously.*employed.*by|past.*employment.*with': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'current.*employment.*status|employment.*status|work.*status': {
-    answer: 'Currently Employed',
-    selectValue: 'employed',
-    flag: false
-  },
+  // WORKDAY SPECIFIC
+  'have you ever worked for|previously.*employed.*by|past.*employment.*with': { answer: 'No', selectValue: 'no' },
+  'current.*employment.*status|employment.*status|work.*status': { answer: 'Currently Employed', selectValue: 'employed' },
   
-  // ============= LEVER SPECIFIC PATTERNS =============
-  'how did you hear|where did you find|source.*application|how.*learn.*position': {
-    answer: 'Company Website',
-    selectValue: 'company website',
-    flag: false
-  },
-  'why.*interested|interest.*role|interest.*position|attracted.*role': {
-    answer: 'I am passionate about this opportunity and believe my skills align perfectly with the requirements.',
-    flag: false
-  },
+  // LEVER SPECIFIC
+  'how did you hear|where did you find|source.*application|how.*learn.*position': { answer: 'Company Website', selectValue: 'company website' },
+  'why.*interested|interest.*role|interest.*position|attracted.*role': { answer: 'I am passionate about this opportunity and believe my skills align perfectly with the requirements.' },
   
-  // ============= ICIMS SPECIFIC PATTERNS =============
-  'shift.*preference|preferred.*shift|work.*schedule.*preference': {
-    answer: 'Flexible/Any',
-    selectValue: 'flexible',
-    flag: false
-  },
+  // iCIMS SPECIFIC
+  'shift.*preference|preferred.*shift|work.*schedule.*preference': { answer: 'Flexible/Any', selectValue: 'flexible' },
   
-  // ============= TALEO SPECIFIC PATTERNS =============
-  'country.*residence|residing.*country|current.*country': {
-    answerFromProfile: 'country',
-    defaultAnswer: 'United States',
-    flag: false
-  },
+  // TALEO SPECIFIC
+  'country.*residence|residing.*country|current.*country': { answerFromProfile: 'country', defaultAnswer: 'United States' },
   
-  // ============= EDUCATION VERIFICATION =============
-  'highest.*degree|degree.*obtained|education.*level|completed.*degree|highest.*education': {
-    answerFromProfile: 'highest_education',
-    defaultAnswer: "Bachelor's Degree",
-    flag: false
-  },
-  'bachelor.*degree|undergraduate.*degree|college.*degree|university.*degree': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'master.*degree|graduate.*degree|advanced.*degree|mba|ms degree|ma degree': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'gpa|grade point|academic.*average': {
-    answer: '3.5',
-    flag: false
-  },
+  // EDUCATION
+  'highest.*degree|degree.*obtained|education.*level|completed.*degree|highest.*education': { answerFromProfile: 'highest_education', defaultAnswer: "Bachelor's Degree" },
+  'bachelor.*degree|undergraduate.*degree|college.*degree|university.*degree': { answer: 'Yes', selectValue: 'yes' },
+  'master.*degree|graduate.*degree|advanced.*degree|mba|ms degree|ma degree': { answer: 'No', selectValue: 'no' },
+  'gpa|grade point|academic.*average': { answer: '3.5' },
   
-  // ============= CERTIFICATIONS & LICENSES =============
-  'certification.*required|required.*certification|professional.*certification|industry.*certification': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'license.*required|professional.*license|state.*license': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // CERTIFICATIONS
+  'certification.*required|required.*certification|professional.*certification|industry.*certification': { answer: 'Yes', selectValue: 'yes' },
+  'license.*required|professional.*license|state.*license': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= SKILLS & EXPERIENCE LEVEL =============
-  'proficiency.*level|skill.*level|expertise.*level|experience.*level': {
-    answer: 'Expert',
-    selectValue: 'expert',
-    flag: false
-  },
-  'years.*total.*experience|total.*years.*experience|overall.*experience': {
-    answerFromProfile: 'total_experience',
-    defaultAnswer: '8',
-    flag: false
-  },
+  // SKILLS
+  'proficiency.*level|skill.*level|expertise.*level|experience.*level': { answer: 'Expert', selectValue: 'expert' },
+  'years.*total.*experience|total.*years.*experience|overall.*experience': { answerFromProfile: 'total_experience', defaultAnswer: '8' },
   
-  // ============= COMPENSATION & SALARY =============
-  'salary.*expectation|expected.*salary|desired.*salary|salary.*requirement|compensation.*expectation|pay.*expectation|desired.*pay|pay.*range|salary.*range': {
-    answerFromProfile: 'expected_salary',
-    defaultAnswer: '$75,000 - $95,000',
-    flag: false
-  },
-  'current.*salary|present.*salary|current.*compensation|base.*salary': {
-    answerFromProfile: 'current_salary',
-    defaultAnswer: 'Prefer not to disclose',
-    flag: false
-  },
-  'hourly.*rate|rate.*per hour|hourly.*expectation': {
-    answer: 'Negotiable based on total compensation',
-    flag: false
-  },
-  'bonus.*eligible|variable.*compensation|commission': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
+  // SALARY
+  'salary.*expectation|expected.*salary|desired.*salary|salary.*requirement|compensation.*expectation|pay.*expectation|desired.*pay|pay.*range|salary.*range': { answerFromProfile: 'expected_salary', defaultAnswer: '$75,000 - $95,000' },
+  'current.*salary|present.*salary|current.*compensation|base.*salary': { answerFromProfile: 'current_salary', defaultAnswer: 'Prefer not to disclose' },
+  'hourly.*rate|rate.*per hour|hourly.*expectation': { answer: 'Negotiable based on total compensation' },
+  'bonus.*eligible|variable.*compensation|commission': { answer: 'Yes', selectValue: 'yes' },
   
-  // ============= LANGUAGE REQUIREMENTS =============
-  'english.*proficiency|speak.*english|english.*fluent|english.*language': {
-    answer: 'Fluent/Native',
-    selectValue: 'fluent',
-    flag: false
-  },
-  'spanish.*proficiency|speak.*spanish|spanish.*language': {
-    answer: 'Intermediate',
-    selectValue: 'intermediate',
-    flag: false
-  },
-  'language.*proficiency|fluent.*language|speak.*language': {
-    answer: 'English (Fluent)',
-    flag: false
-  },
+  // LANGUAGE
+  'english.*proficiency|speak.*english|english.*fluent|english.*language': { answer: 'Fluent/Native', selectValue: 'fluent' },
+  'spanish.*proficiency|speak.*spanish|spanish.*language': { answer: 'Intermediate', selectValue: 'intermediate' },
+  'language.*proficiency|fluent.*language|speak.*language': { answer: 'English (Fluent)' },
   
-  // ============= CONTACT PREFERENCES =============
-  'contact.*method|preferred.*contact|best way.*reach|how.*contact': {
-    answer: 'Email',
-    selectValue: 'email',
-    flag: false
-  },
-  'best.*time.*call|call.*time|when.*call': {
-    answer: 'Anytime during business hours',
-    flag: false
-  },
+  // CONTACT PREFERENCES
+  'contact.*method|preferred.*contact|best way.*reach|how.*contact': { answer: 'Email', selectValue: 'email' },
+  'best.*time.*call|call.*time|when.*call': { answer: 'Anytime during business hours' },
   
-  // ============= ADDITIONAL COMMON PATTERNS =============
-  'conflict.*interest|competing.*interest|outside.*employment': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'relative.*employee|family.*works|related.*anyone': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'government.*employee|public.*sector|federal.*employee': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'union.*member|belong.*union|represented.*union': {
-    answer: 'No',
-    selectValue: 'no',
-    flag: false
-  },
-  'equipment.*use|tools.*own|required.*equipment|personal.*tools': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  },
-  'computer.*proficient|technology.*skills|software.*skills': {
-    answer: 'Yes',
-    selectValue: 'yes',
-    flag: false
-  }
+  // ADDITIONAL
+  'conflict.*interest|competing.*interest|outside.*employment': { answer: 'No', selectValue: 'no' },
+  'relative.*employee|family.*works|related.*anyone': { answer: 'No', selectValue: 'no' },
+  'government.*employee|public.*sector|federal.*employee': { answer: 'No', selectValue: 'no' },
+  'union.*member|belong.*union|represented.*union': { answer: 'No', selectValue: 'no' },
+  'equipment.*use|tools.*own|required.*equipment|personal.*tools': { answer: 'Yes', selectValue: 'yes' },
+  'computer.*proficient|technology.*skills|software.*skills': { answer: 'Yes', selectValue: 'yes' }
 };
 
 // Match knockout question with profile-aware answers
@@ -603,109 +250,56 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
   for (const [pattern, response] of Object.entries(KNOCKOUT_ANSWER_BANK)) {
     const regex = new RegExp(pattern, 'i');
     if (regex.test(lowerQuestion)) {
-      // Check if answer should come from profile
       if (response.answerFromProfile && userProfile) {
         const profileField = response.answerFromProfile;
-        const profileValue = userProfile[profileField] || 
-                            userProfile[profileField.replace(/_/g, '')] ||
-                            userProfile[toCamelCase(profileField)];
+        const profileValue = userProfile[profileField] || userProfile[profileField.replace(/_/g, '')] || userProfile[toCamelCase(profileField)];
         
         if (profileValue !== null && profileValue !== undefined && profileValue !== '') {
-          // Map profile values to appropriate answers
           if (typeof profileValue === 'boolean') {
-            return {
-              answer: profileValue ? 'Yes' : 'No',
-              selectValue: profileValue ? 'yes' : 'no',
-              flag: response.flag
-            };
-          } else if (profileValue) {
-            return {
-              answer: String(profileValue),
-              selectValue: String(profileValue).toLowerCase(),
-              flag: response.flag
-            };
+            return { answer: profileValue ? 'Yes' : 'No', selectValue: profileValue ? 'yes' : 'no' };
           }
+          return { answer: String(profileValue), selectValue: String(profileValue).toLowerCase() };
         }
-        // Use default answer if profile value not available
-        return {
-          answer: response.defaultAnswer || response.answer || 'Yes',
-          selectValue: (response.defaultAnswer || response.answer || 'yes').toLowerCase(),
-          flag: response.flag
-        };
+        return { answer: response.defaultAnswer || 'Yes', selectValue: (response.defaultAnswer || 'yes').toLowerCase() };
       }
-      return {
-        answer: response.answer,
-        selectValue: response.selectValue || (response.answer ? response.answer.toLowerCase() : 'yes'),
-        flag: response.flag || false
-      };
+      return { answer: response.answer, selectValue: response.selectValue || (response.answer ? response.answer.toLowerCase() : 'yes') };
     }
   }
   return null;
 }
 
-// Helper to convert snake_case to camelCase
 function toCamelCase(str) {
   return str.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
 }
 
-// Get years of experience for a skill from profile
 function getExperienceYears(skillName, userProfile) {
-  if (!userProfile?.skills) return 8; // Default to 8 years if unknown
-  
+  if (!userProfile?.skills) return 8;
   const skills = Array.isArray(userProfile.skills) ? userProfile.skills : [];
   const skillLower = skillName.toLowerCase();
-  
-  // Find matching skill
   const matchedSkill = skills.find(s => {
     const name = (s.name || s.skill || '').toLowerCase();
     return name.includes(skillLower) || skillLower.includes(name);
   });
-  
   if (matchedSkill) {
-    // Extract years from skill data
     if (matchedSkill.years) return matchedSkill.years;
-    if (matchedSkill.experience) return matchedSkill.experience;
-    
-    // Map proficiency to years
     const proficiencyMap = { 'expert': 10, 'advanced': 7, 'intermediate': 4, 'beginner': 2 };
-    if (matchedSkill.proficiency && proficiencyMap[matchedSkill.proficiency]) {
-      return proficiencyMap[matchedSkill.proficiency];
-    }
+    if (matchedSkill.proficiency && proficiencyMap[matchedSkill.proficiency]) return proficiencyMap[matchedSkill.proficiency];
   }
-  
-  // Use total experience or default
-  const totalExp = parseInt(userProfile.total_experience) || 8;
-  return Math.min(totalExp, 8); // Cap at 8 or total experience
+  return Math.min(parseInt(userProfile.total_experience) || 8, 8);
 }
 
-// Get salary answer based on job data and profile
 function getSalaryAnswer(questionText, jobData, userProfile) {
-  const expectedSalary = userProfile?.expected_salary;
-  const currentSalary = userProfile?.current_salary;
-  
-  // Try to extract salary from job description
   const jdSalaryMatch = jobData?.description?.match(/\$[\d,]+\s*[-–]\s*\$[\d,]+/);
-  
-  if (jdSalaryMatch) {
-    return jdSalaryMatch[0];
-  } else if (expectedSalary) {
-    return expectedSalary;
-  } else if (currentSalary) {
-    return currentSalary;
-  }
-  
-  return '60,000 - 80,000'; // Reasonable default
+  if (jdSalaryMatch) return jdSalaryMatch[0];
+  if (userProfile?.expected_salary) return userProfile.expected_salary;
+  return '60,000 - 80,000';
 }
 
 // ============= STATE MANAGEMENT =============
 
 let applicationState = {
   platform: null,
-  currentPage: 0,
-  totalPages: 0,
-  pageName: '',
-  status: 'idle', // idle, in_progress, paused, completed, failed
-  pauseReason: null,
+  status: 'idle',
   filledFields: [],
   startTime: null,
   jobData: null,
@@ -717,51 +311,17 @@ let applicationState = {
 
 function detectPlatform() {
   for (const [name, config] of Object.entries(PLATFORM_CONFIG)) {
-    if (config.detect()) {
-      return { name, config };
-    }
+    if (config.detect()) return { name, config };
   }
   return { name: 'generic', config: null };
 }
-
-// detectCaptcha removed - CAPTCHA handling disabled
 
 function detectLoginPage() {
   const hasPasswordField = document.querySelector('input[type="password"]');
   const hasEmailField = document.querySelector('input[type="email"], input[name*="email"], input[id*="email"], input[name*="username"]');
   const hasResumeField = document.querySelector('input[type="file"]');
-  const loginKeywords = ['sign in', 'log in', 'login', 'sign-in'].some(kw => 
-    document.body.innerText.toLowerCase().includes(kw)
-  );
-  
-  return (hasPasswordField && hasEmailField && !hasResumeField) || 
-         (hasPasswordField && loginKeywords);
-}
-
-function detectCurrentPage(platformConfig) {
-  if (!platformConfig) return { current: 1, total: 1, name: 'Application' };
-  
-  // Try to find progress indicator
-  const progressEl = document.querySelector(platformConfig.progressIndicator || '.progress');
-  if (progressEl) {
-    const text = progressEl.innerText || progressEl.getAttribute('aria-valuenow');
-    const match = text?.match(/(\d+)\s*(?:of|\/)\s*(\d+)/i);
-    if (match) {
-      return { current: parseInt(match[1]), total: parseInt(match[2]), name: '' };
-    }
-  }
-  
-  // Try to match page by content
-  const pageContent = document.body.innerText.toLowerCase();
-  const pages = platformConfig.pages || [];
-  
-  for (let i = 0; i < pages.length; i++) {
-    if (pageContent.includes(pages[i].toLowerCase())) {
-      return { current: i + 1, total: pages.length, name: pages[i] };
-    }
-  }
-  
-  return { current: 1, total: pages.length || 1, name: pages[0] || 'Application' };
+  const loginKeywords = ['sign in', 'log in', 'login', 'sign-in'].some(kw => document.body.innerText.toLowerCase().includes(kw));
+  return (hasPasswordField && hasEmailField && !hasResumeField) || (hasPasswordField && loginKeywords);
 }
 
 function extractText(selector) {
@@ -778,30 +338,10 @@ function capitalizeWords(str) {
 // ============= JOB EXTRACTION =============
 
 const JOB_EXTRACTION_SELECTORS = {
-  workday: {
-    title: '[data-automation-id="jobPostingHeader"] h1, .job-title, h1',
-    company: '[data-automation-id="companyName"], .company-name',
-    description: '[data-automation-id="jobPostingDescription"], .job-description, main',
-    location: '[data-automation-id="locations"], .location',
-  },
-  greenhouse: {
-    title: '.app-title, h1.heading',
-    company: '.company-name, .logo-container img[alt]',
-    description: '#content, .job-description',
-    location: '.location, .job-location',
-  },
-  lever: {
-    title: '.posting-headline h2, h1.posting-title',
-    company: '.main-header-logo img[alt]',
-    description: '.posting-description',
-    location: '.location',
-  },
-  generic: {
-    title: 'h1, [class*="job-title"]',
-    company: '[class*="company"], [class*="employer"]',
-    description: '[class*="job-description"], [class*="description"], article, main',
-    location: '[class*="location"]',
-  },
+  workday: { title: '[data-automation-id="jobPostingHeader"] h1, .job-title, h1', company: '[data-automation-id="companyName"], .company-name', description: '[data-automation-id="jobPostingDescription"], .job-description, main', location: '[data-automation-id="locations"], .location' },
+  greenhouse: { title: '.app-title, h1.heading', company: '.company-name, .logo-container img[alt]', description: '#content, .job-description', location: '.location, .job-location' },
+  lever: { title: '.posting-headline h2, h1.posting-title', company: '.main-header-logo img[alt]', description: '.posting-description', location: '.location' },
+  generic: { title: 'h1, [class*="job-title"]', company: '[class*="company"], [class*="employer"]', description: '[class*="job-description"], [class*="description"], article, main', location: '[class*="location"]' }
 };
 
 function extractJobDetails() {
@@ -810,66 +350,18 @@ function extractJobDetails() {
   
   let title = '', company = '', description = '', location = '';
   
-  for (const sel of (selectors.title || '').split(', ')) {
-    title = extractText(sel);
-    if (title) break;
-  }
+  for (const sel of (selectors.title || '').split(', ')) { title = extractText(sel); if (title) break; }
+  for (const sel of (selectors.company || '').split(', ')) { company = extractText(sel); if (company) break; }
+  for (const sel of (selectors.description || '').split(', ')) { description = extractText(sel); if (description && description.length > 100) break; }
+  for (const sel of (selectors.location || '').split(', ')) { location = extractText(sel); if (location) break; }
   
-  for (const sel of (selectors.company || '').split(', ')) {
-    company = extractText(sel);
-    if (company) break;
-  }
+  if (!title) { const match = document.title.match(/^(.+?)(?:\s*[-|–]\s*|\s+at\s+)/); if (match) title = match[1].trim(); }
+  if (!company) { const match = window.location.hostname.match(/^([^.]+)\.(workday|greenhouse|lever)/); if (match) company = capitalizeWords(match[1].replace(/-/g, ' ')); }
   
-  for (const sel of (selectors.description || '').split(', ')) {
-    description = extractText(sel);
-    if (description && description.length > 100) break;
-  }
-  
-  for (const sel of (selectors.location || '').split(', ')) {
-    location = extractText(sel);
-    if (location) break;
-  }
-  
-  // Fallbacks from page title
-  if (!title) {
-    const match = document.title.match(/^(.+?)(?:\s*[-|–]\s*|\s+at\s+)/);
-    if (match) title = match[1].trim();
-  }
-  
-  if (!company) {
-    const hostname = window.location.hostname;
-    const match = hostname.match(/^([^.]+)\.(workday|greenhouse|lever)/);
-    if (match) company = capitalizeWords(match[1].replace(/-/g, ' '));
-  }
-  
-  const requirements = extractRequirements(description);
-  
-  return {
-    title: title || 'Unknown Position',
-    company: company || 'Unknown Company',
-    description: description.substring(0, 5000),
-    location: location,
-    requirements: requirements,
-    url: window.location.href,
-    platform: platform.name,
-  };
+  return { title: title || 'Unknown Position', company: company || 'Unknown Company', description: description.substring(0, 5000), location, url: window.location.href, platform: platform.name };
 }
 
-function extractRequirements(description) {
-  const requirements = [];
-  const bulletMatch = description.match(/(?:•|▪|◦|-|\*)\s*(.+?)(?:\n|$)/g);
-  if (bulletMatch) {
-    bulletMatch.forEach(item => {
-      const cleaned = item.replace(/^[•▪◦\-\*]\s*/, '').trim();
-      if (cleaned.length > 10 && cleaned.length < 200) {
-        requirements.push(cleaned);
-      }
-    });
-  }
-  return requirements.slice(0, 15);
-}
-
-// ============= FIELD MAPPING & FILLING =============
+// ============= ENHANCED FIELD FILLING =============
 
 const FIELD_MAPPINGS = {
   firstName: ['first_name', 'firstname', 'first-name', 'fname', 'given_name'],
@@ -889,58 +381,44 @@ const FIELD_MAPPINGS = {
   currentTitle: ['current_title', 'job_title', 'title', 'position'],
   yearsExperience: ['years_experience', 'experience', 'total_experience'],
   salary: ['salary', 'salary_expectation', 'expected_salary', 'compensation'],
-  coverLetter: ['cover_letter', 'coverletter', 'cover', 'letter', 'message'],
+  coverLetter: ['cover_letter', 'coverletter', 'cover', 'letter', 'message']
 };
 
 function findField(fieldType, platformConfig = null) {
-  // Try platform-specific selector first
   if (platformConfig?.selectors?.[fieldType]) {
     const element = document.querySelector(platformConfig.selectors[fieldType]);
     if (element && element.offsetParent !== null) return element;
   }
   
-  // Try generic mappings
   const mappings = FIELD_MAPPINGS[fieldType] || [fieldType];
   
   for (const mapping of mappings) {
-    // ID-based lookup
     let element = document.getElementById(mapping);
     if (element && element.offsetParent !== null) return element;
     
-    // Name-based lookup (exact)
     element = document.querySelector(`input[name="${mapping}"], textarea[name="${mapping}"], select[name="${mapping}"]`);
     if (element && element.offsetParent !== null) return element;
     
-    // Name-based lookup (partial)
     element = document.querySelector(`input[name*="${mapping}"], textarea[name*="${mapping}"]`);
     if (element && element.offsetParent !== null) return element;
     
-    // ID-based lookup (partial)
     element = document.querySelector(`input[id*="${mapping}"], textarea[id*="${mapping}"]`);
     if (element && element.offsetParent !== null) return element;
     
-    // Placeholder-based lookup
     element = document.querySelector(`input[placeholder*="${mapping}" i], textarea[placeholder*="${mapping}" i]`);
     if (element && element.offsetParent !== null) return element;
     
-    // Aria-label-based lookup
     element = document.querySelector(`input[aria-label*="${mapping}" i], textarea[aria-label*="${mapping}" i]`);
     if (element && element.offsetParent !== null) return element;
     
-    // Data-automation-id lookup (for Workday)
     element = document.querySelector(`input[data-automation-id*="${mapping}"], textarea[data-automation-id*="${mapping}"]`);
     if (element && element.offsetParent !== null) return element;
     
-    // Label-based lookup (find label, then its associated input)
-    const labels = document.querySelectorAll(`label`);
+    const labels = document.querySelectorAll('label');
     for (const label of labels) {
       if (label.innerText?.toLowerCase().includes(mapping.toLowerCase())) {
         const forId = label.getAttribute('for');
-        if (forId) {
-          element = document.getElementById(forId);
-          if (element && element.offsetParent !== null) return element;
-        }
-        // Check for input inside or next to label
+        if (forId) { element = document.getElementById(forId); if (element && element.offsetParent !== null) return element; }
         element = label.querySelector('input, textarea, select');
         if (element && element.offsetParent !== null) return element;
         element = label.parentElement?.querySelector('input, textarea, select');
@@ -948,422 +426,333 @@ function findField(fieldType, platformConfig = null) {
       }
     }
   }
-  
   return null;
 }
+
+// ============= ENHANCED INPUT FILLING WITH REACT SUPPORT =============
 
 function fillField(element, value) {
   if (!element || !value) return false;
   
   try {
-    // Skip if already has value and not empty
-    if (element.value && element.value.trim() !== '') {
-      console.log('QuantumHire AI: Field already filled, skipping');
-      return false;
-    }
+    if (element.value && element.value.trim() !== '') return false;
     
-    // Handle different input types
-    if (element.tagName === 'SELECT') {
-      const options = Array.from(element.options);
-      const valueStr = String(value).toLowerCase();
-      
-      // Try exact match first
-      let match = options.find(o => 
-        o.text.toLowerCase() === valueStr || o.value.toLowerCase() === valueStr
-      );
-      
-      // Then partial match
-      if (!match) {
-        match = options.find(o => 
-          o.text.toLowerCase().includes(valueStr) || valueStr.includes(o.text.toLowerCase()) ||
-          o.value.toLowerCase().includes(valueStr)
-        );
-      }
-      
-      if (match) {
-        element.value = match.value;
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      }
-      return false;
-    }
-    
-    // For Workday and React apps - use native input setter
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     const nativeTextareaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
     
     element.focus();
+    element.click();
     
-    // Clear existing value
-    if (element.tagName === 'TEXTAREA' && nativeTextareaValueSetter) {
-      nativeTextareaValueSetter.call(element, String(value));
-    } else if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(element, String(value));
+    if (element.tagName === 'INPUT' && nativeInputValueSetter) {
+      nativeInputValueSetter.call(element, value);
+    } else if (element.tagName === 'TEXTAREA' && nativeTextareaValueSetter) {
+      nativeTextareaValueSetter.call(element, value);
     } else {
-      element.value = String(value);
+      element.value = value;
     }
     
-    // Dispatch all necessary events for React/Angular/Vue apps
-    element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-    element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
     element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
     
-    // For Workday specifically
-    if (element.getAttribute('data-automation-id')) {
-      element.dispatchEvent(new Event('focusout', { bubbles: true }));
-    }
-    
     return true;
-  } catch (e) {
-    console.error('QuantumHire AI: Fill field error', e);
+  } catch (error) {
+    console.error('QuantumHire AI: Fill error', error);
     return false;
   }
 }
 
-function fillLoginCredentials(credentials) {
-  if (!credentials?.email || !credentials?.password) return 0;
-  
-  let filled = 0;
-  
-  const emailSelectors = [
-    'input[type="email"]',
-    'input[name="email"]',
-    'input[name*="username"]',
-    'input[id*="username"]',
-    'input[data-automation-id="email"]',
-    'input[data-automation-id="userName"]',
-  ];
-  
-  for (const selector of emailSelectors) {
-    const field = document.querySelector(selector);
-    if (field && !field.value) {
-      if (fillField(field, credentials.email)) {
-        field.classList.add('quantumhire-filled');
-        filled++;
-        break;
-      }
-    }
-  }
-  
-  const passwordSelectors = [
-    'input[type="password"]',
-    'input[name="password"]',
-    'input[data-automation-id="password"]',
-  ];
-  
-  for (const selector of passwordSelectors) {
-    const field = document.querySelector(selector);
-    if (field && !field.value) {
-      if (fillField(field, credentials.password)) {
-        field.classList.add('quantumhire-filled');
-        filled++;
-        break;
-      }
-    }
-  }
-  
-  return filled;
-}
+// ============= ENHANCED DROPDOWN FILLING =============
 
-// ============= QUESTION DETECTION & AI ANSWERING =============
-
-function detectApplicationQuestions() {
-  const questions = [];
-  const processed = new Set();
+function fillDropdown(selectElement, answerValue) {
+  if (!selectElement || selectElement.tagName !== 'SELECT') return false;
   
-  // Find all form groups/questions
-  const formGroups = document.querySelectorAll(
-    'label, [class*="form-group"], [class*="question"], [data-automation-id*="question"], .field-group'
-  );
+  const options = Array.from(selectElement.options);
+  const answerLower = String(answerValue).toLowerCase().trim();
   
-  formGroups.forEach((group, index) => {
-    const label = group.tagName === 'LABEL' ? group : group.querySelector('label, [class*="label"]');
-    const labelText = label?.innerText?.trim() || group?.innerText?.split('\n')[0]?.trim();
-    
-    if (!labelText || labelText.length < 3 || labelText.length > 300) return;
-    
-    // Skip basic fields we handle separately
-    const basicFields = ['first name', 'last name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'postal', 'country'];
-    if (basicFields.some(f => labelText.toLowerCase().includes(f))) return;
-    
-    // Find associated input
-    let input = group.querySelector('input:not([type="hidden"]):not([type="file"]), textarea, select');
-    if (!input && label?.htmlFor) {
-      input = document.getElementById(label.htmlFor);
-    }
-    
-    if (!input || processed.has(input)) return;
-    processed.add(input);
-    
-    const question = {
-      id: input.id || input.name || `q_${index}`,
-      label: labelText,
-      type: input.type || input.tagName.toLowerCase(),
-      element: input,
-      required: input.required || group.querySelector('[class*="required"], .required') !== null,
-    };
-    
-    if (input.tagName === 'SELECT') {
-      question.options = Array.from(input.options).map(o => o.text).filter(t => t && t !== '');
-    }
-    
-    questions.push(question);
+  // Strategy 1: Exact match
+  let match = options.find(o => {
+    const optText = o.text.toLowerCase().trim();
+    const optVal = o.value.toLowerCase().trim();
+    return optText === answerLower || optVal === answerLower;
   });
   
-  // Also look for radio button groups
-  const radioGroups = document.querySelectorAll('fieldset, [role="radiogroup"], [class*="radio-group"]');
-  radioGroups.forEach((group, index) => {
-    const legend = group.querySelector('legend, [class*="legend"], [class*="label"]');
-    const labelText = legend?.innerText?.trim();
-    if (!labelText) return;
-    
-    const radios = group.querySelectorAll('input[type="radio"]');
-    if (radios.length === 0) return;
-    
-    const options = Array.from(radios).map(r => {
-      const radioLabel = document.querySelector(`label[for="${r.id}"]`);
-      return radioLabel?.innerText?.trim() || r.value;
+  // Strategy 2: Partial match
+  if (!match) {
+    match = options.find(o => {
+      const optText = o.text.toLowerCase().trim();
+      const optVal = o.value.toLowerCase().trim();
+      return optText.includes(answerLower) || answerLower.includes(optText) || optVal.includes(answerLower);
     });
-    
-    questions.push({
-      id: radios[0].name || `radio_${index}`,
-      label: labelText,
-      type: 'radio',
-      elements: Array.from(radios),
-      options: options,
-      required: radios[0].required,
+  }
+  
+  // Strategy 3: Yes/No variations
+  if (!match && (answerLower === 'yes' || answerLower === 'no')) {
+    match = options.find(o => {
+      const optText = o.text.toLowerCase().trim();
+      const optVal = o.value.toLowerCase().trim();
+      if (answerLower === 'yes') {
+        return optText === 'yes' || optVal === 'yes' || optVal === '1' || optVal === 'true' || optText === 'true' || optText.includes('i agree') || optText.includes('i confirm');
+      } else {
+        return optText === 'no' || optVal === 'no' || optVal === '0' || optVal === 'false' || optText === 'false';
+      }
     });
+  }
+  
+  // Strategy 4: First non-empty option for "Select..." defaults
+  if (!match && options.length > 1) {
+    const validOptions = options.filter(o => o.value && o.value !== '' && !o.text.toLowerCase().includes('select'));
+    if (validOptions.length === 1) {
+      match = validOptions[0]; // Only one real option
+    }
+  }
+  
+  if (match && match.value !== '' && !match.value.toLowerCase().includes('select')) {
+    selectElement.focus();
+    selectElement.click();
+    
+    // Set value using native setter for React compatibility
+    const nativeSelectSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+    if (nativeSelectSetter) {
+      nativeSelectSetter.call(selectElement, match.value);
+    } else {
+      selectElement.value = match.value;
+    }
+    
+    // Fire all events for framework compatibility
+    selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+    selectElement.dispatchEvent(new Event('input', { bubbles: true }));
+    selectElement.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    selectElement.dispatchEvent(new Event('focusout', { bubbles: true }));
+    
+    // For custom dropdowns (React Select, etc.)
+    const customDropdownTrigger = selectElement.closest('[class*="select"]')?.querySelector('[class*="control"], [class*="trigger"]');
+    if (customDropdownTrigger) {
+      customDropdownTrigger.click();
+      setTimeout(() => {
+        const optionElements = document.querySelectorAll('[class*="option"]');
+        optionElements.forEach(opt => {
+          if (opt.textContent.toLowerCase().includes(answerLower)) {
+            opt.click();
+          }
+        });
+      }, 100);
+    }
+    
+    console.log(`QuantumHire AI: Dropdown filled: "${match.text}" for value "${answerValue}"`);
+    selectElement.classList.add('quantumhire-filled');
+    return true;
+  }
+  
+  console.log(`QuantumHire AI: No dropdown match for "${answerValue}". Options:`, options.map(o => o.text));
+  return false;
+}
+
+// ============= ENHANCED CHECKBOX FILLING =============
+
+function fillCheckbox(checkbox, shouldCheck = true) {
+  if (!checkbox || checkbox.type !== 'checkbox') return false;
+  
+  try {
+    if (checkbox.checked === shouldCheck) return true; // Already in desired state
+    
+    checkbox.focus();
+    checkbox.checked = shouldCheck;
+    
+    // Fire events for React/Angular/Vue compatibility
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    checkbox.dispatchEvent(new Event('input', { bubbles: true }));
+    checkbox.dispatchEvent(new Event('click', { bubbles: true }));
+    checkbox.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    
+    // For custom checkbox implementations
+    const label = checkbox.closest('label') || document.querySelector(`label[for="${checkbox.id}"]`);
+    if (label) label.click();
+    
+    console.log(`QuantumHire AI: Checkbox ${shouldCheck ? 'checked' : 'unchecked'}: ${checkbox.name || checkbox.id}`);
+    checkbox.classList.add('quantumhire-filled');
+    return true;
+  } catch (error) {
+    console.error('QuantumHire AI: Checkbox error', error);
+    return false;
+  }
+}
+
+// ============= ENHANCED RADIO BUTTON FILLING =============
+
+function fillRadioButton(radioGroup, answerValue) {
+  if (!radioGroup || radioGroup.length === 0) return false;
+  
+  const answerLower = String(answerValue).toLowerCase().trim();
+  
+  for (const radio of radioGroup) {
+    const label = document.querySelector(`label[for="${radio.id}"]`);
+    const radioText = (label?.innerText?.trim() || radio.value).toLowerCase();
+    
+    if (radioText.includes(answerLower) || answerLower.includes(radioText) ||
+        (answerLower === 'yes' && (radioText === 'yes' || radioText.includes('i agree'))) ||
+        (answerLower === 'no' && radioText === 'no')) {
+      
+      radio.focus();
+      radio.checked = true;
+      radio.dispatchEvent(new Event('change', { bubbles: true }));
+      radio.dispatchEvent(new Event('input', { bubbles: true }));
+      radio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      
+      console.log(`QuantumHire AI: Radio selected: "${radioText}"`);
+      radio.classList.add('quantumhire-filled');
+      return true;
+    }
+  }
+  return false;
+}
+
+// ============= DETECT ALL FORM QUESTIONS =============
+
+function detectAllQuestions() {
+  const questions = [];
+  
+  // Detect SELECT dropdowns
+  document.querySelectorAll('select').forEach(select => {
+    if (select.offsetParent === null) return; // Skip hidden
+    
+    let label = '';
+    const labelEl = document.querySelector(`label[for="${select.id}"]`) || select.closest('label');
+    if (labelEl) label = labelEl.innerText.replace(/\*$/, '').trim();
+    if (!label) label = select.getAttribute('aria-label') || select.name || select.id || '';
+    
+    if (label) {
+      questions.push({ type: 'select', element: select, label, id: select.id || select.name });
+    }
+  });
+  
+  // Detect CHECKBOX inputs
+  document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+    if (checkbox.offsetParent === null) return;
+    
+    let label = '';
+    const labelEl = document.querySelector(`label[for="${checkbox.id}"]`) || checkbox.closest('label');
+    if (labelEl) label = labelEl.innerText.trim();
+    if (!label) label = checkbox.getAttribute('aria-label') || checkbox.name || '';
+    
+    if (label) {
+      questions.push({ type: 'checkbox', element: checkbox, label, id: checkbox.id || checkbox.name });
+    }
+  });
+  
+  // Detect RADIO buttons (group by name)
+  const radioGroups = {};
+  document.querySelectorAll('input[type="radio"]').forEach(radio => {
+    if (radio.offsetParent === null) return;
+    const name = radio.name;
+    if (!radioGroups[name]) radioGroups[name] = [];
+    radioGroups[name].push(radio);
+  });
+  
+  Object.entries(radioGroups).forEach(([name, radios]) => {
+    let label = '';
+    const container = radios[0].closest('fieldset, [role="radiogroup"], .form-group, .question, [class*="question"]');
+    if (container) {
+      const legend = container.querySelector('legend, label, [class*="label"], [class*="question"]');
+      if (legend) label = legend.innerText.replace(/\*$/, '').trim();
+    }
+    if (!label) label = name;
+    
+    questions.push({ type: 'radio', elements: radios, label, id: name });
+  });
+  
+  // Detect TEXT inputs and TEXTAREAS that look like questions
+  document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], input[type="url"], textarea').forEach(input => {
+    if (input.offsetParent === null) return;
+    
+    let label = '';
+    const labelEl = document.querySelector(`label[for="${input.id}"]`) || input.closest('label');
+    if (labelEl) label = labelEl.innerText.replace(/\*$/, '').trim();
+    if (!label) label = input.getAttribute('aria-label') || input.placeholder || input.name || '';
+    
+    // Check if it looks like a question (has question mark or specific keywords)
+    const isQuestion = label.includes('?') || 
+                       /years.*experience|how many|salary|expectation|linkedin|github|portfolio|website/i.test(label);
+    
+    if (label && isQuestion) {
+      questions.push({ type: 'text', element: input, label, id: input.id || input.name });
+    }
   });
   
   return questions;
 }
 
-async function getAIAnswers(questions, jobData, userProfile) {
-  try {
-    console.log('QuantumHire AI: Requesting AI answers for', questions.length, 'questions');
-    
-    const response = await chrome.runtime.sendMessage({
-      action: 'answerQuestions',
-      questions: questions.map(q => ({
-        id: q.id,
-        label: q.label,
-        type: q.type,
-        options: q.options,
-        required: q.required,
-      })),
-      jobTitle: jobData.title,
-      company: jobData.company,
-      jobDescription: jobData.description || '',
-    });
-    
-    if (response?.error) {
-      console.warn('QuantumHire AI: AI returned error:', response.error);
-      showToast(`AI: ${response.error}`, 'warning');
-    }
-    
-    console.log('QuantumHire AI: Received', response?.answers?.length || 0, 'AI answers');
-    return response?.answers || [];
-  } catch (error) {
-    console.error('QuantumHire AI: AI answer error', error);
-    showToast('AI answering unavailable, using smart defaults', 'info');
-    return [];
-  }
-}
+// ============= FILL ALL DETECTED QUESTIONS =============
 
-function fillQuestionsWithAnswers(questions, answers, jobData, userProfile) {
-  const answerMap = new Map(answers.map(a => [a.id, a]));
+async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
+  const questions = detectAllQuestions();
   let filledCount = 0;
-  const flaggedQuestions = [];
   const errors = [];
   
   for (const q of questions) {
-    // First check knockout answer bank with profile data
-    const knockoutMatch = matchKnockoutQuestion(q.label, userProfile);
-    let answer = null;
-    let selectValue = null;
-    let shouldFlag = false;
-    
-    if (knockoutMatch) {
-      answer = knockoutMatch.answer;
-      selectValue = knockoutMatch.selectValue;
-      shouldFlag = knockoutMatch.flag;
-      if (shouldFlag) {
-        flaggedQuestions.push({
-          question: q.label,
-          answer: answer,
-          reason: knockoutMatch.reason
-        });
-      }
-      console.log(`QuantumHire AI: Knockout match for "${q.label}" → "${answer}"${shouldFlag ? ' [FLAGGED]' : ''}`);
-    } else {
-      // Check for salary questions
-      if (q.label.toLowerCase().match(/salary|pay range|compensation|expected.*pay|desired pay|pay expectation/)) {
-        answer = getSalaryAnswer(q.label, jobData, userProfile);
-        console.log(`QuantumHire AI: Salary answer for "${q.label}" → "${answer}"`);
-      }
-      // Check for years of experience questions
-      else if (q.label.toLowerCase().match(/years.*experience|how many years|experience.*years|years.*of/i)) {
-        const skillMatch = q.label.match(/experience\s+(?:in|with|using)?\s*([a-zA-Z+#.\s]+)/i) ||
-                          q.label.match(/years.*(?:of|in)?\s*([a-zA-Z+#.\s]+)\s*experience/i) ||
-                          q.label.match(/([a-zA-Z+#.\s]+)\s*experience/i);
+    try {
+      // First try knockout answer bank
+      let knockoutMatch = matchKnockoutQuestion(q.label, userProfile);
+      let answer = knockoutMatch?.answer;
+      let selectValue = knockoutMatch?.selectValue;
+      
+      // Special handling for specific question types
+      if (!answer) {
+        const labelLower = q.label.toLowerCase();
         
-        if (skillMatch) {
-          const skillName = skillMatch[1].trim();
-          const years = getExperienceYears(skillName, userProfile);
-          answer = String(years);
-          console.log(`QuantumHire AI: Experience answer for "${skillName}" → ${years} years`);
-        } else {
-          answer = userProfile?.total_experience || '8';
-          console.log(`QuantumHire AI: Default experience answer → ${answer} years`);
+        // Salary questions
+        if (labelLower.match(/salary|pay range|compensation|expected.*pay|desired pay/)) {
+          answer = getSalaryAnswer(q.label, jobData, userProfile);
         }
-      }
-      // Check for LinkedIn URL
-      else if (q.label.toLowerCase().match(/linkedin|linked.*in.*url|linkedin.*profile/)) {
-        answer = userProfile?.linkedin || '';
-      }
-      // Check for GitHub URL
-      else if (q.label.toLowerCase().match(/github|git.*hub.*url/)) {
-        answer = userProfile?.github || '';
-      }
-      // Check for portfolio/website
-      else if (q.label.toLowerCase().match(/portfolio|website|personal.*site/)) {
-        answer = userProfile?.portfolio || '';
-      }
-      // Check for highest education
-      else if (q.label.toLowerCase().match(/highest.*education|education.*level|degree.*obtained/)) {
-        answer = userProfile?.highest_education || "Bachelor's Degree";
-      }
-      // Check for citizenship/nationality
-      else if (q.label.toLowerCase().match(/citizenship|nationality|country.*citizen/)) {
-        answer = userProfile?.citizenship || 'United States';
-      }
-      else {
-        const answerObj = answerMap.get(q.id);
-        if (answerObj?.answer) {
-          answer = answerObj.answer;
+        // Years of experience
+        else if (labelLower.match(/years.*experience|how many years|experience.*years/i)) {
+          const skillMatch = q.label.match(/experience\s+(?:in|with|using)?\s*([a-zA-Z+#.\s]+)/i);
+          answer = skillMatch ? String(getExperienceYears(skillMatch[1].trim(), userProfile)) : (userProfile?.total_experience || '8');
         }
-      }
-    }
-    
-    if (!answer) continue;
-    
-    // Fill radio buttons
-    if (q.type === 'radio' && q.elements) {
-      let matched = false;
-      for (const radio of q.elements) {
-        const radioLabel = document.querySelector(`label[for="${radio.id}"]`);
-        const radioText = (radioLabel?.innerText?.trim() || radio.value).toLowerCase();
-        
-        if (radioText.includes(String(answer).toLowerCase()) || 
-            String(answer).toLowerCase().includes(radioText) ||
-            (selectValue && radioText.includes(selectValue))) {
-          radio.checked = true;
-          radio.dispatchEvent(new Event('change', { bubbles: true }));
-          radio.dispatchEvent(new Event('input', { bubbles: true }));
-          radio.dispatchEvent(new Event('click', { bubbles: true }));
-          filledCount++;
-          matched = true;
-          console.log(`QuantumHire AI: Selected radio "${radioText}" for "${q.label}"`);
-          break;
-        }
-      }
-      if (!matched) {
-        errors.push({ question: q.label, error: `No matching radio option for "${answer}"` });
-      }
-    } 
-    // Fill select dropdowns
-    else if (q.element && q.element.tagName === 'SELECT') {
-      const options = Array.from(q.element.options);
-      const answerLower = String(answer).toLowerCase();
-      const selectValueLower = selectValue ? selectValue.toLowerCase() : answerLower;
-      
-      // First try exact match
-      let match = options.find(o => {
-        const optText = o.text.toLowerCase().trim();
-        const optVal = o.value.toLowerCase().trim();
-        return optText === selectValueLower || optVal === selectValueLower ||
-               optText === answerLower || optVal === answerLower;
-      });
-      
-      // Then try partial match
-      if (!match) {
-        match = options.find(o => {
-          const optText = o.text.toLowerCase().trim();
-          const optVal = o.value.toLowerCase().trim();
-          return optText.includes(selectValueLower) || 
-                 selectValueLower.includes(optText) ||
-                 optVal.includes(selectValueLower) ||
-                 optText.includes(answerLower) ||
-                 answerLower.includes(optText);
-        });
+        // Profile-based answers
+        else if (labelLower.match(/linkedin/)) answer = userProfile?.linkedin || '';
+        else if (labelLower.match(/github/)) answer = userProfile?.github || '';
+        else if (labelLower.match(/portfolio|website/)) answer = userProfile?.portfolio || '';
+        else if (labelLower.match(/highest.*education|education.*level/)) answer = userProfile?.highest_education || "Bachelor's Degree";
+        // Use AI answer if available
+        else if (aiAnswers && aiAnswers[q.id]) answer = aiAnswers[q.id];
       }
       
-      // For Yes/No dropdowns, try common variations
-      if (!match && (answerLower === 'yes' || answerLower === 'no')) {
-        match = options.find(o => {
-          const optText = o.text.toLowerCase().trim();
-          const optVal = o.value.toLowerCase().trim();
-          if (answerLower === 'yes') {
-            return optText === 'yes' || optVal === 'yes' || optVal === '1' || 
-                   optVal === 'true' || optText === 'true';
-          } else {
-            return optText === 'no' || optVal === 'no' || optVal === '0' || 
-                   optVal === 'false' || optText === 'false';
-          }
-        });
-      }
+      if (!answer) continue;
       
-      if (match && match.value !== '' && match.value !== 'select' && match.value !== 'Select...') {
-        q.element.focus();
-        q.element.click();
-        q.element.value = match.value;
-        q.element.dispatchEvent(new Event('change', { bubbles: true }));
-        q.element.dispatchEvent(new Event('input', { bubbles: true }));
-        q.element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-        q.element.dispatchEvent(new Event('focusout', { bubbles: true }));
-        
-        console.log(`QuantumHire AI: Selected "${match.text}" for dropdown "${q.label}"`);
-        q.element.classList.add('quantumhire-filled');
-        filledCount++;
-      } else {
-        console.log(`QuantumHire AI: No match for dropdown "${q.label}" with answer "${answer}". Options:`, options.map(o => `${o.text}:${o.value}`));
-        errors.push({ question: q.label, error: `No matching option for "${answer}"`, options: options.map(o => o.text) });
+      // Fill based on question type
+      if (q.type === 'select') {
+        if (fillDropdown(q.element, selectValue || answer)) filledCount++;
+        else errors.push({ question: q.label, error: 'No matching dropdown option' });
       }
-    } 
-    // Fill text inputs/textareas
-    else if (q.element) {
-      if (fillField(q.element, String(answer))) {
-        q.element.classList.add('quantumhire-filled');
-        filledCount++;
-      } else {
-        errors.push({ question: q.label, error: 'Failed to fill field' });
+      else if (q.type === 'checkbox') {
+        const shouldCheck = ['yes', 'true', 'agree', 'i agree', 'accept', 'confirm'].some(v => answer.toLowerCase().includes(v));
+        if (fillCheckbox(q.element, shouldCheck)) filledCount++;
       }
+      else if (q.type === 'radio') {
+        if (fillRadioButton(q.elements, answer)) filledCount++;
+        else errors.push({ question: q.label, error: 'No matching radio option' });
+      }
+      else if (q.type === 'text') {
+        if (fillField(q.element, answer)) filledCount++;
+      }
+    } catch (error) {
+      console.error(`QuantumHire AI: Error filling "${q.label}"`, error);
+      errors.push({ question: q.label, error: error.message });
     }
   }
   
-  if (errors.length > 0) {
-    console.log('QuantumHire AI: ⚠️ Fill errors:', errors);
-  }
-  
-  if (flaggedQuestions.length > 0) {
-    console.log('QuantumHire AI: ⚠️ Flagged questions requiring manual review:', flaggedQuestions);
-    showToast(`⚠️ ${flaggedQuestions.length} question(s) flagged for review`, 'warning');
-  }
-  
-  return { filledCount, flaggedQuestions, errors };
+  console.log(`QuantumHire AI: Filled ${filledCount}/${questions.length} questions. Errors:`, errors);
+  return { filledCount, totalQuestions: questions.length, errors };
 }
 
-// ============= PDF GENERATION & FILE UPLOAD =============
+// ============= PDF GENERATION =============
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 
 async function generatePDF(type, profileData, jobData, tailoredData) {
   console.log(`QuantumHire AI: Generating ${type} PDF...`);
   
-  // Build filename in format: MaxOkafor_CV.pdf or MaxOkafor_CoverLetter.pdf
   const firstName = (profileData.first_name || 'User').replace(/\s+/g, '');
   const lastName = (profileData.last_name || '').replace(/\s+/g, '');
   const fileType = type === 'resume' ? 'CV' : 'CoverLetter';
@@ -1371,7 +760,7 @@ async function generatePDF(type, profileData, jobData, tailoredData) {
   
   try {
     const requestBody = {
-      type: type, // 'resume' or 'cover_letter'
+      type: type,
       personalInfo: {
         name: `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim(),
         email: profileData.email,
@@ -1379,13 +768,12 @@ async function generatePDF(type, profileData, jobData, tailoredData) {
         location: jobData?.location || profileData.city || '',
         linkedin: profileData.linkedin,
         github: profileData.github,
-        portfolio: profileData.portfolio,
+        portfolio: profileData.portfolio
       },
       fileName: fileName
     };
     
     if (type === 'resume') {
-      // Parse tailored resume to extract sections
       const resumeText = tailoredData?.tailoredResume || '';
       requestBody.summary = extractSection(resumeText, 'summary', 'professional summary');
       requestBody.experience = parseExperience(resumeText, profileData.work_experience);
@@ -1394,38 +782,25 @@ async function generatePDF(type, profileData, jobData, tailoredData) {
       requestBody.certifications = profileData.certifications || [];
       requestBody.achievements = parseAchievements(profileData.achievements);
     } else {
-      // Cover letter
       const coverText = tailoredData?.tailoredCoverLetter || '';
       requestBody.coverLetter = {
         recipientCompany: jobData?.company || 'Company',
         jobTitle: jobData?.title || 'Position',
-        jobId: jobData?.jobId || '',
         paragraphs: coverText.split('\n\n').filter(p => p.trim().length > 20)
       };
     }
     
     const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody)
     });
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'PDF generation failed');
-    }
+    if (!response.ok) throw new Error((await response.json()).error || 'PDF generation failed');
     
     const result = await response.json();
-    console.log(`QuantumHire AI: PDF generated successfully: ${result.fileName}`);
-    
-    return {
-      success: true,
-      pdf: result.pdf, // base64
-      fileName: result.fileName,
-      size: result.size
-    };
+    console.log(`QuantumHire AI: PDF generated: ${result.fileName}`);
+    return { success: true, pdf: result.pdf, fileName: result.fileName, size: result.size };
   } catch (error) {
     console.error('QuantumHire AI: PDF generation error', error);
     return { success: false, error: error.message };
@@ -1439,30 +814,22 @@ function extractSection(text, ...keywords) {
   
   for (const line of lines) {
     const lower = line.toLowerCase();
-    if (keywords.some(kw => lower.includes(kw))) {
-      capture = true;
-      continue;
-    }
+    if (keywords.some(kw => lower.includes(kw))) { capture = true; continue; }
     if (capture) {
-      if (line.match(/^[A-Z][A-Z\s]+$/) || line.match(/^#{1,3}\s/)) {
-        break; // Next section
-      }
+      if (line.match(/^[A-Z][A-Z\s]+$/) || line.match(/^#{1,3}\s/)) break;
       section.push(line.trim());
     }
   }
-  
   return section.filter(l => l).join(' ').substring(0, 500);
 }
 
 function parseExperience(resumeText, fallbackExperience) {
-  // Try to parse from tailored text or use fallback
   if (fallbackExperience && Array.isArray(fallbackExperience)) {
     return fallbackExperience.map(exp => ({
       company: exp.company || '',
       title: exp.title || '',
       dates: exp.dates || `${exp.start_date || ''} – ${exp.end_date || 'Present'}`,
-      bullets: Array.isArray(exp.description) ? exp.description : 
-               (exp.description || '').split('\n').filter(b => b.trim())
+      bullets: Array.isArray(exp.description) ? exp.description : (exp.description || '').split('\n').filter(b => b.trim())
     }));
   }
   return [];
@@ -1470,175 +837,197 @@ function parseExperience(resumeText, fallbackExperience) {
 
 function parseEducation(education) {
   if (!education || !Array.isArray(education)) return [];
-  return education.map(edu => ({
-    degree: edu.degree || '',
-    school: edu.school || edu.institution || '',
-    dates: edu.dates || `${edu.start_date || ''} – ${edu.end_date || ''}`,
-    gpa: edu.gpa || ''
-  }));
+  return education.map(edu => ({ degree: edu.degree || '', school: edu.school || edu.institution || '', dates: edu.dates || '', gpa: edu.gpa || '' }));
 }
 
 function parseSkills(resumeText, fallbackSkills) {
   if (fallbackSkills && Array.isArray(fallbackSkills)) {
-    const primary = fallbackSkills
-      .filter(s => s.proficiency === 'expert' || s.proficiency === 'advanced')
-      .map(s => s.name);
-    const secondary = fallbackSkills
-      .filter(s => s.proficiency !== 'expert' && s.proficiency !== 'advanced')
-      .map(s => s.name);
-    return { primary, secondary };
+    return {
+      primary: fallbackSkills.filter(s => s.proficiency === 'expert' || s.proficiency === 'advanced').map(s => s.name),
+      secondary: fallbackSkills.filter(s => s.proficiency !== 'expert' && s.proficiency !== 'advanced').map(s => s.name)
+    };
   }
   return { primary: [], secondary: [] };
 }
 
 function parseAchievements(achievements) {
   if (!achievements || !Array.isArray(achievements)) return [];
-  return achievements.map(a => ({
-    title: a.title || '',
-    date: a.date || '',
-    description: a.description || ''
-  }));
+  return achievements.map(a => ({ title: a.title || '', date: a.date || '', description: a.description || '' }));
 }
 
-// PDF upload with retry logic
+// ============= PDF UPLOAD =============
+
 async function uploadPDFFile(fileInput, pdfBase64, fileName, maxRetries = 3) {
   if (!fileInput || !pdfBase64) return { success: false, error: 'Missing input or PDF data' };
-  
-  let lastError = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`QuantumHire AI: PDF upload attempt ${attempt}/${maxRetries} for ${fileName}`);
       
-      // Convert base64 to Blob
       const binaryString = atob(pdfBase64);
       const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      
       const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
       const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
       
-      // Create DataTransfer and set files
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(pdfFile);
       fileInput.files = dataTransfer.files;
       
-      // Dispatch events
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
       fileInput.dispatchEvent(new Event('input', { bubbles: true }));
       
-      // Verify upload
       if (fileInput.files.length > 0 && fileInput.files[0].name === fileName) {
-        console.log(`QuantumHire AI: ✅ PDF uploaded successfully: ${fileName} (${pdfFile.size} bytes)`);
+        console.log(`QuantumHire AI: ✅ PDF uploaded: ${fileName}`);
         showToast(`✅ PDF uploaded: ${fileName}`, 'success');
         return { success: true, fileName, size: pdfFile.size };
-      } else {
-        throw new Error('File not set correctly');
       }
+      throw new Error('File not set');
     } catch (error) {
-      lastError = error;
-      console.error(`QuantumHire AI: PDF upload attempt ${attempt} failed:`, error);
-      
-      if (attempt < maxRetries) {
-        showToast(`Retrying PDF upload... (${attempt + 1}/${maxRetries})`, 'info');
-        await new Promise(r => setTimeout(r, 500 * attempt)); // Exponential backoff
-      }
+      console.error(`QuantumHire AI: Upload attempt ${attempt} failed:`, error);
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 500 * attempt));
     }
   }
   
-  console.error('QuantumHire AI: PDF upload failed after all retries');
   showToast(`❌ PDF upload failed: ${fileName}`, 'error');
-  return { success: false, error: lastError?.message || 'Upload failed' };
+  return { success: false, error: 'Upload failed' };
 }
 
-// Legacy fallback removed - PDF only uploads now
+// ============= CHECK IF PAGE IS COMPLETE =============
 
-function findLabelForInput(input) {
-  if (input.id) {
-    const label = document.querySelector(`label[for="${input.id}"]`);
-    if (label) return label.innerText;
+function isPageComplete() {
+  const requiredFields = document.querySelectorAll('[required], [aria-required="true"]');
+  const emptyDropdowns = [];
+  const emptyInputs = [];
+  const uncheckedRequired = [];
+  
+  for (const field of requiredFields) {
+    if (field.offsetParent === null) continue; // Skip hidden
+    
+    if (field.tagName === 'SELECT') {
+      if (!field.value || field.value === '' || field.selectedIndex === 0) {
+        emptyDropdowns.push(field);
+      }
+    } else if (field.type === 'checkbox') {
+      if (!field.checked) uncheckedRequired.push(field);
+    } else if (field.type === 'radio') {
+      const name = field.name;
+      const group = document.querySelectorAll(`input[type="radio"][name="${name}"]`);
+      const anyChecked = Array.from(group).some(r => r.checked);
+      if (!anyChecked) uncheckedRequired.push(field);
+    } else if (!field.value || field.value.trim() === '') {
+      emptyInputs.push(field);
+    }
   }
   
-  let parent = input.parentElement;
-  for (let i = 0; i < 5 && parent; i++) {
-    const label = parent.querySelector('label');
-    if (label) return label.innerText;
-    parent = parent.parentElement;
+  const allComplete = emptyDropdowns.length === 0 && emptyInputs.length === 0 && uncheckedRequired.length === 0;
+  
+  return {
+    complete: allComplete,
+    emptyDropdowns,
+    emptyInputs,
+    uncheckedRequired,
+    totalIssues: emptyDropdowns.length + emptyInputs.length + uncheckedRequired.length
+  };
+}
+
+// ============= AUTO NAVIGATE TO NEXT PAGE =============
+
+async function navigateToNextPage() {
+  const platform = detectPlatform();
+  
+  // Try platform-specific next button
+  const nextSelectors = [
+    platform.config?.nextButton,
+    'button[type="submit"]:not([disabled])',
+    'input[type="submit"]:not([disabled])',
+    'button:contains("Next")',
+    'button:contains("Continue")',
+    'a:contains("Next")',
+    '[data-automation-id="bottom-navigation-next-button"]',
+    '.btn-next',
+    '.next-button',
+    '[class*="next"]'
+  ].filter(Boolean);
+  
+  for (const selector of nextSelectors) {
+    try {
+      const nextBtn = document.querySelector(selector);
+      if (nextBtn && nextBtn.offsetParent !== null && !nextBtn.disabled) {
+        console.log('QuantumHire AI: Clicking next button:', selector);
+        nextBtn.click();
+        showToast('➡️ Moving to next page...', 'info');
+        return true;
+      }
+    } catch (e) {}
   }
   
-  return '';
+  // Try by button text
+  const buttons = document.querySelectorAll('button, input[type="submit"], a.btn');
+  for (const btn of buttons) {
+    const text = btn.innerText?.toLowerCase() || btn.value?.toLowerCase() || '';
+    if ((text.includes('next') || text.includes('continue') || text.includes('proceed')) && !btn.disabled && btn.offsetParent !== null) {
+      console.log('QuantumHire AI: Clicking button by text:', text);
+      btn.click();
+      showToast('➡️ Moving to next page...', 'info');
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// ============= CHECK IF THIS IS FINAL PAGE =============
+
+function isFinalPage() {
+  const submitSelectors = [
+    'button[type="submit"]:contains("Submit")',
+    'input[type="submit"][value*="Submit"]',
+    'button:contains("Submit Application")',
+    'button:contains("Apply")',
+    '[data-automation-id="bottom-navigation-submit-button"]'
+  ];
+  
+  const buttons = document.querySelectorAll('button, input[type="submit"]');
+  for (const btn of buttons) {
+    const text = btn.innerText?.toLowerCase() || btn.value?.toLowerCase() || '';
+    if (text.includes('submit') && !text.includes('next')) return true;
+    if (text === 'apply' || text === 'apply now') return true;
+  }
+  
+  return false;
 }
 
 // ============= MAIN AUTOFILL FUNCTION =============
 
 async function autofillForm(tailoredData = null, atsCredentials = null, options = {}) {
-  console.log('QuantumHire AI: Starting advanced autofill...', options);
+  console.log('QuantumHire AI: Starting autofill...', options);
   
   const platform = detectPlatform();
-  const platformConfig = platform.config;
-  
-  // Update state
   applicationState.platform = platform.name;
   applicationState.status = 'in_progress';
   applicationState.startTime = applicationState.startTime || Date.now();
   
-  // Store tailored data in state
-  if (tailoredData) {
-    applicationState.tailoredData = tailoredData;
-  }
+  if (tailoredData) applicationState.tailoredData = tailoredData;
   
-  // CAPTCHA detection removed - user handles manually
-  
-  // Check for login page
-  const isLogin = detectLoginPage();
-  if (isLogin && atsCredentials) {
-    console.log('QuantumHire AI: Login page detected');
-    const loginFilled = fillLoginCredentials(atsCredentials);
-    
+  // Handle login page
+  if (detectLoginPage() && atsCredentials) {
+    const loginFilled = await fillLoginFields(atsCredentials);
     if (loginFilled > 0) {
-      // Try to auto-click sign in button
-      const signInSelectors = [
-        'button[type="submit"]',
-        'input[type="submit"]',
-        '[data-automation-id="click_filter"]',
-        'button[data-automation-id="signInSubmitButton"]',
-        'button.btn-primary[type="submit"]'
-      ];
-      
-      for (const selector of signInSelectors) {
-        const signInBtn = document.querySelector(selector);
-        if (signInBtn && signInBtn.offsetParent !== null) {
-          console.log('QuantumHire AI: Found sign in button, clicking...');
-          setTimeout(() => signInBtn.click(), 500);
-          break;
-        }
-      }
-      
-      return {
-        success: true,
-        status: 'login_filled',
-        fields: loginFilled,
-        message: `Filled ${loginFilled} login fields. Signing in...`
-      };
+      const signInBtn = document.querySelector('button[type="submit"], input[type="submit"]');
+      if (signInBtn) setTimeout(() => signInBtn.click(), 500);
+      return { success: true, status: 'login_filled', fields: loginFilled, message: `Filled ${loginFilled} login fields` };
     }
   }
   
   // Get user profile
   const data = await chrome.storage.local.get(['userProfile']);
   const profile = data.userProfile;
+  if (!profile) return { success: false, message: 'No profile found. Please connect your account.' };
   
-  if (!profile) {
-    return { success: false, message: 'No profile found. Please connect your account.' };
-  }
-  
-  // Detect current page
-  const pageInfo = detectCurrentPage(platformConfig);
-  applicationState.currentPage = pageInfo.current;
-  applicationState.totalPages = pageInfo.total;
-  applicationState.pageName = pageInfo.name;
-  
-  const results = { fields: 0, questions: 0, files: 0 };
+  const results = { fields: 0, questions: 0, files: 0, resumeUploaded: false, coverUploaded: false };
+  const jobData = extractJobDetails();
   
   // Step 1: Fill basic fields
   const fieldValues = {
@@ -1654,273 +1043,134 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     country: profile.country,
     linkedin: profile.linkedin,
     github: profile.github,
-    portfolio: profile.portfolio,
-    currentTitle: profile.work_experience?.[0]?.title,
-    currentCompany: profile.work_experience?.[0]?.company,
-    yearsExperience: profile.total_experience,
-    salary: profile.expected_salary,
-    coverLetter: tailoredData?.tailoredCoverLetter || profile.cover_letter,
+    portfolio: profile.portfolio
   };
   
   for (const [fieldType, value] of Object.entries(fieldValues)) {
     if (!value) continue;
-    
-    const element = findField(fieldType, platformConfig);
-    if (element && !element.value) {
-      if (fillField(element, value)) {
-        results.fields++;
-        element.classList.add('quantumhire-filled');
-        applicationState.filledFields.push(fieldType);
-      }
+    const field = findField(fieldType, platform.config);
+    if (field && fillField(field, value)) {
+      field.classList.add('quantumhire-filled');
+      results.fields++;
     }
   }
   
-  // Step 2: Answer screening questions with AI + Knockout Bank
-  if (!options.skipQuestions) {
-    const questions = detectApplicationQuestions();
-    
-    if (questions.length > 0) {
-      console.log(`QuantumHire AI: Found ${questions.length} screening questions`);
-      
-      const jobData = tailoredData?.jobData || extractJobDetails();
-      const answers = await getAIAnswers(questions, jobData);
-      
-      const questionResult = fillQuestionsWithAnswers(questions, answers, jobData, profile);
-      results.questions = questionResult.filledCount;
-      results.flaggedQuestions = questionResult.flaggedQuestions;
-    }
-  }
+  // Step 2: Fill all questions (dropdowns, checkboxes, radios, text)
+  const questionResults = await fillAllQuestions(profile, jobData);
+  results.questions = questionResults.filledCount;
   
-  // Step 3: MANDATORY PDF Generation and Upload
-  if (tailoredData && !options.skipFileUpload) {
-    const jobData = tailoredData.jobData || extractJobDetails();
+  // Step 3: Handle file uploads - auto-generate and upload PDFs
+  const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')).filter(i => i.offsetParent !== null);
+  
+  if (fileInputs.length > 0) {
+    console.log(`QuantumHire AI: Found ${fileInputs.length} file inputs, generating PDFs...`);
     
-    // ALWAYS generate PDFs when tailored data is available
-    console.log('QuantumHire AI: 📄 Generating PDFs for mandatory upload...');
-    
-    let resumePdfGenerated = false;
-    let coverPdfGenerated = false;
-    
-    // Pre-generate PDFs
+    // Generate PDFs if we have tailored data
     let resumePdfResult = null;
     let coverPdfResult = null;
     
-    if (tailoredData.tailoredResume) {
-      resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
-      resumePdfGenerated = resumePdfResult?.success;
-      if (resumePdfGenerated) {
-        console.log(`QuantumHire AI: ✅ Resume PDF generated: ${resumePdfResult.fileName}`);
+    if (tailoredData?.tailoredResume || tailoredData?.resumePdf) {
+      if (tailoredData.resumePdf?.success) {
+        resumePdfResult = tailoredData.resumePdf;
+      } else {
+        resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
       }
     }
     
-    if (tailoredData.tailoredCoverLetter) {
-      coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
-      coverPdfGenerated = coverPdfResult?.success;
-      if (coverPdfGenerated) {
-        console.log(`QuantumHire AI: ✅ Cover Letter PDF generated: ${coverPdfResult.fileName}`);
+    if (tailoredData?.tailoredCoverLetter || tailoredData?.coverPdf) {
+      if (tailoredData.coverPdf?.success) {
+        coverPdfResult = tailoredData.coverPdf;
+      } else {
+        coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
       }
     }
-    
-    // Find ALL file inputs on the page with expanded detection
-    const fileInputs = document.querySelectorAll('input[type="file"]');
-    
-    // Also look for custom upload components (Workday, Greenhouse, etc.)
-    const uploadButtons = document.querySelectorAll([
-      '[data-automation-id*="file"]',
-      '[data-automation-id*="upload"]',
-      '[data-automation-id*="resume"]',
-      '[data-automation-id*="attachment"]',
-      'button[class*="upload"]',
-      'div[class*="dropzone"]',
-      'label[class*="upload"]',
-      '.file-upload',
-      '.resume-upload',
-      '.attachment-upload'
-    ].join(', '));
-    
-    console.log(`QuantumHire AI: Found ${fileInputs.length} file inputs, ${uploadButtons.length} upload components`);
-    
-    // Track what we've uploaded
-    let resumeUploaded = false;
-    let coverUploaded = false;
     
     // Upload to file inputs
     for (const input of fileInputs) {
-      if (input.files?.length > 0) {
-        console.log('QuantumHire AI: Input already has file, skipping');
-        continue;
-      }
+      const labelText = findLabelForInput(input).toLowerCase();
+      const parentText = (input.closest('.form-group, .field, [class*="upload"]')?.innerText || '').toLowerCase();
       
-      const label = findLabelForInput(input).toLowerCase();
-      const inputName = (input.name || input.id || '').toLowerCase();
-      const inputAccept = (input.accept || '').toLowerCase();
-      const parentText = (input.closest('div, label, section')?.innerText || '').toLowerCase().substring(0, 200);
+      const isResumeField = labelText.includes('resume') || labelText.includes('cv') || 
+                           parentText.includes('resume') || parentText.includes('cv');
+      const isCoverField = labelText.includes('cover') || parentText.includes('cover letter');
       
-      console.log(`QuantumHire AI: Checking file input - name: "${inputName}", label: "${label.substring(0, 50)}"`);
-      
-      // Resume upload detection - expanded patterns
-      const isResumeField = !resumeUploaded && (
-        inputName.includes('resume') || 
-        inputName.includes('cv') ||
-        inputName.includes('file') ||
-        label.includes('resume') || 
-        label.includes('cv') ||
-        label.includes('attach') ||
-        label.includes('upload your') ||
-        parentText.includes('resume') ||
-        parentText.includes('cv') ||
-        parentText.includes('attach your') ||
-        inputAccept.includes('pdf') ||
-        inputAccept.includes('doc')
-      );
-      
-      if (isResumeField) {
-        if (resumePdfResult?.success && resumePdfResult.pdf) {
-          console.log('QuantumHire AI: Uploading resume PDF...');
-          const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
-          if (uploadResult.success) {
-            results.files++;
-            results.resumePdf = resumePdfResult;
-            results.resumeUploaded = true;
-            resumeUploaded = true;
-          }
-        } else {
-          console.log('QuantumHire AI: Resume PDF not available for upload');
-          showToast('⚠️ Resume PDF generation failed', 'warning');
-        }
-        continue;
-      }
-      
-      // Cover letter upload detection - expanded patterns  
-      const isCoverField = !coverUploaded && (
-        inputName.includes('cover') ||
-        label.includes('cover letter') ||
-        label.includes('cover_letter') ||
-        label.includes('coverletter') ||
-        parentText.includes('cover letter')
-      );
-      
-      if (isCoverField) {
-        if (coverPdfResult?.success && coverPdfResult.pdf) {
-          console.log('QuantumHire AI: Uploading cover letter PDF...');
-          const uploadResult = await uploadPDFFile(input, coverPdfResult.pdf, coverPdfResult.fileName);
-          if (uploadResult.success) {
-            results.files++;
-            results.coverPdf = coverPdfResult;
-            results.coverUploaded = true;
-            coverUploaded = true;
-          }
-        } else {
-          console.log('QuantumHire AI: Cover letter PDF not available for upload');
-        }
+      if (isResumeField && resumePdfResult?.success && !results.resumeUploaded) {
+        const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
+        if (uploadResult.success) { results.files++; results.resumeUploaded = true; }
+      } else if (isCoverField && coverPdfResult?.success && !results.coverUploaded) {
+        const uploadResult = await uploadPDFFile(input, coverPdfResult.pdf, coverPdfResult.fileName);
+        if (uploadResult.success) { results.files++; results.coverUploaded = true; }
+      } else if (!input.files?.length && resumePdfResult?.success && !results.resumeUploaded) {
+        // First available input gets resume
+        const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
+        if (uploadResult.success) { results.files++; results.resumeUploaded = true; }
       }
     }
     
-    // If we have a resume but couldn't find a specific resume input, try the first empty file input
-    if (!resumeUploaded && resumePdfResult?.success && fileInputs.length > 0) {
-      for (const input of fileInputs) {
-        if (!input.files?.length) {
-          console.log('QuantumHire AI: Uploading resume to first available file input...');
-          const uploadResult = await uploadPDFFile(input, resumePdfResult.pdf, resumePdfResult.fileName);
-          if (uploadResult.success) {
-            results.files++;
-            results.resumePdf = resumePdfResult;
-            results.resumeUploaded = true;
-            break;
-          }
-        }
-      }
-    }
-    
-    // Store generated PDFs for preview even if no file input found
-    if (resumePdfResult?.success) {
-      results.resumePdf = resumePdfResult;
-    }
-    if (coverPdfResult?.success) {
-      results.coverPdf = coverPdfResult;
-    }
+    results.resumePdf = resumePdfResult;
+    results.coverPdf = coverPdfResult;
   }
   
-  // Highlight unfilled file inputs
-  document.querySelectorAll('input[type="file"]').forEach(input => {
-    if (!input.files?.length) {
-      input.classList.add('quantumhire-resume-field');
-    }
-  });
+  // Step 4: Check page completion
+  const pageStatus = isPageComplete();
   
   const totalFilled = results.fields + results.questions + results.files;
+  let message = `Filled: ${results.fields} fields, ${results.questions} questions`;
+  if (results.files > 0) message += `, ${results.files} files uploaded`;
   
-  applicationState.status = 'in_progress';
-  
-  // Save session state
-  await saveSessionState();
-  
-  // Build detailed message
-  let message = `Page ${pageInfo.current}/${pageInfo.total}: `;
-  const parts = [];
-  
-  if (results.fields > 0) parts.push(`${results.fields} fields`);
-  if (results.questions > 0) parts.push(`${results.questions}/${results.questions} questions auto-answered`);
-  if (results.files > 0) {
-    const uploadParts = [];
-    if (results.resumeUploaded) uploadParts.push('CV');
-    if (results.coverUploaded) uploadParts.push('Cover Letter');
-    parts.push(`${uploadParts.join(' + ')} ✅ UPLOADED`);
-  }
-  
-  message += parts.join(', ');
-  
-  // Add flagged questions warning
-  if (results.flaggedQuestions?.length > 0) {
-    message += ` | ⚠️ ${results.flaggedQuestions.length} flagged for review`;
+  if (pageStatus.complete) {
+    message += ' ✅ Page complete!';
+  } else {
+    message += ` | ${pageStatus.totalIssues} items need attention`;
   }
   
   return {
     success: totalFilled > 0,
-    status: 'in_progress',
+    status: pageStatus.complete ? 'page_complete' : 'in_progress',
     ...results,
-    page: { current: pageInfo.current, total: pageInfo.total, name: pageInfo.name },
+    pageComplete: pageStatus.complete,
     platform: platform.name,
     message
   };
 }
 
-// ============= SESSION PERSISTENCE =============
-
-async function saveSessionState() {
-  const sessionData = {
-    ...applicationState,
-    url: window.location.href,
-    savedAt: Date.now()
-  };
+async function fillLoginFields(credentials) {
+  let filled = 0;
   
-  await chrome.storage.local.set({ 
-    [`session_${btoa(window.location.origin)}`]: sessionData 
-  });
+  const emailSelectors = ['input[type="email"]', 'input[name*="email"]', 'input[id*="email"]', 'input[name*="username"]', 'input[id*="username"]'];
+  const passwordSelectors = ['input[type="password"]'];
+  
+  for (const sel of emailSelectors) {
+    const field = document.querySelector(sel);
+    if (field && !field.value && credentials.email) {
+      if (fillField(field, credentials.email)) filled++;
+      break;
+    }
+  }
+  
+  for (const sel of passwordSelectors) {
+    const field = document.querySelector(sel);
+    if (field && !field.value && credentials.password) {
+      if (fillField(field, credentials.password)) filled++;
+      break;
+    }
+  }
+  
+  return filled;
 }
 
-async function loadSessionState() {
-  const key = `session_${btoa(window.location.origin)}`;
-  const data = await chrome.storage.local.get([key]);
-  return data[key] || null;
-}
-
-async function clearSessionState() {
-  const key = `session_${btoa(window.location.origin)}`;
-  await chrome.storage.local.remove([key]);
-  applicationState = {
-    platform: null,
-    currentPage: 0,
-    totalPages: 0,
-    pageName: '',
-    status: 'idle',
-    pauseReason: null,
-    filledFields: [],
-    startTime: null,
-    jobData: null,
-    tailoredData: null,
-    sessionId: null
-  };
+function findLabelForInput(input) {
+  if (input.id) {
+    const label = document.querySelector(`label[for="${input.id}"]`);
+    if (label) return label.innerText;
+  }
+  let parent = input.parentElement;
+  for (let i = 0; i < 5 && parent; i++) {
+    const label = parent.querySelector('label');
+    if (label) return label.innerText;
+    parent = parent.parentElement;
+  }
+  return '';
 }
 
 // ============= TOAST NOTIFICATIONS =============
@@ -1942,20 +1192,15 @@ function showToast(message, type = 'success') {
   toast.querySelector('.quantumhire-toast-close').addEventListener('click', () => toast.remove());
   document.body.appendChild(toast);
   
-  if (type !== 'warning') {
-    setTimeout(() => toast.remove(), 5000);
-  }
+  if (type !== 'warning') setTimeout(() => toast.remove(), 5000);
 }
 
-// CAPTCHA Alert removed - user handles CAPTCHA manually
-
-// ============= FLOATING PANEL =============
+// ============= FLOATING PANEL (Streamlined UI) =============
 
 function createFloatingPanel() {
   if (document.getElementById('quantumhire-panel')) return;
   
   const platform = detectPlatform();
-  const pageInfo = detectCurrentPage(platform.config);
   const jobData = extractJobDetails();
   
   const panel = document.createElement('div');
@@ -1978,18 +1223,8 @@ function createFloatingPanel() {
         ${jobData.location ? `<div class="qh-job-location">📍 ${jobData.location}</div>` : ''}
       </div>
       
-      <div class="qh-progress-section" id="qh-progress">
-        <div class="qh-progress-header">
-          <span>Page ${pageInfo.current} of ${pageInfo.total}</span>
-          <span class="qh-page-name">${pageInfo.name}</span>
-        </div>
-        <div class="qh-progress-bar">
-        <div class="qh-progress-fill" style="width: ${(pageInfo.current / pageInfo.total) * 100}%"></div>
-        </div>
-      </div>
-      
-      <!-- AUTOMATION CONTROLS -->
-      <div class="qh-automation-controls" id="qh-automation-controls">
+      <!-- Speed & Control Row -->
+      <div class="qh-automation-controls">
         <div class="qh-speed-row">
           <span class="qh-speed-label">Speed:</span>
           <div class="qh-speed-buttons">
@@ -2001,13 +1236,13 @@ function createFloatingPanel() {
         </div>
         <div class="qh-control-row">
           <button class="qh-control-btn pause" id="qh-pause-btn">
-            <span class="qh-ctrl-icon">⏸️</span> Pause
+            <span>⏸️</span> Pause
           </button>
           <button class="qh-control-btn skip" id="qh-skip-btn">
-            <span class="qh-ctrl-icon">⏭️</span> Skip
+            <span>⏭️</span> Skip
           </button>
           <button class="qh-control-btn quit" id="qh-quit-btn">
-            <span class="qh-ctrl-icon">⏹️</span> Quit
+            <span>⏹️</span> Quit
           </button>
         </div>
       </div>
@@ -2022,34 +1257,15 @@ function createFloatingPanel() {
           <span class="qh-btn-icon">⚡</span>
           <div class="qh-btn-content">
             <span class="qh-btn-title">Smart Apply</span>
-            <span class="qh-btn-subtitle">Tailor + Fill + Upload + Answer Questions</span>
+            <span class="qh-btn-subtitle">AI Tailor → Fill All → Upload PDFs → Auto-Submit</span>
           </div>
         </button>
         
         <div class="qh-btn-row">
-          <button id="qh-quick-fill" class="qh-btn secondary">
-            <span>📝</span> Quick Fill
-          </button>
-          <button id="qh-next-page" class="qh-btn secondary">
-            <span>➡️</span> Next Page
-          </button>
+          <button id="qh-quick-fill" class="qh-btn secondary">📝 Quick Fill</button>
+          <button id="qh-next-page" class="qh-btn secondary">➡️ Next Page</button>
         </div>
-        
-        <button id="qh-validate-submit" class="qh-btn submit">
-          <span class="qh-btn-icon">✅</span>
-          <div class="qh-btn-content">
-            <span class="qh-btn-title">Validate & Submit</span>
-            <span class="qh-btn-subtitle">Check all fields, then submit</span>
-          </div>
-        </button>
       </div>
-      
-      <!-- Validation Results -->
-      <div class="qh-validation hidden" id="qh-validation">
-        <div class="qh-validation-header">📋 Form Validation</div>
-        <div class="qh-validation-list" id="qh-validation-list"></div>
-      </div>
-      
       
       <div class="qh-results hidden" id="qh-results">
         <div class="qh-match-score">
@@ -2057,7 +1273,6 @@ function createFloatingPanel() {
           <span class="qh-score-value" id="qh-score">0%</span>
         </div>
         
-        <!-- PDF Preview Section -->
         <div class="qh-pdf-preview" id="qh-pdf-preview">
           <div class="qh-pdf-header">📄 Generated PDFs</div>
           <div class="qh-pdf-cards">
@@ -2067,10 +1282,7 @@ function createFloatingPanel() {
                 <div class="qh-pdf-name" id="qh-resume-pdf-name">Resume.pdf</div>
                 <div class="qh-pdf-size" id="qh-resume-pdf-size">-</div>
               </div>
-              <div class="qh-pdf-actions">
-                <button class="qh-pdf-preview-btn" data-type="resume" title="Preview">👁️</button>
-                <button class="qh-pdf-download-btn" data-type="resume" title="Download">⬇️</button>
-              </div>
+              <button class="qh-pdf-download-btn" data-type="resume">⬇️</button>
             </div>
             <div class="qh-pdf-card" id="qh-cover-pdf-card">
               <div class="qh-pdf-icon">📝</div>
@@ -2078,42 +1290,22 @@ function createFloatingPanel() {
                 <div class="qh-pdf-name" id="qh-cover-pdf-name">CoverLetter.pdf</div>
                 <div class="qh-pdf-size" id="qh-cover-pdf-size">-</div>
               </div>
-              <div class="qh-pdf-actions">
-                <button class="qh-pdf-preview-btn" data-type="cover" title="Preview">👁️</button>
-                <button class="qh-pdf-download-btn" data-type="cover" title="Download">⬇️</button>
-              </div>
+              <button class="qh-pdf-download-btn" data-type="cover">⬇️</button>
             </div>
           </div>
         </div>
         
         <div class="qh-tabs">
-          <button class="qh-tab active" data-tab="resume">Resume Text</button>
-          <button class="qh-tab" data-tab="cover">Cover Letter Text</button>
+          <button class="qh-tab active" data-tab="resume">Resume</button>
+          <button class="qh-tab" data-tab="cover">Cover Letter</button>
         </div>
         <div class="qh-tab-content" id="qh-resume-tab">
           <textarea id="qh-resume" readonly></textarea>
-          <div class="qh-tab-actions">
-            <button class="qh-copy-btn" data-target="qh-resume">📋 Copy</button>
-            <button class="qh-regenerate-btn" data-type="resume">🔄 Regenerate PDF</button>
-          </div>
+          <button class="qh-copy-btn" data-target="qh-resume">📋 Copy</button>
         </div>
         <div class="qh-tab-content hidden" id="qh-cover-tab">
           <textarea id="qh-cover" readonly></textarea>
-          <div class="qh-tab-actions">
-            <button class="qh-copy-btn" data-target="qh-cover">📋 Copy</button>
-            <button class="qh-regenerate-btn" data-type="cover">🔄 Regenerate PDF</button>
-          </div>
-        </div>
-      </div>
-      
-      <!-- PDF Preview Modal -->
-      <div class="qh-pdf-modal hidden" id="qh-pdf-modal">
-        <div class="qh-modal-header">
-          <span id="qh-modal-title">PDF Preview</span>
-          <button class="qh-modal-close">×</button>
-        </div>
-        <div class="qh-modal-body">
-          <iframe id="qh-pdf-iframe" style="width:100%;height:400px;border:none;"></iframe>
+          <button class="qh-copy-btn" data-target="qh-cover">📋 Copy</button>
         </div>
       </div>
     </div>
@@ -2122,7 +1314,6 @@ function createFloatingPanel() {
   document.body.appendChild(panel);
   addPanelStyles();
   setupPanelEvents(panel);
-  setupAutomationControls(panel);
   
   panel.dataset.job = JSON.stringify(jobData);
   panel.dataset.resumePdf = '';
@@ -2139,7 +1330,7 @@ function addPanelStyles() {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 360px;
+      width: 340px;
       background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
       border-radius: 16px;
       box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1);
@@ -2149,519 +1340,102 @@ function addPanelStyles() {
       overflow: hidden;
     }
     
-    .qh-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.4);
-    }
-    
-    .qh-brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .qh-logo {
-      font-size: 18px;
-    }
-    
-    .qh-title {
-      font-weight: 700;
-      font-size: 14px;
-      background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    
-    .qh-controls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .qh-platform-badge {
-      font-size: 9px;
-      font-weight: 700;
-      padding: 3px 8px;
-      background: rgba(99, 102, 241, 0.3);
-      border-radius: 4px;
-      color: #a5b4fc;
-    }
-    
-    .qh-minimize {
-      background: none;
-      border: none;
-      color: #64748b;
-      font-size: 20px;
-      cursor: pointer;
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .qh-minimize:hover {
-      background: rgba(255,255,255,0.1);
-      color: #fff;
-    }
-    
-    .qh-body {
-      padding: 16px;
-    }
-    
-    .qh-job-info {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      border-radius: 12px;
-      padding: 14px;
-      margin-bottom: 14px;
-    }
-    
-    .qh-job-title {
-      font-weight: 600;
-      font-size: 15px;
-      color: #fff;
-      margin-bottom: 4px;
-    }
-    
-    .qh-job-company {
-      font-size: 13px;
-      color: #a5b4fc;
-    }
-    
-    .qh-job-location {
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 6px;
-    }
-    
-    .qh-progress-section {
-      background: rgba(0,0,0,0.3);
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    
-    .qh-progress-header {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #94a3b8;
-      margin-bottom: 8px;
-    }
-    
-    .qh-page-name {
-      color: #10b981;
-    }
-    
-    .qh-progress-bar {
-      height: 6px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    
-    .qh-progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #10b981, #34d399);
-      transition: width 0.3s ease;
-    }
-    
-    .qh-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      background: rgba(16, 185, 129, 0.1);
-      border-radius: 8px;
-      margin-bottom: 14px;
-      font-size: 12px;
-    }
-    
-    .qh-status-icon {
-      font-size: 10px;
-    }
-    
-    .qh-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    
-    .qh-btn {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border: none;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    
-    .qh-btn.primary {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      color: #fff;
-      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35);
-    }
-    
-    .qh-btn.primary:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 25px rgba(16, 185, 129, 0.45);
-    }
-    
-    .qh-btn.secondary {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.08);
-      color: #94a3b8;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      justify-content: center;
-    }
-    
-    .qh-btn.secondary:hover {
-      background: rgba(255, 255, 255, 0.12);
-      color: #e2e8f0;
-    }
-    
-    .qh-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none !important;
-    }
-    
-    .qh-btn-row {
-      display: flex;
-      gap: 8px;
-    }
-    
-    .qh-btn-content {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    
-    .qh-btn-title {
-      font-weight: 600;
-      font-size: 14px;
-    }
-    
-    .qh-btn-subtitle {
-      font-size: 10px;
-      opacity: 0.8;
-    }
-    
-    .qh-results {
-      margin-top: 14px;
-    }
-    
-    .qh-results.hidden {
-      display: none;
-    }
-    
-    .qh-match-score {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 14px;
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%);
-      border-radius: 10px;
-      margin-bottom: 12px;
-    }
-    
-    .qh-score-label {
-      font-size: 12px;
-      color: #a7f3d0;
-    }
-    
-    .qh-score-value {
-      font-size: 20px;
-      font-weight: 700;
-      color: #10b981;
-    }
-    
-    .qh-tabs {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 10px;
-    }
-    
-    .qh-tab {
-      flex: 1;
-      padding: 8px;
-      border: none;
-      background: rgba(255, 255, 255, 0.08);
-      color: #94a3b8;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-    }
-    
-    .qh-tab:hover {
-      background: rgba(255, 255, 255, 0.12);
-    }
-    
-    .qh-tab.active {
-      background: rgba(16, 185, 129, 0.2);
-      color: #10b981;
-    }
-    
-    .qh-tab-content {
-      position: relative;
-    }
-    
-    .qh-tab-content.hidden {
-      display: none;
-    }
-    
-    .qh-tab-content textarea {
-      width: 100%;
-      height: 120px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 10px;
-      color: #e2e8f0;
-      font-size: 11px;
-      font-family: inherit;
-      resize: none;
-    }
-    
-    .qh-tab-actions {
-      display: flex;
-      gap: 6px;
-      margin-top: 8px;
-    }
-    
-    .qh-copy-btn, .qh-download-btn, .qh-regenerate-btn {
-      flex: 1;
-      padding: 6px 10px;
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      border-radius: 6px;
-      color: #e2e8f0;
-      font-size: 11px;
-      cursor: pointer;
-    }
-    
-    .qh-copy-btn:hover, .qh-download-btn:hover, .qh-regenerate-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-    
-    /* PDF Preview Section */
-    .qh-pdf-preview {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    
-    .qh-pdf-header {
-      font-size: 12px;
-      font-weight: 600;
-      color: #a5b4fc;
-      margin-bottom: 10px;
-    }
-    
-    .qh-pdf-cards {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    
-    .qh-pdf-card {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      transition: all 0.2s;
-    }
-    
-    .qh-pdf-card:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(16, 185, 129, 0.3);
-    }
-    
-    .qh-pdf-card.uploaded {
-      border-color: rgba(16, 185, 129, 0.5);
-      background: rgba(16, 185, 129, 0.1);
-    }
-    
-    .qh-pdf-icon {
-      font-size: 20px;
-    }
-    
-    .qh-pdf-info {
-      flex: 1;
-    }
-    
-    .qh-pdf-name {
-      font-size: 11px;
-      font-weight: 500;
-      color: #e2e8f0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 150px;
-    }
-    
-    .qh-pdf-size {
-      font-size: 10px;
-      color: #64748b;
-    }
-    
-    .qh-pdf-actions {
-      display: flex;
-      gap: 4px;
-    }
-    
-    .qh-pdf-preview-btn, .qh-pdf-download-btn {
-      padding: 6px 8px;
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-    
-    .qh-pdf-preview-btn:hover, .qh-pdf-download-btn:hover {
-      background: rgba(99, 102, 241, 0.3);
-    }
-    
-    /* PDF Modal */
-    .qh-pdf-modal {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.95);
-      border-radius: 16px;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .qh-pdf-modal.hidden {
-      display: none;
-    }
-    
-    .qh-modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .qh-modal-header span {
-      font-weight: 600;
-      font-size: 14px;
-    }
-    
-    .qh-modal-close {
-      background: none;
-      border: none;
-      color: #94a3b8;
-      font-size: 20px;
-      cursor: pointer;
-    }
-    
-    .qh-modal-close:hover {
-      color: #fff;
-    }
-    
-    .qh-modal-body {
-      flex: 1;
-      padding: 10px;
-      overflow: auto;
-    }
-    
-    .quantumhire-toast {
-      position: fixed;
-      bottom: 100px;
-      right: 20px;
-      padding: 14px 20px;
-      background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      z-index: 2147483648;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-      animation: slideIn 0.3s ease;
-      max-width: 320px;
-    }
-    
-    .quantumhire-toast.success { border-left: 4px solid #10b981; }
-    .quantumhire-toast.error { border-left: 4px solid #ef4444; }
-    .quantumhire-toast.warning { border-left: 4px solid #f59e0b; }
-    .quantumhire-toast.info { border-left: 4px solid #3b82f6; }
-    
-    .quantumhire-toast-message { color: #fff; font-size: 13px; line-height: 1.4; }
-    
-    .quantumhire-toast-close {
-      background: none;
-      border: none;
-      color: #94a3b8;
-      cursor: pointer;
-      font-size: 18px;
-    }
-    
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-    
-    .quantumhire-filled {
-      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6) !important;
-      transition: box-shadow 0.3s;
-    }
-    
-    .quantumhire-resume-field {
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.6) !important;
-    }
-    
-    #quantumhire-panel.minimized .qh-body {
-      display: none;
-    }
-    
-    /* Automation Controls */
-    .qh-automation-controls { background: rgba(0,0,0,0.4); border-radius: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.1); }
-    .qh-speed-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .qh-speed-label { font-size: 12px; color: #94a3b8; font-weight: 500; }
+    .qh-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: rgba(0, 0, 0, 0.4); }
+    .qh-brand { display: flex; align-items: center; gap: 8px; }
+    .qh-logo { font-size: 18px; }
+    .qh-title { font-weight: 700; font-size: 14px; background: linear-gradient(135deg, #10b981 0%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .qh-controls { display: flex; align-items: center; gap: 8px; }
+    .qh-platform-badge { font-size: 9px; font-weight: 700; padding: 3px 8px; background: rgba(99, 102, 241, 0.3); border-radius: 4px; color: #a5b4fc; }
+    .qh-minimize { background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .qh-minimize:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    
+    .qh-body { padding: 14px; }
+    
+    .qh-job-info { background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .qh-job-title { font-weight: 600; font-size: 14px; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qh-job-company { font-size: 12px; color: #a5b4fc; }
+    .qh-job-location { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+    
+    .qh-automation-controls { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .qh-speed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .qh-speed-label { font-size: 11px; color: #94a3b8; }
     .qh-speed-buttons { display: flex; gap: 4px; }
-    .qh-speed-btn { padding: 6px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; color: #94a3b8; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .qh-speed-btn { padding: 4px 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; color: #94a3b8; font-size: 10px; font-weight: 600; cursor: pointer; }
     .qh-speed-btn:hover { background: rgba(255,255,255,0.15); color: #e2e8f0; }
     .qh-speed-btn.active { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); color: #a5b4fc; }
-    .qh-control-row { display: flex; gap: 6px; }
-    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 10px; border: none; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
-    .qh-control-btn.pause { background: rgba(251,191,36,0.2); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+    .qh-control-row { display: flex; gap: 4px; }
+    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 6px 8px; border: none; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; }
+    .qh-control-btn.pause { background: rgba(251,191,36,0.2); color: #fbbf24; }
     .qh-control-btn.pause.paused { background: rgba(16,185,129,0.2); color: #10b981; }
-    .qh-control-btn.skip { background: rgba(148,163,184,0.2); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
-    .qh-control-btn.quit { background: rgba(15,23,42,0.8); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.2); }
-    .qh-control-btn.quit:hover { background: rgba(239,68,68,0.2); color: #ef4444; }
-    .qh-btn.submit { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 4px 20px rgba(59,130,246,0.35); margin-top: 10px; }
-    .qh-validation { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 12px; margin-top: 12px; }
-    .qh-validation-header { font-size: 12px; font-weight: 600; color: #a5b4fc; margin-bottom: 10px; }
-    .qh-validation-list { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; }
-    .qh-validation-error { padding: 8px 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; font-size: 11px; color: #fca5a5; cursor: pointer; }
-    .qh-validation-success { padding: 10px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; font-size: 12px; color: #34d399; text-align: center; }
+    .qh-control-btn.skip { background: rgba(148,163,184,0.15); color: #94a3b8; }
+    .qh-control-btn.quit { background: rgba(239,68,68,0.15); color: #f87171; }
+    
+    .qh-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; margin-bottom: 12px; font-size: 11px; }
+    .qh-status-icon { font-size: 10px; }
+    
+    .qh-actions { display: flex; flex-direction: column; gap: 8px; }
+    .qh-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; border-radius: 10px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .qh-btn.primary { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35); }
+    .qh-btn.primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45); }
+    .qh-btn.secondary { flex: 1; background: rgba(255, 255, 255, 0.08); color: #94a3b8; border: 1px solid rgba(255, 255, 255, 0.1); justify-content: center; font-size: 11px; }
+    .qh-btn.secondary:hover { background: rgba(255, 255, 255, 0.12); color: #e2e8f0; }
+    .qh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .qh-btn-row { display: flex; gap: 6px; }
+    .qh-btn-content { display: flex; flex-direction: column; align-items: flex-start; }
+    .qh-btn-title { font-weight: 600; font-size: 13px; }
+    .qh-btn-subtitle { font-size: 9px; opacity: 0.8; }
+    
+    .qh-results { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }
+    .qh-results.hidden { display: none; }
+    .qh-match-score { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 10px; margin-bottom: 10px; }
+    .qh-score-label { font-size: 11px; color: #94a3b8; }
+    .qh-score-value { font-size: 20px; font-weight: 700; color: #10b981; }
+    
+    .qh-pdf-preview { background: rgba(0, 0, 0, 0.3); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .qh-pdf-header { font-size: 11px; font-weight: 600; color: #a5b4fc; margin-bottom: 8px; }
+    .qh-pdf-cards { display: flex; flex-direction: column; gap: 6px; }
+    .qh-pdf-card { display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; }
+    .qh-pdf-card.uploaded { border-color: rgba(16, 185, 129, 0.5); background: rgba(16, 185, 129, 0.1); }
+    .qh-pdf-icon { font-size: 16px; }
+    .qh-pdf-info { flex: 1; }
+    .qh-pdf-name { font-size: 10px; font-weight: 500; color: #e2e8f0; }
+    .qh-pdf-size { font-size: 9px; color: #64748b; }
+    .qh-pdf-download-btn { padding: 5px 7px; background: rgba(255, 255, 255, 0.1); border: none; border-radius: 5px; cursor: pointer; font-size: 11px; }
+    .qh-pdf-download-btn:hover { background: rgba(99, 102, 241, 0.3); }
+    
+    .qh-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+    .qh-tab { flex: 1; padding: 6px 10px; background: rgba(255, 255, 255, 0.08); border: none; color: #94a3b8; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; }
+    .qh-tab:hover { background: rgba(255, 255, 255, 0.12); }
+    .qh-tab.active { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .qh-tab-content { position: relative; }
+    .qh-tab-content.hidden { display: none; }
+    .qh-tab-content textarea { width: 100%; height: 100px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 8px; color: #e2e8f0; font-size: 10px; font-family: inherit; resize: none; }
+    .qh-copy-btn { width: 100%; margin-top: 6px; padding: 6px; background: rgba(255, 255, 255, 0.1); border: none; border-radius: 6px; color: #e2e8f0; font-size: 10px; cursor: pointer; }
+    .qh-copy-btn:hover { background: rgba(255, 255, 255, 0.2); }
+    
+    .quantumhire-toast { position: fixed; bottom: 100px; right: 20px; padding: 12px 16px; background: linear-gradient(145deg, #1e293b 0%, #334155 100%); border-radius: 10px; display: flex; align-items: center; gap: 10px; z-index: 2147483648; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); animation: slideIn 0.3s ease; max-width: 300px; }
+    .quantumhire-toast.success { border-left: 3px solid #10b981; }
+    .quantumhire-toast.error { border-left: 3px solid #ef4444; }
+    .quantumhire-toast.warning { border-left: 3px solid #f59e0b; }
+    .quantumhire-toast.info { border-left: 3px solid #3b82f6; }
+    .quantumhire-toast-message { color: #fff; font-size: 12px; line-height: 1.4; }
+    .quantumhire-toast-close { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    
+    .quantumhire-filled { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6) !important; }
+    #quantumhire-panel.minimized .qh-body { display: none; }
   `;
   document.head.appendChild(style);
 }
 
-// Setup automation control handlers
-function setupAutomationControls(panel) {
+function setupPanelEvents(panel) {
+  // Minimize
+  panel.querySelector('.qh-minimize').addEventListener('click', () => {
+    panel.classList.toggle('minimized');
+    panel.querySelector('.qh-minimize').textContent = panel.classList.contains('minimized') ? '+' : '−';
+  });
+  
+  // Speed controls
   panel.querySelectorAll('.qh-speed-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       panel.querySelectorAll('.qh-speed-btn').forEach(b => b.classList.remove('active'));
@@ -2671,10 +1445,11 @@ function setupAutomationControls(panel) {
     });
   });
   
+  // Pause/Resume
   panel.querySelector('#qh-pause-btn')?.addEventListener('click', () => {
     automationState.isPaused = !automationState.isPaused;
     const btn = panel.querySelector('#qh-pause-btn');
-    btn.innerHTML = automationState.isPaused ? '<span class="qh-ctrl-icon">▶️</span> Resume' : '<span class="qh-ctrl-icon">⏸️</span> Pause';
+    btn.innerHTML = automationState.isPaused ? '<span>▶️</span> Resume' : '<span>⏸️</span> Pause';
     btn.classList.toggle('paused', automationState.isPaused);
     showToast(automationState.isPaused ? 'Paused' : 'Resumed', 'info');
   });
@@ -2682,102 +1457,71 @@ function setupAutomationControls(panel) {
   panel.querySelector('#qh-skip-btn')?.addEventListener('click', () => { automationState.shouldSkip = true; showToast('Skipping...', 'info'); });
   panel.querySelector('#qh-quit-btn')?.addEventListener('click', () => { automationState.shouldQuit = true; showToast('Stopped', 'error'); });
   
-  panel.querySelector('#qh-validate-submit')?.addEventListener('click', async () => {
-    const statusEl = panel.querySelector('#qh-status');
-    updateStatus(statusEl, '🔍', 'Validating...');
-    const errors = [];
-    document.querySelectorAll('[required]').forEach(f => {
-      if (!f.value || f.value.trim() === '') errors.push({ field: findLabelForInput(f) || f.name, element: f });
-    });
-    const validationSection = panel.querySelector('#qh-validation');
-    const validationList = panel.querySelector('#qh-validation-list');
-    validationSection?.classList.remove('hidden');
-    if (validationList) {
-      validationList.innerHTML = errors.length === 0 
-        ? '<div class="qh-validation-success">✅ All fields valid!</div>'
-        : errors.map(e => `<div class="qh-validation-error">❌ ${e.field}: Required</div>`).join('');
-    }
-    updateStatus(statusEl, errors.length === 0 ? '✅' : '⚠️', errors.length === 0 ? 'Ready to submit' : `${errors.length} issues`);
-  });
-}
-
-function setupPanelEvents(panel) {
-  // Minimize
-  panel.querySelector('.qh-minimize').addEventListener('click', () => {
-    panel.classList.toggle('minimized');
-    const btn = panel.querySelector('.qh-minimize');
-    btn.textContent = panel.classList.contains('minimized') ? '+' : '−';
-  });
-  
-  // Smart Apply
+  // Smart Apply - Full automation
   panel.querySelector('#qh-smart-apply').addEventListener('click', async () => {
     const btn = panel.querySelector('#qh-smart-apply');
     const statusEl = panel.querySelector('#qh-status');
     
     btn.disabled = true;
-    updateStatus(statusEl, '⏳', 'Tailoring resume with AI...');
+    automationState.isRunning = true;
     
     try {
+      // Step 1: Tailor resume with AI
+      updateStatus(statusEl, '🤖', 'Tailoring resume with AI...');
       const jobData = JSON.parse(panel.dataset.job || '{}');
       
-      // Get tailored application
-      const tailoredData = await chrome.runtime.sendMessage({
-        action: 'getTailoredApplication',
-        job: jobData,
-      });
-      
+      const tailoredData = await chrome.runtime.sendMessage({ action: 'getTailoredApplication', job: jobData });
       if (tailoredData.error) throw new Error(tailoredData.error);
       
-      updateStatus(statusEl, '📄', 'Generating PDFs...');
+      await waitWithControls(getDelayForSpeed());
       
-      // Generate PDFs
+      // Step 2: Generate PDFs
+      updateStatus(statusEl, '📄', 'Generating PDFs...');
       const profileData = await chrome.storage.local.get(['userProfile']);
       const profile = profileData.userProfile || {};
       
-      let resumePdfResult = null;
-      let coverPdfResult = null;
+      const resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
+      const coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
       
-      // Generate Resume PDF
-      try {
-        resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
-        if (resumePdfResult.success) {
-          panel.dataset.resumePdf = resumePdfResult.pdf;
-          panel.querySelector('#qh-resume-pdf-name').textContent = resumePdfResult.fileName;
-          panel.querySelector('#qh-resume-pdf-size').textContent = formatFileSize(resumePdfResult.size);
-          panel.querySelector('#qh-resume-pdf-card').classList.add('uploaded');
-        }
-      } catch (e) {
-        console.error('Resume PDF generation failed:', e);
-      }
-      
-      // Generate Cover Letter PDF
-      try {
-        coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
-        if (coverPdfResult.success) {
-          panel.dataset.coverPdf = coverPdfResult.pdf;
-          panel.querySelector('#qh-cover-pdf-name').textContent = coverPdfResult.fileName;
-          panel.querySelector('#qh-cover-pdf-size').textContent = formatFileSize(coverPdfResult.size);
-          panel.querySelector('#qh-cover-pdf-card').classList.add('uploaded');
-        }
-      } catch (e) {
-        console.error('Cover letter PDF generation failed:', e);
-      }
-      
-      // Add PDF data to tailored data for upload
       if (resumePdfResult?.success) {
-        tailoredData.resumePdf = resumePdfResult;
+        panel.dataset.resumePdf = resumePdfResult.pdf;
+        panel.querySelector('#qh-resume-pdf-name').textContent = resumePdfResult.fileName;
+        panel.querySelector('#qh-resume-pdf-size').textContent = formatFileSize(resumePdfResult.size);
+        panel.querySelector('#qh-resume-pdf-card').classList.add('uploaded');
       }
       if (coverPdfResult?.success) {
-        tailoredData.coverPdf = coverPdfResult;
+        panel.dataset.coverPdf = coverPdfResult.pdf;
+        panel.querySelector('#qh-cover-pdf-name').textContent = coverPdfResult.fileName;
+        panel.querySelector('#qh-cover-pdf-size').textContent = formatFileSize(coverPdfResult.size);
+        panel.querySelector('#qh-cover-pdf-card').classList.add('uploaded');
       }
       
-      updateStatus(statusEl, '📝', 'Auto-filling form...');
+      tailoredData.resumePdf = resumePdfResult;
+      tailoredData.coverPdf = coverPdfResult;
       
-      // Auto-fill with tailored data
+      await waitWithControls(getDelayForSpeed());
+      
+      // Step 3: Fill form
+      updateStatus(statusEl, '📝', 'Auto-filling form...');
       const atsData = await chrome.storage.local.get(['atsCredentials']);
       const result = await autofillForm(tailoredData, atsData.atsCredentials);
       
-      updateStatus(statusEl, '✅', result.message);
+      await waitWithControls(getDelayForSpeed());
+      
+      // Step 4: Check completion and navigate
+      if (result.pageComplete) {
+        updateStatus(statusEl, '✅', 'Page complete! Moving to next...');
+        
+        if (isFinalPage()) {
+          updateStatus(statusEl, '🎉', 'Application ready to submit!');
+          showToast('🎉 Application complete! Ready to submit.', 'success');
+        } else {
+          await waitWithControls(getDelayForSpeed());
+          await navigateToNextPage();
+        }
+      } else {
+        updateStatus(statusEl, '⚠️', `${result.message} - Review remaining fields`);
+      }
       
       // Show results
       panel.querySelector('#qh-results').classList.remove('hidden');
@@ -2785,41 +1529,41 @@ function setupPanelEvents(panel) {
       panel.querySelector('#qh-cover').value = tailoredData.tailoredCoverLetter || '';
       panel.querySelector('#qh-score').textContent = `${tailoredData.matchScore || 0}%`;
       
-      showToast(result.message, 'success');
-      
     } catch (error) {
-      console.error('Smart apply error:', error);
-      updateStatus(statusEl, '❌', error.message);
-      showToast(error.message, 'error');
+      if (error.message === 'QUIT') {
+        updateStatus(statusEl, '⏹️', 'Stopped');
+      } else if (error.message === 'SKIP') {
+        updateStatus(statusEl, '⏭️', 'Skipped');
+      } else {
+        console.error('Smart apply error:', error);
+        updateStatus(statusEl, '❌', error.message);
+        showToast(error.message, 'error');
+      }
     } finally {
       btn.disabled = false;
+      automationState.isRunning = false;
     }
   });
   
   // Quick Fill
   panel.querySelector('#qh-quick-fill').addEventListener('click', async () => {
     const btn = panel.querySelector('#qh-quick-fill');
+    const statusEl = panel.querySelector('#qh-status');
     btn.disabled = true;
     
+    updateStatus(statusEl, '📝', 'Quick filling...');
     const atsData = await chrome.storage.local.get(['atsCredentials']);
-    const result = await autofillForm(null, atsData.atsCredentials, { skipQuestions: true });
+    const result = await autofillForm(null, atsData.atsCredentials);
     
-    showToast(result.message, result.success ? 'success' : 'error');
+    updateStatus(statusEl, result.success ? '✅' : '⚠️', result.message);
+    showToast(result.message, result.success ? 'success' : 'warning');
     btn.disabled = false;
   });
   
   // Next Page
-  panel.querySelector('#qh-next-page').addEventListener('click', () => {
-    const platform = detectPlatform();
-    if (platform.config?.nextButton) {
-      const nextBtn = document.querySelector(platform.config.nextButton);
-      if (nextBtn) {
-        nextBtn.click();
-        showToast('Navigating to next page...', 'info');
-      } else {
-        showToast('Next button not found', 'error');
-      }
-    }
+  panel.querySelector('#qh-next-page').addEventListener('click', async () => {
+    const navigated = await navigateToNextPage();
+    if (!navigated) showToast('Next button not found', 'error');
   });
   
   // Tab switching
@@ -2827,7 +1571,6 @@ function setupPanelEvents(panel) {
     tab.addEventListener('click', () => {
       panel.querySelectorAll('.qh-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      
       const tabName = tab.dataset.tab;
       panel.querySelector('#qh-resume-tab').classList.toggle('hidden', tabName !== 'resume');
       panel.querySelector('#qh-cover-tab').classList.toggle('hidden', tabName !== 'cover');
@@ -2844,109 +1587,26 @@ function setupPanelEvents(panel) {
     });
   });
   
-  // PDF Preview buttons
-  panel.querySelectorAll('.qh-pdf-preview-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const type = btn.dataset.type;
-      const pdfBase64 = type === 'resume' ? panel.dataset.resumePdf : panel.dataset.coverPdf;
-      
-      if (!pdfBase64) {
-        showToast('PDF not generated yet', 'error');
-        return;
-      }
-      
-      // Show modal with PDF
-      const modal = panel.querySelector('#qh-pdf-modal');
-      const iframe = panel.querySelector('#qh-pdf-iframe');
-      const title = panel.querySelector('#qh-modal-title');
-      
-      title.textContent = type === 'resume' ? 'Resume Preview' : 'Cover Letter Preview';
-      iframe.src = `data:application/pdf;base64,${pdfBase64}`;
-      modal.classList.remove('hidden');
-    });
-  });
-  
-  // PDF Download buttons
+  // PDF Download
   panel.querySelectorAll('.qh-pdf-download-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const type = btn.dataset.type;
       const pdfBase64 = type === 'resume' ? panel.dataset.resumePdf : panel.dataset.coverPdf;
-      const fileName = type === 'resume' 
-        ? panel.querySelector('#qh-resume-pdf-name').textContent 
-        : panel.querySelector('#qh-cover-pdf-name').textContent;
+      const fileName = type === 'resume' ? panel.querySelector('#qh-resume-pdf-name').textContent : panel.querySelector('#qh-cover-pdf-name').textContent;
       
-      if (!pdfBase64) {
-        showToast('PDF not generated yet', 'error');
-        return;
-      }
+      if (!pdfBase64) { showToast('PDF not generated yet', 'error'); return; }
       
-      // Download PDF
       const link = document.createElement('a');
       link.href = `data:application/pdf;base64,${pdfBase64}`;
-      link.download = fileName || `${type}.pdf`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
       showToast(`Downloaded ${fileName}`, 'success');
     });
   });
-  
-  // Regenerate PDF buttons
-  panel.querySelectorAll('.qh-regenerate-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const type = btn.dataset.type;
-      const statusEl = panel.querySelector('#qh-status');
-      
-      btn.disabled = true;
-      btn.textContent = '⏳ Generating...';
-      
-      try {
-        const jobData = JSON.parse(panel.dataset.job || '{}');
-        const profileData = await chrome.storage.local.get(['userProfile']);
-        const profile = profileData.userProfile || {};
-        
-        const tailoredData = {
-          tailoredResume: panel.querySelector('#qh-resume').value,
-          tailoredCoverLetter: panel.querySelector('#qh-cover').value,
-        };
-        
-        const pdfType = type === 'resume' ? 'resume' : 'cover_letter';
-        const result = await generatePDF(pdfType, profile, jobData, tailoredData);
-        
-        if (result.success) {
-          if (type === 'resume') {
-            panel.dataset.resumePdf = result.pdf;
-            panel.querySelector('#qh-resume-pdf-name').textContent = result.fileName;
-            panel.querySelector('#qh-resume-pdf-size').textContent = formatFileSize(result.size);
-            panel.querySelector('#qh-resume-pdf-card').classList.add('uploaded');
-          } else {
-            panel.dataset.coverPdf = result.pdf;
-            panel.querySelector('#qh-cover-pdf-name').textContent = result.fileName;
-            panel.querySelector('#qh-cover-pdf-size').textContent = formatFileSize(result.size);
-            panel.querySelector('#qh-cover-pdf-card').classList.add('uploaded');
-          }
-          showToast(`${type === 'resume' ? 'Resume' : 'Cover letter'} PDF regenerated!`, 'success');
-        } else {
-          throw new Error(result.error || 'Generation failed');
-        }
-      } catch (error) {
-        showToast(error.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '🔄 Regenerate PDF';
-      }
-    });
-  });
-  
-  // Modal close button
-  panel.querySelector('.qh-modal-close')?.addEventListener('click', () => {
-    panel.querySelector('#qh-pdf-modal').classList.add('hidden');
-    panel.querySelector('#qh-pdf-iframe').src = '';
-  });
 }
 
-// Helper function to format file size
 function formatFileSize(bytes) {
   if (!bytes) return '-';
   if (bytes < 1024) return `${bytes} B`;
@@ -2956,10 +1616,7 @@ function formatFileSize(bytes) {
 
 function updateStatus(statusEl, icon, text) {
   if (!statusEl) return;
-  statusEl.innerHTML = `
-    <span class="qh-status-icon">${icon}</span>
-    <span class="qh-status-text">${text}</span>
-  `;
+  statusEl.innerHTML = `<span class="qh-status-icon">${icon}</span><span class="qh-status-text">${text}</span>`;
 }
 
 // ============= MESSAGE LISTENER =============
@@ -2968,8 +1625,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('QuantumHire AI: Message received', message.action);
   
   if (message.action === 'autofill') {
-    autofillForm(message.tailoredData, message.atsCredentials, message.options || {})
-      .then(sendResponse);
+    autofillForm(message.tailoredData, message.atsCredentials, message.options || {}).then(sendResponse);
     return true;
   }
   
@@ -2985,12 +1641,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   if (message.action === 'getStatus') {
-    sendResponse({
-      ...applicationState,
-      platform: detectPlatform().name,
-      page: detectCurrentPage(detectPlatform().config),
-      automationState: automationState
-    });
+    sendResponse({ ...applicationState, platform: detectPlatform().name, automationState });
     return true;
   }
 });
@@ -3000,7 +1651,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function initialize() {
   const hostname = window.location.hostname;
   
-  // Skip job boards
   if (hostname.includes('linkedin.com') || hostname.includes('indeed.com')) {
     console.log('QuantumHire AI: Skipping job board');
     return;
@@ -3009,19 +1659,9 @@ async function initialize() {
   const platform = detectPlatform();
   console.log(`QuantumHire AI: Detected platform: ${platform.name}`);
   
-  // Check for saved session
-  const savedSession = await loadSessionState();
-  if (savedSession && savedSession.status === 'in_progress') {
-    console.log('QuantumHire AI: Resuming saved session');
-    applicationState = savedSession;
-  }
-  
-  // Show panel on application pages
   if (platform.name !== 'generic' || document.querySelector('input[type="file"], form input[type="text"]')) {
     setTimeout(createFloatingPanel, 1000);
   }
-  
-  // Removed CAPTCHA detection - user handles manually
 }
 
 if (document.readyState === 'loading') {
