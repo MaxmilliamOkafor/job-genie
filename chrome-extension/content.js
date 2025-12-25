@@ -915,122 +915,204 @@ function findFileUploadSections() {
   return sections;
 }
 
-// Click "Attach" button and wait for file input to appear
-async function clickAttachAndGetFileInput(attachButton, maxWait = 3000) {
-  return new Promise((resolve) => {
-    // Watch for file input to appear
-    const observer = new MutationObserver((mutations, obs) => {
-      const fileInput = document.querySelector('input[type="file"]:not([data-qh-used])');
-      if (fileInput) {
-        obs.disconnect();
-        fileInput.dataset.qhUsed = 'true';
-        resolve(fileInput);
+// Click "Attach" button and wait for the *relevant* file input to appear
+// Many ATS UIs render a modal/dialog with a hidden <input type="file"> and an extra "Upload/Attach" confirmation.
+async function clickAttachAndGetFileInput(attachButton, maxWait = 6000) {
+  const startedAt = Date.now();
+
+  const getLikelyUploadRoot = () => {
+    // Prefer active dialog/modal if present
+    const dialogs = Array.from(document.querySelectorAll(
+      '[role="dialog"], dialog, [aria-modal="true"], .modal, .Modal, .ReactModal__Content'
+    )).filter((d) => (d.offsetParent !== null) && d.querySelector('input[type="file"]'));
+    if (dialogs.length) return dialogs[dialogs.length - 1];
+
+    // Otherwise, prefer the nearest container
+    return attachButton.closest('section, fieldset, form, div') || document.body;
+  };
+
+  const findFileInputInRoot = (root) => {
+    const inputs = Array.from(root.querySelectorAll('input[type="file"]')).filter((i) => !i.dataset.qhUsed);
+    if (!inputs.length) return null;
+
+    // Prefer visible (some ATS keep it offscreen but still works)
+    const visible = inputs.find((i) => i.offsetParent !== null) || inputs[0];
+    return visible;
+  };
+
+  // Click using real mouse event to satisfy some frameworks' gesture checks
+  try {
+    attachButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  } catch {
+    attachButton.click();
+  }
+  console.log('QuantumHire AI: Clicked attach button');
+
+  const initialRoot = getLikelyUploadRoot();
+  let existing = findFileInputInRoot(initialRoot);
+  if (existing) return { fileInput: existing, uploadRoot: initialRoot };
+
+  return await new Promise((resolve) => {
+    const observer = new MutationObserver(() => {
+      const root = getLikelyUploadRoot();
+      const input = findFileInputInRoot(root);
+      if (input) {
+        observer.disconnect();
+        resolve({ fileInput: input, uploadRoot: root });
       }
     });
-    
+
     observer.observe(document.body, { childList: true, subtree: true });
-    
-    // Also check if there's already a hidden file input nearby
-    const container = attachButton.closest('div, section, form');
-    const existingInput = container?.querySelector('input[type="file"]');
-    if (existingInput) {
-      observer.disconnect();
-      resolve(existingInput);
-      return;
-    }
-    
-    // Click the button
-    attachButton.click();
-    console.log('QuantumHire AI: Clicked attach button');
-    
-    // Timeout fallback
-    setTimeout(() => {
-      observer.disconnect();
-      // Try to find any file input that appeared
-      const fileInput = document.querySelector('input[type="file"]:not([data-qh-used])');
-      resolve(fileInput || null);
-    }, maxWait);
+
+    const t = setInterval(() => {
+      if (Date.now() - startedAt > maxWait) {
+        clearInterval(t);
+        observer.disconnect();
+        // Fallback: last resort, any file input
+        const any = Array.from(document.querySelectorAll('input[type="file"]')).find((i) => !i.dataset.qhUsed) || null;
+        resolve({ fileInput: any, uploadRoot: any ? (any.closest('[role="dialog"], dialog, [aria-modal="true"], .modal, .Modal') || any.closest('section, fieldset, form, div') || document.body) : null });
+      }
+    }, 150);
   });
 }
 
-// Upload PDF to standard file input
-async function uploadPDFToInput(fileInput, pdfBase64, fileName) {
+function clickPossibleConfirmButton(uploadRoot) {
+  if (!uploadRoot) return false;
+
+  const candidates = Array.from(uploadRoot.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]'))
+    .filter((b) => (b.offsetParent !== null));
+
+  const scoreText = (t) => {
+    const s = (t || '').toLowerCase().trim();
+    if (!s) return 0;
+    // Prefer explicit confirmation verbs
+    if (/(upload|attach|save|done|add|confirm)/.test(s)) return 3;
+    if (/(next|continue)/.test(s)) return 2;
+    if (/(cancel|close|back)/.test(s)) return -10;
+    return 0;
+  };
+
+  let best = null;
+  let bestScore = 0;
+  for (const el of candidates) {
+    const label = (el.tagName === 'INPUT' ? el.value : el.innerText) || el.getAttribute('aria-label') || '';
+    const sc = scoreText(label);
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = el;
+    }
+  }
+
+  if (best && bestScore > 0) {
+    try {
+      best.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    } catch {
+      best.click();
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// Upload PDF to standard file input (and confirm if the ATS requires an extra step)
+async function uploadPDFToInput(fileInput, pdfBase64, fileName, uploadRoot = null) {
   if (!fileInput || !pdfBase64) return { success: false, error: 'Missing input or PDF data' };
-  
+
   try {
     console.log(`QuantumHire AI: Uploading ${fileName} to file input...`);
-    
-    const binaryString = atob(pdfBase64);
+
+    // Normalize base64 (some responses may include data: prefix)
+    const base64 = String(pdfBase64).includes('base64,') ? String(pdfBase64).split('base64,')[1] : String(pdfBase64);
+
+    const binaryString = atob(base64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-    
+
     const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
     const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-    
+
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(pdfFile);
     fileInput.files = dataTransfer.files;
-    
+
     // Fire all events for React/Angular/Vue compatibility
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-    
-    // Some frameworks need a slight delay
-    await new Promise(r => setTimeout(r, 100));
-    
-    if (fileInput.files.length > 0 && fileInput.files[0].name === fileName) {
+
+    // Some frameworks update state async
+    await new Promise((r) => setTimeout(r, 250));
+
+    // If there is an explicit confirm/upload step inside a modal, click it.
+    const confirmed = clickPossibleConfirmButton(uploadRoot || fileInput.closest('[role="dialog"], dialog, [aria-modal="true"], .modal, .Modal') || null);
+    if (confirmed) {
+      console.log('QuantumHire AI: Clicked confirm/upload button');
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    // Verification: some ATS replaces the input; accept success if either input contains the file or UI shows file name.
+    const hasFileOnInput = fileInput.files && fileInput.files.length > 0 && fileInput.files[0]?.name;
+    const uiShowsName = (uploadRoot || fileInput.closest('section, fieldset, form, div') || document.body)
+      .innerText?.toLowerCase()?.includes(fileName.toLowerCase());
+
+    if (hasFileOnInput || uiShowsName) {
       console.log(`QuantumHire AI: ✅ PDF uploaded: ${fileName}`);
       return { success: true, fileName, size: pdfFile.size };
     }
-    
-    throw new Error('File not set correctly');
+
+    // Mark as used anyway to avoid infinite retries on the same element
+    throw new Error('Upload did not reflect in UI');
   } catch (error) {
     console.error('QuantumHire AI: Upload error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error?.message || 'Upload error' };
   }
 }
 
 // Main PDF upload function with button-based interface support
 async function uploadPDFFile(target, pdfBase64, fileName, maxRetries = 3) {
   if (!pdfBase64) return { success: false, error: 'Missing PDF data' };
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`QuantumHire AI: PDF upload attempt ${attempt}/${maxRetries} for ${fileName}`);
-      
+
       let fileInput = null;
-      
+      let uploadRoot = null;
+
       // Check if target is a file input or a button
       if (target?.tagName === 'INPUT' && target.type === 'file') {
         fileInput = target;
+        uploadRoot = target.closest('[role="dialog"], dialog, [aria-modal="true"], .modal, .Modal') || target.closest('section, fieldset, form, div') || null;
       } else if (target?.tagName === 'BUTTON' || target?.role === 'button' || target?.tagName === 'A') {
-        // It's a button - click it and wait for file input
-        fileInput = await clickAttachAndGetFileInput(target);
+        // It's a button - click it and wait for the relevant file input
+        const res = await clickAttachAndGetFileInput(target);
+        fileInput = res.fileInput;
+        uploadRoot = res.uploadRoot;
       } else {
         // Try to find a file input in the container
-        const container = target?.closest('div, section');
-        fileInput = container?.querySelector('input[type="file"]');
+        const container = target?.closest('div, section, fieldset, form');
+        fileInput = container?.querySelector('input[type="file"]') || null;
+        uploadRoot = container || null;
       }
-      
-      if (!fileInput) {
-        throw new Error('Could not find file input');
-      }
-      
-      const result = await uploadPDFToInput(fileInput, pdfBase64, fileName);
-      
+
+      if (!fileInput) throw new Error('Could not find file input');
+
+      const result = await uploadPDFToInput(fileInput, pdfBase64, fileName, uploadRoot);
+
       if (result.success) {
-        showToast(`✅ PDF uploaded: ${fileName}`, 'success');
+        fileInput.dataset.qhUsed = 'true';
+        showToast(`✅ Attached: ${fileName}`, 'success');
         return result;
       }
-      
+
       throw new Error(result.error || 'Upload failed');
     } catch (error) {
       console.error(`QuantumHire AI: Upload attempt ${attempt} failed:`, error);
-      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 500 * attempt));
+      if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 600 * attempt));
     }
   }
-  
-  showToast(`❌ PDF upload failed: ${fileName}`, 'error');
+
+  showToast(`❌ Upload failed: ${fileName}`, 'error');
   return { success: false, error: 'Upload failed after retries' };
 }
 
