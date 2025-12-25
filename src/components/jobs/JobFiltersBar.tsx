@@ -191,15 +191,23 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
       <CardContent className="p-4 space-y-4">
         {/* Main Filters Row */}
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* Search */}
+          {/* Search Input (no button) */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search jobs, companies..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-8"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
           
           {/* Location */}

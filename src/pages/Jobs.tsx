@@ -24,7 +24,8 @@ import {
   Star,
   Sparkles,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from 'lucide-react';
 
 // Tier-1 companies for visual highlighting
@@ -55,6 +56,8 @@ const Jobs = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [prevStats, setPrevStats] = useState({ total: 0, today: 0, week: 0, applied: 0 });
   
   const observerRef = useRef<IntersectionObserver>();
 
@@ -83,13 +86,23 @@ const Jobs = () => {
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
     
-    return {
+    const newStats = {
       total: jobs.length,
       today: jobs.filter(j => new Date(j.posted_date).getTime() > oneDayAgo).length,
       week: jobs.filter(j => new Date(j.posted_date).getTime() > oneWeekAgo).length,
       applied: jobs.filter(j => j.status === 'applied').length,
     };
+    
+    // Track changes for animation
+    setPrevStats(newStats);
+    return newStats;
   }, [jobs]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refetch();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   const handleJobApplied = (jobId: string) => updateJobStatus(jobId, 'applied');
 
@@ -129,63 +142,84 @@ const Jobs = () => {
                 Find and apply to jobs from top tech companies
               </p>
             </div>
-            {jobs.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={clearAndRefresh}
-                disabled={isSearching}
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear All Jobs
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {jobs.length > 0 && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={clearAndRefresh}
+                    disabled={isSearching}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear All
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Stats Cards */}
           {jobs.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card className="transition-all hover:border-primary/50">
+              <Card className="transition-all hover:border-primary/50 group">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <Sparkles className="h-3.5 w-3.5 text-green-500" />
+                    <Sparkles className="h-3.5 w-3.5 text-green-500 animate-pulse" />
                     Today
                   </div>
-                  <div className="text-2xl font-bold text-green-500">{jobStats.today.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-green-500 transition-all duration-300 group-hover:scale-105">
+                    {jobStats.today.toLocaleString()}
+                  </div>
                   <div className="text-xs text-muted-foreground">new jobs</div>
                 </CardContent>
               </Card>
               
-              <Card className="transition-all hover:border-primary/50">
+              <Card className="transition-all hover:border-primary/50 group">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <Calendar className="h-3.5 w-3.5" />
                     This Week
                   </div>
-                  <div className="text-2xl font-bold">{jobStats.week.toLocaleString()}</div>
+                  <div className="text-2xl font-bold transition-all duration-300 group-hover:scale-105">
+                    {jobStats.week.toLocaleString()}
+                  </div>
                   <div className="text-xs text-muted-foreground">jobs</div>
                 </CardContent>
               </Card>
               
-              <Card className="transition-all hover:border-primary/50">
+              <Card className="transition-all hover:border-primary/50 group">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <TrendingUp className="h-3.5 w-3.5" />
                     All Time
                   </div>
-                  <div className="text-2xl font-bold">{jobStats.total.toLocaleString()}</div>
+                  <div className="text-2xl font-bold transition-all duration-300 group-hover:scale-105">
+                    {jobStats.total.toLocaleString()}
+                  </div>
                   <div className="text-xs text-muted-foreground">total jobs</div>
                 </CardContent>
               </Card>
               
-              <Card className="transition-all hover:border-green-500/50">
+              <Card className="transition-all hover:border-green-500/50 group">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <CheckCircle className="h-3.5 w-3.5 text-green-500" />
                     Applied
                   </div>
-                  <div className="text-2xl font-bold text-green-500">{jobStats.applied}</div>
+                  <div className="text-2xl font-bold text-green-500 transition-all duration-300 group-hover:scale-105">
+                    {jobStats.applied}
+                  </div>
                   <div className="text-xs text-muted-foreground">applications</div>
                 </CardContent>
               </Card>
