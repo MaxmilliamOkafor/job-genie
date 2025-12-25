@@ -1,13 +1,14 @@
-// AutoApply AI - Background Service Worker
+// QuantumHire AI - Background Service Worker
+// Handles authentication and API calls for non-Easy Apply job applications
 
-console.log('AutoApply AI: Background service worker started');
+console.log('QuantumHire AI: Background service worker started');
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('AutoApply AI: Extension installed');
+    console.log('QuantumHire AI: Extension installed');
     
-    // Set default settings with your Supabase credentials
+    // Set default settings with Supabase credentials
     chrome.storage.local.set({
       autoDetect: true,
       supabaseUrl: 'https://wntpldomgjutwufphnpg.supabase.co',
@@ -18,7 +19,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 // Handle messages from content scripts or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('AutoApply AI: Received message', message);
+  console.log('QuantumHire AI: Received message', message);
   
   if (message.action === 'getProfile') {
     chrome.storage.local.get(['userProfile'], (data) => {
@@ -29,7 +30,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.action === 'getTailoredApplication') {
     getTailoredApplication(message.job).then(sendResponse).catch(err => {
-      console.error('AutoApply AI: Tailor error', err);
+      console.error('QuantumHire AI: Tailor error', err);
       sendResponse({ error: err.message });
     });
     return true;
@@ -50,7 +51,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Get tailored application from edge function
 async function getTailoredApplication(job) {
-  console.log('AutoApply AI: Getting tailored application for', job.title, 'at', job.company);
+  console.log('QuantumHire AI: Getting tailored application for', job.title, 'at', job.company);
   
   const data = await chrome.storage.local.get(['supabaseUrl', 'supabaseKey', 'accessToken', 'userProfile']);
   
@@ -59,17 +60,16 @@ async function getTailoredApplication(job) {
   }
   
   if (!data.supabaseUrl || !data.supabaseKey) {
-    throw new Error('Supabase not configured. Please reconnect your account.');
+    throw new Error('Not configured. Please reconnect your account.');
   }
   
-  console.log('AutoApply AI: Calling tailor-application function...');
+  console.log('QuantumHire AI: Calling tailor-application function...');
   
   const response = await fetch(`${data.supabaseUrl}/functions/v1/tailor-application`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'apikey': data.supabaseKey,
-      // Use access token if available, otherwise just use anon key
       'Authorization': `Bearer ${data.accessToken || data.supabaseKey}`,
     },
     body: JSON.stringify({
@@ -82,11 +82,11 @@ async function getTailoredApplication(job) {
     }),
   });
   
-  console.log('AutoApply AI: Response status', response.status);
+  console.log('QuantumHire AI: Response status', response.status);
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('AutoApply AI: API error', response.status, errorText);
+    console.error('QuantumHire AI: API error', response.status, errorText);
     
     if (response.status === 401) {
       throw new Error('Authentication failed. Please reconnect your account.');
@@ -95,14 +95,14 @@ async function getTailoredApplication(job) {
       throw new Error('Rate limit exceeded. Please try again later.');
     }
     if (response.status === 402) {
-      throw new Error('AI usage limit reached. Please add credits.');
+      throw new Error('AI usage limit reached.');
     }
     
     throw new Error(`API error: ${response.status}`);
   }
   
   const result = await response.json();
-  console.log('AutoApply AI: Received tailored application', result);
+  console.log('QuantumHire AI: Received tailored application', result);
   
   return result;
 }
@@ -129,12 +129,12 @@ async function refreshAccessToken() {
         accessToken: authData.access_token,
         refreshToken: authData.refresh_token,
       });
-      console.log('AutoApply AI: Token refreshed successfully');
+      console.log('QuantumHire AI: Token refreshed successfully');
     } else {
-      console.log('AutoApply AI: Token refresh failed', response.status);
+      console.log('QuantumHire AI: Token refresh failed', response.status);
     }
   } catch (error) {
-    console.error('AutoApply AI: Token refresh error', error);
+    console.error('QuantumHire AI: Token refresh error', error);
   }
 }
 

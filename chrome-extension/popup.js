@@ -1,4 +1,5 @@
 // QuantumHire AI - Popup Script
+// For non-Easy Apply jobs that redirect to company websites
 
 // DOM Elements
 const notConnectedSection = document.getElementById('not-connected');
@@ -8,7 +9,6 @@ const disconnectBtn = document.getElementById('disconnect-btn');
 const autofillBtn = document.getElementById('autofill-btn');
 const refreshBtn = document.getElementById('refresh-btn');
 const tailorBtn = document.getElementById('tailor-btn');
-const addToQueueBtn = document.getElementById('add-to-queue-btn');
 const statusMessage = document.getElementById('status-message');
 const userName = document.getElementById('user-name');
 const profileSummary = document.getElementById('profile-summary');
@@ -22,6 +22,9 @@ const viewQueueBtn = document.getElementById('view-queue-btn');
 // Supabase config
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
+// Dashboard URL
+const DASHBOARD_URL = 'https://preview--autoapply-ai-nexus.lovable.app';
 
 // Show status message
 function showStatus(message, type = 'success') {
@@ -74,7 +77,7 @@ function updateQueueCount(queue) {
   }
 }
 
-// Detect ATS platform
+// Detect ATS platform from URL
 function detectATS(url) {
   if (url.includes('greenhouse.io')) return { name: 'Greenhouse', icon: '🌿' };
   if (url.includes('lever.co')) return { name: 'Lever', icon: '🔧' };
@@ -82,89 +85,86 @@ function detectATS(url) {
   if (url.includes('ashbyhq.com')) return { name: 'Ashby', icon: '💼' };
   if (url.includes('smartrecruiters.com')) return { name: 'SmartRecruiters', icon: '🎯' };
   if (url.includes('icims.com')) return { name: 'iCIMS', icon: '📋' };
-  if (url.includes('linkedin.com')) return { name: 'LinkedIn', icon: '💼' };
-  if (url.includes('workable.com')) return { name: 'Workable', icon: '⚙️' };
+  if (url.includes('jobvite.com')) return { name: 'Jobvite', icon: '📌' };
+  if (url.includes('taleo.net')) return { name: 'Taleo', icon: '🏢' };
+  if (url.includes('successfactors.com')) return { name: 'SuccessFactors', icon: '✅' };
   return null;
+}
+
+// Check if on a job board (LinkedIn/Indeed) vs company page
+function isJobBoard(url) {
+  return url.includes('linkedin.com') || url.includes('indeed.com');
 }
 
 // Detect current job on page
 async function detectCurrentJob() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const ats = detectATS(tab.url || '');
+    const url = tab.url || '';
+    
+    // Check if on job board
+    if (isJobBoard(url)) {
+      currentJob.innerHTML = `
+        <p class="job-board-notice">⚠️ You're on a job board</p>
+        <p class="ats-hint">Click on a job that says "Apply on company website" to be taken to the company's application page where auto-fill works.</p>
+      `;
+      autofillBtn.disabled = true;
+      tailorBtn.disabled = true;
+      return;
+    }
+    
+    const ats = detectATS(url);
     
     if (!ats) {
       currentJob.innerHTML = `
-        <p class="not-job-page">📄 Navigate to a job application page to tailor your resume.</p>
-        <p class="ats-hint">Supported: Greenhouse, Lever, Workday, Ashby, SmartRecruiters, iCIMS, LinkedIn</p>
+        <p class="not-job-page">📄 Not on a supported job page</p>
+        <p class="ats-hint">Supported: Greenhouse, Lever, Workday, Ashby, SmartRecruiters, iCIMS, Jobvite, Taleo</p>
       `;
+      autofillBtn.disabled = true;
       tailorBtn.disabled = true;
-      addToQueueBtn.disabled = true;
       return;
     }
     
     // Try to extract job info from the page
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractJob' });
-    
-    if (response && response.title) {
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractJob' });
+      
+      if (response && response.title) {
+        currentJob.innerHTML = `
+          <div class="ats-badge">${ats.icon} ${ats.name}</div>
+          <p class="job-title">${response.title}</p>
+          <p class="job-company">${response.company}</p>
+          ${response.location ? `<p class="job-location">📍 ${response.location}</p>` : ''}
+        `;
+        currentJob.dataset.job = JSON.stringify({ ...response, url: url, ats: ats.name });
+        autofillBtn.disabled = false;
+        tailorBtn.disabled = false;
+      } else {
+        currentJob.innerHTML = `
+          <div class="ats-badge">${ats.icon} ${ats.name}</div>
+          <p class="not-job-page">Could not detect job details. Try refreshing.</p>
+        `;
+        currentJob.dataset.job = JSON.stringify({ url: url, ats: ats.name });
+        autofillBtn.disabled = false;
+        tailorBtn.disabled = true;
+      }
+    } catch (err) {
+      // Content script might not be loaded yet
       currentJob.innerHTML = `
         <div class="ats-badge">${ats.icon} ${ats.name}</div>
-        <p class="job-title">${response.title}</p>
-        <p class="job-company">${response.company}</p>
-        ${response.location ? `<p class="job-location">📍 ${response.location}</p>` : ''}
+        <p class="not-job-page">Refresh the page to enable auto-fill</p>
       `;
-      currentJob.dataset.job = JSON.stringify({ ...response, url: tab.url, ats: ats.name });
-      tailorBtn.disabled = false;
-      addToQueueBtn.disabled = false;
-    } else {
-      currentJob.innerHTML = `
-        <div class="ats-badge">${ats.icon} ${ats.name}</div>
-        <p class="not-job-page">Could not detect job details. Try refreshing.</p>
-      `;
-      currentJob.dataset.job = JSON.stringify({ url: tab.url, ats: ats.name });
+      autofillBtn.disabled = true;
       tailorBtn.disabled = true;
-      addToQueueBtn.disabled = false;
     }
   } catch (error) {
     console.error('Job detection error:', error);
     currentJob.innerHTML = `
-      <p class="not-job-page">📄 Navigate to a job application page to tailor your resume.</p>
+      <p class="not-job-page">📄 Navigate to a company job page to auto-fill</p>
     `;
+    autofillBtn.disabled = true;
     tailorBtn.disabled = true;
-    addToQueueBtn.disabled = true;
   }
-}
-
-// Add to queue
-async function addToQueue() {
-  const jobData = currentJob.dataset.job ? JSON.parse(currentJob.dataset.job) : null;
-  
-  if (!jobData || !jobData.url) {
-    showStatus('No job URL detected', 'error');
-    return;
-  }
-  
-  const data = await chrome.storage.local.get(['jobQueue']);
-  const queue = data.jobQueue || [];
-  
-  // Check for duplicates
-  if (queue.some(j => j.url === jobData.url)) {
-    showStatus('Job already in queue', 'warning');
-    return;
-  }
-  
-  queue.push({
-    id: Date.now().toString(),
-    url: jobData.url,
-    title: jobData.title || 'Unknown',
-    company: jobData.company || 'Unknown',
-    ats: jobData.ats,
-    addedAt: new Date().toISOString(),
-  });
-  
-  await chrome.storage.local.set({ jobQueue: queue });
-  updateQueueCount(queue);
-  showStatus('Added to queue!', 'success');
 }
 
 // Connect to Supabase
@@ -273,7 +273,7 @@ async function refreshProfile() {
 
 // Trigger autofill
 async function triggerAutofill() {
-  autofillBtn.textContent = '⏳ ...';
+  autofillBtn.textContent = '⏳ Filling...';
   autofillBtn.disabled = true;
   
   try {
@@ -287,9 +287,9 @@ async function triggerAutofill() {
     }
   } catch (error) {
     console.error('Autofill error:', error);
-    showStatus('Make sure you\'re on a job application page', 'error');
+    showStatus('Make sure you\'re on a company job application page', 'error');
   } finally {
-    autofillBtn.textContent = '📝 Auto-Fill';
+    autofillBtn.textContent = '📝 Auto-Fill Application';
     autofillBtn.disabled = false;
   }
 }
@@ -337,12 +337,12 @@ async function tailorForJob() {
 // Open app dashboard
 openAppLink.addEventListener('click', async (e) => {
   e.preventDefault();
-  chrome.tabs.create({ url: 'https://preview--autoapply-ai-nexus.lovable.app/jobs' });
+  chrome.tabs.create({ url: `${DASHBOARD_URL}/jobs` });
 });
 
 // View queue in app
 viewQueueBtn?.addEventListener('click', () => {
-  chrome.tabs.create({ url: 'https://preview--autoapply-ai-nexus.lovable.app/jobs' });
+  chrome.tabs.create({ url: `${DASHBOARD_URL}/jobs` });
 });
 
 // Tab switching
@@ -374,7 +374,6 @@ disconnectBtn.addEventListener('click', disconnect);
 autofillBtn.addEventListener('click', triggerAutofill);
 refreshBtn.addEventListener('click', refreshProfile);
 tailorBtn.addEventListener('click', tailorForJob);
-addToQueueBtn?.addEventListener('click', addToQueue);
 
 // Initialize
 loadConnection();
