@@ -4,6 +4,10 @@ import { useAuth } from './useAuth';
 import { Job } from './useJobs';
 import { toast } from 'sonner';
 
+// Reasonable page size to prevent browser crashes
+const PAGE_SIZE = 100;
+const INITIAL_LOAD = 200;
+
 export function useJobScraper() {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -11,118 +15,86 @@ export function useJobScraper() {
   const [isScraping, setIsScraping] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [keywords, setKeywords] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const offsetRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const loadedCountRef = useRef(0);
 
-  // Fetch existing jobs from database - no artificial limits
-  const fetchExistingJobs = useCallback(async (append = false) => {
+  // Fetch jobs with pagination - NOT all at once
+  const fetchExistingJobs = useCallback(async (append = false, search = '') => {
     if (!user) return;
 
     setIsLoading(true);
     try {
-      const PAGE_SIZE = 1000; // backend max per query
+      const from = append ? loadedCountRef.current : 0;
+      const to = from + (append ? PAGE_SIZE : INITIAL_LOAD) - 1;
+
+      let query = supabase
+        .from('jobs')
+        .select('*', { count: 'exact' })
+        .eq('user_id', user.id)
+        .neq('status', 'applied')
+        .order('created_at', { ascending: false });
+
+      // Server-side search if provided
+      if (search.trim()) {
+        const searchTerm = `%${search.trim()}%`;
+        query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm},location.ilike.${searchTerm}`);
+      }
+
+      const { data, error, count } = await query.range(from, to);
+
+      if (error) throw error;
+
+      const formattedJobs: Job[] = (data || []).map(job => ({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        salary: job.salary || '',
+        description: job.description || '',
+        requirements: job.requirements || [],
+        platform: job.platform || '',
+        url: job.url || '',
+        posted_date: job.posted_date || job.created_at || new Date().toISOString(),
+        match_score: job.match_score || 0,
+        status: job.status || 'pending',
+        applied_at: job.applied_at,
+      }));
 
       if (append) {
-        const from = jobs.length;
-        const to = from + 999; // append in larger chunks
-
-        const { data, error, count } = await supabase
-          .from('jobs')
-          .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
-          .neq('status', 'applied')
-          .order('created_at', { ascending: false })
-          .range(from, to);
-
-        if (error) throw error;
-
-        const formattedJobs: Job[] = (data || []).map(job => ({
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          salary: job.salary || '',
-          description: job.description || '',
-          requirements: job.requirements || [],
-          platform: job.platform || '',
-          url: job.url || '',
-          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
-          match_score: job.match_score || 0,
-          status: job.status || 'pending',
-          applied_at: job.applied_at,
-        }));
-
-        const dedupe = (list: Job[]) => {
+        // Dedupe when appending
+        setJobs(prev => {
           const map = new Map<string, Job>();
-          for (const j of list) map.set(j.id, j);
+          for (const j of prev) map.set(j.id, j);
+          for (const j of formattedJobs) map.set(j.id, j);
           return Array.from(map.values());
-        };
-
-        setJobs(prev => dedupe([...prev, ...formattedJobs]));
-        const newTotal = jobs.length + formattedJobs.length;
-        setHasMore((count || 0) > newTotal);
-        return;
+        });
+        loadedCountRef.current += formattedJobs.length;
+      } else {
+        setJobs(formattedJobs);
+        loadedCountRef.current = formattedJobs.length;
       }
 
-      // Initial load: fetch ALL jobs for user (no limit)
-      const collected: Job[] = [];
-      let fetched = 0;
-      let totalCount: number | null = null;
-
-      while (true) {
-        const from = fetched;
-        const to = fetched + PAGE_SIZE - 1;
-
-        const { data, error, count } = await supabase
-          .from('jobs')
-          .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
-          .neq('status', 'applied')
-          .order('created_at', { ascending: false })
-          .range(from, to);
-
-        if (error) throw error;
-        totalCount = count ?? totalCount;
-
-        const pageJobs: Job[] = (data || []).map(job => ({
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          salary: job.salary || '',
-          description: job.description || '',
-          requirements: job.requirements || [],
-          platform: job.platform || '',
-          url: job.url || '',
-          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
-          match_score: job.match_score || 0,
-          status: job.status || 'pending',
-          applied_at: job.applied_at,
-        }));
-
-        collected.push(...pageJobs);
-        fetched += pageJobs.length;
-
-        if (pageJobs.length === 0) break;
-        if (totalCount !== null && fetched >= totalCount) break;
-        if (pageJobs.length < (to - from + 1)) break;
-      }
-
-      // Dedupe just in case
-      const map = new Map<string, Job>();
-      for (const j of collected) map.set(j.id, j);
-      const final = Array.from(map.values());
-
-      setJobs(final);
-      setHasMore((totalCount || 0) > final.length);
+      setTotalCount(count || 0);
+      setHasMore((count || 0) > (append ? loadedCountRef.current : formattedJobs.length));
     } catch (error) {
       console.error('Error fetching jobs:', error);
+      toast.error('Failed to load jobs');
     } finally {
       setIsLoading(false);
     }
-  }, [user, jobs.length]);
+  }, [user]);
 
-  // Scrape new jobs from edge function (larger batches)
+  // Search jobs with server-side filtering
+  const searchJobs = useCallback(async (query: string) => {
+    setSearchQuery(query);
+    loadedCountRef.current = 0;
+    await fetchExistingJobs(false, query);
+  }, [fetchExistingJobs]);
+
+  // Scrape new jobs from edge function
   const scrapeJobs = useCallback(async (keywordString: string, append = false) => {
     if (!user) return;
     
@@ -132,7 +104,7 @@ export function useJobScraper() {
         body: {
           keywords: keywordString,
           offset: append ? offsetRef.current : 0,
-          limit: 200, // Fetch larger batches
+          limit: 100,
           user_id: user.id,
         },
       });
@@ -144,7 +116,7 @@ export function useJobScraper() {
         setHasMore(data.hasMore);
         
         // Refresh from database
-        await fetchExistingJobs(append);
+        await fetchExistingJobs(append, searchQuery);
         
         if (!append) {
           toast.success(`Found ${data.jobs?.length || 0} new jobs`);
@@ -156,57 +128,60 @@ export function useJobScraper() {
     } finally {
       setIsScraping(false);
     }
-  }, [user, fetchExistingJobs]);
+  }, [user, fetchExistingJobs, searchQuery]);
 
-  // Start continuous scraping
+  // Start continuous scraping with progress updates
   const startContinuousScraping = useCallback((keywordString: string) => {
     setKeywords(keywordString);
+    setIsScraping(true);
+    offsetRef.current = 0;
 
     (async () => {
-      // Initial scrape
-      await scrapeJobs(keywordString, false);
-
-      // Continue fetching while there are more jobs available - no artificial limit
+      let totalScraped = 0;
       let hasMoreJobs = true;
       
       while (hasMoreJobs) {
-        const { data } = await supabase.functions.invoke('scrape-jobs', {
-          body: {
-            keywords: keywordString,
-            offset: offsetRef.current,
-            limit: 500, // Larger batches for faster loading
-            user_id: user?.id,
-          },
-        });
-        
-        if (data?.success && data.jobs?.length > 0) {
-          offsetRef.current = data.nextOffset;
-          hasMoreJobs = data.hasMore;
-          await fetchExistingJobs(true);
+        try {
+          const { data } = await supabase.functions.invoke('scrape-jobs', {
+            body: {
+              keywords: keywordString,
+              offset: offsetRef.current,
+              limit: 100,
+              user_id: user?.id,
+            },
+          });
           
-          // Update toast with progress
-          toast.info(`Loaded ${offsetRef.current} jobs...`, { id: 'scrape-progress' });
-        } else {
+          if (data?.success && data.jobs?.length > 0) {
+            offsetRef.current = data.nextOffset;
+            totalScraped += data.jobs.length;
+            hasMoreJobs = data.hasMore;
+            
+            // Refresh the visible jobs (not ALL)
+            await fetchExistingJobs(false, searchQuery);
+            
+            toast.info(`Scraped ${totalScraped} jobs...`, { id: 'scrape-progress' });
+          } else {
+            hasMoreJobs = false;
+          }
+          
+          // Pause between batches
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (error) {
+          console.error('Scraping error:', error);
           hasMoreJobs = false;
         }
-        
-        // Small pause between batches
-        await new Promise((r) => setTimeout(r, 100));
       }
       
-      toast.success(`Finished loading ${offsetRef.current} valid jobs`, { id: 'scrape-progress' });
+      toast.success(`Finished! ${totalScraped} jobs added to your queue.`, { id: 'scrape-progress' });
       setIsScraping(false);
     })();
 
-    // Set up interval for continuous updates every 10 minutes
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
+    // Set up interval for continuous updates
+    if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       scrapeJobs(keywordString, true);
-    }, 600000); // Every 10 minutes
-  }, [scrapeJobs, user, fetchExistingJobs]);
+    }, 600000);
+  }, [scrapeJobs, user, fetchExistingJobs, searchQuery]);
 
   // Stop continuous scraping
   const stopScraping = useCallback(() => {
@@ -216,18 +191,13 @@ export function useJobScraper() {
     }
   }, []);
 
-  // Load more jobs
+  // Load more jobs (paginated)
   const loadMore = useCallback(async () => {
     if (isLoading || isScraping) return;
-    
-    if (keywords) {
-      await scrapeJobs(keywords, true);
-    } else {
-      await fetchExistingJobs(true);
-    }
-  }, [isLoading, isScraping, keywords, scrapeJobs, fetchExistingJobs]);
+    await fetchExistingJobs(true, searchQuery);
+  }, [isLoading, isScraping, fetchExistingJobs, searchQuery]);
 
-  // Update job status and remove from list if applied
+  // Update job status
   const updateJobStatus = useCallback(async (jobId: string, status: Job['status']) => {
     if (!user) return;
 
@@ -245,9 +215,9 @@ export function useJobScraper() {
 
       if (error) throw error;
 
-      // Remove applied jobs from the list to prevent duplicate applications
       if (status === 'applied') {
         setJobs(prev => prev.filter(job => job.id !== jobId));
+        setTotalCount(prev => prev - 1);
       } else {
         setJobs(prev => prev.map(job => 
           job.id === jobId ? { ...job, ...updates } : job
@@ -259,71 +229,17 @@ export function useJobScraper() {
     }
   }, [user]);
 
-  // Polling for live updates (cost-free alternative to realtime) - fetches ALL jobs
-  useEffect(() => {
-    if (!user) return;
-
-    const pollJobs = async () => {
-      const PAGE_SIZE = 1000;
-      const allJobs: Job[] = [];
-      let fetched = 0;
-      
-      while (true) {
-        const { data, error } = await supabase
-          .from('jobs')
-          .select('*')
-          .eq('user_id', user.id)
-          .neq('status', 'applied')
-          .order('created_at', { ascending: false })
-          .range(fetched, fetched + PAGE_SIZE - 1);
-
-        if (error || !data || data.length === 0) break;
-        
-        const formattedJobs: Job[] = data.map((job: any) => ({
-          id: job.id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          salary: job.salary || '',
-          description: job.description || '',
-          requirements: job.requirements || [],
-          platform: job.platform || '',
-          url: job.url || '',
-          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
-          match_score: job.match_score || 0,
-          status: job.status || 'pending',
-          applied_at: job.applied_at,
-        }));
-        
-        allJobs.push(...formattedJobs);
-        fetched += data.length;
-        
-        if (data.length < PAGE_SIZE) break;
-      }
-      
-      if (allJobs.length > 0) {
-        setJobs(allJobs);
-      }
-    };
-
-    // Poll every 30 seconds
-    const interval = setInterval(pollJobs, 30000);
-
-    return () => clearInterval(interval);
-  }, [user]);
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
   // Initial load
   useEffect(() => {
     if (user) {
+      loadedCountRef.current = 0;
       fetchExistingJobs();
     }
   }, [user]);
@@ -333,7 +249,6 @@ export function useJobScraper() {
     if (!user) return;
     
     try {
-      // Delete all existing jobs for this user
       const { error } = await supabase
         .from('jobs')
         .delete()
@@ -342,12 +257,13 @@ export function useJobScraper() {
       if (error) throw error;
       
       setJobs([]);
+      setTotalCount(0);
       offsetRef.current = 0;
+      loadedCountRef.current = 0;
       setHasMore(true);
       
-      toast.success('Cleared old jobs. Starting fresh scrape...');
+      toast.success('Cleared old jobs.');
       
-      // Start fresh scrape
       if (keywords) {
         startContinuousScraping(keywords);
       }
@@ -363,12 +279,15 @@ export function useJobScraper() {
     isScraping,
     hasMore,
     keywords,
+    totalCount,
+    searchQuery,
     loadMore,
     scrapeJobs,
+    searchJobs,
     startContinuousScraping,
     stopScraping,
     updateJobStatus,
     clearAndRefresh,
-    refetch: fetchExistingJobs,
+    refetch: () => fetchExistingJobs(false, searchQuery),
   };
 }
