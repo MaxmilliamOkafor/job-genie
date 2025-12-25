@@ -1,0 +1,93 @@
+/* AutoApply AI - Content Script Styles */
+
+/* Highlight filled fields */
+.autoapply-filled {
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* Highlight resume upload fields */
+.autoapply-resume-field {
+  border: 3px dashed #8b5cf6 !important;
+  border-radius: 8px !important;
+  padding: 10px !important;
+  background: rgba(139, 92, 246, 0.05) !important;
+}
+
+/* Tooltip for filled fields */
+.autoapply-tooltip {
+  position: absolute;
+  background: #1a1a2e;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  z-index: 999999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.autoapply-tooltip.visible {
+  opacity: 1;
+}
+
+/* Notification toast */
+.autoapply-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #fff;
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.autoapply-toast.success {
+  border-left: 4px solid #22c55e;
+}
+
+.autoapply-toast.error {
+  border-left: 4px solid #ef4444;
+}
+
+.autoapply-toast-icon {
+  font-size: 20px;
+}
+
+.autoapply-toast-message {
+  flex: 1;
+}
+
+.autoapply-toast-close {
+  background: none;
+  border: none;
+  color: #a1a1aa;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+}
+
+.autoapply-toast-close:hover {
+  color: #fff;
+}
