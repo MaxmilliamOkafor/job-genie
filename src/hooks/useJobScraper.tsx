@@ -47,21 +47,41 @@ export function useJobScraper() {
 
       if (error) throw error;
 
-      const formattedJobs: Job[] = (data || []).map(job => ({
-        id: job.id,
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        salary: job.salary || '',
-        description: job.description || '',
-        requirements: job.requirements || [],
-        platform: job.platform || '',
-        url: job.url || '',
-        posted_date: job.posted_date || job.created_at || new Date().toISOString(),
-        match_score: job.match_score || 0,
-        status: job.status || 'pending',
-        applied_at: job.applied_at,
-      }));
+      // Filter out invalid job listings (error pages, not found, etc.)
+      const INVALID_PATTERNS = [
+        /page.*(?:you.*(?:looking|requested)|doesn'?t|does not).*exist/i,
+        /not found/i,
+        /404/i,
+        /no longer available/i,
+        /position.*(?:has been|is).*(?:filled|closed)/i,
+        /job.*(?:has been|is).*(?:removed|deleted)/i,
+        /this job is no longer/i,
+        /expired/i,
+        /error loading/i,
+      ];
+
+      const isInvalidJob = (job: any): boolean => {
+        const textToCheck = [job.title, job.description, job.company].filter(Boolean).join(' ');
+        return INVALID_PATTERNS.some(pattern => pattern.test(textToCheck));
+      };
+
+      const formattedJobs: Job[] = (data || [])
+        .filter(job => !isInvalidJob(job))
+        .map(job => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary || '',
+          description: job.description || '',
+          requirements: job.requirements || [],
+          platform: job.platform || '',
+          url: job.url || '',
+          posted_date: job.posted_date || job.created_at || new Date().toISOString(),
+          match_score: job.match_score || 0,
+          status: job.status || 'pending',
+          applied_at: job.applied_at,
+        }));
 
       if (append) {
         // Dedupe when appending

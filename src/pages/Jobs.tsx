@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { 
   Briefcase, 
   ArrowUp,
+  ArrowDown,
   Trash2,
   RefreshCw,
   ArrowUpDown,
@@ -52,6 +53,7 @@ const Jobs = () => {
   } = useJobScraper();
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(true);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
@@ -64,12 +66,21 @@ const Jobs = () => {
   const [isBatchApplying, setIsBatchApplying] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const windowHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+      setShowScrollTop(scrollY > 400);
+      // Show scroll bottom when not near bottom
+      setShowScrollBottom(scrollY < docHeight - windowHeight - 400);
+    };
     window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Initial check
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToBottom = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -434,16 +445,28 @@ const Jobs = () => {
         )}
       </div>
 
-      {/* Scroll to Top */}
-      {showScrollTop && (
-        <Button
-          onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-50 rounded-full h-12 w-12 p-0 shadow-lg"
-          size="icon"
-        >
-          <ArrowUp className="h-5 w-5" />
-        </Button>
-      )}
+      {/* Scroll Navigation Buttons */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
+        {showScrollBottom && hasMore && (
+          <Button
+            onClick={scrollToBottom}
+            className="rounded-full h-12 w-12 p-0 shadow-lg"
+            size="icon"
+            variant="outline"
+          >
+            <ArrowDown className="h-5 w-5" />
+          </Button>
+        )}
+        {showScrollTop && (
+          <Button
+            onClick={scrollToTop}
+            className="rounded-full h-12 w-12 p-0 shadow-lg"
+            size="icon"
+          >
+            <ArrowUp className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
     </AppLayout>
   );
 };
