@@ -18,8 +18,8 @@ import {
   Zap,
   CheckCircle,
   Loader2,
-  Sparkles,
-  RefreshCw
+  RefreshCw,
+  ArrowUp
 } from 'lucide-react';
 
 const DEFAULT_KEYWORDS = 'Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics, Continuous Integration, User Experience (UX) & User Interface (UI)';
@@ -39,7 +39,21 @@ const Jobs = () => {
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const observerRef = useRef<IntersectionObserver>();
+
+  // Scroll-to-top visibility
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Infinite scroll observer
   const lastJobRef = useCallback((node: HTMLDivElement | null) => {
@@ -320,6 +334,17 @@ const Jobs = () => {
           </p>
         )}
       </div>
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <Button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-50 rounded-full h-12 w-12 p-0 shadow-lg"
+          size="icon"
+        >
+          <ArrowUp className="h-5 w-5" />
+        </Button>
+      )}
     </AppLayout>
   );
 };
