@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,12 +37,34 @@ interface TailorRequest {
   includeReferral?: boolean;
 }
 
+// Helper function to verify JWT and extract user ID
+async function verifyAuth(req: Request): Promise<void> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Verify authentication
+    await verifyAuth(req);
+    
     const { jobTitle, company, description, requirements, location, jobId, userProfile, includeReferral } = await req.json() as TailorRequest;
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -289,9 +312,10 @@ ${includeReferral ? `
 
   } catch (error) {
     console.error("Error in tailor-application:", error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error occurred" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

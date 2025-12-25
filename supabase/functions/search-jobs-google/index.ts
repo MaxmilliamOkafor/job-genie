@@ -40,6 +40,23 @@ const TIER1_COMPANIES = [
   'crowdstrike', 'zillow', 'doordash', 'instacart', 'pinterest', 'reddit', 'discord',
 ];
 
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
+}
+
 // Extract platform from URL
 function getPlatformFromUrl(url: string): string {
   if (url.includes('greenhouse.io')) return 'Greenhouse';
@@ -226,9 +243,16 @@ serve(async (req) => {
   }
 
   try {
-    const { keywords = '', location = '', user_id } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
-    console.log(`Fast job search - keywords: "${keywords.slice(0, 100)}...", location: "${location}"`);
+    // Verify JWT and get authenticated user ID
+    const user_id = await verifyAndGetUserId(req, supabase);
+    
+    const { keywords = '', location = '' } = await req.json();
+    
+    console.log(`Fast job search - keywords: "${keywords.slice(0, 100)}...", location: "${location}" for user ${user_id}`);
     
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (!FIRECRAWL_API_KEY) {
@@ -355,11 +379,7 @@ serve(async (req) => {
     allJobs.sort((a, b) => b.match_score - a.match_score);
     
     // Save to database
-    if (user_id && allJobs.length > 0) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
+    if (allJobs.length > 0) {
       // Get existing URLs to avoid duplicates
       const { data: existingJobs } = await supabase
         .from('jobs')
@@ -387,8 +407,8 @@ serve(async (req) => {
         
         // Insert in batches of 100
         for (let i = 0; i < jobsToInsert.length; i += 100) {
-          const batch = jobsToInsert.slice(i, i + 100);
-          await supabase.from('jobs').insert(batch);
+          const insertBatch = jobsToInsert.slice(i, i + 100);
+          await supabase.from('jobs').insert(insertBatch);
         }
         
         console.log(`Inserted ${newJobs.length} new jobs`);
@@ -405,9 +425,10 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Search error:', error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

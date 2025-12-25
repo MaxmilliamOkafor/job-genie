@@ -47,6 +47,23 @@ interface LiveJob {
   requirements: string[];
 }
 
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
+}
+
 // Fetch with timeout
 async function fetchWithTimeout(url: string, timeout = 5000): Promise<Response> {
   const controller = new AbortController();
@@ -137,14 +154,20 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Verify JWT and get authenticated user ID
+    const user_id = await verifyAndGetUserId(req, supabase);
+    
     const { 
       keywords = '',
       locations = '',
-      user_id,
       limit = 100,
     } = await req.json();
     
-    console.log(`Live jobs fetch - ${GREENHOUSE_COMPANIES.length} companies`);
+    console.log(`Live jobs fetch - ${GREENHOUSE_COMPANIES.length} companies for user ${user_id}`);
     
     const keywordList = keywords.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k).slice(0, 20);
     const locationList = locations.split(',').map((l: string) => l.trim().toLowerCase()).filter((l: string) => l).slice(0, 10);
@@ -182,12 +205,8 @@ serve(async (req) => {
     
     const topJobs = uniqueJobs.slice(0, limit);
     
-    // Save to database if user_id provided
-    if (user_id && topJobs.length > 0) {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
+    // Save to database
+    if (topJobs.length > 0) {
       // Get existing URLs
       const { data: existingJobs } = await supabase
         .from('jobs')
@@ -229,9 +248,10 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Live jobs error:', error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

@@ -10,12 +10,28 @@ const corsHeaders = {
 
 interface SendEmailRequest {
   type: "application" | "referral" | "follow_up" | "test";
-  userId: string;
   applicationId?: string;
   recipient: string;
   subject: string;
   body: string;
   fromName?: string;
+}
+
+// Helper function to verify JWT and extract user ID
+async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Missing authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    throw new Error('Unauthorized: Invalid or expired token');
+  }
+  
+  return user.id;
 }
 
 serve(async (req) => {
@@ -29,7 +45,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { type, userId, applicationId, recipient, subject, body, fromName } = await req.json() as SendEmailRequest;
+    // Verify JWT and get authenticated user ID
+    const userId = await verifyAndGetUserId(req, supabase);
+
+    const { type, applicationId, recipient, subject, body, fromName } = await req.json() as SendEmailRequest;
 
     // Normalize email to lowercase to avoid case-sensitivity issues
     const normalizedRecipient = recipient.toLowerCase();
@@ -110,9 +129,10 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error("Error in send-email-resend:", error);
+    const status = error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500;
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
