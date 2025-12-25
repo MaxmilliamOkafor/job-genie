@@ -82,7 +82,7 @@ export function GmailIntegration() {
         // Clear URL params
         window.history.replaceState({}, document.title, window.location.pathname);
 
-        const redirectUri = `${window.location.origin}${window.location.pathname}`;
+        const redirectUri = `${window.location.origin}/`;
 
         const { data, error } = await supabase.functions.invoke('gmail-oauth', {
           body: {
@@ -126,7 +126,7 @@ export function GmailIntegration() {
     setIsConnecting(true);
 
     try {
-      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      const redirectUri = `${window.location.origin}/`;
 
       const { data, error } = await supabase.functions.invoke('gmail-oauth', {
         body: {
