@@ -7,32 +7,49 @@ import { Search, X, Loader2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BulkKeywordSearchProps {
+  /** Starts/refreshes scraping using the provided comma-separated keyword string. */
   onSearch: (keywords: string) => void;
+  /** Optional: keep the listings filtered using the same search bar input. */
+  onFilterChange?: (value: string) => void;
   isSearching: boolean;
 }
 
 const SAMPLE_KEYWORDS = `Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics, Continuous Integration, User Experience (UX) & User Interface (UI)`;
 
-export function BulkKeywordSearch({ onSearch, isSearching }: BulkKeywordSearchProps) {
+export function BulkKeywordSearch({ onSearch, onFilterChange, isSearching }: BulkKeywordSearchProps) {
   const [keywordInput, setKeywordInput] = useState('');
   const [activeKeywords, setActiveKeywords] = useState<string[]>([]);
 
+  const normalize = (input: string) =>
+    input
+      .replace(/[“”"]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const parseKeywords = (input: string): string[] => {
-    return input
+    const normalized = normalize(input);
+    const parts = normalized
       .split(',')
-      .map(k => k.trim())
-      .filter(k => k.length > 0);
+      .map((k) => k.trim())
+      .filter((k) => k.length > 0);
+
+    // De-dupe while keeping order
+    return parts.filter((k, idx) => parts.indexOf(k) === idx);
   };
 
   const handleSearch = () => {
-    const keywords = parseKeywords(keywordInput);
+    const normalized = normalize(keywordInput);
+    const keywords = parseKeywords(normalized);
+
     if (keywords.length === 0) {
       toast.error('Please enter at least one keyword');
       return;
     }
-    
+
+    setKeywordInput(normalized);
     setActiveKeywords(keywords);
-    onSearch(keywordInput);
+    onFilterChange?.(normalized);
+    onSearch(normalized);
     toast.success(`Searching for ${keywords.length} keywords`);
   };
 
@@ -66,7 +83,11 @@ export function BulkKeywordSearch({ onSearch, isSearching }: BulkKeywordSearchPr
         <Textarea
           placeholder="Enter keywords separated by commas, e.g.: Data Scientist, Machine Learning, Python, AWS, Cloud Computing..."
           value={keywordInput}
-          onChange={(e) => setKeywordInput(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            setKeywordInput(next);
+            onFilterChange?.(next);
+          }}
           className="min-h-[100px] resize-none"
         />
         
