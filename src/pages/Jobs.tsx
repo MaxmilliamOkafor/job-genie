@@ -56,9 +56,7 @@ const Jobs = () => {
     loadMore, 
     updateJobStatus,
     clearAndRefresh,
-    refetch,
-    liveJobCount,
-    isScraping
+    refetch
   } = useJobScraper();
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -169,25 +167,12 @@ const Jobs = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              Job Search
-              {isScraping && (
-                <Badge variant="outline" className="animate-pulse bg-green-500/10 border-green-500/30 text-green-500">
-                  <span className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse" />
-                  Live Updating
-                </Badge>
-              )}
-            </h1>
+            <h1 className="text-3xl font-bold">Job Search</h1>
             <p className="text-muted-foreground mt-1">
               <span className="font-semibold text-foreground">{filteredJobs.length.toLocaleString()}</span> jobs
-              {liveJobCount > 0 && liveJobCount !== filteredJobs.length && (
-                <span className="ml-1 text-xs">
-                  (of {liveJobCount.toLocaleString()} in database)
-                </span>
-              )}
               {hasActiveFilters && (
                 <span className="ml-1 text-xs">
-                  • filtered from {validJobs.length.toLocaleString()}
+                  (of {validJobs.length.toLocaleString()} total)
                 </span>
               )}
             </p>

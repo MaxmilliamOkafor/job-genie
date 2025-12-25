@@ -6,7 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Top Greenhouse companies (most reliable)
+// ATS Platform priority tiers
+const PLATFORM_TIERS = {
+  tier1: ['Workday', 'Greenhouse', 'Workable', 'SAP SuccessFactors', 'iCIMS', 'LinkedIn (Direct)'],
+  tier2: ['Oracle Taleo', 'BambooHR', 'Bullhorn'],
+  tier3: ['JazzHR', 'Jobvite', 'SmartRecruiters', 'Recruitee', 'Breezy HR'],
+};
+
+// Tier-1 companies with their Greenhouse board tokens
 const GREENHOUSE_COMPANIES: { name: string; token: string }[] = [
   { name: 'Stripe', token: 'stripe' },
   { name: 'Airbnb', token: 'airbnb' },
@@ -20,7 +27,10 @@ const GREENHOUSE_COMPANIES: { name: string; token: string }[] = [
   { name: 'Ramp', token: 'ramp' },
   { name: 'Brex', token: 'brex' },
   { name: 'Gusto', token: 'gusto' },
+  { name: 'Flexport', token: 'flexport' },
+  { name: 'Nuro', token: 'nuro' },
   { name: 'Scale AI', token: 'scaleai' },
+  { name: 'Anduril', token: 'andurilindustries' },
   { name: 'Rippling', token: 'rippling' },
   { name: 'Airtable', token: 'airtable' },
   { name: 'Webflow', token: 'webflow' },
@@ -29,41 +39,35 @@ const GREENHOUSE_COMPANIES: { name: string; token: string }[] = [
   { name: 'Retool', token: 'retool' },
   { name: 'Mercury', token: 'mercury' },
   { name: 'Deel', token: 'deel' },
+  { name: 'OpenSea', token: 'opensea' },
   { name: 'Instacart', token: 'instacart' },
   { name: 'DoorDash', token: 'doordash' },
   { name: 'Lyft', token: 'lyft' },
   { name: 'Pinterest', token: 'pinterest' },
+  { name: 'Snap', token: 'snapchat' },
+  { name: 'Dropbox', token: 'dropbox' },
+  { name: 'Twitch', token: 'twitch' },
   { name: 'Reddit', token: 'reddit' },
   { name: 'Affirm', token: 'affirm' },
   { name: 'Robinhood', token: 'robinhood' },
   { name: 'Chime', token: 'chime' },
+  { name: 'SoFi', token: 'sofi' },
+  { name: 'Faire', token: 'faire' },
   { name: 'Canva', token: 'canva' },
   { name: 'HashiCorp', token: 'hashicorp' },
   { name: 'GitLab', token: 'gitlab' },
+  { name: 'Elastic', token: 'elastic' },
   { name: 'MongoDB', token: 'mongodb' },
   { name: 'Snowflake', token: 'snowflake' },
-  { name: 'Datadog', token: 'datadog' },
-  { name: 'Twilio', token: 'twilio' },
-  { name: 'Shopify', token: 'shopify' },
-  { name: 'HubSpot', token: 'hubspot' },
-  { name: 'Asana', token: 'asana' },
-  { name: 'Grammarly', token: 'grammarly' },
 ];
 
 // Workable companies
 const WORKABLE_COMPANIES: { name: string; subdomain: string }[] = [
   { name: 'Revolut', subdomain: 'revolut' },
+  { name: 'N26', subdomain: 'n26' },
   { name: 'Monzo', subdomain: 'monzo' },
   { name: 'Wise', subdomain: 'transferwise' },
-  { name: 'GoCardless', subdomain: 'gocardless' },
-];
-
-// Lever companies
-const LEVER_COMPANIES: { name: string; token: string }[] = [
-  { name: 'Netflix', token: 'netflix' },
-  { name: 'Spotify', token: 'spotify' },
-  { name: 'OpenAI', token: 'openai' },
-  { name: 'Anthropic', token: 'anthropic' },
+  { name: 'Klarna', subdomain: 'klarna' },
 ];
 
 interface JobListing {
@@ -79,163 +83,147 @@ interface JobListing {
   match_score: number;
 }
 
-// Fetch with timeout
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-// Fetch jobs from Greenhouse
+// Fetch jobs from Greenhouse public API - uses absolute_url for direct job links
 async function fetchGreenhouseJobs(company: { name: string; token: string }): Promise<JobListing[]> {
   try {
-    const response = await fetchWithTimeout(
+    const response = await fetch(
       `https://boards-api.greenhouse.io/v1/boards/${company.token}/jobs?content=true`,
-      { headers: { 'Accept': 'application/json' } },
-      5000
+      { headers: { 'Accept': 'application/json' } }
     );
     
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.log(`Greenhouse ${company.name}: ${response.status}`);
+      return [];
+    }
     
     const data = await response.json();
-    return (data.jobs || []).map((job: any) => ({
-      title: job.title || 'Unknown Position',
-      company: company.name,
-      location: job.location?.name || 'Remote',
-      salary: null,
-      description: job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '',
-      requirements: extractRequirements(job.content || ''),
-      platform: 'Greenhouse',
-      url: job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`,
-      posted_date: job.updated_at || new Date().toISOString(),
-      match_score: 0,
-    }));
+    const jobs: JobListing[] = (data.jobs || []).slice(0, 30).map((job: any) => {
+      // Greenhouse API provides absolute_url which is the direct apply link
+      const directUrl = job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`;
+      
+      return {
+        title: job.title || 'Unknown Position',
+        company: company.name,
+        location: job.location?.name || 'Remote',
+        salary: null,
+        description: job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '',
+        requirements: extractRequirements(job.content || ''),
+        platform: 'Greenhouse',
+        url: directUrl,
+        posted_date: job.updated_at || new Date().toISOString(),
+        match_score: 0,
+      };
+    });
+    
+    console.log(`Greenhouse ${company.name}: fetched ${jobs.length} jobs`);
+    return jobs;
   } catch (error) {
-    console.log(`Greenhouse ${company.name}: timeout or error`);
+    console.error(`Greenhouse ${company.name} error:`, error);
     return [];
   }
 }
 
-// Fetch jobs from Workable
+// Fetch jobs from Workable public API - uses shortcode for direct job apply links
 async function fetchWorkableJobs(company: { name: string; subdomain: string }): Promise<JobListing[]> {
   try {
-    const response = await fetchWithTimeout(
+    const response = await fetch(
       `https://apply.workable.com/api/v3/accounts/${company.subdomain}/jobs`,
-      { headers: { 'Accept': 'application/json' } },
-      5000
+      { headers: { 'Accept': 'application/json' } }
     );
     
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.log(`Workable ${company.name}: ${response.status}`);
+      return [];
+    }
     
     const data = await response.json();
-    return (data.results || []).map((job: any) => ({
-      title: job.title || 'Unknown Position',
-      company: company.name,
-      location: job.location?.city || job.location?.country || 'Remote',
-      salary: null,
-      description: job.description || '',
-      requirements: extractRequirements(job.description || ''),
-      platform: 'Workable',
-      url: `https://apply.workable.com/${company.subdomain}/j/${job.shortcode}/`,
-      posted_date: job.published || new Date().toISOString(),
-      match_score: 0,
-    }));
+    const jobs: JobListing[] = (data.results || []).slice(0, 30).map((job: any) => {
+      // Workable direct apply URL format uses shortcode
+      const directUrl = `https://apply.workable.com/${company.subdomain}/j/${job.shortcode}/`;
+      
+      return {
+        title: job.title || 'Unknown Position',
+        company: company.name,
+        location: job.location?.city || job.location?.country || 'Remote',
+        salary: null,
+        description: job.description || '',
+        requirements: extractRequirements(job.description || ''),
+        platform: 'Workable',
+        url: directUrl,
+        posted_date: job.published || new Date().toISOString(),
+        match_score: 0,
+      };
+    });
+    
+    console.log(`Workable ${company.name}: fetched ${jobs.length} jobs`);
+    return jobs;
   } catch (error) {
-    console.log(`Workable ${company.name}: timeout or error`);
+    console.error(`Workable ${company.name} error:`, error);
     return [];
   }
 }
 
-// Fetch jobs from Lever
-async function fetchLeverJobs(company: { name: string; token: string }): Promise<JobListing[]> {
-  try {
-    const response = await fetchWithTimeout(
-      `https://api.lever.co/v0/postings/${company.token}?mode=json`,
-      { headers: { 'Accept': 'application/json' } },
-      5000
-    );
-    
-    if (!response.ok) return [];
-    
-    const data = await response.json();
-    return (data || []).map((job: any) => ({
-      title: job.text || 'Unknown Position',
-      company: company.name,
-      location: job.categories?.location || 'Remote',
-      salary: null,
-      description: job.descriptionPlain?.slice(0, 500) || '',
-      requirements: extractRequirements(job.descriptionPlain || ''),
-      platform: 'Lever',
-      url: job.hostedUrl || job.applyUrl || '',
-      posted_date: new Date(job.createdAt || Date.now()).toISOString(),
-      match_score: 0,
-    }));
-  } catch (error) {
-    console.log(`Lever ${company.name}: timeout or error`);
-    return [];
-  }
-}
-
+// Extract requirements from job description
 function extractRequirements(content: string): string[] {
   const techKeywords = [
     'Python', 'Java', 'TypeScript', 'JavaScript', 'React', 'Node.js', 'AWS', 'GCP', 'Azure',
     'Kubernetes', 'Docker', 'PostgreSQL', 'MongoDB', 'Redis', 'Kafka', 'GraphQL',
-    'Machine Learning', 'TensorFlow', 'PyTorch', 'Go', 'Rust', 'C++', 'SQL'
+    'Machine Learning', 'Deep Learning', 'TensorFlow', 'PyTorch', 'Go', 'Rust', 'C++',
+    'SQL', 'NoSQL', 'REST API', 'Microservices', 'CI/CD', 'Terraform', 'Linux'
   ];
-  return techKeywords.filter(kw => content.toLowerCase().includes(kw.toLowerCase())).slice(0, 6);
+  
+  const found = techKeywords.filter(kw => 
+    content.toLowerCase().includes(kw.toLowerCase())
+  );
+  
+  return found.slice(0, 6);
 }
 
+// Calculate match score
 function calculateMatchScore(job: JobListing, keywords: string[]): number {
   let score = 50;
   const jobText = `${job.title} ${job.description} ${job.requirements.join(' ')}`.toLowerCase();
   
   for (const keyword of keywords) {
-    if (keyword && jobText.includes(keyword.toLowerCase())) score += 5;
+    if (keyword && jobText.includes(keyword.toLowerCase())) {
+      score += 5;
+    }
   }
+  
+  if (PLATFORM_TIERS.tier1.includes(job.platform)) {
+    score += 10;
+  } else if (PLATFORM_TIERS.tier2.includes(job.platform)) {
+    score += 5;
+  }
+  
   return Math.min(100, score);
 }
 
+// Parse comma-separated keywords
 function parseKeywords(keywordString: string): string[] {
-  return (keywordString || '').replace(/["""]/g, '').split(',').map(k => k.trim()).filter(k => k.length > 0);
+  return (keywordString || '')
+    .replace(/["""]/g, '')
+    .split(',')
+    .map(k => k.trim())
+    .filter(k => k.length > 0)
+    .filter((k, i, arr) => arr.indexOf(k) === i);
 }
 
+// Validate that a job URL is a direct job link (not a general careers page)
 function isValidDirectJobUrl(url: string): boolean {
   if (!url) return false;
-  if (url.includes('greenhouse.io') && url.includes('/jobs/')) return true;
-  if (url.includes('workable.com') && url.includes('/j/')) return true;
-  if (url.includes('lever.co')) return true;
-  return false;
-}
-
-// Process companies in batches to avoid resource limits
-async function processBatch<T, R>(items: T[], batchSize: number, processor: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = [];
   
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const batchResults = await Promise.allSettled(batch.map(processor));
-    
-    for (const result of batchResults) {
-      if (result.status === 'fulfilled') {
-        results.push(result.value);
-      }
-    }
-    
-    // Small pause between batches
-    if (i + batchSize < items.length) {
-      await new Promise(r => setTimeout(r, 100));
-    }
+  // Greenhouse direct job URLs always contain /jobs/ with a job ID
+  if (url.includes('greenhouse.io') && url.includes('/jobs/')) {
+    return true;
   }
   
-  return results;
+  // Workable direct job URLs use /j/ with a shortcode
+  if (url.includes('workable.com') && url.includes('/j/')) {
+    return true;
+  }
+  
+  return false;
 }
 
 serve(async (req) => {
@@ -244,99 +232,98 @@ serve(async (req) => {
   }
 
   try {
-    const { keywords = '', user_id } = await req.json();
+    const { keywords = '', offset = 0, limit = 100, user_id } = await req.json();
     
-    const totalCompanies = GREENHOUSE_COMPANIES.length + WORKABLE_COMPANIES.length + LEVER_COMPANIES.length;
-    console.log(`Starting job scrape - ${totalCompanies} companies`);
+    console.log(`Scraping jobs with keywords: ${keywords}, offset: ${offset}, limit: ${limit}`);
     
     const parsedKeywords = parseKeywords(keywords);
-    const allJobs: JobListing[] = [];
+    let allJobs: JobListing[] = [];
     
-    // Process in small batches (5 at a time) to avoid resource limits
-    console.log('Fetching Greenhouse jobs...');
-    const greenhouseResults = await processBatch(GREENHOUSE_COMPANIES, 5, fetchGreenhouseJobs);
-    for (const jobs of greenhouseResults) allJobs.push(...jobs);
-    console.log(`Greenhouse: ${allJobs.length} jobs`);
+    // Fetch from ALL companies - no artificial limits
+    const greenhousePromises = GREENHOUSE_COMPANIES.map(c => fetchGreenhouseJobs(c));
+    const workablePromises = WORKABLE_COMPANIES.map(c => fetchWorkableJobs(c));
     
-    console.log('Fetching Workable jobs...');
-    const workableResults = await processBatch(WORKABLE_COMPANIES, 3, fetchWorkableJobs);
-    for (const jobs of workableResults) allJobs.push(...jobs);
-    console.log(`After Workable: ${allJobs.length} jobs`);
+    const [greenhouseResults, workableResults] = await Promise.all([
+      Promise.allSettled(greenhousePromises),
+      Promise.allSettled(workablePromises),
+    ]);
     
-    console.log('Fetching Lever jobs...');
-    const leverResults = await processBatch(LEVER_COMPANIES, 3, fetchLeverJobs);
-    for (const jobs of leverResults) allJobs.push(...jobs);
-    console.log(`Total fetched: ${allJobs.length} jobs`);
+    // Collect real jobs
+    for (const result of greenhouseResults) {
+      if (result.status === 'fulfilled') {
+        allJobs.push(...result.value);
+      }
+    }
+    for (const result of workableResults) {
+      if (result.status === 'fulfilled') {
+        allJobs.push(...result.value);
+      }
+    }
     
-    // Filter valid URLs
+    console.log(`Fetched ${allJobs.length} real jobs from APIs`);
+    
+    // Filter out jobs with invalid URLs (career pages instead of direct job links)
     const validJobs = allJobs.filter(job => isValidDirectJobUrl(job.url));
-    console.log(`Valid jobs: ${validJobs.length}`);
+    console.log(`${validJobs.length} jobs have valid direct apply URLs`);
     
     // Calculate match scores
     for (const job of validJobs) {
       job.match_score = calculateMatchScore(job, parsedKeywords);
     }
     
-    // Sort by match score
-    validJobs.sort((a, b) => b.match_score - a.match_score);
+    // Sort by platform tier then match score
+    validJobs.sort((a, b) => {
+      const tierA = PLATFORM_TIERS.tier1.includes(a.platform) ? 0 : PLATFORM_TIERS.tier2.includes(a.platform) ? 1 : 2;
+      const tierB = PLATFORM_TIERS.tier1.includes(b.platform) ? 0 : PLATFORM_TIERS.tier2.includes(b.platform) ? 1 : 2;
+      if (tierA !== tierB) return tierA - tierB;
+      return b.match_score - a.match_score;
+    });
     
-    // Save to database
-    let newJobsCount = 0;
-    if (user_id && validJobs.length > 0) {
+    // Slice for pagination
+    const paginatedJobs = validJobs.slice(offset, offset + limit);
+    
+    // Save to database if user_id provided
+    if (user_id && paginatedJobs.length > 0) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      // Get existing URLs
-      const { data: existingJobs } = await supabase
-        .from('jobs')
-        .select('url')
-        .eq('user_id', user_id);
+      const jobsToInsert = paginatedJobs.map(job => ({
+        user_id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        salary: job.salary,
+        description: job.description,
+        requirements: job.requirements,
+        platform: job.platform,
+        url: job.url,
+        posted_date: job.posted_date,
+        match_score: job.match_score,
+        status: 'pending',
+      }));
       
-      const existingUrls = new Set((existingJobs || []).map(j => j.url));
-      const newJobs = validJobs.filter(j => !existingUrls.has(j.url));
-      newJobsCount = newJobs.length;
+      const { error } = await supabase.from('jobs').insert(jobsToInsert);
       
-      console.log(`New jobs: ${newJobsCount}`);
-      
-      if (newJobs.length > 0) {
-        const jobsToInsert = newJobs.map(job => ({
-          user_id,
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          salary: job.salary,
-          description: job.description,
-          requirements: job.requirements,
-          platform: job.platform,
-          url: job.url,
-          posted_date: job.posted_date,
-          match_score: job.match_score,
-          status: 'pending',
-        }));
-        
-        // Insert in batches
-        for (let i = 0; i < jobsToInsert.length; i += 100) {
-          const batch = jobsToInsert.slice(i, i + 100);
-          await supabase.from('jobs').insert(batch);
-        }
+      if (error) {
+        console.error('Error inserting jobs:', error);
+      } else {
+        console.log(`Inserted ${paginatedJobs.length} jobs for user ${user_id}`);
       }
     }
-    
-    console.log(`Complete: ${validJobs.length} total, ${newJobsCount} new`);
     
     return new Response(
       JSON.stringify({ 
         success: true, 
-        jobs: validJobs,
-        totalFound: validJobs.length,
-        newJobsInserted: newJobsCount,
-        companiesScraped: totalCompanies,
+        jobs: paginatedJobs,
+        hasMore: offset + limit < validJobs.length,
+        nextOffset: offset + limit,
+        totalValidJobs: validJobs.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Scrape error:', error);
+    console.error('Error in scrape-jobs:', error);
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
