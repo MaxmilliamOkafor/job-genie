@@ -14,18 +14,17 @@ export function useJobScraper() {
   const offsetRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch existing jobs from database
+  // Fetch existing jobs from database - no artificial limits
   const fetchExistingJobs = useCallback(async (append = false) => {
     if (!user) return;
 
     setIsLoading(true);
     try {
       const PAGE_SIZE = 1000; // backend max per query
-      const MAX_INITIAL = 2000;
 
       if (append) {
         const from = jobs.length;
-        const to = from + 199; // append in smaller chunks
+        const to = from + 999; // append in larger chunks
 
         const { data, error, count } = await supabase
           .from('jobs')
@@ -64,14 +63,14 @@ export function useJobScraper() {
         return;
       }
 
-      // Initial load: try to pull up to 2000 without scrolling
+      // Initial load: fetch ALL jobs for user (no limit)
       const collected: Job[] = [];
       let fetched = 0;
       let totalCount: number | null = null;
 
-      while (fetched < MAX_INITIAL) {
+      while (true) {
         const from = fetched;
-        const to = Math.min(fetched + PAGE_SIZE - 1, MAX_INITIAL - 1);
+        const to = fetched + PAGE_SIZE - 1;
 
         const { data, error, count } = await supabase
           .from('jobs')

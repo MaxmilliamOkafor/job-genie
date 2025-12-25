@@ -22,8 +22,8 @@ const SAMPLE_KEYWORDS = `Technology, Data Scientist, Data Engineer, Technical, P
 
 const BOOLEAN_EXAMPLES = [
   'site:greenhouse.io "Data Scientist" remote',
-  'site:lever.co "Software Engineer" "New York"',
-  'site:jobs.ashbyhq.com "Product Manager"',
+  'site:linkedin.com/jobs "Software Engineer" "apply on company"',
+  'site:indeed.com "Product Manager" "apply on company site"',
   'site:apply.workable.com "Machine Learning"',
 ];
 

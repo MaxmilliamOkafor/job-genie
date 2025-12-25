@@ -19,11 +19,9 @@ interface JobListing {
   match_score: number;
 }
 
-// All ATS platforms to search
+// All ATS platforms to search - Direct company URLs via LinkedIn/Indeed boolean
 const ATS_SITES = [
   'boards.greenhouse.io',
-  'jobs.lever.co',
-  'jobs.ashbyhq.com',
   'apply.workable.com',
   'jobs.smartrecruiters.com',
   'myworkdayjobs.com',
@@ -45,15 +43,15 @@ const TIER1_COMPANIES = [
 // Extract platform from URL
 function getPlatformFromUrl(url: string): string {
   if (url.includes('greenhouse.io')) return 'Greenhouse';
-  if (url.includes('lever.co')) return 'Lever';
   if (url.includes('workable.com')) return 'Workable';
-  if (url.includes('ashbyhq.com')) return 'Ashby';
   if (url.includes('smartrecruiters.com')) return 'SmartRecruiters';
   if (url.includes('myworkdayjobs.com')) return 'Workday';
   if (url.includes('icims.com')) return 'iCIMS';
   if (url.includes('taleo.net')) return 'Taleo';
   if (url.includes('bamboohr.com')) return 'BambooHR';
   if (url.includes('teamtailor.com')) return 'Teamtailor';
+  // Direct company career pages found via LinkedIn/Indeed
+  if (url.includes('/careers/') || url.includes('/jobs/') || url.includes('/job/')) return 'Direct';
   return 'Other';
 }
 
@@ -62,12 +60,13 @@ function extractCompanyFromUrl(url: string): string {
   try {
     const patterns = [
       /greenhouse\.io\/([^\/]+)/,
-      /lever\.co\/([^\/]+)/,
       /workable\.com\/([^\/]+)/,
-      /ashbyhq\.com\/([^\/]+)/,
       /smartrecruiters\.com\/([^\/]+)/,
       /([^\.]+)\.wd\d+\.myworkdayjobs/,
       /([^\.]+)\.teamtailor\.com/,
+      // Extract company from direct career pages
+      /([^\.]+)\.com\/(?:careers|jobs)/,
+      /https?:\/\/(?:careers|jobs)\.([^\.]+)\./,
     ];
     
     for (const pattern of patterns) {
@@ -85,19 +84,24 @@ function extractCompanyFromUrl(url: string): string {
   return 'Unknown Company';
 }
 
-// Validate direct job URL
+// Validate direct job URL - accepts company career pages
 function isValidJobUrl(url: string): boolean {
   if (!url) return false;
+  // Reject LinkedIn and Indeed listing pages (we want direct company URLs)
+  if (url.includes('linkedin.com/jobs/view')) return false;
+  if (url.includes('indeed.com/viewjob')) return false;
+  if (url.includes('indeed.com/rc/clk')) return false;
   if (url.match(/\/(careers|jobs)\/?$/)) return false;
   
   if (url.includes('greenhouse.io') && url.match(/\/jobs\/\d+/)) return true;
-  if (url.includes('lever.co') && url.match(/\/[a-f0-9-]{36}/)) return true;
   if (url.includes('workable.com') && url.includes('/j/')) return true;
-  if (url.includes('ashbyhq.com') && url.match(/\/[a-f0-9-]{36}/)) return true;
   if (url.includes('smartrecruiters.com') && url.match(/\/\d+/)) return true;
   if (url.includes('myworkdayjobs.com') && url.includes('/job/')) return true;
   if (url.includes('icims.com') && url.match(/\/jobs\/\d+/)) return true;
   if (url.includes('teamtailor.com') && url.includes('/jobs/')) return true;
+  
+  // Accept direct company career pages with job IDs or specific job paths
+  if (url.match(/\/(?:careers|jobs|job|positions?)\/[a-zA-Z0-9-]+/)) return true;
   
   return false;
 }
@@ -251,8 +255,8 @@ serve(async (req) => {
       keywordBatches.push(searchTitles.slice(i, i + 3));
     }
     
-    // Priority ATS platforms
-    const prioritySites = ['boards.greenhouse.io', 'jobs.lever.co', 'myworkdayjobs.com', 'jobs.ashbyhq.com'];
+    // Priority ATS platforms + LinkedIn/Indeed boolean for direct company URLs
+    const prioritySites = ['boards.greenhouse.io', 'myworkdayjobs.com', 'apply.workable.com'];
     
     for (const batch of keywordBatches.slice(0, 10)) { // Limit to first 10 batches
       const keywordStr = batch.map(k => `"${k}"`).join(' OR ');
@@ -263,6 +267,18 @@ serve(async (req) => {
           keyword: batch[0],
         });
       }
+      
+      // LinkedIn boolean search - finds jobs but extracts company career URLs
+      searchQueries.push({
+        query: `site:linkedin.com/jobs (${keywordStr}) "${locationFilter}" "apply" -intern -internship`,
+        keyword: batch[0],
+      });
+      
+      // Indeed boolean search - finds jobs with direct company apply links
+      searchQueries.push({
+        query: `site:indeed.com (${keywordStr}) "${locationFilter}" "apply on company site" -intern -internship`,
+        keyword: batch[0],
+      });
     }
     
     // Also add broader searches without site restriction for top keywords
