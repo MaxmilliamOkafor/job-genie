@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,13 +16,13 @@ import {
   CheckCircle, 
   XCircle, 
   Loader2,
-  Send,
   CloudOff,
   Mail
 } from 'lucide-react';
 import { Job } from '@/hooks/useJobs';
 import { Profile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 interface AutomationPanelProps {
@@ -42,16 +41,33 @@ interface AutomationLog {
 }
 
 export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanelProps) {
+  const { user } = useAuth();
   const [isRunning, setIsRunning] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [backgroundCount, setBackgroundCount] = useState(10);
-  const [sendReferrals, setSendReferrals] = useState(true);
+  const [sendReferrals, setSendReferrals] = useState(false);
+  const [emailConnected, setEmailConnected] = useState(false);
   const [logs, setLogs] = useState<AutomationLog[]>([]);
   const [currentJobIndex, setCurrentJobIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Check if email is connected
+  useEffect(() => {
+    const checkEmailConnection = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('email_integrations')
+        .select('is_connected')
+        .eq('user_id', user.id)
+        .single();
+      setEmailConnected(data?.is_connected || false);
+    };
+    checkEmailConnection();
+  }, [user]);
+
+  // All pending jobs are eligible (no match score filter)
   const eligibleJobs = jobs.filter(job => job.status === 'pending');
 
   const addLog = useCallback((log: Omit<AutomationLog, 'id' | 'timestamp'>) => {
@@ -253,24 +269,24 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         <CardContent className="space-y-4">
           {/* Controls */}
           <div className="grid gap-4 md:grid-cols-2">
+            {/* Email connection / Referral toggle */}
             <div className="flex items-center justify-between">
-              <Label htmlFor="send-referrals">Send Referral Emails</Label>
-              <Switch
-                id="send-referrals"
-                checked={sendReferrals}
-                onCheckedChange={setSendReferrals}
-                disabled={isRunning}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="send-referrals">Send Referral Emails</Label>
-              <Switch
-                id="send-referrals"
-                checked={sendReferrals}
-                onCheckedChange={setSendReferrals}
-                disabled={isRunning}
-              />
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Label htmlFor="send-referrals">Send Referral Emails</Label>
+              </div>
+              {emailConnected ? (
+                <Switch
+                  id="send-referrals"
+                  checked={sendReferrals}
+                  onCheckedChange={setSendReferrals}
+                  disabled={isRunning}
+                />
+              ) : (
+                <Button size="sm" variant="outline" asChild>
+                  <a href="/settings">Connect Email</a>
+                </Button>
+              )}
             </div>
 
             <div className="flex items-center justify-between">
@@ -305,7 +321,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
             <div>
               <p className="text-sm font-medium">
-                {eligibleJobs.length} jobs ready to apply
+                {jobs.length} jobs loaded • {eligibleJobs.length} ready to apply
               </p>
               {isRunning && !backgroundMode && (
                 <p className="text-xs text-muted-foreground">
