@@ -39,7 +39,7 @@ export function useJobs() {
         .from('jobs')
         .select('*', { count: 'exact' })
         .eq('user_id', user.id)
-        .order('posted_date', { ascending: false })
+        .order('created_at', { ascending: false })
         .range(from, to);
 
       if (error) throw error;
