@@ -1,7 +1,7 @@
-// AutoApply AI - Content Script
-// Handles form detection, auto-filling, and job extraction on job application pages
+// QuantumHire AI - Content Script
+// Handles form detection, auto-filling, job extraction, and queue management on job application pages
 
-console.log('AutoApply AI: Content script loaded');
+console.log('QuantumHire AI: Content script loaded');
 
 // Field mapping for common form fields
 const FIELD_MAPPINGS = {

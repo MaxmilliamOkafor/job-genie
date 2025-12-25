@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { JobSearchPanel } from '@/components/jobs/JobSearchPanel';
 import { JobFiltersAdvanced } from '@/components/jobs/JobFiltersAdvanced';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
+import { JobQueue } from '@/components/jobs/JobQueue';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -227,6 +228,9 @@ const Jobs = () => {
             onClearFilters={clearFilters}
           />
         )}
+
+        {/* Job Queue */}
+        <JobQueue onJobsAdded={(count) => count > 0 && refetch()} />
 
         {/* Automation Panel */}
         <AutomationPanel 
