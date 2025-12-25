@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.search-jobs-google]
 verify_jwt = false
+
+[functions.live-jobs]
+verify_jwt = false
