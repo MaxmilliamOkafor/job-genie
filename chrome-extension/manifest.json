@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AutoApply AI - Job Application Assistant",
+  "name": "QuantumHire AI - Job Application Assistant",
   "version": "1.0.0",
-  "description": "Auto-fill job applications with your tailored resume and profile data",
+  "description": "Auto-fill job applications on external company websites (non-Easy Apply jobs from LinkedIn/Indeed)",
   "permissions": [
     "storage",
     "activeTab",
@@ -22,7 +22,11 @@
     "https://*.recruitee.com/*",
     "https://*.breezy.hr/*",
     "https://*.jazz.co/*",
-    "https://*.linkedin.com/*"
+    "https://*.taleo.net/*",
+    "https://*.successfactors.com/*",
+    "https://*.avature.net/*",
+    "https://*.ultipro.com/*",
+    "https://*.paylocity.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -48,7 +52,11 @@
         "https://*.recruitee.com/*",
         "https://*.breezy.hr/*",
         "https://*.jazz.co/*",
-        "https://*.linkedin.com/jobs/*"
+        "https://*.taleo.net/*",
+        "https://*.successfactors.com/*",
+        "https://*.avature.net/*",
+        "https://*.ultipro.com/*",
+        "https://*.paylocity.com/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"]
