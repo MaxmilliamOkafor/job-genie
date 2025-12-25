@@ -42,6 +42,8 @@ const DASHBOARD_URL = 'https://lovable.dev/projects/47ce3fc9-a939-41ad-bf41-c4c3
 let currentJob = null;
 let userProfile = null;
 let jobQueue = [];
+let batchProcessing = false;
+let batchCancelled = false;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -74,6 +76,17 @@ function setupEventListeners() {
   }
   if (addQueueBtn) {
     addQueueBtn.addEventListener('click', handleAddToQueue);
+  }
+  
+  // Batch apply
+  const batchApplyBtn = document.getElementById('batch-apply-btn');
+  if (batchApplyBtn) {
+    batchApplyBtn.addEventListener('click', handleBatchApply);
+  }
+  
+  const cancelBatchBtn = document.getElementById('cancel-batch-btn');
+  if (cancelBatchBtn) {
+    cancelBatchBtn.addEventListener('click', cancelBatchApply);
   }
   
   // Auto-fill toggle
@@ -792,4 +805,222 @@ function downloadAsPDF(type) {
 // Utility: delay
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============= BATCH AUTO-APPLY FUNCTIONS =============
+
+// Handle Batch Apply
+async function handleBatchApply() {
+  if (jobQueue.length === 0) {
+    showStatus('No jobs in queue to process', 'error');
+    return;
+  }
+  
+  if (!userProfile) {
+    showStatus('Profile not loaded. Please refresh.', 'error');
+    return;
+  }
+  
+  if (batchProcessing) {
+    showStatus('Batch processing already in progress', 'info');
+    return;
+  }
+  
+  batchProcessing = true;
+  batchCancelled = false;
+  
+  // Show batch progress UI
+  const batchSection = document.getElementById('batch-progress-section');
+  batchSection.classList.remove('hidden');
+  
+  const batchTotal = document.getElementById('batch-total');
+  const batchCurrent = document.getElementById('batch-current');
+  const batchProgressFill = document.getElementById('batch-progress-fill');
+  const batchJobTitle = document.getElementById('batch-job-title');
+  const batchLog = document.getElementById('batch-log');
+  
+  batchTotal.textContent = jobQueue.length;
+  batchCurrent.textContent = '0';
+  batchProgressFill.style.width = '0%';
+  batchLog.innerHTML = '';
+  
+  addBatchLog('Starting batch auto-apply...', 'processing');
+  
+  const totalJobs = jobQueue.length;
+  let processed = 0;
+  let successful = 0;
+  let failed = 0;
+  
+  // Process jobs one by one
+  for (let i = 0; i < jobQueue.length; i++) {
+    if (batchCancelled) {
+      addBatchLog('Batch cancelled by user', 'error');
+      break;
+    }
+    
+    const job = jobQueue[i];
+    processed++;
+    
+    batchCurrent.textContent = processed;
+    batchProgressFill.style.width = `${(processed / totalJobs) * 100}%`;
+    batchJobTitle.textContent = `${job.title} at ${job.company}`;
+    
+    addBatchLog(`Processing: ${job.title} at ${job.company}...`, 'processing');
+    
+    try {
+      // Process this job via background script
+      const result = await processBatchJob(job);
+      
+      if (result.success) {
+        successful++;
+        addBatchLog(`✓ ${job.company}: Applied successfully!`, 'success');
+        
+        // Update job status in queue
+        job.status = 'applied';
+        job.appliedAt = new Date().toISOString();
+      } else {
+        failed++;
+        addBatchLog(`✗ ${job.company}: ${result.error || 'Failed'}`, 'error');
+        job.status = 'failed';
+        job.error = result.error;
+      }
+    } catch (error) {
+      failed++;
+      addBatchLog(`✗ ${job.company}: ${error.message}`, 'error');
+      job.status = 'failed';
+      job.error = error.message;
+    }
+    
+    // Save updated queue
+    await chrome.storage.local.set({ jobQueue });
+    
+    // Small delay between jobs to avoid rate limiting
+    if (i < jobQueue.length - 1 && !batchCancelled) {
+      await delay(2000);
+    }
+  }
+  
+  // Complete
+  batchProcessing = false;
+  
+  // Remove successfully applied jobs from queue
+  jobQueue = jobQueue.filter(j => j.status !== 'applied');
+  await chrome.storage.local.set({ jobQueue });
+  updateQueueDisplay();
+  
+  const summary = `Batch complete: ${successful} applied, ${failed} failed`;
+  addBatchLog(summary, successful > 0 ? 'success' : 'error');
+  showStatus(summary, successful > 0 ? 'success' : 'error');
+  
+  // Hide batch section after a few seconds
+  setTimeout(() => {
+    if (!batchProcessing) {
+      batchSection.classList.add('hidden');
+    }
+  }, 5000);
+}
+
+// Cancel batch processing
+function cancelBatchApply() {
+  batchCancelled = true;
+  batchProcessing = false;
+  showStatus('Cancelling batch...', 'info');
+}
+
+// Process a single job in batch mode
+async function processBatchJob(job) {
+  return new Promise(async (resolve) => {
+    try {
+      const data = await chrome.storage.local.get(['accessToken', 'autofillEnabled', 'atsCredentials']);
+      
+      // Step 1: Call tailor-application API
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${data.accessToken}`,
+        },
+        body: JSON.stringify({
+          jobTitle: job.title,
+          company: job.company,
+          description: job.description || '',
+          requirements: job.requirements || [],
+          location: job.location || '',
+          userProfile: {
+            firstName: userProfile.first_name,
+            lastName: userProfile.last_name,
+            email: userProfile.email,
+            phone: userProfile.phone,
+            linkedin: userProfile.linkedin,
+            github: userProfile.github,
+            portfolio: userProfile.portfolio,
+            coverLetter: userProfile.cover_letter || '',
+            workExperience: userProfile.work_experience || [],
+            education: userProfile.education || [],
+            skills: userProfile.skills || [],
+            certifications: userProfile.certifications || [],
+            achievements: userProfile.achievements || [],
+            atsStrategy: userProfile.ats_strategy || 'Match keywords exactly from job description',
+            city: userProfile.city,
+            country: userProfile.country,
+          },
+          includeReferral: false,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
+      
+      const tailoredData = await response.json();
+      
+      // Step 2: Open job URL in new tab and apply
+      if (job.url && data.autofillEnabled !== false) {
+        const applyResult = await openTabAndApply(job.url, tailoredData, data.atsCredentials);
+        resolve(applyResult);
+      } else {
+        // No URL or autofill disabled - just mark as tailored
+        resolve({ success: true, message: 'Tailored (no auto-fill)' });
+      }
+      
+    } catch (error) {
+      resolve({ success: false, error: error.message });
+    }
+  });
+}
+
+// Open a new tab, wait for load, and apply
+async function openTabAndApply(url, tailoredData, atsCredentials) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: 'batchApplyToJob',
+      url: url,
+      tailoredData: tailoredData,
+      atsCredentials: atsCredentials
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        resolve(response || { success: true });
+      }
+    });
+  });
+}
+
+// Add log entry to batch log
+function addBatchLog(message, type = 'info') {
+  const batchLog = document.getElementById('batch-log');
+  const logItem = document.createElement('div');
+  logItem.className = `batch-log-item ${type}`;
+  
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  logItem.innerHTML = `<span class="log-time">${time}</span> <span>${message}</span>`;
+  
+  batchLog.insertBefore(logItem, batchLog.firstChild);
+  
+  // Keep only last 20 log entries
+  while (batchLog.children.length > 20) {
+    batchLog.removeChild(batchLog.lastChild);
+  }
 }
