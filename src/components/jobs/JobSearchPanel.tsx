@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,11 +8,22 @@ import { Search, MapPin, Calendar, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { ScrapeProgress } from './ScrapeProgress';
 
 interface JobSearchPanelProps {
   onSearchComplete: () => void;
   isSearching: boolean;
   setIsSearching: (val: boolean) => void;
+}
+
+interface ScrapeState {
+  currentPhase: 'idle' | 'searching' | 'processing' | 'saving' | 'complete';
+  jobsFound: number;
+  jobsSaved: number;
+  platformsSearched: number;
+  totalPlatforms: number;
+  startTime: number;
+  elapsedTime: number;
 }
 
 const LOCATIONS = [
@@ -35,11 +46,64 @@ const DATE_FILTERS = [
   { value: 'month', label: 'Last Month' },
 ];
 
+const TOTAL_PLATFORMS = 11; // Number of ATS platforms we search
+
 export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }: JobSearchPanelProps) {
   const { user } = useAuth();
   const [keywords, setKeywords] = useState('');
   const [location, setLocation] = useState('Remote');
   const [dateFilter, setDateFilter] = useState('week');
+  
+  const [scrapeState, setScrapeState] = useState<ScrapeState>({
+    currentPhase: 'idle',
+    jobsFound: 0,
+    jobsSaved: 0,
+    platformsSearched: 0,
+    totalPlatforms: TOTAL_PLATFORMS,
+    startTime: 0,
+    elapsedTime: 0,
+  });
+
+  // Update elapsed time while searching
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (isSearching && scrapeState.startTime > 0) {
+      intervalId = setInterval(() => {
+        setScrapeState(prev => ({
+          ...prev,
+          elapsedTime: Date.now() - prev.startTime,
+        }));
+      }, 100);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isSearching, scrapeState.startTime]);
+
+  // Simulate progress updates (since edge function runs as single request)
+  const simulateProgress = useCallback(() => {
+    const phases: Array<{ phase: ScrapeState['currentPhase']; platforms: number; duration: number }> = [
+      { phase: 'searching', platforms: 3, duration: 1500 },
+      { phase: 'searching', platforms: 6, duration: 1500 },
+      { phase: 'searching', platforms: 9, duration: 1500 },
+      { phase: 'searching', platforms: 11, duration: 1000 },
+      { phase: 'processing', platforms: 11, duration: 1000 },
+    ];
+
+    let totalDelay = 0;
+    phases.forEach(({ phase, platforms, duration }) => {
+      setTimeout(() => {
+        setScrapeState(prev => ({
+          ...prev,
+          currentPhase: phase,
+          platformsSearched: platforms,
+        }));
+      }, totalDelay);
+      totalDelay += duration;
+    });
+  }, []);
 
   const parseKeywords = (input: string): string[] => {
     return input
@@ -64,10 +128,20 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
     }
 
     setIsSearching(true);
+    setScrapeState({
+      currentPhase: 'searching',
+      jobsFound: 0,
+      jobsSaved: 0,
+      platformsSearched: 0,
+      totalPlatforms: TOTAL_PLATFORMS,
+      startTime: Date.now(),
+      elapsedTime: 0,
+    });
+
+    // Start progress simulation
+    simulateProgress();
     
     try {
-      toast.info(`Searching for ${parsedKeywords.length} keywords...`, { id: 'job-search' });
-      
       const { data, error } = await supabase.functions.invoke('search-jobs-google', {
         body: {
           keywords: parsedKeywords.join(', '),
@@ -80,14 +154,28 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
       if (error) throw error;
 
       if (data?.success) {
+        setScrapeState(prev => ({
+          ...prev,
+          currentPhase: 'complete',
+          jobsFound: data.totalFound || 0,
+          jobsSaved: data.newJobsSaved || data.totalFound || 0,
+          platformsSearched: TOTAL_PLATFORMS,
+        }));
+        
         toast.success(`Found ${data.totalFound} jobs!`, { id: 'job-search' });
         onSearchComplete();
+
+        // Reset to idle after 5 seconds
+        setTimeout(() => {
+          setScrapeState(prev => ({ ...prev, currentPhase: 'idle' }));
+        }, 5000);
       } else {
         throw new Error(data?.error || 'Search failed');
       }
     } catch (error) {
       console.error('Job search error:', error);
       toast.error('Search failed. Please try again.', { id: 'job-search' });
+      setScrapeState(prev => ({ ...prev, currentPhase: 'idle' }));
     } finally {
       setIsSearching(false);
     }
@@ -96,89 +184,102 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
   const clearKeywords = () => setKeywords('');
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5">
-      <CardContent className="p-6 space-y-4">
-        {/* Keywords textarea */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Keywords</label>
-            <div className="flex items-center gap-2">
-              {keywordCount > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  {keywordCount} keyword{keywordCount !== 1 ? 's' : ''}
-                </Badge>
-              )}
-              {keywords && (
-                <Button variant="ghost" size="sm" onClick={clearKeywords} className="h-7 text-xs">
-                  <X className="h-3 w-3 mr-1" />
-                  Clear
-                </Button>
-              )}
+    <div className="space-y-4">
+      <Card className="border-primary/20 bg-gradient-to-br from-card to-primary/5">
+        <CardContent className="p-6 space-y-4">
+          {/* Keywords textarea */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Keywords</label>
+              <div className="flex items-center gap-2">
+                {keywordCount > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {keywordCount} keyword{keywordCount !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+                {keywords && (
+                  <Button variant="ghost" size="sm" onClick={clearKeywords} className="h-7 text-xs">
+                    <X className="h-3 w-3 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+            <Textarea
+              placeholder="Enter keywords separated by commas, e.g.: Data Scientist, Machine Learning, Python, AWS, Product Manager..."
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              className="min-h-[100px] resize-none bg-background"
+            />
+          </div>
+
+          {/* Filters row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+              <Select value={location} onValueChange={setLocation}>
+                <SelectTrigger className="pl-10 h-11 bg-background">
+                  <SelectValue placeholder="Location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LOCATIONS.map(loc => (
+                    <SelectItem key={loc.value} value={loc.value}>{loc.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="pl-10 h-11 bg-background">
+                  <SelectValue placeholder="Posted" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATE_FILTERS.map(df => (
+                    <SelectItem key={df.value} value={df.value}>{df.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <Textarea
-            placeholder="Enter keywords separated by commas, e.g.: Data Scientist, Machine Learning, Python, AWS, Product Manager..."
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            className="min-h-[100px] resize-none bg-background"
-          />
-        </div>
 
-        {/* Filters row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-            <Select value={location} onValueChange={setLocation}>
-              <SelectTrigger className="pl-10 h-11 bg-background">
-                <SelectValue placeholder="Location" />
-              </SelectTrigger>
-              <SelectContent>
-                {LOCATIONS.map(loc => (
-                  <SelectItem key={loc.value} value={loc.value}>{loc.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Search button */}
+          <Button 
+            onClick={handleSearch} 
+            disabled={isSearching || keywordCount === 0}
+            className="w-full h-12 text-base font-medium"
+            size="lg"
+          >
+            {isSearching ? (
+              <>
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                Scraping Jobs...
+              </>
+            ) : (
+              <>
+                <Search className="h-5 w-5 mr-2" />
+                Search {keywordCount > 0 ? `${keywordCount} Keywords` : 'Jobs'}
+              </>
+            )}
+          </Button>
 
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="pl-10 h-11 bg-background">
-                <SelectValue placeholder="Posted" />
-              </SelectTrigger>
-              <SelectContent>
-                {DATE_FILTERS.map(df => (
-                  <SelectItem key={df.value} value={df.value}>{df.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+          <p className="text-xs text-muted-foreground text-center">
+            Searches Greenhouse, Lever, Workday, Ashby, SmartRecruiters & more ATS platforms
+          </p>
+        </CardContent>
+      </Card>
 
-        {/* Search button */}
-        <Button 
-          onClick={handleSearch} 
-          disabled={isSearching || keywordCount === 0}
-          className="w-full h-12 text-base font-medium"
-          size="lg"
-        >
-          {isSearching ? (
-            <>
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Searching...
-            </>
-          ) : (
-            <>
-              <Search className="h-5 w-5 mr-2" />
-              Search {keywordCount > 0 ? `${keywordCount} Keywords` : 'Jobs'}
-            </>
-          )}
-        </Button>
-
-        <p className="text-xs text-muted-foreground text-center">
-          Searches Greenhouse, Lever, Workday, Ashby, SmartRecruiters & more ATS platforms
-        </p>
-      </CardContent>
-    </Card>
+      {/* Progress indicator */}
+      <ScrapeProgress
+        isSearching={isSearching}
+        currentPhase={scrapeState.currentPhase}
+        jobsFound={scrapeState.jobsFound}
+        jobsSaved={scrapeState.jobsSaved}
+        platformsSearched={scrapeState.platformsSearched}
+        totalPlatforms={scrapeState.totalPlatforms}
+        elapsedTime={scrapeState.elapsedTime}
+      />
+    </div>
   );
 }
