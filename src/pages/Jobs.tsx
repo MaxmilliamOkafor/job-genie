@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { JobFilters } from '@/components/jobs/JobFilters';
 import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
@@ -22,12 +22,15 @@ import {
   RefreshCw
 } from 'lucide-react';
 
+const DEFAULT_KEYWORDS = 'Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics, Continuous Integration, User Experience (UX) & User Interface (UI)';
+
 const Jobs = () => {
   const { 
     jobs, 
     isLoading, 
     isScraping, 
-    hasMore, 
+    hasMore,
+    keywords,
     loadMore, 
     startContinuousScraping,
     updateJobStatus 
@@ -51,6 +54,13 @@ const Jobs = () => {
     
     if (node) observerRef.current.observe(node);
   }, [isLoading, isScraping, hasMore, loadMore]);
+
+  // Auto-start scraping so the page fills without manual searching
+  useEffect(() => {
+    if (!keywords && jobs.length < 2000) {
+      startContinuousScraping(DEFAULT_KEYWORDS);
+    }
+  }, [keywords, jobs.length, startContinuousScraping]);
 
   const filteredJobs = useMemo(() => {
     const terms = search
