@@ -48,8 +48,7 @@ const Jobs = () => {
     loadMore, 
     updateJobStatus,
     clearAndRefresh,
-    refetch,
-    startContinuousScraping
+    refetch
   } = useJobScraper();
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -81,11 +80,6 @@ const Jobs = () => {
     setIsRefreshing(true);
     await refetch();
     setTimeout(() => setIsRefreshing(false), 500);
-  };
-
-  const handleBulkSearch = (keywords: string) => {
-    // Start scraping with the keywords - this will fetch and update jobs
-    startContinuousScraping(keywords);
   };
 
   const handleJobApplied = (jobId: string) => updateJobStatus(jobId, 'applied');
@@ -154,7 +148,6 @@ const Jobs = () => {
 
         {/* Bulk Keyword Search */}
         <BulkKeywordSearch 
-          onSearch={handleBulkSearch}
           isSearching={isScraping}
           onGoogleSearchComplete={refetch}
         />

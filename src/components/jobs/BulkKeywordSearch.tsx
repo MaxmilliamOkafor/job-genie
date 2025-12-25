@@ -3,17 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, X, Loader2, Zap, Globe } from 'lucide-react';
+import { Search, X, Loader2, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
 interface BulkKeywordSearchProps {
-  /** Starts/refreshes scraping using the provided comma-separated keyword string. */
-  onSearch: (keywords: string) => void;
-  /** Optional: keep the listings filtered using the same search bar input. */
-  onFilterChange?: (value: string) => void;
   isSearching: boolean;
   onGoogleSearchComplete?: () => void;
 }
@@ -27,12 +22,11 @@ const BOOLEAN_EXAMPLES = [
   'site:apply.workable.com "Machine Learning"',
 ];
 
-export function BulkKeywordSearch({ onSearch, onFilterChange, isSearching, onGoogleSearchComplete }: BulkKeywordSearchProps) {
+export function BulkKeywordSearch({ isSearching, onGoogleSearchComplete }: BulkKeywordSearchProps) {
   const { user } = useAuth();
   const [keywordInput, setKeywordInput] = useState('');
   const [activeKeywords, setActiveKeywords] = useState<string[]>([]);
   const [isGoogleSearching, setIsGoogleSearching] = useState(false);
-  const [searchMode, setSearchMode] = useState<'api' | 'google'>('api');
 
   const normalize = (input: string) =>
     input
@@ -49,22 +43,6 @@ export function BulkKeywordSearch({ onSearch, onFilterChange, isSearching, onGoo
 
     // De-dupe while keeping order
     return parts.filter((k, idx) => parts.indexOf(k) === idx);
-  };
-
-  const handleSearch = () => {
-    const normalized = normalize(keywordInput);
-    const keywords = parseKeywords(normalized);
-
-    if (keywords.length === 0) {
-      toast.error('Please enter at least one keyword');
-      return;
-    }
-
-    setKeywordInput(normalized);
-    setActiveKeywords(keywords);
-    onFilterChange?.(normalized);
-    onSearch(normalized);
-    toast.success(`Searching for ${keywords.length} keywords`);
   };
 
   const handleGoogleBooleanSearch = async () => {
@@ -133,102 +111,54 @@ export function BulkKeywordSearch({ onSearch, onFilterChange, isSearching, onGoo
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Zap className="h-5 w-5 text-primary" />
+          <Globe className="h-5 w-5 text-primary" />
           Job Search
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Tabs value={searchMode} onValueChange={(v) => setSearchMode(v as 'api' | 'google')}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="api">
-              <Zap className="h-4 w-4 mr-2" />
-              Direct API
-            </TabsTrigger>
-            <TabsTrigger value="google">
-              <Globe className="h-4 w-4 mr-2" />
-              Google Boolean
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="api" className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">
-              Search directly from Greenhouse & Workable APIs. Fast and reliable.
-            </p>
-            <Textarea
-              placeholder="Enter keywords separated by commas, e.g.: Data Scientist, Machine Learning, Python, AWS..."
-              value={keywordInput}
-              onChange={(e) => {
-                const next = e.target.value;
-                setKeywordInput(next);
-                onFilterChange?.(next);
-              }}
-              className="min-h-[80px] resize-none"
-            />
-            <div className="flex gap-2 flex-wrap">
-              <Button onClick={handleSearch} disabled={isSearching || !keywordInput.trim()}>
-                {isSearching ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Scraping...
-                  </>
-                ) : (
-                  <>
-                    <Search className="h-4 w-4 mr-2" />
-                    Search Jobs
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" onClick={loadSampleKeywords}>
-                Load Sample Keywords
-              </Button>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="google" className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">
-              Use Google boolean search to find jobs across ATS platforms. More comprehensive but slower.
-            </p>
-            <Textarea
-              placeholder='Enter keywords, e.g.: Data Scientist, Remote, Python OR use boolean: site:greenhouse.io "Data Scientist"'
-              value={keywordInput}
-              onChange={(e) => {
-                const next = e.target.value;
-                setKeywordInput(next);
-              }}
-              className="min-h-[80px] resize-none"
-            />
-            <div className="flex gap-2 flex-wrap">
-              <Button onClick={handleGoogleBooleanSearch} disabled={isGoogleSearching || !keywordInput.trim()}>
-                {isGoogleSearching ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Searching Google...
-                  </>
-                ) : (
-                  <>
-                    <Globe className="h-4 w-4 mr-2" />
-                    Google Boolean Search
-                  </>
-                )}
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Boolean examples (click to use):</p>
-              <div className="flex flex-wrap gap-1.5">
-                {BOOLEAN_EXAMPLES.map((example, i) => (
-                  <Badge 
-                    key={i} 
-                    variant="outline" 
-                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
-                    onClick={() => loadBooleanExample(example)}
-                  >
-                    {example}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+        <p className="text-sm text-muted-foreground">
+          Search jobs across ATS platforms using Google boolean search. Finds direct company application URLs.
+        </p>
+        <Textarea
+          placeholder='Enter keywords, e.g.: Data Scientist, Remote, Python OR use boolean: site:greenhouse.io "Data Scientist"'
+          value={keywordInput}
+          onChange={(e) => setKeywordInput(e.target.value)}
+          className="min-h-[80px] resize-none"
+        />
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={handleGoogleBooleanSearch} disabled={isGoogleSearching || !keywordInput.trim()}>
+            {isGoogleSearching ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4 mr-2" />
+                Search Jobs
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={loadSampleKeywords}>
+            Load Sample Keywords
+          </Button>
+        </div>
+        
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Boolean examples (click to use):</p>
+          <div className="flex flex-wrap gap-1.5">
+            {BOOLEAN_EXAMPLES.map((example, i) => (
+              <Badge 
+                key={i} 
+                variant="outline" 
+                className="cursor-pointer hover:bg-primary hover:text-primary-foreground text-xs"
+                onClick={() => loadBooleanExample(example)}
+              >
+                {example}
+              </Badge>
+            ))}
+          </div>
+        </div>
 
         {activeKeywords.length > 0 && (
           <div className="space-y-2 pt-2 border-t">
