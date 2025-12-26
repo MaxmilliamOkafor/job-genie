@@ -664,16 +664,23 @@ async function handleApplyWithAI() {
   try {
     // Step 1: Extracting job details
     updateProgress(1, 25);
-    await delay(500);
+    showStatus('Extracting job details...', 'info');
+    await delay(300);
     
     // Step 2: Analyzing ATS keywords
     updateProgress(2, 50);
-    await delay(300);
+    showStatus('Analyzing ATS keywords...', 'info');
+    await delay(200);
     
     // Step 3: Tailoring resume & cover letter
-    updateProgress(3, 75);
+    updateProgress(3, 70);
+    showStatus('Tailoring resume & cover letter with AI...', 'info');
     
     const data = await chrome.storage.local.get(['accessToken']);
+    
+    if (!data.accessToken) {
+      throw new Error('Not authenticated. Please reconnect your account.');
+    }
     
     // Call the tailor-application edge function
     const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
@@ -704,7 +711,10 @@ async function handleApplyWithAI() {
           achievements: userProfile.achievements || [],
           atsStrategy: userProfile.ats_strategy || 'Match keywords exactly from job description',
           city: userProfile.city,
+          state: userProfile.state,
           country: userProfile.country,
+          address: userProfile.address,
+          zipCode: userProfile.zip_code,
         },
         includeReferral: false,
       }),
@@ -712,13 +722,25 @@ async function handleApplyWithAI() {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        throw new Error('Session expired. Please reconnect your account.');
+      }
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please wait and try again.');
+      }
+      if (response.status === 402) {
+        throw new Error('AI credits exhausted. Please add more credits.');
+      }
       throw new Error(errorData.error || `Request failed: ${response.status}`);
     }
     
     const result = await response.json();
     
-    // Step 4: Auto-filling application
-    updateProgress(4, 90);
+    console.log('QuantumHire: Tailored application received', { matchScore: result.matchScore });
+    
+    // Step 4: Generate PDFs and Auto-fill
+    updateProgress(4, 85);
+    showStatus('Generating PDFs & auto-filling...', 'info');
     
     // Check if auto-fill is enabled
     const settingsData = await chrome.storage.local.get(['autofillEnabled', 'atsCredentials']);
@@ -727,28 +749,45 @@ async function handleApplyWithAI() {
     if (autofillEnabled) {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
-        chrome.tabs.sendMessage(tab.id, {
-          action: 'autofill',
-          tailoredData: result,
-          atsCredentials: settingsData.atsCredentials || null
-        });
+        try {
+          // Send autofill message with tailored data - the content script will handle PDF generation
+          await new Promise((resolve, reject) => {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'autofill',
+              tailoredData: result,
+              atsCredentials: settingsData.atsCredentials || null,
+              options: { generatePdfs: true }
+            }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.warn('Autofill communication error:', chrome.runtime.lastError);
+                reject(new Error('Could not communicate with page. Please refresh and try again.'));
+              } else {
+                console.log('QuantumHire: Autofill response', response);
+                resolve(response);
+              }
+            });
+          });
+        } catch (autofillError) {
+          console.warn('Autofill error (non-fatal):', autofillError);
+          // Don't throw - we still have the tailored content
+        }
       }
     }
     
     // Complete progress
     updateProgress(4, 100);
-    await delay(500);
+    await delay(400);
     
     // Show results
     displayResults(result);
     const statusMsg = autofillEnabled 
-      ? 'Application tailored and form filled!' 
-      : 'Application tailored! (Auto-fill disabled)';
+      ? '✅ Application tailored and form filled!' 
+      : '✅ Application tailored! (Auto-fill disabled)';
     showStatus(statusMsg, 'success');
     
   } catch (error) {
     console.error('Apply error:', error);
-    showStatus(error.message || 'Failed to process application', 'error');
+    showStatus(`❌ ${error.message || 'Failed to process application'}`, 'error');
     if (progressSection) progressSection.classList.add('hidden');
   } finally {
     if (applyNowBtn) {
@@ -878,8 +917,8 @@ async function copyToClipboard(elementId) {
   }
 }
 
-// Download as PDF
-function downloadAsPDF(type) {
+// Download as PDF - improved with actual PDF generation
+async function downloadAsPDF(type) {
   const content = type === 'resume' 
     ? document.getElementById('tailored-resume')?.value 
     : document.getElementById('tailored-cover')?.value;
@@ -889,44 +928,123 @@ function downloadAsPDF(type) {
     return;
   }
   
-  const title = type === 'resume' ? 'Tailored Resume' : 'Cover Letter';
+  const btn = document.getElementById(type === 'resume' ? 'download-resume-btn' : 'download-cover-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-icon">⏳</span> Generating...';
+  }
   
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>${title}</title>
-      <style>
-        body {
-          font-family: 'Times New Roman', serif;
-          font-size: 11pt;
-          line-height: 1.5;
-          max-width: 8.5in;
-          margin: 0.5in auto;
-          padding: 0 0.5in;
-          color: #000;
-        }
-        h1, h2, h3 { font-weight: bold; margin: 0.5em 0; }
-        h1 { font-size: 16pt; text-align: center; }
-        h2 { font-size: 12pt; border-bottom: 1px solid #000; padding-bottom: 2px; }
-        p { margin: 0.5em 0; }
-        ul { margin: 0.5em 0; padding-left: 1.5em; }
-        li { margin: 0.25em 0; }
-        @media print {
-          body { margin: 0; padding: 0.5in; }
-        }
-      </style>
-    </head>
-    <body>
-      <pre style="white-space: pre-wrap; font-family: inherit;">${content}</pre>
-      <script>window.onload = function() { window.print(); };<\/script>
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
-  
-  showStatus(`Opening ${title} for printing/PDF`, 'info');
+  try {
+    const firstName = (userProfile?.first_name || 'User').replace(/\s+/g, '');
+    const lastName = (userProfile?.last_name || '').replace(/\s+/g, '');
+    const companyName = (currentJob?.company || 'Company').replace(/[^a-zA-Z0-9]/g, '');
+    const fileType = type === 'resume' ? 'CV' : 'CoverLetter';
+    const fileName = `${firstName}${lastName}_${companyName}_${fileType}.pdf`;
+    
+    // Call the PDF generation endpoint
+    const data = await chrome.storage.local.get(['accessToken']);
+    
+    const requestBody = {
+      type: type === 'resume' ? 'resume' : 'cover_letter',
+      personalInfo: {
+        name: `${userProfile?.first_name || ''} ${userProfile?.last_name || ''}`.trim() || 'Applicant',
+        email: userProfile?.email || '',
+        phone: userProfile?.phone || '',
+        location: currentJob?.location || userProfile?.city || '',
+        linkedin: userProfile?.linkedin || '',
+        github: userProfile?.github || '',
+        portfolio: userProfile?.portfolio || ''
+      },
+      fileName: fileName
+    };
+    
+    if (type === 'resume') {
+      requestBody.summary = content.substring(0, 500);
+      requestBody.experience = userProfile?.work_experience || [];
+      requestBody.education = userProfile?.education || [];
+      requestBody.skills = { primary: (userProfile?.skills || []).map(s => s.name || s) };
+      requestBody.certifications = userProfile?.certifications || [];
+    } else {
+      requestBody.coverLetter = {
+        recipientCompany: currentJob?.company || 'Company',
+        jobTitle: currentJob?.title || 'Position',
+        paragraphs: content.split(/\n\n+/).filter(p => p.trim().length > 20)
+      };
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': data.accessToken ? `Bearer ${data.accessToken}` : undefined
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success && result.pdf) {
+        // Create download link
+        const link = document.createElement('a');
+        link.href = `data:application/pdf;base64,${result.pdf}`;
+        link.download = result.fileName || fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showStatus(`✅ Downloaded: ${result.fileName}`, 'success');
+        return;
+      }
+    }
+    
+    // Fallback to print-based PDF
+    console.log('QuantumHire: Falling back to print-based PDF');
+    const title = type === 'resume' ? 'Tailored Resume' : 'Cover Letter';
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body {
+            font-family: 'Times New Roman', serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            max-width: 8.5in;
+            margin: 0.5in auto;
+            padding: 0 0.5in;
+            color: #000;
+          }
+          h1, h2, h3 { font-weight: bold; margin: 0.5em 0; }
+          h1 { font-size: 16pt; text-align: center; }
+          h2 { font-size: 12pt; border-bottom: 1px solid #000; padding-bottom: 2px; }
+          p { margin: 0.5em 0; }
+          ul { margin: 0.5em 0; padding-left: 1.5em; }
+          li { margin: 0.25em 0; }
+          @media print {
+            body { margin: 0; padding: 0.5in; }
+          }
+        </style>
+      </head>
+      <body>
+        <pre style="white-space: pre-wrap; font-family: inherit;">${content}</pre>
+        <script>window.onload = function() { window.print(); };<\/script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    showStatus(`Opening ${title} for printing/PDF`, 'info');
+    
+  } catch (error) {
+    console.error('PDF download error:', error);
+    showStatus('Failed to generate PDF', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span class="btn-icon">⬇️</span> Download PDF';
+    }
+  }
 }
 
 // Utility: delay
