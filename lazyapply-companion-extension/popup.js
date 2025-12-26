@@ -965,6 +965,7 @@ async function refreshProfile() {
   } catch (error) {
     showToast('Failed to refresh profile', 'error');
   }
+}
 
 function displayProfile(profile) {
   const card = document.getElementById('profile-card');
