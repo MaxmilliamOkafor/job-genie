@@ -575,6 +575,46 @@ const JOB_EXTRACTION_SELECTORS = {
   generic: { title: 'h1, [class*="job-title"]', company: '[class*="company"], [class*="employer"]', description: '[class*="job-description"], [class*="description"], article, main', location: '[class*="location"]' }
 };
 
+// Tech keywords to extract from job descriptions
+const TECH_KEYWORDS_LIST = [
+  // Programming languages
+  'Python', 'Java', 'JavaScript', 'TypeScript', 'C++', 'C#', 'Go', 'Rust', 'Ruby', 'Scala', 'Kotlin', 'Swift', 'PHP', 'R',
+  // Frontend
+  'React', 'Vue', 'Angular', 'Next.js', 'Svelte', 'HTML', 'CSS', 'Tailwind', 'Redux', 'GraphQL',
+  // Backend
+  'Node.js', 'Django', 'Flask', 'FastAPI', 'Spring', 'Express', 'NestJS', 'Rails', '.NET',
+  // Cloud & DevOps
+  'AWS', 'GCP', 'Azure', 'Kubernetes', 'Docker', 'Terraform', 'Jenkins', 'CI/CD', 'GitHub Actions', 'GitLab CI',
+  // Databases
+  'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'DynamoDB', 'Cassandra', 'Elasticsearch', 'Snowflake', 'BigQuery',
+  // Data & ML
+  'Machine Learning', 'Deep Learning', 'TensorFlow', 'PyTorch', 'Spark', 'Airflow', 'Kafka', 'Pandas', 'NumPy', 'Scikit-learn',
+  'NLP', 'Computer Vision', 'LLM', 'GPT', 'RAG', 'Vector Database', 'Langchain',
+  // Tools & Practices
+  'Git', 'Agile', 'Scrum', 'REST API', 'Microservices', 'Linux', 'Bash', 'SQL', 'NoSQL', 'ETL',
+  // Soft skills
+  'Leadership', 'Communication', 'Problem-solving', 'Teamwork', 'Mentoring',
+];
+
+// Extract keywords from job content
+function extractKeywordsFromText(content) {
+  if (!content || content.length < 50) return [];
+  
+  const contentLower = content.toLowerCase();
+  const matched = [];
+  
+  for (const keyword of TECH_KEYWORDS_LIST) {
+    const keywordLower = keyword.toLowerCase();
+    // Check for whole word match
+    const regex = new RegExp(`\\b${keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(content)) {
+      matched.push(keyword);
+    }
+  }
+  
+  return [...new Set(matched)];
+}
+
 function extractJobDetails() {
   const platform = detectPlatform();
   const selectors = JOB_EXTRACTION_SELECTORS[platform.name] || JOB_EXTRACTION_SELECTORS.generic;
@@ -589,7 +629,29 @@ function extractJobDetails() {
   if (!title) { const match = document.title.match(/^(.+?)(?:\s*[-|–]\s*|\s+at\s+)/); if (match) title = match[1].trim(); }
   if (!company) { const match = window.location.hostname.match(/^([^.]+)\.(workday|greenhouse|lever)/); if (match) company = capitalizeWords(match[1].replace(/-/g, ' ')); }
   
-  return { title: title || 'Unknown Position', company: company || 'Unknown Company', description: description.substring(0, 5000), location, url: window.location.href, platform: platform.name };
+  // If description is short, try to get more content from page
+  if (!description || description.length < 200) {
+    const mainContent = document.querySelector('main, article, [role="main"], .content, #content');
+    if (mainContent) {
+      description = mainContent.innerText?.substring(0, 8000) || description;
+    }
+  }
+  
+  // Extract keywords from the description
+  const keywords = extractKeywordsFromText(description);
+  
+  console.log(`QuantumHire AI: Extracted ${keywords.length} keywords from job description`);
+  
+  return { 
+    title: title || 'Unknown Position', 
+    company: company || 'Unknown Company', 
+    description: description.substring(0, 8000), 
+    location, 
+    url: window.location.href, 
+    platform: platform.name,
+    keywords: keywords,
+    requirements: keywords // Also set as requirements for backwards compatibility
+  };
 }
 
 // ============= ENHANCED FIELD FILLING =============

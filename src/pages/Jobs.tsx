@@ -289,6 +289,9 @@ const Jobs = () => {
               requirements={selectedJobForATS.requirements || []}
               jobTitle={selectedJobForATS.title}
               userSkills={profile?.skills || []}
+              jobUrl={selectedJobForATS.url || undefined}
+              jobDescription={selectedJobForATS.description || undefined}
+              jobId={selectedJobForATS.id}
             />
           </div>
         )}
