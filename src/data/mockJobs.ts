@@ -174,13 +174,11 @@ export const mockJobs: Job[] = [
 
 export const atsPlatforms = [
   "Workday",
-  "Greenhouse",
-  "Lever",
-  "SAP SuccessFactors",
-  "iCIMS",
-  "Ashby",
-  "Oracle Taleo",
+  "SmartRecruiters",
+  "Direct Company Website (LinkedIn and Indeed)",
+  "Bullhorn",
+  "Teamtailor",
   "Workable",
-  "BambooHR",
-  "Bullhorn"
+  "iCIMS",
+  "Oracle Cloud"
 ];
