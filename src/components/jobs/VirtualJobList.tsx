@@ -136,7 +136,7 @@ const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode }: Job
           )}
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
-            {getTimeAgo(job.posted_date)}
+            Found {getTimeAgo(job.posted_date)}
           </span>
         </div>
 
