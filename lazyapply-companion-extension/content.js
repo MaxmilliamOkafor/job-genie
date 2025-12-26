@@ -92,78 +92,13 @@ const EXTRACTORS = {
     isApplicationPage: () => !!document.querySelector('form')
   },
   
-  // Additional Tier-1 ATS Extractors
-  successfactors: {
-    title: () => document.querySelector('.jobTitle, h1[class*="title"]')?.innerText?.trim(),
-    company: () => document.querySelector('.company-name, [class*="company"]')?.innerText?.trim(),
-    location: () => document.querySelector('.location, [class*="location"]')?.innerText?.trim(),
-    description: () => document.querySelector('.job-description, [class*="description"]')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('form[action*="apply"], [class*="apply-button"]')
-  },
-  
-  taleo: {
-    title: () => document.querySelector('.titlefield, h1.requisitionTitle')?.innerText?.trim(),
-    company: () => document.querySelector('.headertext')?.innerText?.trim() || document.title.split(' - ')[1],
-    location: () => document.querySelector('[id*="location"], .contentlinepanel')?.innerText?.trim(),
-    description: () => document.querySelector('.contentlinepanel, .jobdescription')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('[id*="applybutton"], .applybutton')
-  },
-  
-  brassring: {
-    title: () => document.querySelector('.jobTitle, h1')?.innerText?.trim(),
-    company: () => document.title.split(' - ')[1] || '',
-    location: () => document.querySelector('.location')?.innerText?.trim(),
-    description: () => document.querySelector('.jobDescription')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('[class*="apply"]')
-  },
-  
-  bamboohr: {
-    title: () => document.querySelector('.ResAts__listing-header__title, h1')?.innerText?.trim(),
-    company: () => document.querySelector('.ResAts__header__logo img')?.alt || '',
-    location: () => document.querySelector('.ResAts__listing-header__location')?.innerText?.trim(),
-    description: () => document.querySelector('.ResAts__listing-body')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('.ResAts__apply-btn')
-  },
-  
-  paylocity: {
-    title: () => document.querySelector('h1.job-title, h1')?.innerText?.trim(),
-    company: () => document.querySelector('.company-name')?.innerText?.trim(),
-    location: () => document.querySelector('.job-location')?.innerText?.trim(),
-    description: () => document.querySelector('.job-description')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('[class*="apply"]')
-  },
-  
-  jobvite: {
-    title: () => document.querySelector('.jv-header h1, h1')?.innerText?.trim(),
-    company: () => document.querySelector('.jv-company-name')?.innerText?.trim(),
-    location: () => document.querySelector('.jv-job-detail-meta')?.innerText?.trim(),
-    description: () => document.querySelector('.jv-job-detail-description')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('.jv-apply-button, [class*="apply"]')
-  },
-  
-  wellfound: {
-    title: () => document.querySelector('h1')?.innerText?.trim(),
-    company: () => document.querySelector('[class*="company-name"], h2')?.innerText?.trim(),
-    location: () => document.querySelector('[class*="location"]')?.innerText?.trim(),
-    description: () => document.querySelector('[class*="description"], main')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('[class*="apply"]')
-  },
-  
-  ycombinator: {
-    title: () => document.querySelector('h1')?.innerText?.trim(),
-    company: () => document.querySelector('.company-name, h2 a')?.innerText?.trim(),
-    location: () => document.querySelector('.job-location, [class*="location"]')?.innerText?.trim(),
-    description: () => document.querySelector('.job-description, main')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('[class*="apply"], form')
-  },
-  
-  // Generic fallback (enhanced)
+  // Generic fallback
   generic: {
-    title: () => document.querySelector('h1, .job-title, [class*="title"], [data-testid*="title"]')?.innerText?.trim(),
-    company: () => document.querySelector('.company, [class*="company"], [data-testid*="company"]')?.innerText?.trim(),
-    location: () => document.querySelector('.location, [class*="location"], [data-testid*="location"]')?.innerText?.trim(),
-    description: () => document.querySelector('.description, [class*="description"], [data-testid*="description"], main, article')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('form[action*="apply"], button[class*="apply"], [class*="apply-button"], a[href*="apply"]')
+    title: () => document.querySelector('h1, .job-title, [class*="title"]')?.innerText?.trim(),
+    company: () => document.querySelector('.company, [class*="company"]')?.innerText?.trim(),
+    location: () => document.querySelector('.location, [class*="location"]')?.innerText?.trim(),
+    description: () => document.querySelector('.description, [class*="description"], main')?.innerText?.trim(),
+    isApplicationPage: () => !!document.querySelector('form[action*="apply"], button[class*="apply"]')
   }
 };
 
@@ -206,89 +141,22 @@ function detectWorkdayPage() {
   return 'overview';
 }
 
-// Detect current platform - Extended for 60+ ATS
+// Detect current platform
 function detectPlatform() {
   const hostname = window.location.hostname.toLowerCase();
-  const url = window.location.href.toLowerCase();
   
-  // Tier 1: Premium ATS
-  if (hostname.includes('greenhouse')) return 'greenhouse';
-  if (hostname.includes('lever')) return 'lever';
-  if (hostname.includes('ashby')) return 'ashby';
-  if (hostname.includes('rippling')) return 'rippling';
-  if (hostname.includes('workday') || hostname.includes('myworkdayjobs')) return 'workday';
-  if (hostname.includes('icims')) return 'icims';
-  if (hostname.includes('workable')) return 'workable';
-  if (hostname.includes('smartrecruiters')) return 'smartrecruiters';
-  if (hostname.includes('taleo')) return 'taleo';
-  if (hostname.includes('successfactors')) return 'successfactors';
-  if (hostname.includes('bamboohr')) return 'bamboohr';
-  if (hostname.includes('jobvite')) return 'jobvite';
-  if (hostname.includes('brassring')) return 'brassring';
-  if (hostname.includes('paylocity')) return 'paylocity';
-  if (hostname.includes('paycom')) return 'paycom';
-  if (hostname.includes('ultipro')) return 'ultipro';
-  if (hostname.includes('adp')) return 'adp';
-  
-  // Tier 2: Major Job Boards
   if (hostname.includes('linkedin')) return 'linkedin';
   if (hostname.includes('indeed')) return 'indeed';
   if (hostname.includes('glassdoor')) return 'glassdoor';
-  if (hostname.includes('dice')) return 'dice';
-  if (hostname.includes('monster')) return 'monster';
-  if (hostname.includes('ziprecruiter')) return 'ziprecruiter';
-  if (hostname.includes('careerbuilder')) return 'careerbuilder';
-  if (hostname.includes('simplyhired')) return 'simplyhired';
-  
-  // Tier 3: Startup/Tech Focused
-  if (hostname.includes('wellfound') || hostname.includes('angel.co')) return 'wellfound';
-  if (hostname.includes('builtin')) return 'builtin';
-  if (hostname.includes('otta')) return 'otta';
-  if (hostname.includes('ycombinator') || hostname.includes('workatastartup')) return 'ycombinator';
-  if (hostname.includes('triplebyte')) return 'triplebyte';
-  if (hostname.includes('hired.com')) return 'hired';
-  if (hostname.includes('cord.co')) return 'cord';
-  
-  // Tier 4: International/Regional
-  if (hostname.includes('usajobs.gov')) return 'usajobs';
-  if (hostname.includes('seek.com')) return 'seek';
-  if (hostname.includes('reed.co.uk')) return 'reed';
-  if (hostname.includes('totaljobs')) return 'totaljobs';
-  if (hostname.includes('cwjobs')) return 'cwjobs';
-  if (hostname.includes('xing')) return 'xing';
-  if (hostname.includes('stepstone')) return 'stepstone';
-  if (hostname.includes('naukri')) return 'naukri';
-  
-  // Tier 5: Mid-Market ATS
-  if (hostname.includes('breezy')) return 'breezy';
-  if (hostname.includes('jazz')) return 'jazz';
-  if (hostname.includes('personio')) return 'personio';
-  if (hostname.includes('teamtailor')) return 'teamtailor';
-  if (hostname.includes('recruitee')) return 'recruitee';
-  if (hostname.includes('applytojob')) return 'applytojob';
-  if (hostname.includes('fountain')) return 'fountain';
-  if (hostname.includes('pinpointhq')) return 'pinpoint';
-  if (hostname.includes('homerun')) return 'homerun';
-  if (hostname.includes('comeet')) return 'comeet';
-  if (hostname.includes('freshteam')) return 'freshteam';
-  if (hostname.includes('zoho') && url.includes('recruit')) return 'zoho_recruit';
-  if (hostname.includes('bullhorn')) return 'bullhorn';
-  if (hostname.includes('avature')) return 'avature';
-  if (hostname.includes('cornerstone')) return 'cornerstone';
-  if (hostname.includes('dayforcehcm')) return 'dayforce';
-  if (hostname.includes('apploi')) return 'apploi';
-  if (hostname.includes('clearcompany')) return 'clearcompany';
-  
-  // Tier 6: Remote/Specialized
-  if (hostname.includes('remoteok')) return 'remoteok';
-  if (hostname.includes('weworkremotely')) return 'weworkremotely';
-  if (hostname.includes('flexjobs')) return 'flexjobs';
-  if (hostname.includes('remote.co')) return 'remote';
-  if (hostname.includes('himalayas')) return 'himalayas';
-  if (hostname.includes('arc.dev')) return 'arc';
-  if (hostname.includes('toptal')) return 'toptal';
-  if (hostname.includes('turing.com')) return 'turing';
-  if (hostname.includes('andela')) return 'andela';
+  if (hostname.includes('greenhouse')) return 'greenhouse';
+  if (hostname.includes('lever')) return 'lever';
+  if (hostname.includes('workday') || hostname.includes('myworkdayjobs')) return 'workday';
+  if (hostname.includes('ashby')) return 'ashby';
+  if (hostname.includes('smartrecruiters')) return 'smartrecruiters';
+  if (hostname.includes('icims')) return 'icims';
+  if (hostname.includes('workable')) return 'workable';
+  if (hostname.includes('jobvite')) return 'jobvite';
+  if (hostname.includes('bamboohr')) return 'bamboohr';
   
   return 'generic';
 }
