@@ -2198,9 +2198,27 @@ function createFloatingPanel() {
         </div>
       </div>
       
-      <div class="qh-status" id="qh-status">
+<div class="qh-status" id="qh-status">
         <span class="qh-status-icon">🟢</span>
         <span class="qh-status-text">Ready to apply</span>
+      </div>
+      
+      <!-- Question Review Panel -->
+      <div class="qh-review-panel hidden" id="qh-review-panel">
+        <div class="qh-review-header">
+          <span class="qh-review-title">📋 Question Review</span>
+          <div class="qh-ats-score-badge" id="qh-ats-score-badge">ATS: --</div>
+        </div>
+        <div class="qh-review-summary" id="qh-review-summary">
+          <span class="qh-review-stat">✅ <span id="qh-auto-filled">0</span> Auto-filled</span>
+          <span class="qh-review-stat">⚠️ <span id="qh-needs-review">0</span> Need Review</span>
+          <span class="qh-review-stat">❓ <span id="qh-unfamiliar">0</span> Unfamiliar</span>
+        </div>
+        <div class="qh-review-list" id="qh-review-list"></div>
+        <div class="qh-review-actions">
+          <button class="qh-btn secondary" id="qh-approve-all">✅ Approve All</button>
+          <button class="qh-btn primary" id="qh-apply-reviewed">⚡ Apply Reviewed</button>
+        </div>
       </div>
       
       <div class="qh-actions">
@@ -2208,12 +2226,15 @@ function createFloatingPanel() {
           <span class="qh-btn-icon">⚡</span>
           <div class="qh-btn-content">
             <span class="qh-btn-title">Smart Apply</span>
-            <span class="qh-btn-subtitle">AI Tailor → Fill All → Upload PDFs → Auto-Submit</span>
+            <span class="qh-btn-subtitle">AI Tailor → Review → Fill → Upload PDFs</span>
           </div>
         </button>
         
         <div class="qh-btn-row">
+          <button id="qh-review-questions" class="qh-btn secondary">🔍 Review Questions</button>
           <button id="qh-quick-fill" class="qh-btn secondary">📝 Quick Fill</button>
+        </div>
+        <div class="qh-btn-row">
           <button id="qh-next-page" class="qh-btn secondary">➡️ Next Page</button>
         </div>
       </div>
@@ -2397,8 +2418,40 @@ function addPanelStyles() {
     .qh-tab-content { position: relative; }
     .qh-tab-content.hidden { display: none; }
     .qh-tab-content textarea { width: 100%; height: 100px; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 12px; padding: 8px; color: hsl(var(--qh-text)); font-size: 10px; font-family: inherit; resize: none; }
-    .qh-copy-btn { width: 100%; margin-top: 6px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 10px; color: hsl(var(--qh-text)); font-size: 10px; cursor: pointer; }
+.qh-copy-btn { width: 100%; margin-top: 6px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 10px; color: hsl(var(--qh-text)); font-size: 10px; cursor: pointer; }
     .qh-copy-btn:hover { background: hsl(var(--qh-card) / 0.40); }
+
+    /* Question Review Panel Styles */
+    .qh-review-panel { background: hsl(var(--qh-card-2) / 0.65); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .qh-review-panel.hidden { display: none; }
+    .qh-review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .qh-review-title { font-size: 12px; font-weight: 800; color: hsl(var(--qh-violet)); }
+    .qh-ats-score-badge { font-size: 10px; font-weight: 800; padding: 4px 10px; background: hsl(var(--qh-brand) / 0.15); border: 1px solid hsl(var(--qh-brand) / 0.25); border-radius: 999px; color: hsl(var(--qh-brand)); }
+    .qh-review-summary { display: flex; gap: 10px; margin-bottom: 10px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border-radius: 8px; }
+    .qh-review-stat { font-size: 10px; color: hsl(var(--qh-muted)); }
+    .qh-review-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .qh-review-item { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; }
+    .qh-review-item.needs-review { border-left: 3px solid hsl(var(--qh-warn)); }
+    .qh-review-item.unfamiliar { border-left: 3px solid hsl(var(--qh-danger)); }
+    .qh-review-item.approved { border-left: 3px solid hsl(var(--qh-brand)); }
+    .qh-review-question { font-size: 10px; font-weight: 600; color: hsl(var(--qh-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .qh-review-answer { display: flex; align-items: center; gap: 6px; }
+    .qh-review-answer-text { font-size: 9px; color: hsl(var(--qh-muted)); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .qh-review-answer-edit { font-size: 8px; padding: 3px 6px; background: hsl(var(--qh-violet) / 0.12); border: 1px solid hsl(var(--qh-violet) / 0.22); border-radius: 6px; color: hsl(var(--qh-violet)); cursor: pointer; }
+    .qh-review-answer-edit:hover { background: hsl(var(--qh-violet) / 0.20); }
+    .qh-review-reasoning { font-size: 8px; color: hsl(var(--qh-muted-2)); font-style: italic; }
+    .qh-review-score { font-size: 8px; font-weight: 700; padding: 2px 6px; background: hsl(var(--qh-brand) / 0.12); border-radius: 4px; color: hsl(var(--qh-brand)); }
+    .qh-review-actions { display: flex; gap: 6px; }
+    .qh-review-actions .qh-btn { flex: 1; justify-content: center; padding: 8px 12px; font-size: 10px; }
+    .qh-review-edit-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 320px; background: hsl(var(--qh-bg-0)); border: 1px solid hsl(var(--qh-border)); border-radius: 12px; padding: 16px; z-index: 2147483649; box-shadow: 0 25px 80px hsl(var(--qh-shadow) / 0.35); }
+    .qh-review-edit-modal.hidden { display: none; }
+    .qh-review-edit-question { font-size: 12px; font-weight: 600; color: hsl(var(--qh-text)); margin-bottom: 12px; }
+    .qh-review-edit-input { width: 100%; padding: 10px; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 8px; color: hsl(var(--qh-text)); font-size: 11px; margin-bottom: 12px; }
+    .qh-review-edit-input:focus { outline: none; border-color: hsl(var(--qh-brand) / 0.5); }
+    .qh-review-edit-actions { display: flex; gap: 8px; }
+    .qh-review-edit-actions .qh-btn { flex: 1; }
+    .qh-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: hsl(0 0% 0% / 0.5); z-index: 2147483648; }
+    .qh-overlay.hidden { display: none; }
 
     .quantumhire-toast { position: fixed; bottom: 100px; right: 20px; padding: 12px 16px; background: linear-gradient(145deg, hsl(var(--qh-card)) 0%, hsl(var(--qh-card-2)) 100%); border-radius: 12px; display: flex; align-items: center; gap: 10px; z-index: 2147483648; box-shadow: 0 16px 44px hsl(var(--qh-shadow) / 0.20); animation: slideIn 0.3s ease; max-width: 320px; border: 1px solid hsl(var(--qh-border) / 0.8); color: hsl(var(--qh-text)); }
     .quantumhire-toast.success { border-left: 3px solid hsl(var(--qh-brand)); }
@@ -2587,12 +2640,336 @@ function setupPanelEvents(panel) {
     }
   });
   
+  // Review Questions - AI-powered question analysis with proofreading
+  panel.querySelector('#qh-review-questions')?.addEventListener('click', async () => {
+    const btn = panel.querySelector('#qh-review-questions');
+    const statusEl = panel.querySelector('#qh-status');
+    const reviewPanel = panel.querySelector('#qh-review-panel');
+    btn.disabled = true;
+    
+    try {
+      updateStatus(statusEl, '🔍', 'Analyzing form questions...');
+      
+      // Detect all questions on the page
+      const questions = detectAllQuestions();
+      
+      if (questions.length === 0) {
+        updateStatus(statusEl, '❌', 'No questions found on this page');
+        showToast('No questions detected', 'warning');
+        return;
+      }
+      
+      updateStatus(statusEl, '🤖', `Found ${questions.length} questions, analyzing with AI...`);
+      
+      // Get user profile and job data
+      const profileData = await chrome.storage.local.get(['userProfile', 'accessToken']);
+      const profile = profileData.userProfile || {};
+      const jobData = extractJobDetails();
+      
+      // Prepare questions for AI analysis
+      const questionsForAI = questions.map((q, i) => ({
+        id: q.id || `q_${i}`,
+        label: q.label,
+        type: q.type,
+        options: q.type === 'select' ? Array.from(q.element?.options || []).map(o => o.text).filter(t => t) : undefined,
+        required: q.element?.required || q.element?.getAttribute('aria-required') === 'true' || false
+      }));
+      
+      // Call AI to analyze and answer questions
+      let aiAnswers = {};
+      let overallAtsScore = 0;
+      let reviewRecommendations = [];
+      let knockoutRisks = [];
+      
+      if (profileData.accessToken) {
+        try {
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${profileData.accessToken}`
+            },
+            body: JSON.stringify({
+              questions: questionsForAI,
+              jobTitle: jobData.title,
+              company: jobData.company,
+              jobDescription: jobData.description,
+              userProfile: {
+                firstName: profile.first_name,
+                lastName: profile.last_name,
+                email: profile.email,
+                phone: profile.phone,
+                skills: profile.skills || [],
+                workExperience: profile.work_experience || [],
+                education: profile.education || [],
+                certifications: profile.certifications || [],
+                city: profile.city,
+                state: profile.state,
+                country: profile.country,
+                citizenship: profile.citizenship,
+                willingToRelocate: profile.willing_to_relocate,
+                visaRequired: profile.visa_required,
+                veteranStatus: profile.veteran_status,
+                disability: profile.disability,
+                raceEthnicity: profile.race_ethnicity,
+                drivingLicense: profile.driving_license,
+                securityClearance: profile.security_clearance,
+                expectedSalary: profile.expected_salary,
+                currentSalary: profile.current_salary,
+                noticePeriod: profile.notice_period,
+                totalExperience: profile.total_experience,
+                linkedin: profile.linkedin,
+                github: profile.github,
+                portfolio: profile.portfolio,
+                highestEducation: profile.highest_education,
+                languages: profile.languages || [],
+                achievements: profile.achievements || []
+              }
+            })
+          });
+          
+          if (response.ok) {
+            const aiResult = await response.json();
+            overallAtsScore = aiResult.overallAtsScore || 0;
+            reviewRecommendations = aiResult.reviewRecommendations || [];
+            knockoutRisks = aiResult.knockoutRisks || [];
+            
+            if (aiResult.answers) {
+              aiResult.answers.forEach(a => {
+                aiAnswers[a.id] = {
+                  answer: a.answer,
+                  selectValue: a.selectValue,
+                  confidence: a.confidence,
+                  atsScore: a.atsScore,
+                  needsReview: a.needsReview,
+                  reasoning: a.reasoning
+                };
+              });
+            }
+            console.log('QuantumHire AI: AI answered', Object.keys(aiAnswers).length, 'questions');
+          } else {
+            console.error('AI response error:', await response.text());
+          }
+        } catch (aiError) {
+          console.error('AI analysis error:', aiError);
+        }
+      }
+      
+      // Build review list
+      const reviewList = panel.querySelector('#qh-review-list');
+      reviewList.innerHTML = '';
+      
+      let autoFilledCount = 0;
+      let needsReviewCount = 0;
+      let unfamiliarCount = 0;
+      
+      // Store answers for later application
+      panel.dataset.reviewedAnswers = JSON.stringify(aiAnswers);
+      panel.dataset.questionIds = JSON.stringify(questions.map((q, i) => q.id || `q_${i}`));
+      
+      questions.forEach((q, i) => {
+        const qId = q.id || `q_${i}`;
+        const aiAnswer = aiAnswers[qId];
+        
+        // Determine answer source
+        let answer = '';
+        let confidence = 'low';
+        let atsScore = 0;
+        let needsReview = true;
+        let reasoning = 'No AI answer available';
+        let answerClass = 'unfamiliar';
+        
+        // Check knockout bank first
+        const knockoutMatch = matchKnockoutQuestion(q.label, profile);
+        if (knockoutMatch) {
+          answer = knockoutMatch.answer;
+          confidence = 'high';
+          atsScore = 95;
+          needsReview = false;
+          reasoning = 'Standard ATS knockout question - auto-answered';
+          answerClass = 'approved';
+          autoFilledCount++;
+        } else if (aiAnswer) {
+          answer = aiAnswer.answer;
+          confidence = aiAnswer.confidence || 'medium';
+          atsScore = aiAnswer.atsScore || 75;
+          needsReview = aiAnswer.needsReview || false;
+          reasoning = aiAnswer.reasoning || 'AI-generated response';
+          
+          if (needsReview || confidence === 'low') {
+            answerClass = 'needs-review';
+            needsReviewCount++;
+          } else {
+            answerClass = 'approved';
+            autoFilledCount++;
+          }
+        } else {
+          unfamiliarCount++;
+          answer = 'N/A (no answer available)';
+          reasoning = 'This question requires manual review - AI could not determine an appropriate answer';
+        }
+        
+        const itemHtml = `
+          <div class="qh-review-item ${answerClass}" data-question-id="${qId}">
+            <div class="qh-review-question" title="${q.label}">${q.label.substring(0, 60)}${q.label.length > 60 ? '...' : ''}</div>
+            <div class="qh-review-answer">
+              <span class="qh-review-answer-text" title="${answer}">${answer}</span>
+              <span class="qh-review-score">ATS: ${atsScore}%</span>
+              <button class="qh-review-answer-edit" data-question-id="${qId}">✏️ Edit</button>
+            </div>
+            <div class="qh-review-reasoning">${reasoning}</div>
+          </div>
+        `;
+        reviewList.insertAdjacentHTML('beforeend', itemHtml);
+      });
+      
+      // Update summary stats
+      panel.querySelector('#qh-auto-filled').textContent = autoFilledCount;
+      panel.querySelector('#qh-needs-review').textContent = needsReviewCount;
+      panel.querySelector('#qh-unfamiliar').textContent = unfamiliarCount;
+      panel.querySelector('#qh-ats-score-badge').textContent = `ATS: ${overallAtsScore}%`;
+      
+      // Show knockout risks if any
+      if (knockoutRisks.length > 0) {
+        showToast(`⚠️ Knockout risks detected: ${knockoutRisks.join(', ')}`, 'warning');
+      }
+      
+      // Show review panel
+      reviewPanel.classList.remove('hidden');
+      updateStatus(statusEl, '✅', `${questions.length} questions analyzed - review before applying`);
+      
+      // Add edit button handlers
+      reviewList.querySelectorAll('.qh-review-answer-edit').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const qId = e.target.dataset.questionId;
+          const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
+          const currentAnswer = aiAnswers[qId]?.answer || '';
+          showEditModal(panel, qId, question?.label || 'Edit Answer', currentAnswer);
+        });
+      });
+      
+    } catch (error) {
+      console.error('Review questions error:', error);
+      updateStatus(statusEl, '❌', error.message);
+      showToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  
+  // Approve All reviewed answers
+  panel.querySelector('#qh-approve-all')?.addEventListener('click', () => {
+    const reviewList = panel.querySelector('#qh-review-list');
+    reviewList.querySelectorAll('.qh-review-item').forEach(item => {
+      item.classList.remove('needs-review', 'unfamiliar');
+      item.classList.add('approved');
+    });
+    panel.querySelector('#qh-needs-review').textContent = '0';
+    panel.querySelector('#qh-unfamiliar').textContent = '0';
+    showToast('All answers approved', 'success');
+  });
+  
+  // Apply Reviewed answers
+  panel.querySelector('#qh-apply-reviewed')?.addEventListener('click', async () => {
+    const btn = panel.querySelector('#qh-apply-reviewed');
+    const statusEl = panel.querySelector('#qh-status');
+    btn.disabled = true;
+    
+    try {
+      updateStatus(statusEl, '📝', 'Applying reviewed answers...');
+      
+      const reviewedAnswers = JSON.parse(panel.dataset.reviewedAnswers || '{}');
+      const profileData = await chrome.storage.local.get(['userProfile']);
+      const profile = profileData.userProfile || {};
+      const jobData = extractJobDetails();
+      
+      // Fill form with reviewed answers
+      const result = await fillAllQuestions(profile, jobData, reviewedAnswers);
+      
+      updateStatus(statusEl, '✅', `Applied ${result.filledCount} answers`);
+      showToast(`✅ Applied ${result.filledCount} of ${result.totalQuestions} answers`, 'success');
+      
+      // Hide review panel
+      panel.querySelector('#qh-review-panel').classList.add('hidden');
+      
+    } catch (error) {
+      console.error('Apply reviewed error:', error);
+      updateStatus(statusEl, '❌', error.message);
+      showToast(error.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  
   // Next Page
   panel.querySelector('#qh-next-page').addEventListener('click', async () => {
     const navigated = await navigateToNextPage();
     if (!navigated) showToast('Next button not found', 'error');
   });
+}
+
+// Show edit modal for reviewing/editing AI answers
+function showEditModal(panel, questionId, questionLabel, currentAnswer) {
+  // Remove existing modal
+  document.querySelector('.qh-overlay')?.remove();
+  document.querySelector('.qh-review-edit-modal')?.remove();
   
+  const overlay = document.createElement('div');
+  overlay.className = 'qh-overlay';
+  
+  const modal = document.createElement('div');
+  modal.className = 'qh-review-edit-modal';
+  modal.innerHTML = `
+    <div class="qh-review-edit-question">${questionLabel}</div>
+    <textarea class="qh-review-edit-input" id="qh-edit-answer">${currentAnswer}</textarea>
+    <div class="qh-review-edit-actions">
+      <button class="qh-btn secondary" id="qh-edit-cancel">Cancel</button>
+      <button class="qh-btn primary" id="qh-edit-save">Save</button>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  document.body.appendChild(modal);
+  
+  modal.querySelector('#qh-edit-cancel').addEventListener('click', () => {
+    overlay.remove();
+    modal.remove();
+  });
+  
+  overlay.addEventListener('click', () => {
+    overlay.remove();
+    modal.remove();
+  });
+  
+  modal.querySelector('#qh-edit-save').addEventListener('click', () => {
+    const newAnswer = modal.querySelector('#qh-edit-answer').value;
+    const reviewedAnswers = JSON.parse(panel.dataset.reviewedAnswers || '{}');
+    reviewedAnswers[questionId] = { 
+      answer: newAnswer, 
+      selectValue: newAnswer.toLowerCase(),
+      confidence: 'high',
+      atsScore: 90,
+      needsReview: false,
+      reasoning: 'User-edited response'
+    };
+    panel.dataset.reviewedAnswers = JSON.stringify(reviewedAnswers);
+    
+    // Update display
+    const item = panel.querySelector(`[data-question-id="${questionId}"]`);
+    if (item) {
+      item.querySelector('.qh-review-answer-text').textContent = newAnswer;
+      item.classList.remove('needs-review', 'unfamiliar');
+      item.classList.add('approved');
+    }
+    
+    overlay.remove();
+    modal.remove();
+    showToast('Answer updated', 'success');
+  });
+}
+
+function setupPanelEventsContinued(panel) {
   // Tab switching
   panel.querySelectorAll('.qh-tab').forEach(tab => {
     tab.addEventListener('click', () => {
