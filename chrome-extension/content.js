@@ -2523,12 +2523,13 @@ function setupPanelEvents(panel) {
   panel.querySelector('#qh-skip-btn')?.addEventListener('click', () => { automationState.shouldSkip = true; showToast('Skipping...', 'info'); });
   panel.querySelector('#qh-quit-btn')?.addEventListener('click', () => { automationState.shouldQuit = true; showToast('Stopped', 'error'); });
   
-  // Smart Apply - Enhanced workflow: Review → Quick Fill → Next Page
+  // Smart Apply - Full 4-step workflow: Tailor CV → Attach PDFs → Fill → Next
   panel.querySelector('#qh-smart-apply').addEventListener('click', async () => {
     const btn = panel.querySelector('#qh-smart-apply');
     const statusEl = panel.querySelector('#qh-status');
     const stepsContainer = panel.querySelector('#qh-smart-apply-steps');
     const reviewPanel = panel.querySelector('#qh-review-panel');
+    const resultsPanel = panel.querySelector('#qh-results');
     
     btn.disabled = true;
     automationState.isRunning = true;
@@ -2544,6 +2545,15 @@ function setupPanelEvents(panel) {
     
     try {
       const platform = detectPlatform();
+      const jobData = extractJobDetails();
+      
+      // Get user profile and tokens
+      const profileData = await chrome.storage.local.get(['userProfile', 'accessToken']);
+      const profile = profileData.userProfile || {};
+      
+      if (!profile.first_name) {
+        throw new Error('No profile found. Please set up your profile first.');
+      }
       
       // Handle Workday pre-apply flow if needed
       if (platform.name === 'workday' && platform.config?.preApplyFlow) {
@@ -2559,46 +2569,213 @@ function setupPanelEvents(panel) {
         }
       }
       
-      // ===== STEP 1: REVIEW QUESTIONS =====
+      // ===== STEP 1: TAILOR CV & COVER LETTER =====
       setStep(1);
-      updateStatus(statusEl, '🔍', 'Step 1: Reviewing questions...');
+      updateStatus(statusEl, '📄', 'Step 1: Tailoring CV & Cover Letter...');
       
-      const questions = detectAllQuestions();
-      
-      if (questions.length === 0) {
-        updateStatus(statusEl, '⚠️', 'No questions found - trying to navigate...');
-        // Try to go to next page if no questions
-        const navigated = await navigateToNextPage();
-        if (navigated) {
-          showToast('Moved to next page', 'info');
-        }
-        return;
-      }
-      
-      // Get user profile and job data
-      const profileData = await chrome.storage.local.get(['userProfile', 'accessToken']);
-      const profile = profileData.userProfile || {};
-      const jobData = extractJobDetails();
-      
-      // Prepare questions for AI analysis
-      const questionsForAI = questions.map((q, i) => ({
-        id: q.id || `q_${i}`,
-        label: q.label,
-        type: q.type,
-        options: q.type === 'select' ? Array.from(q.element?.options || []).map(o => o.text).filter(t => t) : undefined,
-        required: q.element?.required || q.element?.getAttribute('aria-required') === 'true' || false
-      }));
-      
-      // Call AI to analyze and answer questions
-      let aiAnswers = {};
-      let overallAtsScore = 85;
-      let knockoutRisks = [];
+      let tailoredData = null;
+      let matchScore = 85;
+      let smartLocation = '';
+      let keywordsMatched = [];
+      let keywordsMissing = [];
       
       if (profileData.accessToken) {
         try {
+          showToast('🤖 AI tailoring your CV for this role...', 'info');
+          
+          const tailorResponse = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${profileData.accessToken}`
+            },
+            body: JSON.stringify({
+              jobTitle: jobData.title,
+              company: jobData.company,
+              jobDescription: jobData.description,
+              jobLocation: jobData.location,
+              userProfile: {
+                firstName: profile.first_name,
+                lastName: profile.last_name,
+                email: profile.email,
+                phone: profile.phone,
+                linkedin: profile.linkedin,
+                github: profile.github,
+                portfolio: profile.portfolio,
+                city: profile.city,
+                state: profile.state,
+                country: profile.country,
+                skills: profile.skills || [],
+                workExperience: profile.work_experience || [],
+                education: profile.education || [],
+                certifications: profile.certifications || [],
+                achievements: profile.achievements || [],
+                languages: profile.languages || [],
+                totalExperience: profile.total_experience,
+                highestEducation: profile.highest_education,
+                citizenship: profile.citizenship,
+                willingToRelocate: profile.willing_to_relocate,
+                visaRequired: profile.visa_required,
+                expectedSalary: profile.expected_salary,
+                noticePeriod: profile.notice_period
+              }
+            })
+          });
+          
+          if (tailorResponse.ok) {
+            tailoredData = await tailorResponse.json();
+            matchScore = tailoredData.matchScore || 85;
+            smartLocation = tailoredData.smartLocation || '';
+            keywordsMatched = tailoredData.keywordsMatched || [];
+            keywordsMissing = tailoredData.keywordsMissing || [];
+            
+            console.log('QuantumHire AI: Tailoring complete', {
+              matchScore,
+              smartLocation,
+              keywordsMatched: keywordsMatched.length,
+              keywordsMissing: keywordsMissing.length
+            });
+            
+            // Update ATS score badge
+            panel.querySelector('#qh-ats-score-badge').textContent = `ATS: ${matchScore}%`;
+            
+            // Show match score in results
+            if (resultsPanel) {
+              panel.querySelector('#qh-score').textContent = `${matchScore}%`;
+            }
+            
+            showToast(`✅ CV tailored! ATS Match: ${matchScore}%`, 'success');
+            
+            if (keywordsMissing.length > 0) {
+              console.log('QuantumHire AI: Missing keywords:', keywordsMissing.slice(0, 5));
+            }
+          } else {
+            const errorText = await tailorResponse.text();
+            console.error('Tailor error:', errorText);
+            showToast('⚠️ Tailoring partial - using profile data', 'warning');
+          }
+        } catch (tailorError) {
+          console.error('Tailor error:', tailorError);
+          showToast('⚠️ Tailoring failed - using profile data', 'warning');
+        }
+      } else {
+        showToast('⚠️ Not authenticated - using basic profile', 'warning');
+      }
+      
+      await waitWithControls(getDelayForSpeed());
+      
+      // ===== STEP 2: GENERATE & ATTACH PDFs =====
+      setStep(2);
+      updateStatus(statusEl, '📎', 'Step 2: Generating & Attaching PDFs...');
+      
+      let resumePdfResult = null;
+      let coverPdfResult = null;
+      
+      try {
+        showToast('📄 Generating ATS-optimized PDFs...', 'info');
+        
+        // Generate Resume PDF
+        resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
+        
+        // Generate Cover Letter PDF
+        coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
+        
+        console.log('QuantumHire AI: PDF generation results:', {
+          resume: resumePdfResult?.success,
+          resumeFileName: resumePdfResult?.fileName,
+          cover: coverPdfResult?.success,
+          coverFileName: coverPdfResult?.fileName
+        });
+        
+        // Update PDF preview in panel
+        if (resumePdfResult?.success) {
+          panel.dataset.resumePdf = resumePdfResult.pdf;
+          const resumeNameEl = panel.querySelector('#qh-resume-pdf-name');
+          const resumeSizeEl = panel.querySelector('#qh-resume-pdf-size');
+          const resumeCardEl = panel.querySelector('#qh-resume-pdf-card');
+          if (resumeNameEl) resumeNameEl.textContent = resumePdfResult.fileName;
+          if (resumeSizeEl) resumeSizeEl.textContent = formatFileSize(resumePdfResult.pdf?.length * 0.75);
+          if (resumeCardEl) resumeCardEl.classList.add('uploaded');
+        }
+        
+        if (coverPdfResult?.success) {
+          panel.dataset.coverPdf = coverPdfResult.pdf;
+          const coverNameEl = panel.querySelector('#qh-cover-pdf-name');
+          const coverSizeEl = panel.querySelector('#qh-cover-pdf-size');
+          const coverCardEl = panel.querySelector('#qh-cover-pdf-card');
+          if (coverNameEl) coverNameEl.textContent = coverPdfResult.fileName;
+          if (coverSizeEl) coverSizeEl.textContent = formatFileSize(coverPdfResult.pdf?.length * 0.75);
+          if (coverCardEl) coverCardEl.classList.add('uploaded');
+        }
+        
+        // Upload PDFs to form
+        const uploadResults = await uploadPDFsToAllSections(resumePdfResult, coverPdfResult);
+        
+        if (uploadResults.filesUploaded > 0) {
+          showToast(`✅ ${uploadResults.filesUploaded} PDF(s) attached to form`, 'success');
+        } else if (resumePdfResult?.success || coverPdfResult?.success) {
+          showToast('⚠️ PDFs generated but no upload fields found', 'warning');
+        }
+        
+        // Store for results display
+        if (tailoredData) {
+          tailoredData.resumePdf = resumePdfResult;
+          tailoredData.coverPdf = coverPdfResult;
+        }
+        
+        // Update tailored content preview
+        if (tailoredData?.tailoredResume) {
+          const resumeTextarea = panel.querySelector('#qh-resume-text');
+          if (resumeTextarea) resumeTextarea.value = tailoredData.tailoredResume;
+        }
+        
+        if (tailoredData?.tailoredCoverLetter) {
+          const coverTextarea = panel.querySelector('#qh-cover-text');
+          if (coverTextarea) coverTextarea.value = tailoredData.tailoredCoverLetter;
+        }
+        
+        // Show results panel with PDFs
+        if (resultsPanel && (resumePdfResult?.success || coverPdfResult?.success)) {
+          resultsPanel.classList.remove('hidden');
+        }
+        
+      } catch (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        showToast('⚠️ PDF generation failed - continuing with form fill', 'warning');
+      }
+      
+      await waitWithControls(getDelayForSpeed());
+      
+      // ===== STEP 3: FILL FORM FIELDS & QUESTIONS =====
+      setStep(3);
+      updateStatus(statusEl, '📝', 'Step 3: Filling form fields...');
+      
+      // First fill basic profile fields
+      const atsData = await chrome.storage.local.get(['atsCredentials']);
+      const basicFillResult = await autofillForm(tailoredData, atsData.atsCredentials);
+      
+      // Detect all questions on the page
+      const questions = detectAllQuestions();
+      console.log(`QuantumHire AI: Found ${questions.length} questions to answer`);
+      
+      let aiAnswers = {};
+      let overallAtsScore = matchScore;
+      let knockoutRisks = [];
+      
+      if (questions.length > 0 && profileData.accessToken) {
+        try {
           updateStatus(statusEl, '🤖', `Analyzing ${questions.length} questions with AI...`);
           
-          const response = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
+          const questionsForAI = questions.map((q, i) => ({
+            id: q.id || `q_${i}`,
+            label: q.label,
+            type: q.type,
+            options: q.type === 'select' ? Array.from(q.element?.options || []).map(o => o.text).filter(t => t) : undefined,
+            required: q.element?.required || q.element?.getAttribute('aria-required') === 'true' || false
+          }));
+          
+          const aiResponse = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -2644,9 +2821,9 @@ function setupPanelEvents(panel) {
             })
           });
           
-          if (response.ok) {
-            const aiResult = await response.json();
-            overallAtsScore = aiResult.overallAtsScore || 85;
+          if (aiResponse.ok) {
+            const aiResult = await aiResponse.json();
+            overallAtsScore = aiResult.overallAtsScore || matchScore;
             knockoutRisks = aiResult.knockoutRisks || [];
             
             if (aiResult.answers) {
@@ -2664,20 +2841,15 @@ function setupPanelEvents(panel) {
             console.log('QuantumHire AI: AI answered', Object.keys(aiAnswers).length, 'questions');
           }
         } catch (aiError) {
-          console.error('AI analysis error:', aiError);
+          console.error('AI question analysis error:', aiError);
         }
       }
       
-      // Build review list UI
-      const reviewList = panel.querySelector('#qh-review-list');
-      reviewList.innerHTML = '';
-      
+      // Build reviewed answers combining knockout bank + AI answers
+      const reviewedAnswers = {};
       let autoFilledCount = 0;
       let needsReviewCount = 0;
       let unfamiliarCount = 0;
-      let naCount = 0;
-      
-      const reviewedAnswers = {};
       
       questions.forEach((q, i) => {
         const qId = q.id || `q_${i}`;
@@ -2687,151 +2859,144 @@ function setupPanelEvents(panel) {
         
         let answer = '';
         let atsScore = 0;
-        let answerClass = 'unfamiliar';
-        let reasoning = '';
         
-        // Check knockout bank first
+        // Check knockout bank first (highest priority)
         const knockoutMatch = matchKnockoutQuestion(q.label, profile);
         
         if (knockoutMatch) {
           answer = knockoutMatch.answer;
           atsScore = 95;
-          reasoning = 'Standard ATS knockout question';
-          answerClass = 'approved';
           autoFilledCount++;
+          reviewedAnswers[qId] = {
+            answer: knockoutMatch.answer,
+            selectValue: knockoutMatch.selectValue || knockoutMatch.answer.toLowerCase(),
+            atsScore: 95,
+            needsReview: false
+          };
         } else if (aiAnswer && aiAnswer.answer) {
           answer = aiAnswer.answer;
           atsScore = aiAnswer.atsScore || 75;
-          reasoning = aiAnswer.reasoning || 'AI-generated response';
           
           if (aiAnswer.needsReview || aiAnswer.confidence === 'low') {
-            answerClass = 'needs-review';
             needsReviewCount++;
           } else {
-            answerClass = 'approved';
             autoFilledCount++;
           }
+          
+          reviewedAnswers[qId] = {
+            answer: aiAnswer.answer,
+            selectValue: aiAnswer.selectValue || aiAnswer.answer.toLowerCase(),
+            atsScore: aiAnswer.atsScore || 75,
+            needsReview: aiAnswer.needsReview || false
+          };
         } else if (isOptional && !isRequired) {
-          // For optional questions without answers, use N/A
+          // Optional questions without answers get N/A
           answer = 'N/A';
           atsScore = 100;
-          reasoning = 'Optional question - marked as not applicable';
-          answerClass = 'na-response';
-          naCount++;
+          reviewedAnswers[qId] = {
+            answer: 'N/A',
+            selectValue: 'n/a',
+            atsScore: 100,
+            needsReview: false
+          };
         } else {
           unfamiliarCount++;
-          answer = '';
-          reasoning = 'This question requires manual input';
         }
-        
-        reviewedAnswers[qId] = {
-          answer: answer,
-          selectValue: knockoutMatch?.selectValue || aiAnswer?.selectValue || answer.toLowerCase(),
-          atsScore: atsScore,
-          needsReview: answerClass === 'needs-review' || answerClass === 'unfamiliar'
-        };
-        
-        const itemHtml = `
-          <div class="qh-review-item ${answerClass}" data-question-id="${qId}" title="Click to edit">
-            <div class="qh-review-question">${q.label.substring(0, 50)}${q.label.length > 50 ? '...' : ''}</div>
-            <div class="qh-review-answer">
-              <span class="qh-review-answer-text">${answer || '(needs input)'}</span>
-              <span class="qh-review-score">ATS: ${atsScore}%</span>
-              <button class="qh-review-answer-edit" data-question-id="${qId}">✏️</button>
-            </div>
-            <div class="qh-review-reasoning">${reasoning}</div>
-          </div>
-        `;
-        reviewList.insertAdjacentHTML('beforeend', itemHtml);
       });
       
-      // Update summary stats
-      panel.querySelector('#qh-auto-filled').textContent = autoFilledCount;
-      panel.querySelector('#qh-needs-review').textContent = needsReviewCount;
-      panel.querySelector('#qh-unfamiliar').textContent = unfamiliarCount;
-      panel.querySelector('#qh-ats-score-badge').textContent = `ATS: ${overallAtsScore}%`;
-      
-      // Store answers for application
+      // Store answers for later use
       panel.dataset.reviewedAnswers = JSON.stringify(reviewedAnswers);
+      
+      // Fill questions with the reviewed answers
+      const questionFillResult = await fillAllQuestions(profile, jobData, reviewedAnswers);
+      
+      updateStatus(statusEl, '✅', `Filled ${basicFillResult.fields} fields + ${questionFillResult.filledCount} questions`);
       
       // Show knockout risks warning
       if (knockoutRisks.length > 0) {
         showToast(`⚠️ Knockout risks: ${knockoutRisks.join(', ')}`, 'warning');
       }
       
-      // Show review panel
-      reviewPanel.classList.remove('hidden');
-      
-      // Add edit handlers
-      reviewList.querySelectorAll('.qh-review-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-          if (e.target.classList.contains('qh-review-answer-edit')) return;
-          const qId = item.dataset.questionId;
-          const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
-          const currentAnswer = reviewedAnswers[qId]?.answer || '';
-          showEditModal(panel, qId, question?.label || 'Edit Answer', currentAnswer, question);
-        });
-      });
-      
-      reviewList.querySelectorAll('.qh-review-answer-edit').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const qId = btn.dataset.questionId;
-          const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
-          const currentAnswer = reviewedAnswers[qId]?.answer || '';
-          showEditModal(panel, qId, question?.label || 'Edit Answer', currentAnswer, question);
-        });
-      });
-      
-      await waitWithControls(getDelayForSpeed());
-      
-      // Check if there are unfamiliar questions that need review
+      // If there are unfamiliar questions, show review panel
       if (unfamiliarCount > 0) {
-        updateStatus(statusEl, '⚠️', `${unfamiliarCount} questions need your input - click to edit`);
-        showToast(`${unfamiliarCount} unfamiliar questions found - please review`, 'warning');
-        // Don't auto-proceed, let user review
-        setStep(1);
-        btn.disabled = false;
-        automationState.isRunning = false;
-        return;
+        // Build review list for unfamiliar questions
+        const reviewList = panel.querySelector('#qh-review-list');
+        if (reviewList) {
+          reviewList.innerHTML = '';
+          
+          questions.forEach((q, i) => {
+            const qId = q.id || `q_${i}`;
+            const reviewedAnswer = reviewedAnswers[qId];
+            
+            if (!reviewedAnswer) {
+              const itemHtml = `
+                <div class="qh-review-item unfamiliar" data-question-id="${qId}" title="Click to edit">
+                  <div class="qh-review-question">${q.label.substring(0, 50)}${q.label.length > 50 ? '...' : ''}</div>
+                  <div class="qh-review-answer">
+                    <span class="qh-review-answer-text">(needs your input)</span>
+                    <span class="qh-review-score">ATS: 0%</span>
+                    <button class="qh-review-answer-edit" data-question-id="${qId}">✏️</button>
+                  </div>
+                  <div class="qh-review-reasoning">This question requires manual input</div>
+                </div>
+              `;
+              reviewList.insertAdjacentHTML('beforeend', itemHtml);
+            }
+          });
+          
+          // Update summary stats
+          panel.querySelector('#qh-auto-filled').textContent = autoFilledCount;
+          panel.querySelector('#qh-needs-review').textContent = needsReviewCount;
+          panel.querySelector('#qh-unfamiliar').textContent = unfamiliarCount;
+          panel.querySelector('#qh-ats-score-badge').textContent = `ATS: ${overallAtsScore}%`;
+          
+          // Add edit handlers
+          reviewList.querySelectorAll('.qh-review-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+              if (e.target.classList.contains('qh-review-answer-edit')) return;
+              const qId = item.dataset.questionId;
+              const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
+              showEditModal(panel, qId, question?.label || 'Edit Answer', '', question);
+            });
+          });
+          
+          reviewList.querySelectorAll('.qh-review-answer-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const qId = btn.dataset.questionId;
+              const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
+              showEditModal(panel, qId, question?.label || 'Edit Answer', '', question);
+            });
+          });
+          
+          // Show review panel
+          reviewPanel.classList.remove('hidden');
+          showToast(`⚠️ ${unfamiliarCount} questions need your input - please review`, 'warning');
+          updateStatus(statusEl, '⚠️', `${unfamiliarCount} questions need your input`);
+          
+          // Don't auto-proceed, let user review unfamiliar questions
+          btn.disabled = false;
+          automationState.isRunning = false;
+          return;
+        }
       }
       
-      // ===== STEP 2: QUICK FILL =====
-      setStep(2);
-      updateStatus(statusEl, '📝', 'Step 2: Auto-filling form...');
-      
       await waitWithControls(getDelayForSpeed());
       
-      // Apply reviewed answers
-      const finalAnswers = JSON.parse(panel.dataset.reviewedAnswers || '{}');
-      const atsData = await chrome.storage.local.get(['atsCredentials']);
-      
-      // Fill profile fields first
-      await autofillForm(null, atsData.atsCredentials);
-      
-      // Fill questions with AI answers
-      const fillResult = await fillAllQuestions(profile, jobData, finalAnswers);
-      
-      updateStatus(statusEl, '✅', `Filled ${fillResult.filledCount}/${fillResult.totalQuestions} fields`);
-      
-      // Hide review panel after filling
-      reviewPanel.classList.add('hidden');
-      
-      await waitWithControls(getDelayForSpeed());
-      
-      // ===== STEP 3: NEXT PAGE =====
-      setStep(3);
+      // ===== STEP 4: NAVIGATE TO NEXT PAGE =====
+      setStep(4);
       
       if (isFinalPage()) {
         updateStatus(statusEl, '🎉', 'Application ready to submit!');
-        showToast('🎉 Application complete! Ready to submit.', 'success');
+        showToast('🎉 Application complete! Review and click Submit.', 'success');
       } else {
-        updateStatus(statusEl, '➡️', 'Step 3: Moving to next page...');
+        updateStatus(statusEl, '➡️', 'Step 4: Moving to next page...');
         await waitWithControls(getDelayForSpeed());
         
         const navigated = await navigateToNextPage();
         if (navigated) {
           showToast('✅ Page complete - moved to next section', 'success');
+          updateStatus(statusEl, '✅', 'Page complete - continue on next page');
         } else {
           updateStatus(statusEl, '⚠️', 'Could not find next button');
           showToast('Please click Next manually', 'warning');
