@@ -10,6 +10,9 @@
     "tabs"
   ],
   "host_permissions": [
+    "https://*.lovable.app/*",
+    "https://*.lovableproject.com/*",
+    "https://*.supabase.co/*",
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",
     "https://*.glassdoor.com/*",

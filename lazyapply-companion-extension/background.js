@@ -237,9 +237,13 @@ async function addJobsToQueue(jobs) {
 async function fetchLiveJobs(keywords, location, dateFilter) {
   console.log('🔍 Fetching live jobs for:', keywords);
   
+  const storage = await chrome.storage.local.get(['accessToken']);
+  
+  if (!storage.accessToken) {
+    throw new Error('Not authenticated. Please load your profile from QuantumHire first.');
+  }
+  
   try {
-    const storage = await chrome.storage.local.get(['accessToken', 'userProfile']);
-    
     let query = keywords;
     if (location) {
       query += ` ${location}`;
@@ -250,17 +254,21 @@ async function fetchLiveJobs(keywords, location, dateFilter) {
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_ANON_KEY,
-        ...(storage.accessToken ? { 'Authorization': `Bearer ${storage.accessToken}` } : {})
+        'Authorization': `Bearer ${storage.accessToken}`
       },
       body: JSON.stringify({ 
         keywords: query,
-        dateFilter: dateFilter,
-        user_id: storage.userProfile?.user_id
+        dateFilter: dateFilter
       })
     });
     
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      if (response.status === 401) {
+        await chrome.storage.local.remove(['accessToken']);
+        throw new Error('Session expired. Please reload your profile from QuantumHire.');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error: ${response.status}`);
     }
     
     const data = await response.json();
