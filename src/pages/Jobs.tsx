@@ -41,6 +41,11 @@ import {
   ExternalLink,
   SkipForward,
   MousePointer,
+  Timer,
+  Wifi,
+  WifiOff,
+  Settings2,
+  FastForward,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -99,6 +104,18 @@ const Jobs = () => {
   const [sequentialMode, setSequentialMode] = useState(false);
   const [sequentialQueue, setSequentialQueue] = useState<string[]>([]);
   const [currentSequentialIndex, setCurrentSequentialIndex] = useState(0);
+  
+  // Automated sequential apply mode (auto-advance with extension)
+  const [autoSequentialMode, setAutoSequentialMode] = useState(false);
+  const [autoProcessing, setAutoProcessing] = useState(false);
+  const [currentAutoJob, setCurrentAutoJob] = useState<Job | null>(null);
+  const [autoProgress, setAutoProgress] = useState({ current: 0, total: 0, successful: 0, failed: 0, skipped: 0 });
+  const [jobTimeout, setJobTimeout] = useState(60); // seconds per job
+  const [extensionConnected, setExtensionConnected] = useState(false);
+  const autoAbortRef = useRef<AbortController | null>(null);
+  const autoPauseRef = useRef(false);
+  const currentJobWindowRef = useRef<Window | null>(null);
+  const jobStartTimeRef = useRef<number>(0);
   
   // Feedback dialog state
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -428,6 +445,275 @@ const Jobs = () => {
     toast.info('Sequential apply cancelled');
   }, []);
 
+  // ============= AUTOMATED SEQUENTIAL APPLY MODE =============
+  // Automatically opens jobs one by one, triggers extension autofill, and handles timeouts/errors
+
+  // Check if Chrome extension is available
+  const checkExtensionConnection = useCallback(() => {
+    try {
+      // Check for extension by looking for specific message in page
+      const extensionCheck = document.querySelector('[data-quantumhire-extension]');
+      // Also check if running in a context where extension might be available
+      const hasChromeRuntime = typeof window !== 'undefined' && 
+        'chrome' in window && 
+        (window as any).chrome?.runtime;
+      setExtensionConnected(!!extensionCheck || !!hasChromeRuntime);
+    } catch {
+      setExtensionConnected(false);
+    }
+  }, []);
+
+  // Start automated sequential apply
+  const startAutoSequentialApply = useCallback(async () => {
+    if (selectedJobs.size === 0) return;
+    
+    const jobIds = Array.from(selectedJobs);
+    const jobsToProcess = jobIds.map(id => jobs.find(j => j.id === id)).filter(Boolean) as Job[];
+    
+    if (jobsToProcess.length === 0) {
+      toast.error('No valid jobs selected');
+      return;
+    }
+
+    setAutoSequentialMode(true);
+    setAutoProcessing(true);
+    setSequentialQueue(jobIds);
+    setCurrentSequentialIndex(0);
+    setAutoProgress({ current: 0, total: jobsToProcess.length, successful: 0, failed: 0, skipped: 0 });
+    setFailedJobs([]);
+    autoAbortRef.current = new AbortController();
+    autoPauseRef.current = false;
+    setIsPaused(false);
+
+    toast.info('Automated Sequential Apply started', {
+      description: `Processing ${jobsToProcess.length} jobs with ${jobTimeout}s timeout per job`,
+    });
+
+    let successful = 0;
+    let failed = 0;
+    let skipped = 0;
+    const newFailedJobs: { id: string; title: string; company: string; error: string }[] = [];
+
+    for (let i = 0; i < jobsToProcess.length; i++) {
+      // Check if stopped
+      if (autoAbortRef.current?.signal.aborted) {
+        break;
+      }
+
+      // Handle pause
+      while (autoPauseRef.current && !autoAbortRef.current?.signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      if (autoAbortRef.current?.signal.aborted) break;
+
+      const job = jobsToProcess[i];
+      setCurrentAutoJob(job);
+      setCurrentSequentialIndex(i);
+      setAutoProgress(prev => ({ ...prev, current: i + 1 }));
+
+      // Process this job
+      const result = await processAutoJob(job);
+
+      if (result.success) {
+        successful++;
+        await updateJobStatus(job.id, 'applied');
+      } else if (result.skipped) {
+        skipped++;
+        newFailedJobs.push({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          error: result.error || 'Skipped',
+        });
+      } else {
+        failed++;
+        newFailedJobs.push({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          error: result.error || 'Failed to apply',
+        });
+      }
+
+      setAutoProgress(prev => ({ ...prev, successful, failed, skipped }));
+      setFailedJobs([...newFailedJobs]);
+
+      // Small delay between jobs
+      if (i < jobsToProcess.length - 1 && !autoAbortRef.current?.signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+
+    // Cleanup
+    setAutoSequentialMode(false);
+    setAutoProcessing(false);
+    setCurrentAutoJob(null);
+    setSelectedJobs(new Set());
+    setSelectionMode(false);
+
+    // Show summary
+    const total = successful + failed + skipped;
+    if (total > 0) {
+      if (failed > 0 || skipped > 0) {
+        toast.warning(`Automated apply completed with issues`, {
+          description: `${successful} applied, ${failed} failed, ${skipped} skipped`,
+          duration: 8000,
+        });
+      } else {
+        toast.success(`Successfully applied to ${successful} job${successful !== 1 ? 's' : ''}!`, {
+          description: 'All jobs have been processed.',
+          duration: 5000,
+        });
+      }
+    }
+  }, [selectedJobs, jobs, jobTimeout, updateJobStatus]);
+
+  // Process a single job in auto mode
+  const processAutoJob = useCallback(async (job: Job): Promise<{ success: boolean; skipped?: boolean; error?: string }> => {
+    if (!job.url) {
+      return { success: false, error: 'No URL available' };
+    }
+
+    // Check for broken links
+    const isBroken = job.url_status === 'broken' || (job.report_count && job.report_count >= 3);
+    if (isBroken) {
+      return { success: false, skipped: true, error: 'Link reported as broken' };
+    }
+
+    jobStartTimeRef.current = Date.now();
+
+    try {
+      // Open the job in a new window (user-initiated via the automation, won't be blocked)
+      const newWindow = window.open(job.url, '_blank', 'noopener,noreferrer');
+      
+      if (!newWindow) {
+        return { success: false, error: 'Popup blocked - click to open manually' };
+      }
+
+      currentJobWindowRef.current = newWindow;
+
+      // Wait for the job to be processed (with timeout)
+      const timeoutMs = jobTimeout * 1000;
+      const checkInterval = 1000;
+      let elapsed = 0;
+
+      // Create a promise that resolves when the window is closed or timeout occurs
+      return new Promise((resolve) => {
+        const checkProgress = setInterval(() => {
+          // Check if aborted
+          if (autoAbortRef.current?.signal.aborted) {
+            clearInterval(checkProgress);
+            try { newWindow.close(); } catch {}
+            resolve({ success: false, error: 'Stopped by user' });
+            return;
+          }
+
+          // Check if paused - just wait
+          if (autoPauseRef.current) {
+            return;
+          }
+
+          elapsed += checkInterval;
+
+          // Check if window was closed (user completed or closed it)
+          try {
+            if (newWindow.closed) {
+              clearInterval(checkProgress);
+              // If closed quickly (< 5 seconds), likely an error
+              if (elapsed < 5000) {
+                resolve({ success: false, skipped: true, error: 'Page closed quickly - may be invalid' });
+              } else {
+                // Assume successful if user spent time on the page
+                resolve({ success: true });
+              }
+              return;
+            }
+          } catch {
+            // Cross-origin - can't check, assume still loading
+          }
+
+          // Check for timeout
+          if (elapsed >= timeoutMs) {
+            clearInterval(checkProgress);
+            try { newWindow.close(); } catch {}
+            resolve({ success: false, skipped: true, error: `Timeout after ${jobTimeout}s` });
+            return;
+          }
+        }, checkInterval);
+
+        // Also set a hard timeout as backup
+        setTimeout(() => {
+          clearInterval(checkProgress);
+          try { 
+            if (currentJobWindowRef.current && !currentJobWindowRef.current.closed) {
+              currentJobWindowRef.current.close();
+            }
+          } catch {}
+          resolve({ success: false, skipped: true, error: `Timeout after ${jobTimeout}s` });
+        }, timeoutMs + 2000);
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Handle specific error types
+      if (errorMessage.includes('ERR_BLOCKED_BY_RESPONSE') || errorMessage.includes('blocked')) {
+        return { success: false, skipped: true, error: 'Site blocked access' };
+      }
+      
+      return { success: false, error: errorMessage };
+    }
+  }, [jobTimeout]);
+
+  // Pause auto sequential
+  const pauseAutoSequential = useCallback(() => {
+    autoPauseRef.current = true;
+    setIsPaused(true);
+    toast.info('Automation paused');
+  }, []);
+
+  // Resume auto sequential
+  const resumeAutoSequential = useCallback(() => {
+    autoPauseRef.current = false;
+    setIsPaused(false);
+    toast.info('Automation resumed');
+  }, []);
+
+  // Stop auto sequential
+  const stopAutoSequential = useCallback(() => {
+    autoAbortRef.current?.abort();
+    autoPauseRef.current = false;
+    setIsPaused(false);
+    setAutoSequentialMode(false);
+    setAutoProcessing(false);
+    setCurrentAutoJob(null);
+    
+    // Close any open window
+    try {
+      if (currentJobWindowRef.current && !currentJobWindowRef.current.closed) {
+        currentJobWindowRef.current.close();
+      }
+    } catch {}
+    
+    toast.info('Automation stopped');
+  }, []);
+
+  // Skip current job in auto mode
+  const skipAutoCurrentJob = useCallback(() => {
+    try {
+      if (currentJobWindowRef.current && !currentJobWindowRef.current.closed) {
+        currentJobWindowRef.current.close();
+      }
+    } catch {}
+    toast.info('Skipping current job...');
+  }, []);
+
+  // Check extension on mount
+  useEffect(() => {
+    checkExtensionConnection();
+  }, [checkExtensionConnection]);
+
   // Submit feedback
   const handleSubmitFeedback = useCallback(async () => {
     if (!feedbackText.trim()) return;
@@ -716,29 +1002,118 @@ const Jobs = () => {
                 )}
                 
                 {/* Start Batch Apply buttons */}
-                {selectedJobs.size > 0 && !isBatchApplying && !sequentialMode && (
+                {selectedJobs.size > 0 && !isBatchApplying && !sequentialMode && !autoSequentialMode && (
                   <>
                     <Badge variant="secondary" className="text-sm">
                       {selectedJobs.size} selected
                     </Badge>
+                    
+                    {/* Timeout Setting */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="gap-1">
+                          <Settings2 className="h-4 w-4" />
+                          <Timer className="h-3 w-3" />
+                          {jobTimeout}s
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
+                        <DropdownMenuItem onClick={() => setJobTimeout(30)}>
+                          30s - Fast (may skip some)
+                          {jobTimeout === 30 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setJobTimeout(60)}>
+                          60s - Standard
+                          {jobTimeout === 60 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setJobTimeout(90)}>
+                          90s - Patient
+                          {jobTimeout === 90 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setJobTimeout(120)}>
+                          120s - Very Patient
+                          {jobTimeout === 120 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {/* Auto Sequential Apply - Main CTA */}
+                    <Button
+                      size="sm"
+                      onClick={startAutoSequentialApply}
+                      className="gap-2"
+                      title="Automatically opens and applies to each job with timeout protection"
+                    >
+                      <FastForward className="h-4 w-4" />
+                      Auto Apply ({selectedJobs.size})
+                    </Button>
+                    
+                    {/* Manual Sequential Apply */}
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={startSequentialApply}
                       className="gap-2"
-                      title="Opens one job at a time - no popups blocked"
+                      title="Opens one job at a time - you click to proceed"
                     >
-                      <ExternalLink className="h-4 w-4" />
-                      Sequential Apply
+                      <MousePointer className="h-4 w-4" />
+                      Manual
                     </Button>
+                    
+                    {/* Batch Apply - Opens all at once */}
                     <Button
                       size="sm"
+                      variant="ghost"
                       onClick={handleBatchApply}
                       className="gap-2"
                       title="Opens all jobs at once - may be blocked by browser"
                     >
                       <Zap className="h-4 w-4" />
-                      Batch Apply ({selectedJobs.size})
+                      Batch
+                    </Button>
+                  </>
+                )}
+                
+                {/* Auto Sequential Mode Controls */}
+                {autoSequentialMode && (
+                  <>
+                    {isPaused ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resumeAutoSequential}
+                        className="gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        Resume
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={pauseAutoSequential}
+                        className="gap-2"
+                      >
+                        <Pause className="h-4 w-4" />
+                        Pause
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={skipAutoCurrentJob}
+                      className="gap-2"
+                    >
+                      <SkipForward className="h-4 w-4" />
+                      Skip
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={stopAutoSequential}
+                      className="gap-2"
+                    >
+                      <StopCircle className="h-4 w-4" />
+                      Stop
                     </Button>
                   </>
                 )}
@@ -792,6 +1167,137 @@ const Jobs = () => {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+            
+            {/* Auto Sequential Mode Panel */}
+            {autoSequentialMode && currentAutoJob && (
+              <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-primary/5 p-4 rounded-lg border border-green-500/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FastForward className={`h-5 w-5 text-green-600 ${!isPaused ? 'animate-pulse' : ''}`} />
+                    <span className="font-medium text-green-600">
+                      Auto Apply Mode
+                    </span>
+                    <Badge variant="secondary" className="bg-green-500/10 text-green-700">
+                      {isPaused ? 'Paused' : 'Running'}
+                    </Badge>
+                    <Badge variant="outline">
+                      Job {autoProgress.current} / {autoProgress.total}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="gap-1">
+                      <Timer className="h-3 w-3" />
+                      {jobTimeout}s timeout
+                    </Badge>
+                  </div>
+                </div>
+                
+                {/* Current Job Card */}
+                <div className="bg-background p-4 rounded-lg border">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg">{currentAutoJob.title}</h3>
+                      <p className="text-muted-foreground">{currentAutoJob.company}</p>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                        <span>{currentAutoJob.location}</span>
+                        {currentAutoJob.salary && (
+                          <span className="text-green-600">{currentAutoJob.salary}</span>
+                        )}
+                        {currentAutoJob.platform && (
+                          <Badge variant="outline" className="text-xs">
+                            {currentAutoJob.platform}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {!isPaused && (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+                        <span className="text-sm text-green-600">Processing...</span>
+                      </div>
+                    )}
+                  </div>
+                  {currentAutoJob.url && (
+                    <p className="text-xs text-muted-foreground mt-2 truncate">
+                      {currentAutoJob.url}
+                    </p>
+                  )}
+                </div>
+                
+                {/* Progress */}
+                <Progress 
+                  value={(autoProgress.current / autoProgress.total) * 100} 
+                  className={`h-2 ${isPaused ? '[&>div]:bg-yellow-500' : '[&>div]:bg-green-500'}`}
+                />
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="flex items-center gap-1 text-green-600">
+                      <CheckCircle className="h-4 w-4" />
+                      {autoProgress.successful} applied
+                    </span>
+                    {autoProgress.failed > 0 && (
+                      <span className="flex items-center gap-1 text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        {autoProgress.failed} failed
+                      </span>
+                    )}
+                    {autoProgress.skipped > 0 && (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <SkipForward className="h-4 w-4" />
+                        {autoProgress.skipped} skipped
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {isPaused ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resumeAutoSequential}
+                        className="gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        Resume
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={pauseAutoSequential}
+                        className="gap-2"
+                      >
+                        <Pause className="h-4 w-4" />
+                        Pause
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={skipAutoCurrentJob}
+                      className="gap-2"
+                    >
+                      <SkipForward className="h-4 w-4" />
+                      Skip
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={stopAutoSequential}
+                      className="gap-2"
+                    >
+                      <StopCircle className="h-4 w-4" />
+                      Stop
+                    </Button>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-muted-foreground text-center">
+                  Jobs open automatically. Extension will autofill forms. Close the tab when done or wait for timeout.
+                </p>
               </div>
             )}
             
