@@ -12,10 +12,12 @@ import { useProfile, type Profile } from '@/hooks/useProfile';
 import { CVUpload } from '@/components/profile/CVUpload';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
 import { 
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
   Shield, CheckCircle, Globe, FileText, Languages, Key, Eye, EyeOff,
-  Loader2, Activity, Zap
+  Loader2, Activity, Zap, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,46 +48,8 @@ const Profile = () => {
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingKey, setIsTestingKey] = useState(false);
-  const [apiUsageStats, setApiUsageStats] = useState<{ totalCalls: number; totalTokens: number; todayCalls: number } | null>(null);
 
-  // Fetch API usage stats
-  useEffect(() => {
-    if (user) {
-      fetchApiUsage();
-    }
-  }, [user]);
-
-  const fetchApiUsage = async () => {
-    if (!user) return;
-    
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      // Get all-time stats
-      const { data: allTime, error: allTimeError } = await supabase
-        .from('api_usage')
-        .select('tokens_used')
-        .eq('user_id', user.id);
-      
-      // Get today's stats
-      const { data: todayData, error: todayError } = await supabase
-        .from('api_usage')
-        .select('tokens_used')
-        .eq('user_id', user.id)
-        .gte('created_at', today.toISOString());
-      
-      if (!allTimeError && !todayError) {
-        const totalCalls = allTime?.length || 0;
-        const totalTokens = allTime?.reduce((sum, row) => sum + (row.tokens_used || 0), 0) || 0;
-        const todayCalls = todayData?.length || 0;
-        
-        setApiUsageStats({ totalCalls, totalTokens, todayCalls });
-      }
-    } catch (error) {
-      console.error('Error fetching API usage:', error);
-    }
-  };
+  // Note: API usage stats are now shown in the ApiUsageChart component
 
   const testApiKey = async () => {
     if (!localProfile.openai_api_key) {
@@ -171,9 +135,26 @@ const Profile = () => {
     );
   }
 
+  const hasApiKey = !!localProfile.openai_api_key;
+
   return (
     <AppLayout>
       <div className="space-y-6 max-w-4xl mx-auto">
+        {/* Warning Banner for Missing API Key */}
+        {!hasApiKey && (
+          <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>
+                <strong>OpenAI API key is missing.</strong> AI-powered resume tailoring and question answering features are disabled.
+              </span>
+              <a href="#api-key-section" className="underline font-medium ml-2">
+                Add API key below
+              </a>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Profile</h1>
@@ -226,7 +207,7 @@ const Profile = () => {
         />
 
         {/* OpenAI API Key */}
-        <Card className="border-primary/30 bg-primary/5">
+        <Card id="api-key-section" className="border-primary/30 bg-primary/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
@@ -293,30 +274,6 @@ const Profile = () => {
               </div>
             )}
             
-            {/* Usage Stats */}
-            {apiUsageStats && (
-              <div className="mt-4 p-4 bg-background rounded-lg border">
-                <div className="flex items-center gap-2 mb-3">
-                  <Activity className="h-4 w-4 text-primary" />
-                  <span className="font-medium text-sm">API Usage Statistics</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-2xl font-bold text-primary">{apiUsageStats.todayCalls}</div>
-                    <div className="text-xs text-muted-foreground">Today's Calls</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">{apiUsageStats.totalCalls}</div>
-                    <div className="text-xs text-muted-foreground">Total Calls</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">{(apiUsageStats.totalTokens / 1000).toFixed(1)}k</div>
-                    <div className="text-xs text-muted-foreground">Total Tokens</div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
             <p className="text-xs text-muted-foreground">
               Get your API key from{' '}
               <a 
@@ -331,6 +288,9 @@ const Profile = () => {
             </p>
           </CardContent>
         </Card>
+
+        {/* API Usage Chart */}
+        <ApiUsageChart />
 
         <Card>
           <CardHeader>
