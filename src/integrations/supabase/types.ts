@@ -324,6 +324,7 @@ export type Database = {
           id: string
           languages: Json | null
           last_name: string | null
+          learned_preferences: Json | null
           linkedin: string | null
           notice_period: string | null
           phone: string | null
@@ -370,6 +371,7 @@ export type Database = {
           id?: string
           languages?: Json | null
           last_name?: string | null
+          learned_preferences?: Json | null
           linkedin?: string | null
           notice_period?: string | null
           phone?: string | null
@@ -416,6 +418,7 @@ export type Database = {
           id?: string
           languages?: Json | null
           last_name?: string | null
+          learned_preferences?: Json | null
           linkedin?: string | null
           notice_period?: string | null
           phone?: string | null
@@ -481,6 +484,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_memories: {
+        Row: {
+          answer: Json
+          ats_score: number | null
+          confidence: string
+          context: Json | null
+          created_at: string
+          id: string
+          last_used_at: string
+          query_hash: string
+          question_keywords: string[]
+          question_normalized: string
+          updated_at: string
+          used_count: number
+          user_id: string
+        }
+        Insert: {
+          answer: Json
+          ats_score?: number | null
+          confidence?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          query_hash: string
+          question_keywords?: string[]
+          question_normalized: string
+          updated_at?: string
+          used_count?: number
+          user_id: string
+        }
+        Update: {
+          answer?: Json
+          ats_score?: number | null
+          confidence?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          query_hash?: string
+          question_keywords?: string[]
+          question_normalized?: string
+          updated_at?: string
+          used_count?: number
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
