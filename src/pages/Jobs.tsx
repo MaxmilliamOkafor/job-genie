@@ -4,6 +4,8 @@ import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 import { VirtualJobList } from '@/components/jobs/VirtualJobList';
 import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +53,7 @@ const Jobs = () => {
     searchJobs,
   } = useJobScraper();
   const { profile } = useProfile();
+  const { user } = useAuth();
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -242,10 +245,33 @@ const Jobs = () => {
           <JobFiltersBar 
             jobs={jobs} 
             onFiltersChange={handleFiltersChange}
-            onSearch={async (term) => {
+            onSearch={async (keywords) => {
+              if (!user) return;
               setIsSearching(true);
-              await searchJobs(term);
-              setIsSearching(false);
+              try {
+                const { data, error } = await supabase.functions.invoke('live-jobs', {
+                  body: {
+                    keywords,
+                    locations: 'Remote, Dublin, Ireland, United Kingdom, United States, Germany, Netherlands, France',
+                    hours: 24,
+                    user_id: user.id,
+                    limit: 100,
+                    sortBy: 'recent',
+                  },
+                });
+                
+                if (error) throw error;
+                
+                if (data?.success) {
+                  await refetch();
+                  toast.success(`Found ${data.jobs?.length || 0} new jobs for: ${keywords.split(',').slice(0, 3).join(', ')}...`);
+                }
+              } catch (error) {
+                console.error('Search error:', error);
+                toast.error('Failed to search jobs');
+              } finally {
+                setIsSearching(false);
+              }
             }}
             isSearching={isSearching}
           />
