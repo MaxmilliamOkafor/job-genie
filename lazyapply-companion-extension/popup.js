@@ -1,12 +1,27 @@
-// LazyApply 2.0 EXTREME - Popup Script with Live Jobs
+// LazyApply 2.0 EXTREME - Enhanced Popup with Full Boolean Search
+// Mirrors QuantumHire Jobs page functionality
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 const QUANTUMHIRE_URL = 'https://preview--quantumhire.lovable.app';
 
+const SAMPLE_KEYWORDS = `Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity`;
+
 let allJobs = [];
+let filteredJobs = [];
 let selectedJobs = new Set();
 let jobQueue = [];
 let currentFilter = 'all';
+let isApplying = false;
+let currentApplyIndex = 0;
+
+// Stats
+const stats = {
+  searched: 0,
+  queued: 0,
+  tailored: 0,
+  applied: 0
+};
 
 document.addEventListener('DOMContentLoaded', async () => {
   await initializePopup();
@@ -15,10 +30,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function initializePopup() {
-  // Load saved state
   const storage = await chrome.storage.local.get([
-    'enabled', 'autoTailor', 'showPanel', 'autoQueue',
-    'userProfile', 'accessToken', 'jobQueue', 'lastKeywords', 'lastLocation'
+    'enabled', 'autoTailor', 'showPanel', 'autoQueue', 'workdayMultiPage',
+    'userProfile', 'accessToken', 'jobQueue', 'lastBooleanSearch',
+    'stats', 'tailorOnApply', 'attachDocuments'
   ]);
   
   // Set toggle states
@@ -26,10 +41,21 @@ async function initializePopup() {
   document.getElementById('auto-tailor-toggle').checked = storage.autoTailor !== false;
   document.getElementById('show-panel-toggle').checked = storage.showPanel !== false;
   document.getElementById('auto-queue-toggle').checked = storage.autoQueue || false;
+  document.getElementById('workday-multipage-toggle').checked = storage.workdayMultiPage !== false;
+  document.getElementById('tailor-on-apply').checked = storage.tailorOnApply !== false;
+  document.getElementById('attach-documents').checked = storage.attachDocuments || false;
   
-  // Restore search inputs
-  if (storage.lastKeywords) document.getElementById('keyword-input').value = storage.lastKeywords;
-  if (storage.lastLocation) document.getElementById('location-input').value = storage.lastLocation;
+  // Restore search
+  if (storage.lastBooleanSearch) {
+    document.getElementById('boolean-search-input').value = storage.lastBooleanSearch;
+    updateKeywordCount(storage.lastBooleanSearch);
+  }
+  
+  // Load stats
+  if (storage.stats) {
+    Object.assign(stats, storage.stats);
+    updateStatsDisplay();
+  }
   
   // Load queue
   jobQueue = storage.jobQueue || [];
@@ -38,18 +64,13 @@ async function initializePopup() {
   // Check backend
   checkBackendConnection(storage.accessToken);
   
-  // Load profile if exists
+  // Load profile
   if (storage.userProfile) {
     displayProfile(storage.userProfile);
   }
   
   // Load jobs from database
   await fetchJobsFromDatabase();
-  
-  // Get live stats
-  chrome.runtime.sendMessage({ action: 'GET_STATS' }, (response) => {
-    if (response?.stats) updateStats(response.stats);
-  });
 }
 
 function setupTabNavigation() {
@@ -57,7 +78,6 @@ function setupTabNavigation() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      
       btn.classList.add('active');
       document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
     });
@@ -65,17 +85,30 @@ function setupTabNavigation() {
 }
 
 function setupEventListeners() {
-  // Search jobs
-  document.getElementById('search-jobs-btn').addEventListener('click', searchJobs);
-  document.getElementById('refresh-jobs-btn').addEventListener('click', () => fetchJobsFromDatabase());
+  // Boolean Search
+  document.getElementById('boolean-search-btn').addEventListener('click', performBooleanSearch);
+  document.getElementById('boolean-search-input').addEventListener('input', (e) => {
+    updateKeywordCount(e.target.value);
+  });
+  document.getElementById('load-sample-btn').addEventListener('click', loadSampleKeywords);
+  document.getElementById('clear-keywords-btn')?.addEventListener('click', clearKeywords);
   
-  // Quick filters
+  // Example chips
+  document.querySelectorAll('.example-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.getElementById('boolean-search-input').value = chip.dataset.query;
+      updateKeywordCount(chip.dataset.query);
+    });
+  });
+  
+  // Job filters
+  document.getElementById('job-search-input').addEventListener('input', filterJobsList);
   document.querySelectorAll('.filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       currentFilter = chip.dataset.filter;
-      renderJobs();
+      filterJobsList();
     });
   });
   
@@ -84,25 +117,34 @@ function setupEventListeners() {
   document.getElementById('add-selected-btn').addEventListener('click', addSelectedToQueue);
   
   // Queue actions
-  document.getElementById('send-to-lazyapply-btn').addEventListener('click', pushToLazyApply);
+  document.getElementById('start-apply-btn').addEventListener('click', startApplyingFromQueue);
+  document.getElementById('send-to-lazyapply-btn').addEventListener('click', copyUrlsToClipboard);
   document.getElementById('clear-queue-btn').addEventListener('click', clearQueue);
   document.getElementById('manual-add-btn').addEventListener('click', addManualUrl);
+  
+  // Queue settings
+  document.getElementById('tailor-on-apply').addEventListener('change', (e) => {
+    chrome.storage.local.set({ tailorOnApply: e.target.checked });
+  });
+  document.getElementById('attach-documents').addEventListener('change', (e) => {
+    chrome.storage.local.set({ attachDocuments: e.target.checked });
+  });
   
   // Settings toggles
   document.getElementById('enabled-toggle').addEventListener('change', (e) => {
     chrome.runtime.sendMessage({ action: 'SET_ENABLED', enabled: e.target.checked });
   });
-  
   document.getElementById('auto-tailor-toggle').addEventListener('change', (e) => {
     chrome.storage.local.set({ autoTailor: e.target.checked });
   });
-  
   document.getElementById('show-panel-toggle').addEventListener('change', (e) => {
     chrome.storage.local.set({ showPanel: e.target.checked });
   });
-  
   document.getElementById('auto-queue-toggle').addEventListener('change', (e) => {
     chrome.storage.local.set({ autoQueue: e.target.checked });
+  });
+  document.getElementById('workday-multipage-toggle').addEventListener('change', (e) => {
+    chrome.storage.local.set({ workdayMultiPage: e.target.checked });
   });
   
   document.getElementById('load-profile-btn').addEventListener('click', loadProfileFromQuantumHire);
@@ -112,24 +154,180 @@ function setupEventListeners() {
   });
   
   // Enter key for search
-  document.getElementById('keyword-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchJobs();
-  });
-  document.getElementById('location-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchJobs();
+  document.getElementById('boolean-search-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      performBooleanSearch();
+    }
   });
 }
 
-// Fetch jobs from QuantumHire database
+// =========================
+// Boolean Search Functions
+// =========================
+
+function updateKeywordCount(input) {
+  const keywords = parseKeywords(input);
+  const countEl = document.getElementById('keyword-count');
+  if (keywords.length > 0) {
+    countEl.textContent = `${keywords.length} keyword${keywords.length !== 1 ? 's' : ''}`;
+    countEl.style.display = 'inline';
+  } else {
+    countEl.style.display = 'none';
+  }
+  
+  // Show active keywords section
+  const activeSection = document.getElementById('active-keywords');
+  const keywordsList = document.getElementById('keywords-list');
+  
+  if (keywords.length > 0 && keywords.length <= 20) {
+    activeSection.style.display = 'block';
+    keywordsList.innerHTML = keywords.map(k => 
+      `<span class="keyword-tag">${escapeHtml(k)}<button class="keyword-remove" data-keyword="${escapeHtml(k)}">×</button></span>`
+    ).join('');
+    
+    // Add remove handlers
+    keywordsList.querySelectorAll('.keyword-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeKeyword(btn.dataset.keyword);
+      });
+    });
+  } else {
+    activeSection.style.display = 'none';
+  }
+}
+
+function parseKeywords(input) {
+  const normalized = input.replace(/["""]/g, '').replace(/\s+/g, ' ').trim();
+  return normalized.split(',').map(k => k.trim()).filter(k => k.length > 0);
+}
+
+function removeKeyword(keyword) {
+  const input = document.getElementById('boolean-search-input');
+  const keywords = parseKeywords(input.value).filter(k => k !== keyword);
+  input.value = keywords.join(', ');
+  updateKeywordCount(input.value);
+}
+
+function loadSampleKeywords() {
+  document.getElementById('boolean-search-input').value = SAMPLE_KEYWORDS;
+  updateKeywordCount(SAMPLE_KEYWORDS);
+  showToast('Sample keywords loaded!', 'success');
+}
+
+function clearKeywords() {
+  document.getElementById('boolean-search-input').value = '';
+  updateKeywordCount('');
+}
+
+async function performBooleanSearch() {
+  const input = document.getElementById('boolean-search-input').value.trim();
+  const location = document.getElementById('location-filter').value;
+  const dateFilter = document.getElementById('date-filter').value;
+  
+  if (!input) {
+    showToast('Please enter keywords', 'error');
+    return;
+  }
+  
+  // Save search
+  chrome.storage.local.set({ lastBooleanSearch: input });
+  
+  const btn = document.getElementById('boolean-search-btn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Searching...';
+  
+  // Switch to Jobs tab
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="jobs"]').classList.add('active');
+  document.getElementById('tab-jobs').classList.add('active');
+  
+  showJobsLoading();
+  
+  try {
+    const storage = await chrome.storage.local.get(['accessToken', 'userProfile']);
+    
+    // Build query with location
+    let query = input;
+    if (location) {
+      query += ` ${location}`;
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/search-jobs-google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        ...(storage.accessToken ? { 'Authorization': `Bearer ${storage.accessToken}` } : {})
+      },
+      body: JSON.stringify({ 
+        keywords: query,
+        dateFilter: dateFilter,
+        user_id: storage.userProfile?.user_id
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.jobs?.length > 0) {
+      allJobs = data.jobs;
+      stats.searched = allJobs.length;
+      updateStatsDisplay();
+      saveStats();
+      filterJobsList();
+      showToast(`Found ${data.jobs.length} jobs!`, 'success');
+      
+      // Auto-queue high match if enabled
+      const autoQueue = (await chrome.storage.local.get(['autoQueue'])).autoQueue;
+      if (autoQueue) {
+        autoQueueHighMatch();
+      }
+    } else if (data.jobs?.length === 0) {
+      showToast('No jobs found. Try different keywords.', 'info');
+      allJobs = [];
+      filterJobsList();
+    } else {
+      throw new Error(data.error || 'Search failed');
+    }
+  } catch (error) {
+    console.error('Search error:', error);
+    showToast('Search failed. Check your connection.', 'error');
+    showJobsError('Search failed. Try again.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Search Jobs';
+  }
+}
+
+function autoQueueHighMatch() {
+  const highMatchJobs = allJobs.filter(j => (j.match_score || 0) >= 85);
+  if (highMatchJobs.length > 0) {
+    highMatchJobs.forEach(job => {
+      if (!jobQueue.some(q => q.id === job.id)) {
+        jobQueue.push(createQueueItem(job));
+      }
+    });
+    saveQueue();
+    updateQueueDisplay();
+    showToast(`Auto-queued ${highMatchJobs.length} high-match jobs!`, 'success');
+  }
+}
+
+// =========================
+// Jobs List Functions
+// =========================
+
 async function fetchJobsFromDatabase() {
   showJobsLoading();
   
   try {
     const storage = await chrome.storage.local.get(['accessToken']);
     
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/jobs?select=*&order=created_at.desc&limit=100`, {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/jobs?select=*&order=created_at.desc&limit=200`, {
       headers: {
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM',
+        'apikey': SUPABASE_ANON_KEY,
         'Content-Type': 'application/json',
         ...(storage.accessToken ? { 'Authorization': `Bearer ${storage.accessToken}` } : {})
       }
@@ -137,8 +335,9 @@ async function fetchJobsFromDatabase() {
     
     if (response.ok) {
       allJobs = await response.json();
-      renderJobs();
-      showToast(`Loaded ${allJobs.length} jobs`, 'success');
+      stats.searched = allJobs.length;
+      updateStatsDisplay();
+      filterJobsList();
     } else {
       throw new Error('Failed to fetch jobs');
     }
@@ -148,71 +347,60 @@ async function fetchJobsFromDatabase() {
   }
 }
 
-// Search for new jobs via edge function
-async function searchJobs() {
-  const keywords = document.getElementById('keyword-input').value.trim();
-  const location = document.getElementById('location-input').value.trim();
+function filterJobsList() {
+  const searchTerm = document.getElementById('job-search-input').value.toLowerCase();
   
-  if (!keywords) {
-    showToast('Please enter keywords', 'error');
-    return;
-  }
-  
-  // Save search params
-  chrome.storage.local.set({ lastKeywords: keywords, lastLocation: location });
-  
-  const btn = document.getElementById('search-jobs-btn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Searching...';
-  showJobsLoading();
-  
-  try {
-    const query = location ? `${keywords} ${location}` : keywords;
+  filteredJobs = allJobs.filter(job => {
+    // Text filter
+    const matchesSearch = !searchTerm || 
+      (job.title?.toLowerCase().includes(searchTerm)) ||
+      (job.company?.toLowerCase().includes(searchTerm)) ||
+      (job.location?.toLowerCase().includes(searchTerm));
     
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/search-jobs-google`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM'
-      },
-      body: JSON.stringify({ keywords: query })
-    });
-    
-    const data = await response.json();
-    
-    if (data.jobs && data.jobs.length > 0) {
-      allJobs = data.jobs;
-      renderJobs();
-      showToast(`Found ${data.jobs.length} new jobs!`, 'success');
-    } else {
-      showToast('No jobs found. Try different keywords.', 'info');
-      renderJobs();
+    // Category filter
+    let matchesFilter = true;
+    switch (currentFilter) {
+      case 'remote':
+        matchesFilter = (job.location || '').toLowerCase().includes('remote');
+        break;
+      case 'high-match':
+        matchesFilter = (job.match_score || 0) >= 80;
+        break;
+      case 'new':
+        const today = new Date().toDateString();
+        matchesFilter = new Date(job.created_at).toDateString() === today;
+        break;
+      case 'pending':
+        matchesFilter = job.status === 'pending';
+        break;
     }
-  } catch (error) {
-    console.error('Search error:', error);
-    showToast('Search failed. Try again.', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🔍 Search Jobs';
-  }
+    
+    return matchesSearch && matchesFilter;
+  });
+  
+  renderJobsList();
 }
 
-// Render jobs list
-function renderJobs() {
+function renderJobsList() {
   const container = document.getElementById('jobs-list');
-  const filteredJobs = filterJobs(allJobs);
   
   document.getElementById('jobs-count').textContent = `${filteredJobs.length} jobs`;
   
   if (filteredJobs.length === 0) {
-    container.innerHTML = '<div class="jobs-empty">No jobs found. Try searching!</div>';
+    container.innerHTML = `
+      <div class="jobs-empty">
+        <span>No jobs found</span>
+        <span class="jobs-empty-hint">Try a different search or filter</span>
+      </div>
+    `;
     return;
   }
   
-  container.innerHTML = filteredJobs.map(job => {
+  container.innerHTML = filteredJobs.slice(0, 100).map(job => {
     const isSelected = selectedJobs.has(job.id);
     const isQueued = jobQueue.some(q => q.id === job.id || q.url === job.url);
     const scoreClass = (job.match_score || 0) >= 80 ? 'high' : (job.match_score || 0) >= 60 ? 'medium' : 'low';
+    const platformClass = getPlatformClass(job.platform || job.url);
     
     return `
       <div class="job-card ${isSelected ? 'selected' : ''} ${isQueued ? 'queued' : ''}" data-job-id="${job.id}">
@@ -223,19 +411,19 @@ function renderJobs() {
           <div class="job-title">${escapeHtml(job.title || 'Unknown Position')}</div>
           <div class="job-company">${escapeHtml(job.company || 'Unknown Company')}</div>
           <div class="job-meta">
-            <span class="job-location">📍 ${escapeHtml(job.location || 'Unknown')}</span>
-            ${job.platform ? `<span class="job-platform">${escapeHtml(job.platform)}</span>` : ''}
+            <span class="job-location">📍 ${escapeHtml(truncate(job.location || 'Unknown', 20))}</span>
+            ${job.platform ? `<span class="job-platform ${platformClass}">${escapeHtml(job.platform)}</span>` : ''}
           </div>
         </div>
         <div class="job-actions">
           <div class="job-score ${scoreClass}">${job.match_score || 0}%</div>
-          ${isQueued ? '<span class="queued-badge">Queued</span>' : `<button class="btn-add-queue" title="Add to queue">+</button>`}
+          ${isQueued ? '<span class="queued-badge">✓</span>' : `<button class="btn-add-queue" title="Add to queue">+</button>`}
         </div>
       </div>
     `;
   }).join('');
   
-  // Add event listeners
+  // Event listeners
   container.querySelectorAll('.job-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', (e) => {
       const jobId = e.target.closest('.job-card').dataset.jobId;
@@ -245,6 +433,7 @@ function renderJobs() {
   
   container.querySelectorAll('.btn-add-queue').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const jobId = e.target.closest('.job-card').dataset.jobId;
       addJobToQueue(jobId);
     });
@@ -261,18 +450,13 @@ function renderJobs() {
   updateBulkActionState();
 }
 
-function filterJobs(jobs) {
-  switch (currentFilter) {
-    case 'remote':
-      return jobs.filter(j => (j.location || '').toLowerCase().includes('remote'));
-    case 'high-match':
-      return jobs.filter(j => (j.match_score || 0) >= 80);
-    case 'new':
-      const today = new Date().toDateString();
-      return jobs.filter(j => new Date(j.created_at).toDateString() === today);
-    default:
-      return jobs;
+function getPlatformClass(platformOrUrl) {
+  const platform = (platformOrUrl || '').toLowerCase();
+  if (platform.includes('greenhouse') || platform.includes('lever') || 
+      platform.includes('ashby') || platform.includes('rippling')) {
+    return 'lazyapply-supported';
   }
+  return '';
 }
 
 function toggleJobSelection(jobId) {
@@ -281,11 +465,10 @@ function toggleJobSelection(jobId) {
   } else {
     selectedJobs.add(jobId);
   }
-  renderJobs();
+  renderJobsList();
 }
 
 function toggleSelectAll() {
-  const filteredJobs = filterJobs(allJobs);
   const selectableJobs = filteredJobs.filter(j => !jobQueue.some(q => q.id === j.id));
   
   if (selectedJobs.size === selectableJobs.length) {
@@ -293,13 +476,49 @@ function toggleSelectAll() {
   } else {
     selectableJobs.forEach(j => selectedJobs.add(j.id));
   }
-  renderJobs();
+  renderJobsList();
 }
 
 function updateBulkActionState() {
   const btn = document.getElementById('add-selected-btn');
+  const count = document.getElementById('selected-count');
   btn.disabled = selectedJobs.size === 0;
-  btn.innerHTML = selectedJobs.size > 0 ? `➕ Add ${selectedJobs.size} to Queue` : '➕ Add to Queue';
+  count.textContent = selectedJobs.size;
+}
+
+// =========================
+// Queue Functions
+// =========================
+
+function createQueueItem(job) {
+  return {
+    id: job.id,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    url: job.url,
+    platform: detectPlatformFromUrl(job.url || job.platform),
+    match_score: job.match_score,
+    addedAt: new Date().toISOString(),
+    status: 'pending',
+    tailored: false
+  };
+}
+
+function detectPlatformFromUrl(urlOrPlatform) {
+  const str = (urlOrPlatform || '').toLowerCase();
+  if (str.includes('greenhouse')) return 'Greenhouse';
+  if (str.includes('lever')) return 'Lever';
+  if (str.includes('ashby')) return 'Ashby';
+  if (str.includes('rippling')) return 'Rippling';
+  if (str.includes('workday') || str.includes('myworkdayjobs')) return 'Workday';
+  if (str.includes('icims')) return 'iCIMS';
+  if (str.includes('workable')) return 'Workable';
+  if (str.includes('smartrecruiters')) return 'SmartRecruiters';
+  if (str.includes('linkedin')) return 'LinkedIn';
+  if (str.includes('indeed')) return 'Indeed';
+  if (str.includes('glassdoor')) return 'Glassdoor';
+  return 'Other';
 }
 
 function addJobToQueue(jobId) {
@@ -307,45 +526,41 @@ function addJobToQueue(jobId) {
   if (!job) return;
   
   if (!jobQueue.some(q => q.id === job.id)) {
-    jobQueue.push({
-      id: job.id,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      url: job.url,
-      platform: job.platform,
-      match_score: job.match_score,
-      addedAt: new Date().toISOString()
-    });
+    jobQueue.push(createQueueItem(job));
+    stats.queued++;
+    updateStatsDisplay();
+    saveStats();
     saveQueue();
     showToast('Added to queue!', 'success');
   }
-  renderJobs();
+  renderJobsList();
   updateQueueDisplay();
 }
 
 function addSelectedToQueue() {
+  let addedCount = 0;
   selectedJobs.forEach(jobId => {
     const job = allJobs.find(j => j.id === jobId);
     if (job && !jobQueue.some(q => q.id === job.id)) {
-      jobQueue.push({
-        id: job.id,
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        url: job.url,
-        platform: job.platform,
-        match_score: job.match_score,
-        addedAt: new Date().toISOString()
-      });
+      jobQueue.push(createQueueItem(job));
+      addedCount++;
     }
   });
   
+  stats.queued += addedCount;
+  updateStatsDisplay();
+  saveStats();
   saveQueue();
-  showToast(`Added ${selectedJobs.size} jobs to queue!`, 'success');
+  showToast(`Added ${addedCount} jobs to queue!`, 'success');
   selectedJobs.clear();
-  renderJobs();
+  renderJobsList();
   updateQueueDisplay();
+  
+  // Switch to queue tab
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="queue"]').classList.add('active');
+  document.getElementById('tab-queue').classList.add('active');
 }
 
 function addManualUrl() {
@@ -358,13 +573,19 @@ function addManualUrl() {
     new URL(url);
     
     if (!jobQueue.some(q => q.url === url)) {
+      const platform = detectPlatformFromUrl(url);
       jobQueue.push({
         id: `manual-${Date.now()}`,
         title: 'Manual Job',
-        company: new URL(url).hostname,
+        company: new URL(url).hostname.replace('www.', ''),
         url: url,
-        addedAt: new Date().toISOString()
+        platform: platform,
+        addedAt: new Date().toISOString(),
+        status: 'pending'
       });
+      stats.queued++;
+      updateStatsDisplay();
+      saveStats();
       saveQueue();
       updateQueueDisplay();
       input.value = '';
@@ -381,33 +602,61 @@ function updateQueueDisplay() {
   const container = document.getElementById('queue-list');
   const countEl = document.getElementById('queue-count');
   
-  countEl.textContent = `${jobQueue.length} jobs queued`;
+  countEl.textContent = `${jobQueue.length} jobs`;
   
   if (jobQueue.length === 0) {
-    container.innerHTML = '<div class="queue-empty">No jobs in queue. Add some from Live Jobs!</div>';
+    container.innerHTML = `
+      <div class="queue-empty">
+        <span class="queue-empty-icon">📋</span>
+        <span>No jobs in queue</span>
+        <span class="queue-empty-hint">Search for jobs and add them here</span>
+      </div>
+    `;
     return;
   }
   
-  container.innerHTML = jobQueue.map((job, index) => `
-    <div class="queue-item" data-index="${index}">
-      <div class="queue-item-content">
-        <div class="queue-item-title">${escapeHtml(job.title || 'Unknown')}</div>
-        <div class="queue-item-company">${escapeHtml(job.company || 'Unknown')}</div>
+  container.innerHTML = jobQueue.map((job, index) => {
+    const platformClass = getPlatformClass(job.platform);
+    const statusClass = job.status === 'applied' ? 'applied' : job.status === 'tailored' ? 'tailored' : '';
+    
+    return `
+      <div class="queue-item ${statusClass}" data-index="${index}">
+        <div class="queue-item-content">
+          <div class="queue-item-title">${escapeHtml(truncate(job.title || 'Unknown', 35))}</div>
+          <div class="queue-item-meta">
+            <span class="queue-item-company">${escapeHtml(job.company || 'Unknown')}</span>
+            <span class="queue-item-platform ${platformClass}">${job.platform || 'Unknown'}</span>
+          </div>
+        </div>
+        <div class="queue-item-actions">
+          ${job.match_score ? `<span class="queue-item-score">${job.match_score}%</span>` : ''}
+          ${job.tailored ? '<span class="tailored-badge">✓ Tailored</span>' : ''}
+          <button class="btn-open-job" title="Open job">↗</button>
+          <button class="btn-remove-queue" title="Remove">×</button>
+        </div>
       </div>
-      <div class="queue-item-actions">
-        ${job.match_score ? `<span class="queue-item-score">${job.match_score}%</span>` : ''}
-        <button class="btn-remove-queue" title="Remove">×</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   
+  // Event listeners
   container.querySelectorAll('.btn-remove-queue').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const index = parseInt(e.target.closest('.queue-item').dataset.index);
       jobQueue.splice(index, 1);
       saveQueue();
       updateQueueDisplay();
-      renderJobs();
+      renderJobsList();
+    });
+  });
+  
+  container.querySelectorAll('.btn-open-job').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const index = parseInt(e.target.closest('.queue-item').dataset.index);
+      if (jobQueue[index]?.url) {
+        chrome.tabs.create({ url: jobQueue[index].url });
+      }
     });
   });
 }
@@ -421,166 +670,202 @@ function clearQueue() {
     jobQueue = [];
     saveQueue();
     updateQueueDisplay();
-    renderJobs();
+    renderJobsList();
     showToast('Queue cleared', 'info');
   }
 }
 
-// Push jobs to LazyApply's queue
-async function pushToLazyApply() {
+async function copyUrlsToClipboard() {
   if (jobQueue.length === 0) {
     showToast('No jobs in queue', 'info');
     return;
   }
   
-  const btn = document.getElementById('send-to-lazyapply-btn');
+  const urls = jobQueue.map(j => j.url).filter(Boolean);
+  await navigator.clipboard.writeText(urls.join('\n'));
+  showToast(`${urls.length} URLs copied! Paste in LazyApply.`, 'success');
+}
+
+// =========================
+// Apply Functions
+// =========================
+
+async function startApplyingFromQueue() {
+  if (jobQueue.length === 0) {
+    showToast('No jobs in queue', 'info');
+    return;
+  }
+  
+  const btn = document.getElementById('start-apply-btn');
   btn.disabled = true;
-  btn.innerHTML = '⏳ Pushing...';
+  btn.innerHTML = '⏳ Starting...';
+  
+  const tailorEnabled = document.getElementById('tailor-on-apply').checked;
+  const attachEnabled = document.getElementById('attach-documents').checked;
   
   try {
-    // Method 1: Try to inject into LazyApply's chrome.storage
-    const lazyApplyQueueKey = 'lazyapply_job_queue'; // Common key pattern
-    const urls = jobQueue.map(j => j.url).filter(Boolean);
+    // Get first pending job
+    const pendingJob = jobQueue.find(j => j.status === 'pending');
+    if (!pendingJob) {
+      showToast('All jobs processed!', 'success');
+      return;
+    }
     
-    // Store in multiple formats LazyApply might use
-    await chrome.storage.local.set({
-      [lazyApplyQueueKey]: urls,
-      'jobQueue': urls,
-      'pendingJobs': urls,
-      'lazyapply_urls': urls,
-      // Also store full job data
-      'lazyapply_jobs': jobQueue.map(j => ({
-        url: j.url,
-        title: j.title,
-        company: j.company,
-        status: 'pending'
-      }))
-    });
-    
-    // Method 2: Open LazyApply with jobs in URL params (some versions support this)
-    // Create a tab with the job URLs
-    const jobUrlsParam = encodeURIComponent(urls.join(','));
-    
-    // Try to find LazyApply extension
-    chrome.management?.getAll?.((extensions) => {
-      const lazyApply = extensions?.find(ext => 
-        ext.name.toLowerCase().includes('lazyapply') || 
-        ext.name.toLowerCase().includes('lazy apply')
-      );
+    // If tailoring is enabled, tailor first
+    if (tailorEnabled && !pendingJob.tailored) {
+      showToast('Tailoring documents...', 'info');
       
-      if (lazyApply) {
-        console.log('LazyApply found:', lazyApply.id);
-        // Try to message LazyApply directly
-        chrome.runtime.sendMessage(lazyApply.id, {
-          action: 'ADD_JOBS',
-          jobs: urls
-        }, () => {
-          if (chrome.runtime.lastError) {
-            console.log('Could not message LazyApply directly');
-          }
-        });
+      const tailorResult = await chrome.runtime.sendMessage({
+        action: 'TAILOR_FOR_QUEUE',
+        job: pendingJob
+      });
+      
+      if (tailorResult.success) {
+        pendingJob.tailored = true;
+        pendingJob.tailoredData = tailorResult.data;
+        stats.tailored++;
+        updateStatsDisplay();
+        saveStats();
+        saveQueue();
+        showToast(`Tailored! ATS Score: ${tailorResult.data.matchScore}%`, 'success');
       }
-    });
+    }
     
-    // Method 3: Copy URLs to clipboard for manual paste
-    const urlList = urls.join('\n');
-    await navigator.clipboard.writeText(urlList);
-    
-    showToast(`${urls.length} job URLs copied! Paste in LazyApply or they're in storage.`, 'success');
-    
-    // Open first job to start
-    if (urls[0]) {
-      chrome.tabs.create({ url: urls[0] });
+    // Open the job in a new tab
+    if (pendingJob.url) {
+      // Store the tailored data for the content script to use
+      await chrome.storage.local.set({ 
+        currentApplyJob: pendingJob,
+        attachDocuments: attachEnabled
+      });
+      
+      chrome.tabs.create({ url: pendingJob.url, active: true });
+      
+      // Mark as in progress
+      pendingJob.status = 'applying';
+      saveQueue();
+      updateQueueDisplay();
     }
     
   } catch (error) {
-    console.error('Push error:', error);
-    showToast('Error pushing to LazyApply', 'error');
+    console.error('Apply error:', error);
+    showToast('Error starting application', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '🚀 Push to LazyApply';
+    btn.innerHTML = '🚀 Start Applying';
   }
 }
 
-// Utility functions
+// =========================
+// Profile & Backend
+// =========================
+
+async function checkBackendConnection(token) {
+  const statusEl = document.getElementById('backend-status');
+  
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY
+      }
+    });
+    
+    if (response.ok) {
+      statusEl.textContent = 'Connected ✓';
+      statusEl.classList.add('connected');
+    } else {
+      statusEl.textContent = 'Disconnected';
+      statusEl.classList.add('error');
+    }
+  } catch {
+    statusEl.textContent = 'Offline';
+    statusEl.classList.add('error');
+  }
+}
+
+async function loadProfileFromQuantumHire() {
+  showToast('Loading profile...', 'info');
+  
+  try {
+    const storage = await chrome.storage.local.get(['accessToken']);
+    
+    if (!storage.accessToken) {
+      showToast('Please log in to QuantumHire first', 'error');
+      chrome.tabs.create({ url: QUANTUMHIRE_URL });
+      return;
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&limit=1`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${storage.accessToken}`
+      }
+    });
+    
+    if (response.ok) {
+      const profiles = await response.json();
+      if (profiles.length > 0) {
+        const profile = profiles[0];
+        await chrome.storage.local.set({ userProfile: profile });
+        displayProfile(profile);
+        showToast('Profile loaded!', 'success');
+      } else {
+        showToast('No profile found. Create one in QuantumHire.', 'info');
+      }
+    }
+  } catch (error) {
+    console.error('Profile load error:', error);
+    showToast('Failed to load profile', 'error');
+  }
+}
+
+function displayProfile(profile) {
+  const card = document.getElementById('profile-card');
+  card.innerHTML = `
+    <div class="profile-loaded">
+      <div class="profile-avatar">${(profile.first_name?.[0] || '?').toUpperCase()}</div>
+      <div class="profile-info">
+        <div class="profile-name">${escapeHtml(profile.first_name || '')} ${escapeHtml(profile.last_name || '')}</div>
+        <div class="profile-email">${escapeHtml(profile.email || '')}</div>
+      </div>
+    </div>
+  `;
+}
+
+// =========================
+// Stats
+// =========================
+
+function updateStatsDisplay() {
+  document.getElementById('stat-searched').textContent = stats.searched;
+  document.getElementById('stat-queued').textContent = stats.queued;
+  document.getElementById('stat-tailored').textContent = stats.tailored;
+  document.getElementById('stat-applied').textContent = stats.applied;
+}
+
+function saveStats() {
+  chrome.storage.local.set({ stats });
+}
+
+// =========================
+// Utilities
+// =========================
+
 function showJobsLoading() {
   document.getElementById('jobs-list').innerHTML = `
     <div class="jobs-loading">
       <div class="spinner"></div>
-      <span>Loading jobs...</span>
+      <span>Searching for jobs...</span>
     </div>
   `;
 }
 
 function showJobsError(message) {
   document.getElementById('jobs-list').innerHTML = `
-    <div class="jobs-error">${message}</div>
-  `;
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-async function checkBackendConnection(token) {
-  const statusEl = document.getElementById('backend-status');
-  try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
-      headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM' }
-    });
-    statusEl.textContent = response.ok ? 'Connected' : 'Error';
-    statusEl.className = 'status-value ' + (response.ok ? 'connected' : 'error');
-  } catch {
-    statusEl.textContent = 'Offline';
-    statusEl.className = 'status-value error';
-  }
-}
-
-async function loadProfileFromQuantumHire() {
-  const btn = document.getElementById('load-profile-btn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Loading...';
-  
-  try {
-    const result = await chrome.storage.local.get(['quantumhire_profile', 'quantumhire_token']);
-    if (result.quantumhire_profile) {
-      await chrome.storage.local.set({ 
-        userProfile: result.quantumhire_profile,
-        accessToken: result.quantumhire_token 
-      });
-      displayProfile(result.quantumhire_profile);
-      showToast('Profile loaded!', 'success');
-    } else {
-      showToast('Open QuantumHire to sync profile', 'info');
-      chrome.tabs.create({ url: `${QUANTUMHIRE_URL}/profile` });
-    }
-  } catch (error) {
-    showToast('Failed to load profile', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '📥 Load from QuantumHire';
-  }
-}
-
-function displayProfile(profile) {
-  const card = document.getElementById('profile-card');
-  const skills = profile.skills?.slice(0, 4).map(s => typeof s === 'string' ? s : s.name) || [];
-  
-  card.innerHTML = `
-    <div class="profile-loaded">
-      <div class="profile-name">${profile.first_name || ''} ${profile.last_name || 'User'}</div>
-      <div class="profile-email">${profile.email || ''}</div>
-      ${skills.length ? `<div class="profile-skills">${skills.map(s => `<span class="profile-skill">${s}</span>`).join('')}</div>` : ''}
+    <div class="jobs-error">
+      <span>❌ ${escapeHtml(message)}</span>
     </div>
   `;
-}
-
-function updateStats(stats) {
-  document.getElementById('stat-intercepted').textContent = stats.applicationsIntercepted || 0;
-  document.getElementById('stat-tailored').textContent = stats.documentsGenerated || 0;
-  document.getElementById('stat-score').textContent = stats.atsScoreAverage > 0 ? `${Math.round(stats.atsScoreAverage)}%` : '--%';
 }
 
 function showToast(message, type = 'info') {
@@ -589,12 +874,26 @@ function showToast(message, type = 'info') {
   
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
+  toast.innerHTML = `
+    <span class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
+  `;
   
+  document.body.appendChild(toast);
   setTimeout(() => toast.classList.add('show'), 10);
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
-  }, 2500);
+  }, 3000);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+function truncate(str, len) {
+  if (!str) return '';
+  return str.length > len ? str.substring(0, len) + '...' : str;
 }

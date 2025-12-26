@@ -1,5 +1,5 @@
-// LazyApply 2.0 EXTREME - Content Script
-// Detects LazyApply activity and injects ATS-tailored content
+// LazyApply 2.0 EXTREME - Enhanced Content Script
+// Multi-ATS support with Workday multi-page handling
 
 console.log('🚀 LazyApply 2.0 EXTREME loaded on:', window.location.hostname);
 
@@ -7,6 +7,7 @@ let isEnabled = true;
 let currentJobData = null;
 let floatingPanel = null;
 let lastTailoredData = null;
+let workdayCurrentPage = null;
 
 // Job data extraction patterns for different platforms
 const EXTRACTORS = {
@@ -51,11 +52,44 @@ const EXTRACTORS = {
   },
   
   workday: {
-    title: () => document.querySelector('[data-automation-id="jobPostingHeader"], h1')?.innerText?.trim(),
-    company: () => document.querySelector('[data-automation-id="company-name"]')?.innerText?.trim() || document.title.split(' - ')[1],
-    location: () => document.querySelector('[data-automation-id="locations"]')?.innerText?.trim(),
-    description: () => document.querySelector('[data-automation-id="jobPostingDescription"]')?.innerText?.trim(),
-    isApplicationPage: () => !!document.querySelector('[data-automation-id="applyButton"], [data-automation-id="apply"]')
+    title: () => document.querySelector('[data-automation-id="jobPostingHeader"], [data-automation-id="headerTitle"], h1')?.innerText?.trim(),
+    company: () => document.querySelector('[data-automation-id="company-name"]')?.innerText?.trim() || extractCompanyFromUrl(),
+    location: () => document.querySelector('[data-automation-id="locations"], [data-automation-id="location"]')?.innerText?.trim(),
+    description: () => document.querySelector('[data-automation-id="jobPostingDescription"], [data-automation-id="description"]')?.innerText?.trim(),
+    isApplicationPage: () => !!document.querySelector('[data-automation-id="applyButton"], [data-automation-id="apply"], [data-automation-id="navigationRegion"]'),
+    currentPage: () => detectWorkdayPage()
+  },
+  
+  icims: {
+    title: () => document.querySelector('.iCIMS_JobTitle, .title, h1')?.innerText?.trim(),
+    company: () => document.querySelector('.iCIMS_Company, .company')?.innerText?.trim(),
+    location: () => document.querySelector('.iCIMS_JobLocation, .location')?.innerText?.trim(),
+    description: () => document.querySelector('.iCIMS_JobDescription, .description')?.innerText?.trim(),
+    isApplicationPage: () => !!document.querySelector('.iCIMS_Apply, [id*="apply"]')
+  },
+  
+  smartrecruiters: {
+    title: () => document.querySelector('h1.job-title, .job-title')?.innerText?.trim(),
+    company: () => document.querySelector('.company-name')?.innerText?.trim(),
+    location: () => document.querySelector('.job-location')?.innerText?.trim(),
+    description: () => document.querySelector('.job-description')?.innerText?.trim(),
+    isApplicationPage: () => !!document.querySelector('[class*="apply"]')
+  },
+  
+  workable: {
+    title: () => document.querySelector('h1[data-ui="job-title"], h1')?.innerText?.trim(),
+    company: () => document.querySelector('[data-ui="company-name"]')?.innerText?.trim(),
+    location: () => document.querySelector('[data-ui="job-location"]')?.innerText?.trim(),
+    description: () => document.querySelector('[data-ui="job-description"]')?.innerText?.trim(),
+    isApplicationPage: () => !!document.querySelector('[data-ui="apply-button"]')
+  },
+  
+  ashby: {
+    title: () => document.querySelector('h1')?.innerText?.trim(),
+    company: () => document.title.split(' - ')[1] || '',
+    location: () => document.querySelector('[class*="location"]')?.innerText?.trim(),
+    description: () => document.querySelector('[class*="description"], main')?.innerText?.trim(),
+    isApplicationPage: () => !!document.querySelector('form')
   },
   
   // Generic fallback
@@ -67,6 +101,45 @@ const EXTRACTORS = {
     isApplicationPage: () => !!document.querySelector('form[action*="apply"], button[class*="apply"]')
   }
 };
+
+// Extract company from Workday URL
+function extractCompanyFromUrl() {
+  const url = window.location.href;
+  const match = url.match(/https?:\/\/([^.]+)\.(wd\d+\.)?myworkdayjobs\.com/);
+  if (match) {
+    return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+  }
+  return document.title.split(' - ')[1] || '';
+}
+
+// Detect current Workday application page
+function detectWorkdayPage() {
+  const url = window.location.href;
+  const pageIndicators = document.querySelectorAll('[data-automation-id="navigationRegion"] li, .wd-ProgressBar-segment');
+  
+  if (url.includes('/apply/') || url.includes('/form/')) {
+    // Check for specific page indicators
+    if (document.querySelector('[data-automation-id="resumeSection"], [data-automation-id="resume"]')) {
+      return 'resume';
+    }
+    if (document.querySelector('[data-automation-id="contactInformation"], [data-automation-id="legalNameSection"]')) {
+      return 'personal-info';
+    }
+    if (document.querySelector('[data-automation-id="workExperience"]')) {
+      return 'experience';
+    }
+    if (document.querySelector('[data-automation-id="education"]')) {
+      return 'education';
+    }
+    if (document.querySelector('[data-automation-id="voluntaryDisclosures"], [data-automation-id="selfIdentification"]')) {
+      return 'disclosures';
+    }
+    if (document.querySelector('[data-automation-id="review"]')) {
+      return 'review';
+    }
+  }
+  return 'overview';
+}
 
 // Detect current platform
 function detectPlatform() {
@@ -81,6 +154,7 @@ function detectPlatform() {
   if (hostname.includes('ashby')) return 'ashby';
   if (hostname.includes('smartrecruiters')) return 'smartrecruiters';
   if (hostname.includes('icims')) return 'icims';
+  if (hostname.includes('workable')) return 'workable';
   if (hostname.includes('jobvite')) return 'jobvite';
   if (hostname.includes('bamboohr')) return 'bamboohr';
   
@@ -103,6 +177,11 @@ function extractJobData() {
     extractedAt: new Date().toISOString()
   };
   
+  // Add Workday page info if applicable
+  if (platform === 'workday' && extractor.currentPage) {
+    data.workdayPage = extractor.currentPage();
+  }
+  
   console.log('📋 Extracted job data:', data.title, 'at', data.company);
   return data;
 }
@@ -122,7 +201,7 @@ function extractRequirements(description) {
       continue;
     }
     
-    if (inRequirementsSection && line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().match(/^\d+\./)) {
+    if (inRequirementsSection && (line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().match(/^\d+\./))) {
       requirements.push(line.trim().replace(/^[•\-\d+\.]\s*/, ''));
     }
     
@@ -143,20 +222,20 @@ function createFloatingPanel() {
   floatingPanel.innerHTML = `
     <div class="lae-header">
       <span class="lae-logo">⚡</span>
-      <span class="lae-title">LazyApply 2.0 EXTREME</span>
+      <span class="lae-title">EXTREME</span>
       <button class="lae-minimize">−</button>
     </div>
     <div class="lae-content">
       <div class="lae-status">
         <span class="lae-status-dot"></span>
-        <span class="lae-status-text">Ready to enhance</span>
+        <span class="lae-status-text">Ready</span>
       </div>
       <div class="lae-job-info">
         <div class="lae-job-title">-</div>
         <div class="lae-job-company">-</div>
       </div>
       <div class="lae-score-container" style="display: none;">
-        <div class="lae-score-label">ATS Match Score</div>
+        <div class="lae-score-label">ATS Match</div>
         <div class="lae-score-value">--%</div>
         <div class="lae-score-bar">
           <div class="lae-score-fill"></div>
@@ -164,17 +243,15 @@ function createFloatingPanel() {
       </div>
       <div class="lae-actions">
         <button class="lae-btn lae-btn-primary" id="lae-tailor-btn">
-          🎯 Tailor Now
+          🎯 Tailor
         </button>
-        <button class="lae-btn lae-btn-secondary" id="lae-copy-resume-btn" style="display: none;">
-          📄 Copy Resume
-        </button>
-        <button class="lae-btn lae-btn-secondary" id="lae-copy-cover-btn" style="display: none;">
-          ✉️ Copy Cover Letter
+        <button class="lae-btn lae-btn-secondary" id="lae-attach-btn" style="display: none;">
+          📎 Attach
         </button>
       </div>
-      <div class="lae-stats">
-        <span>Session: <strong id="lae-session-count">0</strong> tailored</span>
+      <div class="lae-copy-actions" style="display: none;">
+        <button class="lae-btn-small" id="lae-copy-resume-btn">📄 Resume</button>
+        <button class="lae-btn-small" id="lae-copy-cover-btn">✉️ Cover</button>
       </div>
     </div>
   `;
@@ -184,14 +261,37 @@ function createFloatingPanel() {
   // Event listeners
   floatingPanel.querySelector('.lae-minimize').addEventListener('click', togglePanel);
   floatingPanel.querySelector('#lae-tailor-btn').addEventListener('click', handleTailorClick);
-  floatingPanel.querySelector('#lae-copy-resume-btn').addEventListener('click', () => copyToClipboard('resume'));
-  floatingPanel.querySelector('#lae-copy-cover-btn').addEventListener('click', () => copyToClipboard('cover'));
+  floatingPanel.querySelector('#lae-attach-btn')?.addEventListener('click', handleAttachClick);
+  floatingPanel.querySelector('#lae-copy-resume-btn')?.addEventListener('click', () => copyToClipboard('resume'));
+  floatingPanel.querySelector('#lae-copy-cover-btn')?.addEventListener('click', () => copyToClipboard('cover'));
   
   // Make draggable
   makeDraggable(floatingPanel);
   
   // Update with current job
   updatePanelWithJobData();
+  
+  // Check for current apply job from queue
+  checkForQueuedJob();
+}
+
+// Check if we're on a job from the queue
+async function checkForQueuedJob() {
+  chrome.runtime.sendMessage({ action: 'GET_CURRENT_JOB' }, (response) => {
+    if (response?.job && response.job.url === window.location.href) {
+      console.log('🎯 This job is from the queue!');
+      
+      if (response.job.tailoredData) {
+        lastTailoredData = response.job.tailoredData;
+        showTailoredResults(response.job.tailoredData);
+        
+        if (response.attachDocuments) {
+          // Auto-attach if enabled
+          setTimeout(() => handleAttachClick(), 1000);
+        }
+      }
+    }
+  });
 }
 
 // Toggle panel minimized state
@@ -236,11 +336,11 @@ function updatePanelWithJobData() {
   currentJobData = extractJobData();
   
   if (floatingPanel) {
-    floatingPanel.querySelector('.lae-job-title').textContent = currentJobData.title || 'Unknown Position';
-    floatingPanel.querySelector('.lae-job-company').textContent = currentJobData.company || 'Unknown Company';
+    floatingPanel.querySelector('.lae-job-title').textContent = truncate(currentJobData.title || 'Unknown Position', 30);
+    floatingPanel.querySelector('.lae-job-company').textContent = truncate(currentJobData.company || 'Unknown Company', 25);
     
     if (currentJobData.title) {
-      floatingPanel.querySelector('.lae-status-text').textContent = 'Job detected - Ready to tailor';
+      floatingPanel.querySelector('.lae-status-text').textContent = 'Job detected';
       floatingPanel.querySelector('.lae-status-dot').classList.add('active');
     }
   }
@@ -255,9 +355,9 @@ async function handleTailorClick() {
   
   const btn = floatingPanel.querySelector('#lae-tailor-btn');
   btn.disabled = true;
-  btn.innerHTML = '⏳ Tailoring...';
+  btn.innerHTML = '⏳ ...';
   
-  updateStatus('Generating ATS-optimized documents...', 'loading');
+  updateStatus('Tailoring...', 'loading');
   
   try {
     const response = await chrome.runtime.sendMessage({
@@ -268,17 +368,98 @@ async function handleTailorClick() {
     if (response.success) {
       lastTailoredData = response.data;
       showTailoredResults(response.data);
-      updateSessionCount();
     } else {
       throw new Error(response.error || 'Tailoring failed');
     }
   } catch (error) {
     console.error('Tailoring error:', error);
     showNotification(error.message, 'error');
-    updateStatus('Error - Click to retry', 'error');
+    updateStatus('Error', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '🎯 Tailor Now';
+    btn.innerHTML = '🎯 Tailor';
+  }
+}
+
+// Handle attach button click
+function handleAttachClick() {
+  if (!lastTailoredData) {
+    showNotification('No tailored data available', 'error');
+    return;
+  }
+  
+  const platform = detectPlatform();
+  
+  switch (platform) {
+    case 'workday':
+      attachToWorkday(lastTailoredData);
+      break;
+    case 'greenhouse':
+      attachToGreenhouse(lastTailoredData);
+      break;
+    case 'lever':
+      attachToLever(lastTailoredData);
+      break;
+    default:
+      autoFillIfPossible(lastTailoredData);
+  }
+}
+
+// Attach to Workday (multi-page aware)
+function attachToWorkday(data) {
+  const currentPage = detectWorkdayPage();
+  console.log('📄 Workday page:', currentPage);
+  
+  switch (currentPage) {
+    case 'resume':
+      // Look for file upload or text field
+      const resumeUpload = document.querySelector('[data-automation-id="resumeUpload"], input[type="file"]');
+      if (resumeUpload) {
+        // Can't programmatically set file input, show notification
+        showNotification('Resume ready - paste or upload manually', 'info');
+        navigator.clipboard.writeText(data.tailoredResume || '');
+      }
+      break;
+      
+    case 'personal-info':
+      // Fill contact info if available
+      fillWorkdayPersonalInfo(data);
+      break;
+      
+    default:
+      // Try to fill cover letter field
+      const coverField = document.querySelector('textarea[data-automation-id*="cover"], textarea[name*="cover"]');
+      if (coverField && data.coverLetter) {
+        coverField.value = data.coverLetter;
+        coverField.dispatchEvent(new Event('input', { bubbles: true }));
+        showNotification('Cover letter filled!', 'success');
+      }
+  }
+}
+
+// Fill Workday personal info
+function fillWorkdayPersonalInfo(data) {
+  // This would use the profile data to fill form fields
+  showNotification('Personal info should be auto-filled by LazyApply', 'info');
+}
+
+// Attach to Greenhouse
+function attachToGreenhouse(data) {
+  const coverField = document.querySelector('#cover_letter, textarea[name*="cover"]');
+  if (coverField && data.coverLetter) {
+    coverField.value = data.coverLetter;
+    coverField.dispatchEvent(new Event('input', { bubbles: true }));
+    showNotification('Cover letter attached!', 'success');
+  }
+}
+
+// Attach to Lever
+function attachToLever(data) {
+  const coverField = document.querySelector('[name="comments"], textarea[placeholder*="cover"]');
+  if (coverField && data.coverLetter) {
+    coverField.value = data.coverLetter;
+    coverField.dispatchEvent(new Event('input', { bubbles: true }));
+    showNotification('Cover letter attached!', 'success');
   }
 }
 
@@ -287,14 +468,13 @@ function showTailoredResults(data) {
   const scoreContainer = floatingPanel.querySelector('.lae-score-container');
   const scoreValue = floatingPanel.querySelector('.lae-score-value');
   const scoreFill = floatingPanel.querySelector('.lae-score-fill');
-  const copyResumeBtn = floatingPanel.querySelector('#lae-copy-resume-btn');
-  const copyCoverBtn = floatingPanel.querySelector('#lae-copy-cover-btn');
+  const attachBtn = floatingPanel.querySelector('#lae-attach-btn');
+  const copyActions = floatingPanel.querySelector('.lae-copy-actions');
   
   scoreContainer.style.display = 'block';
   scoreValue.textContent = `${data.matchScore || 0}%`;
   scoreFill.style.width = `${data.matchScore || 0}%`;
   
-  // Color based on score
   if (data.matchScore >= 80) {
     scoreFill.style.background = 'linear-gradient(90deg, #10b981, #34d399)';
   } else if (data.matchScore >= 60) {
@@ -303,11 +483,11 @@ function showTailoredResults(data) {
     scoreFill.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
   }
   
-  copyResumeBtn.style.display = data.tailoredResume ? 'block' : 'none';
-  copyCoverBtn.style.display = data.coverLetter ? 'block' : 'none';
+  attachBtn.style.display = 'block';
+  copyActions.style.display = 'flex';
   
-  updateStatus(`ATS Score: ${data.matchScore}% - Ready to apply!`, 'success');
-  showNotification(`ATS Score: ${data.matchScore}% - Documents ready!`, 'success');
+  updateStatus(`Score: ${data.matchScore}%`, 'success');
+  showNotification(`ATS Score: ${data.matchScore}%`, 'success');
 }
 
 // Copy to clipboard
@@ -334,20 +514,11 @@ function updateStatus(message, type) {
   statusDot.className = 'lae-status-dot ' + type;
 }
 
-// Update session count
-function updateSessionCount() {
-  chrome.runtime.sendMessage({ action: 'GET_STATS' }, (response) => {
-    if (response?.stats) {
-      const countEl = floatingPanel.querySelector('#lae-session-count');
-      if (countEl) {
-        countEl.textContent = response.stats.documentsGenerated || 0;
-      }
-    }
-  });
-}
-
 // Show notification toast
 function showNotification(message, type = 'info') {
+  const existing = document.querySelector('.lae-toast');
+  if (existing) existing.remove();
+  
   const toast = document.createElement('div');
   toast.className = `lae-toast lae-toast-${type}`;
   toast.innerHTML = `
@@ -364,15 +535,20 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
-// Detect LazyApply activity (watch for their UI elements)
+// Truncate string
+function truncate(str, len) {
+  if (!str) return '';
+  return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+// Detect LazyApply activity
 function watchForLazyApply() {
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node.nodeType === Node.ELEMENT_NODE) {
-          // Look for LazyApply's signature elements
           if (node.id?.includes('lazyapply') || 
-              node.className?.includes('lazyapply') ||
+              node.className?.includes?.('lazyapply') ||
               node.querySelector?.('[id*="lazyapply"], [class*="lazyapply"]')) {
             console.log('🔍 LazyApply activity detected!');
             handleLazyApplyDetected();
@@ -396,6 +572,56 @@ function handleLazyApplyDetected() {
     });
     
     updatePanelWithJobData();
+  }
+}
+
+// Watch for Workday page changes
+function watchForWorkdayNavigation() {
+  if (!window.location.hostname.includes('workday') && !window.location.hostname.includes('myworkdayjobs')) {
+    return;
+  }
+  
+  let lastPage = detectWorkdayPage();
+  
+  const observer = new MutationObserver(() => {
+    const currentPage = detectWorkdayPage();
+    if (currentPage !== lastPage) {
+      console.log('📄 Workday page changed:', lastPage, '->', currentPage);
+      lastPage = currentPage;
+      
+      chrome.runtime.sendMessage({
+        action: 'WORKDAY_PAGE_CHANGED',
+        pageData: { pageType: currentPage }
+      });
+      
+      updatePanelWithJobData();
+    }
+  });
+  
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+// Auto-fill application fields if possible
+function autoFillIfPossible(data) {
+  // LinkedIn Easy Apply
+  const linkedInTextarea = document.querySelector('[data-test-text-entity-list-form-component] textarea, textarea[name*="cover"]');
+  if (linkedInTextarea && data.coverLetter) {
+    linkedInTextarea.value = data.coverLetter;
+    linkedInTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+    showNotification('Cover letter filled!', 'success');
+    return;
+  }
+  
+  // Generic cover letter field
+  const coverLetterField = document.querySelector(
+    'textarea[name*="cover"], textarea[id*="cover"], ' +
+    'textarea[placeholder*="cover" i], textarea[placeholder*="letter" i], ' +
+    '[data-field="cover_letter"] textarea'
+  );
+  if (coverLetterField && data.coverLetter) {
+    coverLetterField.value = data.coverLetter;
+    coverLetterField.dispatchEvent(new Event('input', { bubbles: true }));
+    showNotification('Cover letter filled!', 'success');
   }
 }
 
@@ -428,35 +654,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       showTailoredResults(message.data);
       autoFillIfPossible(message.data);
       break;
+      
+    case 'WORKDAY_FILL_PAGE':
+      if (message.tailoredData) {
+        lastTailoredData = message.tailoredData;
+        attachToWorkday(message.tailoredData);
+      }
+      break;
   }
   
   sendResponse({ success: true });
   return true;
 });
 
-// Auto-fill application fields if possible
-function autoFillIfPossible(data) {
-  // LinkedIn Easy Apply
-  const linkedInTextarea = document.querySelector('[data-test-text-entity-list-form-component] textarea');
-  if (linkedInTextarea && data.coverLetter) {
-    linkedInTextarea.value = data.coverLetter;
-    linkedInTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  
-  // Generic cover letter field
-  const coverLetterField = document.querySelector('textarea[name*="cover"], textarea[id*="cover"], [data-field="cover_letter"] textarea');
-  if (coverLetterField && data.coverLetter) {
-    coverLetterField.value = data.coverLetter;
-    coverLetterField.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-}
-
 // Initialize
 function init() {
-  // Wait for page to stabilize
   setTimeout(() => {
-    createFloatingPanel();
+    chrome.storage.local.get(['showPanel'], (data) => {
+      if (data.showPanel !== false) {
+        createFloatingPanel();
+      }
+    });
+    
     watchForLazyApply();
+    watchForWorkdayNavigation();
     
     // Re-extract on URL changes (SPA navigation)
     let lastUrl = location.href;
@@ -470,9 +691,5 @@ function init() {
   }, 1500);
 }
 
-// Start when DOM ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+// Start
+init();

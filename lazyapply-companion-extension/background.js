@@ -1,5 +1,5 @@
-// LazyApply 2.0 EXTREME - Background Service Worker
-// Supercharges LazyApply with AI-powered ATS tailoring + Live Job Queue
+// LazyApply 2.0 EXTREME - Enhanced Background Service Worker
+// Full ATS support with Workday multi-page handling
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
@@ -9,29 +9,37 @@ const ExtState = {
   enabled: true,
   autoTailor: true,
   autoQueue: false,
+  workdayMultiPage: true,
   tailoredCount: 0,
   sessionStats: {
     applicationsIntercepted: 0,
     documentsGenerated: 0,
     atsScoreAverage: 0,
-    jobsQueued: 0
+    jobsQueued: 0,
+    applied: 0
   },
   userProfile: null,
   accessToken: null,
-  jobQueue: []
+  jobQueue: [],
+  currentWorkdaySession: null
 };
 
-// Platform detection patterns
+// Platform detection patterns - Extended list
 const PLATFORM_PATTERNS = {
+  // LazyApply supported (autofill works)
+  greenhouse: { pattern: /greenhouse\.io/i, name: 'Greenhouse', lazyApplySupported: true },
+  lever: { pattern: /lever\.co/i, name: 'Lever', lazyApplySupported: true },
+  ashby: { pattern: /ashbyhq\.com/i, name: 'Ashby', lazyApplySupported: true },
+  rippling: { pattern: /rippling\.com/i, name: 'Rippling', lazyApplySupported: true },
+  
+  // EXTREME enhanced (tailoring + attachment)
+  workday: { pattern: /(workday|myworkdayjobs)\.com/i, name: 'Workday', multiPage: true },
+  icims: { pattern: /icims\.com/i, name: 'iCIMS' },
+  workable: { pattern: /workable\.com/i, name: 'Workable' },
+  smartrecruiters: { pattern: /smartrecruiters\.com/i, name: 'SmartRecruiters' },
   linkedin: { pattern: /linkedin\.com/i, name: 'LinkedIn' },
   indeed: { pattern: /indeed\.com/i, name: 'Indeed' },
   glassdoor: { pattern: /glassdoor\.com/i, name: 'Glassdoor' },
-  greenhouse: { pattern: /greenhouse\.io/i, name: 'Greenhouse' },
-  lever: { pattern: /lever\.co/i, name: 'Lever' },
-  workday: { pattern: /(workday|myworkdayjobs)\.com/i, name: 'Workday' },
-  ashby: { pattern: /ashbyhq\.com/i, name: 'Ashby' },
-  smartrecruiters: { pattern: /smartrecruiters\.com/i, name: 'SmartRecruiters' },
-  icims: { pattern: /icims\.com/i, name: 'iCIMS' },
   jobvite: { pattern: /jobvite\.com/i, name: 'Jobvite' },
   bamboohr: { pattern: /bamboohr\.com/i, name: 'BambooHR' },
   breezy: { pattern: /breezy\.hr/i, name: 'Breezy HR' },
@@ -44,19 +52,24 @@ const PLATFORM_PATTERNS = {
   builtin: { pattern: /builtin\.com/i, name: 'BuiltIn' },
   usajobs: { pattern: /usajobs\.gov/i, name: 'USAJobs' },
   otta: { pattern: /otta\.com/i, name: 'Otta' },
-  rippling: { pattern: /rippling\.com/i, name: 'Rippling' },
-  workable: { pattern: /workable\.com/i, name: 'Workable' },
   personio: { pattern: /personio\.com/i, name: 'Personio' },
-  teamtailor: { pattern: /teamtailor\.com/i, name: 'Teamtailor' }
+  teamtailor: { pattern: /teamtailor\.com/i, name: 'Teamtailor' },
+  recruitee: { pattern: /recruitee\.com/i, name: 'Recruitee' },
+  applytojob: { pattern: /applytojob\.com/i, name: 'ApplyToJob' }
 };
 
 function detectPlatform(url) {
   for (const [key, config] of Object.entries(PLATFORM_PATTERNS)) {
     if (config.pattern.test(url)) {
-      return { id: key, name: config.name };
+      return { 
+        id: key, 
+        name: config.name, 
+        lazyApplySupported: config.lazyApplySupported || false,
+        multiPage: config.multiPage || false
+      };
     }
   }
-  return { id: 'unknown', name: 'Unknown ATS' };
+  return { id: 'unknown', name: 'Unknown ATS', lazyApplySupported: false, multiPage: false };
 }
 
 // Initialize on install
@@ -67,15 +80,18 @@ chrome.runtime.onInstalled.addListener(() => {
     enabled: true,
     autoTailor: true,
     autoQueue: false,
+    workdayMultiPage: true,
+    tailorOnApply: true,
+    attachDocuments: false,
     interceptLazyApply: true,
     userProfile: null,
     accessToken: null,
     jobQueue: [],
     stats: {
-      totalIntercepted: 0,
-      totalTailored: 0,
-      totalQueued: 0,
-      averageScore: 0
+      searched: 0,
+      queued: 0,
+      tailored: 0,
+      applied: 0
     }
   });
 });
@@ -120,6 +136,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
       
+    case 'TAILOR_FOR_QUEUE':
+      handleTailorForQueue(message.job)
+        .then(result => sendResponse({ success: true, data: result }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+      
     case 'LAZYAPPLY_DETECTED':
       handleLazyApplyDetection(message.jobData, sender.tab?.id);
       sendResponse({ success: true });
@@ -158,7 +180,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
       
     case 'FETCH_LIVE_JOBS':
-      fetchLiveJobs(message.keywords)
+      fetchLiveJobs(message.keywords, message.location, message.dateFilter)
         .then(jobs => sendResponse({ success: true, jobs }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
@@ -167,6 +189,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       startBatchApplyFromQueue()
         .then(() => sendResponse({ success: true }))
         .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+      
+    case 'WORKDAY_PAGE_CHANGED':
+      handleWorkdayPageChange(message.pageData, sender.tab?.id);
+      sendResponse({ success: true });
+      break;
+      
+    case 'MARK_JOB_APPLIED':
+      markJobAsApplied(message.jobId);
+      sendResponse({ success: true });
+      break;
+      
+    case 'GET_CURRENT_JOB':
+      chrome.storage.local.get(['currentApplyJob', 'attachDocuments'], (data) => {
+        sendResponse({ 
+          success: true, 
+          job: data.currentApplyJob,
+          attachDocuments: data.attachDocuments 
+        });
+      });
       return true;
       
     default:
@@ -192,17 +234,29 @@ async function addJobsToQueue(jobs) {
 }
 
 // Fetch live jobs from QuantumHire backend
-async function fetchLiveJobs(keywords) {
+async function fetchLiveJobs(keywords, location, dateFilter) {
   console.log('🔍 Fetching live jobs for:', keywords);
   
   try {
+    const storage = await chrome.storage.local.get(['accessToken', 'userProfile']);
+    
+    let query = keywords;
+    if (location) {
+      query += ` ${location}`;
+    }
+    
     const response = await fetch(`${SUPABASE_URL}/functions/v1/search-jobs-google`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY
+        'apikey': SUPABASE_ANON_KEY,
+        ...(storage.accessToken ? { 'Authorization': `Bearer ${storage.accessToken}` } : {})
       },
-      body: JSON.stringify({ keywords })
+      body: JSON.stringify({ 
+        keywords: query,
+        dateFilter: dateFilter,
+        user_id: storage.userProfile?.user_id
+      })
     });
     
     if (!response.ok) {
@@ -221,7 +275,7 @@ async function fetchLiveJobs(keywords) {
 
 // Start batch apply from queue
 async function startBatchApplyFromQueue() {
-  const storage = await chrome.storage.local.get(['jobQueue', 'userProfile']);
+  const storage = await chrome.storage.local.get(['jobQueue', 'userProfile', 'tailorOnApply']);
   const queue = storage.jobQueue || [];
   
   if (queue.length === 0) {
@@ -230,16 +284,61 @@ async function startBatchApplyFromQueue() {
   
   console.log(`🚀 Starting batch apply for ${queue.length} jobs`);
   
-  // Process first job - open in new tab
-  const firstJob = queue[0];
-  if (firstJob.url) {
-    chrome.tabs.create({ url: firstJob.url, active: true });
+  // Get first pending job
+  const pendingJob = queue.find(j => j.status === 'pending');
+  if (!pendingJob) {
+    console.log('All jobs processed!');
+    return;
   }
   
-  // Store remaining jobs
-  const remaining = queue.slice(1);
-  await chrome.storage.local.set({ jobQueue: remaining });
-  ExtState.jobQueue = remaining;
+  // Tailor if enabled and not already tailored
+  if (storage.tailorOnApply && !pendingJob.tailored) {
+    try {
+      const tailored = await handleTailorForQueue(pendingJob);
+      pendingJob.tailored = true;
+      pendingJob.tailoredData = tailored;
+      
+      // Update queue
+      const idx = queue.findIndex(j => j.id === pendingJob.id);
+      if (idx >= 0) {
+        queue[idx] = pendingJob;
+      }
+      await chrome.storage.local.set({ jobQueue: queue });
+    } catch (error) {
+      console.error('Tailoring failed:', error);
+    }
+  }
+  
+  // Store current job for content script
+  await chrome.storage.local.set({ currentApplyJob: pendingJob });
+  
+  // Open job in new tab
+  if (pendingJob.url) {
+    chrome.tabs.create({ url: pendingJob.url, active: true });
+  }
+  
+  // Update status
+  pendingJob.status = 'applying';
+  const idx = queue.findIndex(j => j.id === pendingJob.id);
+  if (idx >= 0) {
+    queue[idx] = pendingJob;
+  }
+  await chrome.storage.local.set({ jobQueue: queue });
+}
+
+// Mark job as applied
+async function markJobAsApplied(jobId) {
+  const storage = await chrome.storage.local.get(['jobQueue', 'stats']);
+  const queue = storage.jobQueue || [];
+  const stats = storage.stats || { searched: 0, queued: 0, tailored: 0, applied: 0 };
+  
+  const idx = queue.findIndex(j => j.id === jobId);
+  if (idx >= 0) {
+    queue[idx].status = 'applied';
+    stats.applied++;
+    await chrome.storage.local.set({ jobQueue: queue, stats });
+    ExtState.sessionStats.applied++;
+  }
 }
 
 // Broadcast state to all tabs
@@ -283,11 +382,85 @@ async function handleLazyApplyDetection(jobData, tabId) {
   }
 }
 
+// Handle Workday multi-page navigation
+async function handleWorkdayPageChange(pageData, tabId) {
+  if (!ExtState.workdayMultiPage) return;
+  
+  console.log('📄 Workday page change detected:', pageData.pageType);
+  
+  const storage = await chrome.storage.local.get(['currentApplyJob']);
+  const currentJob = storage.currentApplyJob;
+  
+  if (!currentJob || !currentJob.tailoredData) {
+    console.log('No tailored data available for Workday');
+    return;
+  }
+  
+  // Send data to content script based on page type
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      action: 'WORKDAY_FILL_PAGE',
+      pageType: pageData.pageType,
+      tailoredData: currentJob.tailoredData
+    }).catch(() => {});
+  }
+}
+
+// Tailor for queue job (without tab)
+async function handleTailorForQueue(job) {
+  console.log('🔧 Tailoring for queue:', job.title, 'at', job.company);
+  
+  const storage = await chrome.storage.local.get(['userProfile', 'accessToken']);
+  const profile = storage.userProfile || ExtState.userProfile;
+  const token = storage.accessToken || ExtState.accessToken;
+  
+  if (!profile) {
+    throw new Error('No user profile configured. Please set up your profile first.');
+  }
+  
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        jobTitle: job.title || 'Unknown Position',
+        company: job.company || 'Unknown Company',
+        jobDescription: job.description || '',
+        location: job.location || '',
+        requirements: job.requirements || [],
+        userProfile: profile
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Queue tailoring complete! Match score:', result.matchScore);
+    
+    // Update stats
+    const stats = (await chrome.storage.local.get(['stats'])).stats || {};
+    stats.tailored = (stats.tailored || 0) + 1;
+    await chrome.storage.local.set({ stats });
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ Queue tailoring failed:', error);
+    throw error;
+  }
+}
+
 // Main tailoring function
 async function handleTailorRequest(jobData, tabId) {
   console.log('🔧 Tailoring application for:', jobData.title, 'at', jobData.company);
   
-  // Get stored profile and token
   const storage = await chrome.storage.local.get(['userProfile', 'accessToken']);
   const profile = storage.userProfile || ExtState.userProfile;
   const token = storage.accessToken || ExtState.accessToken;
@@ -310,6 +483,7 @@ async function handleTailorRequest(jobData, tabId) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
       body: JSON.stringify({
@@ -390,16 +564,24 @@ async function storeApplicationResult(jobData, tailoredData) {
 function updateAverageScore(newScore) {
   const count = ExtState.sessionStats.documentsGenerated;
   const currentAvg = ExtState.sessionStats.atsScoreAverage;
-  ExtState.sessionStats.atsScoreAverage = 
-    ((currentAvg * (count - 1)) + newScore) / count;
+  if (count > 0) {
+    ExtState.sessionStats.atsScoreAverage = ((currentAvg * (count - 1)) + newScore) / count;
+  } else {
+    ExtState.sessionStats.atsScoreAverage = newScore;
+  }
 }
 
 // Load saved state on startup
-chrome.storage.local.get(['enabled', 'autoTailor', 'userProfile', 'accessToken', 'stats'], (data) => {
+chrome.storage.local.get([
+  'enabled', 'autoTailor', 'workdayMultiPage', 
+  'userProfile', 'accessToken', 'stats', 'jobQueue'
+], (data) => {
   if (data.enabled !== undefined) ExtState.enabled = data.enabled;
   if (data.autoTailor !== undefined) ExtState.autoTailor = data.autoTailor;
+  if (data.workdayMultiPage !== undefined) ExtState.workdayMultiPage = data.workdayMultiPage;
   if (data.userProfile) ExtState.userProfile = data.userProfile;
   if (data.accessToken) ExtState.accessToken = data.accessToken;
+  if (data.jobQueue) ExtState.jobQueue = data.jobQueue;
   if (data.stats) {
     ExtState.sessionStats = { ...ExtState.sessionStats, ...data.stats };
   }
