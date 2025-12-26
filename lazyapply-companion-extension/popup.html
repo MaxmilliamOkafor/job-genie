@@ -26,38 +26,112 @@
 
     <!-- Tab Navigation -->
     <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="jobs">🔥 Live Jobs</button>
+      <button class="tab-btn active" data-tab="search">🔍 Search</button>
+      <button class="tab-btn" data-tab="jobs">🔥 Jobs</button>
       <button class="tab-btn" data-tab="queue">📋 Queue</button>
-      <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+      <button class="tab-btn" data-tab="settings">⚙️</button>
     </nav>
 
     <main class="main-content">
-      <!-- Live Jobs Tab -->
-      <section class="tab-content active" id="tab-jobs">
-        <!-- Search Section -->
+      <!-- Search Tab - Full Boolean Search -->
+      <section class="tab-content active" id="tab-search">
         <div class="search-section">
-          <div class="search-row">
-            <input type="text" id="keyword-input" placeholder="Keywords (e.g., Software Engineer)" class="search-input">
+          <div class="search-label">
+            <span>Boolean Job Search</span>
+            <span class="keyword-count" id="keyword-count"></span>
           </div>
-          <div class="search-row">
-            <input type="text" id="location-input" placeholder="Location (e.g., Remote, London)" class="search-input">
+          <textarea id="boolean-search-input" class="boolean-textarea" placeholder='Enter keywords (comma-separated) or use Boolean operators:
+
+Examples:
+• Data Scientist, Machine Learning, Remote
+• site:greenhouse.io "Software Engineer"
+• site:linkedin.com/jobs "Product Manager" "apply on company"
+• "Full Stack Developer" AND (React OR Vue)'></textarea>
+          
+          <div class="search-filters">
+            <select id="location-filter" class="filter-select">
+              <option value="">All Locations</option>
+              <option value="Remote">Remote</option>
+              <option value="United States">United States</option>
+              <option value="United Kingdom">United Kingdom</option>
+              <option value="Europe">Europe</option>
+              <option value="London">London, UK</option>
+              <option value="New York">New York, US</option>
+              <option value="San Francisco">San Francisco, US</option>
+              <option value="Dublin">Dublin, Ireland</option>
+            </select>
+            <select id="date-filter" class="filter-select">
+              <option value="week">Last Week</option>
+              <option value="24h">Last 24 Hours</option>
+              <option value="3d">Last 3 Days</option>
+              <option value="month">Last Month</option>
+              <option value="all">Any Time</option>
+            </select>
           </div>
+
           <div class="search-actions">
-            <button class="btn btn-primary" id="search-jobs-btn">
+            <button class="btn btn-primary" id="boolean-search-btn">
               🔍 Search Jobs
             </button>
-            <button class="btn btn-secondary" id="refresh-jobs-btn" title="Refresh from database">
-              🔄
+          </div>
+        </div>
+
+        <!-- Boolean Examples -->
+        <div class="examples-section">
+          <div class="examples-label">Quick Boolean Examples (click to use):</div>
+          <div class="examples-grid">
+            <button class="example-chip" data-query='site:greenhouse.io "Data Scientist" remote'>
+              Greenhouse + Remote
+            </button>
+            <button class="example-chip" data-query='site:lever.co "Software Engineer"'>
+              Lever Jobs
+            </button>
+            <button class="example-chip" data-query='site:myworkdayjobs.com "Product Manager"'>
+              Workday PM
+            </button>
+            <button class="example-chip" data-query='site:linkedin.com/jobs "apply on company site"'>
+              LinkedIn Direct
+            </button>
+            <button class="example-chip" data-query='"Machine Learning Engineer" OR "ML Engineer" remote'>
+              ML Engineer
+            </button>
+            <button class="example-chip" data-query='site:ashbyhq.com "Full Stack"'>
+              Ashby Full Stack
             </button>
           </div>
+        </div>
+
+        <!-- Sample Keywords -->
+        <div class="sample-section">
+          <button class="btn btn-outline btn-full" id="load-sample-btn">
+            📝 Load Sample Keywords (Tech Roles)
+          </button>
+        </div>
+
+        <!-- Active Keywords Display -->
+        <div class="active-keywords" id="active-keywords" style="display: none;">
+          <div class="keywords-header">
+            <span class="keywords-label">Active Keywords:</span>
+            <button class="btn-clear" id="clear-keywords-btn">Clear All</button>
+          </div>
+          <div class="keywords-list" id="keywords-list"></div>
+        </div>
+      </section>
+
+      <!-- Jobs Tab -->
+      <section class="tab-content" id="tab-jobs">
+        <!-- Quick Search -->
+        <div class="quick-search">
+          <input type="text" id="job-search-input" placeholder="Filter jobs..." class="search-input">
         </div>
 
         <!-- Quick Filters -->
         <div class="quick-filters">
           <button class="filter-chip active" data-filter="all">All</button>
           <button class="filter-chip" data-filter="remote">Remote</button>
-          <button class="filter-chip" data-filter="high-match">80%+ Match</button>
-          <button class="filter-chip" data-filter="new">New Today</button>
+          <button class="filter-chip" data-filter="high-match">80%+</button>
+          <button class="filter-chip" data-filter="new">Today</button>
+          <button class="filter-chip" data-filter="pending">Pending</button>
         </div>
 
         <!-- Jobs List -->
@@ -67,15 +141,18 @@
             <div class="bulk-actions">
               <button class="btn-icon" id="select-all-btn" title="Select all">☑️</button>
               <button class="btn-icon" id="add-selected-btn" title="Add selected to queue" disabled>
-                ➕ Add to Queue
+                ➕ Add (<span id="selected-count">0</span>)
               </button>
             </div>
           </div>
           <div class="jobs-list" id="jobs-list">
             <div class="jobs-loading">
               <div class="spinner"></div>
-              <span>Loading jobs...</span>
+              <span>Loading jobs from QuantumHire...</span>
             </div>
+          </div>
+          <div class="jobs-pagination" id="jobs-pagination" style="display: none;">
+            <button class="btn btn-secondary btn-sm" id="load-more-btn">Load More</button>
           </div>
         </div>
       </section>
@@ -83,23 +160,44 @@
       <!-- Queue Tab -->
       <section class="tab-content" id="tab-queue">
         <div class="queue-header">
-          <h2 class="section-title">LazyApply Queue</h2>
+          <h2 class="section-title">Application Queue</h2>
           <div class="queue-stats">
-            <span class="queue-count" id="queue-count">0 jobs queued</span>
+            <span class="queue-count" id="queue-count">0 jobs</span>
           </div>
         </div>
         
-        <div class="queue-actions">
-          <button class="btn btn-primary" id="send-to-lazyapply-btn">
-            🚀 Push to LazyApply
+        <!-- Queue Actions -->
+        <div class="queue-action-bar">
+          <button class="btn btn-primary" id="start-apply-btn">
+            🚀 Start Applying
           </button>
-          <button class="btn btn-secondary" id="clear-queue-btn">
-            🗑️ Clear Queue
+          <button class="btn btn-secondary" id="send-to-lazyapply-btn" title="Copy URLs for LazyApply">
+            📋 Copy URLs
+          </button>
+          <button class="btn btn-danger btn-sm" id="clear-queue-btn">
+            🗑️
           </button>
         </div>
 
+        <!-- Tailor Settings for Queue -->
+        <div class="queue-settings">
+          <label class="checkbox-row">
+            <input type="checkbox" id="tailor-on-apply" checked>
+            <span>Tailor CV & Cover Letter for each job</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="attach-documents">
+            <span>Auto-attach documents when possible</span>
+          </label>
+        </div>
+
+        <!-- Queue List -->
         <div class="queue-list" id="queue-list">
-          <div class="queue-empty">No jobs in queue</div>
+          <div class="queue-empty">
+            <span class="queue-empty-icon">📋</span>
+            <span>No jobs in queue</span>
+            <span class="queue-empty-hint">Search for jobs and add them here</span>
+          </div>
         </div>
 
         <!-- Manual URL Add -->
@@ -108,6 +206,27 @@
           <div class="manual-add-row">
             <input type="url" id="manual-url-input" placeholder="Paste job URL..." class="search-input">
             <button class="btn btn-secondary" id="manual-add-btn">+</button>
+          </div>
+        </div>
+
+        <!-- Supported Platforms Info -->
+        <div class="platforms-info">
+          <div class="platforms-label">Supported ATS Platforms:</div>
+          <div class="platforms-grid">
+            <span class="platform-badge lazyapply">Greenhouse</span>
+            <span class="platform-badge lazyapply">Lever</span>
+            <span class="platform-badge lazyapply">Ashby</span>
+            <span class="platform-badge lazyapply">Rippling</span>
+            <span class="platform-badge enhanced">Workday</span>
+            <span class="platform-badge enhanced">iCIMS</span>
+            <span class="platform-badge enhanced">Workable</span>
+            <span class="platform-badge enhanced">SmartRecruiters</span>
+            <span class="platform-badge enhanced">LinkedIn</span>
+            <span class="platform-badge enhanced">Indeed</span>
+          </div>
+          <div class="platforms-legend">
+            <span><span class="dot lazyapply"></span> LazyApply Autofill</span>
+            <span><span class="dot enhanced"></span> EXTREME Tailoring</span>
           </div>
         </div>
       </section>
@@ -130,16 +249,20 @@
           <h2 class="section-title">Session Stats</h2>
           <div class="stats-grid">
             <div class="stat-card">
-              <div class="stat-value" id="stat-intercepted">0</div>
-              <div class="stat-label">Intercepted</div>
+              <div class="stat-value" id="stat-searched">0</div>
+              <div class="stat-label">Jobs Found</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-queued">0</div>
+              <div class="stat-label">Queued</div>
             </div>
             <div class="stat-card">
               <div class="stat-value" id="stat-tailored">0</div>
               <div class="stat-label">Tailored</div>
             </div>
             <div class="stat-card">
-              <div class="stat-value" id="stat-score">--%</div>
-              <div class="stat-label">Avg Score</div>
+              <div class="stat-value" id="stat-applied">0</div>
+              <div class="stat-label">Applied</div>
             </div>
           </div>
         </div>
@@ -158,13 +281,13 @@
           </button>
         </div>
 
-        <!-- Settings -->
+        <!-- Settings List -->
         <div class="settings-list">
-          <h2 class="section-title">Settings</h2>
+          <h2 class="section-title">Automation Settings</h2>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Auto-Tailor</div>
-              <div class="setting-desc">Generate documents when applying</div>
+              <div class="setting-title">Auto-Tailor on Apply</div>
+              <div class="setting-desc">Generate CV & cover letter for each job</div>
             </div>
             <label class="toggle">
               <input type="checkbox" id="auto-tailor-toggle" checked>
@@ -188,6 +311,16 @@
             </div>
             <label class="toggle">
               <input type="checkbox" id="auto-queue-toggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Workday Multi-Page Mode</div>
+              <div class="setting-desc">Handle multi-step Workday applications</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="workday-multipage-toggle" checked>
               <span class="toggle-slider"></span>
             </label>
           </div>
