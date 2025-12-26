@@ -6,6 +6,38 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation limits
+const MAX_CODE_LENGTH = 500;
+const MAX_URI_LENGTH = 500;
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} exceeds maximum length`);
+  }
+  return trimmed;
+}
+
+// Validate OAuth authorization code format
+function isValidAuthCode(code: string): boolean {
+  // OAuth codes are typically alphanumeric with some special chars
+  return /^[a-zA-Z0-9_\-\/]+$/.test(code) && code.length >= 10 && code.length <= MAX_CODE_LENGTH;
+}
+
+// Validate redirect URI
+function isValidRedirectUri(uri: string): boolean {
+  try {
+    const url = new URL(uri);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 interface OAuthRequest {
   type: "get_auth_url" | "exchange_code" | "refresh_token";
   code?: string;
@@ -29,6 +61,34 @@ async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> 
   return user.id;
 }
 
+// Validate request payload
+function validateRequest(data: any): OAuthRequest {
+  const validTypes = ['get_auth_url', 'exchange_code', 'refresh_token'];
+  if (!validTypes.includes(data.type)) {
+    throw new Error('Invalid request type');
+  }
+  
+  const result: OAuthRequest = { type: data.type };
+  
+  if (data.code) {
+    const code = validateString(data.code, MAX_CODE_LENGTH, 'code');
+    if (code && !isValidAuthCode(code)) {
+      throw new Error('Invalid authorization code format');
+    }
+    result.code = code;
+  }
+  
+  if (data.redirectUri) {
+    const redirectUri = validateString(data.redirectUri, MAX_URI_LENGTH, 'redirectUri');
+    if (redirectUri && !isValidRedirectUri(redirectUri)) {
+      throw new Error('Invalid redirect URI format');
+    }
+    result.redirectUri = redirectUri;
+  }
+  
+  return result;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -50,7 +110,9 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const userId = await verifyAndGetUserId(req, supabase);
     
-    const { type, code, redirectUri } = await req.json() as OAuthRequest;
+    // Parse and validate request
+    const rawData = await req.json();
+    const { type, code, redirectUri } = validateRequest(rawData);
 
     console.log(`Gmail OAuth request: ${type} for user ${userId}`);
 

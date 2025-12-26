@@ -6,6 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation limits
+const MAX_KEYWORDS_LENGTH = 2000;
+const MAX_LOCATION_LENGTH = 200;
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return trimmed.substring(0, maxLength);
+  }
+  return trimmed;
+}
+
 interface JobListing {
   title: string;
   company: string;
@@ -250,7 +266,10 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const user_id = await verifyAndGetUserId(req, supabase);
     
-    const { keywords = '', location = '' } = await req.json();
+    // Parse and validate request
+    const rawData = await req.json();
+    const keywords = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH, 'keywords');
+    const location = validateString(rawData.location || '', MAX_LOCATION_LENGTH, 'location');
     
     console.log(`Fast job search - keywords: "${keywords.slice(0, 100)}...", location: "${location}" for user ${user_id}`);
     
@@ -259,8 +278,8 @@ serve(async (req) => {
       throw new Error('FIRECRAWL_API_KEY not configured');
     }
     
-    // Parse all keywords
-    const titles = keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+    // Parse all keywords (limit to 30)
+    const titles = keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0).slice(0, 30);
     const searchTitles = titles.length > 0 ? titles : ['Data Scientist', 'Software Engineer'];
     const locationFilter = location && location !== 'all' ? location : 'Remote';
     

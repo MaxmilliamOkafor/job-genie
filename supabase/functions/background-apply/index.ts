@@ -6,6 +6,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation limits
+const MAX_JOB_IDS = 100;
+const MAX_EMAIL_LENGTH = 254;
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return trimmed.substring(0, maxLength);
+  }
+  return trimmed;
+}
+
+// Validate email format
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= MAX_EMAIL_LENGTH;
+}
+
 interface BackgroundApplyRequest {
   jobIds: string[];
   userProfile: any;
@@ -30,6 +52,49 @@ async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> 
   return user.id;
 }
 
+// Validate the request payload
+function validateRequest(data: any): BackgroundApplyRequest {
+  // Validate jobIds array
+  if (!Array.isArray(data.jobIds)) {
+    throw new Error('jobIds must be an array');
+  }
+  if (data.jobIds.length === 0) {
+    throw new Error('jobIds cannot be empty');
+  }
+  if (data.jobIds.length > MAX_JOB_IDS) {
+    throw new Error(`Maximum ${MAX_JOB_IDS} jobs per batch allowed`);
+  }
+  
+  // Validate each job ID is a valid UUID-like string
+  const jobIds = data.jobIds.slice(0, MAX_JOB_IDS).map((id: any) => {
+    if (typeof id !== 'string' || id.length > 100) {
+      throw new Error('Invalid job ID format');
+    }
+    return id.trim();
+  });
+  
+  // Validate user profile exists
+  if (!data.userProfile || typeof data.userProfile !== 'object') {
+    throw new Error('userProfile is required');
+  }
+  
+  // Validate optional email
+  let userEmail: string | undefined;
+  if (data.userEmail) {
+    userEmail = validateString(data.userEmail, MAX_EMAIL_LENGTH, 'userEmail');
+    if (userEmail && !isValidEmail(userEmail)) {
+      throw new Error('Invalid userEmail format');
+    }
+  }
+  
+  return {
+    jobIds,
+    userProfile: data.userProfile, // Profile validation happens in tailor-application
+    sendConfirmationEmail: !!data.sendConfirmationEmail,
+    userEmail,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -43,7 +108,9 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const userId = await verifyAndGetUserId(req, supabase);
 
-    const { jobIds, userProfile, sendConfirmationEmail, userEmail } = await req.json() as BackgroundApplyRequest;
+    // Parse and validate request
+    const rawData = await req.json();
+    const { jobIds, userProfile, sendConfirmationEmail, userEmail } = validateRequest(rawData);
 
     console.log(`Starting background apply for ${jobIds.length} jobs for user ${userId}`);
 

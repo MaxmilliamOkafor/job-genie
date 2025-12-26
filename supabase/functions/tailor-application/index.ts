@@ -6,6 +6,37 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation limits
+const MAX_STRING_SHORT = 200;
+const MAX_STRING_MEDIUM = 500;
+const MAX_STRING_LONG = 50000; // ~50KB for descriptions
+const MAX_ARRAY_SIZE = 50;
+
+// Validate and sanitize string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} exceeds maximum length of ${maxLength} characters`);
+  }
+  return trimmed;
+}
+
+// Validate array of strings
+function validateStringArray(value: any, maxItems: number, maxStringLength: number, fieldName: string): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  if (value.length > maxItems) {
+    throw new Error(`${fieldName} exceeds maximum of ${maxItems} items`);
+  }
+  return value.slice(0, maxItems).map((item, i) => 
+    validateString(item, maxStringLength, `${fieldName}[${i}]`)
+  );
+}
+
 interface TailorRequest {
   jobTitle: string;
   company: string;
@@ -56,6 +87,51 @@ async function verifyAuth(req: Request): Promise<void> {
   }
 }
 
+// Validate the entire request payload
+function validateRequest(data: any): TailorRequest {
+  const jobTitle = validateString(data.jobTitle, MAX_STRING_SHORT, 'jobTitle');
+  const company = validateString(data.company, MAX_STRING_SHORT, 'company');
+  const description = validateString(data.description || '', MAX_STRING_LONG, 'description');
+  const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, 'requirements');
+  const location = data.location ? validateString(data.location, MAX_STRING_SHORT, 'location') : undefined;
+  const jobId = data.jobId ? validateString(data.jobId, MAX_STRING_SHORT, 'jobId') : undefined;
+  
+  // Validate user profile
+  const profile = data.userProfile || {};
+  const userProfile = {
+    firstName: validateString(profile.firstName || '', MAX_STRING_SHORT, 'firstName'),
+    lastName: validateString(profile.lastName || '', MAX_STRING_SHORT, 'lastName'),
+    email: validateString(profile.email || '', MAX_STRING_SHORT, 'email'),
+    phone: validateString(profile.phone || '', MAX_STRING_SHORT, 'phone'),
+    linkedin: validateString(profile.linkedin || '', MAX_STRING_MEDIUM, 'linkedin'),
+    github: validateString(profile.github || '', MAX_STRING_MEDIUM, 'github'),
+    portfolio: validateString(profile.portfolio || '', MAX_STRING_MEDIUM, 'portfolio'),
+    coverLetter: validateString(profile.coverLetter || '', MAX_STRING_LONG, 'coverLetter'),
+    workExperience: Array.isArray(profile.workExperience) ? profile.workExperience.slice(0, 20) : [],
+    education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
+    skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
+    certifications: validateStringArray(profile.certifications || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, 'certifications'),
+    achievements: Array.isArray(profile.achievements) ? profile.achievements.slice(0, 20) : [],
+    atsStrategy: validateString(profile.atsStrategy || '', MAX_STRING_LONG, 'atsStrategy'),
+    city: profile.city ? validateString(profile.city, MAX_STRING_SHORT, 'city') : undefined,
+    country: profile.country ? validateString(profile.country, MAX_STRING_SHORT, 'country') : undefined,
+    address: profile.address ? validateString(profile.address, MAX_STRING_MEDIUM, 'address') : undefined,
+    state: profile.state ? validateString(profile.state, MAX_STRING_SHORT, 'state') : undefined,
+    zipCode: profile.zipCode ? validateString(profile.zipCode, MAX_STRING_SHORT, 'zipCode') : undefined,
+  };
+
+  return {
+    jobTitle,
+    company,
+    description,
+    requirements,
+    location,
+    jobId,
+    userProfile,
+    includeReferral: !!data.includeReferral,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -65,7 +141,9 @@ serve(async (req) => {
     // Verify authentication
     await verifyAuth(req);
     
-    const { jobTitle, company, description, requirements, location, jobId, userProfile, includeReferral } = await req.json() as TailorRequest;
+    // Parse and validate request
+    const rawData = await req.json();
+    const { jobTitle, company, description, requirements, location, jobId, userProfile, includeReferral } = validateRequest(rawData);
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {

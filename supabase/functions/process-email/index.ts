@@ -6,6 +6,50 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation limits
+const MAX_EMAIL_LENGTH = 254;
+const MAX_SUBJECT_LENGTH = 500;
+const MAX_BODY_LENGTH = 100000; // 100KB
+const MAX_TOKEN_LENGTH = 5000;
+
+// Simple HTML sanitizer to prevent XSS
+function sanitizeHtml(html: string): string {
+  // Remove script tags and their content
+  let sanitized = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  
+  // Remove onclick, onerror, and other event handlers
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
+  
+  // Remove javascript: and data: URLs
+  sanitized = sanitized.replace(/javascript\s*:/gi, '');
+  sanitized = sanitized.replace(/data\s*:/gi, '');
+  
+  // Remove iframe, object, embed tags
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button)[^>]*>.*?<\/\1>/gi, '');
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button)[^>]*\/?>/gi, '');
+  
+  return sanitized;
+}
+
+// Validate email format
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= MAX_EMAIL_LENGTH;
+}
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return trimmed.substring(0, maxLength);
+  }
+  return trimmed;
+}
+
 interface SendEmailRequest {
   type: "send_application" | "send_referral" | "detect_responses";
   applicationId?: string;
@@ -32,6 +76,43 @@ async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> 
   return user.id;
 }
 
+// Validate the request payload
+function validateRequest(data: any): SendEmailRequest {
+  const validTypes = ['send_application', 'send_referral', 'detect_responses'];
+  if (!validTypes.includes(data.type)) {
+    throw new Error('Invalid request type');
+  }
+  
+  const result: SendEmailRequest = { type: data.type };
+  
+  if (data.applicationId) {
+    result.applicationId = validateString(data.applicationId, 100, 'applicationId');
+  }
+  
+  if (data.recipient) {
+    const recipient = validateString(data.recipient, MAX_EMAIL_LENGTH, 'recipient');
+    if (recipient && !isValidEmail(recipient)) {
+      throw new Error('Invalid recipient email address');
+    }
+    result.recipient = recipient;
+  }
+  
+  if (data.subject) {
+    result.subject = validateString(data.subject, MAX_SUBJECT_LENGTH, 'subject');
+  }
+  
+  if (data.body) {
+    let body = validateString(data.body, MAX_BODY_LENGTH, 'body');
+    result.body = sanitizeHtml(body);
+  }
+  
+  if (data.accessToken) {
+    result.accessToken = validateString(data.accessToken, MAX_TOKEN_LENGTH, 'accessToken');
+  }
+  
+  return result;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -45,7 +126,9 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const userId = await verifyAndGetUserId(req, supabase);
 
-    const { type, applicationId, recipient, subject, body, accessToken } = await req.json() as SendEmailRequest;
+    // Parse and validate request
+    const rawData = await req.json();
+    const { type, applicationId, recipient, subject, body, accessToken } = validateRequest(rawData);
 
     console.log(`Processing email request: ${type} for user ${userId}`);
 
@@ -145,7 +228,7 @@ serve(async (req) => {
 
         const msgData = await msgResponse.json();
         const headers = msgData.payload?.headers || [];
-        const subject = headers.find((h: any) => h.name === "Subject")?.value || "";
+        const emailSubject = headers.find((h: any) => h.name === "Subject")?.value || "";
         const from = headers.find((h: any) => h.name === "From")?.value || "";
         
         // Get body
@@ -160,7 +243,7 @@ serve(async (req) => {
         }
 
         // Detect email type using keywords
-        const lowerSubject = subject.toLowerCase();
+        const lowerSubject = emailSubject.toLowerCase();
         const lowerBody = emailBody.toLowerCase();
         
         let detectionType: string | null = null;
@@ -182,15 +265,15 @@ serve(async (req) => {
             .from("email_detections")
             .select("id")
             .eq("user_id", userId)
-            .eq("email_subject", subject)
+            .eq("email_subject", emailSubject)
             .eq("email_from", from)
             .maybeSingle();
 
           if (!existing) {
             const { data: detection, error } = await supabase.from("email_detections").insert({
               user_id: userId,
-              email_subject: subject,
-              email_from: from,
+              email_subject: emailSubject.substring(0, 500),
+              email_from: from.substring(0, 254),
               email_body: emailBody.substring(0, 1000),
               detection_type: detectionType,
             }).select().single();
