@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
-import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
 import { VirtualJobList } from '@/components/jobs/VirtualJobList';
 import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 
@@ -24,7 +23,6 @@ import {
   ArrowUpDown,
   Calendar,
   Upload,
-  Search,
   CheckCircle,
   CheckSquare,
   Square,
@@ -236,35 +234,8 @@ const Jobs = () => {
           </div>
         </div>
 
-        {/* Live Jobs Panel - Auto-fetches from tier 1/2 companies */}
+        {/* Live Jobs Panel - Single unified search interface */}
         <LiveJobsPanel onJobsFetched={refetch} />
-
-        {/* Bulk Keyword Search */}
-        <BulkKeywordSearch 
-          isSearching={isScraping}
-          onGoogleSearchComplete={refetch}
-        />
-
-        {/* Server-side Search */}
-        {jobs.length > 0 && (
-          <div className="flex gap-2">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search jobs by title, company, or location..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            {isSearching && (
-              <div className="flex items-center text-sm text-muted-foreground">
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Searching...
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Filters Bar */}
         {jobs.length > 0 && (

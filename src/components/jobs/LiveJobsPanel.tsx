@@ -198,37 +198,19 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-background/50 rounded-lg p-3 border">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <TrendingUp className="h-3 w-3" />
-              Jobs Found
+        {/* Compact Stats Row */}
+        <div className="flex items-center justify-between flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-green-500" />
+              <span className="text-muted-foreground">Found:</span>
+              <span className="font-bold text-lg">{jobsFound.toLocaleString()}</span>
             </div>
-            <div className="text-2xl font-bold">{jobsFound.toLocaleString()}</div>
-          </div>
-          <div className="bg-background/50 rounded-lg p-3 border">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Search className="h-3 w-3" />
-              Keywords
-            </div>
-            <div className="text-2xl font-bold">{keywordCount}</div>
-          </div>
-          <div className="bg-background/50 rounded-lg p-3 border">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Globe className="h-3 w-3" />
-              Locations
-            </div>
-            <div className="text-2xl font-bold">{locationCount}</div>
-          </div>
-          <div className="bg-background/50 rounded-lg p-3 border">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Clock className="h-3 w-3" />
-              Last Fetch
-            </div>
-            <div className="text-lg font-medium">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Last:</span>
               {lastFetch ? (
-                <span className="text-green-500">
+                <span className="text-green-500 font-medium">
                   {Math.round((Date.now() - lastFetch.getTime()) / 1000)}s ago
                 </span>
               ) : (
@@ -236,151 +218,147 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
               )}
             </div>
           </div>
+          
+          {/* Time Filter Quick Select */}
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Posted within:</span>
+            <div className="flex gap-1">
+              {[
+                { value: 15, unit: 'minutes', label: '15m' },
+                { value: 30, unit: 'minutes', label: '30m' },
+                { value: 1, unit: 'hours', label: '1h' },
+                { value: 6, unit: 'hours', label: '6h' },
+                { value: 24, unit: 'hours', label: '24h' },
+              ].map(preset => (
+                <Button
+                  key={preset.label}
+                  variant={timeValue === preset.value && timeUnit === preset.unit ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setTimeValue(preset.value);
+                    setTimeUnit(preset.unit as 'minutes' | 'hours');
+                  }}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Toggle Advanced */}
-        <div className="flex items-center justify-between py-2 border-t border-b border-border/50">
+        {/* Toggle Advanced - Cleaner */}
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center justify-between w-full py-2 px-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-sm"
+        >
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            <Label htmlFor="advanced-mode" className="font-medium">Advanced Configuration</Label>
+            <span className="font-medium">Configure Keywords & Locations</span>
+            <Badge variant="secondary" className="text-xs">
+              {keywordCount} keywords · {locationCount} locations
+            </Badge>
           </div>
-          <Switch
-            id="advanced-mode"
-            checked={showAdvanced}
-            onCheckedChange={setShowAdvanced}
-          />
-        </div>
+          <RefreshCw className={`h-4 w-4 text-muted-foreground transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+        </button>
 
-        {/* Advanced Config */}
+        {/* Advanced Config - Collapsible */}
         {showAdvanced && (
-          <div className="space-y-4 animate-in fade-in-50 duration-300">
-            {/* Keywords */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Bulk Keywords (comma-separated)</Label>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">{keywordCount} keywords</Badge>
+          <div className="space-y-4 p-4 rounded-lg border bg-card animate-in fade-in-50 slide-in-from-top-2 duration-200">
+            {/* Two Column Layout for Keywords and Locations */}
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Keywords */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Search className="h-3.5 w-3.5" />
+                    Keywords
+                  </Label>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="h-7 text-xs"
+                    className="h-6 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => setKeywords(DEFAULT_KEYWORDS)}
                   >
-                    Reset
+                    Reset to defaults
                   </Button>
                 </div>
+                <Textarea
+                  value={keywords}
+                  onChange={(e) => setKeywords(e.target.value)}
+                  placeholder="Data Scientist, Machine Learning, Python..."
+                  className="min-h-[100px] text-sm resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {keywordCount} keywords (comma-separated)
+                </p>
               </div>
-              <Textarea
-                value={keywords}
-                onChange={(e) => setKeywords(e.target.value)}
-                placeholder="Data Scientist, Machine Learning, Python, AWS..."
-                className="min-h-[120px] text-sm bg-background"
-              />
-            </div>
 
-            {/* Locations */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Target Locations (comma-separated)</Label>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">{locationCount} locations</Badge>
+              {/* Locations */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Globe className="h-3.5 w-3.5" />
+                    Locations
+                  </Label>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="h-7 text-xs"
+                    className="h-6 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => setLocations(DEFAULT_LOCATIONS)}
                   >
-                    Reset
+                    Reset to defaults
                   </Button>
                 </div>
+                <Textarea
+                  value={locations}
+                  onChange={(e) => setLocations(e.target.value)}
+                  placeholder="Dublin, Ireland, Remote, Germany..."
+                  className="min-h-[100px] text-sm resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {locationCount} locations (comma-separated)
+                </p>
               </div>
-              <Textarea
-                value={locations}
-                onChange={(e) => setLocations(e.target.value)}
-                placeholder="Dublin, Ireland, Remote, Germany..."
-                className="min-h-[80px] text-sm bg-background"
-              />
             </div>
 
-            {/* Time Filter - Custom Input */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Posted Within</Label>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 flex-1 max-w-xs">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={timeUnit === 'hours' ? 168 : 10080}
-                    value={timeValue}
-                    onChange={(e) => setTimeValue(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-24"
-                  />
-                  <Select value={timeUnit} onValueChange={(v: 'minutes' | 'hours') => setTimeUnit(v)}>
-                    <SelectTrigger className="w-28">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="minutes">Minutes</SelectItem>
-                      <SelectItem value="hours">Hours</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="text-sm text-muted-foreground">ago</span>
-                </div>
-                {/* Quick presets */}
-                <div className="flex gap-1">
-                  {[
-                    { value: 15, unit: 'minutes', label: '15m' },
-                    { value: 30, unit: 'minutes', label: '30m' },
-                    { value: 1, unit: 'hours', label: '1h' },
-                    { value: 24, unit: 'hours', label: '24h' },
-                  ].map(preset => (
-                    <Button
-                      key={preset.label}
-                      variant={timeValue === preset.value && timeUnit === preset.unit ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => {
-                        setTimeValue(preset.value);
-                        setTimeUnit(preset.unit as 'minutes' | 'hours');
-                      }}
-                    >
-                      {preset.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+            {/* Custom Time Input */}
+            <div className="flex items-center gap-3 pt-2 border-t">
+              <Label className="text-sm font-medium whitespace-nowrap">Custom time:</Label>
+              <Input
+                type="number"
+                min={1}
+                max={timeUnit === 'hours' ? 168 : 10080}
+                value={timeValue}
+                onChange={(e) => setTimeValue(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-20 h-8"
+              />
+              <Select value={timeUnit} onValueChange={(v: 'minutes' | 'hours') => setTimeUnit(v)}>
+                <SelectTrigger className="w-24 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border z-50">
+                  <SelectItem value="minutes">Minutes</SelectItem>
+                  <SelectItem value="hours">Hours</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-muted-foreground">ago</span>
             </div>
           </div>
         )}
 
-        {/* ATS Platforms Info - Clickable */}
-        <div className="bg-background/30 rounded-lg p-4 border border-border/50">
-          <h4 className="font-medium mb-2 flex items-center gap-2">
-            <Globe className="h-4 w-4 text-primary" />
-            Priority ATS Platforms
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { name: 'Greenhouse', url: 'https://www.greenhouse.com' },
-              { name: 'SmartRecruiters', url: 'https://www.smartrecruiters.com' },
-              { name: 'Lever', url: 'https://www.lever.co' },
-              { name: 'Workday', url: 'https://www.workday.com' },
-              { name: 'Ashby', url: 'https://www.ashbyhq.com' },
-              { name: 'Workable', url: 'https://www.workable.com' },
-            ].map(platform => (
-              <Badge 
-                key={platform.name} 
-                variant="outline" 
-                className="text-xs cursor-pointer hover:bg-primary/10 hover:border-primary transition-colors"
-                onClick={() => window.open(platform.url, '_blank')}
-              >
-                {platform.name}
+        {/* ATS Platforms - Compact */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>Sources:</span>
+          <div className="flex flex-wrap gap-1.5">
+            {['Greenhouse', 'Lever', 'Workday', 'Ashby', 'Workable'].map(platform => (
+              <Badge key={platform} variant="outline" className="text-xs font-normal">
+                {platform}
               </Badge>
             ))}
+            <Badge variant="outline" className="text-xs font-normal">+55 more</Badge>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Direct API access to 60+ tier-1 companies including Stripe, Airbnb, Figma, Notion, Coinbase, and more
-          </p>
         </div>
       </CardContent>
     </Card>
