@@ -482,7 +482,53 @@ const KNOCKOUT_ANSWER_BANK = {
   'government.*employee|public.*sector|federal.*employee': { answer: 'No', selectValue: 'no' },
   'union.*member|belong.*union|represented.*union': { answer: 'No', selectValue: 'no' },
   'equipment.*use|tools.*own|required.*equipment|personal.*tools': { answer: 'Yes', selectValue: 'yes' },
-  'computer.*proficient|technology.*skills|software.*skills': { answer: 'Yes', selectValue: 'yes' }
+  'computer.*proficient|technology.*skills|software.*skills': { answer: 'Yes', selectValue: 'yes' },
+  
+  // OVERTIME & SHIFT AVAILABILITY
+  'willing.*overtime|work.*overtime|overtime.*available|extra.*hours|additional.*hours|extended.*hours|long.*hours': { answer: 'Yes', selectValue: 'yes' },
+  'shift.*availability|available.*shifts|work.*any.*shift|all.*shifts|shift.*preference': { answer: 'Flexible/Any Shift', selectValue: 'flexible' },
+  'night.*shift.*available|evening.*shift|graveyard.*shift|swing.*shift': { answer: 'Yes', selectValue: 'yes' },
+  'weekend.*availability|work.*saturdays|work.*sundays|available.*weekends|saturday.*sunday': { answer: 'Yes', selectValue: 'yes' },
+  'holiday.*work|work.*holidays|available.*holidays': { answer: 'Yes', selectValue: 'yes' },
+  'flexible.*hours|flexible.*schedule|varied.*schedule|irregular.*hours': { answer: 'Yes', selectValue: 'yes' },
+  'rotating.*shift|rotating.*schedule': { answer: 'Yes', selectValue: 'yes' },
+  'on-call.*availability|standby.*duty|emergency.*call|after.*hours.*availability': { answer: 'Yes', selectValue: 'yes' },
+  
+  // CERTIFICATIONS REQUIRED
+  'certification.*required|required.*certification|hold.*certification|possess.*certification|valid.*certification': { answer: 'Yes', selectValue: 'yes' },
+  'willing.*obtain.*certification|obtain.*required.*certification|get.*certified': { answer: 'Yes', selectValue: 'yes' },
+  'professional.*license|state.*license|license.*required|licensed.*professional': { answer: 'Yes', selectValue: 'yes' },
+  'aws.*certified|azure.*certified|google.*certified|cloud.*certified': { answer: 'Yes', selectValue: 'yes' },
+  'pmp.*certified|scrum.*master|agile.*certified|itil.*certified': { answer: 'Yes', selectValue: 'yes' },
+  'cpa.*certified|cfa.*chartered|series.*7|finra|licensed.*broker': { answer: 'Yes, if applicable', selectValue: 'yes' },
+  'first.*aid|cpr.*certified|safety.*training|osha.*certified': { answer: 'Yes', selectValue: 'yes' },
+  
+  // PHYSICAL REQUIREMENTS
+  'lift.*25.*pounds|lift.*50.*pounds|lift.*75.*pounds|heavy.*lifting|physically.*demanding': { answer: 'Yes', selectValue: 'yes' },
+  'stand.*extended|stand.*long.*periods|standing.*hours|prolonged.*standing': { answer: 'Yes', selectValue: 'yes' },
+  'sit.*extended|sit.*long.*periods|desk.*work|sedentary.*work': { answer: 'Yes', selectValue: 'yes' },
+  'climb.*ladders|work.*heights|height.*comfortable|elevated.*platforms': { answer: 'Yes', selectValue: 'yes' },
+  'outdoor.*weather|inclement.*weather|outdoor.*conditions|work.*outside': { answer: 'Yes', selectValue: 'yes' },
+  'repetitive.*motion|repetitive.*tasks|manual.*dexterity': { answer: 'Yes', selectValue: 'yes' },
+  
+  // TEAM & ENVIRONMENT
+  'team.*environment|work.*team|collaborative.*environment|teamwork': { answer: 'Yes', selectValue: 'yes' },
+  'independent.*work|work.*independently|self-directed|autonomous.*work|minimal.*supervision': { answer: 'Yes', selectValue: 'yes' },
+  'fast-paced.*environment|high.*pressure|deadline.*driven|time.*sensitive': { answer: 'Yes', selectValue: 'yes' },
+  'customer.*facing|client.*interaction|public.*contact|customer.*service': { answer: 'Yes', selectValue: 'yes' },
+  'remote.*work.*capable|work.*from.*home|virtual.*work|telecommute': { answer: 'Yes', selectValue: 'yes' },
+  'hybrid.*work|in-office.*days|office.*attendance': { answer: 'Yes', selectValue: 'yes' },
+  
+  // ADDITIONAL COMMON QUESTIONS
+  'emergency.*contact|emergency.*situation|available.*emergency': { answer: 'Yes', selectValue: 'yes' },
+  'social.*media.*presence|professional.*social|online.*presence': { answer: 'Yes', selectValue: 'yes' },
+  'public.*speaking|presentation.*skills|speak.*groups': { answer: 'Yes', selectValue: 'yes' },
+  'training.*others|mentor.*others|coach.*team|train.*new.*employees': { answer: 'Yes', selectValue: 'yes' },
+  'feedback.*receptive|accept.*feedback|constructive.*criticism': { answer: 'Yes', selectValue: 'yes' },
+  'multi-task|multitask|multiple.*priorities|juggle.*tasks': { answer: 'Yes', selectValue: 'yes' },
+  'attention.*detail|detail.*oriented|meticulous|accuracy': { answer: 'Yes', selectValue: 'yes' },
+  'problem.*solving|analytical.*thinking|critical.*thinking': { answer: 'Yes', selectValue: 'yes' },
+  'leadership.*experience|lead.*team|supervisory.*experience|management.*experience': { answer: 'Yes', selectValue: 'yes' }
 };
 
 // Match knockout question with profile-aware answers
@@ -2338,7 +2384,10 @@ function createFloatingPanel() {
         </div>
         
         <div class="qh-pdf-preview" id="qh-pdf-preview">
-          <div class="qh-pdf-header">📄 Generated PDFs</div>
+          <div class="qh-pdf-header">
+            <span>📄 Generated PDFs</span>
+            <button class="qh-pdf-preview-btn" id="qh-preview-pdfs-btn">👁️ Preview</button>
+          </div>
           <div class="qh-pdf-cards">
             <div class="qh-pdf-card" id="qh-resume-pdf-card">
               <div class="qh-pdf-icon">📄</div>
@@ -2346,7 +2395,10 @@ function createFloatingPanel() {
                 <div class="qh-pdf-name" id="qh-resume-pdf-name">Resume.pdf</div>
                 <div class="qh-pdf-size" id="qh-resume-pdf-size">-</div>
               </div>
-              <button class="qh-pdf-download-btn" data-type="resume">⬇️</button>
+              <div class="qh-pdf-actions">
+                <button class="qh-pdf-action-btn" data-action="preview" data-type="resume" title="Preview">👁️</button>
+                <button class="qh-pdf-download-btn" data-type="resume" title="Download">⬇️</button>
+              </div>
             </div>
             <div class="qh-pdf-card" id="qh-cover-pdf-card">
               <div class="qh-pdf-icon">📝</div>
@@ -2354,7 +2406,10 @@ function createFloatingPanel() {
                 <div class="qh-pdf-name" id="qh-cover-pdf-name">CoverLetter.pdf</div>
                 <div class="qh-pdf-size" id="qh-cover-pdf-size">-</div>
               </div>
-              <button class="qh-pdf-download-btn" data-type="cover">⬇️</button>
+              <div class="qh-pdf-actions">
+                <button class="qh-pdf-action-btn" data-action="preview" data-type="cover" title="Preview">👁️</button>
+                <button class="qh-pdf-download-btn" data-type="cover" title="Download">⬇️</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2427,62 +2482,74 @@ function addPanelStyles() {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 340px;
+      width: 380px;
+      max-height: 85vh;
       background: linear-gradient(145deg, hsl(var(--qh-bg-0)) 0%, hsl(var(--qh-bg-1)) 100%);
-      border-radius: 16px;
-      box-shadow: 0 25px 80px hsl(var(--qh-shadow) / 0.28), 0 0 0 1px hsl(var(--qh-border) / 0.9);
+      border-radius: 18px;
+      box-shadow: 0 25px 80px hsl(var(--qh-shadow) / 0.35), 0 0 0 1px hsl(var(--qh-border) / 0.9);
       z-index: 2147483647;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       color: hsl(var(--qh-text));
       overflow: hidden;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #quantumhire-panel.minimized {
+      max-height: 52px;
+    }
+    
+    #quantumhire-panel.minimized .qh-body {
+      display: none;
     }
 
-    .qh-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: hsl(var(--qh-card-2) / 0.7); border-bottom: 1px solid hsl(var(--qh-border) / 0.8); }
-    .qh-brand { display: flex; align-items: center; gap: 8px; }
-    .qh-logo { font-size: 18px; }
-    .qh-title { font-weight: 800; font-size: 14px; background: linear-gradient(135deg, hsl(var(--qh-brand)) 0%, hsl(var(--qh-brand-2)) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .qh-controls { display: flex; align-items: center; gap: 8px; }
-    .qh-platform-badge { font-size: 9px; font-weight: 800; padding: 3px 8px; background: hsl(var(--qh-violet) / 0.12); border: 1px solid hsl(var(--qh-violet) / 0.22); border-radius: 999px; color: hsl(var(--qh-violet)); }
-    .qh-minimize { background: transparent; border: none; color: hsl(var(--qh-muted)); font-size: 20px; cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+    .qh-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: hsl(var(--qh-card-2) / 0.7); border-bottom: 1px solid hsl(var(--qh-border) / 0.8); }
+    .qh-brand { display: flex; align-items: center; gap: 10px; }
+    .qh-logo { font-size: 20px; }
+    .qh-title { font-weight: 800; font-size: 15px; background: linear-gradient(135deg, hsl(var(--qh-brand)) 0%, hsl(var(--qh-brand-2)) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .qh-controls { display: flex; align-items: center; gap: 10px; }
+    .qh-platform-badge { font-size: 10px; font-weight: 800; padding: 4px 10px; background: hsl(var(--qh-violet) / 0.12); border: 1px solid hsl(var(--qh-violet) / 0.22); border-radius: 999px; color: hsl(var(--qh-violet)); }
+    .qh-minimize { background: transparent; border: none; color: hsl(var(--qh-muted)); font-size: 22px; cursor: pointer; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
     .qh-minimize:hover { background: hsl(var(--qh-border) / 0.5); color: hsl(var(--qh-text)); }
 
-    .qh-body { padding: 14px; }
+    .qh-body { padding: 16px; overflow-y: auto; flex: 1; }
 
-    .qh-job-info { background: linear-gradient(135deg, hsl(var(--qh-violet) / 0.10) 0%, hsl(var(--qh-violet) / 0.06) 100%); border: 1px solid hsl(var(--qh-violet) / 0.18); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-    .qh-job-title { font-weight: 650; font-size: 14px; color: hsl(var(--qh-text)); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .qh-job-company { font-size: 12px; color: hsl(var(--qh-muted)); }
-    .qh-job-location { font-size: 10px; color: hsl(var(--qh-muted-2)); margin-top: 4px; }
+    .qh-job-info { background: linear-gradient(135deg, hsl(var(--qh-violet) / 0.10) 0%, hsl(var(--qh-violet) / 0.06) 100%); border: 1px solid hsl(var(--qh-violet) / 0.18); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+    .qh-job-title { font-weight: 700; font-size: 15px; color: hsl(var(--qh-text)); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qh-job-company { font-size: 13px; color: hsl(var(--qh-muted)); font-weight: 500; }
+    .qh-job-location { font-size: 11px; color: hsl(var(--qh-muted-2)); margin-top: 6px; }
 
-    .qh-automation-controls { background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
-    .qh-speed-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .qh-speed-label { font-size: 11px; color: hsl(var(--qh-muted-2)); }
-    .qh-speed-buttons { display: flex; gap: 4px; }
-    .qh-speed-btn { padding: 4px 10px; background: hsl(var(--qh-border) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.9); border-radius: 999px; color: hsl(var(--qh-muted)); font-size: 10px; font-weight: 700; cursor: pointer; }
+    .qh-automation-controls { background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .qh-speed-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .qh-speed-label { font-size: 12px; color: hsl(var(--qh-muted-2)); font-weight: 600; }
+    .qh-speed-buttons { display: flex; gap: 5px; }
+    .qh-speed-btn { padding: 5px 12px; background: hsl(var(--qh-border) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.9); border-radius: 999px; color: hsl(var(--qh-muted)); font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; }
     .qh-speed-btn:hover { background: hsl(var(--qh-border) / 0.55); color: hsl(var(--qh-text)); }
     .qh-speed-btn.active { background: hsl(var(--qh-violet) / 0.14); border-color: hsl(var(--qh-violet) / 0.28); color: hsl(var(--qh-violet)); }
 
-    .qh-control-row { display: flex; gap: 4px; }
-    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 6px 8px; border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; background: hsl(var(--qh-card) / 0.35); color: hsl(var(--qh-text)); }
+    .qh-control-row { display: flex; gap: 6px; }
+    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 10px; border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; background: hsl(var(--qh-card) / 0.35); color: hsl(var(--qh-text)); transition: all 0.15s ease; }
+    .qh-control-btn:hover { transform: translateY(-1px); }
     .qh-control-btn.pause { border-color: hsl(var(--qh-warn) / 0.35); color: hsl(var(--qh-warn)); }
     .qh-control-btn.pause.paused { border-color: hsl(var(--qh-brand) / 0.35); color: hsl(var(--qh-brand)); }
     .qh-control-btn.skip { color: hsl(var(--qh-muted)); }
     .qh-control-btn.quit { border-color: hsl(var(--qh-danger) / 0.28); color: hsl(var(--qh-danger)); }
 
-    .qh-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: hsl(var(--qh-brand) / 0.10); border: 1px solid hsl(var(--qh-brand) / 0.18); border-radius: 10px; margin-bottom: 12px; font-size: 11px; }
-    .qh-status-icon { font-size: 10px; }
+    .qh-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: hsl(var(--qh-brand) / 0.10); border: 1px solid hsl(var(--qh-brand) / 0.18); border-radius: 12px; margin-bottom: 14px; font-size: 12px; font-weight: 500; }
+    .qh-status-icon { font-size: 12px; }
 
-    .qh-actions { display: flex; flex-direction: column; gap: 8px; }
-    .qh-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease; background: hsl(var(--qh-card) / 0.25); color: hsl(var(--qh-text)); }
-    .qh-btn.primary { background: linear-gradient(135deg, hsl(var(--qh-brand)) 0%, hsl(var(--qh-brand-2)) 100%); color: hsl(var(--qh-bg-0)); border-color: transparent; box-shadow: 0 10px 30px hsl(var(--qh-brand) / 0.20); }
-    .qh-btn.primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 36px hsl(var(--qh-brand) / 0.26); }
-    .qh-btn.secondary { justify-content: center; font-size: 11px; color: hsl(var(--qh-muted)); }
-    .qh-btn.secondary:hover { background: hsl(var(--qh-card) / 0.40); color: hsl(var(--qh-text)); }
-    .qh-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    .qh-btn-row { display: flex; gap: 6px; }
+    .qh-actions { display: flex; flex-direction: column; gap: 10px; }
+    .qh-btn { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease; background: hsl(var(--qh-card) / 0.25); color: hsl(var(--qh-text)); }
+    .qh-btn.primary { background: linear-gradient(135deg, hsl(var(--qh-brand)) 0%, hsl(var(--qh-brand-2)) 100%); color: hsl(var(--qh-bg-0)); border-color: transparent; box-shadow: 0 10px 30px hsl(var(--qh-brand) / 0.22); }
+    .qh-btn.primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 14px 40px hsl(var(--qh-brand) / 0.30); }
+    .qh-btn.secondary { justify-content: center; font-size: 12px; color: hsl(var(--qh-muted)); padding: 10px 14px; }
+    .qh-btn.secondary:hover { background: hsl(var(--qh-card) / 0.40); color: hsl(var(--qh-text)); transform: translateY(-1px); }
+    .qh-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; }
+    .qh-btn-row { display: flex; gap: 8px; }
     .qh-btn-content { display: flex; flex-direction: column; align-items: flex-start; }
-    .qh-btn-title { font-weight: 800; font-size: 13px; }
-    .qh-btn-subtitle { font-size: 9px; opacity: 0.85; }
+    .qh-btn-title { font-weight: 800; font-size: 14px; }
+    .qh-btn-subtitle { font-size: 10px; opacity: 0.85; }
 
     .qh-results { margin-top: 12px; padding-top: 12px; border-top: 1px solid hsl(var(--qh-border) / 0.8); }
     .qh-results.hidden { display: none; }
@@ -2491,17 +2558,41 @@ function addPanelStyles() {
     .qh-score-label { font-size: 11px; color: hsl(var(--qh-muted-2)); }
     .qh-score-value { font-size: 20px; font-weight: 900; color: hsl(var(--qh-brand)); }
 
-    .qh-pdf-preview { background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
-    .qh-pdf-header { font-size: 11px; font-weight: 800; color: hsl(var(--qh-violet)); margin-bottom: 8px; }
-    .qh-pdf-cards { display: flex; flex-direction: column; gap: 6px; }
-    .qh-pdf-card { display: flex; align-items: center; gap: 8px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; }
-    .qh-pdf-card.uploaded { border-color: hsl(var(--qh-brand) / 0.30); background: hsl(var(--qh-brand) / 0.08); }
-    .qh-pdf-icon { font-size: 16px; }
+    .qh-pdf-preview { background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+    .qh-pdf-header { font-size: 12px; font-weight: 800; color: hsl(var(--qh-violet)); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .qh-pdf-preview-btn { padding: 4px 8px; background: hsl(var(--qh-violet) / 0.12); border: 1px solid hsl(var(--qh-violet) / 0.22); border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: 600; color: hsl(var(--qh-violet)); }
+    .qh-pdf-preview-btn:hover { background: hsl(var(--qh-violet) / 0.22); }
+    .qh-pdf-cards { display: flex; flex-direction: column; gap: 8px; }
+    .qh-pdf-card { display: flex; align-items: center; gap: 10px; padding: 10px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 12px; transition: all 0.15s ease; }
+    .qh-pdf-card:hover { background: hsl(var(--qh-card) / 0.4); }
+    .qh-pdf-card.uploaded { border-color: hsl(var(--qh-brand) / 0.35); background: hsl(var(--qh-brand) / 0.10); }
+    .qh-pdf-icon { font-size: 18px; }
     .qh-pdf-info { flex: 1; }
-    .qh-pdf-name { font-size: 10px; font-weight: 650; color: hsl(var(--qh-text)); }
-    .qh-pdf-size { font-size: 9px; color: hsl(var(--qh-muted-2)); }
-    .qh-pdf-download-btn { padding: 5px 7px; background: hsl(var(--qh-card) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; cursor: pointer; font-size: 11px; color: hsl(var(--qh-text)); }
-    .qh-pdf-download-btn:hover { background: hsl(var(--qh-violet) / 0.12); border-color: hsl(var(--qh-violet) / 0.20); }
+    .qh-pdf-name { font-size: 11px; font-weight: 700; color: hsl(var(--qh-text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+    .qh-pdf-size { font-size: 10px; color: hsl(var(--qh-muted-2)); margin-top: 2px; }
+    .qh-pdf-actions { display: flex; gap: 4px; }
+    .qh-pdf-action-btn { padding: 6px 8px; background: hsl(var(--qh-card) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; cursor: pointer; font-size: 12px; color: hsl(var(--qh-text)); transition: all 0.12s ease; }
+    .qh-pdf-action-btn:hover { background: hsl(var(--qh-violet) / 0.12); border-color: hsl(var(--qh-violet) / 0.22); }
+    .qh-pdf-download-btn { padding: 6px 8px; background: hsl(var(--qh-card) / 0.35); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; cursor: pointer; font-size: 12px; color: hsl(var(--qh-text)); }
+    .qh-pdf-download-btn:hover { background: hsl(var(--qh-violet) / 0.12); border-color: hsl(var(--qh-violet) / 0.22); }
+
+    /* PDF Preview Modal */
+    .qh-pdf-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90vw; max-width: 900px; height: 80vh; background: hsl(var(--qh-bg-0)); border: 1px solid hsl(var(--qh-border)); border-radius: 16px; z-index: 2147483648; display: flex; flex-direction: column; box-shadow: 0 30px 100px hsl(var(--qh-shadow) / 0.5); }
+    .qh-pdf-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid hsl(var(--qh-border)); }
+    .qh-pdf-modal-title { font-size: 16px; font-weight: 800; color: hsl(var(--qh-text)); }
+    .qh-pdf-modal-tabs { display: flex; gap: 8px; }
+    .qh-pdf-modal-tab { padding: 8px 16px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border)); border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; color: hsl(var(--qh-muted)); }
+    .qh-pdf-modal-tab.active { background: hsl(var(--qh-violet) / 0.12); border-color: hsl(var(--qh-violet) / 0.25); color: hsl(var(--qh-violet)); }
+    .qh-pdf-modal-close { padding: 8px; background: transparent; border: none; cursor: pointer; font-size: 20px; color: hsl(var(--qh-muted)); border-radius: 8px; }
+    .qh-pdf-modal-close:hover { background: hsl(var(--qh-border) / 0.5); color: hsl(var(--qh-text)); }
+    .qh-pdf-modal-body { flex: 1; display: flex; overflow: hidden; }
+    .qh-pdf-modal-content { flex: 1; padding: 20px; overflow: auto; }
+    .qh-pdf-modal-content.hidden { display: none; }
+    .qh-pdf-modal-iframe { width: 100%; height: 100%; border: none; border-radius: 8px; background: white; }
+    .qh-pdf-modal-text { width: 100%; height: 100%; background: hsl(var(--qh-card-2)); border: 1px solid hsl(var(--qh-border)); border-radius: 12px; padding: 16px; color: hsl(var(--qh-text)); font-size: 12px; font-family: inherit; resize: none; line-height: 1.6; }
+    .qh-pdf-modal-footer { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid hsl(var(--qh-border)); }
+    .qh-pdf-modal-footer-left { display: flex; gap: 8px; }
+    .qh-pdf-modal-footer-right { display: flex; gap: 8px; }
 
     .qh-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
     .qh-tab { flex: 1; padding: 6px 10px; background: hsl(var(--qh-card) / 0.20); border: 1px solid hsl(var(--qh-border) / 0.75); color: hsl(var(--qh-muted)); border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
@@ -3563,6 +3654,137 @@ function setupPanelEventsContinued(panel) {
       document.body.removeChild(link);
       showToast(`Downloaded ${fileName}`, 'success');
     });
+  });
+  
+  // PDF Preview buttons
+  panel.querySelectorAll('.qh-pdf-action-btn[data-action="preview"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      showPdfPreviewModal(panel, type);
+    });
+  });
+  
+  // Main Preview PDFs button
+  panel.querySelector('#qh-preview-pdfs-btn')?.addEventListener('click', () => {
+    showPdfPreviewModal(panel, 'resume');
+  });
+}
+
+// Show PDF Preview Modal
+function showPdfPreviewModal(panel, initialTab = 'resume') {
+  // Remove existing modal
+  document.querySelector('.qh-overlay')?.remove();
+  document.querySelector('.qh-pdf-modal')?.remove();
+  
+  const resumePdf = panel.dataset.resumePdf;
+  const coverPdf = panel.dataset.coverPdf;
+  const resumeName = panel.querySelector('#qh-resume-pdf-name')?.textContent || 'Resume.pdf';
+  const coverName = panel.querySelector('#qh-cover-pdf-name')?.textContent || 'CoverLetter.pdf';
+  
+  if (!resumePdf && !coverPdf) {
+    showToast('No PDFs generated yet. Click Smart Apply first.', 'error');
+    return;
+  }
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'qh-overlay';
+  
+  const modal = document.createElement('div');
+  modal.className = 'qh-pdf-modal';
+  modal.innerHTML = `
+    <div class="qh-pdf-modal-header">
+      <div class="qh-pdf-modal-title">📄 PDF Preview</div>
+      <div class="qh-pdf-modal-tabs">
+        <button class="qh-pdf-modal-tab ${initialTab === 'resume' ? 'active' : ''}" data-tab="resume">📄 Resume</button>
+        <button class="qh-pdf-modal-tab ${initialTab === 'cover' ? 'active' : ''}" data-tab="cover">📝 Cover Letter</button>
+      </div>
+      <button class="qh-pdf-modal-close">×</button>
+    </div>
+    <div class="qh-pdf-modal-body">
+      <div class="qh-pdf-modal-content ${initialTab === 'resume' ? '' : 'hidden'}" id="qh-modal-resume">
+        ${resumePdf ? 
+          `<iframe class="qh-pdf-modal-iframe" src="data:application/pdf;base64,${resumePdf}"></iframe>` : 
+          '<div style="padding:40px;text-align:center;color:hsl(215 20% 65%);">Resume not generated yet</div>'
+        }
+      </div>
+      <div class="qh-pdf-modal-content ${initialTab === 'cover' ? '' : 'hidden'}" id="qh-modal-cover">
+        ${coverPdf ? 
+          `<iframe class="qh-pdf-modal-iframe" src="data:application/pdf;base64,${coverPdf}"></iframe>` : 
+          '<div style="padding:40px;text-align:center;color:hsl(215 20% 65%);">Cover letter not generated yet</div>'
+        }
+      </div>
+    </div>
+    <div class="qh-pdf-modal-footer">
+      <div class="qh-pdf-modal-footer-left">
+        <span style="font-size:12px;color:hsl(215 20% 65%);">Review your documents before attaching</span>
+      </div>
+      <div class="qh-pdf-modal-footer-right">
+        <button class="qh-btn secondary" id="qh-modal-download">⬇️ Download</button>
+        <button class="qh-btn primary" id="qh-modal-attach">📎 Attach to Form</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  document.body.appendChild(modal);
+  
+  // Track active tab
+  let activeTab = initialTab;
+  
+  // Tab switching
+  modal.querySelectorAll('.qh-pdf-modal-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      modal.querySelectorAll('.qh-pdf-modal-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeTab = tab.dataset.tab;
+      modal.querySelector('#qh-modal-resume').classList.toggle('hidden', activeTab !== 'resume');
+      modal.querySelector('#qh-modal-cover').classList.toggle('hidden', activeTab !== 'cover');
+    });
+  });
+  
+  // Close handlers
+  const closeModal = () => {
+    overlay.remove();
+    modal.remove();
+  };
+  
+  modal.querySelector('.qh-pdf-modal-close').addEventListener('click', closeModal);
+  overlay.addEventListener('click', closeModal);
+  
+  // Download button
+  modal.querySelector('#qh-modal-download').addEventListener('click', () => {
+    const pdfData = activeTab === 'resume' ? resumePdf : coverPdf;
+    const fileName = activeTab === 'resume' ? resumeName : coverName;
+    
+    if (!pdfData) {
+      showToast(`${activeTab === 'resume' ? 'Resume' : 'Cover letter'} not available`, 'error');
+      return;
+    }
+    
+    const link = document.createElement('a');
+    link.href = `data:application/pdf;base64,${pdfData}`;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Downloaded ${fileName}`, 'success');
+  });
+  
+  // Attach to form button
+  modal.querySelector('#qh-modal-attach').addEventListener('click', async () => {
+    closeModal();
+    showToast('Attaching PDFs to form...', 'info');
+    
+    const resumePdfResult = resumePdf ? { success: true, pdf: resumePdf, fileName: resumeName } : null;
+    const coverPdfResult = coverPdf ? { success: true, pdf: coverPdf, fileName: coverName } : null;
+    
+    const uploadResults = await uploadPDFsToAllSections(resumePdfResult, coverPdfResult);
+    
+    if (uploadResults.filesUploaded > 0) {
+      showToast(`✅ ${uploadResults.filesUploaded} PDF(s) attached to form`, 'success');
+    } else {
+      showToast('⚠️ No upload fields found on this page', 'warning');
+    }
   });
 }
 
