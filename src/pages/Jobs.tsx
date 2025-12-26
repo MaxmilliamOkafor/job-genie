@@ -245,15 +245,18 @@ const Jobs = () => {
           <JobFiltersBar 
             jobs={jobs} 
             onFiltersChange={handleFiltersChange}
-            onSearch={async (keywords, locations) => {
+            onSearch={async (keywords, locations, filters) => {
               if (!user) return;
               setIsSearching(true);
               try {
-                // Use search-jobs-google for proper boolean web search across all ATS platforms
                 const { data, error } = await supabase.functions.invoke('search-jobs-google', {
                   body: {
                     keywords,
-                    location: locations || 'Remote, Dublin, Ireland, United Kingdom, United States, Germany, Netherlands, France',
+                    location: locations || '',
+                    timeFilter: filters?.timeFilter || 'all',
+                    jobType: filters?.jobType || 'all',
+                    workType: filters?.workType || 'all',
+                    experienceLevel: filters?.experienceLevel || 'all',
                   },
                 });
                 
@@ -263,7 +266,6 @@ const Jobs = () => {
                   await refetch();
                   const keywordPreview = keywords.split(',').slice(0, 3).map((k: string) => k.trim()).join(', ');
                   
-                  // Build platform breakdown message
                   let platformInfo = '';
                   if (data.platforms && Object.keys(data.platforms).length > 0) {
                     const topPlatforms = Object.entries(data.platforms)

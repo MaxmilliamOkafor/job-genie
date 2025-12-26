@@ -28,85 +28,65 @@ interface JobListing {
   match_score: number;
 }
 
-// ATS Platform Configurations
+// ATS Platform Configurations - UPDATED: Removed Ashby and Lever, renamed Direct
 const ATS_PLATFORMS = {
   greenhouse: {
     name: 'Greenhouse',
-    sitePatterns: ['site:boards.greenhouse.io', 'site:*.greenhouse.io/jobs'],
+    sitePatterns: ['site:greenhouse.io', 'site:boards.greenhouse.io'],
     urlPattern: /greenhouse\.io/,
     jobIdPattern: /\/jobs\/\d+/,
   },
   workday: {
     name: 'Workday',
-    sitePatterns: ['site:*.myworkdayjobs.com', 'site:*.wd5.myworkdayjobs.com'],
+    sitePatterns: ['site:myworkdayjobs.com', 'site:*.wd5.myworkdayjobs.com'],
     urlPattern: /myworkdayjobs\.com/,
     jobIdPattern: /\/job\//,
   },
-  workable: {
-    name: 'Workable',
-    sitePatterns: ['site:apply.workable.com', 'site:*.workable.com/j/'],
-    urlPattern: /workable\.com/,
-    jobIdPattern: /\/j\/[a-zA-Z0-9]+/,
-  },
-  successfactors: {
-    name: 'SAP SuccessFactors',
-    sitePatterns: ['site:*.successfactors.com', 'site:jobs.sap.com'],
-    urlPattern: /successfactors\.com|jobs\.sap\.com/,
-    jobIdPattern: /\/job\//,
-  },
-  icims: {
-    name: 'iCIMS',
-    sitePatterns: ['site:*.icims.com', 'site:careers-*.icims.com'],
-    urlPattern: /icims\.com/,
-    jobIdPattern: /\/jobs\/\d+/,
-  },
-  linkedin: {
-    name: 'LinkedIn',
-    sitePatterns: ['site:linkedin.com/jobs/view'],
-    urlPattern: /linkedin\.com\/jobs\/view/,
-    jobIdPattern: /\/view\/\d+/,
-  },
-  taleo: {
-    name: 'Oracle Taleo',
-    sitePatterns: ['site:*.taleo.net', 'site:*.oraclecloud.com/hcmUI/CandidateExperience'],
-    urlPattern: /taleo\.net|oraclecloud\.com.*CandidateExperience/,
-    jobIdPattern: /requisition|job/i,
-  },
-  bamboohr: {
-    name: 'BambooHR',
-    sitePatterns: ['site:*.bamboohr.com/careers', 'site:*.bamboohr.com/jobs'],
-    urlPattern: /bamboohr\.com/,
-    jobIdPattern: /\/jobs\/view/,
-  },
-  teamtailor: {
-    name: 'Teamtailor',
-    sitePatterns: ['site:*.teamtailor.com/jobs', 'site:career.*.com'],
-    urlPattern: /teamtailor\.com/,
-    jobIdPattern: /\/jobs\//,
-  },
-  bullhorn: {
-    name: 'Bullhorn',
-    sitePatterns: ['site:*.bullhornstaffing.com', 'site:jobs.*.bullhorn'],
-    urlPattern: /bullhorn/i,
-    jobIdPattern: /\/job\//,
-  },
-  lever: {
-    name: 'Lever',
-    sitePatterns: ['site:jobs.lever.co', 'site:*.lever.co'],
-    urlPattern: /lever\.co/,
-    jobIdPattern: /\/[a-f0-9-]+$/,
-  },
   smartrecruiters: {
     name: 'SmartRecruiters',
-    sitePatterns: ['site:jobs.smartrecruiters.com', 'site:*.smartrecruiters.com'],
+    sitePatterns: ['site:jobs.smartrecruiters.com', 'site:smartrecruiters.com'],
     urlPattern: /smartrecruiters\.com/,
     jobIdPattern: /\/\d+/,
   },
-  ashby: {
-    name: 'Ashby',
-    sitePatterns: ['site:jobs.ashbyhq.com'],
-    urlPattern: /ashbyhq\.com/,
-    jobIdPattern: /\/[a-f0-9-]+/,
+  direct: {
+    name: 'Direct Company Website (LinkedIn and Indeed)',
+    sitePatterns: [
+      'site:linkedin.com/jobs/view -"Easy Apply"',
+      'site:indeed.com/viewjob -"easily apply"',
+      'site:indeed.com/job -"easily apply"',
+    ],
+    urlPattern: /linkedin\.com\/jobs\/view|indeed\.com\/(viewjob|job)/,
+    jobIdPattern: /\/(view|viewjob|job)\//,
+  },
+  bullhorn: {
+    name: 'Bullhorn',
+    sitePatterns: ['site:bullhornstaffing.com', 'site:*.bullhorn.com'],
+    urlPattern: /bullhorn/i,
+    jobIdPattern: /\/job\//,
+  },
+  teamtailor: {
+    name: 'Teamtailor',
+    sitePatterns: ['site:teamtailor.com/jobs', 'site:*.teamtailor.com'],
+    urlPattern: /teamtailor\.com/,
+    jobIdPattern: /\/jobs\//,
+  },
+  workable: {
+    name: 'Workable',
+    sitePatterns: ['site:jobs.workable.com', 'site:apply.workable.com'],
+    urlPattern: /workable\.com/,
+    jobIdPattern: /\/j\/[a-zA-Z0-9]+/,
+  },
+  icims: {
+    name: 'ICIMS',
+    sitePatterns: ['site:icims.com', 'site:careers-*.icims.com'],
+    urlPattern: /icims\.com/,
+    jobIdPattern: /\/jobs\/\d+/,
+  },
+  oraclecloud: {
+    name: 'Oracle Cloud',
+    sitePatterns: ['site:oraclecloud.com/hcmUI/CandidateExperience', 'site:*.fa.*.oraclecloud.com'],
+    urlPattern: /oraclecloud\.com.*CandidateExperience/,
+    jobIdPattern: /requisition|job/i,
   },
 };
 
@@ -133,6 +113,18 @@ const TIER1_COMPANIES = [
   'spotify', 'nvidia', 'oracle', 'cisco', 'ibm', 'intel', 'amd', 'qualcomm', 'tesla',
 ];
 
+// Time filter mappings for Google search
+const TIME_FILTER_MAP: Record<string, string> = {
+  '10min': 'qdr:n10',
+  '30min': 'qdr:n30',
+  '1h': 'qdr:h',
+  '2h': 'qdr:h2',
+  '6h': 'qdr:h6',
+  'today': 'qdr:d',
+  'week': 'qdr:w',
+  'all': '',
+};
+
 async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
   const authHeader = req.headers.get('authorization');
   if (!authHeader) throw new Error('Missing authorization header');
@@ -148,7 +140,7 @@ function getPlatformFromUrl(url: string): string {
   for (const [key, platform] of Object.entries(ATS_PLATFORMS)) {
     if (platform.urlPattern.test(url)) return platform.name;
   }
-  if (url.match(/\/(?:careers|jobs|employment|opportunities)\//)) return 'Direct';
+  if (url.match(/\/(?:careers|jobs|employment|opportunities)\//)) return 'Career Page';
   return 'Other';
 }
 
@@ -159,10 +151,9 @@ function extractCompanyFromUrl(url: string): string {
       /([^\.]+)\.workable\.com/,
       /([^\.]+)\.wd\d+\.myworkdayjobs/,
       /([^\.]+)\.teamtailor\.com/,
-      /jobs\.lever\.co\/([^\/]+)/,
-      /([^\.]+)\.bamboohr\.com/,
       /jobs\.smartrecruiters\.com\/([^\/]+)/,
-      /jobs\.ashbyhq\.com\/([^\/]+)/,
+      /linkedin\.com\/jobs\/view\/.*at-([^?\/]+)/,
+      /indeed\.com\/.*company\/([^?\/]+)/,
       /https?:\/\/(?:careers|jobs)\.([^\.\/]+)\./,
       /https?:\/\/([^\.]+)\.com\/(?:careers|jobs)/,
     ];
@@ -187,7 +178,7 @@ function isValidJobUrl(url: string): boolean {
   
   // Check if it matches any ATS pattern
   for (const platform of Object.values(ATS_PLATFORMS)) {
-    if (platform.urlPattern.test(url) && platform.jobIdPattern.test(url)) {
+    if (platform.urlPattern.test(url)) {
       return true;
     }
   }
@@ -207,6 +198,10 @@ function parseSearchResult(result: any, searchKeyword: string): JobListing | nul
     const description = result.description || result.snippet || result.content || '';
     
     if (!isValidJobUrl(url)) return null;
+    
+    // Skip Easy Apply jobs from LinkedIn/Indeed
+    if (url.includes('linkedin.com') && title.toLowerCase().includes('easy apply')) return null;
+    if (url.includes('indeed.com') && (title.toLowerCase().includes('easily apply') || description.toLowerCase().includes('easily apply'))) return null;
     
     const platform = getPlatformFromUrl(url);
     const company = extractCompanyFromUrl(url);
@@ -284,58 +279,103 @@ function extractRequirements(content: string): string[] {
     .slice(0, 8);
 }
 
-// Build boolean search queries for all ATS platforms
-function buildBooleanQueries(keywords: string[], locations: string[]): string[] {
+// Build comprehensive Boolean search queries for all ATS platforms
+function buildBooleanQueries(
+  keywords: string[], 
+  locations: string[], 
+  timeFilter: string,
+  jobType: string,
+  workType: string,
+  experienceLevel: string
+): string[] {
   const queries: string[] = [];
   
-  // Create location OR string
+  // Build location OR string
   const locationOr = locations.length > 0 
     ? locations.map(l => `"${l}"`).join(' OR ')
-    : '"Remote"';
+    : '';
   
-  // Batch keywords (3 at a time for better results)
+  // Build work type modifier
+  const workTypeModifier = workType && workType !== 'all' 
+    ? `"${workType}"` 
+    : '';
+  
+  // Build job type modifier
+  const jobTypeModifier = jobType && jobType !== 'all' 
+    ? `"${jobType}"` 
+    : '';
+  
+  // Build experience level modifier
+  const experienceModifier = experienceLevel && experienceLevel !== 'all'
+    ? `"${experienceLevel}"`
+    : '';
+  
+  // Combine modifiers
+  const modifiers = [workTypeModifier, jobTypeModifier, experienceModifier]
+    .filter(Boolean)
+    .join(' ');
+  
+  // Batch keywords (2-3 at a time for better precision)
   const keywordBatches: string[][] = [];
-  for (let i = 0; i < keywords.length; i += 3) {
-    keywordBatches.push(keywords.slice(i, i + 3));
+  for (let i = 0; i < keywords.length; i += 2) {
+    keywordBatches.push(keywords.slice(i, i + 2));
   }
   
-  // Exclusions for cleaner results
-  const exclusions = '-intern -internship -graduate -student -trainee -apprentice';
-  
-  for (const batch of keywordBatches.slice(0, 8)) { // Limit batches
+  // Process each batch
+  for (const batch of keywordBatches.slice(0, 15)) {
     const keywordOr = batch.map(k => `"${k}"`).join(' OR ');
     
-    // ATS platform queries
+    // Generate queries for each ATS platform
     for (const [key, platform] of Object.entries(ATS_PLATFORMS)) {
-      const sitePattern = platform.sitePatterns[0];
-      queries.push(`(${keywordOr}) (${locationOr}) ${sitePattern} ${exclusions}`);
+      for (const sitePattern of platform.sitePatterns) {
+        let query = `(${keywordOr})`;
+        if (locationOr) query += ` (${locationOr})`;
+        if (modifiers) query += ` ${modifiers}`;
+        query += ` ${sitePattern}`;
+        queries.push(query);
+      }
     }
     
-    // Career page pattern queries
-    const careerSites = CAREER_PAGE_PATTERNS.slice(0, 4).join(' OR ');
-    queries.push(`(${keywordOr}) (${locationOr}) (${careerSites}) ${exclusions}`);
+    // Add career page queries
+    const careerQuery = `(${keywordOr})${locationOr ? ` (${locationOr})` : ''} ${modifiers} (${CAREER_PAGE_PATTERNS.slice(0, 4).join(' OR ')})`;
+    queries.push(careerQuery);
   }
   
-  // Also add broader queries with multiple ATS sites
-  for (const batch of keywordBatches.slice(0, 3)) {
+  // Add combined ATS queries for broader coverage
+  for (const batch of keywordBatches.slice(0, 5)) {
     const keywordOr = batch.map(k => `"${k}"`).join(' OR ');
-    const topAtsSites = [
-      'site:boards.greenhouse.io',
-      'site:*.myworkdayjobs.com',
-      'site:apply.workable.com',
-      'site:jobs.lever.co',
-      'site:jobs.smartrecruiters.com',
-    ].join(' OR ');
     
-    queries.push(`(${keywordOr}) (${locationOr}) (${topAtsSites}) ${exclusions}`);
+    // Greenhouse + Workday + SmartRecruiters combo
+    let comboQuery = `(${keywordOr})`;
+    if (locationOr) comboQuery += ` (${locationOr})`;
+    if (modifiers) comboQuery += ` ${modifiers}`;
+    comboQuery += ` (site:greenhouse.io OR site:myworkdayjobs.com OR site:jobs.smartrecruiters.com OR site:jobs.workable.com)`;
+    queries.push(comboQuery);
+    
+    // LinkedIn Direct + Indeed combo (excluding Easy Apply)
+    let directQuery = `(${keywordOr})`;
+    if (locationOr) directQuery += ` (${locationOr})`;
+    if (modifiers) directQuery += ` ${modifiers}`;
+    directQuery += ` (site:linkedin.com/jobs/view OR site:indeed.com/viewjob) -"easy apply" -"easily apply"`;
+    queries.push(directQuery);
   }
   
   return queries;
 }
 
-async function searchWithFirecrawl(query: string, apiKey: string, limit = 80): Promise<any[]> {
+async function searchWithFirecrawl(query: string, apiKey: string, limit = 100, timeFilter?: string): Promise<any[]> {
   try {
-    console.log(`Searching: ${query.slice(0, 100)}...`);
+    console.log(`Searching: ${query.slice(0, 150)}...`);
+    
+    const searchBody: any = { 
+      query, 
+      limit,
+    };
+    
+    // Add time-based search if specified
+    if (timeFilter && TIME_FILTER_MAP[timeFilter]) {
+      searchBody.tbs = TIME_FILTER_MAP[timeFilter];
+    }
     
     const response = await fetch('https://api.firecrawl.dev/v1/search', {
       method: 'POST',
@@ -343,7 +383,7 @@ async function searchWithFirecrawl(query: string, apiKey: string, limit = 80): P
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query, limit }),
+      body: JSON.stringify(searchBody),
     });
     
     if (!response.ok) {
@@ -385,10 +425,15 @@ serve(async (req) => {
     const rawData = await req.json();
     const keywordsRaw = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH);
     const locationRaw = validateString(rawData.location || '', MAX_LOCATION_LENGTH);
+    const timeFilter = validateString(rawData.timeFilter || 'all', 20);
+    const jobType = validateString(rawData.jobType || 'all', 50);
+    const workType = validateString(rawData.workType || 'all', 50);
+    const experienceLevel = validateString(rawData.experienceLevel || 'all', 50);
     
     console.log(`Boolean job search for user ${user_id}`);
     console.log(`Keywords: ${keywordsRaw.slice(0, 100)}...`);
-    console.log(`Locations: ${locationRaw.slice(0, 100)}...`);
+    console.log(`Locations: ${locationRaw}`);
+    console.log(`Filters - Time: ${timeFilter}, Job Type: ${jobType}, Work Type: ${workType}, Experience: ${experienceLevel}`);
     
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (!FIRECRAWL_API_KEY) {
@@ -400,13 +445,13 @@ serve(async (req) => {
       .split(',')
       .map(k => k.trim())
       .filter(k => k.length > 0)
-      .slice(0, 30);
+      .slice(0, 50);
     
     const locations = locationRaw
       .split(',')
       .map(l => l.trim())
       .filter(l => l.length > 0 && l.toLowerCase() !== 'all')
-      .slice(0, 15);
+      .slice(0, 20);
     
     const searchKeywords = keywords.length > 0 
       ? keywords 
@@ -414,23 +459,30 @@ serve(async (req) => {
     
     const searchLocations = locations.length > 0 
       ? locations 
-      : ['Remote', 'United States', 'United Kingdom', 'Ireland'];
+      : [];
     
-    // Build boolean search queries
-    const searchQueries = buildBooleanQueries(searchKeywords, searchLocations);
-    console.log(`Generated ${searchQueries.length} boolean search queries`);
+    // Build Boolean search queries with all filters
+    const searchQueries = buildBooleanQueries(
+      searchKeywords, 
+      searchLocations, 
+      timeFilter,
+      jobType,
+      workType,
+      experienceLevel
+    );
+    console.log(`Generated ${searchQueries.length} Boolean search queries`);
     
     const allJobs: JobListing[] = [];
     const seenUrls = new Set<string>();
     const dedupeKeys = new Set<string>();
     
-    // Run searches in parallel batches of 4
-    const batchSize = 4;
+    // Run searches in parallel batches of 5
+    const batchSize = 5;
     for (let i = 0; i < searchQueries.length; i += batchSize) {
       const batch = searchQueries.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (query) => {
-        const results = await searchWithFirecrawl(query, FIRECRAWL_API_KEY, 60);
+        const results = await searchWithFirecrawl(query, FIRECRAWL_API_KEY, 80, timeFilter);
         return { results, keyword: searchKeywords[0] };
       });
       
@@ -451,6 +503,12 @@ serve(async (req) => {
       }
       
       console.log(`Batch ${Math.floor(i / batchSize) + 1}: ${allJobs.length} unique jobs found`);
+      
+      // Stop early if we have enough jobs
+      if (allJobs.length >= 500) {
+        console.log('Reached 500 jobs limit, stopping search');
+        break;
+      }
     }
     
     console.log(`Total: ${allJobs.length} unique jobs across all ATS platforms`);
@@ -475,11 +533,26 @@ serve(async (req) => {
         }
       }
       
+      // Work type match bonus
+      if (workType && workType !== 'all' && jobText.includes(workType.toLowerCase())) {
+        score += 10;
+      }
+      
+      // Job type match bonus
+      if (jobType && jobType !== 'all' && jobText.includes(jobType.toLowerCase())) {
+        score += 10;
+      }
+      
+      // Experience level match bonus
+      if (experienceLevel && experienceLevel !== 'all' && jobText.includes(experienceLevel.toLowerCase())) {
+        score += 10;
+      }
+      
       // Tier-1 company bonus
       if (isTier1Company(job.company)) score += 15;
       
       // Known ATS platform bonus (more reliable)
-      if (!['Other', 'Direct'].includes(job.platform)) score += 5;
+      if (!['Other', 'Career Page'].includes(job.platform)) score += 5;
       
       // Salary info bonus
       if (job.salary) score += 5;
