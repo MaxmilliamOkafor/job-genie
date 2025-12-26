@@ -317,7 +317,9 @@ let automationState = {
   isRunning: false,
   shouldSkip: false,
   shouldQuit: false,
-  autoMode: true // Auto-advance through pages
+  autoMode: true, // Auto-advance through pages
+  currentStep: 0, // Track which step we're on
+  stepLock: false // Prevent concurrent step execution
 };
 
 function getDelayForSpeed() {
@@ -1160,15 +1162,12 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
     if (!el) return false;
     if (el.hasAttribute?.('required')) return true;
     if (el.getAttribute?.('aria-required') === 'true') return true;
-    // Workday often marks required in aria-invalid + "Required" text, but we keep this conservative.
     return false;
   };
 
   const shouldAutoNA = (q) => {
     const labelLower = (q.label || '').toLowerCase();
     if (!/optional|if applicable|not applicable|n\/a|na\b/.test(labelLower)) return false;
-
-    // Only auto-fill for free text fields and only when NOT required
     if (q.type !== 'text') return false;
     return !isRequiredEl(q.element);
   };
@@ -1176,11 +1175,27 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
   for (const q of questions) {
     try {
       const labelLower = (q.label || '').toLowerCase();
+      const qId = q.id || q.label;
 
       // First try knockout answer bank
       const knockoutMatch = matchKnockoutQuestion(q.label, userProfile);
       let answer = knockoutMatch?.answer;
-      const selectValue = knockoutMatch?.selectValue;
+      let selectValue = knockoutMatch?.selectValue;
+
+      // Check AI answers - handle both object and string formats
+      if (!answer && aiAnswers) {
+        const aiAnswer = aiAnswers[qId];
+        if (aiAnswer) {
+          // AI answer can be string or object with { answer, selectValue }
+          if (typeof aiAnswer === 'string') {
+            answer = aiAnswer;
+            selectValue = aiAnswer.toLowerCase();
+          } else if (aiAnswer.answer) {
+            answer = aiAnswer.answer;
+            selectValue = aiAnswer.selectValue || aiAnswer.answer.toLowerCase();
+          }
+        }
+      }
 
       // Special handling for specific question types
       if (!answer) {
@@ -1198,8 +1213,6 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
         else if (labelLower.match(/github/)) answer = userProfile?.github || '';
         else if (labelLower.match(/portfolio|website/)) answer = userProfile?.portfolio || '';
         else if (labelLower.match(/highest.*education|education.*level/)) answer = userProfile?.highest_education || "Bachelor's Degree";
-        // Use AI answer if available
-        else if (aiAnswers && aiAnswers[q.id]) answer = aiAnswers[q.id];
         // Non-essential questions: auto N/A
         else if (shouldAutoNA(q)) answer = 'N/A';
       }
@@ -2253,6 +2266,18 @@ function findLabelForInput(input) {
   return '';
 }
 
+// ============= HELPER FUNCTIONS =============
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ============= TOAST NOTIFICATIONS =============
 
 function showToast(message, type = 'success') {
@@ -2653,6 +2678,26 @@ function addPanelStyles() {
     .qh-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: hsl(0 0% 0% / 0.5); z-index: 2147483648; }
     .qh-overlay.hidden { display: none; }
 
+    /* PDF Preview Modal */
+    .qh-pdf-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90vw; max-width: 700px; max-height: 85vh; background: hsl(var(--qh-bg-0)); border: 1px solid hsl(var(--qh-border)); border-radius: 16px; z-index: 2147483649; box-shadow: 0 25px 80px hsl(var(--qh-shadow) / 0.35); display: flex; flex-direction: column; overflow: hidden; }
+    .qh-pdf-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid hsl(var(--qh-border) / 0.8); background: hsl(var(--qh-card-2) / 0.55); }
+    .qh-pdf-modal-title { font-size: 14px; font-weight: 700; color: hsl(var(--qh-text)); }
+    .qh-pdf-modal-tabs { display: flex; gap: 8px; }
+    .qh-pdf-modal-tab { padding: 6px 12px; font-size: 11px; font-weight: 600; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.6); border-radius: 8px; color: hsl(var(--qh-muted)); cursor: pointer; transition: all 0.15s; }
+    .qh-pdf-modal-tab:hover { background: hsl(var(--qh-card) / 0.4); }
+    .qh-pdf-modal-tab.active { background: hsl(var(--qh-brand) / 0.15); border-color: hsl(var(--qh-brand) / 0.3); color: hsl(var(--qh-brand)); }
+    .qh-pdf-modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.6); border-radius: 8px; color: hsl(var(--qh-muted)); cursor: pointer; font-size: 16px; }
+    .qh-pdf-modal-close:hover { background: hsl(var(--qh-danger) / 0.15); color: hsl(var(--qh-danger)); }
+    .qh-pdf-modal-body { flex: 1; overflow: hidden; padding: 16px 20px; }
+    .qh-pdf-modal-content { height: 100%; }
+    .qh-pdf-modal-content.hidden { display: none; }
+    .qh-pdf-text-preview { height: 100%; max-height: 50vh; overflow-y: auto; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; padding: 16px; }
+    .qh-pdf-text-preview pre { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; line-height: 1.6; color: hsl(var(--qh-text)); white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+    .qh-pdf-modal-footer { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid hsl(var(--qh-border) / 0.8); background: hsl(var(--qh-card-2) / 0.55); }
+    .qh-pdf-modal-footer-left { flex: 1; }
+    .qh-pdf-modal-footer-right { display: flex; gap: 10px; }
+
+
     .quantumhire-toast { position: fixed; bottom: 100px; right: 20px; padding: 12px 16px; background: linear-gradient(145deg, hsl(var(--qh-card)) 0%, hsl(var(--qh-card-2)) 100%); border-radius: 12px; display: flex; align-items: center; gap: 10px; z-index: 2147483648; box-shadow: 0 16px 44px hsl(var(--qh-shadow) / 0.20); animation: slideIn 0.3s ease; max-width: 320px; border: 1px solid hsl(var(--qh-border) / 0.8); color: hsl(var(--qh-text)); }
     .quantumhire-toast.success { border-left: 3px solid hsl(var(--qh-brand)); }
     .quantumhire-toast.error { border-left: 3px solid hsl(var(--qh-danger)); }
@@ -2898,14 +2943,14 @@ function setupPanelEvents(panel) {
           tailoredData.coverPdf = coverPdfResult;
         }
         
-        // Update tailored content preview
+        // Update tailored content preview (use correct textarea IDs)
         if (tailoredData?.tailoredResume) {
-          const resumeTextarea = panel.querySelector('#qh-resume-text');
+          const resumeTextarea = panel.querySelector('#qh-resume');
           if (resumeTextarea) resumeTextarea.value = tailoredData.tailoredResume;
         }
         
         if (tailoredData?.tailoredCoverLetter) {
-          const coverTextarea = panel.querySelector('#qh-cover-text');
+          const coverTextarea = panel.querySelector('#qh-cover');
           if (coverTextarea) coverTextarea.value = tailoredData.tailoredCoverLetter;
         }
         
@@ -2925,9 +2970,41 @@ function setupPanelEvents(panel) {
       setStep(3);
       updateStatus(statusEl, '📝', 'Step 3: Filling form fields...');
       
-      // First fill basic profile fields
-      const atsData = await chrome.storage.local.get(['atsCredentials']);
-      const basicFillResult = await autofillForm(tailoredData, atsData.atsCredentials);
+      // Prevent concurrent execution
+      if (automationState.stepLock) {
+        console.log('QuantumHire AI: Step 3 already running, skipping...');
+        return;
+      }
+      automationState.stepLock = true;
+      
+      // Fill basic profile fields DIRECTLY (don't call autofillForm to avoid recursion)
+      let basicFieldsCount = 0;
+      const fieldValues = {
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        fullName: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+        email: profile.email,
+        phone: profile.phone,
+        address: profile.address,
+        city: profile.city,
+        state: profile.state,
+        zipCode: profile.zip_code,
+        country: profile.country,
+        linkedin: profile.linkedin,
+        github: profile.github,
+        portfolio: profile.portfolio
+      };
+      
+      for (const [fieldType, value] of Object.entries(fieldValues)) {
+        if (!value) continue;
+        const field = findField(fieldType, platform.config);
+        if (field && !field.classList.contains('quantumhire-filled') && fillField(field, value)) {
+          field.classList.add('quantumhire-filled');
+          basicFieldsCount++;
+        }
+      }
+      
+      console.log(`QuantumHire AI: Filled ${basicFieldsCount} basic fields`);
       
       // Detect all questions on the page
       const questions = detectAllQuestions();
@@ -2979,6 +3056,8 @@ function setupPanelEvents(panel) {
                 veteranStatus: profile.veteran_status,
                 disability: profile.disability,
                 raceEthnicity: profile.race_ethnicity,
+                gender: profile.gender,
+                hispanicLatino: profile.hispanic_latino,
                 drivingLicense: profile.driving_license,
                 securityClearance: profile.security_clearance,
                 expectedSalary: profile.expected_salary,
@@ -3031,15 +3110,10 @@ function setupPanelEvents(panel) {
         const isOptional = /optional|if applicable|not applicable|n\/a|prefer not/i.test(q.label);
         const isRequired = q.element?.required || q.element?.getAttribute('aria-required') === 'true';
         
-        let answer = '';
-        let atsScore = 0;
-        
         // Check knockout bank first (highest priority)
         const knockoutMatch = matchKnockoutQuestion(q.label, profile);
         
         if (knockoutMatch) {
-          answer = knockoutMatch.answer;
-          atsScore = 95;
           autoFilledCount++;
           reviewedAnswers[qId] = {
             answer: knockoutMatch.answer,
@@ -3048,9 +3122,6 @@ function setupPanelEvents(panel) {
             needsReview: false
           };
         } else if (aiAnswer && aiAnswer.answer) {
-          answer = aiAnswer.answer;
-          atsScore = aiAnswer.atsScore || 75;
-          
           if (aiAnswer.needsReview || aiAnswer.confidence === 'low') {
             needsReviewCount++;
           } else {
@@ -3065,8 +3136,6 @@ function setupPanelEvents(panel) {
           };
         } else if (isOptional && !isRequired) {
           // Optional questions without answers get N/A
-          answer = 'N/A';
-          atsScore = 100;
           reviewedAnswers[qId] = {
             answer: 'N/A',
             selectValue: 'n/a',
@@ -3081,10 +3150,13 @@ function setupPanelEvents(panel) {
       // Store answers for later use
       panel.dataset.reviewedAnswers = JSON.stringify(reviewedAnswers);
       
-      // Fill questions with the reviewed answers
+      // Fill questions ONCE with the reviewed answers (this is the ONLY call to fillAllQuestions)
       const questionFillResult = await fillAllQuestions(profile, jobData, reviewedAnswers);
       
-      updateStatus(statusEl, '✅', `Filled ${basicFillResult.fields} fields + ${questionFillResult.filledCount} questions`);
+      // Release the lock
+      automationState.stepLock = false;
+      
+      updateStatus(statusEl, '✅', `Filled ${basicFieldsCount} fields + ${questionFillResult.filledCount} questions`);
       
       // Show knockout risks warning
       if (knockoutRisks.length > 0) {
@@ -3681,7 +3753,11 @@ function showPdfPreviewModal(panel, initialTab = 'resume') {
   const resumeName = panel.querySelector('#qh-resume-pdf-name')?.textContent || 'Resume.pdf';
   const coverName = panel.querySelector('#qh-cover-pdf-name')?.textContent || 'CoverLetter.pdf';
   
-  if (!resumePdf && !coverPdf) {
+  // Get the text content from textareas for preview (more reliable than iframe)
+  const resumeText = panel.querySelector('#qh-resume')?.value || '';
+  const coverText = panel.querySelector('#qh-cover')?.value || '';
+  
+  if (!resumePdf && !coverPdf && !resumeText && !coverText) {
     showToast('No PDFs generated yet. Click Smart Apply first.', 'error');
     return;
   }
@@ -3693,7 +3769,7 @@ function showPdfPreviewModal(panel, initialTab = 'resume') {
   modal.className = 'qh-pdf-modal';
   modal.innerHTML = `
     <div class="qh-pdf-modal-header">
-      <div class="qh-pdf-modal-title">📄 PDF Preview</div>
+      <div class="qh-pdf-modal-title">📄 Document Preview</div>
       <div class="qh-pdf-modal-tabs">
         <button class="qh-pdf-modal-tab ${initialTab === 'resume' ? 'active' : ''}" data-tab="resume">📄 Resume</button>
         <button class="qh-pdf-modal-tab ${initialTab === 'cover' ? 'active' : ''}" data-tab="cover">📝 Cover Letter</button>
@@ -3702,14 +3778,14 @@ function showPdfPreviewModal(panel, initialTab = 'resume') {
     </div>
     <div class="qh-pdf-modal-body">
       <div class="qh-pdf-modal-content ${initialTab === 'resume' ? '' : 'hidden'}" id="qh-modal-resume">
-        ${resumePdf ? 
-          `<iframe class="qh-pdf-modal-iframe" src="data:application/pdf;base64,${resumePdf}"></iframe>` : 
+        ${resumeText || resumePdf ? 
+          `<div class="qh-pdf-text-preview"><pre>${escapeHtml(resumeText) || '(PDF generated - click Download to view)'}</pre></div>` : 
           '<div style="padding:40px;text-align:center;color:hsl(215 20% 65%);">Resume not generated yet</div>'
         }
       </div>
       <div class="qh-pdf-modal-content ${initialTab === 'cover' ? '' : 'hidden'}" id="qh-modal-cover">
-        ${coverPdf ? 
-          `<iframe class="qh-pdf-modal-iframe" src="data:application/pdf;base64,${coverPdf}"></iframe>` : 
+        ${coverText || coverPdf ? 
+          `<div class="qh-pdf-text-preview"><pre>${escapeHtml(coverText) || '(PDF generated - click Download to view)'}</pre></div>` : 
           '<div style="padding:40px;text-align:center;color:hsl(215 20% 65%);">Cover letter not generated yet</div>'
         }
       </div>
@@ -3719,7 +3795,7 @@ function showPdfPreviewModal(panel, initialTab = 'resume') {
         <span style="font-size:12px;color:hsl(215 20% 65%);">Review your documents before attaching</span>
       </div>
       <div class="qh-pdf-modal-footer-right">
-        <button class="qh-btn secondary" id="qh-modal-download">⬇️ Download</button>
+        <button class="qh-btn secondary" id="qh-modal-download">⬇️ Download PDF</button>
         <button class="qh-btn primary" id="qh-modal-attach">📎 Attach to Form</button>
       </div>
     </div>
