@@ -94,10 +94,11 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'applied'>('all');
-  const [locationFilter, setLocationFilter] = useState('');
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
   const [selectedWorkTypes, setSelectedWorkTypes] = useState<string[]>([]);
   const [selectedExperienceLevels, setSelectedExperienceLevels] = useState<string[]>([]);
+  const [locationPopoverOpen, setLocationPopoverOpen] = useState(false);
 
   // Extract unique values
   const uniquePlatforms = useMemo(() => 
@@ -143,10 +144,13 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
         if (!matchesSearch) return false;
       }
       
-      // Location filter
-      if (locationFilter) {
-        const locationLower = locationFilter.toLowerCase();
-        if (!job.location.toLowerCase().includes(locationLower)) return false;
+      // Location filter (multi-select)
+      if (selectedLocations.length > 0) {
+        const locationLower = job.location.toLowerCase();
+        const matchesAnyLocation = selectedLocations.some(loc => 
+          locationLower.includes(loc.toLowerCase())
+        );
+        if (!matchesAnyLocation) return false;
       }
       
       // Platform filter
@@ -190,12 +194,12 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
     
     onFiltersChange(filtered);
     return filtered;
-  }, [jobs, timeFilter, searchTerm, locationFilter, platformFilter, statusFilter, 
+  }, [jobs, timeFilter, searchTerm, selectedLocations, platformFilter, statusFilter, 
       selectedJobTypes, selectedWorkTypes, selectedExperienceLevels, onFiltersChange]);
 
   const activeFiltersCount = [
     searchTerm,
-    locationFilter,
+    selectedLocations.length > 0,
     platformFilter !== 'all',
     statusFilter !== 'all',
     selectedJobTypes.length > 0,
@@ -208,10 +212,18 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
     setTimeFilter('all');
     setPlatformFilter('all');
     setStatusFilter('all');
-    setLocationFilter('');
+    setSelectedLocations([]);
     setSelectedJobTypes([]);
     setSelectedWorkTypes([]);
     setSelectedExperienceLevels([]);
+  };
+
+  const toggleLocation = (location: string) => {
+    setSelectedLocations(prev => 
+      prev.includes(location) 
+        ? prev.filter(l => l !== location)
+        : [...prev, location]
+    );
   };
 
   const toggleArrayFilter = (array: string[], setArray: (arr: string[]) => void, value: string) => {
@@ -253,20 +265,51 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
             </Button>
           </div>
           
-          {/* Location */}
-          <Select value={locationFilter || 'all'} onValueChange={(v) => setLocationFilter(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-full lg:w-[180px]">
-              <MapPin className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Location" />
-            </SelectTrigger>
-            <SelectContent>
-              {LOCATION_OPTIONS.map(loc => (
-                <SelectItem key={loc.value} value={loc.value}>
-                  {loc.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Location Multi-Select */}
+          <Popover open={locationPopoverOpen} onOpenChange={setLocationPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full lg:w-[180px] justify-start gap-2">
+                <MapPin className="h-4 w-4" />
+                <span className="truncate">
+                  {selectedLocations.length === 0 
+                    ? 'All Locations' 
+                    : selectedLocations.length === 1 
+                      ? selectedLocations[0]
+                      : `${selectedLocations.length} locations`}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3 max-h-80 overflow-y-auto" align="start">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <span className="text-sm font-medium">Select Locations</span>
+                  {selectedLocations.length > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-xs"
+                      onClick={() => setSelectedLocations([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {LOCATION_OPTIONS.filter(loc => loc.value !== 'all').map(loc => (
+                  <div 
+                    key={loc.value} 
+                    className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted rounded px-2"
+                    onClick={() => toggleLocation(loc.value)}
+                  >
+                    <Checkbox 
+                      checked={selectedLocations.includes(loc.value)}
+                      onCheckedChange={() => toggleLocation(loc.value)}
+                    />
+                    <span className="text-sm">{loc.label}</span>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
           
           {/* Platform */}
           <Select value={platformFilter} onValueChange={setPlatformFilter}>
@@ -403,32 +446,40 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
         </div>
         
         {/* Active Filters Display */}
-        {(locationFilter || selectedJobTypes.length > 0 || selectedWorkTypes.length > 0 || selectedExperienceLevels.length > 0) && (
+        {(selectedLocations.length > 0 || selectedJobTypes.length > 0 || selectedWorkTypes.length > 0 || selectedExperienceLevels.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
             <span className="text-xs text-muted-foreground">Active:</span>
-            {locationFilter && (
-              <Badge variant="secondary" className="gap-1">
+            {selectedLocations.map(loc => (
+              <Badge key={loc} variant="secondary" className="gap-1">
                 <MapPin className="h-3 w-3" />
-                {locationFilter}
-                <X className="h-3 w-3 cursor-pointer" onClick={() => setLocationFilter('')} />
+                {loc}
+                <button onClick={() => toggleLocation(loc)} className="hover:text-destructive">
+                  <X className="h-3 w-3" />
+                </button>
               </Badge>
-            )}
+            ))}
             {selectedJobTypes.map(type => (
               <Badge key={type} variant="secondary" className="gap-1">
                 {type}
-                <X className="h-3 w-3 cursor-pointer" onClick={() => toggleArrayFilter(selectedJobTypes, setSelectedJobTypes, type)} />
+                <button onClick={() => toggleArrayFilter(selectedJobTypes, setSelectedJobTypes, type)} className="hover:text-destructive">
+                  <X className="h-3 w-3" />
+                </button>
               </Badge>
             ))}
             {selectedWorkTypes.map(type => (
               <Badge key={type} variant="secondary" className="gap-1">
                 {type}
-                <X className="h-3 w-3 cursor-pointer" onClick={() => toggleArrayFilter(selectedWorkTypes, setSelectedWorkTypes, type)} />
+                <button onClick={() => toggleArrayFilter(selectedWorkTypes, setSelectedWorkTypes, type)} className="hover:text-destructive">
+                  <X className="h-3 w-3" />
+                </button>
               </Badge>
             ))}
             {selectedExperienceLevels.map(level => (
               <Badge key={level} variant="secondary" className="gap-1">
                 {level}
-                <X className="h-3 w-3 cursor-pointer" onClick={() => toggleArrayFilter(selectedExperienceLevels, setSelectedExperienceLevels, level)} />
+                <button onClick={() => toggleArrayFilter(selectedExperienceLevels, setSelectedExperienceLevels, level)} className="hover:text-destructive">
+                  <X className="h-3 w-3" />
+                </button>
               </Badge>
             ))}
           </div>
