@@ -4,7 +4,6 @@ import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
 import { VirtualJobList } from '@/components/jobs/VirtualJobList';
-import { ATSScoreBreakdown } from '@/components/jobs/ATSScoreBreakdown';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,7 +54,6 @@ const Jobs = () => {
   const { profile } = useProfile();
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
-  const [selectedJobForATS, setSelectedJobForATS] = useState<Job | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
   const [searchInput, setSearchInput] = useState('');
@@ -94,9 +92,6 @@ const Jobs = () => {
 
   const handleJobApplied = (jobId: string) => updateJobStatus(jobId, 'applied');
 
-  const handleJobSelect = useCallback((job: Job) => {
-    setSelectedJobForATS(prev => prev?.id === job.id ? null : job);
-  }, []);
   const handleFiltersChange = useCallback((filtered: Job[]) => {
     setFilteredJobs(filtered);
   }, []);
@@ -281,21 +276,6 @@ const Jobs = () => {
           />
         )}
 
-        {/* ATS Score Breakdown for Selected Job */}
-        {selectedJobForATS && (
-          <div className="animate-fade-in">
-            <ATSScoreBreakdown
-              matchScore={selectedJobForATS.match_score || 0}
-              requirements={selectedJobForATS.requirements || []}
-              jobTitle={selectedJobForATS.title}
-              userSkills={profile?.skills || []}
-              jobUrl={selectedJobForATS.url || undefined}
-              jobDescription={selectedJobForATS.description || undefined}
-              jobId={selectedJobForATS.id}
-            />
-          </div>
-        )}
-
         {/* Bulk Selection Bar */}
         {jobs.length > 0 && (
           <div className="flex items-center justify-between flex-wrap gap-3 bg-muted/50 p-3 rounded-lg border">
@@ -414,7 +394,6 @@ const Jobs = () => {
             isLoading={isLoading}
             onLoadMore={loadMore}
             onApply={handleJobApplied}
-            onJobSelect={handleJobSelect}
             selectedJobs={selectedJobs}
             onSelectionChange={setSelectedJobs}
             selectionMode={selectionMode}

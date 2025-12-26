@@ -29,6 +29,3 @@ verify_jwt = false
 
 [functions.live-jobs]
 verify_jwt = false
-
-[functions.extract-job-keywords]
-verify_jwt = false

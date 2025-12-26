@@ -54,11 +54,10 @@ interface JobCardProps {
   isSelected: boolean;
   onSelect: (jobId: string, selected: boolean) => void;
   onApply: (jobId: string) => void;
-  onViewATS?: (job: Job) => void;
   selectionMode: boolean;
 }
 
-const JobCard = memo(({ job, isSelected, onSelect, onApply, onViewATS, selectionMode }: JobCardProps) => {
+const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode }: JobCardProps) => {
   const isTier1 = isTier1Company(job.company);
   const isNew = Date.now() - new Date(job.posted_date).getTime() < 2 * 60 * 60 * 1000;
   const isPending = job.status === 'pending';
@@ -162,16 +161,6 @@ const JobCard = memo(({ job, isSelected, onSelect, onApply, onViewATS, selection
               Applied
             </Button>
           ) : null}
-          {job.match_score > 0 && onViewATS && (
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={(e) => { e.stopPropagation(); onViewATS(job); }}
-              className="text-primary border-primary/30 hover:bg-primary/10"
-            >
-              📊 ATS Details
-            </Button>
-          )}
           {job.url && (
             <Button 
               size="sm" 
@@ -196,7 +185,6 @@ interface VirtualJobListProps {
   isLoading: boolean;
   onLoadMore: () => void;
   onApply: (jobId: string) => void;
-  onJobSelect?: (job: Job) => void;
   selectedJobs: Set<string>;
   onSelectionChange: (selected: Set<string>) => void;
   selectionMode: boolean;
@@ -209,7 +197,6 @@ export function VirtualJobList({
   isLoading, 
   onLoadMore, 
   onApply,
-  onJobSelect,
   selectedJobs,
   onSelectionChange,
   selectionMode,
@@ -296,7 +283,6 @@ export function VirtualJobList({
                   isSelected={selectedJobs.has(job.id)}
                   onSelect={handleSelect}
                   onApply={onApply}
-                  onViewATS={onJobSelect}
                   selectionMode={selectionMode}
                 />
               </div>
