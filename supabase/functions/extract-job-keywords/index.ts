@@ -40,25 +40,7 @@ const EXPERIENCE_PATTERNS = [
   /(?:at least|minimum|min)\s*(\d+)\s*(?:years?|yrs?)/gi,
 ];
 
-async function verifyAuth(req: Request): Promise<string> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader) {
-    throw new Error('Missing authorization header');
-  }
-  
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  
-  if (error || !user) {
-    throw new Error('Unauthorized: Invalid or expired token');
-  }
-  
-  return user.id;
-}
+// Removed auth requirement - function is now public
 
 // Extract keywords from job content
 function extractKeywords(content: string): {
@@ -119,8 +101,7 @@ serve(async (req) => {
   }
 
   try {
-    await verifyAuth(req);
-    
+    // Function is public - no auth required
     const { jobUrl, description, jobId } = await req.json();
     
     if (!jobUrl && !description) {
