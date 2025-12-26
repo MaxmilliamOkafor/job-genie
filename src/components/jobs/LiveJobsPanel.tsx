@@ -107,6 +107,18 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
     toast.info('Live polling stopped');
   }, [pollInterval]);
 
+  // Auto-start polling on mount
+  useEffect(() => {
+    if (user && !isPolling && !pollInterval) {
+      // Delay auto-start slightly to let page settle
+      const autoStartTimer = setTimeout(() => {
+        startPolling();
+      }, 1000);
+      return () => clearTimeout(autoStartTimer);
+    }
+  }, [user]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollInterval) clearInterval(pollInterval);
