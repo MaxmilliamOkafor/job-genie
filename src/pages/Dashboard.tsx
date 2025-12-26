@@ -44,7 +44,7 @@ const Dashboard = () => {
   const topMatches = jobs
     .filter(j => j.status === 'pending')
     .sort((a, b) => b.match_score - a.match_score)
-    .slice(0, 5);
+    .slice(0, 10);
 
   return (
     <AppLayout>
@@ -142,25 +142,27 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             {topMatches.length > 0 ? (
-              <div className="space-y-3">
-                {topMatches.map(job => (
-                  <div 
-                    key={job.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{job.title}</p>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {job.company} • {job.location}
-                      </p>
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {topMatches.map(job => (
+                    <div 
+                      key={job.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{job.title}</p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {job.company} • {job.location}
+                        </p>
+                      </div>
+                      <Badge className="ml-2 bg-primary/10 text-primary shrink-0">
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        {job.match_score}%
+                      </Badge>
                     </div>
-                    <Badge className="ml-2 bg-primary/10 text-primary">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      {job.match_score}%
-                    </Badge>
-                  </div>
-                ))}
-                <Button variant="outline" className="w-full mt-2" asChild>
+                  ))}
+                </div>
+                <Button variant="outline" className="w-full" asChild>
                   <Link to="/jobs">
                     View All Jobs
                     <ArrowRight className="h-4 w-4 ml-2" />
