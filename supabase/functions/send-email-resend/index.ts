@@ -8,6 +8,57 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation limits
+const MAX_EMAIL_LENGTH = 254;
+const MAX_SUBJECT_LENGTH = 200;
+const MAX_BODY_LENGTH = 100000; // 100KB
+const MAX_NAME_LENGTH = 100;
+
+// Allowed HTML tags for email body (safe for email rendering)
+const ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'table', 'tr', 'td', 'th', 'thead', 'tbody'];
+const ALLOWED_ATTRS = ['href', 'style', 'class'];
+
+// Simple HTML sanitizer to prevent XSS
+function sanitizeHtml(html: string): string {
+  // Remove script tags and their content
+  let sanitized = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  
+  // Remove onclick, onerror, and other event handlers
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
+  
+  // Remove javascript: and data: URLs
+  sanitized = sanitized.replace(/javascript\s*:/gi, '');
+  sanitized = sanitized.replace(/data\s*:/gi, '');
+  
+  // Remove iframe, object, embed tags
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button)[^>]*>.*?<\/\1>/gi, '');
+  sanitized = sanitized.replace(/<(iframe|object|embed|form|input|button)[^>]*\/?>/gi, '');
+  
+  // Remove style tags with malicious content
+  sanitized = sanitized.replace(/<style[^>]*>.*?<\/style>/gi, '');
+  
+  return sanitized;
+}
+
+// Validate email format
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= MAX_EMAIL_LENGTH;
+}
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} exceeds maximum length of ${maxLength} characters`);
+  }
+  return trimmed;
+}
+
 interface SendEmailRequest {
   type: "application" | "referral" | "follow_up" | "test";
   applicationId?: string;
@@ -34,6 +85,47 @@ async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> 
   return user.id;
 }
 
+// Validate the request payload
+function validateRequest(data: any): SendEmailRequest {
+  // Validate type
+  const validTypes = ['application', 'referral', 'follow_up', 'test'];
+  if (!validTypes.includes(data.type)) {
+    throw new Error('Invalid email type');
+  }
+  
+  // Validate recipient email
+  const recipient = validateString(data.recipient, MAX_EMAIL_LENGTH, 'recipient');
+  if (!isValidEmail(recipient)) {
+    throw new Error('Invalid recipient email address');
+  }
+  
+  // Validate subject
+  const subject = validateString(data.subject, MAX_SUBJECT_LENGTH, 'subject');
+  if (!subject) {
+    throw new Error('Subject is required');
+  }
+  
+  // Validate and sanitize body
+  let body = validateString(data.body, MAX_BODY_LENGTH, 'body');
+  if (!body) {
+    throw new Error('Body is required');
+  }
+  body = sanitizeHtml(body);
+  
+  // Validate optional fields
+  const fromName = data.fromName ? validateString(data.fromName, MAX_NAME_LENGTH, 'fromName') : undefined;
+  const applicationId = data.applicationId ? validateString(data.applicationId, 100, 'applicationId') : undefined;
+  
+  return {
+    type: data.type,
+    applicationId,
+    recipient,
+    subject,
+    body,
+    fromName,
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -48,16 +140,14 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const userId = await verifyAndGetUserId(req, supabase);
 
-    const { type, applicationId, recipient, subject, body, fromName } = await req.json() as SendEmailRequest;
+    // Parse and validate request
+    const rawData = await req.json();
+    const { type, applicationId, recipient, subject, body, fromName } = validateRequest(rawData);
 
     // Normalize email to lowercase to avoid case-sensitivity issues
     const normalizedRecipient = recipient.toLowerCase();
 
     console.log(`Sending ${type} email to ${normalizedRecipient} for user ${userId}`);
-
-    if (!normalizedRecipient || !subject || !body) {
-      throw new Error("Missing required fields: recipient, subject, body");
-    }
 
     // Get user profile for sender name
     let senderName = fromName || "Job Application";

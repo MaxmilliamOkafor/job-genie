@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Input validation limits
+const MAX_QUESTIONS = 100;
+const MAX_STRING_SHORT = 200;
+const MAX_STRING_MEDIUM = 1000;
+const MAX_STRING_LONG = 10000;
+
+// Validate and sanitize string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return trimmed.substring(0, maxLength);
+  }
+  return trimmed;
+}
+
 interface QuestionRequest {
   questions: {
     id: string;
@@ -69,6 +87,71 @@ async function verifyAuth(req: Request): Promise<void> {
   }
 }
 
+// Validate the request payload
+function validateRequest(data: any): QuestionRequest {
+  // Validate questions array
+  if (!Array.isArray(data.questions)) {
+    throw new Error('questions must be an array');
+  }
+  if (data.questions.length > MAX_QUESTIONS) {
+    throw new Error(`Maximum ${MAX_QUESTIONS} questions allowed`);
+  }
+  
+  const questions = data.questions.slice(0, MAX_QUESTIONS).map((q: any) => ({
+    id: validateString(q.id, MAX_STRING_SHORT, 'question.id'),
+    label: validateString(q.label, MAX_STRING_MEDIUM, 'question.label'),
+    type: validateString(q.type, 50, 'question.type'),
+    options: Array.isArray(q.options) ? q.options.slice(0, 20).map((o: any) => validateString(o, MAX_STRING_SHORT, 'option')) : undefined,
+    required: !!q.required,
+  }));
+  
+  const jobTitle = validateString(data.jobTitle, MAX_STRING_SHORT, 'jobTitle');
+  const company = validateString(data.company, MAX_STRING_SHORT, 'company');
+  const jobDescription = validateString(data.jobDescription || '', MAX_STRING_LONG, 'jobDescription');
+  
+  // Validate user profile
+  const profile = data.userProfile || {};
+  const userProfile = {
+    firstName: validateString(profile.firstName || '', MAX_STRING_SHORT, 'firstName'),
+    lastName: validateString(profile.lastName || '', MAX_STRING_SHORT, 'lastName'),
+    email: validateString(profile.email || '', MAX_STRING_SHORT, 'email'),
+    phone: validateString(profile.phone || '', MAX_STRING_SHORT, 'phone'),
+    skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
+    workExperience: Array.isArray(profile.workExperience) ? profile.workExperience.slice(0, 20) : [],
+    education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
+    certifications: Array.isArray(profile.certifications) ? profile.certifications.slice(0, 50).map((c: any) => validateString(c, MAX_STRING_SHORT, 'certification')) : [],
+    city: validateString(profile.city || '', MAX_STRING_SHORT, 'city'),
+    state: validateString(profile.state || '', MAX_STRING_SHORT, 'state'),
+    country: validateString(profile.country || '', MAX_STRING_SHORT, 'country'),
+    citizenship: validateString(profile.citizenship || '', MAX_STRING_SHORT, 'citizenship'),
+    willingToRelocate: !!profile.willingToRelocate,
+    visaRequired: !!profile.visaRequired,
+    veteranStatus: !!profile.veteranStatus,
+    disability: !!profile.disability,
+    raceEthnicity: validateString(profile.raceEthnicity || '', MAX_STRING_SHORT, 'raceEthnicity'),
+    drivingLicense: !!profile.drivingLicense,
+    securityClearance: !!profile.securityClearance,
+    expectedSalary: validateString(profile.expectedSalary || '', MAX_STRING_SHORT, 'expectedSalary'),
+    currentSalary: validateString(profile.currentSalary || '', MAX_STRING_SHORT, 'currentSalary'),
+    noticePeriod: validateString(profile.noticePeriod || '', MAX_STRING_SHORT, 'noticePeriod'),
+    totalExperience: validateString(profile.totalExperience || '', MAX_STRING_SHORT, 'totalExperience'),
+    linkedin: validateString(profile.linkedin || '', MAX_STRING_MEDIUM, 'linkedin'),
+    github: validateString(profile.github || '', MAX_STRING_MEDIUM, 'github'),
+    portfolio: validateString(profile.portfolio || '', MAX_STRING_MEDIUM, 'portfolio'),
+    highestEducation: validateString(profile.highestEducation || '', MAX_STRING_SHORT, 'highestEducation'),
+    languages: Array.isArray(profile.languages) ? profile.languages.slice(0, 20) : [],
+    achievements: Array.isArray(profile.achievements) ? profile.achievements.slice(0, 20) : [],
+  };
+
+  return {
+    questions,
+    jobTitle,
+    company,
+    jobDescription,
+    userProfile,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -78,7 +161,9 @@ serve(async (req) => {
     // Verify authentication
     await verifyAuth(req);
     
-    const { questions, jobTitle, company, jobDescription, userProfile } = await req.json() as QuestionRequest;
+    // Parse and validate request
+    const rawData = await req.json();
+    const { questions, jobTitle, company, jobDescription, userProfile } = validateRequest(rawData);
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {

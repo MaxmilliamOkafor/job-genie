@@ -6,6 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation limits
+const MAX_KEYWORDS_LENGTH = 2000;
+const MAX_OFFSET = 10000;
+const MAX_LIMIT = 200;
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return trimmed.substring(0, maxLength);
+  }
+  return trimmed;
+}
+
+// Validate number input
+function validateNumber(value: any, min: number, max: number, defaultValue: number): number {
+  const num = parseInt(value, 10);
+  if (isNaN(num)) return defaultValue;
+  if (num < min) return min;
+  if (num > max) return max;
+  return num;
+}
+
 // ATS Platform priority tiers
 const PLATFORM_TIERS = {
   tier1: ['Workday', 'Greenhouse', 'Workable', 'SAP SuccessFactors', 'iCIMS', 'LinkedIn (Direct)'],
@@ -223,7 +249,8 @@ function parseKeywords(keywordString: string): string[] {
     .split(',')
     .map(k => k.trim())
     .filter(k => k.length > 0)
-    .filter((k, i, arr) => arr.indexOf(k) === i);
+    .filter((k, i, arr) => arr.indexOf(k) === i)
+    .slice(0, 50); // Limit to 50 keywords
 }
 
 // Validate that a job URL is a direct job link (not a general careers page)
@@ -256,9 +283,13 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const user_id = await verifyAndGetUserId(req, supabase);
     
-    const { keywords = '', offset = 0, limit = 100 } = await req.json();
+    // Parse and validate request
+    const rawData = await req.json();
+    const keywords = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH, 'keywords');
+    const offset = validateNumber(rawData.offset, 0, MAX_OFFSET, 0);
+    const limit = validateNumber(rawData.limit, 1, MAX_LIMIT, 100);
     
-    console.log(`Scraping jobs with keywords: ${keywords}, offset: ${offset}, limit: ${limit} for user ${user_id}`);
+    console.log(`Scraping jobs with keywords: ${keywords.substring(0, 100)}..., offset: ${offset}, limit: ${limit} for user ${user_id}`);
     
     const parsedKeywords = parseKeywords(keywords);
     let allJobs: JobListing[] = [];

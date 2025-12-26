@@ -6,6 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation limits
+const MAX_KEYWORDS_LENGTH = 2000;
+const MAX_LOCATIONS_LENGTH = 1000;
+const MAX_LIMIT = 500;
+
+// Validate string input
+function validateString(value: any, maxLength: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return trimmed.substring(0, maxLength);
+  }
+  return trimmed;
+}
+
+// Validate number input
+function validateNumber(value: any, min: number, max: number, defaultValue: number): number {
+  const num = parseInt(value, 10);
+  if (isNaN(num)) return defaultValue;
+  if (num < min) return min;
+  if (num > max) return max;
+  return num;
+}
+
 // Target locations for filtering
 const TARGET_LOCATIONS = [
   "Dublin", "Ireland", "United Kingdom", "United States", "Remote",
@@ -161,16 +187,16 @@ serve(async (req) => {
     // Verify JWT and get authenticated user ID
     const user_id = await verifyAndGetUserId(req, supabase);
     
-    const { 
-      keywords = '',
-      locations = '',
-      limit = 100,
-    } = await req.json();
+    // Parse and validate request
+    const rawData = await req.json();
+    const keywords = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH, 'keywords');
+    const locations = validateString(rawData.locations || '', MAX_LOCATIONS_LENGTH, 'locations');
+    const limit = validateNumber(rawData.limit, 1, MAX_LIMIT, 100);
     
     console.log(`Live jobs fetch - ${GREENHOUSE_COMPANIES.length} companies for user ${user_id}`);
     
-    const keywordList = keywords.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k).slice(0, 20);
-    const locationList = locations.split(',').map((l: string) => l.trim().toLowerCase()).filter((l: string) => l).slice(0, 10);
+    const keywordList = keywords.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k).slice(0, 30);
+    const locationList = locations.split(',').map((l: string) => l.trim().toLowerCase()).filter((l: string) => l).slice(0, 20);
     
     // Fetch in batches of 5 to avoid CPU limits
     const allJobs: LiveJob[] = [];
