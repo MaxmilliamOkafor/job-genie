@@ -100,6 +100,20 @@ async function getUserOpenAIKey(supabase: any, userId: string): Promise<string |
   return data.openai_api_key;
 }
 
+async function logApiUsage(supabase: any, userId: string, functionName: string, tokensUsed: number): Promise<void> {
+  try {
+    await supabase
+      .from('api_usage')
+      .insert({
+        user_id: userId,
+        function_name: functionName,
+        tokens_used: tokensUsed,
+      });
+  } catch (error) {
+    console.error('Failed to log API usage:', error);
+  }
+}
+
 function validateRequest(data: any): TailorRequest {
   const jobTitle = validateString(data.jobTitle, MAX_STRING_SHORT, 'jobTitle');
   const company = validateString(data.company, MAX_STRING_SHORT, 'company');
@@ -559,8 +573,12 @@ ${includeReferral ? `
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
+    const tokensUsed = data.usage?.total_tokens || 0;
     
-    console.log("AI response received, parsing...");
+    // Log API usage
+    await logApiUsage(supabase, userId, 'tailor-application', tokensUsed);
+    
+    console.log(`AI response received (${tokensUsed} tokens), parsing...`);
     
     let result;
     try {
