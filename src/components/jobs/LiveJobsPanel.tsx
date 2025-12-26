@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { 
   Zap, 
   Globe, 
@@ -15,13 +16,18 @@ import {
   Play,
   TrendingUp,
   Clock,
-  MapPin,
   Search,
-  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface LiveJobsPanelProps {
   onJobsFetched: () => void;
@@ -39,7 +45,8 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
   const [jobsFound, setJobsFound] = useState(0);
   const [keywords, setKeywords] = useState(DEFAULT_KEYWORDS);
   const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
-  const [hoursFilter, setHoursFilter] = useState(0); // 0 = all time
+  const [timeValue, setTimeValue] = useState(30); // Default 30 minutes
+  const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
@@ -47,6 +54,9 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
     if (!user || isFetching) return;
     
     setIsFetching(true);
+    
+    // Convert time to hours for API
+    const hoursFilter = timeUnit === 'hours' ? timeValue : timeValue / 60;
     
     try {
       const { data, error } = await supabase.functions.invoke('live-jobs', {
@@ -56,6 +66,7 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
           hours: hoursFilter,
           user_id: user.id,
           limit: 100,
+          sortBy: 'recent', // Prioritize recently added
         },
       });
 
@@ -81,7 +92,7 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
     } finally {
       setIsFetching(false);
     }
-  }, [user, keywords, locations, hoursFilter, onJobsFetched, isFetching]);
+  }, [user, keywords, locations, timeValue, timeUnit, onJobsFetched, isFetching]);
 
   const startPolling = useCallback(() => {
     if (pollInterval) clearInterval(pollInterval);
@@ -291,26 +302,52 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
               />
             </div>
 
-            {/* Hours Filter */}
-            <div className="flex items-center gap-4">
-              <Label className="text-sm font-medium">Posted Within:</Label>
-              <div className="flex gap-2">
-                {[
-                  { value: 0, label: 'All Time' },
-                  { value: 2, label: '2 hours' },
-                  { value: 24, label: '24 hours' },
-                  { value: 72, label: '3 days' },
-                  { value: 168, label: '1 week' },
-                ].map(opt => (
-                  <Button
-                    key={opt.value}
-                    variant={hoursFilter === opt.value ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setHoursFilter(opt.value)}
-                  >
-                    {opt.label}
-                  </Button>
-                ))}
+            {/* Time Filter - Custom Input */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Posted Within</Label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-1 max-w-xs">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={timeUnit === 'hours' ? 168 : 10080}
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-24"
+                  />
+                  <Select value={timeUnit} onValueChange={(v: 'minutes' | 'hours') => setTimeUnit(v)}>
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="minutes">Minutes</SelectItem>
+                      <SelectItem value="hours">Hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground">ago</span>
+                </div>
+                {/* Quick presets */}
+                <div className="flex gap-1">
+                  {[
+                    { value: 15, unit: 'minutes', label: '15m' },
+                    { value: 30, unit: 'minutes', label: '30m' },
+                    { value: 1, unit: 'hours', label: '1h' },
+                    { value: 24, unit: 'hours', label: '24h' },
+                  ].map(preset => (
+                    <Button
+                      key={preset.label}
+                      variant={timeValue === preset.value && timeUnit === preset.unit ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => {
+                        setTimeValue(preset.value);
+                        setTimeUnit(preset.unit as 'minutes' | 'hours');
+                      }}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
