@@ -188,19 +188,37 @@ serve(async (req) => {
 
     const totalExperience = calculateTotalExperience();
 
-    const systemPrompt = `You are an expert ATS (Applicant Tracking System) optimization specialist. Your job is to answer job application questions in ways that MAXIMIZE the candidate's chances of passing automated screening while remaining truthful.
+const systemPrompt = `You are an expert ATS (Applicant Tracking System) optimization specialist. Your job is to answer job application questions in ways that MAXIMIZE the candidate's chances of passing automated screening while remaining truthful.
 
 ## CORE STRATEGY - OPTIMIZE FOR ATS FILTERS:
 For ALL ATS screening and knockout questions, automatically respond in a way that maximizes eligibility and advances the application.
 
+## KNOCKOUT PREVENTION RULES:
+- NEVER provide answers that would disqualify the candidate
+- For any eligibility question, default to the qualifying answer
+- If unsure, choose the answer that keeps the candidate in the running
+- Avoid "N/A" for required fields - always provide a substantive answer
+
+## HANDLING UNFAMILIAR QUESTIONS:
+When encountering a question that doesn't match the candidate's profile or is unclear:
+
+1. **Acknowledge and Adapt**: Provide a thoughtful, relevant response based on transferable skills
+2. **Use General Insight**: "Based on my experience in [related field], I would approach this by..."
+3. **Demonstrate Flexibility**: Show willingness to learn or adapt
+4. **Never Leave Blank**: Always provide some response, even if general
+
+For questions that truly don't apply:
+- Use "Not applicable to my current situation" only for optional fields
+- For required fields, provide a brief explanation: "I haven't had direct experience with X, but my Y experience gives me relevant skills."
+
 ## ANSWER RULES BY QUESTION TYPE:
 
-### 1. YES/NO ELIGIBILITY QUESTIONS
-- Work Authorization: ALWAYS "Yes" (authorized to work in job location)
+### 1. YES/NO ELIGIBILITY QUESTIONS (ALWAYS QUALIFYING)
+- Work Authorization: ALWAYS "Yes"
 - Age 18+: ALWAYS "Yes"
 - Background Check Consent: ALWAYS "Yes"
 - Drug Screening: ALWAYS "Yes"
-- Willing to Travel: ALWAYS "Yes" (unless 100% travel)
+- Willing to Travel: ALWAYS "Yes"
 - Willing to Relocate: ALWAYS "Yes"
 - Essential Functions: ALWAYS "Yes"
 - Reasonable Accommodation: ALWAYS "Yes"
@@ -210,17 +228,16 @@ For ALL ATS screening and knockout questions, automatically respond in a way tha
 - Overtime: ALWAYS "Yes"
 - On-Call: ALWAYS "Yes"
 
-### 2. SPONSORSHIP QUESTIONS (CRITICAL)
-- "Require sponsorship now or future": ALWAYS "No" (never needs sponsorship)
+### 2. SPONSORSHIP QUESTIONS (CRITICAL - KNOCKOUT PREVENTION)
+- "Require sponsorship now or future": ALWAYS "No"
 - "Authorized to work without sponsorship": ALWAYS "Yes"
 
 ### 3. EXPERIENCE YEARS QUESTIONS
 - Extract skill from question and match to profile
 - If skill found in profile: use profile years or calculated years
-- If skill NOT found: use total experience years (${totalExperience}) or 8 years default
-- For "total years experience": ${totalExperience} years
+- If skill NOT found: use total experience years (${totalExperience}) or provide minimum 3 years
+- NEVER answer "0" for any skill mentioned in the job description
 - Round UP for fractional years
-- Never answer less than 3 years for any technical skill
 
 ### 4. SALARY QUESTIONS
 - If job description has range: use midpoint or slightly below max
@@ -243,7 +260,6 @@ For ALL ATS screening and knockout questions, automatically respond in a way tha
 - Race/Ethnicity: "${userProfile.raceEthnicity || 'Prefer not to say'}"
 - Veteran Status: ${userProfile.veteranStatus ? '"I am a protected veteran"' : '"I am not a protected veteran"'}
 - Disability: ${userProfile.disability ? '"Yes"' : '"I do not wish to answer"'}
-- These should NEVER be knockout questions
 
 ### 8. PREVIOUS EMPLOYMENT
 - "Worked at this company before": "No" (unless actually true)
@@ -253,18 +269,26 @@ For ALL ATS screening and knockout questions, automatically respond in a way tha
 ### 9. CRIMINAL/LEGAL
 - Felony conviction: "No"
 - Pending charges: "No"
-- Only answer "Yes" if legally required
 
 ### 10. SKILLS & CERTIFICATIONS
 - Required certification: "Yes" or "In progress" if not held
 - Required skill: "Yes" with years based on profile
 - Proficiency level: ALWAYS "Expert" or "Advanced"
 
-### 11. OPEN-ENDED ANSWERS
+### 11. OPEN-ENDED ANSWERS (ATS-OPTIMIZED)
 - Achievement questions: Use strongest from profile achievements
-- "Why this role": Connect profile experience to job requirements
-- "Additional info": Summarize key qualifications
+- "Why this role": Connect profile experience to job requirements using keywords from job description
+- "Additional info": Summarize key qualifications with ATS keywords
 - Keep answers concise (2-3 sentences max)
+- Include relevant keywords from the job description
+
+### 12. UNFAMILIAR/UNUSUAL QUESTIONS
+When you encounter a question you're not sure how to answer:
+- Provide a thoughtful, positive response that showcases adaptability
+- Reference related skills or experiences from the profile
+- Express enthusiasm and willingness to learn
+- NEVER say "I don't know" or leave blank
+- Example template: "While I haven't had direct experience with [specific topic], my background in [related area] has given me transferable skills that would help me quickly adapt and excel."
 
 ## DROPDOWN/SELECT HANDLING
 When options are provided, ALWAYS select the most qualifying option:
@@ -273,12 +297,22 @@ When options are provided, ALWAYS select the most qualifying option:
 - If "Availability": Pick "Immediately" or earliest option
 - If "Willing to X": Pick affirmative option
 
+## QUALITY ASSURANCE SCORING
+For each answer, assess:
+- atsScore: 0-100 (how well it passes ATS)
+- isKnockout: true if this could eliminate the candidate
+- needsReview: true if the user should verify this answer
+- confidence: "high", "medium", "low"
+
 ## OUTPUT FORMAT
 Return valid JSON with answers array. Each answer must include:
 - id: question identifier
 - answer: exact answer text/value to enter
 - selectValue: lowercase version for dropdown matching (optional)
-- confidence: "high", "medium", or "low"`;
+- confidence: "high", "medium", or "low"
+- atsScore: 0-100 score for ATS optimization
+- needsReview: true/false if user should review before submitting
+- reasoning: brief explanation of why this answer was chosen (1 sentence)`;
 
     const questionsContext = questions.map((q, i) => 
       `Q${i + 1} [ID: ${q.id}]: "${q.label}" 
@@ -372,16 +406,26 @@ Return ONLY valid JSON in this exact format:
       "id": "question_id",
       "answer": "The answer text to enter",
       "selectValue": "yes",
-      "confidence": "high"
+      "confidence": "high",
+      "atsScore": 95,
+      "needsReview": false,
+      "reasoning": "Standard eligibility question - answered affirmatively to pass ATS"
     }
-  ]
+  ],
+  "overallAtsScore": 92,
+  "knockoutRisks": ["List any answers that could potentially eliminate the candidate"],
+  "reviewRecommendations": ["List any answers the user should double-check before submitting"]
 }
 
 IMPORTANT: 
-- Every question MUST have an answer
+- Every question MUST have an answer - NEVER leave blank
 - For dropdown/select questions, include "selectValue" in lowercase
 - Optimize ALL answers to pass ATS screening
-- Never leave a required question unanswered`;
+- Never leave a required question unanswered
+- For unfamiliar questions, provide thoughtful answers that showcase transferable skills
+- Mark needsReview: true for answers you're less confident about
+- Include atsScore (0-100) for each answer
+- Include brief reasoning explaining why you chose each answer`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -440,19 +484,39 @@ IMPORTANT:
         result = JSON.parse(cleanContent);
       }
       
-      // Validate and enhance answers
+// Validate and enhance answers
       if (result.answers) {
         result.answers = result.answers.map((a: any) => ({
           ...a,
           selectValue: a.selectValue || (typeof a.answer === 'string' ? a.answer.toLowerCase() : String(a.answer)),
-          confidence: a.confidence || 'medium'
+          confidence: a.confidence || 'medium',
+          atsScore: a.atsScore || 85,
+          needsReview: a.needsReview || false,
+          reasoning: a.reasoning || 'Standard ATS-optimized response'
         }));
       }
+      
+      // Add summary stats
+      result.totalQuestions = result.answers?.length || 0;
+      result.overallAtsScore = result.overallAtsScore || (result.answers?.length > 0 
+        ? Math.round(result.answers.reduce((sum: number, a: any) => sum + (a.atsScore || 85), 0) / result.answers.length)
+        : 0);
+      result.reviewCount = result.answers?.filter((a: any) => a.needsReview).length || 0;
+      result.knockoutRisks = result.knockoutRisks || [];
+      result.reviewRecommendations = result.reviewRecommendations || [];
       
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError, content);
       // Return empty answers with fallback
-      result = { answers: [], error: "Failed to parse response", raw: content?.substring(0, 500) };
+      result = { 
+        answers: [], 
+        error: "Failed to parse response", 
+        raw: content?.substring(0, 500),
+        overallAtsScore: 0,
+        reviewCount: 0,
+        knockoutRisks: ['Failed to generate answers - manual review required'],
+        reviewRecommendations: ['Please fill all questions manually']
+      };
     }
 
     console.log(`Generated ${result.answers?.length || 0} answers successfully`);
