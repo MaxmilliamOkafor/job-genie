@@ -16,8 +16,7 @@ import {
   CheckCircle, 
   XCircle, 
   Loader2,
-  CloudOff,
-  Mail
+  CloudOff
 } from 'lucide-react';
 import { Job } from '@/hooks/useJobs';
 import { Profile } from '@/hooks/useProfile';
@@ -46,33 +45,10 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
   const [isVisible, setIsVisible] = useState(true);
   const [backgroundMode, setBackgroundMode] = useState(false);
   const [backgroundCount, setBackgroundCount] = useState(10);
-  const [sendReferrals, setSendReferrals] = useState(false);
-  const [emailConnected, setEmailConnected] = useState(false);
   const [logs, setLogs] = useState<AutomationLog[]>([]);
   const [currentJobIndex, setCurrentJobIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Check if email is connected
-  useEffect(() => {
-    const checkEmailConnection = async () => {
-      if (!user) return;
-      const { data, error } = await supabase
-        .from('email_integrations')
-        .select('is_connected')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.warn('Email integration lookup failed:', error);
-        setEmailConnected(false);
-        return;
-      }
-
-      setEmailConnected(Boolean(data?.is_connected));
-    };
-    checkEmailConnection();
-  }, [user]);
 
   // All pending jobs are eligible (no match score filter)
   const eligibleJobs = jobs.filter(job => job.status === 'pending');
@@ -121,7 +97,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
             city: profile.city,
             country: profile.country,
           },
-          includeReferral: sendReferrals,
+          includeReferral: false,
         }
       });
 
@@ -301,26 +277,6 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         <CardContent className="space-y-4">
           {/* Controls */}
           <div className="grid gap-4 md:grid-cols-2">
-            {/* Email connection / Referral toggle */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <Label htmlFor="send-referrals">Send Referral Emails</Label>
-              </div>
-              {emailConnected ? (
-                <Switch
-                  id="send-referrals"
-                  checked={sendReferrals}
-                  onCheckedChange={setSendReferrals}
-                  disabled={isRunning}
-                />
-              ) : (
-                <Button size="sm" variant="outline" asChild>
-                  <a href="/settings">Connect Email</a>
-                </Button>
-              )}
-            </div>
-
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CloudOff className="h-4 w-4 text-muted-foreground" />
