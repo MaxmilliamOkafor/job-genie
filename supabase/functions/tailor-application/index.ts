@@ -66,7 +66,7 @@ interface TailorRequest {
   includeReferral?: boolean;
 }
 
-async function verifyAuth(req: Request): Promise<void> {
+async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -82,6 +82,22 @@ async function verifyAuth(req: Request): Promise<void> {
   if (error || !user) {
     throw new Error('Unauthorized: Invalid or expired token');
   }
+  
+  return { userId: user.id, supabase };
+}
+
+async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('openai_api_key')
+    .eq('user_id', userId)
+    .single();
+  
+  if (error || !data) {
+    return null;
+  }
+  
+  return data.openai_api_key;
 }
 
 function validateRequest(data: any): TailorRequest {
@@ -296,17 +312,24 @@ serve(async (req) => {
   }
 
   try {
-    await verifyAuth(req);
+    const { userId, supabase } = await verifyAuth(req);
     
     const rawData = await req.json();
     const { jobTitle, company, description, requirements, location, jobId, userProfile, includeReferral } = validateRequest(rawData);
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    // Get user's OpenAI API key from their profile
+    const userOpenAIKey = await getUserOpenAIKey(supabase, userId);
+    
+    if (!userOpenAIKey) {
+      return new Response(JSON.stringify({ 
+        error: "OpenAI API key not configured. Please add your API key in Profile settings." 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    console.log(`Tailoring application for ${jobTitle} at ${company}`);
+    console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
     // Smart location logic
     const smartLocation = getSmartLocation(location, description, userProfile.city, userProfile.country);
@@ -491,24 +514,26 @@ ${includeReferral ? `
   "referralEmail": "[Subject + email body]"` : ''}
 }`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${userOpenAIKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
+        max_tokens: 4000,
+        temperature: 0.7,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("OpenAI API error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
@@ -516,14 +541,20 @@ ${includeReferral ? `
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Usage limit reached. Please add credits to continue." }), {
+      if (response.status === 401) {
+        return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402 || response.status === 403) {
+        return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
