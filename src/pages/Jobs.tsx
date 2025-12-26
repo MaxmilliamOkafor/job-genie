@@ -245,18 +245,15 @@ const Jobs = () => {
           <JobFiltersBar 
             jobs={jobs} 
             onFiltersChange={handleFiltersChange}
-            onSearch={async (keywords) => {
+            onSearch={async (keywords, locations) => {
               if (!user) return;
               setIsSearching(true);
               try {
-                const { data, error } = await supabase.functions.invoke('live-jobs', {
+                // Use search-jobs-google for proper boolean web search across all ATS platforms
+                const { data, error } = await supabase.functions.invoke('search-jobs-google', {
                   body: {
                     keywords,
-                    locations: 'Remote, Dublin, Ireland, United Kingdom, United States, Germany, Netherlands, France',
-                    hours: 24,
-                    user_id: user.id,
-                    limit: 100,
-                    sortBy: 'recent',
+                    location: locations || 'Remote, Dublin, Ireland, United Kingdom, United States, Germany, Netherlands, France',
                   },
                 });
                 
@@ -264,7 +261,12 @@ const Jobs = () => {
                 
                 if (data?.success) {
                   await refetch();
-                  toast.success(`Found ${data.jobs?.length || 0} new jobs for: ${keywords.split(',').slice(0, 3).join(', ')}...`);
+                  const keywordPreview = keywords.split(',').slice(0, 3).map((k: string) => k.trim()).join(', ');
+                  toast.success(`Found ${data.totalFound || data.jobs?.length || 0} jobs`, {
+                    description: `Searched: ${keywordPreview}${keywords.split(',').length > 3 ? '...' : ''}`,
+                  });
+                } else {
+                  toast.error('Search returned no results');
                 }
               } catch (error) {
                 console.error('Search error:', error);
