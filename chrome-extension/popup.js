@@ -751,22 +751,32 @@ async function handleApplyWithAI() {
       if (tab?.id) {
         try {
           // Send autofill message with tailored data - the content script will handle PDF generation
-          await new Promise((resolve, reject) => {
+          const autofillResponse = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Autofill timed out after 60 seconds'));
+            }, 60000);
+            
             chrome.tabs.sendMessage(tab.id, {
               action: 'autofill',
               tailoredData: result,
               atsCredentials: settingsData.atsCredentials || null,
               options: { generatePdfs: true }
             }, (response) => {
+              clearTimeout(timeout);
               if (chrome.runtime.lastError) {
                 console.warn('Autofill communication error:', chrome.runtime.lastError);
-                reject(new Error('Could not communicate with page. Please refresh and try again.'));
+                // Don't reject - we still have the tailored content
+                resolve({ success: false, error: chrome.runtime.lastError.message });
               } else {
                 console.log('QuantumHire: Autofill response', response);
-                resolve(response);
+                resolve(response || { success: true });
               }
             });
           });
+          
+          if (autofillResponse?.pdfUploads) {
+            console.log('QuantumHire: PDF uploads result:', autofillResponse.pdfUploads);
+          }
         } catch (autofillError) {
           console.warn('Autofill error (non-fatal):', autofillError);
           // Don't throw - we still have the tailored content
@@ -959,26 +969,70 @@ async function downloadAsPDF(type) {
     };
     
     if (type === 'resume') {
+      // Extract summary from content
       requestBody.summary = content.substring(0, 500);
-      requestBody.experience = userProfile?.work_experience || [];
-      requestBody.education = userProfile?.education || [];
-      requestBody.skills = { primary: (userProfile?.skills || []).map(s => s.name || s) };
+      
+      // Parse experience from profile
+      const workExp = userProfile?.work_experience || [];
+      requestBody.experience = workExp.map(exp => ({
+        company: exp.company || '',
+        title: exp.title || '',
+        dates: exp.dates || `${exp.startDate || exp.start_date || ''} – ${exp.endDate || exp.end_date || 'Present'}`,
+        bullets: Array.isArray(exp.description) ? exp.description : 
+                 (typeof exp.description === 'string' ? exp.description.split('\n').filter(b => b.trim()) : [])
+      }));
+      
+      // Parse education
+      const education = userProfile?.education || [];
+      requestBody.education = education.map(edu => ({
+        degree: edu.degree || '',
+        school: edu.school || edu.institution || '',
+        dates: edu.dates || `${edu.startDate || ''} – ${edu.endDate || ''}`,
+        gpa: edu.gpa || ''
+      }));
+      
+      // Parse skills
+      const skills = userProfile?.skills || [];
+      if (Array.isArray(skills)) {
+        const primarySkills = skills.filter(s => s.category === 'technical' || s.proficiency === 'expert' || s.proficiency === 'advanced');
+        const secondarySkills = skills.filter(s => s.category !== 'technical' && s.proficiency !== 'expert' && s.proficiency !== 'advanced');
+        requestBody.skills = {
+          primary: primarySkills.map(s => s.name || s),
+          secondary: secondarySkills.map(s => s.name || s)
+        };
+      }
+      
       requestBody.certifications = userProfile?.certifications || [];
+      
+      // Parse achievements
+      const achievements = userProfile?.achievements || [];
+      requestBody.achievements = achievements.map(a => ({
+        title: a.title || '',
+        date: a.date || '',
+        description: a.description || ''
+      }));
     } else {
+      const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 20);
       requestBody.coverLetter = {
         recipientCompany: currentJob?.company || 'Company',
         jobTitle: currentJob?.title || 'Position',
-        paragraphs: content.split(/\n\n+/).filter(p => p.trim().length > 20)
+        jobId: currentJob?.jobId || '',
+        paragraphs: paragraphs.length > 0 ? paragraphs : [content.trim()]
       };
+    }
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY
+    };
+    
+    if (data.accessToken) {
+      headers['Authorization'] = `Bearer ${data.accessToken}`;
     }
     
     const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': data.accessToken ? `Bearer ${data.accessToken}` : undefined
-      },
+      headers: headers,
       body: JSON.stringify(requestBody)
     });
     
@@ -994,47 +1048,55 @@ async function downloadAsPDF(type) {
         document.body.removeChild(link);
         showStatus(`✅ Downloaded: ${result.fileName}`, 'success');
         return;
+      } else {
+        console.log('QuantumHire: PDF generation returned error:', result.error);
       }
+    } else {
+      console.log('QuantumHire: PDF generation response not OK:', response.status);
     }
     
     // Fallback to print-based PDF
     console.log('QuantumHire: Falling back to print-based PDF');
     const title = type === 'resume' ? 'Tailored Resume' : 'Cover Letter';
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>${title}</title>
-        <style>
-          body {
-            font-family: 'Times New Roman', serif;
-            font-size: 11pt;
-            line-height: 1.5;
-            max-width: 8.5in;
-            margin: 0.5in auto;
-            padding: 0 0.5in;
-            color: #000;
-          }
-          h1, h2, h3 { font-weight: bold; margin: 0.5em 0; }
-          h1 { font-size: 16pt; text-align: center; }
-          h2 { font-size: 12pt; border-bottom: 1px solid #000; padding-bottom: 2px; }
-          p { margin: 0.5em 0; }
-          ul { margin: 0.5em 0; padding-left: 1.5em; }
-          li { margin: 0.25em 0; }
-          @media print {
-            body { margin: 0; padding: 0.5in; }
-          }
-        </style>
-      </head>
-      <body>
-        <pre style="white-space: pre-wrap; font-family: inherit;">${content}</pre>
-        <script>window.onload = function() { window.print(); };<\/script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    showStatus(`Opening ${title} for printing/PDF`, 'info');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body {
+              font-family: 'Times New Roman', serif;
+              font-size: 11pt;
+              line-height: 1.5;
+              max-width: 8.5in;
+              margin: 0.5in auto;
+              padding: 0 0.5in;
+              color: #000;
+            }
+            h1, h2, h3 { font-weight: bold; margin: 0.5em 0; }
+            h1 { font-size: 16pt; text-align: center; }
+            h2 { font-size: 12pt; border-bottom: 1px solid #000; padding-bottom: 2px; }
+            p { margin: 0.5em 0; }
+            ul { margin: 0.5em 0; padding-left: 1.5em; }
+            li { margin: 0.25em 0; }
+            @media print {
+              body { margin: 0; padding: 0.5in; }
+            }
+          </style>
+        </head>
+        <body>
+          <pre style="white-space: pre-wrap; font-family: inherit;">${content}</pre>
+          <script>window.onload = function() { window.print(); };<\/script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      showStatus(`Opening ${title} for printing/PDF`, 'info');
+    } else {
+      showStatus('Please allow popups to download PDF', 'error');
+    }
     
   } catch (error) {
     console.error('PDF download error:', error);
