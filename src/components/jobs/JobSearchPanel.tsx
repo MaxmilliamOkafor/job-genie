@@ -176,7 +176,7 @@ export function JobSearchPanel({ onSearchComplete, isSearching, setIsSearching }
         </Button>
 
         <p className="text-xs text-muted-foreground text-center">
-          Searches Greenhouse, Lever, Workday, Ashby, SmartRecruiters & more ATS platforms
+          Searches Workday, SmartRecruiters, iCIMS, Bullhorn, Teamtailor & more ATS platforms
         </p>
       </CardContent>
     </Card>

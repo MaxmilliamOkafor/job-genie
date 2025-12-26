@@ -113,7 +113,7 @@ export function CSVUpload({ onUpload }: CSVUploadProps) {
         <div className="mt-4 p-3 bg-muted rounded-lg">
           <p className="text-xs text-muted-foreground flex items-start gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            CSV should contain job URLs from supported platforms: Workday, Greenhouse, Lever, iCIMS, etc.
+            CSV should contain job URLs from supported platforms: Workday, SmartRecruiters, iCIMS, Bullhorn, etc.
           </p>
         </div>
       </CardContent>
