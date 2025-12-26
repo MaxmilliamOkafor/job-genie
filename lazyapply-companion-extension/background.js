@@ -1,20 +1,24 @@
 // LazyApply 2.0 EXTREME - Background Service Worker
-// Supercharges LazyApply with AI-powered ATS tailoring
+// Supercharges LazyApply with AI-powered ATS tailoring + Live Job Queue
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 // Extension state
 const ExtState = {
   enabled: true,
   autoTailor: true,
+  autoQueue: false,
   tailoredCount: 0,
   sessionStats: {
     applicationsIntercepted: 0,
     documentsGenerated: 0,
-    atsScoreAverage: 0
+    atsScoreAverage: 0,
+    jobsQueued: 0
   },
   userProfile: null,
-  accessToken: null
+  accessToken: null,
+  jobQueue: []
 };
 
 // Platform detection patterns
@@ -62,12 +66,15 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({
     enabled: true,
     autoTailor: true,
+    autoQueue: false,
     interceptLazyApply: true,
     userProfile: null,
     accessToken: null,
+    jobQueue: [],
     stats: {
       totalIntercepted: 0,
       totalTailored: 0,
+      totalQueued: 0,
       averageScore: 0
     }
   });
@@ -111,7 +118,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleTailorRequest(message.jobData, sender.tab?.id)
         .then(result => sendResponse({ success: true, data: result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
-      return true; // Keep channel open for async response
+      return true;
       
     case 'LAZYAPPLY_DETECTED':
       handleLazyApplyDetection(message.jobData, sender.tab?.id);
@@ -131,6 +138,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'GET_STATS':
       sendResponse({ success: true, stats: ExtState.sessionStats });
       break;
+    
+    case 'ADD_TO_QUEUE':
+      addJobsToQueue(message.jobs)
+        .then(() => sendResponse({ success: true }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+      
+    case 'GET_QUEUE':
+      chrome.storage.local.get(['jobQueue'], (data) => {
+        sendResponse({ success: true, queue: data.jobQueue || [] });
+      });
+      return true;
+      
+    case 'CLEAR_QUEUE':
+      chrome.storage.local.set({ jobQueue: [] });
+      ExtState.jobQueue = [];
+      sendResponse({ success: true });
+      break;
+      
+    case 'FETCH_LIVE_JOBS':
+      fetchLiveJobs(message.keywords)
+        .then(jobs => sendResponse({ success: true, jobs }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+      
+    case 'START_BATCH_APPLY':
+      startBatchApplyFromQueue()
+        .then(() => sendResponse({ success: true }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
       
     default:
       sendResponse({ success: false, error: 'Unknown action' });
@@ -138,6 +175,72 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   return true;
 });
+
+// Add jobs to queue
+async function addJobsToQueue(jobs) {
+  const storage = await chrome.storage.local.get(['jobQueue']);
+  const currentQueue = storage.jobQueue || [];
+  
+  const newJobs = jobs.filter(j => !currentQueue.some(q => q.url === j.url));
+  const updatedQueue = [...currentQueue, ...newJobs];
+  
+  await chrome.storage.local.set({ jobQueue: updatedQueue });
+  ExtState.jobQueue = updatedQueue;
+  ExtState.sessionStats.jobsQueued += newJobs.length;
+  
+  console.log(`📋 Added ${newJobs.length} jobs to queue. Total: ${updatedQueue.length}`);
+}
+
+// Fetch live jobs from QuantumHire backend
+async function fetchLiveJobs(keywords) {
+  console.log('🔍 Fetching live jobs for:', keywords);
+  
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/search-jobs-google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ keywords })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`✅ Found ${data.jobs?.length || 0} jobs`);
+    
+    return data.jobs || [];
+  } catch (error) {
+    console.error('❌ Failed to fetch jobs:', error);
+    throw error;
+  }
+}
+
+// Start batch apply from queue
+async function startBatchApplyFromQueue() {
+  const storage = await chrome.storage.local.get(['jobQueue', 'userProfile']);
+  const queue = storage.jobQueue || [];
+  
+  if (queue.length === 0) {
+    throw new Error('No jobs in queue');
+  }
+  
+  console.log(`🚀 Starting batch apply for ${queue.length} jobs`);
+  
+  // Process first job - open in new tab
+  const firstJob = queue[0];
+  if (firstJob.url) {
+    chrome.tabs.create({ url: firstJob.url, active: true });
+  }
+  
+  // Store remaining jobs
+  const remaining = queue.slice(1);
+  await chrome.storage.local.set({ jobQueue: remaining });
+  ExtState.jobQueue = remaining;
+}
 
 // Broadcast state to all tabs
 function broadcastState() {
