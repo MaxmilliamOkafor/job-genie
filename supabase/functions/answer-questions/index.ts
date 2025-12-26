@@ -12,6 +12,9 @@ const MAX_STRING_SHORT = 200;
 const MAX_STRING_MEDIUM = 1000;
 const MAX_STRING_LONG = 10000;
 
+// Memory matching configuration
+const MEMORY_SIMILARITY_THRESHOLD = 0.85;
+
 // Validate and sanitize string input
 function validateString(value: any, maxLength: number, fieldName: string): string {
   if (typeof value !== 'string') {
@@ -22,6 +25,70 @@ function validateString(value: any, maxLength: number, fieldName: string): strin
     return trimmed.substring(0, maxLength);
   }
   return trimmed;
+}
+
+// Generate a hash for a question (for exact matching)
+function generateQueryHash(question: string): string {
+  const normalized = question.toLowerCase().trim()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ');
+  
+  // Simple hash function
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
+}
+
+// Extract keywords from a question for similarity matching
+function extractKeywords(question: string): string[] {
+  const stopWords = new Set([
+    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
+    'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by',
+    'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above',
+    'below', 'between', 'under', 'again', 'further', 'then', 'once', 'here',
+    'there', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more',
+    'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
+    'same', 'so', 'than', 'too', 'very', 'just', 'and', 'but', 'if', 'or',
+    'because', 'until', 'while', 'although', 'though', 'this', 'that',
+    'these', 'those', 'what', 'which', 'who', 'whom', 'whose', 'your', 'you',
+    'please', 'select', 'choose', 'enter', 'provide', 'required', 'optional'
+  ]);
+
+  return question.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !stopWords.has(word))
+    .slice(0, 20); // Max 20 keywords
+}
+
+// Calculate keyword similarity between two sets
+function calculateKeywordSimilarity(keywords1: string[], keywords2: string[]): number {
+  if (keywords1.length === 0 || keywords2.length === 0) return 0;
+  
+  const set1 = new Set(keywords1);
+  const set2 = new Set(keywords2);
+  
+  let matches = 0;
+  for (const word of set1) {
+    if (set2.has(word)) matches++;
+  }
+  
+  // Jaccard similarity
+  const union = new Set([...keywords1, ...keywords2]);
+  return matches / union.size;
+}
+
+// Normalize question for comparison
+function normalizeQuestion(question: string): string {
+  return question.toLowerCase().trim()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ');
 }
 
 interface QuestionRequest {
@@ -68,8 +135,202 @@ interface QuestionRequest {
   };
 }
 
+interface MemoryMatch {
+  questionId: string;
+  answer: any;
+  confidence: string;
+  fromMemory: boolean;
+  similarity: number;
+}
+
+// Get user ID from JWT token
+async function getUserFromToken(req: Request, supabase: any): Promise<string | null> {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader) return null;
+  
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) return null;
+  return user.id;
+}
+
+// Check memory for matching questions
+async function checkMemory(
+  supabase: any,
+  userId: string,
+  questions: { id: string; label: string; type: string; options?: string[] }[]
+): Promise<Map<string, MemoryMatch>> {
+  const matches = new Map<string, MemoryMatch>();
+  
+  try {
+    // Get all user memories
+    const { data: memories, error } = await supabase
+      .from('user_memories')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (error || !memories || memories.length === 0) {
+      console.log(`No memories found for user ${userId}`);
+      return matches;
+    }
+    
+    console.log(`Found ${memories.length} memories for user`);
+    
+    for (const question of questions) {
+      const queryHash = generateQueryHash(question.label);
+      const keywords = extractKeywords(question.label);
+      const normalized = normalizeQuestion(question.label);
+      
+      // First check for exact hash match
+      let bestMatch: any = null;
+      let bestSimilarity = 0;
+      
+      for (const memory of memories) {
+        // Exact hash match
+        if (memory.query_hash === queryHash) {
+          bestMatch = memory;
+          bestSimilarity = 1.0;
+          break;
+        }
+        
+        // Keyword similarity check
+        const similarity = calculateKeywordSimilarity(keywords, memory.question_keywords || []);
+        
+        // Also check normalized question similarity
+        const normalizedSimilarity = memory.question_normalized === normalized ? 1.0 : 
+          (normalized.includes(memory.question_normalized) || memory.question_normalized.includes(normalized)) ? 0.9 : 0;
+        
+        const combinedSimilarity = Math.max(similarity, normalizedSimilarity);
+        
+        if (combinedSimilarity > bestSimilarity && combinedSimilarity >= MEMORY_SIMILARITY_THRESHOLD) {
+          bestSimilarity = combinedSimilarity;
+          bestMatch = memory;
+        }
+      }
+      
+      if (bestMatch && bestSimilarity >= MEMORY_SIMILARITY_THRESHOLD) {
+        matches.set(question.id, {
+          questionId: question.id,
+          answer: bestMatch.answer,
+          confidence: bestMatch.confidence,
+          fromMemory: true,
+          similarity: bestSimilarity
+        });
+        
+        // Update usage stats (fire and forget)
+        supabase
+          .from('user_memories')
+          .update({
+            used_count: bestMatch.used_count + 1,
+            last_used_at: new Date().toISOString()
+          })
+          .eq('id', bestMatch.id)
+          .then(() => {});
+        
+        console.log(`Memory match for "${question.label.substring(0, 50)}..." (similarity: ${(bestSimilarity * 100).toFixed(1)}%)`);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error checking memory:', error);
+  }
+  
+  return matches;
+}
+
+// Store new answers in memory
+async function storeInMemory(
+  supabase: any,
+  userId: string,
+  questions: { id: string; label: string; type: string }[],
+  answers: any[],
+  context: { jobTitle: string; company: string }
+): Promise<void> {
+  try {
+    const memoriesToInsert = [];
+    
+    for (const answer of answers) {
+      const question = questions.find(q => q.id === answer.id);
+      if (!question) continue;
+      
+      // Skip low-confidence answers or those that need review
+      if (answer.confidence === 'low' || answer.needsReview) continue;
+      
+      const queryHash = generateQueryHash(question.label);
+      const keywords = extractKeywords(question.label);
+      const normalized = normalizeQuestion(question.label);
+      
+      memoriesToInsert.push({
+        user_id: userId,
+        query_hash: queryHash,
+        question_normalized: normalized,
+        question_keywords: keywords,
+        answer: {
+          answer: answer.answer,
+          selectValue: answer.selectValue,
+          reasoning: answer.reasoning
+        },
+        context: {
+          questionType: question.type,
+          jobTitle: context.jobTitle,
+          company: context.company
+        },
+        confidence: answer.confidence || 'medium',
+        ats_score: answer.atsScore || 85
+      });
+    }
+    
+    if (memoriesToInsert.length > 0) {
+      // Use upsert to update existing or insert new
+      const { error } = await supabase
+        .from('user_memories')
+        .upsert(memoriesToInsert, {
+          onConflict: 'user_id,query_hash',
+          ignoreDuplicates: false
+        });
+      
+      if (error) {
+        // If upsert fails due to no unique constraint, just insert
+        console.log('Upsert failed, inserting individually...');
+        for (const memory of memoriesToInsert) {
+          // Check if exists first
+          const { data: existing } = await supabase
+            .from('user_memories')
+            .select('id')
+            .eq('user_id', memory.user_id)
+            .eq('query_hash', memory.query_hash)
+            .single();
+          
+          if (existing) {
+            // Update existing
+            await supabase
+              .from('user_memories')
+              .update({
+                answer: memory.answer,
+                confidence: memory.confidence,
+                ats_score: memory.ats_score,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existing.id);
+          } else {
+            // Insert new
+            await supabase
+              .from('user_memories')
+              .insert(memory);
+          }
+        }
+      }
+      
+      console.log(`Stored ${memoriesToInsert.length} answers in memory`);
+    }
+  } catch (error) {
+    console.error('Error storing in memory:', error);
+  }
+}
+
 // Helper function to verify JWT
-async function verifyAuth(req: Request): Promise<void> {
+async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -85,6 +346,8 @@ async function verifyAuth(req: Request): Promise<void> {
   if (error || !user) {
     throw new Error('Unauthorized: Invalid or expired token');
   }
+  
+  return { userId: user.id, supabase };
 }
 
 // Validate the request payload
@@ -158,19 +421,64 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
-    await verifyAuth(req);
+    // Verify authentication and get user ID
+    const { userId, supabase } = await verifyAuth(req);
     
     // Parse and validate request
     const rawData = await req.json();
     const { questions, jobTitle, company, jobDescription, userProfile } = validateRequest(rawData);
     
+    console.log(`[User ${userId}] Answering ${questions.length} questions for ${jobTitle} at ${company}`);
+    
+    // Check memory for cached answers
+    const memoryMatches = await checkMemory(supabase, userId, questions);
+    const cachedCount = memoryMatches.size;
+    
+    console.log(`[Memory] Found ${cachedCount} cached answers out of ${questions.length} questions`);
+    
+    // Separate questions into cached and uncached
+    const uncachedQuestions = questions.filter(q => !memoryMatches.has(q.id));
+    
+    // If all questions are cached, return immediately
+    if (uncachedQuestions.length === 0) {
+      const cachedAnswers = questions.map(q => {
+        const match = memoryMatches.get(q.id)!;
+        return {
+          id: q.id,
+          answer: match.answer.answer,
+          selectValue: match.answer.selectValue,
+          confidence: match.confidence,
+          atsScore: 95,
+          needsReview: false,
+          reasoning: `[From Memory - ${(match.similarity * 100).toFixed(0)}% match] ${match.answer.reasoning || 'Previously answered successfully'}`,
+          fromMemory: true
+        };
+      });
+      
+      console.log(`[Memory] All ${questions.length} answers served from memory!`);
+      
+      return new Response(JSON.stringify({
+        answers: cachedAnswers,
+        totalQuestions: questions.length,
+        overallAtsScore: 95,
+        reviewCount: 0,
+        knockoutRisks: [],
+        reviewRecommendations: [],
+        memoryStats: {
+          cached: cachedCount,
+          generated: 0,
+          cacheHitRate: '100%'
+        }
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // Need to generate answers for uncached questions
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
-
-    console.log(`Answering ${questions.length} questions for ${jobTitle} at ${company}`);
 
     // Calculate total years of experience from work history
     const calculateTotalExperience = () => {
@@ -314,7 +622,7 @@ Return valid JSON with answers array. Each answer must include:
 - needsReview: true/false if user should review before submitting
 - reasoning: brief explanation of why this answer was chosen (1 sentence)`;
 
-    const questionsContext = questions.map((q, i) => 
+    const questionsContext = uncachedQuestions.map((q, i) => 
       `Q${i + 1} [ID: ${q.id}]: "${q.label}" 
        Type: ${q.type}${q.options ? `\n       Options: [${q.options.join(', ')}]` : ''}${q.required ? '\n       ⚠️ REQUIRED' : ''}`
     ).join('\n\n');
@@ -466,7 +774,7 @@ IMPORTANT:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     
-    let result;
+    let aiResult;
     try {
       let cleanContent = content;
       // Remove markdown code blocks
@@ -479,36 +787,28 @@ IMPORTANT:
       // Extract JSON object
       const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
+        aiResult = JSON.parse(jsonMatch[0]);
       } else {
-        result = JSON.parse(cleanContent);
+        aiResult = JSON.parse(cleanContent);
       }
       
-// Validate and enhance answers
-      if (result.answers) {
-        result.answers = result.answers.map((a: any) => ({
+      // Validate and enhance answers
+      if (aiResult.answers) {
+        aiResult.answers = aiResult.answers.map((a: any) => ({
           ...a,
           selectValue: a.selectValue || (typeof a.answer === 'string' ? a.answer.toLowerCase() : String(a.answer)),
           confidence: a.confidence || 'medium',
           atsScore: a.atsScore || 85,
           needsReview: a.needsReview || false,
-          reasoning: a.reasoning || 'Standard ATS-optimized response'
+          reasoning: a.reasoning || 'Standard ATS-optimized response',
+          fromMemory: false
         }));
       }
-      
-      // Add summary stats
-      result.totalQuestions = result.answers?.length || 0;
-      result.overallAtsScore = result.overallAtsScore || (result.answers?.length > 0 
-        ? Math.round(result.answers.reduce((sum: number, a: any) => sum + (a.atsScore || 85), 0) / result.answers.length)
-        : 0);
-      result.reviewCount = result.answers?.filter((a: any) => a.needsReview).length || 0;
-      result.knockoutRisks = result.knockoutRisks || [];
-      result.reviewRecommendations = result.reviewRecommendations || [];
       
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError, content);
       // Return empty answers with fallback
-      result = { 
+      aiResult = { 
         answers: [], 
         error: "Failed to parse response", 
         raw: content?.substring(0, 500),
@@ -518,8 +818,59 @@ IMPORTANT:
         reviewRecommendations: ['Please fill all questions manually']
       };
     }
+    
+    // Store new AI-generated answers in memory (async, don't wait)
+    if (aiResult.answers && aiResult.answers.length > 0) {
+      storeInMemory(supabase, userId, uncachedQuestions, aiResult.answers, { jobTitle, company })
+        .catch(err => console.error('Failed to store in memory:', err));
+    }
 
-    console.log(`Generated ${result.answers?.length || 0} answers successfully`);
+    // Merge cached and AI-generated answers
+    const allAnswers = questions.map(q => {
+      const cachedMatch = memoryMatches.get(q.id);
+      if (cachedMatch) {
+        return {
+          id: q.id,
+          answer: cachedMatch.answer.answer,
+          selectValue: cachedMatch.answer.selectValue,
+          confidence: cachedMatch.confidence,
+          atsScore: 95,
+          needsReview: false,
+          reasoning: `[From Memory - ${(cachedMatch.similarity * 100).toFixed(0)}% match] ${cachedMatch.answer.reasoning || 'Previously answered successfully'}`,
+          fromMemory: true
+        };
+      }
+      
+      const aiAnswer = aiResult.answers?.find((a: any) => a.id === q.id);
+      return aiAnswer || {
+        id: q.id,
+        answer: '',
+        confidence: 'low',
+        atsScore: 0,
+        needsReview: true,
+        reasoning: 'No answer generated',
+        fromMemory: false
+      };
+    });
+
+    // Calculate stats
+    const result = {
+      answers: allAnswers,
+      totalQuestions: questions.length,
+      overallAtsScore: allAnswers.length > 0 
+        ? Math.round(allAnswers.reduce((sum, a) => sum + (a.atsScore || 85), 0) / allAnswers.length)
+        : 0,
+      reviewCount: allAnswers.filter(a => a.needsReview).length,
+      knockoutRisks: aiResult.knockoutRisks || [],
+      reviewRecommendations: aiResult.reviewRecommendations || [],
+      memoryStats: {
+        cached: cachedCount,
+        generated: uncachedQuestions.length,
+        cacheHitRate: `${((cachedCount / questions.length) * 100).toFixed(0)}%`
+      }
+    };
+
+    console.log(`[User ${userId}] Generated ${result.answers.length} answers (${cachedCount} from memory, ${uncachedQuestions.length} AI-generated)`);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
