@@ -352,7 +352,7 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>Sources:</span>
           <div className="flex flex-wrap gap-1.5">
-            {['Greenhouse', 'Lever', 'Workday', 'Ashby', 'Workable'].map(platform => (
+            {['Workday', 'SmartRecruiters', 'Company Website', 'Bullhorn', 'Teamtailor'].map(platform => (
               <Badge key={platform} variant="outline" className="text-xs font-normal">
                 {platform}
               </Badge>
