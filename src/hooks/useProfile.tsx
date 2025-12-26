@@ -32,6 +32,8 @@ export interface Profile {
   veteran_status: boolean;
   disability: boolean;
   race_ethnicity: string | null;
+  gender: string | null;
+  hispanic_latino: boolean;
   security_clearance: boolean;
   cover_letter: string | null;
   work_experience: any[];
@@ -84,6 +86,8 @@ export function useProfile() {
           cv_file_path: data.cv_file_path || null,
           cv_file_name: data.cv_file_name || null,
           cv_uploaded_at: data.cv_uploaded_at || null,
+          gender: data.gender || null,
+          hispanic_latino: data.hispanic_latino ?? false,
         });
       }
     } catch (error) {
