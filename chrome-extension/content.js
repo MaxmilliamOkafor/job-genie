@@ -2226,9 +2226,17 @@ function createFloatingPanel() {
           <span class="qh-btn-icon">⚡</span>
           <div class="qh-btn-content">
             <span class="qh-btn-title">Smart Apply</span>
-            <span class="qh-btn-subtitle">AI Tailor → Review → Fill → Upload PDFs</span>
+            <span class="qh-btn-subtitle">🔍 Review → 📝 Quick Fill → ➡️ Next Page</span>
           </div>
         </button>
+        
+        <div class="qh-smart-apply-steps hidden" id="qh-smart-apply-steps">
+          <div class="qh-step-indicator">
+            <div class="qh-step" data-step="1"><span class="qh-step-num">1</span><span class="qh-step-label">🔍 Review</span></div>
+            <div class="qh-step" data-step="2"><span class="qh-step-num">2</span><span class="qh-step-label">📝 Fill</span></div>
+            <div class="qh-step" data-step="3"><span class="qh-step-num">3</span><span class="qh-step-label">➡️ Next</span></div>
+          </div>
+        </div>
         
         <div class="qh-btn-row">
           <button id="qh-review-questions" class="qh-btn secondary">🔍 Review Questions</button>
@@ -2421,6 +2429,20 @@ function addPanelStyles() {
 .qh-copy-btn { width: 100%; margin-top: 6px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.75); border-radius: 10px; color: hsl(var(--qh-text)); font-size: 10px; cursor: pointer; }
     .qh-copy-btn:hover { background: hsl(var(--qh-card) / 0.40); }
 
+    /* Smart Apply Step Indicator */
+    .qh-smart-apply-steps { margin: 10px 0; padding: 8px 12px; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; }
+    .qh-smart-apply-steps.hidden { display: none; }
+    .qh-step-indicator { display: flex; justify-content: space-between; align-items: center; }
+    .qh-step { display: flex; align-items: center; gap: 6px; opacity: 0.5; transition: opacity 0.2s, transform 0.2s; }
+    .qh-step.active { opacity: 1; transform: scale(1.05); }
+    .qh-step.completed { opacity: 0.8; }
+    .qh-step.completed .qh-step-num { background: hsl(var(--qh-brand)); color: hsl(var(--qh-bg-0)); }
+    .qh-step-num { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; background: hsl(var(--qh-border) / 0.5); border-radius: 50%; font-size: 10px; font-weight: 800; color: hsl(var(--qh-muted)); }
+    .qh-step.active .qh-step-num { background: hsl(var(--qh-violet)); color: white; animation: pulse 1.5s infinite; }
+    .qh-step-label { font-size: 10px; font-weight: 600; color: hsl(var(--qh-muted)); }
+    .qh-step.active .qh-step-label { color: hsl(var(--qh-text)); }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 hsl(var(--qh-violet) / 0.4); } 50% { box-shadow: 0 0 0 6px hsl(var(--qh-violet) / 0); } }
+
     /* Question Review Panel Styles */
     .qh-review-panel { background: hsl(var(--qh-card-2) / 0.65); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
     .qh-review-panel.hidden { display: none; }
@@ -2430,10 +2452,12 @@ function addPanelStyles() {
     .qh-review-summary { display: flex; gap: 10px; margin-bottom: 10px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border-radius: 8px; }
     .qh-review-stat { font-size: 10px; color: hsl(var(--qh-muted)); }
     .qh-review-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-    .qh-review-item { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; }
+    .qh-review-item { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: hsl(var(--qh-card) / 0.25); border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+    .qh-review-item:hover { background: hsl(var(--qh-card) / 0.4); }
     .qh-review-item.needs-review { border-left: 3px solid hsl(var(--qh-warn)); }
     .qh-review-item.unfamiliar { border-left: 3px solid hsl(var(--qh-danger)); }
     .qh-review-item.approved { border-left: 3px solid hsl(var(--qh-brand)); }
+    .qh-review-item.na-response { border-left: 3px solid hsl(var(--qh-muted)); background: hsl(var(--qh-card) / 0.15); }
     .qh-review-question { font-size: 10px; font-weight: 600; color: hsl(var(--qh-text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .qh-review-answer { display: flex; align-items: center; gap: 6px; }
     .qh-review-answer-text { font-size: 9px; color: hsl(var(--qh-muted)); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2446,8 +2470,9 @@ function addPanelStyles() {
     .qh-review-edit-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 320px; background: hsl(var(--qh-bg-0)); border: 1px solid hsl(var(--qh-border)); border-radius: 12px; padding: 16px; z-index: 2147483649; box-shadow: 0 25px 80px hsl(var(--qh-shadow) / 0.35); }
     .qh-review-edit-modal.hidden { display: none; }
     .qh-review-edit-question { font-size: 12px; font-weight: 600; color: hsl(var(--qh-text)); margin-bottom: 12px; }
-    .qh-review-edit-input { width: 100%; padding: 10px; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 8px; color: hsl(var(--qh-text)); font-size: 11px; margin-bottom: 12px; }
+    .qh-review-edit-input { width: 100%; padding: 10px; background: hsl(var(--qh-card-2) / 0.55); border: 1px solid hsl(var(--qh-border) / 0.85); border-radius: 8px; color: hsl(var(--qh-text)); font-size: 11px; margin-bottom: 12px; min-height: 80px; resize: vertical; }
     .qh-review-edit-input:focus { outline: none; border-color: hsl(var(--qh-brand) / 0.5); }
+    .qh-review-edit-hint { font-size: 9px; color: hsl(var(--qh-muted-2)); margin-bottom: 12px; padding: 8px; background: hsl(var(--qh-info) / 0.1); border-radius: 6px; }
     .qh-review-edit-actions { display: flex; gap: 8px; }
     .qh-review-edit-actions .qh-btn { flex: 1; }
     .qh-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: hsl(0 0% 0% / 0.5); z-index: 2147483648; }
@@ -2497,18 +2522,29 @@ function setupPanelEvents(panel) {
   panel.querySelector('#qh-skip-btn')?.addEventListener('click', () => { automationState.shouldSkip = true; showToast('Skipping...', 'info'); });
   panel.querySelector('#qh-quit-btn')?.addEventListener('click', () => { automationState.shouldQuit = true; showToast('Stopped', 'error'); });
   
-  // Smart Apply - Full automation
+  // Smart Apply - Enhanced workflow: Review → Quick Fill → Next Page
   panel.querySelector('#qh-smart-apply').addEventListener('click', async () => {
     const btn = panel.querySelector('#qh-smart-apply');
     const statusEl = panel.querySelector('#qh-status');
+    const stepsContainer = panel.querySelector('#qh-smart-apply-steps');
+    const reviewPanel = panel.querySelector('#qh-review-panel');
     
     btn.disabled = true;
     automationState.isRunning = true;
+    stepsContainer.classList.remove('hidden');
+    
+    const setStep = (stepNum) => {
+      stepsContainer.querySelectorAll('.qh-step').forEach((step, i) => {
+        step.classList.remove('active', 'completed');
+        if (i + 1 < stepNum) step.classList.add('completed');
+        if (i + 1 === stepNum) step.classList.add('active');
+      });
+    };
     
     try {
       const platform = detectPlatform();
       
-      // Step 0: Handle Workday pre-apply flow (Apply → Apply Manually)
+      // Handle Workday pre-apply flow if needed
       if (platform.name === 'workday' && platform.config?.preApplyFlow) {
         updateStatus(statusEl, '🚀', 'Starting Workday application...');
         const preApplyResult = await handleWorkdayPreApplyFlow();
@@ -2518,75 +2554,294 @@ function setupPanelEvents(panel) {
         }
         
         if (!preApplyResult.skipped) {
-          // Wait for form to fully load after navigation
           await new Promise(r => setTimeout(r, 2500));
         }
       }
       
-      // Step 1: Tailor resume with AI
-      updateStatus(statusEl, '🤖', 'Tailoring resume with AI...');
-      const jobData = JSON.parse(panel.dataset.job || '{}');
+      // ===== STEP 1: REVIEW QUESTIONS =====
+      setStep(1);
+      updateStatus(statusEl, '🔍', 'Step 1: Reviewing questions...');
       
-      const tailoredData = await chrome.runtime.sendMessage({ action: 'getTailoredApplication', job: jobData });
-      if (tailoredData.error) throw new Error(tailoredData.error);
+      const questions = detectAllQuestions();
       
-      await waitWithControls(getDelayForSpeed());
-      
-      // Step 2: Generate PDFs
-      updateStatus(statusEl, '📄', 'Generating PDFs...');
-      const profileData = await chrome.storage.local.get(['userProfile']);
-      const profile = profileData.userProfile || {};
-      
-      const resumePdfResult = await generatePDF('resume', profile, jobData, tailoredData);
-      const coverPdfResult = await generatePDF('cover_letter', profile, jobData, tailoredData);
-      
-      if (resumePdfResult?.success) {
-        panel.dataset.resumePdf = resumePdfResult.pdf;
-        panel.querySelector('#qh-resume-pdf-name').textContent = resumePdfResult.fileName;
-        panel.querySelector('#qh-resume-pdf-size').textContent = formatFileSize(resumePdfResult.size);
-        panel.querySelector('#qh-resume-pdf-card').classList.add('uploaded');
-      }
-      if (coverPdfResult?.success) {
-        panel.dataset.coverPdf = coverPdfResult.pdf;
-        panel.querySelector('#qh-cover-pdf-name').textContent = coverPdfResult.fileName;
-        panel.querySelector('#qh-cover-pdf-size').textContent = formatFileSize(coverPdfResult.size);
-        panel.querySelector('#qh-cover-pdf-card').classList.add('uploaded');
-      }
-      
-      tailoredData.resumePdf = resumePdfResult;
-      tailoredData.coverPdf = coverPdfResult;
-      
-      await waitWithControls(getDelayForSpeed());
-      
-      // Step 3: Fill form
-      updateStatus(statusEl, '📝', 'Auto-filling form...');
-      const atsData = await chrome.storage.local.get(['atsCredentials']);
-      const result = await autofillForm(tailoredData, atsData.atsCredentials);
-      
-      await waitWithControls(getDelayForSpeed());
-      
-      // Step 4: Check completion and navigate
-      if (result.pageComplete) {
-        updateStatus(statusEl, '✅', 'Page complete! Moving to next...');
-        
-        if (isFinalPage()) {
-          updateStatus(statusEl, '🎉', 'Application ready to submit!');
-          showToast('🎉 Application complete! Ready to submit.', 'success');
-        } else {
-          await waitWithControls(getDelayForSpeed());
-          await navigateToNextPage();
+      if (questions.length === 0) {
+        updateStatus(statusEl, '⚠️', 'No questions found - trying to navigate...');
+        // Try to go to next page if no questions
+        const navigated = await navigateToNextPage();
+        if (navigated) {
+          showToast('Moved to next page', 'info');
         }
-      } else {
-        updateStatus(statusEl, '⚠️', `${result.message} - Review remaining fields`);
+        return;
       }
       
-      // Show results
-      panel.querySelector('#qh-results').classList.remove('hidden');
-      panel.querySelector('#qh-resume').value = tailoredData.tailoredResume || '';
-      panel.querySelector('#qh-cover').value = tailoredData.tailoredCoverLetter || '';
-      panel.querySelector('#qh-score').textContent = `${tailoredData.matchScore || 0}%`;
+      // Get user profile and job data
+      const profileData = await chrome.storage.local.get(['userProfile', 'accessToken']);
+      const profile = profileData.userProfile || {};
+      const jobData = extractJobDetails();
+      
+      // Prepare questions for AI analysis
+      const questionsForAI = questions.map((q, i) => ({
+        id: q.id || `q_${i}`,
+        label: q.label,
+        type: q.type,
+        options: q.type === 'select' ? Array.from(q.element?.options || []).map(o => o.text).filter(t => t) : undefined,
+        required: q.element?.required || q.element?.getAttribute('aria-required') === 'true' || false
+      }));
+      
+      // Call AI to analyze and answer questions
+      let aiAnswers = {};
+      let overallAtsScore = 85;
+      let knockoutRisks = [];
+      
+      if (profileData.accessToken) {
+        try {
+          updateStatus(statusEl, '🤖', `Analyzing ${questions.length} questions with AI...`);
+          
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${profileData.accessToken}`
+            },
+            body: JSON.stringify({
+              questions: questionsForAI,
+              jobTitle: jobData.title,
+              company: jobData.company,
+              jobDescription: jobData.description,
+              userProfile: {
+                firstName: profile.first_name,
+                lastName: profile.last_name,
+                email: profile.email,
+                phone: profile.phone,
+                skills: profile.skills || [],
+                workExperience: profile.work_experience || [],
+                education: profile.education || [],
+                certifications: profile.certifications || [],
+                city: profile.city,
+                state: profile.state,
+                country: profile.country,
+                citizenship: profile.citizenship,
+                willingToRelocate: profile.willing_to_relocate,
+                visaRequired: profile.visa_required,
+                veteranStatus: profile.veteran_status,
+                disability: profile.disability,
+                raceEthnicity: profile.race_ethnicity,
+                drivingLicense: profile.driving_license,
+                securityClearance: profile.security_clearance,
+                expectedSalary: profile.expected_salary,
+                currentSalary: profile.current_salary,
+                noticePeriod: profile.notice_period,
+                totalExperience: profile.total_experience,
+                linkedin: profile.linkedin,
+                github: profile.github,
+                portfolio: profile.portfolio,
+                highestEducation: profile.highest_education,
+                languages: profile.languages || [],
+                achievements: profile.achievements || []
+              }
+            })
+          });
+          
+          if (response.ok) {
+            const aiResult = await response.json();
+            overallAtsScore = aiResult.overallAtsScore || 85;
+            knockoutRisks = aiResult.knockoutRisks || [];
+            
+            if (aiResult.answers) {
+              aiResult.answers.forEach(a => {
+                aiAnswers[a.id] = {
+                  answer: a.answer,
+                  selectValue: a.selectValue,
+                  confidence: a.confidence,
+                  atsScore: a.atsScore,
+                  needsReview: a.needsReview,
+                  reasoning: a.reasoning
+                };
+              });
+            }
+            console.log('QuantumHire AI: AI answered', Object.keys(aiAnswers).length, 'questions');
+          }
+        } catch (aiError) {
+          console.error('AI analysis error:', aiError);
+        }
+      }
+      
+      // Build review list UI
+      const reviewList = panel.querySelector('#qh-review-list');
+      reviewList.innerHTML = '';
+      
+      let autoFilledCount = 0;
+      let needsReviewCount = 0;
+      let unfamiliarCount = 0;
+      let naCount = 0;
+      
+      const reviewedAnswers = {};
+      
+      questions.forEach((q, i) => {
+        const qId = q.id || `q_${i}`;
+        const aiAnswer = aiAnswers[qId];
+        const isOptional = /optional|if applicable|not applicable|n\/a|prefer not/i.test(q.label);
+        const isRequired = q.element?.required || q.element?.getAttribute('aria-required') === 'true';
+        
+        let answer = '';
+        let atsScore = 0;
+        let answerClass = 'unfamiliar';
+        let reasoning = '';
+        
+        // Check knockout bank first
+        const knockoutMatch = matchKnockoutQuestion(q.label, profile);
+        
+        if (knockoutMatch) {
+          answer = knockoutMatch.answer;
+          atsScore = 95;
+          reasoning = 'Standard ATS knockout question';
+          answerClass = 'approved';
+          autoFilledCount++;
+        } else if (aiAnswer && aiAnswer.answer) {
+          answer = aiAnswer.answer;
+          atsScore = aiAnswer.atsScore || 75;
+          reasoning = aiAnswer.reasoning || 'AI-generated response';
+          
+          if (aiAnswer.needsReview || aiAnswer.confidence === 'low') {
+            answerClass = 'needs-review';
+            needsReviewCount++;
+          } else {
+            answerClass = 'approved';
+            autoFilledCount++;
+          }
+        } else if (isOptional && !isRequired) {
+          // For optional questions without answers, use N/A
+          answer = 'N/A';
+          atsScore = 100;
+          reasoning = 'Optional question - marked as not applicable';
+          answerClass = 'na-response';
+          naCount++;
+        } else {
+          unfamiliarCount++;
+          answer = '';
+          reasoning = 'This question requires manual input';
+        }
+        
+        reviewedAnswers[qId] = {
+          answer: answer,
+          selectValue: knockoutMatch?.selectValue || aiAnswer?.selectValue || answer.toLowerCase(),
+          atsScore: atsScore,
+          needsReview: answerClass === 'needs-review' || answerClass === 'unfamiliar'
+        };
+        
+        const itemHtml = `
+          <div class="qh-review-item ${answerClass}" data-question-id="${qId}" title="Click to edit">
+            <div class="qh-review-question">${q.label.substring(0, 50)}${q.label.length > 50 ? '...' : ''}</div>
+            <div class="qh-review-answer">
+              <span class="qh-review-answer-text">${answer || '(needs input)'}</span>
+              <span class="qh-review-score">ATS: ${atsScore}%</span>
+              <button class="qh-review-answer-edit" data-question-id="${qId}">✏️</button>
+            </div>
+            <div class="qh-review-reasoning">${reasoning}</div>
+          </div>
+        `;
+        reviewList.insertAdjacentHTML('beforeend', itemHtml);
+      });
+      
+      // Update summary stats
+      panel.querySelector('#qh-auto-filled').textContent = autoFilledCount;
+      panel.querySelector('#qh-needs-review').textContent = needsReviewCount;
+      panel.querySelector('#qh-unfamiliar').textContent = unfamiliarCount;
+      panel.querySelector('#qh-ats-score-badge').textContent = `ATS: ${overallAtsScore}%`;
+      
+      // Store answers for application
+      panel.dataset.reviewedAnswers = JSON.stringify(reviewedAnswers);
+      
+      // Show knockout risks warning
+      if (knockoutRisks.length > 0) {
+        showToast(`⚠️ Knockout risks: ${knockoutRisks.join(', ')}`, 'warning');
+      }
+      
+      // Show review panel
+      reviewPanel.classList.remove('hidden');
+      
+      // Add edit handlers
+      reviewList.querySelectorAll('.qh-review-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.classList.contains('qh-review-answer-edit')) return;
+          const qId = item.dataset.questionId;
+          const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
+          const currentAnswer = reviewedAnswers[qId]?.answer || '';
+          showEditModal(panel, qId, question?.label || 'Edit Answer', currentAnswer, question);
+        });
+      });
+      
+      reviewList.querySelectorAll('.qh-review-answer-edit').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const qId = btn.dataset.questionId;
+          const question = questions.find((q, i) => (q.id || `q_${i}`) === qId);
+          const currentAnswer = reviewedAnswers[qId]?.answer || '';
+          showEditModal(panel, qId, question?.label || 'Edit Answer', currentAnswer, question);
+        });
+      });
+      
+      await waitWithControls(getDelayForSpeed());
+      
+      // Check if there are unfamiliar questions that need review
+      if (unfamiliarCount > 0) {
+        updateStatus(statusEl, '⚠️', `${unfamiliarCount} questions need your input - click to edit`);
+        showToast(`${unfamiliarCount} unfamiliar questions found - please review`, 'warning');
+        // Don't auto-proceed, let user review
+        setStep(1);
+        btn.disabled = false;
+        automationState.isRunning = false;
+        return;
+      }
+      
+      // ===== STEP 2: QUICK FILL =====
+      setStep(2);
+      updateStatus(statusEl, '📝', 'Step 2: Auto-filling form...');
+      
+      await waitWithControls(getDelayForSpeed());
+      
+      // Apply reviewed answers
+      const finalAnswers = JSON.parse(panel.dataset.reviewedAnswers || '{}');
+      const atsData = await chrome.storage.local.get(['atsCredentials']);
+      
+      // Fill profile fields first
+      await autofillForm(null, atsData.atsCredentials);
+      
+      // Fill questions with AI answers
+      const fillResult = await fillAllQuestions(profile, jobData, finalAnswers);
+      
+      updateStatus(statusEl, '✅', `Filled ${fillResult.filledCount}/${fillResult.totalQuestions} fields`);
+      
+      // Hide review panel after filling
+      reviewPanel.classList.add('hidden');
+      
+      await waitWithControls(getDelayForSpeed());
+      
+      // ===== STEP 3: NEXT PAGE =====
+      setStep(3);
+      
+      if (isFinalPage()) {
+        updateStatus(statusEl, '🎉', 'Application ready to submit!');
+        showToast('🎉 Application complete! Ready to submit.', 'success');
+      } else {
+        updateStatus(statusEl, '➡️', 'Step 3: Moving to next page...');
+        await waitWithControls(getDelayForSpeed());
+        
+        const navigated = await navigateToNextPage();
+        if (navigated) {
+          showToast('✅ Page complete - moved to next section', 'success');
+        } else {
+          updateStatus(statusEl, '⚠️', 'Could not find next button');
+          showToast('Please click Next manually', 'warning');
+        }
+      }
+      
+      // Hide steps indicator
+      stepsContainer.classList.add('hidden');
       
     } catch (error) {
+      stepsContainer.classList.add('hidden');
       if (error.message === 'QUIT') {
         updateStatus(statusEl, '⏹️', 'Stopped');
       } else if (error.message === 'SKIP') {
@@ -2909,8 +3164,8 @@ function setupPanelEvents(panel) {
   });
 }
 
-// Show edit modal for reviewing/editing AI answers
-function showEditModal(panel, questionId, questionLabel, currentAnswer) {
+// Show edit modal for reviewing/editing AI answers with guidance for unfamiliar questions
+function showEditModal(panel, questionId, questionLabel, currentAnswer, questionData = null) {
   // Remove existing modal
   document.querySelector('.qh-overlay')?.remove();
   document.querySelector('.qh-review-edit-modal')?.remove();
@@ -2918,12 +3173,39 @@ function showEditModal(panel, questionId, questionLabel, currentAnswer) {
   const overlay = document.createElement('div');
   overlay.className = 'qh-overlay';
   
+  // Determine if this is an unfamiliar question
+  const isUnfamiliar = !currentAnswer || currentAnswer === 'N/A' || currentAnswer === '';
+  const isOptional = /optional|if applicable|not applicable|prefer not/i.test(questionLabel);
+  
+  // Build hint based on question type
+  let hint = '';
+  if (isUnfamiliar) {
+    hint = `
+      <div class="qh-review-edit-hint">
+        💡 <strong>Tips for unfamiliar questions:</strong><br/>
+        • Provide a relevant response based on your experience<br/>
+        • For questions that don't apply, enter "N/A"<br/>
+        • Keep answers ATS-friendly and concise<br/>
+        ${isOptional ? '• This appears to be optional - "N/A" is acceptable' : ''}
+      </div>
+    `;
+  } else {
+    hint = `
+      <div class="qh-review-edit-hint">
+        ✏️ Review and edit the AI-generated answer to add your personal touch.<br/>
+        Ensure accuracy and alignment with your actual experience.
+      </div>
+    `;
+  }
+  
   const modal = document.createElement('div');
   modal.className = 'qh-review-edit-modal';
   modal.innerHTML = `
     <div class="qh-review-edit-question">${questionLabel}</div>
-    <textarea class="qh-review-edit-input" id="qh-edit-answer">${currentAnswer}</textarea>
+    ${hint}
+    <textarea class="qh-review-edit-input" id="qh-edit-answer" placeholder="${isUnfamiliar ? 'Enter your response or type N/A if not applicable...' : 'Edit your answer...'}">${currentAnswer || ''}</textarea>
     <div class="qh-review-edit-actions">
+      ${isOptional ? '<button class="qh-btn secondary" id="qh-edit-na">Mark N/A</button>' : ''}
       <button class="qh-btn secondary" id="qh-edit-cancel">Cancel</button>
       <button class="qh-btn primary" id="qh-edit-save">Save</button>
     </div>
@@ -2931,6 +3213,9 @@ function showEditModal(panel, questionId, questionLabel, currentAnswer) {
   
   document.body.appendChild(overlay);
   document.body.appendChild(modal);
+  
+  // Focus on the textarea
+  modal.querySelector('#qh-edit-answer').focus();
   
   modal.querySelector('#qh-edit-cancel').addEventListener('click', () => {
     overlay.remove();
@@ -2942,16 +3227,29 @@ function showEditModal(panel, questionId, questionLabel, currentAnswer) {
     modal.remove();
   });
   
+  // Mark as N/A button
+  modal.querySelector('#qh-edit-na')?.addEventListener('click', () => {
+    modal.querySelector('#qh-edit-answer').value = 'N/A';
+  });
+  
   modal.querySelector('#qh-edit-save').addEventListener('click', () => {
-    const newAnswer = modal.querySelector('#qh-edit-answer').value;
+    const newAnswer = modal.querySelector('#qh-edit-answer').value.trim();
+    
+    if (!newAnswer) {
+      showToast('Please enter an answer or mark as N/A', 'warning');
+      return;
+    }
+    
     const reviewedAnswers = JSON.parse(panel.dataset.reviewedAnswers || '{}');
+    const isNA = newAnswer.toLowerCase() === 'n/a' || newAnswer.toLowerCase() === 'na';
+    
     reviewedAnswers[questionId] = { 
       answer: newAnswer, 
       selectValue: newAnswer.toLowerCase(),
       confidence: 'high',
-      atsScore: 90,
+      atsScore: isNA ? 100 : 90,
       needsReview: false,
-      reasoning: 'User-edited response'
+      reasoning: isNA ? 'User marked as not applicable' : 'User-edited response'
     };
     panel.dataset.reviewedAnswers = JSON.stringify(reviewedAnswers);
     
@@ -2959,13 +3257,21 @@ function showEditModal(panel, questionId, questionLabel, currentAnswer) {
     const item = panel.querySelector(`[data-question-id="${questionId}"]`);
     if (item) {
       item.querySelector('.qh-review-answer-text').textContent = newAnswer;
+      item.querySelector('.qh-review-score').textContent = `ATS: ${isNA ? 100 : 90}%`;
       item.classList.remove('needs-review', 'unfamiliar');
-      item.classList.add('approved');
+      item.classList.add(isNA ? 'na-response' : 'approved');
+    }
+    
+    // Update unfamiliar count
+    const unfamiliarEl = panel.querySelector('#qh-unfamiliar');
+    const currentUnfamiliar = parseInt(unfamiliarEl?.textContent || '0');
+    if (currentUnfamiliar > 0) {
+      unfamiliarEl.textContent = currentUnfamiliar - 1;
     }
     
     overlay.remove();
     modal.remove();
-    showToast('Answer updated', 'success');
+    showToast('Answer saved', 'success');
   });
 }
 
