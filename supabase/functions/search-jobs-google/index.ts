@@ -6,20 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Input validation limits
-const MAX_KEYWORDS_LENGTH = 2000;
-const MAX_LOCATION_LENGTH = 200;
+const MAX_KEYWORDS_LENGTH = 3000;
+const MAX_LOCATION_LENGTH = 500;
 
-// Validate string input
-function validateString(value: any, maxLength: number, fieldName: string): string {
-  if (typeof value !== 'string') {
-    return '';
-  }
+function validateString(value: any, maxLength: number): string {
+  if (typeof value !== 'string') return '';
   const trimmed = value.trim();
-  if (trimmed.length > maxLength) {
-    return trimmed.substring(0, maxLength);
-  }
-  return trimmed;
+  return trimmed.length > maxLength ? trimmed.substring(0, maxLength) : trimmed;
 }
 
 interface JobListing {
@@ -35,71 +28,143 @@ interface JobListing {
   match_score: number;
 }
 
-// All ATS platforms to search - Direct company URLs via LinkedIn/Indeed boolean
-const ATS_SITES = [
-  'boards.greenhouse.io',
-  'apply.workable.com',
-  'jobs.smartrecruiters.com',
-  'myworkdayjobs.com',
-  'icims.com',
-  'taleo.net',
-  'bamboohr.com',
-  'teamtailor.com',
+// ATS Platform Configurations
+const ATS_PLATFORMS = {
+  greenhouse: {
+    name: 'Greenhouse',
+    sitePatterns: ['site:boards.greenhouse.io', 'site:*.greenhouse.io/jobs'],
+    urlPattern: /greenhouse\.io/,
+    jobIdPattern: /\/jobs\/\d+/,
+  },
+  workday: {
+    name: 'Workday',
+    sitePatterns: ['site:*.myworkdayjobs.com', 'site:*.wd5.myworkdayjobs.com'],
+    urlPattern: /myworkdayjobs\.com/,
+    jobIdPattern: /\/job\//,
+  },
+  workable: {
+    name: 'Workable',
+    sitePatterns: ['site:apply.workable.com', 'site:*.workable.com/j/'],
+    urlPattern: /workable\.com/,
+    jobIdPattern: /\/j\/[a-zA-Z0-9]+/,
+  },
+  successfactors: {
+    name: 'SAP SuccessFactors',
+    sitePatterns: ['site:*.successfactors.com', 'site:jobs.sap.com'],
+    urlPattern: /successfactors\.com|jobs\.sap\.com/,
+    jobIdPattern: /\/job\//,
+  },
+  icims: {
+    name: 'iCIMS',
+    sitePatterns: ['site:*.icims.com', 'site:careers-*.icims.com'],
+    urlPattern: /icims\.com/,
+    jobIdPattern: /\/jobs\/\d+/,
+  },
+  linkedin: {
+    name: 'LinkedIn',
+    sitePatterns: ['site:linkedin.com/jobs/view'],
+    urlPattern: /linkedin\.com\/jobs\/view/,
+    jobIdPattern: /\/view\/\d+/,
+  },
+  taleo: {
+    name: 'Oracle Taleo',
+    sitePatterns: ['site:*.taleo.net', 'site:*.oraclecloud.com/hcmUI/CandidateExperience'],
+    urlPattern: /taleo\.net|oraclecloud\.com.*CandidateExperience/,
+    jobIdPattern: /requisition|job/i,
+  },
+  bamboohr: {
+    name: 'BambooHR',
+    sitePatterns: ['site:*.bamboohr.com/careers', 'site:*.bamboohr.com/jobs'],
+    urlPattern: /bamboohr\.com/,
+    jobIdPattern: /\/jobs\/view/,
+  },
+  teamtailor: {
+    name: 'Teamtailor',
+    sitePatterns: ['site:*.teamtailor.com/jobs', 'site:career.*.com'],
+    urlPattern: /teamtailor\.com/,
+    jobIdPattern: /\/jobs\//,
+  },
+  bullhorn: {
+    name: 'Bullhorn',
+    sitePatterns: ['site:*.bullhornstaffing.com', 'site:jobs.*.bullhorn'],
+    urlPattern: /bullhorn/i,
+    jobIdPattern: /\/job\//,
+  },
+  lever: {
+    name: 'Lever',
+    sitePatterns: ['site:jobs.lever.co', 'site:*.lever.co'],
+    urlPattern: /lever\.co/,
+    jobIdPattern: /\/[a-f0-9-]+$/,
+  },
+  smartrecruiters: {
+    name: 'SmartRecruiters',
+    sitePatterns: ['site:jobs.smartrecruiters.com', 'site:*.smartrecruiters.com'],
+    urlPattern: /smartrecruiters\.com/,
+    jobIdPattern: /\/\d+/,
+  },
+  ashby: {
+    name: 'Ashby',
+    sitePatterns: ['site:jobs.ashbyhq.com'],
+    urlPattern: /ashbyhq\.com/,
+    jobIdPattern: /\/[a-f0-9-]+/,
+  },
+};
+
+// Career page patterns for direct company sites
+const CAREER_PAGE_PATTERNS = [
+  'site:*/careers/*',
+  'site:*/jobs/*',
+  'site:*/employment/*',
+  'site:*/opportunities/*',
+  'site:*/openings/*',
+  'site:*/join-us/*',
+  'site:*/work-with-us/*',
+  'site:*/join-our-team/*',
+  'site:*/vacancies/*',
 ];
 
-// Tier-1 companies
+// Tier-1 companies for scoring boost
 const TIER1_COMPANIES = [
   'google', 'meta', 'apple', 'amazon', 'microsoft', 'netflix', 'stripe', 'airbnb',
   'uber', 'lyft', 'dropbox', 'salesforce', 'adobe', 'linkedin', 'twitter', 'snap',
   'shopify', 'square', 'paypal', 'coinbase', 'robinhood', 'plaid', 'figma', 'notion',
   'slack', 'zoom', 'datadog', 'snowflake', 'databricks', 'mongodb', 'openai', 'anthropic',
   'crowdstrike', 'zillow', 'doordash', 'instacart', 'pinterest', 'reddit', 'discord',
+  'spotify', 'nvidia', 'oracle', 'cisco', 'ibm', 'intel', 'amd', 'qualcomm', 'tesla',
 ];
 
-// Helper function to verify JWT and extract user ID
 async function verifyAndGetUserId(req: Request, supabase: any): Promise<string> {
   const authHeader = req.headers.get('authorization');
-  if (!authHeader) {
-    throw new Error('Missing authorization header');
-  }
+  if (!authHeader) throw new Error('Missing authorization header');
   
   const token = authHeader.replace('Bearer ', '');
   const { data: { user }, error } = await supabase.auth.getUser(token);
   
-  if (error || !user) {
-    throw new Error('Unauthorized: Invalid or expired token');
-  }
-  
+  if (error || !user) throw new Error('Unauthorized: Invalid or expired token');
   return user.id;
 }
 
-// Extract platform from URL
 function getPlatformFromUrl(url: string): string {
-  if (url.includes('greenhouse.io')) return 'Greenhouse';
-  if (url.includes('workable.com')) return 'Workable';
-  if (url.includes('smartrecruiters.com')) return 'SmartRecruiters';
-  if (url.includes('myworkdayjobs.com')) return 'Workday';
-  if (url.includes('icims.com')) return 'iCIMS';
-  if (url.includes('taleo.net')) return 'Taleo';
-  if (url.includes('bamboohr.com')) return 'BambooHR';
-  if (url.includes('teamtailor.com')) return 'Teamtailor';
-  // Direct company career pages found via LinkedIn/Indeed
-  if (url.includes('/careers/') || url.includes('/jobs/') || url.includes('/job/')) return 'Direct';
+  for (const [key, platform] of Object.entries(ATS_PLATFORMS)) {
+    if (platform.urlPattern.test(url)) return platform.name;
+  }
+  if (url.match(/\/(?:careers|jobs|employment|opportunities)\//)) return 'Direct';
   return 'Other';
 }
 
-// Extract company from URL
 function extractCompanyFromUrl(url: string): string {
   try {
     const patterns = [
-      /greenhouse\.io\/([^\/]+)/,
-      /workable\.com\/([^\/]+)/,
-      /smartrecruiters\.com\/([^\/]+)/,
+      /boards\.greenhouse\.io\/([^\/]+)/,
+      /([^\.]+)\.workable\.com/,
       /([^\.]+)\.wd\d+\.myworkdayjobs/,
       /([^\.]+)\.teamtailor\.com/,
-      // Extract company from direct career pages
-      /([^\.]+)\.com\/(?:careers|jobs)/,
-      /https?:\/\/(?:careers|jobs)\.([^\.]+)\./,
+      /jobs\.lever\.co\/([^\/]+)/,
+      /([^\.]+)\.bamboohr\.com/,
+      /jobs\.smartrecruiters\.com\/([^\/]+)/,
+      /jobs\.ashbyhq\.com\/([^\/]+)/,
+      /https?:\/\/(?:careers|jobs)\.([^\.\/]+)\./,
+      /https?:\/\/([^\.]+)\.com\/(?:careers|jobs)/,
     ];
     
     for (const pattern of patterns) {
@@ -117,29 +182,24 @@ function extractCompanyFromUrl(url: string): string {
   return 'Unknown Company';
 }
 
-// Validate direct job URL - accepts company career pages
 function isValidJobUrl(url: string): boolean {
   if (!url) return false;
-  // Reject LinkedIn and Indeed listing pages (we want direct company URLs)
-  if (url.includes('linkedin.com/jobs/view')) return false;
-  if (url.includes('indeed.com/viewjob')) return false;
-  if (url.includes('indeed.com/rc/clk')) return false;
-  if (url.match(/\/(careers|jobs)\/?$/)) return false;
   
-  if (url.includes('greenhouse.io') && url.match(/\/jobs\/\d+/)) return true;
-  if (url.includes('workable.com') && url.includes('/j/')) return true;
-  if (url.includes('smartrecruiters.com') && url.match(/\/\d+/)) return true;
-  if (url.includes('myworkdayjobs.com') && url.includes('/job/')) return true;
-  if (url.includes('icims.com') && url.match(/\/jobs\/\d+/)) return true;
-  if (url.includes('teamtailor.com') && url.includes('/jobs/')) return true;
+  // Check if it matches any ATS pattern
+  for (const platform of Object.values(ATS_PLATFORMS)) {
+    if (platform.urlPattern.test(url) && platform.jobIdPattern.test(url)) {
+      return true;
+    }
+  }
   
-  // Accept direct company career pages with job IDs or specific job paths
-  if (url.match(/\/(?:careers|jobs|job|positions?)\/[a-zA-Z0-9-]+/)) return true;
+  // Check for direct career pages with job identifiers
+  if (url.match(/\/(?:careers|jobs|employment|opportunities|openings)\/[a-zA-Z0-9-]+/)) {
+    return true;
+  }
   
   return false;
 }
 
-// Parse search result
 function parseSearchResult(result: any, searchKeyword: string): JobListing | null {
   try {
     const url = result.url || result.link || '';
@@ -180,10 +240,13 @@ function parseSearchResult(result: any, searchKeyword: string): JobListing | nul
 
 function extractLocation(text: string): string | null {
   const patterns = [
-    /(fully remote|100% remote|remote first)/i,
-    /(remote|hybrid|on-site)/i,
-    /(San Francisco|New York|Seattle|Austin|Boston|Denver|Chicago|London|Dublin|Berlin|Amsterdam)/i,
-    /(United States|United Kingdom|Ireland|Germany|Europe|EMEA)/i,
+    /(fully remote|100% remote|remote first|remote-first)/i,
+    /(remote|hybrid|on-site|onsite)/i,
+    /(San Francisco|New York|Seattle|Austin|Boston|Denver|Chicago|Los Angeles|Atlanta)/i,
+    /(London|Dublin|Berlin|Amsterdam|Paris|Munich|Zurich|Stockholm|Madrid|Barcelona)/i,
+    /(Singapore|Tokyo|Sydney|Melbourne|Toronto|Vancouver|Montreal)/i,
+    /(United States|United Kingdom|Ireland|Germany|Europe|EMEA|APAC)/i,
+    /(UAE|Dubai|Abu Dhabi|Qatar|Saudi Arabia)/i,
   ];
   
   for (const pattern of patterns) {
@@ -195,9 +258,10 @@ function extractLocation(text: string): string | null {
 
 function extractSalary(text: string): string | null {
   const patterns = [
-    /\$\s*(\d{2,3}(?:,\d{3})*(?:\s*-\s*\$?\s*\d{2,3}(?:,\d{3})*)?)/i,
-    /(\d{2,3}k\s*-\s*\d{2,3}k)/i,
-    /(\$\d+K?\s*[-–]\s*\$?\d+K?)/i,
+    /\$\s*(\d{2,3}(?:,\d{3})*(?:\s*[-–]\s*\$?\s*\d{2,3}(?:,\d{3})*)?)/i,
+    /(£\s*\d{2,3}(?:,\d{3})*(?:\s*[-–]\s*£?\s*\d{2,3}(?:,\d{3})*)?)/i,
+    /(€\s*\d{2,3}(?:,\d{3})*(?:\s*[-–]\s*€?\s*\d{2,3}(?:,\d{3})*)?)/i,
+    /(\d{2,3}k\s*[-–]\s*\d{2,3}k)/i,
   ];
   
   for (const pattern of patterns) {
@@ -212,6 +276,7 @@ function extractRequirements(content: string): string[] {
     'Python', 'Java', 'TypeScript', 'JavaScript', 'React', 'Node.js', 'AWS', 'GCP', 'Azure',
     'Kubernetes', 'Docker', 'PostgreSQL', 'MongoDB', 'Machine Learning', 'TensorFlow', 'PyTorch',
     'SQL', 'GraphQL', 'REST API', 'Microservices', 'CI/CD', 'Terraform', 'Spark', 'Snowflake',
+    'Kafka', 'Redis', 'Elasticsearch', 'Go', 'Rust', 'C++', 'Scala', 'Ruby', 'PHP',
   ];
   
   return techKeywords
@@ -219,9 +284,59 @@ function extractRequirements(content: string): string[] {
     .slice(0, 8);
 }
 
-// Fast parallel search using Firecrawl
-async function searchWithFirecrawl(query: string, apiKey: string, limit = 100): Promise<any[]> {
+// Build boolean search queries for all ATS platforms
+function buildBooleanQueries(keywords: string[], locations: string[]): string[] {
+  const queries: string[] = [];
+  
+  // Create location OR string
+  const locationOr = locations.length > 0 
+    ? locations.map(l => `"${l}"`).join(' OR ')
+    : '"Remote"';
+  
+  // Batch keywords (3 at a time for better results)
+  const keywordBatches: string[][] = [];
+  for (let i = 0; i < keywords.length; i += 3) {
+    keywordBatches.push(keywords.slice(i, i + 3));
+  }
+  
+  // Exclusions for cleaner results
+  const exclusions = '-intern -internship -graduate -student -trainee -apprentice';
+  
+  for (const batch of keywordBatches.slice(0, 8)) { // Limit batches
+    const keywordOr = batch.map(k => `"${k}"`).join(' OR ');
+    
+    // ATS platform queries
+    for (const [key, platform] of Object.entries(ATS_PLATFORMS)) {
+      const sitePattern = platform.sitePatterns[0];
+      queries.push(`(${keywordOr}) (${locationOr}) ${sitePattern} ${exclusions}`);
+    }
+    
+    // Career page pattern queries
+    const careerSites = CAREER_PAGE_PATTERNS.slice(0, 4).join(' OR ');
+    queries.push(`(${keywordOr}) (${locationOr}) (${careerSites}) ${exclusions}`);
+  }
+  
+  // Also add broader queries with multiple ATS sites
+  for (const batch of keywordBatches.slice(0, 3)) {
+    const keywordOr = batch.map(k => `"${k}"`).join(' OR ');
+    const topAtsSites = [
+      'site:boards.greenhouse.io',
+      'site:*.myworkdayjobs.com',
+      'site:apply.workable.com',
+      'site:jobs.lever.co',
+      'site:jobs.smartrecruiters.com',
+    ].join(' OR ');
+    
+    queries.push(`(${keywordOr}) (${locationOr}) (${topAtsSites}) ${exclusions}`);
+  }
+  
+  return queries;
+}
+
+async function searchWithFirecrawl(query: string, apiKey: string, limit = 80): Promise<any[]> {
   try {
+    console.log(`Searching: ${query.slice(0, 100)}...`);
+    
     const response = await fetch('https://api.firecrawl.dev/v1/search', {
       method: 'POST',
       headers: {
@@ -231,7 +346,11 @@ async function searchWithFirecrawl(query: string, apiKey: string, limit = 100): 
       body: JSON.stringify({ query, limit }),
     });
     
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.error(`Firecrawl error: ${response.status}`);
+      return [];
+    }
+    
     const data = await response.json();
     return data.data || [];
   } catch (error) {
@@ -240,14 +359,12 @@ async function searchWithFirecrawl(query: string, apiKey: string, limit = 100): 
   }
 }
 
-// Create deduplication key
 function getDedupeKey(job: JobListing): string {
   const normalizedTitle = job.title.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30);
   const normalizedCompany = job.company.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
   return `${normalizedTitle}-${normalizedCompany}`;
 }
 
-// Check if company is tier-1
 function isTier1Company(company: string): boolean {
   const normalized = company.toLowerCase().replace(/[^a-z0-9]/g, '');
   return TIER1_COMPANIES.some(t1 => normalized.includes(t1) || t1.includes(normalized));
@@ -263,86 +380,58 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Verify JWT and get authenticated user ID
     const user_id = await verifyAndGetUserId(req, supabase);
     
-    // Parse and validate request
     const rawData = await req.json();
-    const keywords = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH, 'keywords');
-    const location = validateString(rawData.location || '', MAX_LOCATION_LENGTH, 'location');
+    const keywordsRaw = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH);
+    const locationRaw = validateString(rawData.location || '', MAX_LOCATION_LENGTH);
     
-    console.log(`Fast job search - keywords: "${keywords.slice(0, 100)}...", location: "${location}" for user ${user_id}`);
+    console.log(`Boolean job search for user ${user_id}`);
+    console.log(`Keywords: ${keywordsRaw.slice(0, 100)}...`);
+    console.log(`Locations: ${locationRaw.slice(0, 100)}...`);
     
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (!FIRECRAWL_API_KEY) {
       throw new Error('FIRECRAWL_API_KEY not configured');
     }
     
-    // Parse all keywords (limit to 30)
-    const titles = keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0).slice(0, 30);
-    const searchTitles = titles.length > 0 ? titles : ['Data Scientist', 'Software Engineer'];
-    const locationFilter = location && location !== 'all' ? location : 'Remote';
+    // Parse keywords and locations
+    const keywords = keywordsRaw
+      .split(',')
+      .map(k => k.trim())
+      .filter(k => k.length > 0)
+      .slice(0, 30);
     
-    console.log(`Searching ${searchTitles.length} keywords...`);
+    const locations = locationRaw
+      .split(',')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && l.toLowerCase() !== 'all')
+      .slice(0, 15);
+    
+    const searchKeywords = keywords.length > 0 
+      ? keywords 
+      : ['Software Engineer', 'Data Scientist', 'Product Manager'];
+    
+    const searchLocations = locations.length > 0 
+      ? locations 
+      : ['Remote', 'United States', 'United Kingdom', 'Ireland'];
+    
+    // Build boolean search queries
+    const searchQueries = buildBooleanQueries(searchKeywords, searchLocations);
+    console.log(`Generated ${searchQueries.length} boolean search queries`);
     
     const allJobs: JobListing[] = [];
     const seenUrls = new Set<string>();
     const dedupeKeys = new Set<string>();
     
-    // Build search queries - batch keywords into groups of 3 for broader searches
-    const searchQueries: { query: string; keyword: string }[] = [];
-    
-    // Create queries for each ATS platform with batched keywords
-    const keywordBatches: string[][] = [];
-    for (let i = 0; i < searchTitles.length; i += 3) {
-      keywordBatches.push(searchTitles.slice(i, i + 3));
-    }
-    
-    // Priority ATS platforms + LinkedIn/Indeed boolean for direct company URLs
-    const prioritySites = ['boards.greenhouse.io', 'myworkdayjobs.com', 'apply.workable.com'];
-    
-    for (const batch of keywordBatches.slice(0, 10)) { // Limit to first 10 batches
-      const keywordStr = batch.map(k => `"${k}"`).join(' OR ');
-      
-      for (const site of prioritySites) {
-        searchQueries.push({
-          query: `site:${site} (${keywordStr}) "${locationFilter}" -intern -internship`,
-          keyword: batch[0],
-        });
-      }
-      
-      // LinkedIn boolean search - finds jobs but extracts company career URLs
-      searchQueries.push({
-        query: `site:linkedin.com/jobs (${keywordStr}) "${locationFilter}" "apply" -intern -internship`,
-        keyword: batch[0],
-      });
-      
-      // Indeed boolean search - finds jobs with direct company apply links
-      searchQueries.push({
-        query: `site:indeed.com (${keywordStr}) "${locationFilter}" "apply on company site" -intern -internship`,
-        keyword: batch[0],
-      });
-    }
-    
-    // Also add broader searches without site restriction for top keywords
-    for (const keyword of searchTitles.slice(0, 5)) {
-      const sitesStr = ATS_SITES.slice(0, 6).map(s => `site:${s}`).join(' OR ');
-      searchQueries.push({
-        query: `(${sitesStr}) "${keyword}" "${locationFilter}" -intern -internship -graduate`,
-        keyword,
-      });
-    }
-    
-    console.log(`Running ${searchQueries.length} parallel searches...`);
-    
-    // Run searches in parallel batches of 5 for speed
-    const batchSize = 5;
+    // Run searches in parallel batches of 4
+    const batchSize = 4;
     for (let i = 0; i < searchQueries.length; i += batchSize) {
       const batch = searchQueries.slice(i, i + batchSize);
       
-      const batchPromises = batch.map(async ({ query, keyword }) => {
-        const results = await searchWithFirecrawl(query, FIRECRAWL_API_KEY, 50);
-        return { results, keyword };
+      const batchPromises = batch.map(async (query) => {
+        const results = await searchWithFirecrawl(query, FIRECRAWL_API_KEY, 60);
+        return { results, keyword: searchKeywords[0] };
       });
       
       const batchResults = await Promise.all(batchPromises);
@@ -361,29 +450,36 @@ serve(async (req) => {
         }
       }
       
-      console.log(`Batch ${Math.floor(i / batchSize) + 1}: Found ${allJobs.length} unique jobs so far`);
+      console.log(`Batch ${Math.floor(i / batchSize) + 1}: ${allJobs.length} unique jobs found`);
     }
     
-    console.log(`Total: ${allJobs.length} unique jobs found`);
+    console.log(`Total: ${allJobs.length} unique jobs across all ATS platforms`);
     
     // Calculate match scores
     for (const job of allJobs) {
       let score = 50;
-      const jobText = `${job.title} ${job.description} ${job.company}`.toLowerCase();
+      const jobText = `${job.title} ${job.description} ${job.company} ${job.location}`.toLowerCase();
       
-      // Title match bonus
-      for (const title of searchTitles) {
-        if (jobText.includes(title.toLowerCase())) {
-          score += 10;
-          break;
+      // Keyword match bonus
+      for (const keyword of searchKeywords) {
+        if (jobText.includes(keyword.toLowerCase())) {
+          score += 8;
         }
       }
       
       // Location match bonus
-      if (jobText.includes(locationFilter.toLowerCase())) score += 10;
+      for (const loc of searchLocations) {
+        if (jobText.includes(loc.toLowerCase())) {
+          score += 5;
+          break;
+        }
+      }
       
       // Tier-1 company bonus
-      if (isTier1Company(job.company)) score += 20;
+      if (isTier1Company(job.company)) score += 15;
+      
+      // Known ATS platform bonus (more reliable)
+      if (!['Other', 'Direct'].includes(job.platform)) score += 5;
       
       // Salary info bonus
       if (job.salary) score += 5;
@@ -399,7 +495,6 @@ serve(async (req) => {
     
     // Save to database
     if (allJobs.length > 0) {
-      // Get existing URLs to avoid duplicates
       const { data: existingJobs } = await supabase
         .from('jobs')
         .select('url')
@@ -434,11 +529,19 @@ serve(async (req) => {
       }
     }
     
+    // Return platform breakdown
+    const platformBreakdown: Record<string, number> = {};
+    for (const job of allJobs) {
+      platformBreakdown[job.platform] = (platformBreakdown[job.platform] || 0) + 1;
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
         jobs: allJobs,
         totalFound: allJobs.length,
+        platforms: platformBreakdown,
+        queriesRun: searchQueries.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
