@@ -528,47 +528,92 @@ ${includeReferral ? `
   "referralEmail": "[Subject + email body]"` : ''}
 }`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${userOpenAIKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenAI API error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Retry logic with exponential backoff for rate limits
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+    let response: Response | null = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+          console.log(`Rate limit hit, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${userOpenAIKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            max_tokens: 4000,
+            temperature: 0.7,
+          }),
         });
+        
+        if (response.ok) {
+          break; // Success, exit retry loop
+        }
+        
+        if (response.status === 429) {
+          // Rate limit - will retry
+          const errorText = await response.text();
+          console.warn(`OpenAI rate limit (attempt ${attempt + 1}):`, errorText);
+          lastError = new Error("Rate limit exceeded");
+          
+          // Check for Retry-After header
+          const retryAfter = response.headers.get('Retry-After');
+          if (retryAfter && attempt < maxRetries - 1) {
+            const waitTime = parseInt(retryAfter, 10) * 1000 || 2000;
+            console.log(`Retry-After header suggests waiting ${waitTime}ms`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          continue;
+        }
+        
+        // Non-retryable errors
+        const errorText = await response.text();
+        console.error("OpenAI API error:", response.status, errorText);
+        
+        if (response.status === 401) {
+          return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (response.status === 402 || response.status === 403) {
+          return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        
+        throw new Error(`OpenAI API error: ${response.status}`);
+      } catch (fetchError) {
+        console.error(`Fetch error (attempt ${attempt + 1}):`, fetchError);
+        lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+        if (attempt === maxRetries - 1) {
+          throw lastError;
+        }
       }
-      if (response.status === 401) {
-        return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402 || response.status === 403) {
-        return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+    
+    // If all retries exhausted due to rate limit
+    if (!response || !response.ok) {
+      return new Response(JSON.stringify({ 
+        error: "Rate limit exceeded after retries. Please wait a moment and try again.",
+        retryable: true
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
