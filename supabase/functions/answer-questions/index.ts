@@ -8,6 +8,100 @@ const corsHeaders = {
 
 // Input validation limits
 const MAX_QUESTIONS = 100;
+
+// ============= PERPLEXITY COMPANY RESEARCH =============
+
+interface CompanyResearch {
+  overview: string;
+  culture: string;
+  recentNews: string[];
+  interviewTips: string[];
+  keywords: string[];
+  citations: string[];
+}
+
+async function getCompanyResearch(company: string, jobTitle: string): Promise<CompanyResearch | null> {
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  
+  if (!PERPLEXITY_API_KEY) {
+    console.log("Perplexity API key not configured, skipping company research");
+    return null;
+  }
+  
+  try {
+    console.log(`[Perplexity] Researching ${company} for ${jobTitle} position...`);
+    
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${PERPLEXITY_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "sonar",
+        messages: [
+          {
+            role: "system",
+            content: "You are a career research assistant. Provide concise, factual company information to help job applicants. Focus on actionable insights."
+          },
+          {
+            role: "user",
+            content: `Research ${company} for a ${jobTitle} position. Provide:
+1. Brief company overview (2-3 sentences)
+2. Company culture and values
+3. Recent news or developments (last 6 months)
+4. Interview tips specific to this company
+5. Key buzzwords/values they emphasize
+
+Return as JSON:
+{
+  "overview": "...",
+  "culture": "...",
+  "recentNews": ["...", "..."],
+  "interviewTips": ["...", "..."],
+  "keywords": ["keyword1", "keyword2", ...]
+}`
+          }
+        ],
+        search_recency_filter: "month"
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error(`[Perplexity] Error: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const citations = data.citations || [];
+    
+    // Parse the JSON response
+    try {
+      let cleanContent = content;
+      if (content.includes('```json')) {
+        cleanContent = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      } else if (content.includes('```')) {
+        cleanContent = content.replace(/```\s*/g, '');
+      }
+      
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const research = JSON.parse(jsonMatch[0]) as CompanyResearch;
+        research.citations = citations;
+        console.log(`[Perplexity] Successfully researched ${company}: ${research.keywords?.length || 0} keywords found`);
+        return research;
+      }
+    } catch (parseError) {
+      console.error("[Perplexity] Failed to parse response:", parseError);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("[Perplexity] Research error:", error);
+    return null;
+  }
+}
 const MAX_STRING_SHORT = 200;
 const MAX_STRING_MEDIUM = 1000;
 const MAX_STRING_LONG = 10000;
@@ -480,6 +574,9 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Fetch company research from Perplexity (parallel with other prep)
+    const companyResearchPromise = getCompanyResearch(company, jobTitle);
+
     // Calculate total years of experience from work history
     const calculateTotalExperience = () => {
       if (userProfile.totalExperience) return parseInt(userProfile.totalExperience);
@@ -495,6 +592,9 @@ serve(async (req) => {
     };
 
     const totalExperience = calculateTotalExperience();
+    
+    // Wait for Perplexity research
+    const companyResearch = await companyResearchPromise;
 
 const systemPrompt = `You are an expert ATS (Applicant Tracking System) optimization specialist. Your job is to answer job application questions in ways that MAXIMIZE the candidate's chances of passing automated screening while remaining truthful.
 
@@ -699,6 +799,23 @@ ${expSummary}
 **Company:** ${company}
 ${jobDescription ? `**Description Preview:** ${jobDescription.substring(0, 500)}...` : ''}
 
+${companyResearch ? `## COMPANY RESEARCH (from Perplexity AI - Real-time Data)
+
+**Company Overview:** ${companyResearch.overview}
+
+**Company Culture & Values:** ${companyResearch.culture}
+
+**Recent News & Developments:**
+${companyResearch.recentNews?.map((n: string) => `- ${n}`).join('\n') || 'No recent news available'}
+
+**Interview Tips for ${company}:**
+${companyResearch.interviewTips?.map((t: string) => `- ${t}`).join('\n') || 'No specific tips available'}
+
+**Key Keywords/Values to Emphasize:** ${companyResearch.keywords?.join(', ') || 'Not available'}
+
+⚡ Use this real-time company research to craft more personalized, company-specific answers. Include relevant company values and keywords in open-ended responses.
+` : ''}
+
 ---
 
 ## QUESTIONS TO ANSWER
@@ -867,10 +984,18 @@ IMPORTANT:
         cached: cachedCount,
         generated: uncachedQuestions.length,
         cacheHitRate: `${((cachedCount / questions.length) * 100).toFixed(0)}%`
-      }
+      },
+      companyResearch: companyResearch ? {
+        overview: companyResearch.overview,
+        culture: companyResearch.culture,
+        recentNews: companyResearch.recentNews,
+        interviewTips: companyResearch.interviewTips,
+        keywords: companyResearch.keywords,
+        citations: companyResearch.citations
+      } : null
     };
 
-    console.log(`[User ${userId}] Generated ${result.answers.length} answers (${cachedCount} from memory, ${uncachedQuestions.length} AI-generated)`);
+    console.log(`[User ${userId}] Generated ${result.answers.length} answers (${cachedCount} from memory, ${uncachedQuestions.length} AI-generated)${companyResearch ? ' + Perplexity company research' : ''}`);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
