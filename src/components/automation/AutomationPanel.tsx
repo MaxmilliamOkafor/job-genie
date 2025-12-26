@@ -405,40 +405,6 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
             </div>
           )}
 
-          {/* OpenAI Tier Selection */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              OpenAI Tier (affects request speed)
-            </Label>
-            <Select 
-              value={openaiTier} 
-              onValueChange={(v) => handleTierChange(v as keyof typeof OPENAI_TIERS)}
-              disabled={isRunning}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(OPENAI_TIERS).map(([key, config]) => (
-                  <SelectItem key={key} value={key}>
-                    <div className="flex items-center justify-between gap-4">
-                      <span>{config.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {config.delay / 1000}s delay • {config.rpm} RPM
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Higher tiers have faster rate limits. Check your tier at{' '}
-              <a href="https://platform.openai.com/account/limits" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                OpenAI Dashboard
-              </a>
-            </p>
-          </div>
 
           {/* Controls */}
           <div className="grid gap-4 md:grid-cols-2">
