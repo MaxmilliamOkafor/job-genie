@@ -4,6 +4,7 @@ import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 import { BulkKeywordSearch } from '@/components/jobs/BulkKeywordSearch';
 import { VirtualJobList } from '@/components/jobs/VirtualJobList';
+import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -234,6 +235,9 @@ const Jobs = () => {
             )}
           </div>
         </div>
+
+        {/* Live Jobs Panel - Auto-fetches from tier 1/2 companies */}
+        <LiveJobsPanel onJobsFetched={refetch} />
 
         {/* Bulk Keyword Search */}
         <BulkKeywordSearch 
