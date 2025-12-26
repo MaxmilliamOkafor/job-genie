@@ -83,7 +83,7 @@ const Jobs = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'instant' });
   const scrollToJobListBottom = () => {
     if (scrollToJobListBottomRef.current) {
       scrollToJobListBottomRef.current();

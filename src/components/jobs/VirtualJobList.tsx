@@ -316,15 +316,13 @@ export function VirtualJobList({
     overscan: 5,
   });
 
-  // Expose scroll to bottom function via ref
+  // Expose scroll to bottom function via ref - instant scroll to trigger load more
   useEffect(() => {
     if (scrollRef) {
       scrollRef.current = () => {
         if (parentRef.current) {
-          parentRef.current.scrollTo({
-            top: parentRef.current.scrollHeight,
-            behavior: 'smooth',
-          });
+          // Instant scroll to bottom to trigger load more immediately
+          parentRef.current.scrollTop = parentRef.current.scrollHeight;
         }
       };
     }
