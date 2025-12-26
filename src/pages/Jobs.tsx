@@ -239,7 +239,16 @@ const Jobs = () => {
 
         {/* Filters Bar */}
         {jobs.length > 0 && (
-          <JobFiltersBar jobs={jobs} onFiltersChange={handleFiltersChange} />
+          <JobFiltersBar 
+            jobs={jobs} 
+            onFiltersChange={handleFiltersChange}
+            onSearch={async (term) => {
+              setIsSearching(true);
+              await searchJobs(term);
+              setIsSearching(false);
+            }}
+            isSearching={isSearching}
+          />
         )}
 
         {/* Automation Panel */}

@@ -16,13 +16,17 @@ import {
   X,
   Briefcase,
   Home,
-  GraduationCap
+  GraduationCap,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { Job } from '@/hooks/useJobs';
 
 interface JobFiltersBarProps {
   jobs: Job[];
   onFiltersChange: (filteredJobs: Job[]) => void;
+  onSearch?: (searchTerm: string) => Promise<void>;
+  isSearching?: boolean;
 }
 
 type TimeFilter = '10min' | '30min' | '1h' | '2h' | '6h' | 'today' | 'week' | 'all';
@@ -89,8 +93,9 @@ const LOCATION_OPTIONS = [
   { value: 'Thailand', label: 'Thailand' },
 ];
 
-export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
+export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: JobFiltersBarProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [quickFilter, setQuickFilter] = useState('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'applied'>('all');
@@ -133,9 +138,9 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
         if (now - jobTime > maxAge) return false;
       }
       
-      // Search filter
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
+      // Quick filter (client-side text search)
+      if (quickFilter) {
+        const searchLower = quickFilter.toLowerCase();
         const matchesSearch = 
           job.title.toLowerCase().includes(searchLower) ||
           job.company.toLowerCase().includes(searchLower) ||
@@ -194,11 +199,11 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
     
     onFiltersChange(filtered);
     return filtered;
-  }, [jobs, timeFilter, searchTerm, selectedLocations, platformFilter, statusFilter, 
+  }, [jobs, timeFilter, quickFilter, selectedLocations, platformFilter, statusFilter, 
       selectedJobTypes, selectedWorkTypes, selectedExperienceLevels, onFiltersChange]);
 
   const activeFiltersCount = [
-    searchTerm,
+    quickFilter,
     selectedLocations.length > 0,
     platformFilter !== 'all',
     statusFilter !== 'all',
@@ -207,8 +212,16 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
     selectedExperienceLevels.length > 0,
   ].filter(Boolean).length;
 
+  const handleApiSearch = async () => {
+    if (searchTerm && onSearch) {
+      await onSearch(searchTerm);
+      setSearchTerm('');
+    }
+  };
+
   const clearAllFilters = () => {
     setSearchTerm('');
+    setQuickFilter('');
     setTimeFilter('all');
     setPlatformFilter('all');
     setStatusFilter('all');
@@ -239,16 +252,16 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
       <CardContent className="p-4 space-y-4">
         {/* Main Filters Row */}
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* Search Input with Button */}
+          {/* API Search Input - triggers new search */}
           <div className="relative flex-1 flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search jobs, companies..."
+                placeholder="Search new jobs (triggers API search)..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-8"
-                onKeyDown={(e) => e.key === 'Enter' && searchTerm && setSearchTerm(searchTerm)}
+                onKeyDown={(e) => e.key === 'Enter' && handleApiSearch()}
               />
               {searchTerm && (
                 <button
@@ -259,8 +272,12 @@ export function JobFiltersBar({ jobs, onFiltersChange }: JobFiltersBarProps) {
                 </button>
               )}
             </div>
-            <Button onClick={() => setSearchTerm(searchTerm)} disabled={!searchTerm}>
-              <Search className="h-4 w-4 mr-2" />
+            <Button onClick={handleApiSearch} disabled={!searchTerm || isSearching}>
+              {isSearching ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4 mr-2" />
+              )}
               Search
             </Button>
           </div>
