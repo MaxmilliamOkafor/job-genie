@@ -24,38 +24,92 @@ const ExtState = {
   currentWorkdaySession: null
 };
 
-// Platform detection patterns - Extended list
+// Platform detection patterns - MEGA Extended Tier-1 ATS List (60+ platforms)
 const PLATFORM_PATTERNS = {
-  // LazyApply supported (autofill works)
-  greenhouse: { pattern: /greenhouse\.io/i, name: 'Greenhouse', lazyApplySupported: true },
-  lever: { pattern: /lever\.co/i, name: 'Lever', lazyApplySupported: true },
-  ashby: { pattern: /ashbyhq\.com/i, name: 'Ashby', lazyApplySupported: true },
-  rippling: { pattern: /rippling\.com/i, name: 'Rippling', lazyApplySupported: true },
+  // ============ TIER 1: Premium ATS (LazyApply + Full Autofill) ============
+  greenhouse: { pattern: /greenhouse\.io/i, name: 'Greenhouse', lazyApplySupported: true, tier: 1 },
+  lever: { pattern: /lever\.co/i, name: 'Lever', lazyApplySupported: true, tier: 1 },
+  ashby: { pattern: /ashbyhq\.com/i, name: 'Ashby', lazyApplySupported: true, tier: 1 },
+  rippling: { pattern: /rippling\.com/i, name: 'Rippling', lazyApplySupported: true, tier: 1 },
+  workday: { pattern: /(workday|myworkdayjobs)\.com/i, name: 'Workday', multiPage: true, tier: 1 },
+  icims: { pattern: /icims\.com/i, name: 'iCIMS', tier: 1 },
+  workable: { pattern: /workable\.com/i, name: 'Workable', tier: 1 },
+  smartrecruiters: { pattern: /smartrecruiters\.com/i, name: 'SmartRecruiters', tier: 1 },
+  taleo: { pattern: /taleo\.net/i, name: 'Oracle Taleo', tier: 1 },
+  successfactors: { pattern: /successfactors\.com/i, name: 'SAP SuccessFactors', tier: 1 },
+  bamboohr: { pattern: /bamboohr\.com/i, name: 'BambooHR', tier: 1 },
+  jobvite: { pattern: /jobvite\.com/i, name: 'Jobvite', tier: 1 },
+  brassring: { pattern: /brassring\.com/i, name: 'IBM Kenexa BrassRing', tier: 1 },
+  paylocity: { pattern: /paylocity\.com/i, name: 'Paylocity', tier: 1 },
+  paycom: { pattern: /paycom\.com/i, name: 'Paycom', tier: 1 },
+  ultipro: { pattern: /ultipro\.com/i, name: 'UltiPro/UKG', tier: 1 },
+  adp: { pattern: /adp\.com/i, name: 'ADP Workforce', tier: 1 },
+  oracle_recruiting: { pattern: /oracle\.com.*recruiting/i, name: 'Oracle Recruiting Cloud', tier: 1 },
   
-  // EXTREME enhanced (tailoring + attachment)
-  workday: { pattern: /(workday|myworkdayjobs)\.com/i, name: 'Workday', multiPage: true },
-  icims: { pattern: /icims\.com/i, name: 'iCIMS' },
-  workable: { pattern: /workable\.com/i, name: 'Workable' },
-  smartrecruiters: { pattern: /smartrecruiters\.com/i, name: 'SmartRecruiters' },
-  linkedin: { pattern: /linkedin\.com/i, name: 'LinkedIn' },
-  indeed: { pattern: /indeed\.com/i, name: 'Indeed' },
-  glassdoor: { pattern: /glassdoor\.com/i, name: 'Glassdoor' },
-  jobvite: { pattern: /jobvite\.com/i, name: 'Jobvite' },
-  bamboohr: { pattern: /bamboohr\.com/i, name: 'BambooHR' },
-  breezy: { pattern: /breezy\.hr/i, name: 'Breezy HR' },
-  jazz: { pattern: /jazz\.co/i, name: 'JazzHR' },
-  taleo: { pattern: /taleo\.net/i, name: 'Taleo' },
-  dice: { pattern: /dice\.com/i, name: 'Dice' },
-  monster: { pattern: /monster\.com/i, name: 'Monster' },
-  ziprecruiter: { pattern: /ziprecruiter\.com/i, name: 'ZipRecruiter' },
-  wellfound: { pattern: /(wellfound|angel)\.co/i, name: 'Wellfound' },
-  builtin: { pattern: /builtin\.com/i, name: 'BuiltIn' },
-  usajobs: { pattern: /usajobs\.gov/i, name: 'USAJobs' },
-  otta: { pattern: /otta\.com/i, name: 'Otta' },
-  personio: { pattern: /personio\.com/i, name: 'Personio' },
-  teamtailor: { pattern: /teamtailor\.com/i, name: 'Teamtailor' },
-  recruitee: { pattern: /recruitee\.com/i, name: 'Recruitee' },
-  applytojob: { pattern: /applytojob\.com/i, name: 'ApplyToJob' }
+  // ============ TIER 2: Major Job Boards ============
+  linkedin: { pattern: /linkedin\.com/i, name: 'LinkedIn', tier: 2 },
+  indeed: { pattern: /indeed\.com/i, name: 'Indeed', tier: 2 },
+  glassdoor: { pattern: /glassdoor\.com/i, name: 'Glassdoor', tier: 2 },
+  dice: { pattern: /dice\.com/i, name: 'Dice', tier: 2 },
+  monster: { pattern: /monster\.com/i, name: 'Monster', tier: 2 },
+  ziprecruiter: { pattern: /ziprecruiter\.com/i, name: 'ZipRecruiter', tier: 2 },
+  careerbuilder: { pattern: /careerbuilder\.com/i, name: 'CareerBuilder', tier: 2 },
+  simplyhired: { pattern: /simplyhired\.com/i, name: 'SimplyHired', tier: 2 },
+  
+  // ============ TIER 3: Startup/Tech Focused ============
+  wellfound: { pattern: /(wellfound|angel)\.co/i, name: 'Wellfound (AngelList)', tier: 3 },
+  builtin: { pattern: /builtin\.com/i, name: 'BuiltIn', tier: 3 },
+  otta: { pattern: /otta\.com/i, name: 'Otta', tier: 3 },
+  ycombinator: { pattern: /ycombinator\.com|workatastartup\.com/i, name: 'Y Combinator', tier: 3 },
+  triplebyte: { pattern: /triplebyte\.com/i, name: 'Triplebyte', tier: 3 },
+  hired: { pattern: /hired\.com/i, name: 'Hired', tier: 3 },
+  cord: { pattern: /cord\.co/i, name: 'Cord', tier: 3 },
+  techstars: { pattern: /techstars\.com/i, name: 'Techstars', tier: 3 },
+  
+  // ============ TIER 4: International/Regional ============
+  usajobs: { pattern: /usajobs\.gov/i, name: 'USAJobs', tier: 4 },
+  seek: { pattern: /seek\.com/i, name: 'SEEK (AU/NZ)', tier: 4 },
+  reed: { pattern: /reed\.co\.uk/i, name: 'Reed (UK)', tier: 4 },
+  totaljobs: { pattern: /totaljobs\.com/i, name: 'TotalJobs (UK)', tier: 4 },
+  cwjobs: { pattern: /cwjobs\.co\.uk/i, name: 'CWJobs (UK)', tier: 4 },
+  xing: { pattern: /xing\.com/i, name: 'XING (EU)', tier: 4 },
+  stepstone: { pattern: /stepstone\./i, name: 'StepStone (EU)', tier: 4 },
+  naukri: { pattern: /naukri\.com/i, name: 'Naukri (India)', tier: 4 },
+  
+  // ============ TIER 5: Mid-Market ATS ============
+  breezy: { pattern: /breezy\.hr/i, name: 'Breezy HR', tier: 5 },
+  jazz: { pattern: /jazz\.co/i, name: 'JazzHR', tier: 5 },
+  personio: { pattern: /personio\.com/i, name: 'Personio', tier: 5 },
+  teamtailor: { pattern: /teamtailor\.com/i, name: 'Teamtailor', tier: 5 },
+  recruitee: { pattern: /recruitee\.com/i, name: 'Recruitee', tier: 5 },
+  applytojob: { pattern: /applytojob\.com/i, name: 'ApplyToJob', tier: 5 },
+  fountain: { pattern: /fountain\.com/i, name: 'Fountain', tier: 5 },
+  pinpoint: { pattern: /pinpointhq\.com/i, name: 'Pinpoint', tier: 5 },
+  homerun: { pattern: /homerun\.co/i, name: 'Homerun', tier: 5 },
+  comeet: { pattern: /comeet\.com/i, name: 'Comeet', tier: 5 },
+  freshteam: { pattern: /freshteam\.com/i, name: 'Freshteam', tier: 5 },
+  zoho_recruit: { pattern: /zoho\.com.*recruit/i, name: 'Zoho Recruit', tier: 5 },
+  bullhorn: { pattern: /bullhornstaffing\.com/i, name: 'Bullhorn', tier: 5 },
+  avature: { pattern: /avature\.net/i, name: 'Avature', tier: 5 },
+  cornerstone: { pattern: /cornerstoneondemand\.com/i, name: 'Cornerstone', tier: 5 },
+  dayforce: { pattern: /dayforcehcm\.com/i, name: 'Ceridian Dayforce', tier: 5 },
+  apploi: { pattern: /apploi\.com/i, name: 'Apploi', tier: 5 },
+  hiringthing: { pattern: /hiringthing\.com/i, name: 'HiringThing', tier: 5 },
+  clearcompany: { pattern: /clearcompany\.com/i, name: 'ClearCompany', tier: 5 },
+  hirebridge: { pattern: /hirebridge\.com/i, name: 'HireBridge', tier: 5 },
+  
+  // ============ TIER 6: Specialized/Niche ============
+  greenhouse_bhp: { pattern: /boards\.greenhouse\.io/i, name: 'Greenhouse Board', tier: 6 },
+  remoteok: { pattern: /remoteok\.com/i, name: 'RemoteOK', tier: 6 },
+  weworkremotely: { pattern: /weworkremotely\.com/i, name: 'WeWorkRemotely', tier: 6 },
+  flexjobs: { pattern: /flexjobs\.com/i, name: 'FlexJobs', tier: 6 },
+  remote: { pattern: /remote\.co/i, name: 'Remote.co', tier: 6 },
+  himalayas: { pattern: /himalayas\.app/i, name: 'Himalayas', tier: 6 },
+  arc: { pattern: /arc\.dev/i, name: 'Arc.dev', tier: 6 },
+  toptal: { pattern: /toptal\.com/i, name: 'Toptal', tier: 6 },
+  gun: { pattern: /gun\.io/i, name: 'Gun.io', tier: 6 },
+  turing: { pattern: /turing\.com/i, name: 'Turing', tier: 6 },
+  andela: { pattern: /andela\.com/i, name: 'Andela', tier: 6 }
 };
 
 function detectPlatform(url) {
