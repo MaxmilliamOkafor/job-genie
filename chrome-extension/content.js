@@ -322,6 +322,41 @@ let automationState = {
   stepLock: false // Prevent concurrent step execution
 };
 
+// Reset automation state before starting new automation
+function resetAutomationState() {
+  automationState.isPaused = false;
+  automationState.shouldSkip = false;
+  automationState.shouldQuit = false;
+  automationState.currentStep = 0;
+  automationState.stepLock = false;
+  automationState.isRunning = true;
+  console.log('QuantumHire AI: Automation state reset');
+}
+
+// Stop all automation immediately
+function stopAutomation() {
+  automationState.shouldQuit = true;
+  automationState.isRunning = false;
+  automationState.isPaused = false;
+  automationState.stepLock = false;
+  console.log('QuantumHire AI: Automation stopped');
+}
+
+// Toggle pause state
+function togglePause() {
+  automationState.isPaused = !automationState.isPaused;
+  console.log('QuantumHire AI: Automation', automationState.isPaused ? 'paused' : 'resumed');
+  return automationState.isPaused;
+}
+
+// Skip current step
+function skipCurrentStep() {
+  if (automationState.isRunning) {
+    automationState.shouldSkip = true;
+    console.log('QuantumHire AI: Skipping current step');
+  }
+}
+
 function getDelayForSpeed() {
   const delays = { 1: 1000, 1.5: 666, 2: 500, 3: 333 };
   return delays[automationState.speed] || 1000;
@@ -329,15 +364,46 @@ function getDelayForSpeed() {
 
 async function waitWithControls(ms) {
   const startTime = Date.now();
+  const checkInterval = 50; // Check every 50ms for responsiveness
+  
   while (Date.now() - startTime < ms) {
-    if (automationState.shouldQuit) throw new Error('QUIT');
-    if (automationState.shouldSkip) { automationState.shouldSkip = false; throw new Error('SKIP'); }
-    while (automationState.isPaused) {
-      await new Promise(r => setTimeout(r, 100));
-      if (automationState.shouldQuit) throw new Error('QUIT');
+    // Check quit first (highest priority)
+    if (automationState.shouldQuit) {
+      console.log('QuantumHire AI: Quit detected in waitWithControls');
+      throw new Error('QUIT');
     }
-    await new Promise(r => setTimeout(r, 50));
+    
+    // Check skip
+    if (automationState.shouldSkip) {
+      automationState.shouldSkip = false;
+      console.log('QuantumHire AI: Skip detected in waitWithControls');
+      throw new Error('SKIP');
+    }
+    
+    // Handle pause
+    while (automationState.isPaused && !automationState.shouldQuit) {
+      await new Promise(r => setTimeout(r, 100));
+      if (automationState.shouldQuit) {
+        console.log('QuantumHire AI: Quit detected while paused');
+        throw new Error('QUIT');
+      }
+    }
+    
+    await new Promise(r => setTimeout(r, checkInterval));
   }
+}
+
+// Check controls during long operations
+async function checkControls() {
+  if (automationState.shouldQuit) throw new Error('QUIT');
+  if (automationState.shouldSkip) {
+    automationState.shouldSkip = false;
+    throw new Error('SKIP');
+  }
+  while (automationState.isPaused && !automationState.shouldQuit) {
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if (automationState.shouldQuit) throw new Error('QUIT');
 }
 
 // ============= COMPREHENSIVE KNOCKOUT QUESTION ANSWER BANK =============
@@ -2554,12 +2620,17 @@ function addPanelStyles() {
     .qh-speed-btn.active { background: hsl(var(--qh-violet) / 0.14); border-color: hsl(var(--qh-violet) / 0.28); color: hsl(var(--qh-violet)); }
 
     .qh-control-row { display: flex; gap: 6px; }
-    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px 10px; border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; background: hsl(var(--qh-card) / 0.35); color: hsl(var(--qh-text)); transition: all 0.15s ease; }
-    .qh-control-btn:hover { transform: translateY(-1px); }
-    .qh-control-btn.pause { border-color: hsl(var(--qh-warn) / 0.35); color: hsl(var(--qh-warn)); }
-    .qh-control-btn.pause.paused { border-color: hsl(var(--qh-brand) / 0.35); color: hsl(var(--qh-brand)); }
-    .qh-control-btn.skip { color: hsl(var(--qh-muted)); }
-    .qh-control-btn.quit { border-color: hsl(var(--qh-danger) / 0.28); color: hsl(var(--qh-danger)); }
+    .qh-control-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 10px 12px; border: 1px solid hsl(var(--qh-border) / 0.8); border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; background: hsl(var(--qh-card) / 0.35); color: hsl(var(--qh-text)); transition: all 0.15s ease; }
+    .qh-control-btn:hover { transform: translateY(-2px); background: hsl(var(--qh-card) / 0.55); box-shadow: 0 4px 12px hsl(var(--qh-shadow) / 0.2); }
+    .qh-control-btn:active { transform: translateY(0); }
+    .qh-control-btn.pause { border-color: hsl(var(--qh-warn) / 0.45); color: hsl(var(--qh-warn)); background: hsl(var(--qh-warn) / 0.08); }
+    .qh-control-btn.pause:hover { background: hsl(var(--qh-warn) / 0.15); border-color: hsl(var(--qh-warn) / 0.55); }
+    .qh-control-btn.pause.paused { border-color: hsl(var(--qh-brand) / 0.45); color: hsl(var(--qh-brand)); background: hsl(var(--qh-brand) / 0.12); }
+    .qh-control-btn.pause.paused:hover { background: hsl(var(--qh-brand) / 0.20); }
+    .qh-control-btn.skip { border-color: hsl(var(--qh-info) / 0.35); color: hsl(var(--qh-info)); background: hsl(var(--qh-info) / 0.06); }
+    .qh-control-btn.skip:hover { background: hsl(var(--qh-info) / 0.12); border-color: hsl(var(--qh-info) / 0.45); }
+    .qh-control-btn.quit { border-color: hsl(var(--qh-danger) / 0.40); color: hsl(var(--qh-danger)); background: hsl(var(--qh-danger) / 0.08); }
+    .qh-control-btn.quit:hover { background: hsl(var(--qh-danger) / 0.15); border-color: hsl(var(--qh-danger) / 0.55); }
 
     .qh-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: hsl(var(--qh-brand) / 0.10); border: 1px solid hsl(var(--qh-brand) / 0.18); border-radius: 12px; margin-bottom: 14px; font-size: 12px; font-weight: 500; }
     .qh-status-icon { font-size: 12px; }
@@ -2730,17 +2801,68 @@ function setupPanelEvents(panel) {
     });
   });
   
-  // Pause/Resume
-  panel.querySelector('#qh-pause-btn')?.addEventListener('click', () => {
-    automationState.isPaused = !automationState.isPaused;
-    const btn = panel.querySelector('#qh-pause-btn');
-    btn.innerHTML = automationState.isPaused ? '<span>▶️</span> Resume' : '<span>⏸️</span> Pause';
-    btn.classList.toggle('paused', automationState.isPaused);
-    showToast(automationState.isPaused ? 'Paused' : 'Resumed', 'info');
-  });
+  // Pause/Resume button - using direct state manipulation for reliability
+  const pauseBtn = panel.querySelector('#qh-pause-btn');
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const isPaused = togglePause();
+      this.innerHTML = isPaused ? '<span>▶️</span> Resume' : '<span>⏸️</span> Pause';
+      this.classList.toggle('paused', isPaused);
+      
+      const statusEl = panel.querySelector('#qh-status');
+      if (statusEl) {
+        updateStatus(statusEl, isPaused ? '⏸️' : '🟢', isPaused ? 'Paused - click Resume to continue' : 'Running...');
+      }
+      
+      showToast(isPaused ? '⏸️ Paused' : '▶️ Resumed', 'info');
+    });
+  }
   
-  panel.querySelector('#qh-skip-btn')?.addEventListener('click', () => { automationState.shouldSkip = true; showToast('Skipping...', 'info'); });
-  panel.querySelector('#qh-quit-btn')?.addEventListener('click', () => { automationState.shouldQuit = true; showToast('Stopped', 'error'); });
+  // Skip button
+  const skipBtn = panel.querySelector('#qh-skip-btn');
+  if (skipBtn) {
+    skipBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      skipCurrentStep();
+      showToast('⏭️ Skipping current step...', 'info');
+    });
+  }
+  
+  // Quit/Stop button
+  const quitBtn = panel.querySelector('#qh-quit-btn');
+  if (quitBtn) {
+    quitBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      stopAutomation();
+      
+      const statusEl = panel.querySelector('#qh-status');
+      if (statusEl) {
+        updateStatus(statusEl, '⏹️', 'Stopped');
+      }
+      
+      // Reset button states
+      const smartApplyBtn = panel.querySelector('#qh-smart-apply');
+      if (smartApplyBtn) smartApplyBtn.disabled = false;
+      
+      const stepsContainer = panel.querySelector('#qh-smart-apply-steps');
+      if (stepsContainer) stepsContainer.classList.add('hidden');
+      
+      // Reset pause button
+      if (pauseBtn) {
+        pauseBtn.innerHTML = '<span>⏸️</span> Pause';
+        pauseBtn.classList.remove('paused');
+      }
+      
+      showToast('⏹️ Automation stopped', 'error');
+    });
+  }
   
   // Smart Apply - Full 4-step workflow: Tailor CV → Attach PDFs → Fill → Next
   panel.querySelector('#qh-smart-apply').addEventListener('click', async () => {
@@ -2750,11 +2872,20 @@ function setupPanelEvents(panel) {
     const reviewPanel = panel.querySelector('#qh-review-panel');
     const resultsPanel = panel.querySelector('#qh-results');
     
+    // Reset automation state before starting
+    resetAutomationState();
+    
     btn.disabled = true;
-    automationState.isRunning = true;
     stepsContainer.classList.remove('hidden');
     
+    // Reset pause button to default state
+    if (pauseBtn) {
+      pauseBtn.innerHTML = '<span>⏸️</span> Pause';
+      pauseBtn.classList.remove('paused');
+    }
+    
     const setStep = (stepNum) => {
+      automationState.currentStep = stepNum;
       stepsContainer.querySelectorAll('.qh-step').forEach((step, i) => {
         step.classList.remove('active', 'completed');
         if (i + 1 < stepNum) step.classList.add('completed');
@@ -2774,6 +2905,9 @@ function setupPanelEvents(panel) {
         throw new Error('No profile found. Please set up your profile first.');
       }
       
+      // Check controls before each major step
+      await checkControls();
+      
       // Handle Workday pre-apply flow if needed
       if (platform.name === 'workday' && platform.config?.preApplyFlow) {
         updateStatus(statusEl, '🚀', 'Starting Workday application...');
@@ -2784,7 +2918,7 @@ function setupPanelEvents(panel) {
         }
         
         if (!preApplyResult.skipped) {
-          await new Promise(r => setTimeout(r, 2500));
+          await waitWithControls(2500);
         }
       }
       
@@ -2792,11 +2926,14 @@ function setupPanelEvents(panel) {
       setStep(1);
       updateStatus(statusEl, '📄', 'Step 1: Tailoring CV & Cover Letter...');
       
+      await checkControls(); // Check before long operation
+      
       let tailoredData = null;
       let matchScore = 85;
       let smartLocation = '';
       let keywordsMatched = [];
       let keywordsMissing = [];
+      
       
       if (profileData.accessToken) {
         try {
@@ -2964,11 +3101,16 @@ function setupPanelEvents(panel) {
         showToast('⚠️ PDF generation failed - continuing with form fill', 'warning');
       }
       
+      // Check controls before next step
+      await checkControls();
       await waitWithControls(getDelayForSpeed());
       
       // ===== STEP 3: FILL FORM FIELDS & QUESTIONS =====
       setStep(3);
       updateStatus(statusEl, '📝', 'Step 3: Filling form fields...');
+      
+      // Check controls
+      await checkControls();
       
       // Prevent concurrent execution
       if (automationState.stepLock) {
@@ -3227,10 +3369,14 @@ function setupPanelEvents(panel) {
         }
       }
       
+      // Check controls before Step 4
+      await checkControls();
       await waitWithControls(getDelayForSpeed());
       
       // ===== STEP 4: NAVIGATE TO NEXT PAGE =====
       setStep(4);
+      
+      await checkControls();
       
       if (isFinalPage()) {
         updateStatus(statusEl, '🎉', 'Application ready to submit!');
@@ -3254,10 +3400,14 @@ function setupPanelEvents(panel) {
       
     } catch (error) {
       stepsContainer.classList.add('hidden');
+      automationState.stepLock = false; // Release lock on error
+      
       if (error.message === 'QUIT') {
         updateStatus(statusEl, '⏹️', 'Stopped');
+        showToast('⏹️ Automation stopped', 'info');
       } else if (error.message === 'SKIP') {
-        updateStatus(statusEl, '⏭️', 'Skipped');
+        updateStatus(statusEl, '⏭️', 'Skipped current step');
+        showToast('⏭️ Step skipped', 'info');
       } else {
         console.error('Smart apply error:', error);
         updateStatus(statusEl, '❌', error.message);
@@ -3266,6 +3416,14 @@ function setupPanelEvents(panel) {
     } finally {
       btn.disabled = false;
       automationState.isRunning = false;
+      automationState.stepLock = false;
+      
+      // Reset pause button state
+      const pauseBtn = panel.querySelector('#qh-pause-btn');
+      if (pauseBtn) {
+        pauseBtn.innerHTML = '<span>⏸️</span> Pause';
+        pauseBtn.classList.remove('paused');
+      }
     }
   });
   
