@@ -36,12 +36,21 @@ async function initializePopup() {
     'stats', 'tailorOnApply', 'attachDocuments'
   ]);
   
+  // Check auth state first
+  updateAuthUI(storage.accessToken, storage.userProfile);
+  
   // Set toggle states
   document.getElementById('enabled-toggle').checked = storage.enabled !== false;
-  document.getElementById('auto-tailor-toggle').checked = storage.autoTailor !== false;
-  document.getElementById('show-panel-toggle').checked = storage.showPanel !== false;
-  document.getElementById('auto-queue-toggle').checked = storage.autoQueue || false;
-  document.getElementById('workday-multipage-toggle').checked = storage.workdayMultiPage !== false;
+  const autoTailorToggle = document.getElementById('auto-tailor-toggle');
+  const showPanelToggle = document.getElementById('show-panel-toggle');
+  const autoQueueToggle = document.getElementById('auto-queue-toggle');
+  const workdayToggle = document.getElementById('workday-multipage-toggle');
+  
+  if (autoTailorToggle) autoTailorToggle.checked = storage.autoTailor !== false;
+  if (showPanelToggle) showPanelToggle.checked = storage.showPanel !== false;
+  if (autoQueueToggle) autoQueueToggle.checked = storage.autoQueue || false;
+  if (workdayToggle) workdayToggle.checked = storage.workdayMultiPage !== false;
+  
   document.getElementById('tailor-on-apply').checked = storage.tailorOnApply !== false;
   document.getElementById('attach-documents').checked = storage.attachDocuments || false;
   
@@ -61,16 +70,26 @@ async function initializePopup() {
   jobQueue = storage.jobQueue || [];
   updateQueueDisplay();
   
-  // Check backend
-  checkBackendConnection(storage.accessToken);
-  
-  // Load profile
-  if (storage.userProfile) {
-    displayProfile(storage.userProfile);
+  // Load jobs if authenticated
+  if (storage.accessToken) {
+    await fetchJobsFromDatabase();
   }
+}
+
+function updateAuthUI(token, profile) {
+  const authSection = document.getElementById('auth-section');
+  const loggedInSection = document.getElementById('loggedin-section');
   
-  // Load jobs from database
-  await fetchJobsFromDatabase();
+  if (token) {
+    authSection.style.display = 'none';
+    loggedInSection.style.display = 'block';
+    if (profile) {
+      displayProfile(profile);
+    }
+  } else {
+    authSection.style.display = 'block';
+    loggedInSection.style.display = 'none';
+  }
 }
 
 function setupTabNavigation() {
@@ -130,24 +149,46 @@ function setupEventListeners() {
     chrome.storage.local.set({ attachDocuments: e.target.checked });
   });
   
-  // Settings toggles
+  // Settings toggles - with null checks
   document.getElementById('enabled-toggle').addEventListener('change', (e) => {
     chrome.runtime.sendMessage({ action: 'SET_ENABLED', enabled: e.target.checked });
   });
-  document.getElementById('auto-tailor-toggle').addEventListener('change', (e) => {
-    chrome.storage.local.set({ autoTailor: e.target.checked });
-  });
-  document.getElementById('show-panel-toggle').addEventListener('change', (e) => {
-    chrome.storage.local.set({ showPanel: e.target.checked });
-  });
-  document.getElementById('auto-queue-toggle').addEventListener('change', (e) => {
-    chrome.storage.local.set({ autoQueue: e.target.checked });
-  });
-  document.getElementById('workday-multipage-toggle').addEventListener('change', (e) => {
-    chrome.storage.local.set({ workdayMultiPage: e.target.checked });
-  });
   
-  document.getElementById('load-profile-btn').addEventListener('click', loadProfileFromQuantumHire);
+  const autoTailorToggle = document.getElementById('auto-tailor-toggle');
+  const showPanelToggle = document.getElementById('show-panel-toggle');
+  const autoQueueToggle = document.getElementById('auto-queue-toggle');
+  const workdayToggle = document.getElementById('workday-multipage-toggle');
+  
+  if (autoTailorToggle) {
+    autoTailorToggle.addEventListener('change', (e) => {
+      chrome.storage.local.set({ autoTailor: e.target.checked });
+    });
+  }
+  if (showPanelToggle) {
+    showPanelToggle.addEventListener('change', (e) => {
+      chrome.storage.local.set({ showPanel: e.target.checked });
+    });
+  }
+  if (autoQueueToggle) {
+    autoQueueToggle.addEventListener('change', (e) => {
+      chrome.storage.local.set({ autoQueue: e.target.checked });
+    });
+  }
+  if (workdayToggle) {
+    workdayToggle.addEventListener('change', (e) => {
+      chrome.storage.local.set({ workdayMultiPage: e.target.checked });
+    });
+  }
+  
+  // Auth form
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('signup-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: `${QUANTUMHIRE_URL}/auth` });
+  });
+  document.getElementById('logout-btn').addEventListener('click', handleLogout);
+  document.getElementById('refresh-profile-btn').addEventListener('click', refreshProfile);
+  
   document.getElementById('open-dashboard-btn').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: QUANTUMHIRE_URL });
@@ -802,90 +843,110 @@ async function startApplyingFromQueue() {
 // Profile & Backend
 // =========================
 
-async function checkBackendConnection(token) {
-  const statusEl = document.getElementById('backend-status');
+// =========================
+// Authentication
+// =========================
+
+async function handleLogin(e) {
+  e.preventDefault();
+  
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const btn = document.getElementById('login-btn');
+  const errorEl = document.getElementById('auth-error');
+  
+  if (!email || !password) {
+    showAuthError('Please enter email and password');
+    return;
+  }
+  
+  btn.disabled = true;
+  btn.textContent = '⏳ Signing in...';
+  errorEl.style.display = 'none';
   
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+    // Call Supabase auth directly
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'apikey': SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ email, password })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error_description || data.msg || 'Invalid credentials');
+    }
+    
+    // Save token and user
+    await chrome.storage.local.set({ 
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token
+    });
+    
+    // Fetch profile
+    const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&limit=1`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${data.access_token}`,
+        'Content-Type': 'application/json'
       }
     });
     
-    if (response.ok) {
-      statusEl.textContent = 'Connected ✓';
-      statusEl.classList.add('connected');
-    } else {
-      statusEl.textContent = 'Disconnected';
-      statusEl.classList.add('error');
-    }
-  } catch {
-    statusEl.textContent = 'Offline';
-    statusEl.classList.add('error');
-  }
-}
-
-async function loadProfileFromQuantumHire() {
-  const btn = document.getElementById('load-profile-btn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Loading...';
-  
-  try {
-    // First, try to get session from QuantumHire tab
-    const tabs = await chrome.tabs.query({ url: '*://*.lovable.app/*' });
-    let sessionToken = null;
-    
-    for (const tab of tabs) {
-      try {
-        // Inject script to get Supabase session from localStorage
-        const result = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            // Try to get the Supabase session from localStorage
-            const keys = Object.keys(localStorage);
-            for (const key of keys) {
-              if (key.includes('supabase') && key.includes('auth')) {
-                try {
-                  const data = JSON.parse(localStorage.getItem(key));
-                  if (data?.access_token) {
-                    return { 
-                      token: data.access_token,
-                      user: data.user 
-                    };
-                  }
-                } catch (e) {}
-              }
-            }
-            return null;
-          }
-        });
-        
-        if (result?.[0]?.result?.token) {
-          sessionToken = result[0].result.token;
-          console.log('✅ Got session token from QuantumHire tab');
-          break;
-        }
-      } catch (e) {
-        console.log('Could not access tab:', tab.url);
+    if (profileResponse.ok) {
+      const profiles = await profileResponse.json();
+      if (profiles.length > 0) {
+        await chrome.storage.local.set({ userProfile: profiles[0] });
+        displayProfile(profiles[0]);
       }
     }
     
-    if (!sessionToken) {
-      showToast('Open QuantumHire and log in first', 'error');
-      chrome.tabs.create({ url: QUANTUMHIRE_URL });
-      btn.disabled = false;
-      btn.textContent = '📥 Load Profile';
-      return;
-    }
+    // Update UI
+    updateAuthUI(data.access_token, null);
+    showToast('Signed in successfully!', 'success');
     
-    // Save the token
-    await chrome.storage.local.set({ accessToken: sessionToken });
+    // Load jobs
+    await fetchJobsFromDatabase();
     
-    // Now fetch the profile
+  } catch (error) {
+    console.error('Login error:', error);
+    showAuthError(error.message || 'Login failed');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+function showAuthError(message) {
+  const errorEl = document.getElementById('auth-error');
+  errorEl.textContent = message;
+  errorEl.style.display = 'block';
+}
+
+async function handleLogout() {
+  await chrome.storage.local.remove(['accessToken', 'refreshToken', 'userProfile']);
+  updateAuthUI(null, null);
+  allJobs = [];
+  filterJobsList();
+  showToast('Signed out', 'info');
+}
+
+async function refreshProfile() {
+  const storage = await chrome.storage.local.get(['accessToken']);
+  
+  if (!storage.accessToken) {
+    showToast('Please sign in first', 'error');
+    return;
+  }
+  
+  try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&limit=1`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${sessionToken}`,
+        'Authorization': `Bearer ${storage.accessToken}`,
         'Content-Type': 'application/json'
       }
     });
@@ -893,35 +954,17 @@ async function loadProfileFromQuantumHire() {
     if (response.ok) {
       const profiles = await response.json();
       if (profiles.length > 0) {
-        const profile = profiles[0];
-        await chrome.storage.local.set({ userProfile: profile });
-        displayProfile(profile);
-        
-        // Update backend status
-        document.getElementById('backend-status').textContent = 'Connected ✓';
-        document.getElementById('backend-status').className = 'status-badge connected';
-        
-        showToast('Profile synced! Ready to search jobs.', 'success');
-      } else {
-        showToast('No profile found. Create one in QuantumHire.', 'info');
-        chrome.tabs.create({ url: `${QUANTUMHIRE_URL}/profile` });
+        await chrome.storage.local.set({ userProfile: profiles[0] });
+        displayProfile(profiles[0]);
+        showToast('Profile refreshed!', 'success');
       }
     } else if (response.status === 401) {
-      // Token invalid
-      await chrome.storage.local.remove(['accessToken']);
-      showToast('Session expired. Please log in again.', 'error');
-      chrome.tabs.create({ url: QUANTUMHIRE_URL });
-    } else {
-      throw new Error('Failed to fetch profile');
+      await handleLogout();
+      showToast('Session expired. Please sign in again.', 'error');
     }
   } catch (error) {
-    console.error('Profile load error:', error);
-    showToast('Failed to load profile. Make sure you\'re logged in to QuantumHire.', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '📥 Load Profile';
+    showToast('Failed to refresh profile', 'error');
   }
-}
 
 function displayProfile(profile) {
   const card = document.getElementById('profile-card');
