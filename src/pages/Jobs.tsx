@@ -262,15 +262,32 @@ const Jobs = () => {
                 if (data?.success) {
                   await refetch();
                   const keywordPreview = keywords.split(',').slice(0, 3).map((k: string) => k.trim()).join(', ');
-                  toast.success(`Found ${data.totalFound || data.jobs?.length || 0} jobs`, {
-                    description: `Searched: ${keywordPreview}${keywords.split(',').length > 3 ? '...' : ''}`,
+                  
+                  // Build platform breakdown message
+                  let platformInfo = '';
+                  if (data.platforms && Object.keys(data.platforms).length > 0) {
+                    const topPlatforms = Object.entries(data.platforms)
+                      .sort((a, b) => (b[1] as number) - (a[1] as number))
+                      .slice(0, 4)
+                      .map(([name, count]) => `${name}: ${count}`)
+                      .join(', ');
+                    platformInfo = topPlatforms;
+                  }
+                  
+                  toast.success(`Found ${data.totalFound || 0} jobs across ${Object.keys(data.platforms || {}).length} platforms`, {
+                    description: platformInfo || `Searched: ${keywordPreview}`,
+                    duration: 5000,
                   });
                 } else {
-                  toast.error('Search returned no results');
+                  toast.error('Search returned no results', {
+                    description: 'Try different keywords or locations',
+                  });
                 }
               } catch (error) {
                 console.error('Search error:', error);
-                toast.error('Failed to search jobs');
+                toast.error('Failed to search jobs', {
+                  description: error instanceof Error ? error.message : 'Unknown error',
+                });
               } finally {
                 setIsSearching(false);
               }
