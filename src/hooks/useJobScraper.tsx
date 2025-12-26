@@ -81,6 +81,8 @@ export function useJobScraper() {
           match_score: job.match_score || 0,
           status: job.status || 'pending',
           applied_at: job.applied_at,
+          url_status: (job as any).url_status,
+          report_count: (job as any).report_count,
         }));
 
       if (append) {

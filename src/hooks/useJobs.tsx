@@ -17,6 +17,8 @@ export interface Job {
   match_score: number;
   status: 'pending' | 'applied' | 'interviewing' | 'offered' | 'rejected';
   applied_at: string | null;
+  url_status?: string;
+  report_count?: number;
 }
 
 const JOBS_PER_PAGE = 20;

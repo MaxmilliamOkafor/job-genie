@@ -35,3 +35,9 @@ verify_jwt = false
 
 [functions.validate-openai-key]
 verify_jwt = false
+
+[functions.validate-job-urls]
+verify_jwt = false
+
+[functions.report-broken-link]
+verify_jwt = false
