@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   MessageCircle,
   Gift,
-  XCircle
+  XCircle,
+  Hourglass
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -24,16 +25,75 @@ interface JobCardProps {
 
 const statusConfig = {
   new: { label: 'New', icon: Zap, className: 'bg-primary/10 text-primary border-primary/20' },
+  pending: { label: 'Pending', icon: Hourglass, className: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
   applied: { label: 'Applied', icon: CheckCircle2, className: 'status-applied' },
   interviewing: { label: 'Interviewing', icon: MessageCircle, className: 'status-interviewing' },
   offered: { label: 'Offered', icon: Gift, className: 'status-offered' },
   rejected: { label: 'Rejected', icon: XCircle, className: 'status-rejected' },
 };
 
+// Extract salary from description if not provided
+function extractSalary(salary: string | null | undefined, description: string | null | undefined): string {
+  if (salary && salary.trim()) return salary;
+  
+  if (!description) return 'Not specified';
+  
+  // Common salary patterns
+  const patterns = [
+    // $100,000 - $150,000 or $100k - $150k
+    /\$[\d,]+(?:k|K)?\s*[-–—to]+\s*\$?[\d,]+(?:k|K)?(?:\s*(?:per\s+)?(?:year|yr|annum|annually|pa))?/gi,
+    // $100,000/year or $100k/yr
+    /\$[\d,]+(?:k|K)?(?:\s*\/\s*(?:year|yr|annum|annually|hour|hr))?/gi,
+    // 100,000 - 150,000 USD/EUR/GBP
+    /[\d,]+\s*[-–—to]+\s*[\d,]+\s*(?:USD|EUR|GBP|CAD|AUD)/gi,
+    // £50,000 - £70,000
+    /[£€][\d,]+(?:k|K)?\s*[-–—to]+\s*[£€]?[\d,]+(?:k|K)?/gi,
+    // Salary: $X or Compensation: $X
+    /(?:salary|compensation|pay|wage)[:\s]+\$?[\d,]+(?:k|K)?/gi,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = description.match(pattern);
+    if (match) {
+      return match[0].trim();
+    }
+  }
+  
+  return 'Not specified';
+}
+
+// Format relative time with short labels
+function formatRelativeTime(dateString: string | null | undefined): string {
+  if (!dateString) return 'Recently';
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Recently';
+    
+    return formatDistanceToNow(date, { addSuffix: true })
+      .replace('about ', '')
+      .replace('less than a minute ago', 'just now')
+      .replace(' minutes', 'm')
+      .replace(' minute', 'm')
+      .replace(' hours', 'h')
+      .replace(' hour', 'h')
+      .replace(' days', 'd')
+      .replace(' day', 'd');
+  } catch {
+    return 'Recently';
+  }
+}
+
 export function JobCard({ job, onApply, onViewDetails }: JobCardProps) {
-  const status = statusConfig[job.status];
+  const status = statusConfig[job.status] || statusConfig.pending;
   const StatusIcon = status.icon;
-  const postedTime = formatDistanceToNow(new Date(job.postedDate), { addSuffix: true });
+  
+  // Use posted_date or postedDate (handle both naming conventions)
+  const dateField = (job as any).posted_date || (job as any).postedDate || (job as any).created_at;
+  const postedTime = formatRelativeTime(dateField);
+  
+  // Extract salary from description if not in dedicated field
+  const displaySalary = extractSalary(job.salary, (job as any).description || job.description);
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 hover:border-primary/30 animate-fade-in">
@@ -60,9 +120,9 @@ export function JobCard({ job, onApply, onViewDetails }: JobCardProps) {
                 <MapPin className="h-4 w-4" />
                 {job.location}
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1" title={displaySalary}>
                 <DollarSign className="h-4 w-4" />
-                {job.salary}
+                <span className="max-w-[150px] truncate">{displaySalary}</span>
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
