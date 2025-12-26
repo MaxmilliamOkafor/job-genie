@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -252,36 +253,48 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: 
       <CardContent className="p-4 space-y-4">
         {/* Main Filters Row */}
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* API Search Input - triggers new search */}
-          <div className="relative flex-1 flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search new jobs (triggers API search)..."
+          {/* API Search Input - supports comma-separated keywords */}
+          <div className="flex-1 space-y-2">
+            <div className="relative">
+              <Textarea
+                placeholder="Enter keywords (comma-separated), e.g.: Data Scientist, Machine Learning, Python..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-8"
-                onKeyDown={(e) => e.key === 'Enter' && handleApiSearch()}
+                className="min-h-[60px] resize-none pr-8"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleApiSearch();
+                  }
+                }}
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <Button onClick={handleApiSearch} disabled={!searchTerm || isSearching}>
-              {isSearching ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4 mr-2" />
-              )}
-              Search
-            </Button>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {searchTerm.split(',').filter(k => k.trim()).length} keyword(s) • Press Enter or click Search to find jobs
+              </p>
+              <Button onClick={handleApiSearch} disabled={!searchTerm.trim() || isSearching} size="sm">
+                {isSearching ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4 mr-2" />
+                )}
+                Search Jobs
+              </Button>
+            </div>
           </div>
-          
+        </div>
+        
+        {/* Filter Row */}
+        <div className="flex flex-col lg:flex-row gap-3">
           {/* Location Multi-Select */}
           <Popover open={locationPopoverOpen} onOpenChange={setLocationPopoverOpen}>
             <PopoverTrigger asChild>
