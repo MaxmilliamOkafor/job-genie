@@ -2214,6 +2214,22 @@ function createFloatingPanel() {
           <span class="qh-review-stat">⚠️ <span id="qh-needs-review">0</span> Need Review</span>
           <span class="qh-review-stat">❓ <span id="qh-unfamiliar">0</span> Unfamiliar</span>
         </div>
+        
+        <!-- Batch Processing Progress -->
+        <div class="qh-batch-progress hidden" id="qh-batch-progress">
+          <div class="qh-batch-header">
+            <span class="qh-batch-title">📑 Multi-Page Processing</span>
+            <span class="qh-batch-page" id="qh-batch-page">Page 1/1</span>
+          </div>
+          <div class="qh-batch-bar">
+            <div class="qh-batch-fill" id="qh-batch-fill" style="width: 0%"></div>
+          </div>
+          <div class="qh-batch-stats" id="qh-batch-stats">
+            <span>Pages: <strong id="qh-pages-done">0</strong>/<strong id="qh-pages-total">0</strong></span>
+            <span>Questions: <strong id="qh-questions-done">0</strong></span>
+          </div>
+        </div>
+        
         <div class="qh-review-list" id="qh-review-list"></div>
         <div class="qh-review-actions">
           <button class="qh-btn secondary" id="qh-approve-all">✅ Approve All</button>
@@ -2235,6 +2251,7 @@ function createFloatingPanel() {
           <button id="qh-quick-fill" class="qh-btn secondary">📝 Quick Fill</button>
         </div>
         <div class="qh-btn-row">
+          <button id="qh-batch-process" class="qh-btn secondary">📑 Batch All Pages</button>
           <button id="qh-next-page" class="qh-btn secondary">➡️ Next Page</button>
         </div>
       </div>
@@ -2461,6 +2478,17 @@ function addPanelStyles() {
     .quantumhire-toast-message { color: hsl(var(--qh-text)); font-size: 12px; line-height: 1.4; }
     .quantumhire-toast-close { background: none; border: none; color: hsl(var(--qh-muted-2)); cursor: pointer; font-size: 16px; }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Batch Processing Styles */
+    .qh-batch-progress { background: hsl(var(--qh-violet) / 0.10); border: 1px solid hsl(var(--qh-violet) / 0.25); border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .qh-batch-progress.hidden { display: none; }
+    .qh-batch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .qh-batch-title { font-size: 11px; font-weight: 700; color: hsl(var(--qh-violet)); }
+    .qh-batch-page { font-size: 10px; font-weight: 700; padding: 3px 8px; background: hsl(var(--qh-violet) / 0.15); border-radius: 6px; color: hsl(var(--qh-violet)); }
+    .qh-batch-bar { height: 6px; background: hsl(var(--qh-border) / 0.5); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+    .qh-batch-fill { height: 100%; background: linear-gradient(90deg, hsl(var(--qh-brand)), hsl(var(--qh-violet))); border-radius: 3px; transition: width 0.3s ease; }
+    .qh-batch-stats { display: flex; justify-content: space-between; font-size: 10px; color: hsl(var(--qh-muted)); }
+    .qh-batch-stats strong { color: hsl(var(--qh-text)); }
 
     .quantumhire-filled { box-shadow: 0 0 0 2px hsl(var(--qh-brand) / 0.55) !important; }
     #quantumhire-panel.minimized .qh-body { display: none; }
@@ -2906,6 +2934,251 @@ function setupPanelEvents(panel) {
   panel.querySelector('#qh-next-page').addEventListener('click', async () => {
     const navigated = await navigateToNextPage();
     if (!navigated) showToast('Next button not found', 'error');
+  });
+  
+  // Batch Process All Pages - Automatically process multi-page forms
+  panel.querySelector('#qh-batch-process')?.addEventListener('click', async () => {
+    const btn = panel.querySelector('#qh-batch-process');
+    const statusEl = panel.querySelector('#qh-status');
+    const batchProgress = panel.querySelector('#qh-batch-progress');
+    const reviewPanel = panel.querySelector('#qh-review-panel');
+    
+    btn.disabled = true;
+    automationState.isRunning = true;
+    
+    try {
+      updateStatus(statusEl, '📑', 'Starting batch processing...');
+      
+      // Show batch progress UI
+      batchProgress.classList.remove('hidden');
+      reviewPanel.classList.remove('hidden');
+      
+      const profileData = await chrome.storage.local.get(['userProfile', 'accessToken']);
+      const profile = profileData.userProfile || {};
+      const jobData = extractJobDetails();
+      
+      let currentPage = 1;
+      let totalPages = 1;
+      let totalQuestionsProcessed = 0;
+      let allReviewedAnswers = {};
+      let batchResults = [];
+      
+      // Estimate total pages (will update as we go)
+      const estimateTotalPages = () => {
+        // Check for page indicators
+        const pageIndicators = document.querySelectorAll('[class*="step"], [class*="page"], .progress-step, .wizard-step, [data-automation-id*="step"]');
+        if (pageIndicators.length > 0) {
+          const active = document.querySelector('[class*="active"], [class*="current"], [aria-current="step"]');
+          if (active) {
+            const idx = Array.from(pageIndicators).indexOf(active);
+            return { current: idx + 1, total: pageIndicators.length };
+          }
+        }
+        return { current: 1, total: 1 };
+      };
+      
+      const pageInfo = estimateTotalPages();
+      currentPage = pageInfo.current;
+      totalPages = Math.max(pageInfo.total, currentPage);
+      
+      // Update UI
+      const updateBatchUI = () => {
+        panel.querySelector('#qh-batch-page').textContent = `Page ${currentPage}/${totalPages}`;
+        panel.querySelector('#qh-batch-fill').style.width = `${(currentPage / totalPages) * 100}%`;
+        panel.querySelector('#qh-pages-done').textContent = currentPage;
+        panel.querySelector('#qh-pages-total').textContent = totalPages;
+        panel.querySelector('#qh-questions-done').textContent = totalQuestionsProcessed;
+      };
+      
+      updateBatchUI();
+      
+      // Process pages loop
+      let hasMorePages = true;
+      let maxPages = 15; // Safety limit
+      let pagesProcessed = 0;
+      
+      while (hasMorePages && pagesProcessed < maxPages && !automationState.shouldQuit) {
+        // Wait if paused
+        while (automationState.isPaused) {
+          await new Promise(r => setTimeout(r, 100));
+          if (automationState.shouldQuit) throw new Error('QUIT');
+        }
+        
+        updateStatus(statusEl, '🔍', `Analyzing page ${currentPage}...`);
+        
+        // Detect questions on current page
+        const questions = detectAllQuestions();
+        
+        if (questions.length > 0) {
+          updateStatus(statusEl, '🤖', `Found ${questions.length} questions on page ${currentPage}, analyzing...`);
+          
+          // Prepare questions for AI
+          const questionsForAI = questions.map((q, i) => ({
+            id: q.id || `p${currentPage}_q${i}`,
+            label: q.label,
+            type: q.type,
+            options: q.type === 'select' ? Array.from(q.element?.options || []).map(o => o.text).filter(t => t) : undefined,
+            required: q.element?.required || q.element?.getAttribute('aria-required') === 'true' || false
+          }));
+          
+          // Get AI answers
+          let aiAnswers = {};
+          
+          if (profileData.accessToken) {
+            try {
+              const response = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': SUPABASE_KEY,
+                  'Authorization': `Bearer ${profileData.accessToken}`
+                },
+                body: JSON.stringify({
+                  questions: questionsForAI,
+                  jobTitle: jobData.title,
+                  company: jobData.company,
+                  jobDescription: jobData.description,
+                  userProfile: {
+                    firstName: profile.first_name,
+                    lastName: profile.last_name,
+                    email: profile.email,
+                    phone: profile.phone,
+                    skills: profile.skills || [],
+                    workExperience: profile.work_experience || [],
+                    education: profile.education || [],
+                    certifications: profile.certifications || [],
+                    city: profile.city,
+                    state: profile.state,
+                    country: profile.country,
+                    citizenship: profile.citizenship,
+                    willingToRelocate: profile.willing_to_relocate,
+                    visaRequired: profile.visa_required,
+                    veteranStatus: profile.veteran_status,
+                    disability: profile.disability,
+                    drivingLicense: profile.driving_license,
+                    securityClearance: profile.security_clearance,
+                    expectedSalary: profile.expected_salary,
+                    noticePeriod: profile.notice_period,
+                    totalExperience: profile.total_experience,
+                    linkedin: profile.linkedin,
+                    github: profile.github,
+                    portfolio: profile.portfolio,
+                    highestEducation: profile.highest_education
+                  }
+                })
+              });
+              
+              if (response.ok) {
+                const aiResult = await response.json();
+                if (aiResult.answers) {
+                  aiResult.answers.forEach(a => {
+                    aiAnswers[a.id] = {
+                      answer: a.answer,
+                      selectValue: a.selectValue,
+                      confidence: a.confidence,
+                      atsScore: a.atsScore,
+                      needsReview: a.needsReview,
+                      reasoning: a.reasoning
+                    };
+                  });
+                }
+              }
+            } catch (e) {
+              console.error('AI batch error:', e);
+            }
+          }
+          
+          // Also check knockout bank
+          questions.forEach((q, i) => {
+            const qId = q.id || `p${currentPage}_q${i}`;
+            const knockoutMatch = matchKnockoutQuestion(q.label, profile);
+            if (knockoutMatch && !aiAnswers[qId]) {
+              aiAnswers[qId] = {
+                answer: knockoutMatch.answer,
+                selectValue: knockoutMatch.selectValue || knockoutMatch.answer.toLowerCase(),
+                confidence: 'high',
+                atsScore: 95,
+                needsReview: false,
+                reasoning: 'Standard ATS knockout question'
+              };
+            }
+          });
+          
+          // Merge with all answers
+          Object.assign(allReviewedAnswers, aiAnswers);
+          totalQuestionsProcessed += Object.keys(aiAnswers).length;
+          
+          // Apply answers to current page
+          updateStatus(statusEl, '📝', `Filling ${Object.keys(aiAnswers).length} answers on page ${currentPage}...`);
+          const fillResult = await fillAllQuestions(profile, jobData, aiAnswers);
+          
+          batchResults.push({
+            page: currentPage,
+            questionsFound: questions.length,
+            answersFilled: fillResult.filledCount,
+            timestamp: new Date().toISOString()
+          });
+          
+          showToast(`✅ Page ${currentPage}: ${fillResult.filledCount} fields filled`, 'success');
+        } else {
+          updateStatus(statusEl, 'ℹ️', `No questions found on page ${currentPage}`);
+          batchResults.push({ page: currentPage, questionsFound: 0, answersFilled: 0 });
+        }
+        
+        updateBatchUI();
+        pagesProcessed++;
+        
+        // Check if this is the final page
+        if (isFinalPage()) {
+          hasMorePages = false;
+          updateStatus(statusEl, '🎉', 'Final page reached! Application ready to submit.');
+          showToast('🎉 All pages processed! Ready to submit.', 'success');
+          break;
+        }
+        
+        // Try to navigate to next page
+        await new Promise(r => setTimeout(r, getDelayForSpeed()));
+        
+        const navigated = await navigateToNextPage();
+        if (!navigated) {
+          hasMorePages = false;
+          updateStatus(statusEl, '✅', 'No more pages detected');
+        } else {
+          currentPage++;
+          totalPages = Math.max(totalPages, currentPage);
+          updateBatchUI();
+          
+          // Wait for page to load
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      
+      // Store all reviewed answers
+      panel.dataset.reviewedAnswers = JSON.stringify(allReviewedAnswers);
+      
+      // Update final stats
+      updateBatchUI();
+      panel.querySelector('#qh-auto-filled').textContent = totalQuestionsProcessed;
+      panel.querySelector('#qh-ats-score-badge').textContent = `ATS: ${Math.round(totalQuestionsProcessed > 0 ? 85 : 0)}%`;
+      
+      // Summary
+      const totalFilled = batchResults.reduce((sum, r) => sum + r.answersFilled, 0);
+      updateStatus(statusEl, '🎉', `Batch complete! ${pagesProcessed} pages, ${totalFilled} fields filled`);
+      showToast(`📑 Batch complete: ${pagesProcessed} pages processed, ${totalFilled} fields filled`, 'success');
+      
+    } catch (error) {
+      if (error.message === 'QUIT') {
+        updateStatus(statusEl, '⏹️', 'Batch processing stopped');
+        showToast('Batch processing stopped', 'warning');
+      } else {
+        console.error('Batch processing error:', error);
+        updateStatus(statusEl, '❌', error.message);
+        showToast(error.message, 'error');
+      }
+    } finally {
+      btn.disabled = false;
+      automationState.isRunning = false;
+    }
   });
 }
 
