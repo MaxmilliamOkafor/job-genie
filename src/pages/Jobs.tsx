@@ -158,12 +158,20 @@ const Jobs = () => {
     }
   }, [activeSearchQuery]);
 
-  // Sort jobs based on selected sort option
+  // Sort jobs based on selected sort option (default: most recently added first)
   const sortedJobs = useMemo(() => {
     return [...filteredJobs].sort((a, b) => {
-      const aDate = new Date(a.posted_date).getTime();
-      const bDate = new Date(b.posted_date).getTime();
-      return bDate - aDate;
+      if (sortBy === 'posted') {
+        // Sort by job posted date
+        const aDate = new Date(a.posted_date).getTime();
+        const bDate = new Date(b.posted_date).getTime();
+        return bDate - aDate;
+      } else {
+        // Sort by when job was added to system (created_at)
+        const aCreated = new Date((a as any).created_at || a.posted_date).getTime();
+        const bCreated = new Date((b as any).created_at || b.posted_date).getTime();
+        return bCreated - aCreated;
+      }
     });
   }, [filteredJobs, sortBy]);
 
