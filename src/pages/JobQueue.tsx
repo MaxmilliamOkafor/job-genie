@@ -19,6 +19,7 @@ import {
   Upload,
   Play,
   Pause,
+  Square,
   Trash2,
   Link,
   Plus,
@@ -30,6 +31,7 @@ import {
   Zap,
   ExternalLink,
   RefreshCw,
+  CheckSquare,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,10 +53,12 @@ const JobQueuePage = () => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const [urlInput, setUrlInput] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const pauseRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Validate job URL
@@ -223,10 +227,21 @@ const JobQueuePage = () => {
     }
 
     setIsProcessing(true);
+    setIsPaused(false);
+    pauseRef.current = false;
     setProgress(0);
     abortRef.current = new AbortController();
 
     for (let i = 0; i < pendingItems.length; i++) {
+      // Check for abort
+      if (abortRef.current.signal.aborted) break;
+
+      // Wait while paused
+      while (pauseRef.current && !abortRef.current.signal.aborted) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
+      // Check abort again after pause
       if (abortRef.current.signal.aborted) break;
 
       const item = pendingItems[i];
@@ -305,15 +320,47 @@ const JobQueuePage = () => {
     }
 
     setIsProcessing(false);
+    setIsPaused(false);
+    pauseRef.current = false;
     const completed = queue.filter((q) => q.status === 'completed').length;
     toast.success(`Completed ${completed} applications!`);
+  };
+
+  // Pause automation
+  const pauseAutomation = () => {
+    pauseRef.current = true;
+    setIsPaused(true);
+    toast.info('Automation paused');
+  };
+
+  // Resume automation
+  const resumeAutomation = () => {
+    pauseRef.current = false;
+    setIsPaused(false);
+    toast.success('Automation resumed');
   };
 
   // Stop automation
   const stopAutomation = () => {
     abortRef.current?.abort();
+    pauseRef.current = false;
     setIsProcessing(false);
+    setIsPaused(false);
+    // Reset any currently processing items back to pending
+    setQueue((prev) =>
+      prev.map((q) => (q.status === 'processing' ? { ...q, status: 'pending' } : q))
+    );
     toast.info('Automation stopped');
+  };
+
+  // Select all pending jobs for quick start
+  const selectAllPending = () => {
+    const pendingIds = queue.filter((q) => q.status === 'pending').map((q) => q.id);
+    if (pendingIds.length === selectedIds.length && pendingIds.every(id => selectedIds.includes(id))) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(pendingIds);
+    }
   };
 
   // Clear completed
@@ -431,34 +478,51 @@ const JobQueuePage = () => {
         {queue.length > 0 && (
           <div className="flex flex-wrap gap-2 items-center justify-between">
             <div className="flex gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={selectAllPending} disabled={isProcessing}>
+                <CheckSquare className="h-4 w-4 mr-1" />
+                Select All Pending ({pendingCount})
+              </Button>
               {selectedIds.length > 0 && (
-                <Button variant="destructive" size="sm" onClick={deleteSelected}>
+                <Button variant="destructive" size="sm" onClick={deleteSelected} disabled={isProcessing}>
                   <Trash2 className="h-4 w-4 mr-1" />
                   Delete ({selectedIds.length})
                 </Button>
               )}
               {completedCount > 0 && (
-                <Button variant="outline" size="sm" onClick={clearCompleted}>
+                <Button variant="outline" size="sm" onClick={clearCompleted} disabled={isProcessing}>
                   Clear Completed
                 </Button>
               )}
               {failedCount > 0 && (
-                <Button variant="outline" size="sm" onClick={retryFailed}>
+                <Button variant="outline" size="sm" onClick={retryFailed} disabled={isProcessing}>
                   <RefreshCw className="h-4 w-4 mr-1" />
                   Retry Failed
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={clearAll}>
+              <Button variant="ghost" size="sm" onClick={clearAll} disabled={isProcessing}>
                 Clear All
               </Button>
             </div>
 
             <div className="flex gap-2">
               {isProcessing ? (
-                <Button variant="destructive" onClick={stopAutomation}>
-                  <Pause className="h-4 w-4 mr-2" />
-                  Stop Automation
-                </Button>
+                <>
+                  {isPaused ? (
+                    <Button onClick={resumeAutomation} variant="default">
+                      <Play className="h-4 w-4 mr-2" />
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button onClick={pauseAutomation} variant="secondary">
+                      <Pause className="h-4 w-4 mr-2" />
+                      Pause
+                    </Button>
+                  )}
+                  <Button variant="destructive" onClick={stopAutomation}>
+                    <Square className="h-4 w-4 mr-2" />
+                    Stop
+                  </Button>
+                </>
               ) : (
                 <Button onClick={startAutomation} disabled={pendingCount === 0} size="lg">
                   <Zap className="h-4 w-4 mr-2" />
@@ -471,17 +535,24 @@ const JobQueuePage = () => {
 
         {/* Progress */}
         {isProcessing && (
-          <Card>
+          <Card className={isPaused ? 'border-warning' : ''}>
             <CardContent className="py-4">
               <div className="flex items-center gap-4">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                {isPaused ? (
+                  <Pause className="h-5 w-5 text-warning" />
+                ) : (
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                )}
                 <div className="flex-1">
                   <Progress value={progress} className="h-2" />
                 </div>
                 <span className="text-sm font-medium">{Math.round(progress)}%</span>
               </div>
               <p className="text-xs text-muted-foreground mt-2 text-center">
-                Processing {processingCount} job(s)... Do not close this page.
+                {isPaused 
+                  ? 'Automation paused. Click Resume to continue.' 
+                  : `Processing ${processingCount} job(s)... Do not close this page.`
+                }
               </p>
             </CardContent>
           </Card>
