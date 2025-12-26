@@ -8,6 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { 
   Play, 
   Pause, 
   Eye, 
@@ -16,7 +23,9 @@ import {
   CheckCircle, 
   XCircle, 
   Loader2,
-  CloudOff
+  CloudOff,
+  Timer,
+  AlertTriangle
 } from 'lucide-react';
 import { Job } from '@/hooks/useJobs';
 import { Profile } from '@/hooks/useProfile';
@@ -35,9 +44,19 @@ interface AutomationLog {
   timestamp: Date;
   jobTitle: string;
   company: string;
-  status: 'pending' | 'tailoring' | 'applied' | 'failed';
+  status: 'pending' | 'tailoring' | 'applied' | 'failed' | 'rate-limited';
   message: string;
 }
+
+// OpenAI tier configurations with recommended delays
+const OPENAI_TIERS = {
+  free: { label: 'Free Tier', delay: 5000, rpm: 3 },
+  tier1: { label: 'Tier 1 ($5+)', delay: 3000, rpm: 60 },
+  tier2: { label: 'Tier 2 ($50+)', delay: 2000, rpm: 100 },
+  tier3: { label: 'Tier 3 ($100+)', delay: 1500, rpm: 200 },
+  tier4: { label: 'Tier 4 ($250+)', delay: 1000, rpm: 500 },
+  tier5: { label: 'Tier 5 ($1000+)', delay: 500, rpm: 1000 },
+};
 
 export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanelProps) {
   const { user } = useAuth();
@@ -48,7 +67,71 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
   const [logs, setLogs] = useState<AutomationLog[]>([]);
   const [currentJobIndex, setCurrentJobIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [openaiTier, setOpenaiTier] = useState<keyof typeof OPENAI_TIERS>('free');
+  const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
+  const [nextRequestCountdown, setNextRequestCountdown] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load saved settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('automation_settings')
+        .select('openai_tier, api_delay_ms')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (data?.openai_tier) {
+        setOpenaiTier(data.openai_tier as keyof typeof OPENAI_TIERS);
+      }
+    };
+    loadSettings();
+  }, [user?.id]);
+
+  // Save tier setting when changed
+  const handleTierChange = async (tier: keyof typeof OPENAI_TIERS) => {
+    setOpenaiTier(tier);
+    if (user?.id) {
+      await supabase
+        .from('automation_settings')
+        .update({ 
+          openai_tier: tier,
+          api_delay_ms: OPENAI_TIERS[tier].delay 
+        })
+        .eq('user_id', user.id);
+      toast.success(`API delay set to ${OPENAI_TIERS[tier].delay / 1000}s for ${OPENAI_TIERS[tier].label}`);
+    }
+  };
+
+  // Countdown timer effect
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const startCountdown = (seconds: number, isRateLimit: boolean = false) => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+    
+    const setter = isRateLimit ? setRateLimitCountdown : setNextRequestCountdown;
+    setter(seconds);
+    
+    countdownIntervalRef.current = setInterval(() => {
+      setter(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownIntervalRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   // All pending jobs are eligible (no match score filter)
   const eligibleJobs = jobs.filter(job => job.status === 'pending');
@@ -232,6 +315,8 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
     }
 
     // Visible mode - process one by one with UI updates
+    const tierDelay = OPENAI_TIERS[openaiTier].delay;
+    
     for (let i = 0; i < jobsToProcess.length; i++) {
       if (abortControllerRef.current?.signal.aborted) break;
 
@@ -241,13 +326,28 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
 
       const success = await applyToJob(job);
 
-      // Longer delay between applications to avoid rate limits (3-5 seconds)
-      const baseDelay = 3000;
-      const jitter = Math.random() * 2000; // Add 0-2s random jitter
-      await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
+      // Use tier-based delay with jitter
+      if (i < jobsToProcess.length - 1) {
+        const jitter = Math.random() * 1000;
+        const totalDelay = tierDelay + jitter;
+        const delaySeconds = Math.ceil(totalDelay / 1000);
+        
+        addLog({
+          jobTitle: 'Queue',
+          company: '',
+          status: 'pending',
+          message: `Waiting ${delaySeconds}s before next request (${OPENAI_TIERS[openaiTier].label})...`
+        });
+        
+        startCountdown(delaySeconds, false);
+        await new Promise(resolve => setTimeout(resolve, totalDelay));
+        setNextRequestCountdown(0);
+      }
     }
 
     setIsRunning(false);
+    setNextRequestCountdown(0);
+    setRateLimitCountdown(0);
     toast.success('Automation complete!');
   };
 
@@ -277,6 +377,69 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
 
       {isVisible && (
         <CardContent className="space-y-4">
+          {/* Rate Limit / Countdown Alerts */}
+          {rateLimitCountdown > 0 && (
+            <div className="flex items-center gap-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg animate-pulse">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-destructive">Rate Limited</p>
+                <p className="text-xs text-muted-foreground">Retrying in {rateLimitCountdown}s...</p>
+              </div>
+              <Badge variant="destructive" className="text-lg px-3 py-1">
+                <Timer className="h-4 w-4 mr-1" />
+                {rateLimitCountdown}s
+              </Badge>
+            </div>
+          )}
+          
+          {nextRequestCountdown > 0 && !rateLimitCountdown && (
+            <div className="flex items-center gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+              <Timer className="h-5 w-5 text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Next request in</p>
+                <p className="text-xs text-muted-foreground">Spacing requests to avoid rate limits</p>
+              </div>
+              <Badge variant="secondary" className="text-lg px-3 py-1">
+                {nextRequestCountdown}s
+              </Badge>
+            </div>
+          )}
+
+          {/* OpenAI Tier Selection */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              OpenAI Tier (affects request speed)
+            </Label>
+            <Select 
+              value={openaiTier} 
+              onValueChange={(v) => handleTierChange(v as keyof typeof OPENAI_TIERS)}
+              disabled={isRunning}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(OPENAI_TIERS).map(([key, config]) => (
+                  <SelectItem key={key} value={key}>
+                    <div className="flex items-center justify-between gap-4">
+                      <span>{config.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {config.delay / 1000}s delay • {config.rpm} RPM
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Higher tiers have faster rate limits. Check your tier at{' '}
+              <a href="https://platform.openai.com/account/limits" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                OpenAI Dashboard
+              </a>
+            </p>
+          </div>
+
           {/* Controls */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="flex items-center justify-between">
@@ -352,6 +515,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
                       {log.status === 'tailoring' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
                       {log.status === 'applied' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {log.status === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
+                      {log.status === 'rate-limited' && <AlertTriangle className="h-4 w-4 text-amber-500" />}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">
                           {log.jobTitle} {log.company && `at ${log.company}`}

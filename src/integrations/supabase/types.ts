@@ -96,6 +96,7 @@ export type Database = {
       }
       automation_settings: {
         Row: {
+          api_delay_ms: number | null
           apply_within_minutes: number | null
           auto_apply_enabled: boolean | null
           background_apply_count: number | null
@@ -103,12 +104,14 @@ export type Database = {
           created_at: string | null
           id: string
           min_match_score: number | null
+          openai_tier: string | null
           platforms: string[] | null
           send_referral_emails: boolean | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          api_delay_ms?: number | null
           apply_within_minutes?: number | null
           auto_apply_enabled?: boolean | null
           background_apply_count?: number | null
@@ -116,12 +119,14 @@ export type Database = {
           created_at?: string | null
           id?: string
           min_match_score?: number | null
+          openai_tier?: string | null
           platforms?: string[] | null
           send_referral_emails?: boolean | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          api_delay_ms?: number | null
           apply_within_minutes?: number | null
           auto_apply_enabled?: boolean | null
           background_apply_count?: number | null
@@ -129,6 +134,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           min_match_score?: number | null
+          openai_tier?: string | null
           platforms?: string[] | null
           send_referral_emails?: boolean | null
           updated_at?: string | null
