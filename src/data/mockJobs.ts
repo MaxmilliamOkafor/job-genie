@@ -175,7 +175,7 @@ export const mockJobs: Job[] = [
 export const atsPlatforms = [
   "Workday",
   "SmartRecruiters",
-  "Direct Company Website (LinkedIn and Indeed)",
+  "Company Website (LinkedIn and Indeed)",
   "Bullhorn",
   "Teamtailor",
   "Workable",

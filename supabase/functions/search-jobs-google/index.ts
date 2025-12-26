@@ -49,7 +49,7 @@ const ATS_PLATFORMS = {
     jobIdPattern: /\/\d+/,
   },
   direct: {
-    name: 'Direct Company Website (LinkedIn and Indeed)',
+    name: 'Company Website (LinkedIn and Indeed)',
     sitePatterns: [
       'site:linkedin.com/jobs/view -"Easy Apply"',
       'site:indeed.com/viewjob -"easily apply"',
