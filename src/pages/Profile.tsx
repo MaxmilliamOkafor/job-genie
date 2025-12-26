@@ -12,7 +12,7 @@ import { useProfile, type Profile } from '@/hooks/useProfile';
 import { CVUpload } from '@/components/profile/CVUpload';
 import { 
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
-  Shield, CheckCircle, Globe, FileText, Languages 
+  Shield, CheckCircle, Globe, FileText, Languages, Key, Eye, EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -40,6 +40,7 @@ const Profile = () => {
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
+  const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -148,6 +149,72 @@ const Profile = () => {
             });
           }}
         />
+
+        {/* OpenAI API Key */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-primary" />
+              OpenAI API Key (Required for AI Features)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Enter your OpenAI API key to enable AI-powered resume tailoring and cover letter generation. 
+              Your key is stored securely and only used for your own applications.
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input 
+                  type={showApiKey ? 'text' : 'password'}
+                  placeholder="sk-..."
+                  value={localProfile.openai_api_key || ''}
+                  onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                >
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <Button 
+                onClick={() => {
+                  if (localProfile.openai_api_key) {
+                    updateProfile({ openai_api_key: localProfile.openai_api_key });
+                    toast.success('API key saved!');
+                  }
+                }}
+                disabled={!localProfile.openai_api_key}
+              >
+                Save Key
+              </Button>
+            </div>
+            {localProfile.openai_api_key && (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <CheckCircle className="h-4 w-4" />
+                API key configured - AI features enabled
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Get your API key from{' '}
+              <a 
+                href="https://platform.openai.com/api-keys" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                OpenAI Platform
+              </a>
+              . Uses GPT-4o-mini for cost-effective AI tailoring.
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

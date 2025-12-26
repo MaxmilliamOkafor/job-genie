@@ -327,6 +327,7 @@ export type Database = {
           learned_preferences: Json | null
           linkedin: string | null
           notice_period: string | null
+          openai_api_key: string | null
           phone: string | null
           portfolio: string | null
           race_ethnicity: string | null
@@ -374,6 +375,7 @@ export type Database = {
           learned_preferences?: Json | null
           linkedin?: string | null
           notice_period?: string | null
+          openai_api_key?: string | null
           phone?: string | null
           portfolio?: string | null
           race_ethnicity?: string | null
@@ -421,6 +423,7 @@ export type Database = {
           learned_preferences?: Json | null
           linkedin?: string | null
           notice_period?: string | null
+          openai_api_key?: string | null
           phone?: string | null
           portfolio?: string | null
           race_ethnicity?: string | null

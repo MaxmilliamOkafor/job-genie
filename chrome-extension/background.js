@@ -513,9 +513,12 @@ async function getTailoredApplication(job) {
     const errorText = await response.text();
     console.error('QuantumHire AI: API error', response.status, errorText);
     
-    if (response.status === 401) throw new Error('Authentication failed. Please reconnect.');
+    if (response.status === 400 && errorText.includes('API key')) {
+      throw new Error('OpenAI API key not configured. Please add your API key in Profile settings on the web app.');
+    }
+    if (response.status === 401) throw new Error('Authentication failed. Please reconnect or check your OpenAI API key.');
     if (response.status === 429) throw new Error('Rate limit exceeded. Please try again later.');
-    if (response.status === 402) throw new Error('AI usage limit reached. Please add credits.');
+    if (response.status === 402) throw new Error('OpenAI billing issue. Please check your OpenAI account.');
     
     throw new Error(`API error: ${response.status}`);
   }

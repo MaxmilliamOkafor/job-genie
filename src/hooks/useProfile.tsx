@@ -47,6 +47,7 @@ export interface Profile {
   cv_file_path: string | null;
   cv_file_name: string | null;
   cv_uploaded_at: string | null;
+  openai_api_key: string | null;
 }
 
 export function useProfile() {
@@ -88,6 +89,7 @@ export function useProfile() {
           cv_uploaded_at: data.cv_uploaded_at || null,
           gender: data.gender || null,
           hispanic_latino: data.hispanic_latino ?? false,
+          openai_api_key: (data as any).openai_api_key || null,
         });
       }
     } catch (error) {
