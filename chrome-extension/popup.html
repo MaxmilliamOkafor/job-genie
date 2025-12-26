@@ -14,7 +14,10 @@
         <img src="icons/icon48.png" alt="QuantumHire" class="logo">
         <div class="brand">
           <h1>QuantumHire AI</h1>
-          <span class="tagline">Smart ATS-Optimized Applications</span>
+          <span class="tagline">ATS-Optimized Auto Apply</span>
+        </div>
+        <div class="header-actions">
+          <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
         </div>
       </div>
     </header>
@@ -22,9 +25,9 @@
     <!-- Not Connected State -->
     <section id="not-connected" class="section">
       <div class="connect-card">
-        <div class="connect-icon">🔐</div>
-        <h2>Connect Your Account</h2>
-        <p class="connect-desc">Sign in to access your profile and start auto-applying to jobs with AI-tailored resumes.</p>
+        <div class="connect-icon">🚀</div>
+        <h2>Welcome to QuantumHire</h2>
+        <p class="connect-desc">AI-powered job applications with ATS-optimized resumes. Connect to start auto-applying.</p>
         
         <form id="login-form" class="login-form">
           <div class="form-group">
@@ -36,7 +39,7 @@
             <input type="password" id="password" placeholder="••••••••" required>
           </div>
           <button type="submit" id="connect-btn" class="btn primary full">
-            <span class="btn-icon">🚀</span>
+            <span class="btn-icon">🔐</span>
             Connect Account
           </button>
         </form>
@@ -45,78 +48,51 @@
 
     <!-- Connected State -->
     <section id="connected" class="section hidden">
-      <!-- Profile Card -->
-      <div class="profile-card">
-        <div class="profile-header">
+      <!-- Compact Profile Bar -->
+      <div class="profile-bar">
+        <div class="profile-left">
           <div class="avatar" id="avatar">MO</div>
           <div class="profile-info">
             <span class="profile-name" id="profile-name">Max Okafor</span>
-            <span class="profile-email" id="profile-email">maxokafordev@gmail.com</span>
-          </div>
-          <div class="connection-status">
-            <span class="status-dot"></span>
-            <span>Ready</span>
+            <span class="profile-stats-inline">
+              <span id="skills-count">0</span> skills • <span id="exp-years">0</span> yrs exp
+            </span>
           </div>
         </div>
-        
-        <div class="profile-stats">
-          <div class="stat">
-            <span class="stat-value" id="skills-count">0</span>
-            <span class="stat-label">Skills</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value" id="exp-years">0</span>
-            <span class="stat-label">Exp Years</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value" id="certs-count">0</span>
-            <span class="stat-label">Certs</span>
-          </div>
-        </div>
-        
-        <button id="refresh-btn" class="btn ghost small">
-          <span class="btn-icon">🔄</span>
-          Refresh Profile
-        </button>
-      </div>
-
-      <!-- Auto-Fill Toggle -->
-      <div class="toggle-card">
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <span class="toggle-label">⚡ Auto-Fill Enabled</span>
-            <span class="toggle-desc">Automatically fill forms on job pages</span>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="autofill-toggle" checked>
-            <span class="toggle-slider"></span>
-          </label>
+        <div class="connection-badge">
+          <span class="status-dot"></span>
+          Ready
         </div>
       </div>
 
-      <!-- ATS Credentials Section (Expanded by default) -->
-      <div class="credentials-card" id="credentials-card">
-        <div class="credentials-header" id="credentials-toggle">
-          <span>🔑 ATS Login Credentials</span>
-          <span class="toggle-arrow">▲</span>
+      <!-- ATS Preview Card (NEW - Shows before applying) -->
+      <div id="ats-preview-card" class="ats-preview-card hidden">
+        <div class="ats-preview-header">
+          <span class="ats-preview-title">📊 ATS Match Preview</span>
+          <button id="close-preview-btn" class="close-btn">×</button>
         </div>
-        <div class="credentials-body" id="credentials-body">
-          <p class="credentials-note">Your Workday/ATS login for auto-fill. Stored locally only.</p>
-          <div class="form-group">
-            <label for="ats-email">ATS Email</label>
-            <input type="email" id="ats-email" placeholder="your@email.com">
+        <div class="ats-score-ring">
+          <svg viewBox="0 0 36 36" class="circular-chart large">
+            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+            <path class="circle" id="preview-score-circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+            <text x="18" y="20.35" class="percentage" id="preview-score-text">--%</text>
+          </svg>
+        </div>
+        <div class="ats-keywords-preview">
+          <div class="keywords-section matched">
+            <span class="keywords-label">✅ Matched (<span id="matched-count">0</span>)</span>
+            <div class="keywords-chips" id="matched-keywords"></div>
           </div>
-          <div class="form-group">
-            <label for="ats-password">ATS Password</label>
-            <div class="password-input-wrapper">
-              <input type="password" id="ats-password" placeholder="••••••••">
-              <button type="button" id="toggle-password-btn" class="toggle-password-btn" title="Show/Hide Password">👁️</button>
-            </div>
+          <div class="keywords-section missing">
+            <span class="keywords-label">⚠️ Missing (<span id="missing-count">0</span>)</span>
+            <div class="keywords-chips" id="missing-keywords"></div>
           </div>
-          <div class="credentials-actions">
-            <button id="save-credentials-btn" class="btn small primary">💾 Save</button>
-            <button id="clear-credentials-btn" class="btn small ghost">🗑️ Clear</button>
-          </div>
+        </div>
+        <div class="ats-preview-actions">
+          <button id="proceed-apply-btn" class="btn primary">
+            <span class="btn-icon">⚡</span> Proceed with Apply
+          </button>
+          <button id="skip-job-btn" class="btn ghost">Skip Job</button>
         </div>
       </div>
 
@@ -127,58 +103,72 @@
           <span class="ats-badge" id="ats-badge">ATS</span>
         </div>
         <div class="job-details" id="job-details">
-          <span class="job-checking">Checking page...</span>
+          <span class="job-checking">Scanning page...</span>
+        </div>
+        <div class="job-actions" id="job-actions" style="display:none;">
+          <button id="preview-match-btn" class="btn small ghost">
+            <span class="btn-icon">📊</span> Preview Match
+          </button>
         </div>
       </div>
 
       <!-- Main Action Buttons -->
-      <button id="apply-now-btn" class="btn action-btn" disabled>
-        <div class="action-content">
-          <span class="action-icon">⚡</span>
-          <div class="action-text">
-            <span class="action-title">Apply with AI</span>
-            <span class="action-subtitle">Tailor resume + Auto-fill form</span>
+      <div class="action-buttons">
+        <button id="apply-now-btn" class="btn action-btn" disabled>
+          <div class="action-content">
+            <span class="action-icon">⚡</span>
+            <div class="action-text">
+              <span class="action-title">Apply with AI</span>
+              <span class="action-subtitle">Tailor + Auto-fill + Submit</span>
+            </div>
           </div>
-        </div>
-      </button>
+        </button>
 
-      <!-- Add to Queue Button -->
-      <button id="add-queue-btn" class="btn queue-btn" disabled>
-        <span class="btn-icon">📋</span>
-        <span>Add to Job Queue</span>
-      </button>
+        <button id="add-queue-btn" class="btn queue-add-btn" disabled>
+          <span class="btn-icon">➕</span>
+          Add to Queue
+        </button>
+      </div>
 
       <!-- Progress Indicator -->
       <div id="progress-section" class="progress-section hidden">
+        <div class="progress-header">
+          <span class="progress-title">Applying...</span>
+          <span class="progress-percent" id="progress-percent">0%</span>
+        </div>
         <div class="progress-bar">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
         <div class="progress-steps">
           <div class="step" id="step-1">
             <span class="step-icon">📝</span>
-            <span class="step-text">Extracting job details</span>
+            <span class="step-text">Extracting job</span>
           </div>
           <div class="step" id="step-2">
             <span class="step-icon">🔍</span>
-            <span class="step-text">Analyzing ATS keywords</span>
+            <span class="step-text">ATS analysis</span>
           </div>
           <div class="step" id="step-3">
             <span class="step-icon">✨</span>
-            <span class="step-text">Tailoring resume & cover letter</span>
+            <span class="step-text">Tailoring CV</span>
           </div>
           <div class="step" id="step-4">
             <span class="step-icon">📋</span>
-            <span class="step-text">Auto-filling application</span>
+            <span class="step-text">Auto-filling</span>
+          </div>
+          <div class="step" id="step-5">
+            <span class="step-icon">📄</span>
+            <span class="step-text">Attaching PDF</span>
           </div>
         </div>
       </div>
 
       <!-- Results Section -->
       <div id="results-section" class="results-section hidden">
-        <!-- Match Score -->
-        <div class="match-card">
-          <div class="match-score-circle">
-            <svg viewBox="0 0 36 36" class="circular-chart">
+        <!-- Compact Match Score -->
+        <div class="match-card-compact">
+          <div class="match-score-mini">
+            <svg viewBox="0 0 36 36" class="circular-chart mini">
               <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
               <path class="circle" id="match-circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
               <text x="18" y="20.35" class="percentage" id="match-score-text">0%</text>
@@ -188,100 +178,200 @@
             <span class="match-title">ATS Match Score</span>
             <span class="match-subtitle" id="keywords-matched">0 keywords matched</span>
           </div>
-        </div>
-
-        <!-- Keywords -->
-        <div class="keywords-section">
-          <div class="keywords-header">
-            <span>🏷️ Keywords Matched</span>
+          <div class="match-actions">
+            <button id="expand-results-btn" class="btn-icon-only">▼</button>
           </div>
-          <div class="keywords-list" id="keywords-list"></div>
         </div>
 
-        <!-- Tabs for Resume/Cover Letter -->
-        <div class="content-tabs">
-          <button class="content-tab active" data-tab="resume">
-            <span>📄</span> Resume
-          </button>
-          <button class="content-tab" data-tab="cover">
-            <span>✉️</span> Cover Letter
-          </button>
-        </div>
+        <!-- Expandable Results -->
+        <div id="expanded-results" class="expanded-results hidden">
+          <!-- Keywords -->
+          <div class="keywords-section-full">
+            <div class="keywords-header">
+              <span>🏷️ Keywords Analysis</span>
+            </div>
+            <div class="keywords-list" id="keywords-list"></div>
+          </div>
 
-        <div class="content-area">
-          <div class="content-pane active" id="resume-pane">
-            <textarea id="tailored-resume" readonly placeholder="Your tailored resume will appear here..."></textarea>
-            <div class="content-actions">
-              <button class="btn small" id="copy-resume-btn">
-                <span class="btn-icon">📋</span> Copy
-              </button>
-              <button class="btn small primary" id="download-resume-btn">
-                <span class="btn-icon">⬇️</span> Download PDF
-              </button>
+          <!-- Tabs for Resume/Cover Letter -->
+          <div class="content-tabs">
+            <button class="content-tab active" data-tab="resume">
+              <span>📄</span> Resume
+            </button>
+            <button class="content-tab" data-tab="cover">
+              <span>✉️</span> Cover Letter
+            </button>
+          </div>
+
+          <div class="content-area">
+            <div class="content-pane active" id="resume-pane">
+              <textarea id="tailored-resume" readonly placeholder="Your tailored resume..."></textarea>
+              <div class="content-actions">
+                <button class="btn small" id="copy-resume-btn">
+                  <span class="btn-icon">📋</span> Copy
+                </button>
+                <button class="btn small primary" id="download-resume-btn">
+                  <span class="btn-icon">⬇️</span> PDF
+                </button>
+              </div>
+            </div>
+            <div class="content-pane" id="cover-pane">
+              <textarea id="tailored-cover" readonly placeholder="Your tailored cover letter..."></textarea>
+              <div class="content-actions">
+                <button class="btn small" id="copy-cover-btn">
+                  <span class="btn-icon">📋</span> Copy
+                </button>
+                <button class="btn small primary" id="download-cover-btn">
+                  <span class="btn-icon">⬇️</span> PDF
+                </button>
+              </div>
             </div>
           </div>
-          <div class="content-pane" id="cover-pane">
-            <textarea id="tailored-cover" readonly placeholder="Your tailored cover letter will appear here..."></textarea>
-            <div class="content-actions">
-              <button class="btn small" id="copy-cover-btn">
-                <span class="btn-icon">📋</span> Copy
-              </button>
-              <button class="btn small primary" id="download-cover-btn">
-                <span class="btn-icon">⬇️</span> Download PDF
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Suggestions -->
-        <div class="suggestions-section" id="suggestions-section">
-          <div class="suggestions-header">
-            <span>💡 Suggestions to Improve</span>
-          </div>
-          <ul class="suggestions-list" id="suggestions-list"></ul>
         </div>
       </div>
 
-      <!-- Queue Status with Batch Apply -->
-      <div class="queue-status" id="queue-status">
-        <div class="queue-info">
-          <span class="queue-icon">📋</span>
-          <span class="queue-text"><span id="queue-count">0</span> jobs in queue</span>
+      <!-- Queue Panel -->
+      <div class="queue-panel" id="queue-panel">
+        <div class="queue-header" id="queue-header">
+          <div class="queue-info">
+            <span class="queue-icon">📋</span>
+            <span class="queue-text"><strong id="queue-count">0</strong> jobs in queue</span>
+          </div>
+          <div class="queue-controls">
+            <button id="batch-apply-btn" class="btn small primary" disabled>
+              <span class="btn-icon">🚀</span> Start Batch Apply
+            </button>
+            <button id="clear-queue-btn" class="btn small ghost" title="Clear queue">🗑️</button>
+          </div>
         </div>
-        <div class="queue-actions">
-          <button id="batch-apply-btn" class="btn small primary">⚡ Batch Apply</button>
-          <button id="view-queue-btn" class="btn small ghost">View</button>
-        </div>
+
+        <!-- Queue List (Collapsible) -->
+        <div class="queue-list" id="queue-list"></div>
       </div>
 
       <!-- Batch Apply Progress -->
       <div id="batch-progress-section" class="batch-progress-section hidden">
         <div class="batch-header">
           <span class="batch-title">🚀 Batch Auto-Apply</span>
-          <button id="cancel-batch-btn" class="btn small danger">Cancel</button>
+          <div class="batch-controls">
+            <button id="pause-batch-btn" class="btn-icon-only" title="Pause">⏸️</button>
+            <button id="cancel-batch-btn" class="btn-icon-only danger" title="Cancel">⏹️</button>
+          </div>
         </div>
-        <div class="batch-stats">
-          <span id="batch-current">0</span> / <span id="batch-total">0</span> jobs
+        <div class="batch-stats-row">
+          <div class="batch-stat">
+            <span class="batch-stat-value" id="batch-current">0</span>
+            <span class="batch-stat-label">Current</span>
+          </div>
+          <div class="batch-stat">
+            <span class="batch-stat-value" id="batch-total">0</span>
+            <span class="batch-stat-label">Total</span>
+          </div>
+          <div class="batch-stat success">
+            <span class="batch-stat-value" id="batch-success">0</span>
+            <span class="batch-stat-label">Applied</span>
+          </div>
+          <div class="batch-stat error">
+            <span class="batch-stat-value" id="batch-failed">0</span>
+            <span class="batch-stat-label">Failed</span>
+          </div>
         </div>
         <div class="batch-progress-bar">
           <div class="batch-progress-fill" id="batch-progress-fill"></div>
         </div>
         <div class="batch-current-job" id="batch-current-job">
-          <span class="batch-job-label">Processing:</span>
+          <span class="batch-job-label">Now applying:</span>
           <span class="batch-job-title" id="batch-job-title">-</span>
         </div>
         <div class="batch-log" id="batch-log"></div>
       </div>
 
-      <!-- Quick Actions -->
-      <div class="quick-actions">
-        <button id="open-dashboard-btn" class="btn ghost">
-          <span class="btn-icon">🏠</span> Dashboard
-        </button>
-      </div>
+      <!-- Settings Panel (Collapsible) -->
+      <div id="settings-panel" class="settings-panel hidden">
+        <div class="settings-header">
+          <span>⚙️ Settings</span>
+          <button id="close-settings-btn" class="close-btn">×</button>
+        </div>
+        
+        <!-- Auto-Fill Toggle -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">⚡ Auto-Fill Forms</span>
+            <span class="setting-desc">Automatically fill application forms</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autofill-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
 
-      <!-- Disconnect -->
-      <button id="disconnect-btn" class="btn danger small">Disconnect Account</button>
+        <!-- Auto-Submit Toggle -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">🚀 Auto-Submit</span>
+            <span class="setting-desc">Submit applications automatically</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autosubmit-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Answer Memory Toggle -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">🧠 Remember Answers</span>
+            <span class="setting-desc">Learn from your responses</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="memory-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Memory Stats -->
+        <div class="memory-stats" id="memory-stats">
+          <span class="memory-count">💾 <span id="saved-answers-count">0</span> answers saved</span>
+          <button id="clear-memory-btn" class="btn small ghost">Clear Memory</button>
+        </div>
+
+        <!-- ATS Credentials -->
+        <div class="credentials-section">
+          <div class="credentials-header-toggle" id="credentials-toggle">
+            <span>🔑 ATS Login Credentials</span>
+            <span class="toggle-arrow">▼</span>
+          </div>
+          <div class="credentials-body hidden" id="credentials-body">
+            <p class="credentials-note">For Workday/iCIMS auto-login. Stored locally only.</p>
+            <div class="form-group">
+              <label for="ats-email">Email</label>
+              <input type="email" id="ats-email" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+              <label for="ats-password">Password</label>
+              <div class="password-input-wrapper">
+                <input type="password" id="ats-password" placeholder="••••••••">
+                <button type="button" id="toggle-password-btn" class="toggle-password-btn">👁️</button>
+              </div>
+            </div>
+            <div class="credentials-actions">
+              <button id="save-credentials-btn" class="btn small primary">💾 Save</button>
+              <button id="clear-credentials-btn" class="btn small ghost">🗑️</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="settings-actions">
+          <button id="refresh-btn" class="btn ghost full">
+            <span class="btn-icon">🔄</span> Refresh Profile
+          </button>
+          <button id="open-dashboard-btn" class="btn ghost full">
+            <span class="btn-icon">🏠</span> Open Dashboard
+          </button>
+          <button id="disconnect-btn" class="btn danger full">Disconnect Account</button>
+        </div>
+      </div>
     </section>
 
     <!-- Status Message -->
