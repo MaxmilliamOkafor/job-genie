@@ -317,8 +317,10 @@ export type Database = {
           excluded_companies: string[] | null
           expected_salary: string | null
           first_name: string | null
+          gender: string | null
           github: string | null
           highest_education: string | null
+          hispanic_latino: boolean | null
           id: string
           languages: Json | null
           last_name: string | null
@@ -361,8 +363,10 @@ export type Database = {
           excluded_companies?: string[] | null
           expected_salary?: string | null
           first_name?: string | null
+          gender?: string | null
           github?: string | null
           highest_education?: string | null
+          hispanic_latino?: boolean | null
           id?: string
           languages?: Json | null
           last_name?: string | null
@@ -405,8 +409,10 @@ export type Database = {
           excluded_companies?: string[] | null
           expected_salary?: string | null
           first_name?: string | null
+          gender?: string | null
           github?: string | null
           highest_education?: string | null
+          hispanic_latino?: boolean | null
           id?: string
           languages?: Json | null
           last_name?: string | null

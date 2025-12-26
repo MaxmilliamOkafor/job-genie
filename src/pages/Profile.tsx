@@ -389,6 +389,42 @@ const Profile = () => {
                 <Badge variant="secondary">Yes</Badge>
               </div>
             </div>
+            
+            {/* Gender */}
+            <div className="mt-4">
+              <Label>Gender (EEO)</Label>
+              {editMode ? (
+                <Select 
+                  value={localProfile.gender || ''}
+                  onValueChange={(v) => updateLocalField('gender', v)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Non-binary">Non-binary</SelectItem>
+                    <SelectItem value="Prefer not to answer">Prefer not to answer</SelectItem>
+                    <SelectItem value="Decline to self-identify">Decline to self-identify</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={localProfile.gender || ''} readOnly className="mt-1" />
+              )}
+            </div>
+            
+            {/* Hispanic/Latino */}
+            <div className="flex items-center justify-between p-3 border rounded-lg mt-4">
+              <span>Are you Hispanic/Latino?</span>
+              <Switch 
+                checked={localProfile.hispanic_latino ?? false}
+                onCheckedChange={(v) => updateLocalField('hispanic_latino', v)}
+                disabled={!editMode}
+              />
+            </div>
+            
+            {/* Race/Ethnicity */}
             <div className="mt-4">
               <Label>Race/Ethnicity (EEO)</Label>
               {editMode ? (
