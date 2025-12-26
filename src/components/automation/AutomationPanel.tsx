@@ -102,6 +102,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
           company: job.company,
           description: job.description || '',
           requirements: job.requirements || [],
+          location: job.location,
           userProfile: {
             firstName: profile.first_name,
             lastName: profile.last_name,
@@ -117,6 +118,8 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
             certifications: profile.certifications,
             achievements: profile.achievements,
             atsStrategy: profile.ats_strategy,
+            city: profile.city,
+            country: profile.country,
           },
           includeReferral: sendReferrals,
         }
@@ -124,7 +127,19 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
 
       if (error) throw error;
 
-      // Create application record
+      // Verify attachment generation status
+      const resumeOk = data.resumeGenerationStatus === 'success';
+      const coverLetterOk = data.coverLetterGenerationStatus === 'success';
+      
+      // Warn user if any attachments failed
+      if (!resumeOk) {
+        toast.warning(`Resume generation failed for ${job.title} at ${job.company}. Please check your profile data.`);
+      }
+      if (!coverLetterOk) {
+        toast.warning(`Cover letter generation failed for ${job.title} at ${job.company}. Please check your profile data.`);
+      }
+
+      // Create application record with file naming info
       await supabase.from('applications').insert({
         user_id: profile.user_id,
         job_id: job.id,
@@ -135,7 +150,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         applied_at: new Date().toISOString(),
       });
 
-      // Update job status
+      // Update job status with accurate match score
       await supabase.from('jobs').update({
         status: 'applied',
         applied_at: new Date().toISOString(),
@@ -144,11 +159,20 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
 
       onJobApplied(job.id);
 
+      // Show detailed status
+      const attachmentStatus = resumeOk && coverLetterOk 
+        ? '✓ CV & Cover Letter ready' 
+        : resumeOk 
+          ? '✓ CV ready, ⚠️ Cover letter issue'
+          : coverLetterOk
+            ? '⚠️ CV issue, ✓ Cover letter ready'
+            : '⚠️ Attachment issues';
+
       addLog({
         jobTitle: job.title,
         company: job.company,
         status: 'applied',
-        message: `Application ready! Match score: ${data.matchScore}%`
+        message: `${attachmentStatus} | ATS Score: ${data.matchScore}% | Files: ${data.cvFileName}, ${data.coverLetterFileName}`
       });
 
       return true;
@@ -160,6 +184,7 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
         status: 'failed',
         message: error instanceof Error ? error.message : 'Failed to apply'
       });
+      toast.error(`Failed to process ${job.title}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     }
   };

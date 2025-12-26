@@ -152,7 +152,7 @@ serve(async (req) => {
 
     console.log(`Tailoring application for ${jobTitle} at ${company}`);
 
-    // Comprehensive humanized resume tailoring prompt
+    // Comprehensive humanized resume tailoring prompt with enhanced ATS accuracy
     const systemPrompt = `You are a SENIOR PROFESSIONAL RESUME WRITER with 10+ years expertise in ATS optimization, humanized writing, and recruiter-friendly document design.
 
 CRITICAL MISSION: Create application materials that sound HUMAN, not robotic AI-generated text. Recruiters can spot AI-written content instantly.
@@ -162,7 +162,16 @@ ABSOLUTE RULES:
 2. Use Jobscan-style ATS keyword extraction - match 85%+ keyword density naturally
 3. Handle location from job description - add to CV header for ATS compliance
 4. NO typos, grammatical errors, or formatting issues - PROOFREAD CAREFULLY
-5. File naming: FirstnameLastname_CV_JobTitle.pdf and FirstnameLastname_CoverLetter_JobTitle.pdf
+5. File naming convention: FirstnameLastname_CV.pdf and FirstnameLastname_CoverLetter.pdf
+
+ATS SCORING RULES (CRITICAL FOR ACCURACY):
+- Calculate matchScore based on ACTUAL keyword overlap between job requirements and candidate profile
+- Primary keywords (job title, core tech stack): 3 points each
+- Secondary keywords (tools, methodologies): 2 points each  
+- Soft skills/nice-to-haves: 1 point each
+- Missing critical requirements: -5 points each
+- Final score = (matched_points / total_possible_points) * 100, capped at 100
+- Be HONEST about the match - do not inflate scores artificially
 
 HUMANIZED TONE RULES (CRITICAL):
 - Active voice only
@@ -191,8 +200,9 @@ LOCATION HANDLING (CRITICAL FOR ATS):
 Return ONLY valid JSON - no markdown code blocks, no extra text.`;
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`;
+    const candidateNameNoSpaces = `${userProfile.firstName}${userProfile.lastName}`;
     const sanitizedJobTitle = jobTitle.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-    const fileNameBase = `${userProfile.firstName}${userProfile.lastName}_CV_${sanitizedJobTitle.replace(/\s+/g, '')}`;
+    const fileNameBase = candidateNameNoSpaces;
 
     const userPrompt = `TASK: Create an ATS-optimized, HUMANIZED application package for this job.
 
@@ -294,12 +304,25 @@ ${includeReferral ? `
 {
   "tailoredResume": "[COMPLETE RESUME with location in header, tailored summary, work experience with preserved company/dates but rewritten bullets, education, skills prioritized by JD, certifications]",
   "tailoredCoverLetter": "[COMPLETE COVER LETTER addressing ${company} for ${jobTitle}${jobId ? ` (Job ID: ${jobId})` : ''}]",
-  "matchScore": [0-100 based on keyword match],
-  "keywordsMatched": ["exact", "keywords", "from", "JD", "found", "in", "profile"],
-  "keywordsMissing": ["JD", "keywords", "not", "in", "profile"],
+  "matchScore": [0-100 - CALCULATE HONESTLY based on actual keyword overlap. Count matched vs missing critical skills.],
+  "keywordsMatched": ["ONLY list keywords that ACTUALLY appear in candidate profile AND job description"],
+  "keywordsMissing": ["HONESTLY list JD keywords NOT found in candidate profile - be thorough"],
+  "keywordAnalysis": {
+    "primaryMatched": ["core required skills that matched"],
+    "primaryMissing": ["core required skills that are missing"],
+    "secondaryMatched": ["nice-to-have skills that matched"],
+    "secondaryMissing": ["nice-to-have skills that are missing"]
+  },
   "locationAdded": "${location || 'Location from job description'}",
-  "suggestedImprovements": ["actionable suggestions for candidate"],
-  "fileName": "${fileNameBase}"${includeReferral ? `,
+  "suggestedImprovements": ["actionable suggestions for candidate to improve match"],
+  "atsCompliance": {
+    "formatValid": true,
+    "keywordDensity": "percentage of JD keywords included",
+    "sectionOrder": "correct ATS-friendly section ordering confirmed"
+  },
+  "candidateName": "${candidateNameNoSpaces}",
+  "cvFileName": "${candidateNameNoSpaces}_CV.pdf",
+  "coverLetterFileName": "${candidateNameNoSpaces}_CoverLetter.pdf"${includeReferral ? `,
   "referralEmail": "[Subject + email body]"` : ''}
 }`;
 
@@ -372,17 +395,36 @@ ${includeReferral ? `
         keywordsMissing: [],
         locationAdded: location || "Not specified",
         suggestedImprovements: ["Please retry for better results"],
-        fileName: fileNameBase
+        candidateName: `${userProfile.firstName}${userProfile.lastName}`,
+        cvFileName: `${userProfile.firstName}${userProfile.lastName}_CV.pdf`,
+        coverLetterFileName: `${userProfile.firstName}${userProfile.lastName}_CoverLetter.pdf`
       };
     }
 
-    // Ensure fileName is set
-    result.fileName = result.fileName || fileNameBase;
+    // Ensure all required fields are set with proper file naming
+    result.candidateName = result.candidateName || `${userProfile.firstName}${userProfile.lastName}`;
+    result.cvFileName = result.cvFileName || `${result.candidateName}_CV.pdf`;
+    result.coverLetterFileName = result.coverLetterFileName || `${result.candidateName}_CoverLetter.pdf`;
     result.company = company;
     result.jobTitle = jobTitle;
     result.jobId = jobId;
+    
+    // Validate that resume and cover letter were generated
+    if (!result.tailoredResume || result.tailoredResume.length < 100) {
+      console.error('Resume content missing or too short');
+      result.resumeGenerationStatus = 'failed';
+    } else {
+      result.resumeGenerationStatus = 'success';
+    }
+    
+    if (!result.tailoredCoverLetter || result.tailoredCoverLetter.length < 100) {
+      console.error('Cover letter content missing or too short');
+      result.coverLetterGenerationStatus = 'failed';
+    } else {
+      result.coverLetterGenerationStatus = 'success';
+    }
 
-    console.log(`Successfully tailored application. Match score: ${result.matchScore}`);
+    console.log(`Successfully tailored application. Match score: ${result.matchScore}, Resume: ${result.resumeGenerationStatus}, Cover Letter: ${result.coverLetterGenerationStatus}`);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

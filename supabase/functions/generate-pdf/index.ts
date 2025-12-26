@@ -46,7 +46,9 @@ interface ResumeData {
     jobId?: string;
     paragraphs: string[];
   };
-  fileName?: string;
+  // Custom file naming
+  customFileName?: string;
+  candidateName?: string; // e.g., "MaxmilliamOkafor"
 }
 
 // Helper: Sanitize text for WinAnsi encoding (removes unsupported characters)
@@ -478,28 +480,45 @@ serve(async (req) => {
     const pdfBytes = await pdfDoc.save();
     const base64Pdf = btoa(String.fromCharCode(...pdfBytes));
 
-    const fileName = sanitizedData.fileName || 
+    // Use custom candidate name if provided, otherwise extract from personalInfo
+    const candidateName = sanitizedData.candidateName || 
+      sanitizedData.personalInfo.name.replace(/\s+/g, '');
+    
+    // Generate standardized file name: CandidateName_CV.pdf or CandidateName_CoverLetter.pdf
+    const fileName = sanitizedData.customFileName || 
       (sanitizedData.type === 'resume' 
-        ? `${sanitizedData.personalInfo.name.replace(/\s+/g, '')}_CV.pdf`
-        : `${sanitizedData.personalInfo.name.replace(/\s+/g, '')}_CoverLetter.pdf`);
+        ? `${candidateName}_CV.pdf`
+        : `${candidateName}_CoverLetter.pdf`);
 
     console.log('PDF generated successfully:', fileName, 'Size:', pdfBytes.length);
+
+    // Validate PDF was generated properly
+    if (pdfBytes.length < 1000) {
+      console.error('PDF seems too small, possible generation issue');
+      throw new Error('PDF generation produced invalid output');
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true,
         pdf: base64Pdf,
         fileName,
-        size: pdfBytes.length
+        size: pdfBytes.length,
+        type: sanitizedData.type,
+        generatedAt: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('PDF generation error:', errorMessage);
+    console.error('PDF generation error:', errorMessage, error);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ 
+        success: false,
+        error: errorMessage,
+        type: 'pdf_generation_failed'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
