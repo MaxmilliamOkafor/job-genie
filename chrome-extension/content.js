@@ -1116,62 +1116,110 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
 // ============= PDF GENERATION =============
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 async function generatePDF(type, profileData, jobData, tailoredData) {
   console.log(`QuantumHire AI: Generating ${type} PDF...`);
   
-  const firstName = (profileData.first_name || 'User').replace(/\s+/g, '');
-  const lastName = (profileData.last_name || '').replace(/\s+/g, '');
+  const firstName = (profileData.first_name || profileData.firstName || 'User').replace(/\s+/g, '');
+  const lastName = (profileData.last_name || profileData.lastName || '').replace(/\s+/g, '');
+  const companyName = (jobData?.company || 'Company').replace(/[^a-zA-Z0-9]/g, '');
   const fileType = type === 'resume' ? 'CV' : 'CoverLetter';
-  const fileName = `${firstName}${lastName}_${fileType}.pdf`;
+  const fileName = `${firstName}${lastName}_${companyName}_${fileType}.pdf`;
   
   try {
+    // Build personal info from profile
+    const name = `${profileData.first_name || profileData.firstName || ''} ${profileData.last_name || profileData.lastName || ''}`.trim() || 'Applicant';
+    
     const requestBody = {
       type: type,
       personalInfo: {
-        name: `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim(),
-        email: profileData.email,
-        phone: profileData.phone,
-        location: jobData?.location || profileData.city || '',
-        linkedin: profileData.linkedin,
-        github: profileData.github,
-        portfolio: profileData.portfolio
+        name: name,
+        email: profileData.email || '',
+        phone: profileData.phone || '',
+        location: jobData?.location || profileData.city || profileData.location || '',
+        linkedin: profileData.linkedin || '',
+        github: profileData.github || '',
+        portfolio: profileData.portfolio || ''
       },
       fileName: fileName
     };
     
     if (type === 'resume') {
       const resumeText = tailoredData?.tailoredResume || '';
-      requestBody.summary = extractSection(resumeText, 'summary', 'professional summary');
-      requestBody.experience = parseExperience(resumeText, profileData.work_experience);
+      requestBody.summary = extractSection(resumeText, 'summary', 'professional summary') || 
+        'Experienced professional seeking to leverage skills and expertise.';
+      requestBody.experience = parseExperience(resumeText, profileData.work_experience || profileData.workExperience);
       requestBody.education = parseEducation(profileData.education);
       requestBody.skills = parseSkills(resumeText, profileData.skills);
       requestBody.certifications = profileData.certifications || [];
       requestBody.achievements = parseAchievements(profileData.achievements);
     } else {
       const coverText = tailoredData?.tailoredCoverLetter || '';
+      // Parse cover letter into paragraphs
+      let paragraphs = coverText.split(/\n\n+/).filter(p => p.trim().length > 20);
+      if (paragraphs.length === 0 && coverText.trim()) {
+        paragraphs = [coverText.trim()];
+      }
+      if (paragraphs.length === 0) {
+        paragraphs = [
+          `I am writing to express my strong interest in the ${jobData?.title || 'position'} role at ${jobData?.company || 'your company'}.`,
+          `With my background and skills, I am confident I would be a valuable addition to your team. I look forward to the opportunity to discuss how my experience aligns with your needs.`
+        ];
+      }
       requestBody.coverLetter = {
         recipientCompany: jobData?.company || 'Company',
         jobTitle: jobData?.title || 'Position',
-        paragraphs: coverText.split('\n\n').filter(p => p.trim().length > 20)
+        jobId: jobData?.jobId || '',
+        paragraphs: paragraphs
       };
+    }
+    
+    console.log('QuantumHire AI: Sending PDF request for:', type, requestBody.personalInfo.name);
+    
+    // Get access token for authenticated request
+    const authData = await chrome.storage.local.get(['accessToken']);
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY
+    };
+    if (authData.accessToken) {
+      headers['Authorization'] = `Bearer ${authData.accessToken}`;
     }
     
     const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(requestBody)
     });
     
-    if (!response.ok) throw new Error((await response.json()).error || 'PDF generation failed');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(errorData.error || `PDF generation failed: ${response.status}`);
+    }
     
     const result = await response.json();
-    console.log(`QuantumHire AI: PDF generated: ${result.fileName}`);
+    
+    if (!result.success || !result.pdf) {
+      throw new Error(result.error || 'PDF generation returned empty result');
+    }
+    
+    console.log(`QuantumHire AI: ✅ PDF generated: ${result.fileName} (${formatBytes(result.size)})`);
+    showToast(`📄 Generated: ${result.fileName}`, 'success');
+    
     return { success: true, pdf: result.pdf, fileName: result.fileName, size: result.size };
   } catch (error) {
-    console.error('QuantumHire AI: PDF generation error', error);
+    console.error('QuantumHire AI: PDF generation error:', error);
+    showToast(`❌ PDF Error: ${error.message}`, 'error');
     return { success: false, error: error.message };
   }
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function extractSection(text, ...keywords) {
@@ -1222,62 +1270,119 @@ function parseAchievements(achievements) {
   return achievements.map(a => ({ title: a.title || '', date: a.date || '', description: a.description || '' }));
 }
 
-// ============= PDF UPLOAD (ENHANCED FOR BUTTON-BASED UPLOAD INTERFACES) =============
+// ============= PDF UPLOAD (ENHANCED FOR ALL ATS PLATFORMS) =============
 
-// Find file upload sections (like Greenhouse "Attach" button sections)
+// Find file upload sections (like Greenhouse "Attach" button sections, Workday dropzones, etc.)
 function findFileUploadSections() {
   const sections = [];
+  const foundElements = new Set();
   
-  // Look for sections with "Resume/CV" or "Cover Letter" labels
-  const allElements = document.querySelectorAll('*');
+  // Label patterns to detect resume vs cover letter sections
   const labelPatterns = [
-    { type: 'resume', patterns: ['resume', 'cv', 'résumé', 'curriculum vitae'] },
-    { type: 'cover', patterns: ['cover letter', 'cover-letter', 'coverletter', 'letter of interest'] }
+    { type: 'resume', patterns: ['resume', 'cv', 'résumé', 'curriculum vitae', 'upload your resume', 'attach resume', 'upload cv'] },
+    { type: 'cover', patterns: ['cover letter', 'cover-letter', 'coverletter', 'letter of interest', 'cover_letter', 'motivation letter'] }
   ];
   
-  // Find sections by label text
-  document.querySelectorAll('label, h2, h3, h4, p, span, div').forEach(el => {
+  // Strategy 1: Find file inputs directly and classify by context
+  document.querySelectorAll('input[type="file"]').forEach(input => {
+    if (input.offsetParent === null && !input.closest('[aria-hidden="false"]')) return; // Skip truly hidden
+    if (foundElements.has(input)) return;
+    
+    const container = input.closest('div, section, fieldset, form, [class*="upload"], [class*="file"]');
+    const contextText = (
+      findLabelForInput(input) + ' ' + 
+      (container?.innerText?.substring(0, 200) || '') + ' ' +
+      (input.getAttribute('name') || '') + ' ' +
+      (input.getAttribute('id') || '') + ' ' +
+      (input.getAttribute('data-automation-id') || '') + ' ' +
+      (input.getAttribute('aria-label') || '')
+    ).toLowerCase();
+    
+    let type = 'resume'; // Default to resume
+    if (labelPatterns[1].patterns.some(p => contextText.includes(p))) type = 'cover';
+    
+    sections.push({ type, input, container, label: contextText.substring(0, 80) });
+    foundElements.add(input);
+  });
+  
+  // Strategy 2: Find labeled sections with attach/upload buttons
+  document.querySelectorAll('label, h2, h3, h4, h5, p, span, div, [class*="label"], [data-automation-id*="label"]').forEach(el => {
     const text = el.innerText?.toLowerCase() || '';
+    if (text.length > 300) return; // Skip if too much text
     
     for (const labelType of labelPatterns) {
       if (labelType.patterns.some(p => text.includes(p))) {
-        // Look for nearby "Attach" button or file input
-        const container = el.closest('div, section, fieldset') || el.parentElement?.parentElement;
-        if (container) {
-          // Find "Attach" button
-          const attachBtn = container.querySelector('button, a, [role="button"]');
-          if (attachBtn) {
-            const btnText = attachBtn.innerText?.toLowerCase() || '';
-            if (btnText.includes('attach') || btnText.includes('upload') || btnText.includes('browse') || btnText.includes('select file')) {
-              sections.push({ type: labelType.type, button: attachBtn, container, label: text });
+        // Search in parent containers for buttons or file inputs
+        const containers = [
+          el.closest('div'),
+          el.closest('section'),
+          el.closest('fieldset'),
+          el.parentElement,
+          el.parentElement?.parentElement,
+          el.parentElement?.parentElement?.parentElement
+        ].filter(Boolean);
+        
+        for (const container of containers) {
+          // Find "Attach" / "Upload" / "Browse" buttons
+          const buttons = container.querySelectorAll('button, a[role="button"], [role="button"], [class*="button"]');
+          for (const btn of buttons) {
+            if (foundElements.has(btn)) continue;
+            const btnText = (btn.innerText?.toLowerCase() || '') + (btn.getAttribute('aria-label')?.toLowerCase() || '');
+            if (btnText.match(/attach|upload|browse|select file|add file|choose file/)) {
+              sections.push({ type: labelType.type, button: btn, container, label: text.substring(0, 80) });
+              foundElements.add(btn);
             }
           }
           
-          // Also check for hidden file input
-          const fileInput = container.querySelector('input[type="file"]');
-          if (fileInput) {
-            sections.push({ type: labelType.type, input: fileInput, container, label: text });
+          // Also check for file input we might have missed
+          const fileInputs = container.querySelectorAll('input[type="file"]');
+          for (const input of fileInputs) {
+            if (!foundElements.has(input)) {
+              sections.push({ type: labelType.type, input, container, label: text.substring(0, 80) });
+              foundElements.add(input);
+            }
           }
         }
       }
     }
   });
   
-  // Also look for buttons with file-related text anywhere on page
-  document.querySelectorAll('button, a[role="button"], [class*="upload"], [class*="attach"]').forEach(btn => {
-    const text = btn.innerText?.toLowerCase() || '';
-    const parentText = btn.closest('div, section')?.innerText?.toLowerCase() || '';
+  // Strategy 3: Workday-specific dropzone detection
+  document.querySelectorAll('[data-automation-id*="file"], [data-automation-id*="upload"], [data-automation-id*="resume"], [data-automation-id*="attachment"]').forEach(el => {
+    if (foundElements.has(el)) return;
     
-    if (text.includes('attach') || text.includes('upload file') || text.includes('browse')) {
-      let type = 'resume'; // Default
-      if (parentText.includes('cover letter')) type = 'cover';
-      else if (parentText.includes('resume') || parentText.includes('cv')) type = 'resume';
-      
-      if (!sections.find(s => s.button === btn)) {
-        sections.push({ type, button: btn, container: btn.closest('div, section'), label: parentText.substring(0, 50) });
-      }
+    const container = el.closest('[data-automation-id*="formField"]') || el.closest('div');
+    const contextText = (container?.innerText?.substring(0, 200) || '').toLowerCase();
+    
+    let type = 'resume';
+    if (labelPatterns[1].patterns.some(p => contextText.includes(p))) type = 'cover';
+    
+    // Check if it's a button or contains a file input
+    const fileInput = el.querySelector('input[type="file"]') || (el.tagName === 'INPUT' && el.type === 'file' ? el : null);
+    const isButton = el.tagName === 'BUTTON' || el.getAttribute('role') === 'button';
+    
+    if (fileInput && !foundElements.has(fileInput)) {
+      sections.push({ type, input: fileInput, container, label: contextText.substring(0, 80) });
+      foundElements.add(fileInput);
+    } else if (isButton) {
+      sections.push({ type, button: el, container, label: contextText.substring(0, 80) });
+      foundElements.add(el);
     }
   });
+  
+  // Strategy 4: Generic dropzone / drag-drop areas
+  document.querySelectorAll('[class*="dropzone"], [class*="drop-zone"], [class*="upload-area"], [class*="file-upload"]').forEach(zone => {
+    const fileInput = zone.querySelector('input[type="file"]');
+    if (fileInput && !foundElements.has(fileInput)) {
+      const contextText = (zone.innerText?.substring(0, 200) || '').toLowerCase();
+      let type = 'resume';
+      if (labelPatterns[1].patterns.some(p => contextText.includes(p))) type = 'cover';
+      sections.push({ type, input: fileInput, container: zone, label: contextText.substring(0, 80) });
+      foundElements.add(fileInput);
+    }
+  });
+  
+  console.log(`QuantumHire AI: Found ${sections.length} file upload sections:`, sections.map(s => ({ type: s.type, hasInput: !!s.input, hasButton: !!s.button })));
   
   return sections;
 }
@@ -1387,47 +1492,102 @@ async function uploadPDFToInput(fileInput, pdfBase64, fileName, uploadRoot = nul
   if (!fileInput || !pdfBase64) return { success: false, error: 'Missing input or PDF data' };
 
   try {
-    console.log(`QuantumHire AI: Uploading ${fileName} to file input...`);
+    console.log(`QuantumHire AI: Uploading ${fileName} to file input...`, { inputId: fileInput.id, inputName: fileInput.name });
 
     // Normalize base64 (some responses may include data: prefix)
-    const base64 = String(pdfBase64).includes('base64,') ? String(pdfBase64).split('base64,')[1] : String(pdfBase64);
+    let base64 = String(pdfBase64);
+    if (base64.includes('base64,')) {
+      base64 = base64.split('base64,')[1];
+    }
+    // Remove any whitespace
+    base64 = base64.replace(/\s/g, '');
+    
+    // Validate base64
+    if (!base64 || base64.length < 100) {
+      throw new Error('Invalid PDF data (too short)');
+    }
 
     const binaryString = atob(base64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
 
     const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
-    const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+    const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf', lastModified: Date.now() });
 
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(pdfFile);
-    fileInput.files = dataTransfer.files;
+    console.log(`QuantumHire AI: Created file object: ${pdfFile.name}, size: ${pdfFile.size} bytes`);
 
-    // Fire all events for React/Angular/Vue compatibility
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-    // Some frameworks update state async
-    await new Promise((r) => setTimeout(r, 250));
-
-    // If there is an explicit confirm/upload step inside a modal, click it.
-    const confirmed = clickPossibleConfirmButton(uploadRoot || fileInput.closest('[role="dialog"], dialog, [aria-modal="true"], .modal, .Modal') || null);
-    if (confirmed) {
-      console.log('QuantumHire AI: Clicked confirm/upload button');
-      await new Promise((r) => setTimeout(r, 500));
+    // Method 1: DataTransfer API (modern browsers)
+    try {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(pdfFile);
+      fileInput.files = dataTransfer.files;
+    } catch (dtError) {
+      console.log('QuantumHire AI: DataTransfer failed, trying alternative method');
+      // Method 2: Fallback for older browsers
+      const list = new ClipboardEvent('').clipboardData || new DataTransfer();
+      list.items.add(pdfFile);
+      fileInput.files = list.files;
     }
 
-    // Verification: some ATS replaces the input; accept success if either input contains the file or UI shows file name.
-    const hasFileOnInput = fileInput.files && fileInput.files.length > 0 && fileInput.files[0]?.name;
-    const uiShowsName = (uploadRoot || fileInput.closest('section, fieldset, form, div') || document.body)
-      .innerText?.toLowerCase()?.includes(fileName.toLowerCase());
+    // Fire comprehensive events for React/Angular/Vue/Svelte compatibility
+    const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+    const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+    
+    // For React specifically
+    Object.defineProperty(inputEvent, 'target', { writable: false, value: fileInput });
+    Object.defineProperty(changeEvent, 'target', { writable: false, value: fileInput });
+    
+    fileInput.dispatchEvent(inputEvent);
+    fileInput.dispatchEvent(changeEvent);
+    
+    // Also dispatch native events
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Trigger React's synthetic event system
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'files')?.set;
+    if (nativeInputValueSetter) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(pdfFile);
+        nativeInputValueSetter.call(fileInput, dt.files);
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (e) {}
+    }
 
-    if (hasFileOnInput || uiShowsName) {
-      console.log(`QuantumHire AI: ✅ PDF uploaded: ${fileName}`);
+    // Wait for framework state updates
+    await new Promise((r) => setTimeout(r, 400));
+
+    // If there is an explicit confirm/upload step inside a modal, click it.
+    const confirmed = clickPossibleConfirmButton(uploadRoot || fileInput.closest('[role="dialog"], dialog, [aria-modal="true"], .modal, .Modal, [class*="modal"]') || null);
+    if (confirmed) {
+      console.log('QuantumHire AI: Clicked confirm/upload button');
+      await new Promise((r) => setTimeout(r, 600));
+    }
+
+    // Verification - check multiple indicators of success
+    const hasFileOnInput = fileInput.files && fileInput.files.length > 0 && fileInput.files[0]?.size > 0;
+    const parentContainer = uploadRoot || fileInput.closest('section, fieldset, form, div, [class*="upload"]') || document.body;
+    const uiText = parentContainer.innerText?.toLowerCase() || '';
+    const uiShowsName = uiText.includes(fileName.toLowerCase().replace('.pdf', '')) || uiText.includes('.pdf');
+    const uiShowsSuccess = uiText.includes('uploaded') || uiText.includes('attached') || uiText.includes('selected');
+    
+    // Check for visual indicators (green checkmark, success class, etc.)
+    const hasSuccessIndicator = parentContainer.querySelector('[class*="success"], [class*="check"], [class*="complete"], .is-uploaded, .uploaded') !== null;
+
+    if (hasFileOnInput || uiShowsName || uiShowsSuccess || hasSuccessIndicator) {
+      console.log(`QuantumHire AI: ✅ PDF uploaded successfully: ${fileName}`);
+      fileInput.dataset.qhUsed = 'true';
       return { success: true, fileName, size: pdfFile.size };
     }
 
-    // Mark as used anyway to avoid infinite retries on the same element
+    // Even if we can't verify, if we set the files property, consider it a success
+    if (fileInput.files && fileInput.files.length > 0) {
+      console.log(`QuantumHire AI: ⚠️ PDF attached (unverified): ${fileName}`);
+      fileInput.dataset.qhUsed = 'true';
+      return { success: true, fileName, size: pdfFile.size, unverified: true };
+    }
+
     throw new Error('Upload did not reflect in UI');
   } catch (error) {
     console.error('QuantumHire AI: Upload error:', error);
