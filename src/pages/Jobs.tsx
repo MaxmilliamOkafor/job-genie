@@ -38,6 +38,9 @@ import {
   StopCircle,
   AlertTriangle,
   MessageSquare,
+  ExternalLink,
+  SkipForward,
+  MousePointer,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -91,6 +94,11 @@ const Jobs = () => {
   const [failedJobs, setFailedJobs] = useState<{ id: string; title: string; company: string; error: string }[]>([]);
   const pauseRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  
+  // Sequential apply mode (no popups needed)
+  const [sequentialMode, setSequentialMode] = useState(false);
+  const [sequentialQueue, setSequentialQueue] = useState<string[]>([]);
+  const [currentSequentialIndex, setCurrentSequentialIndex] = useState(0);
   
   // Feedback dialog state
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -320,6 +328,105 @@ const Jobs = () => {
       }
     }
   }, [selectedJobs, jobs, updateJobStatus]);
+
+  // Start sequential mode (no popups - user clicks to open each job)
+  const startSequentialApply = useCallback(() => {
+    if (selectedJobs.size === 0) return;
+    
+    const jobIds = Array.from(selectedJobs);
+    setSequentialQueue(jobIds);
+    setCurrentSequentialIndex(0);
+    setSequentialMode(true);
+    setBatchProgress({ current: 0, total: jobIds.length, successful: 0, failed: 0 });
+    setFailedJobs([]);
+    
+    toast.info('Sequential mode started', {
+      description: 'Click "Open & Apply" for each job. No popups needed!',
+    });
+  }, [selectedJobs]);
+
+  // Get current job in sequential mode
+  const currentSequentialJob = useMemo(() => {
+    if (!sequentialMode || currentSequentialIndex >= sequentialQueue.length) return null;
+    return jobs.find(j => j.id === sequentialQueue[currentSequentialIndex]);
+  }, [sequentialMode, currentSequentialIndex, sequentialQueue, jobs]);
+
+  // Open current job and move to next
+  const handleOpenAndNext = useCallback(async () => {
+    if (!currentSequentialJob) return;
+    
+    // Open in current tab or new tab - this is user-initiated so it won't be blocked
+    window.open(currentSequentialJob.url, '_blank');
+    
+    // Mark as applied
+    await updateJobStatus(currentSequentialJob.id, 'applied');
+    
+    const newSuccessful = batchProgress.successful + 1;
+    const newCurrent = currentSequentialIndex + 1;
+    
+    setBatchProgress(prev => ({
+      ...prev,
+      current: newCurrent,
+      successful: newSuccessful,
+    }));
+    
+    if (newCurrent >= sequentialQueue.length) {
+      // All done
+      setSequentialMode(false);
+      setSequentialQueue([]);
+      setSelectedJobs(new Set());
+      setSelectionMode(false);
+      
+      toast.success(`Applied to ${newSuccessful} job${newSuccessful !== 1 ? 's' : ''}!`, {
+        description: 'All jobs have been marked as applied.',
+      });
+    } else {
+      setCurrentSequentialIndex(newCurrent);
+    }
+  }, [currentSequentialJob, currentSequentialIndex, sequentialQueue, batchProgress.successful, updateJobStatus]);
+
+  // Skip current job in sequential mode
+  const handleSkipJob = useCallback(() => {
+    if (!currentSequentialJob) return;
+    
+    const newCurrent = currentSequentialIndex + 1;
+    
+    setFailedJobs(prev => [...prev, {
+      id: currentSequentialJob.id,
+      title: currentSequentialJob.title,
+      company: currentSequentialJob.company,
+      error: 'Skipped by user',
+    }]);
+    
+    setBatchProgress(prev => ({
+      ...prev,
+      current: newCurrent,
+      failed: prev.failed + 1,
+    }));
+    
+    if (newCurrent >= sequentialQueue.length) {
+      setSequentialMode(false);
+      setSequentialQueue([]);
+      setSelectedJobs(new Set());
+      setSelectionMode(false);
+      
+      toast.info('Sequential apply completed', {
+        description: `${batchProgress.successful} applied, ${batchProgress.failed + 1} skipped`,
+      });
+    } else {
+      setCurrentSequentialIndex(newCurrent);
+    }
+  }, [currentSequentialJob, currentSequentialIndex, sequentialQueue, batchProgress]);
+
+  // Exit sequential mode
+  const exitSequentialMode = useCallback(() => {
+    setSequentialMode(false);
+    setSequentialQueue([]);
+    setCurrentSequentialIndex(0);
+    setBatchProgress({ current: 0, total: 0, successful: 0, failed: 0 });
+    
+    toast.info('Sequential apply cancelled');
+  }, []);
 
   // Submit feedback
   const handleSubmitFeedback = useCallback(async () => {
@@ -608,16 +715,27 @@ const Jobs = () => {
                   </>
                 )}
                 
-                {/* Start Batch Apply button */}
-                {selectedJobs.size > 0 && !isBatchApplying && (
+                {/* Start Batch Apply buttons */}
+                {selectedJobs.size > 0 && !isBatchApplying && !sequentialMode && (
                   <>
                     <Badge variant="secondary" className="text-sm">
                       {selectedJobs.size} selected
                     </Badge>
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={startSequentialApply}
+                      className="gap-2"
+                      title="Opens one job at a time - no popups blocked"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Sequential Apply
+                    </Button>
+                    <Button
+                      size="sm"
                       onClick={handleBatchApply}
                       className="gap-2"
+                      title="Opens all jobs at once - may be blocked by browser"
                     >
                       <Zap className="h-4 w-4" />
                       Batch Apply ({selectedJobs.size})
@@ -674,6 +792,94 @@ const Jobs = () => {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+            
+            {/* Sequential Mode Panel */}
+            {sequentialMode && currentSequentialJob && (
+              <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-4 rounded-lg border border-primary/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MousePointer className="h-5 w-5 text-primary" />
+                    <span className="font-medium text-primary">
+                      Sequential Apply Mode
+                    </span>
+                    <Badge variant="secondary">
+                      Job {currentSequentialIndex + 1} of {sequentialQueue.length}
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={exitSequentialMode}
+                    className="text-muted-foreground"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Exit
+                  </Button>
+                </div>
+                
+                {/* Current Job Card */}
+                <div className="bg-background p-4 rounded-lg border">
+                  <h3 className="font-semibold text-lg">{currentSequentialJob.title}</h3>
+                  <p className="text-muted-foreground">{currentSequentialJob.company}</p>
+                  <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                    <span>{currentSequentialJob.location}</span>
+                    {currentSequentialJob.salary && (
+                      <span className="text-green-600">{currentSequentialJob.salary}</span>
+                    )}
+                  </div>
+                  {currentSequentialJob.url && (
+                    <p className="text-xs text-muted-foreground mt-2 truncate">
+                      {currentSequentialJob.url}
+                    </p>
+                  )}
+                </div>
+                
+                {/* Progress */}
+                <Progress 
+                  value={(batchProgress.current / batchProgress.total) * 100} 
+                  className="h-2"
+                />
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="flex items-center gap-1 text-green-600">
+                      <CheckCircle className="h-4 w-4" />
+                      {batchProgress.successful} applied
+                    </span>
+                    {batchProgress.failed > 0 && (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <SkipForward className="h-4 w-4" />
+                        {batchProgress.failed} skipped
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSkipJob}
+                      className="gap-2"
+                    >
+                      <SkipForward className="h-4 w-4" />
+                      Skip
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleOpenAndNext}
+                      className="gap-2"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open & Apply
+                    </Button>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-muted-foreground text-center">
+                  Click "Open & Apply" to open the job page. Since you click the button, popups won't be blocked.
+                </p>
               </div>
             )}
             
