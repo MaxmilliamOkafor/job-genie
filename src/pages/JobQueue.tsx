@@ -300,23 +300,90 @@ const JobQueuePage = () => {
               : q
           )
         );
-      } catch (error) {
+      } catch (error: any) {
         console.error('Queue processing error:', error);
-        setQueue((prev) =>
-          prev.map((q) =>
-            q.id === item.id
-              ? {
-                  ...q,
-                  status: 'failed',
-                  error: error instanceof Error ? error.message : 'Failed',
-                }
-              : q
-          )
-        );
+        
+        // Check for rate limit and add retry logic
+        const errorMsg = error?.message || error?.error || 'Failed';
+        const isRateLimit = errorMsg.toLowerCase().includes('rate limit') || error?.status === 429;
+        
+        if (isRateLimit) {
+          // Wait longer and retry once
+          toast.warning('Rate limit hit, waiting 10 seconds before retry...');
+          await new Promise((r) => setTimeout(r, 10000));
+          
+          try {
+            const { data: retryData, error: retryError } = await supabase.functions.invoke('tailor-application', {
+              body: {
+                jobUrl: item.url,
+                userProfile: {
+                  firstName: profile.first_name,
+                  lastName: profile.last_name,
+                  email: profile.email,
+                  phone: profile.phone,
+                  linkedin: profile.linkedin,
+                  github: profile.github,
+                  portfolio: profile.portfolio,
+                  coverLetter: profile.cover_letter,
+                  workExperience: profile.work_experience,
+                  education: profile.education,
+                  skills: profile.skills,
+                  certifications: profile.certifications,
+                  achievements: profile.achievements,
+                  atsStrategy: profile.ats_strategy,
+                },
+              },
+            });
+            
+            if (!retryError && retryData.jobTitle) {
+              await supabase.from('jobs').insert({
+                user_id: user?.id,
+                title: retryData.jobTitle || 'Unknown Position',
+                company: retryData.company || 'Unknown Company',
+                location: retryData.location || 'Remote',
+                description: retryData.description,
+                url: item.url,
+                match_score: retryData.matchScore || 0,
+                status: 'applied',
+                applied_at: new Date().toISOString(),
+              });
+              
+              setQueue((prev) =>
+                prev.map((q) =>
+                  q.id === item.id
+                    ? { ...q, status: 'completed', title: retryData.jobTitle, company: retryData.company }
+                    : q
+                )
+              );
+            } else {
+              throw retryError || new Error('Retry failed');
+            }
+          } catch (retryErr) {
+            setQueue((prev) =>
+              prev.map((q) =>
+                q.id === item.id
+                  ? { ...q, status: 'failed', error: 'Rate limit exceeded after retry' }
+                  : q
+              )
+            );
+          }
+        } else {
+          setQueue((prev) =>
+            prev.map((q) =>
+              q.id === item.id
+                ? { ...q, status: 'failed', error: errorMsg }
+                : q
+            )
+          );
+        }
       }
 
       setProgress(((i + 1) / pendingItems.length) * 100);
-      await new Promise((r) => setTimeout(r, 1000));
+      
+      // Longer delay between requests to avoid rate limits (3-5 seconds with jitter)
+      const baseDelay = 3000;
+      const jitter = Math.random() * 2000;
+      await new Promise((r) => setTimeout(r, baseDelay + jitter));
     }
 
     setIsProcessing(false);

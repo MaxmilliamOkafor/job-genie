@@ -239,10 +239,12 @@ export function AutomationPanel({ jobs, profile, onJobApplied }: AutomationPanel
       setCurrentJobIndex(i);
       setProgress(((i + 1) / jobsToProcess.length) * 100);
 
-      await applyToJob(job);
+      const success = await applyToJob(job);
 
-      // Small delay between applications
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Longer delay between applications to avoid rate limits (3-5 seconds)
+      const baseDelay = 3000;
+      const jitter = Math.random() * 2000; // Add 0-2s random jitter
+      await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
     }
 
     setIsRunning(false);
