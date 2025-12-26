@@ -2226,15 +2226,16 @@ function createFloatingPanel() {
           <span class="qh-btn-icon">⚡</span>
           <div class="qh-btn-content">
             <span class="qh-btn-title">Smart Apply</span>
-            <span class="qh-btn-subtitle">🔍 Review → 📝 Quick Fill → ➡️ Next Page</span>
+            <span class="qh-btn-subtitle">📄 Tailor CV → 📎 Attach PDFs → 📝 Fill → ➡️ Next</span>
           </div>
         </button>
         
         <div class="qh-smart-apply-steps hidden" id="qh-smart-apply-steps">
           <div class="qh-step-indicator">
-            <div class="qh-step" data-step="1"><span class="qh-step-num">1</span><span class="qh-step-label">🔍 Review</span></div>
-            <div class="qh-step" data-step="2"><span class="qh-step-num">2</span><span class="qh-step-label">📝 Fill</span></div>
-            <div class="qh-step" data-step="3"><span class="qh-step-num">3</span><span class="qh-step-label">➡️ Next</span></div>
+            <div class="qh-step" data-step="1"><span class="qh-step-num">1</span><span class="qh-step-label">📄 Tailor</span></div>
+            <div class="qh-step" data-step="2"><span class="qh-step-num">2</span><span class="qh-step-label">📎 Attach</span></div>
+            <div class="qh-step" data-step="3"><span class="qh-step-num">3</span><span class="qh-step-label">📝 Fill</span></div>
+            <div class="qh-step" data-step="4"><span class="qh-step-num">4</span><span class="qh-step-label">➡️ Next</span></div>
           </div>
         </div>
         
