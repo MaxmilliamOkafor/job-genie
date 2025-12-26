@@ -62,14 +62,35 @@ const sanitizeText = (text: string | null | undefined): string => {
     // Remove or replace other problematic characters
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
     // Replace smart quotes with regular quotes
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u2039\u203A]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')
     // Replace em/en dashes with regular hyphen
-    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u2013\u2014\u2015\u2212]/g, '-')
     // Replace ellipsis with dots
     .replace(/\u2026/g, '...')
-    // Replace bullet points
-    .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '-')
+    // Replace ALL bullet points and symbols (including \u25aa which caused the error)
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25AB\u25A0\u25A1\u25CF\u25CB\u25D8\u25D9\u2B24\u2B58\u29BF\u25C6\u25C7\u2666\u2756\u2605\u2606\u2713\u2714\u2717\u2718\u2794\u27A4\u25B6\u25B8\u25BA\u25BC\u25BE\u25C0\u25C2\u25C4]/g, '-')
+    // Replace arrows
+    .replace(/[\u2190-\u21FF]/g, '->')
+    // Replace check marks and crosses
+    .replace(/[\u2713\u2714\u2715\u2716\u2717\u2718]/g, '*')
+    // Replace copyright and trademark
+    .replace(/\u00A9/g, '(c)')
+    .replace(/\u00AE/g, '(R)')
+    .replace(/\u2122/g, '(TM)')
+    // Replace currency symbols
+    .replace(/\u20AC/g, 'EUR')
+    .replace(/\u00A3/g, 'GBP')
+    .replace(/\u00A5/g, 'JPY')
+    // Replace degree and other math symbols
+    .replace(/\u00B0/g, ' deg')
+    .replace(/\u00B1/g, '+/-')
+    .replace(/\u00D7/g, 'x')
+    .replace(/\u00F7/g, '/')
+    // Replace any remaining non-WinAnsi characters with space
+    .replace(/[^\x00-\x7F\u00A0-\u00FF]/g, ' ')
+    // Clean up multiple spaces
+    .replace(/\s+/g, ' ')
     .trim();
 };
 

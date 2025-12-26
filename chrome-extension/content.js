@@ -409,12 +409,23 @@ const KNOCKOUT_ANSWER_BANK = {
   'security clearance|clearance.*level|active.*clearance|current.*clearance|secret.*clearance|top secret|ts/sci|public trust': { answerFromProfile: 'security_clearance', defaultAnswer: 'No, but willing to obtain' },
   'obtain.*clearance|eligible.*clearance|pass.*clearance|clearance.*investigation': { answer: 'Yes', selectValue: 'yes' },
   
-  // EEO & DEMOGRAPHICS
-  'veteran status|military service|protected veteran|veteran.*self|served.*military|us.*veteran|armed forces': { answerFromProfile: 'veteran_status', defaultAnswer: 'I am not a protected veteran', selectValue: 'i am not a protected veteran' },
-  'disability status|disabled|have.*disability|disability.*self|individual.*disability': { answerFromProfile: 'disability', defaultAnswer: 'I do not wish to answer', selectValue: 'i do not wish to answer' },
-  'race|ethnicity|ethnic background|race.*ethnicity|racial.*identity': { answerFromProfile: 'race_ethnicity', defaultAnswer: 'Decline to self-identify', selectValue: 'decline' },
-  'gender|sex|male.*female|gender.*identity': { answer: 'Prefer not to answer', selectValue: 'prefer not to answer' },
+  // EEO & DEMOGRAPHICS - with profile-based answers
+  'veteran status|military service|protected veteran|veteran.*self|served.*military|us.*veteran|armed forces|vevraa': { answerFromProfile: 'veteran_status', defaultAnswer: 'I am not a protected veteran', selectValue: 'i am not a protected veteran' },
+  'disability status|disabled|have.*disability|disability.*self|individual.*disability|form cc-305|voluntary.*disability': { answerFromProfile: 'disability', defaultAnswer: 'I do not wish to answer', selectValue: 'i do not wish to answer' },
+  'race|ethnicity|ethnic background|race.*ethnicity|racial.*identity|racial.*ethnic|african.*american|asian|caucasian|hispanic.*latino|white|black': { answerFromProfile: 'race_ethnicity', defaultAnswer: 'Decline to self-identify', selectValue: 'decline' },
+  'gender|sex|male.*female|gender.*identity|what is your gender|your gender': { answerFromProfile: 'gender', defaultAnswer: 'Male', selectValue: 'male' },
+  'hispanic.*latino|latino.*hispanic|are you hispanic|hispanic or latino': { answerFromProfile: 'hispanic_latino', defaultAnswer: 'No', selectValue: 'no' },
   'sexual orientation|lgbtq|lgbtqia': { answer: 'Prefer not to answer', selectValue: 'prefer not to answer' },
+  
+  // COMPANY-SPECIFIC QUESTIONS
+  'worked.*microsoft|ever worked for microsoft|microsoft.*employee|microsoft.*vendor|employee or vendor.*microsoft': { answer: 'No', selectValue: 'no' },
+  'worked.*google|ever worked.*google|google.*employee': { answer: 'No', selectValue: 'no' },
+  'worked.*amazon|ever worked.*amazon|amazon.*employee': { answer: 'No', selectValue: 'no' },
+  'worked.*apple|ever worked.*apple|apple.*employee': { answer: 'No', selectValue: 'no' },
+  'worked.*meta|worked.*facebook|ever worked.*meta|meta.*employee': { answer: 'No', selectValue: 'no' },
+  
+  // U.S. CITIZENSHIP - Security Requirements
+  'u\\.s\\. citizen|us citizen|united states citizen|american citizen|citizenship.*u\\.s|require.*u\\.s\\. citizenship|security requirements.*u\\.s': { answer: 'No', selectValue: 'no' },
   
   // GREENHOUSE SPECIFIC
   'are you legally.*18|confirm.*legal age|minimum.*working age': { answer: 'Yes', selectValue: 'yes' },
@@ -483,14 +494,86 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
     if (regex.test(lowerQuestion)) {
       if (response.answerFromProfile && userProfile) {
         const profileField = response.answerFromProfile;
-        const profileValue = userProfile[profileField] || userProfile[profileField.replace(/_/g, '')] || userProfile[toCamelCase(profileField)];
         
+        // Try multiple field name formats
+        let profileValue = userProfile[profileField] 
+          || userProfile[profileField.replace(/_/g, '')] 
+          || userProfile[toCamelCase(profileField)]
+          || userProfile[profileField.toLowerCase()];
+        
+        // Special handling for EEO fields with specific value mapping
         if (profileValue !== null && profileValue !== undefined && profileValue !== '') {
+          // Handle boolean fields
           if (typeof profileValue === 'boolean') {
+            // Special mapping for veteran status
+            if (profileField === 'veteran_status') {
+              return { 
+                answer: profileValue ? 'I identify as one or more of the classifications of protected veteran' : 'I am not a protected veteran',
+                selectValue: profileValue ? 'protected veteran' : 'i am not a protected veteran'
+              };
+            }
+            // Special mapping for disability
+            if (profileField === 'disability') {
+              return { 
+                answer: profileValue ? 'Yes, I have a disability' : 'No, I do not have a disability',
+                selectValue: profileValue ? 'yes' : 'no'
+              };
+            }
+            // Special mapping for hispanic/latino
+            if (profileField === 'hispanic_latino') {
+              return { 
+                answer: profileValue ? 'Yes' : 'No',
+                selectValue: profileValue ? 'yes' : 'no'
+              };
+            }
+            // Generic boolean
             return { answer: profileValue ? 'Yes' : 'No', selectValue: profileValue ? 'yes' : 'no' };
           }
-          return { answer: String(profileValue), selectValue: String(profileValue).toLowerCase() };
+          
+          // Handle string values with smart matching for dropdown values
+          const stringValue = String(profileValue);
+          const lowerValue = stringValue.toLowerCase();
+          
+          // Special handling for race/ethnicity to match common dropdown options
+          if (profileField === 'race_ethnicity') {
+            const raceMapping = {
+              'black or african american': { answer: 'Black or African American', selectValue: 'black' },
+              'black': { answer: 'Black or African American', selectValue: 'black' },
+              'african american': { answer: 'Black or African American', selectValue: 'black' },
+              'white': { answer: 'White', selectValue: 'white' },
+              'caucasian': { answer: 'White', selectValue: 'white' },
+              'asian': { answer: 'Asian', selectValue: 'asian' },
+              'hispanic': { answer: 'Hispanic or Latino', selectValue: 'hispanic' },
+              'latino': { answer: 'Hispanic or Latino', selectValue: 'hispanic' },
+              'two or more races': { answer: 'Two or More Races', selectValue: 'two or more' },
+              'native american': { answer: 'American Indian or Alaska Native', selectValue: 'native american' },
+              'pacific islander': { answer: 'Native Hawaiian or Other Pacific Islander', selectValue: 'pacific islander' },
+              'decline': { answer: 'Decline to self-identify', selectValue: 'decline' }
+            };
+            const mapped = Object.entries(raceMapping).find(([key]) => lowerValue.includes(key));
+            if (mapped) return mapped[1];
+          }
+          
+          // Special handling for gender
+          if (profileField === 'gender') {
+            const genderMapping = {
+              'male': { answer: 'Male', selectValue: 'male' },
+              'm': { answer: 'Male', selectValue: 'male' },
+              'female': { answer: 'Female', selectValue: 'female' },
+              'f': { answer: 'Female', selectValue: 'female' },
+              'non-binary': { answer: 'Non-binary', selectValue: 'non-binary' },
+              'other': { answer: 'Other', selectValue: 'other' },
+              'prefer not': { answer: 'Prefer not to answer', selectValue: 'prefer not to answer' },
+              'decline': { answer: 'Decline to self-identify', selectValue: 'decline' }
+            };
+            const mapped = Object.entries(genderMapping).find(([key]) => lowerValue.includes(key));
+            if (mapped) return mapped[1];
+          }
+          
+          return { answer: stringValue, selectValue: lowerValue };
         }
+        
+        // Use default answer if no profile value
         return { answer: response.defaultAnswer || 'Yes', selectValue: (response.defaultAnswer || 'yes').toLowerCase() };
       }
       return { answer: response.answer, selectValue: response.selectValue || (response.answer ? response.answer.toLowerCase() : 'yes') };
