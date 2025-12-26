@@ -407,7 +407,7 @@ const JobQueuePage = () => {
                 Drag & drop a CSV file with job URLs
               </p>
               <p className="text-xs text-muted-foreground mb-4">
-                Supports Greenhouse, Lever, Workday, Ashby, SmartRecruiters, iCIMS, LinkedIn
+                Supports Workday, SmartRecruiters, iCIMS, Bullhorn, Teamtailor, LinkedIn
               </p>
               <input
                 type="file"
