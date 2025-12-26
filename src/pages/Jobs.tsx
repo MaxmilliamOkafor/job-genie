@@ -34,7 +34,7 @@ import {
   Loader2,
   LinkIcon,
   Radio,
-  Database,
+  Search,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -464,8 +464,8 @@ const Jobs = () => {
                           : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                       }`}
                     >
-                      <Database className="h-4 w-4" />
-                      <span>Saved Jobs</span>
+                      <Search className="h-4 w-4" />
+                      <span>Search Results</span>
                       {totalCount > 0 && (
                         <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
                           viewMode === 'database' 
@@ -592,22 +592,22 @@ const Jobs = () => {
           </Card>
         )}
         
-        {/* Empty state for database view - Enhanced */}
+        {/* Empty state for search results view */}
         {viewMode === 'database' && sortedJobs.length === 0 && !isLoading && !isScraping && (
           <Card className="border-dashed border-2 bg-gradient-to-br from-muted/30 via-background to-muted/30">
             <CardContent className="py-16 text-center">
               <div className="relative inline-block mb-6">
                 <div className="relative bg-muted/50 p-6 rounded-full">
-                  <Database className="h-12 w-12 text-muted-foreground" />
+                  <Search className="h-12 w-12 text-muted-foreground" />
                 </div>
               </div>
               <h3 className="text-xl font-semibold mb-2">
-                {jobs.length > 0 ? 'No matches found' : 'Your job vault is empty'}
+                {jobs.length > 0 ? 'No matches found' : 'No search results yet'}
               </h3>
               <p className="text-muted-foreground max-w-md mx-auto">
                 {jobs.length > 0 
                   ? 'Try adjusting your filters to see more results.'
-                  : 'Jobs from live polling will be automatically saved here.'}
+                  : 'Use the search panel above to find jobs by keywords, location, or other criteria.'}
               </p>
             </CardContent>
           </Card>
