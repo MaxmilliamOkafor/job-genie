@@ -4250,18 +4250,90 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function initialize() {
   const hostname = window.location.hostname;
+  const url = window.location.href;
   
-  if (hostname.includes('linkedin.com') || hostname.includes('indeed.com')) {
-    console.log('QuantumHire AI: Skipping job board');
+  console.log('QuantumHire AI: Initializing on', hostname);
+  
+  // Add extension marker for web app detection
+  addExtensionMarkerToPage();
+  
+  // Check if this was opened from the web app (auto-apply mode)
+  const isFromWebApp = document.referrer.includes('lovable.dev') || 
+                       document.referrer.includes('localhost') ||
+                       sessionStorage.getItem('quantumhire_auto_apply') === 'true';
+  
+  // Skip pure job board listing pages (not application pages)
+  const isJobListingPage = (hostname.includes('linkedin.com') && !url.includes('/jobs/view/')) ||
+                           (hostname.includes('indeed.com') && !url.includes('/viewjob'));
+  
+  if (isJobListingPage) {
+    console.log('QuantumHire AI: Job listing page, waiting for job selection');
     return;
   }
   
   const platform = detectPlatform();
   console.log(`QuantumHire AI: Detected platform: ${platform.name}`);
   
+  // Create floating panel on ATS pages
   if (platform.name !== 'generic' || document.querySelector('input[type="file"], form input[type="text"]')) {
     setTimeout(createFloatingPanel, 1000);
   }
+  
+  // Auto-trigger autofill if we have stored profile and this looks like an application page
+  const shouldAutoFill = platform.name !== 'generic' || 
+                         url.includes('apply') || 
+                         url.includes('application') ||
+                         url.includes('careers') ||
+                         document.querySelector('[data-automation-id="applicationForm"], #application_form, form[action*="apply"]');
+  
+  if (shouldAutoFill) {
+    console.log('QuantumHire AI: Application page detected, checking for auto-fill...');
+    
+    // Wait for page to fully load
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Get stored settings
+    const data = await chrome.storage.local.get(['userProfile', 'autofillEnabled', 'autoApplyEnabled']);
+    
+    if (data.autofillEnabled !== false && data.userProfile) {
+      console.log('QuantumHire AI: Auto-fill enabled, starting...');
+      
+      // Show toast that we're auto-filling
+      showToast('QuantumHire AI detected - Auto-filling form...', 'info', 3000);
+      
+      // Trigger autofill
+      setTimeout(async () => {
+        try {
+          await handleAutofillMessage({
+            userProfile: data.userProfile,
+            tailoredData: {},
+            options: {
+              autoMode: true,
+              autoSubmit: false,
+              generatePdfs: true,
+            }
+          });
+          showToast('Form auto-filled! Review and submit.', 'success', 4000);
+        } catch (error) {
+          console.error('QuantumHire AI: Auto-fill error:', error);
+          showToast('Auto-fill had issues. Check the form.', 'warning', 3000);
+        }
+      }, 1500);
+    }
+  }
+}
+
+// Add marker so web app can detect extension
+function addExtensionMarkerToPage() {
+  if (document.getElementById('quantumhire-extension-marker')) return;
+  
+  const marker = document.createElement('div');
+  marker.id = 'quantumhire-extension-marker';
+  marker.setAttribute('data-quantumhire-extension', 'true');
+  marker.setAttribute('data-version', '2.0');
+  marker.style.display = 'none';
+  document.body.appendChild(marker);
+  console.log('QuantumHire AI: Extension marker added');
 }
 
 if (document.readyState === 'loading') {

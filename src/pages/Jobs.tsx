@@ -110,7 +110,7 @@ const Jobs = () => {
   const [autoProcessing, setAutoProcessing] = useState(false);
   const [currentAutoJob, setCurrentAutoJob] = useState<Job | null>(null);
   const [autoProgress, setAutoProgress] = useState({ current: 0, total: 0, successful: 0, failed: 0, skipped: 0 });
-  const [jobTimeout, setJobTimeout] = useState(60); // seconds per job
+  const [jobTimeout, setJobTimeout] = useState(15); // seconds per job (default 15s for fast skipping)
   const [extensionConnected, setExtensionConnected] = useState(false);
   const autoAbortRef = useRef<AbortController | null>(null);
   const autoPauseRef = useRef(false);
@@ -575,17 +575,18 @@ const Jobs = () => {
       return { success: false, error: 'No URL available' };
     }
 
-    // Check for broken links
+    // Check for broken links - skip immediately (2s check)
     const isBroken = job.url_status === 'broken' || (job.report_count && job.report_count >= 3);
     if (isBroken) {
+      await new Promise(r => setTimeout(r, 500)); // Brief pause before skipping
       return { success: false, skipped: true, error: 'Link reported as broken' };
     }
 
     jobStartTimeRef.current = Date.now();
 
     try {
-      // Open the job in a new window (user-initiated via the automation, won't be blocked)
-      const newWindow = window.open(job.url, '_blank', 'noopener,noreferrer');
+      // Open the job in a new window
+      const newWindow = window.open(job.url, '_blank');
       
       if (!newWindow) {
         return { success: false, error: 'Popup blocked - click to open manually' };
@@ -593,10 +594,28 @@ const Jobs = () => {
 
       currentJobWindowRef.current = newWindow;
 
+      // Send message to extension to trigger autofill
+      try {
+        newWindow.postMessage({
+          type: 'QUANTUMHIRE_WEBAPP',
+          action: 'AUTO_APPLY_START',
+          data: {
+            jobUrl: job.url,
+            jobTitle: job.title,
+            company: job.company,
+            description: job.description,
+          }
+        }, '*');
+      } catch (e) {
+        console.log('Could not send message to new window:', e);
+      }
+
       // Wait for the job to be processed (with timeout)
       const timeoutMs = jobTimeout * 1000;
-      const checkInterval = 1000;
+      const quickSkipMs = 2000; // 2 seconds for quick error detection
+      const checkInterval = 500; // Check more frequently
       let elapsed = 0;
+      let windowLoadError = false;
 
       // Create a promise that resolves when the window is closed or timeout occurs
       return new Promise((resolve) => {
@@ -609,28 +628,46 @@ const Jobs = () => {
             return;
           }
 
-          // Check if paused - just wait
+          // Check if paused - just wait but don't increment elapsed
           if (autoPauseRef.current) {
             return;
           }
 
           elapsed += checkInterval;
 
-          // Check if window was closed (user completed or closed it)
+          // Quick check for window errors (closed very quickly = error)
           try {
             if (newWindow.closed) {
               clearInterval(checkProgress);
-              // If closed quickly (< 5 seconds), likely an error
-              if (elapsed < 5000) {
-                resolve({ success: false, skipped: true, error: 'Page closed quickly - may be invalid' });
+              // If closed within 2 seconds, likely an error page or redirect issue
+              if (elapsed <= quickSkipMs) {
+                resolve({ success: false, skipped: true, error: 'Page closed quickly - invalid link' });
+              } else if (elapsed < 8000) {
+                // Closed somewhat quickly - probably an issue
+                resolve({ success: false, skipped: true, error: 'Page closed - may have redirected' });
               } else {
-                // Assume successful if user spent time on the page
+                // User spent reasonable time, assume success
                 resolve({ success: true });
               }
               return;
             }
+            
+            // Try to detect error pages by checking if we can access the location
+            // This will throw for cross-origin but work for same-origin error pages
+            try {
+              const loc = newWindow.location.href;
+              // If we can read it and it's about:blank or chrome-error, skip quickly
+              if (loc.includes('about:blank') || loc.includes('chrome-error') || loc.includes('err_')) {
+                clearInterval(checkProgress);
+                try { newWindow.close(); } catch {}
+                resolve({ success: false, skipped: true, error: 'Error loading page' });
+                return;
+              }
+            } catch {
+              // Cross-origin - normal, page loaded
+            }
           } catch {
-            // Cross-origin - can't check, assume still loading
+            // Can't check window state
           }
 
           // Check for timeout
@@ -642,7 +679,7 @@ const Jobs = () => {
           }
         }, checkInterval);
 
-        // Also set a hard timeout as backup
+        // Hard timeout backup
         setTimeout(() => {
           clearInterval(checkProgress);
           try { 
@@ -651,7 +688,7 @@ const Jobs = () => {
             }
           } catch {}
           resolve({ success: false, skipped: true, error: `Timeout after ${jobTimeout}s` });
-        }, timeoutMs + 2000);
+        }, timeoutMs + 1000);
       });
 
     } catch (error) {
@@ -1018,21 +1055,25 @@ const Jobs = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
+                        <DropdownMenuItem onClick={() => setJobTimeout(10)}>
+                          10s - Ultra Fast
+                          {jobTimeout === 10 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setJobTimeout(15)}>
+                          15s - Very Fast
+                          {jobTimeout === 15 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setJobTimeout(20)}>
+                          20s - Fast
+                          {jobTimeout === 20 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setJobTimeout(30)}>
-                          30s - Fast (may skip some)
+                          30s - Standard
                           {jobTimeout === 30 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setJobTimeout(60)}>
-                          60s - Standard
+                          60s - Patient
                           {jobTimeout === 60 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setJobTimeout(90)}>
-                          90s - Patient
-                          {jobTimeout === 90 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setJobTimeout(120)}>
-                          120s - Very Patient
-                          {jobTimeout === 120 && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
