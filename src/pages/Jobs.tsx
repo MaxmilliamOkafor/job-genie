@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
 import { Job } from '@/hooks/useJobs';
@@ -32,6 +33,8 @@ import {
   X,
   Loader2,
   LinkIcon,
+  Radio,
+  Database,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -67,6 +70,12 @@ const Jobs = () => {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isBatchApplying, setIsBatchApplying] = useState(false);
   const [isValidatingLinks, setIsValidatingLinks] = useState(false);
+  
+  // View mode toggle - 'live' for live API jobs, 'database' for saved jobs
+  const [viewMode, setViewMode] = useState<'live' | 'database'>('live');
+  const [liveJobs, setLiveJobs] = useState<Job[]>([]);
+  const [liveJobsCount, setLiveJobsCount] = useState(0);
+  const [isLiveFetching, setIsLiveFetching] = useState(false);
   
   // Ref to scroll job list to bottom
   const scrollToJobListBottomRef = useRef<(() => void) | null>(null);
@@ -277,7 +286,14 @@ const Jobs = () => {
         </div>
 
         {/* Live Jobs Panel - Single unified search interface */}
-        <LiveJobsPanel onJobsFetched={refetch} />
+        <LiveJobsPanel 
+          onJobsFetched={refetch} 
+          onLiveJobsUpdate={(jobs, count) => {
+            setLiveJobs(jobs as Job[]);
+            setLiveJobsCount(count);
+          }}
+          onFetchingChange={setIsLiveFetching}
+        />
 
         {/* Filters Bar */}
         {jobs.length > 0 && (
@@ -423,16 +439,41 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Results Header */}
-        {jobs.length > 0 && (
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              Job Results
-              <span className="text-muted-foreground font-normal ml-2">
-                ({sortedJobs.length.toLocaleString()} shown
-                {totalCount > sortedJobs.length && ` of ${totalCount.toLocaleString()} total`})
+        {/* Results Header with View Toggle */}
+        {(jobs.length > 0 || liveJobs.length > 0) && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* View Toggle Tabs */}
+            <div className="flex items-center gap-4">
+              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'live' | 'database')}>
+                <TabsList className="grid grid-cols-2 w-[280px]">
+                  <TabsTrigger value="live" className="gap-2">
+                    <Radio className="h-4 w-4" />
+                    Live Jobs
+                    {liveJobsCount > 0 && (
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {liveJobsCount.toLocaleString()}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="database" className="gap-2">
+                    <Database className="h-4 w-4" />
+                    Saved
+                    {totalCount > 0 && (
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {totalCount.toLocaleString()}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              
+              <span className="text-muted-foreground text-sm">
+                {viewMode === 'live' 
+                  ? `${liveJobs.length.toLocaleString()} live results`
+                  : `${sortedJobs.length.toLocaleString()} shown of ${totalCount.toLocaleString()}`}
               </span>
-            </h2>
+            </div>
+            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -456,8 +497,22 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Virtual Job Listings - only renders visible items */}
-        {sortedJobs.length > 0 && (
+        {/* Virtual Job Listings - shows live or database jobs based on toggle */}
+        {viewMode === 'live' && liveJobs.length > 0 && (
+          <VirtualJobList
+            jobs={liveJobs}
+            hasMore={false}
+            isLoading={false}
+            onLoadMore={() => {}}
+            onApply={handleJobApplied}
+            selectedJobs={selectedJobs}
+            onSelectionChange={setSelectedJobs}
+            selectionMode={selectionMode}
+            scrollRef={scrollToJobListBottomRef}
+          />
+        )}
+        
+        {viewMode === 'database' && sortedJobs.length > 0 && (
           <VirtualJobList
             jobs={sortedJobs}
             hasMore={hasMore}
@@ -494,17 +549,28 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Empty state */}
-        {sortedJobs.length === 0 && !isLoading && !isScraping && (
-          <div className="text-center py-16">
-            <Briefcase className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
+        {/* Empty state for live view */}
+        {viewMode === 'live' && liveJobs.length === 0 && !isLiveFetching && (
+          <div className="text-center py-16 border rounded-lg bg-muted/20">
+            <Radio className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
+            <h3 className="text-lg font-medium mb-2">No live jobs yet</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Click "Start Live" or "Refresh" in the Live Tech Jobs panel above to fetch fresh job listings from tier-1 companies.
+            </p>
+          </div>
+        )}
+        
+        {/* Empty state for database view */}
+        {viewMode === 'database' && sortedJobs.length === 0 && !isLoading && !isScraping && (
+          <div className="text-center py-16 border rounded-lg bg-muted/20">
+            <Database className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-medium mb-2">
-              {jobs.length > 0 ? 'No jobs match your filters' : 'No jobs yet'}
+              {jobs.length > 0 ? 'No jobs match your filters' : 'No saved jobs yet'}
             </h3>
             <p className="text-muted-foreground max-w-md mx-auto">
               {jobs.length > 0 
                 ? 'Try adjusting your filters or search query.'
-                : 'Use the search above to find jobs from top tech companies.'}
+                : 'Jobs from live polling are automatically saved here for you to review later.'}
             </p>
           </div>
         )}

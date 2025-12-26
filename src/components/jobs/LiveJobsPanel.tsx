@@ -29,15 +29,29 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+interface LiveJob {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string;
+  posted_date: string;
+  match_score: number;
+  platform?: string;
+  status?: 'pending' | 'applied' | 'interviewing' | 'offered' | 'rejected';
+}
+
 interface LiveJobsPanelProps {
   onJobsFetched: () => void;
+  onLiveJobsUpdate?: (jobs: LiveJob[], count: number) => void;
+  onFetchingChange?: (isFetching: boolean) => void;
 }
 
 const DEFAULT_KEYWORDS = `Technology, Data Scientist, Data Engineer, Technical, Product Analyst, Data Analyst, Business Analyst, Machine Learning Engineer, UX/UI Designer, Full Stack Developer, Customer Service, Customer Success Architect, Solution Engineer, Project Manager, Support, Software Development, Data Science, Data Analysis, Cloud Computing, Cybersecurity, Programming Languages, Agile Methodologies, User Experience (UX), User Interface (UI), DevOps, Continuous Integration (CI), Continuous Deployment (CD), Machine Learning, Project Management, Database Management, Web Development, Cloud Technologies, Data Science & Analytics`;
 
 const DEFAULT_LOCATIONS = `Dublin, Ireland, United Kingdom, United States, United Arab Emirates, Dubai, Switzerland, Germany, Sweden, Spain, Netherlands, France, Belgium, Austria, Czech Republic, Portugal, Italy, Greece, Turkey, Singapore, Japan, Australia, Canada, Mexico, South Africa, Qatar, Norway, New Zealand, Denmark, Luxembourg, Malta, Cyprus, Morocco, Thailand, Serbia, Tanzania, Remote`;
 
-export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
+export function LiveJobsPanel({ onJobsFetched, onLiveJobsUpdate, onFetchingChange }: LiveJobsPanelProps) {
   const { user } = useAuth();
   const [isPolling, setIsPolling] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
@@ -54,6 +68,7 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
     if (!user || isFetching) return;
     
     setIsFetching(true);
+    onFetchingChange?.(true);
     
     // Convert time to hours for API
     const hoursFilter = timeUnit === 'hours' ? timeValue : timeValue / 60;
@@ -75,6 +90,23 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
       if (data?.success) {
         setJobsFound(data.totalFiltered || 0);
         setLastFetch(new Date());
+        
+        // Pass live jobs to parent for display in the toggle view
+        if (onLiveJobsUpdate && data.jobs) {
+          const formattedJobs: LiveJob[] = data.jobs.map((job: any) => ({
+            id: job.id || `live-${job.url}`,
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            url: job.url,
+            posted_date: job.posted_date || new Date().toISOString(),
+            match_score: job.match_score || 0,
+            platform: job.platform || 'Greenhouse',
+            status: 'pending' as const,
+          }));
+          onLiveJobsUpdate(formattedJobs, data.totalFiltered || formattedJobs.length);
+        }
+        
         onJobsFetched();
         
         if (data.jobs?.length > 0) {
@@ -91,8 +123,9 @@ export function LiveJobsPanel({ onJobsFetched }: LiveJobsPanelProps) {
       toast.error('Failed to fetch jobs', { id: 'live-jobs' });
     } finally {
       setIsFetching(false);
+      onFetchingChange?.(false);
     }
-  }, [user, keywords, locations, timeValue, timeUnit, onJobsFetched, isFetching]);
+  }, [user, keywords, locations, timeValue, timeUnit, onJobsFetched, onLiveJobsUpdate, onFetchingChange, isFetching]);
 
   const startPolling = useCallback(() => {
     if (pollInterval) clearInterval(pollInterval);
