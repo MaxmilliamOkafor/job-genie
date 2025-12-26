@@ -3,6 +3,122 @@
 
 console.log('QuantumHire AI: Advanced content script v2.0 loaded');
 
+// ============= EXTENSION DETECTION MARKER =============
+// Add a marker to the page so the web app can detect if the extension is installed
+(function addExtensionMarker() {
+  const marker = document.createElement('div');
+  marker.id = 'quantumhire-extension-marker';
+  marker.setAttribute('data-quantumhire-extension', 'true');
+  marker.setAttribute('data-version', '2.0');
+  marker.style.display = 'none';
+  document.body.appendChild(marker);
+  console.log('QuantumHire AI: Extension marker added');
+})();
+
+// ============= WEB APP COMMUNICATION =============
+// Listen for messages from the web app for auto-apply mode
+window.addEventListener('message', async (event) => {
+  // Only accept messages from the same origin or trusted sources
+  if (event.source !== window) return;
+  
+  const { type, action, data } = event.data || {};
+  
+  if (type !== 'QUANTUMHIRE_WEBAPP') return;
+  
+  console.log('QuantumHire AI: Received webapp message:', action, data);
+  
+  switch (action) {
+    case 'AUTO_APPLY_START':
+      // Trigger autofill with the job data
+      if (data?.jobUrl) {
+        try {
+          // Get profile and tailored data from storage
+          const storageData = await chrome.storage.local.get(['userProfile', 'accessToken', 'autofillEnabled']);
+          
+          if (storageData.autofillEnabled !== false && storageData.userProfile) {
+            // Start autofill process
+            setTimeout(() => {
+              startAutofillProcess(storageData.userProfile, data.tailoredData || {});
+            }, 2000);
+          }
+          
+          // Send confirmation back to webapp
+          window.postMessage({
+            type: 'QUANTUMHIRE_EXTENSION',
+            action: 'AUTO_APPLY_STARTED',
+            success: true,
+          }, '*');
+        } catch (error) {
+          window.postMessage({
+            type: 'QUANTUMHIRE_EXTENSION',
+            action: 'AUTO_APPLY_ERROR',
+            error: error.message,
+          }, '*');
+        }
+      }
+      break;
+      
+    case 'CHECK_EXTENSION':
+      window.postMessage({
+        type: 'QUANTUMHIRE_EXTENSION',
+        action: 'EXTENSION_DETECTED',
+        version: '2.0',
+      }, '*');
+      break;
+      
+    case 'GET_STATUS':
+      window.postMessage({
+        type: 'QUANTUMHIRE_EXTENSION',
+        action: 'STATUS_RESPONSE',
+        status: {
+          isRunning: automationState.isRunning,
+          isPaused: automationState.isPaused,
+          currentStep: automationState.currentStep,
+        },
+      }, '*');
+      break;
+  }
+});
+
+// Helper to start autofill on current page
+async function startAutofillProcess(profile, tailoredData) {
+  console.log('QuantumHire AI: Starting autofill process from webapp trigger');
+  
+  // Detect platform
+  const platform = detectCurrentPlatform();
+  if (!platform) {
+    console.log('QuantumHire AI: Unknown platform, using generic autofill');
+  }
+  
+  // Wait for page to be fully loaded
+  await new Promise(r => setTimeout(r, 1500));
+  
+  // Trigger main autofill
+  try {
+    await handleAutofillMessage({
+      userProfile: profile,
+      tailoredData: tailoredData,
+      options: {
+        autoMode: true,
+        autoSubmit: false, // Don't auto-submit, let user review
+        generatePdfs: true,
+      }
+    });
+    
+    window.postMessage({
+      type: 'QUANTUMHIRE_EXTENSION',
+      action: 'AUTOFILL_COMPLETE',
+      success: true,
+    }, '*');
+  } catch (error) {
+    window.postMessage({
+      type: 'QUANTUMHIRE_EXTENSION',
+      action: 'AUTOFILL_ERROR',
+      error: error.message,
+    }, '*');
+  }
+}
+
 // ============= PLATFORM DETECTION & CONFIGURATION =============
 
 const PLATFORM_CONFIG = {
