@@ -136,6 +136,50 @@ export type Database = {
         }
         Relationships: []
       }
+      broken_link_reports: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string | null
+          report_reason: string | null
+          status: string
+          updated_at: string
+          url: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          report_reason?: string | null
+          status?: string
+          updated_at?: string
+          url: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          report_reason?: string | null
+          status?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broken_link_reports_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_detections: {
         Row: {
           application_id: string | null
@@ -230,12 +274,15 @@ export type Database = {
           match_score: number | null
           platform: string | null
           posted_date: string | null
+          report_count: number | null
           requirements: string[] | null
           salary: string | null
           status: Database["public"]["Enums"]["application_status"] | null
           title: string
           updated_at: string | null
           url: string | null
+          url_last_checked: string | null
+          url_status: string | null
           user_id: string
         }
         Insert: {
@@ -248,12 +295,15 @@ export type Database = {
           match_score?: number | null
           platform?: string | null
           posted_date?: string | null
+          report_count?: number | null
           requirements?: string[] | null
           salary?: string | null
           status?: Database["public"]["Enums"]["application_status"] | null
           title: string
           updated_at?: string | null
           url?: string | null
+          url_last_checked?: string | null
+          url_status?: string | null
           user_id: string
         }
         Update: {
@@ -266,12 +316,15 @@ export type Database = {
           match_score?: number | null
           platform?: string | null
           posted_date?: string | null
+          report_count?: number | null
           requirements?: string[] | null
           salary?: string | null
           status?: Database["public"]["Enums"]["application_status"] | null
           title?: string
           updated_at?: string | null
           url?: string | null
+          url_last_checked?: string | null
+          url_status?: string | null
           user_id?: string
         }
         Relationships: []

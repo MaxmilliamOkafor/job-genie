@@ -31,6 +31,7 @@ import {
   Zap,
   X,
   Loader2,
+  LinkIcon,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -65,6 +66,7 @@ const Jobs = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isBatchApplying, setIsBatchApplying] = useState(false);
+  const [isValidatingLinks, setIsValidatingLinks] = useState(false);
   
   // Ref to scroll job list to bottom
   const scrollToJobListBottomRef = useRef<(() => void) | null>(null);
@@ -185,6 +187,30 @@ const Jobs = () => {
     setIsSearching(false);
   }, [searchInput, searchJobs, refetch]);
 
+  // Validate job URLs
+  const handleValidateLinks = useCallback(async () => {
+    setIsValidatingLinks(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-job-urls', {
+        body: { validateAll: true, batchSize: 20 },
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        await refetch();
+        toast.success(`Validated ${data.validated} job links`, {
+          description: `${data.validCount} valid, ${data.brokenCount} broken`,
+        });
+      }
+    } catch (error) {
+      console.error('Error validating links:', error);
+      toast.error('Failed to validate links');
+    } finally {
+      setIsValidatingLinks(false);
+    }
+  }, [refetch]);
+
   // Debounced search on input change
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -210,9 +236,22 @@ const Jobs = () => {
               Find and apply to jobs from top tech companies
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {jobs.length > 0 && (
               <>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleValidateLinks}
+                  disabled={isValidatingLinks}
+                >
+                  {isValidatingLinks ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <LinkIcon className="h-4 w-4 mr-2" />
+                  )}
+                  Check Links
+                </Button>
                 <Button 
                   variant="outline" 
                   size="sm"
