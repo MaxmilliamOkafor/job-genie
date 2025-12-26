@@ -95,14 +95,10 @@ async function startAutofillProcess(profile, tailoredData) {
   
   // Trigger main autofill
   try {
-    await handleAutofillMessage({
-      userProfile: profile,
-      tailoredData: tailoredData,
-      options: {
-        autoMode: true,
-        autoSubmit: false, // Don't auto-submit, let user review
-        generatePdfs: true,
-      }
+    await autofillForm(tailoredData || {}, null, {
+      autoMode: true,
+      autoSubmit: false,
+      generatePdfs: true,
     });
     
     window.postMessage({
@@ -903,6 +899,84 @@ function extractJobDetails() {
   if (!company) { const match = window.location.hostname.match(/^([^.]+)\.(workday|greenhouse|lever)/); if (match) company = capitalizeWords(match[1].replace(/-/g, ' ')); }
   
   return { title: title || 'Unknown Position', company: company || 'Unknown Company', description: description.substring(0, 5000), location, url: window.location.href, platform: platform.name };
+}
+
+// ============= JOB DETECTION & VALIDATION =============
+
+function isValidJobPage() {
+  const jobData = extractJobDetails();
+  const url = window.location.href.toLowerCase();
+  const bodyText = document.body?.innerText?.toLowerCase() || '';
+  
+  // Check for error/404 page indicators
+  const errorIndicators = [
+    'page not found',
+    'page you are looking for doesn\'t exist',
+    'page doesn\'t exist',
+    'job not found',
+    'job no longer available',
+    'position has been filled',
+    'this job has been removed',
+    'job listing expired',
+    'posting is no longer active',
+    'this position is no longer available',
+    '404',
+    'error 404',
+    'not found',
+    'oops',
+    'sorry, we couldn\'t find',
+    'page cannot be found'
+  ];
+  
+  for (const indicator of errorIndicators) {
+    // Check if page primarily shows error content
+    if (bodyText.includes(indicator) && bodyText.length < 2000) {
+      return { valid: false, reason: 'broken_link', message: 'Job posting not found or expired' };
+    }
+  }
+  
+  // Check if we have meaningful job data
+  const hasTitle = jobData.title && jobData.title !== 'Unknown Position';
+  const hasDescription = jobData.description && jobData.description.length > 50;
+  const hasCompany = jobData.company && jobData.company !== 'Unknown Company';
+  
+  // Check for application form elements
+  const hasApplicationElements = !!(
+    document.querySelector('input[type="file"]') ||
+    document.querySelector('input[type="text"][name*="name"]') ||
+    document.querySelector('input[type="email"]') ||
+    document.querySelector('[data-automation-id="applicationForm"]') ||
+    document.querySelector('form[action*="apply"]') ||
+    document.querySelector('button[type="submit"]')
+  );
+  
+  // If we're on what looks like an application page, it's valid even without full job details
+  if (hasApplicationElements) {
+    return { valid: true, hasJobData: hasTitle || hasDescription };
+  }
+  
+  // If we have job data (title AND description), it's valid
+  if (hasTitle && hasDescription) {
+    return { valid: true, hasJobData: true };
+  }
+  
+  // If only have company from URL but no other data, might be invalid
+  if (!hasTitle && !hasDescription && bodyText.length < 1000) {
+    return { valid: false, reason: 'no_job_data', message: 'No job detected on this page' };
+  }
+  
+  // Default to valid but flag as potentially missing data
+  return { valid: true, hasJobData: hasTitle || hasDescription, warning: 'Limited job data detected' };
+}
+
+// Send skip signal to web app
+function notifyWebAppToSkip(reason) {
+  window.postMessage({
+    type: 'QUANTUMHIRE_EXTENSION',
+    action: 'SKIP_JOB',
+    reason: reason,
+    url: window.location.href
+  }, '*');
 }
 
 // ============= ENHANCED FIELD FILLING =============
@@ -2885,17 +2959,31 @@ function addPanelStyles() {
     .qh-pdf-modal-footer-right { display: flex; gap: 10px; }
 
 
-    .quantumhire-toast { position: fixed; bottom: 100px; right: 20px; padding: 12px 16px; background: linear-gradient(145deg, hsl(var(--qh-card)) 0%, hsl(var(--qh-card-2)) 100%); border-radius: 12px; display: flex; align-items: center; gap: 10px; z-index: 2147483648; box-shadow: 0 16px 44px hsl(var(--qh-shadow) / 0.20); animation: slideIn 0.3s ease; max-width: 320px; border: 1px solid hsl(var(--qh-border) / 0.8); color: hsl(var(--qh-text)); }
+    .quantumhire-toast { position: fixed; bottom: 100px; right: 400px; padding: 12px 16px; background: linear-gradient(145deg, hsl(var(--qh-card)) 0%, hsl(var(--qh-card-2)) 100%); border-radius: 12px; display: flex; align-items: center; gap: 10px; z-index: 2147483646; box-shadow: 0 16px 44px hsl(var(--qh-shadow) / 0.20); animation: slideInUp 0.3s ease; max-width: 300px; border: 1px solid hsl(var(--qh-border) / 0.8); color: hsl(var(--qh-text)); pointer-events: auto; }
     .quantumhire-toast.success { border-left: 3px solid hsl(var(--qh-brand)); }
     .quantumhire-toast.error { border-left: 3px solid hsl(var(--qh-danger)); }
     .quantumhire-toast.warning { border-left: 3px solid hsl(var(--qh-warn)); }
     .quantumhire-toast.info { border-left: 3px solid hsl(var(--qh-info)); }
     .quantumhire-toast-message { color: hsl(var(--qh-text)); font-size: 12px; line-height: 1.4; }
-    .quantumhire-toast-close { background: none; border: none; color: hsl(var(--qh-muted-2)); cursor: pointer; font-size: 16px; }
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .quantumhire-toast-close { background: none; border: none; color: hsl(var(--qh-muted-2)); cursor: pointer; font-size: 16px; padding: 0 4px; margin-left: 8px; }
+    .quantumhire-toast-close:hover { color: hsl(var(--qh-text)); }
+    @keyframes slideInUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
     .quantumhire-filled { box-shadow: 0 0 0 2px hsl(var(--qh-brand) / 0.55) !important; }
     #quantumhire-panel.minimized .qh-body { display: none; }
+    
+    /* Invalid job page styles */
+    .qh-invalid-message { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 16px; gap: 12px; }
+    .qh-invalid-icon { font-size: 40px; opacity: 0.8; }
+    .qh-invalid-text { font-size: 14px; font-weight: 600; color: hsl(var(--qh-warn)); line-height: 1.4; }
+    .qh-invalid-action { display: flex; justify-content: center; padding: 12px; background: hsl(var(--qh-warn) / 0.1); border-top: 1px solid hsl(var(--qh-warn) / 0.2); }
+    .qh-skip-indicator { font-size: 12px; color: hsl(var(--qh-muted)); animation: qh-pulse-text 1.5s ease-in-out infinite; }
+    @keyframes qh-pulse-text { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+    
+    /* Status variants */
+    .qh-status.qh-status-error { background: hsl(var(--qh-danger) / 0.15) !important; border-color: hsl(var(--qh-danger) / 0.3) !important; }
+    .qh-status.qh-status-warning { background: hsl(var(--qh-warn) / 0.15) !important; border-color: hsl(var(--qh-warn) / 0.3) !important; }
+    .qh-status.qh-status-success { background: hsl(var(--qh-brand) / 0.15) !important; border-color: hsl(var(--qh-brand) / 0.3) !important; }
   `;
   document.head.appendChild(style);
 }
@@ -4274,9 +4362,33 @@ async function initialize() {
   const platform = detectPlatform();
   console.log(`QuantumHire AI: Detected platform: ${platform.name}`);
   
+  // Wait a moment for page to render before checking validity
+  await new Promise(r => setTimeout(r, 1500));
+  
+  // Check if this is a valid job page
+  const jobValidation = isValidJobPage();
+  console.log('QuantumHire AI: Job validation result:', jobValidation);
+  
+  if (!jobValidation.valid) {
+    console.log('QuantumHire AI: Invalid job page -', jobValidation.reason);
+    
+    // Show notification about the issue
+    showToast(`⚠️ ${jobValidation.message}`, 'warning');
+    
+    // Create a minimal panel showing the error
+    createInvalidJobPanel(jobValidation.message);
+    
+    // Notify web app to skip this job after 2 seconds
+    setTimeout(() => {
+      notifyWebAppToSkip(jobValidation.reason);
+    }, 2000);
+    
+    return;
+  }
+  
   // Create floating panel on ATS pages
   if (platform.name !== 'generic' || document.querySelector('input[type="file"], form input[type="text"]')) {
-    setTimeout(createFloatingPanel, 1000);
+    setTimeout(createFloatingPanel, 500);
   }
   
   // Auto-trigger autofill if we have stored profile and this looks like an application page
@@ -4290,7 +4402,7 @@ async function initialize() {
     console.log('QuantumHire AI: Application page detected, checking for auto-fill...');
     
     // Wait for page to fully load
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 1500));
     
     // Get stored settings
     const data = await chrome.storage.local.get(['userProfile', 'autofillEnabled', 'autoApplyEnabled']);
@@ -4304,22 +4416,68 @@ async function initialize() {
       // Trigger autofill
       setTimeout(async () => {
         try {
-          await handleAutofillMessage({
-            userProfile: data.userProfile,
-            tailoredData: {},
-            options: {
-              autoMode: true,
-              autoSubmit: false,
-              generatePdfs: true,
-            }
+          await autofillForm({}, null, {
+            autoMode: true,
+            autoSubmit: false,
+            generatePdfs: true,
           });
           showToast('Form auto-filled! Review and submit.', 'success', 4000);
         } catch (error) {
           console.error('QuantumHire AI: Auto-fill error:', error);
-          showToast('Auto-fill had issues. Check the form.', 'warning', 3000);
+          updatePanelStatus('error', 'Auto-fill had issues. Check form.');
         }
       }, 1500);
     }
+  }
+}
+
+// Create panel for invalid/broken job pages
+function createInvalidJobPanel(message) {
+  if (document.getElementById('quantumhire-panel')) return;
+  
+  const panel = document.createElement('div');
+  panel.id = 'quantumhire-panel';
+  panel.className = 'qh-invalid-panel';
+  panel.innerHTML = `
+    <div class="qh-header">
+      <div class="qh-brand">
+        <span class="qh-logo">⚡</span>
+        <span class="qh-title">QuantumHire AI</span>
+      </div>
+      <div class="qh-controls">
+        <button class="qh-minimize">×</button>
+      </div>
+    </div>
+    <div class="qh-body">
+      <div class="qh-invalid-message">
+        <span class="qh-invalid-icon">🔍</span>
+        <span class="qh-invalid-text">${message}</span>
+      </div>
+      <div class="qh-invalid-action">
+        <span class="qh-skip-indicator">⏭️ Skipping to next job...</span>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(panel);
+  addPanelStyles();
+  
+  // Add close functionality
+  panel.querySelector('.qh-minimize').addEventListener('click', () => {
+    panel.remove();
+  });
+}
+
+// Update panel status message (for error states)
+function updatePanelStatus(type, message) {
+  const panel = document.getElementById('quantumhire-panel');
+  if (!panel) return;
+  
+  const statusEl = panel.querySelector('#qh-status');
+  if (statusEl) {
+    const iconMap = { success: '✅', error: '⚠️', warning: '⚠️', info: 'ℹ️' };
+    statusEl.innerHTML = `<span class="qh-status-icon">${iconMap[type] || '🔔'}</span><span class="qh-status-text">${message}</span>`;
+    statusEl.className = `qh-status qh-status-${type}`;
   }
 }
 

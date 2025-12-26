@@ -20,8 +20,8 @@
 
 .quantumhire-toast {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  bottom: 100px;
+  right: 400px;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: #fff;
   padding: 14px 20px;
@@ -29,17 +29,18 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-  z-index: 2147483647;
+  z-index: 2147483646;
   display: flex;
   align-items: center;
   gap: 10px;
   animation: qh-slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  max-width: 360px;
+  max-width: 300px;
+  pointer-events: auto;
 }
 
 @keyframes qh-slideIn {
-  from { transform: translateX(120%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .quantumhire-toast.success { border-left: 4px solid #22c55e; }
@@ -61,6 +62,18 @@
   z-index: 2147483646;
   overflow: hidden;
   animation: qh-panelSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
+}
+
+/* Container wrapper to allow clicking through non-interactive areas */
+.qh-panel-container {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 400px;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 2147483645;
 }
 
 @keyframes qh-panelSlideUp {
@@ -460,4 +473,78 @@
 
 /* Legacy support */
 .autoapply-filled { border-color: #8b5cf6 !important; box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2) !important; }
-.autoapply-toast { position: fixed; top: 20px; right: 20px; z-index: 2147483647; }
+.autoapply-toast { position: fixed; bottom: 100px; right: 400px; z-index: 2147483646; pointer-events: auto; }
+
+/* ============= INVALID JOB PAGE STYLES ============= */
+
+.qh-invalid-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 16px;
+  gap: 12px;
+}
+
+.qh-invalid-icon {
+  font-size: 40px;
+  opacity: 0.8;
+}
+
+.qh-invalid-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f59e0b;
+  line-height: 1.4;
+}
+
+.qh-invalid-action {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.qh-skip-indicator {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  animation: qh-pulse-text 1.5s ease-in-out infinite;
+}
+
+@keyframes qh-pulse-text {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Status variants */
+.qh-status.qh-status-error {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.qh-status.qh-status-warning {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.qh-status.qh-status-success {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+}
+
+/* Toast close button */
+.quantumhire-toast-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 8px;
+  line-height: 1;
+}
+
+.quantumhire-toast-close:hover {
+  color: #fff;
+}

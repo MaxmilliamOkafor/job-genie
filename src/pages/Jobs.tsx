@@ -749,7 +749,32 @@ const Jobs = () => {
   // Check extension on mount
   useEffect(() => {
     checkExtensionConnection();
-  }, [checkExtensionConnection]);
+    
+    // Listen for skip signals from the extension
+    const handleExtensionMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'QUANTUMHIRE_EXTENSION') return;
+      
+      const { action, reason, url } = event.data;
+      
+      if (action === 'SKIP_JOB') {
+        console.log('Extension requested skip for:', url, 'reason:', reason);
+        
+        // If in auto mode, trigger a skip
+        if (autoSequentialMode && autoProcessing) {
+          toast.info(`Skipping: ${reason || 'Invalid job page'}`, {
+            description: 'Moving to next job...',
+            duration: 2000,
+          });
+          
+          // Close the window and move on
+          skipAutoCurrentJob();
+        }
+      }
+    };
+    
+    window.addEventListener('message', handleExtensionMessage);
+    return () => window.removeEventListener('message', handleExtensionMessage);
+  }, [checkExtensionConnection, autoSequentialMode, autoProcessing, skipAutoCurrentJob]);
 
   // Submit feedback
   const handleSubmitFeedback = useCallback(async () => {
