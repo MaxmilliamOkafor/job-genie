@@ -61,6 +61,8 @@ const Jobs = () => {
   const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
   const [searchInput, setSearchInput] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [activeSearchQuery, setActiveSearchQuery] = useState<string>('');
+  const [lastSearchResultCount, setLastSearchResultCount] = useState<number | null>(null);
   
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -98,7 +100,11 @@ const Jobs = () => {
 
   const handleFiltersChange = useCallback((filtered: Job[]) => {
     setFilteredJobs(filtered);
-  }, []);
+    // Update result count when filters change
+    if (activeSearchQuery) {
+      setLastSearchResultCount(filtered.length);
+    }
+  }, [activeSearchQuery]);
 
   // Sort jobs based on selected sort option
   const sortedJobs = useMemo(() => {
@@ -287,6 +293,7 @@ const Jobs = () => {
             onSearch={async (keywords, locations, filters) => {
               if (!user) return;
               setIsSearching(true);
+              setActiveSearchQuery(keywords);
               try {
                 const { data, error } = await supabase.functions.invoke('search-jobs-google', {
                   body: {
@@ -303,6 +310,7 @@ const Jobs = () => {
                 
                 if (data?.success) {
                   await refetch();
+                  setLastSearchResultCount(data.totalFound || 0);
                   const keywordPreview = keywords.split(',').slice(0, 3).map((k: string) => k.trim()).join(', ');
                   
                   let platformInfo = '';
@@ -320,12 +328,14 @@ const Jobs = () => {
                     duration: 5000,
                   });
                 } else {
+                  setLastSearchResultCount(0);
                   toast.error('Search returned no results', {
                     description: 'Try different keywords or locations',
                   });
                 }
               } catch (error) {
                 console.error('Search error:', error);
+                setActiveSearchQuery('');
                 toast.error('Failed to search jobs', {
                   description: error instanceof Error ? error.message : 'Unknown error',
                 });
@@ -423,36 +433,96 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Results Header */}
+        {/* Dynamic Results Header */}
         {jobs.length > 0 && (
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              Job Results
-              <span className="text-muted-foreground font-normal ml-2">
-                ({sortedJobs.length.toLocaleString()} shown
-                {totalCount > sortedJobs.length && ` of ${totalCount.toLocaleString()} total`})
-              </span>
-            </h2>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <ArrowUpDown className="h-4 w-4 mr-2" />
-                  Sort: {sortBy === 'uploaded' ? 'Recently Added' : 'Posted Date'}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4 rounded-xl border border-primary/20">
+            <div className="flex items-center gap-3">
+              {isSearching ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <div>
+                    <h2 className="text-lg font-semibold">Searching...</h2>
+                    <p className="text-sm text-muted-foreground">Finding matching jobs</p>
+                  </div>
+                </div>
+              ) : sortedJobs.length === 0 ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <Briefcase className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold">No Jobs Found</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {activeSearchQuery ? `No results for "${activeSearchQuery}"` : 'Try adjusting your filters'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <CheckCircle className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      {activeSearchQuery ? (
+                        <>Jobs Found: <span className="text-primary">{sortedJobs.length.toLocaleString()}</span></>
+                      ) : (
+                        <>All Jobs: <span className="text-primary">{sortedJobs.length.toLocaleString()}</span></>
+                      )}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {activeSearchQuery ? (
+                        <>Matching "{activeSearchQuery.split(',').slice(0, 2).join(', ').trim()}"
+                          {totalCount > sortedJobs.length && ` • ${totalCount.toLocaleString()} total in database`}
+                        </>
+                      ) : (
+                        totalCount > sortedJobs.length 
+                          ? `Showing ${sortedJobs.length.toLocaleString()} of ${totalCount.toLocaleString()} total`
+                          : `${sortedJobs.length.toLocaleString()} jobs ready to apply`
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {activeSearchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setActiveSearchQuery('');
+                    setLastSearchResultCount(null);
+                    refetch();
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Search
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
-                <DropdownMenuItem onClick={() => setSortBy('uploaded')}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Recently Added
-                  {sortBy === 'uploaded' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('posted')}>
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Posted Date
-                  {sortBy === 'posted' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    Sort: {sortBy === 'uploaded' ? 'Recently Added' : 'Posted Date'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
+                  <DropdownMenuItem onClick={() => setSortBy('uploaded')}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Recently Added
+                    {sortBy === 'uploaded' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('posted')}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Posted Date
+                    {sortBy === 'posted' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         )}
 
