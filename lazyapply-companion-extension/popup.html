@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LazyApply 2.0 EXTREME</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <div class="logo-text">
+          <h1>LazyApply 2.0</h1>
+          <span class="logo-subtitle">EXTREME</span>
+        </div>
+      </div>
+      <div class="header-toggle">
+        <label class="toggle">
+          <input type="checkbox" id="enabled-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Connection Status -->
+      <section class="status-section">
+        <div class="status-card" id="connection-status">
+          <div class="status-icon">🔗</div>
+          <div class="status-info">
+            <div class="status-title">QuantumHire Backend</div>
+            <div class="status-value" id="backend-status">Checking...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Session Stats -->
+      <section class="stats-section">
+        <h2 class="section-title">Session Stats</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="stat-intercepted">0</div>
+            <div class="stat-label">Intercepted</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-tailored">0</div>
+            <div class="stat-label">Tailored</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-score">--%</div>
+            <div class="stat-label">Avg Score</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Profile Section -->
+      <section class="profile-section">
+        <h2 class="section-title">Your Profile</h2>
+        <div class="profile-card" id="profile-card">
+          <div class="profile-placeholder">
+            <span class="profile-icon">👤</span>
+            <span class="profile-text">No profile loaded</span>
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="load-profile-btn">
+          📥 Load from QuantumHire
+        </button>
+      </section>
+
+      <!-- Settings -->
+      <section class="settings-section">
+        <h2 class="section-title">Settings</h2>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Auto-Tailor</div>
+            <div class="setting-desc">Automatically generate documents when LazyApply applies</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="auto-tailor-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-title">Show Floating Panel</div>
+            <div class="setting-desc">Display control panel on job pages</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="show-panel-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Application History -->
+      <section class="history-section">
+        <h2 class="section-title">Recent Applications</h2>
+        <div class="history-list" id="history-list">
+          <div class="history-empty">No applications yet</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Powered by QuantumHire AI</span>
+      <a href="#" id="open-dashboard-btn">Open Dashboard</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
