@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { GmailIntegration } from '@/components/email/GmailIntegration';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -183,9 +182,6 @@ const Dashboard = () => {
               )}
             </CardContent>
           </Card>
-
-          {/* Gmail Integration */}
-          <GmailIntegration />
         </div>
 
         {/* Quick Start */}
