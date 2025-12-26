@@ -49,6 +49,28 @@ interface ResumeData {
   fileName?: string;
 }
 
+// Helper: Sanitize text for WinAnsi encoding (removes unsupported characters)
+const sanitizeText = (text: string | null | undefined): string => {
+  if (!text) return '';
+  return String(text)
+    // Replace newlines and carriage returns with spaces
+    .replace(/[\n\r\t]/g, ' ')
+    // Replace multiple spaces with single space
+    .replace(/\s+/g, ' ')
+    // Remove or replace other problematic characters
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    // Replace smart quotes with regular quotes
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    // Replace em/en dashes with regular hyphen
+    .replace(/[\u2013\u2014]/g, '-')
+    // Replace ellipsis with dots
+    .replace(/\u2026/g, '...')
+    // Replace bullet points
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '-')
+    .trim();
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -57,6 +79,22 @@ serve(async (req) => {
   try {
     const data: ResumeData = await req.json();
     console.log('Generating PDF for:', data.type, data.personalInfo?.name);
+
+    // Deep sanitize all string fields in data
+    const sanitizeObject = (obj: unknown): unknown => {
+      if (typeof obj === 'string') return sanitizeText(obj);
+      if (Array.isArray(obj)) return obj.map(item => sanitizeObject(item));
+      if (obj && typeof obj === 'object') {
+        const result: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          result[key] = sanitizeObject(value);
+        }
+        return result;
+      }
+      return obj;
+    };
+    
+    const sanitizedData = sanitizeObject(data) as ResumeData;
 
     const pdfDoc = await PDFDocument.create();
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -79,9 +117,10 @@ serve(async (req) => {
       accent: rgb(0.1, 0.3, 0.6),
     };
 
-    // Helper function to wrap text
+    // Helper function to wrap text (use sanitizedData throughout)
     const wrapText = (text: string, maxWidth: number, font: typeof helvetica, fontSize: number): string[] => {
-      const words = text.split(' ');
+      const cleanText = sanitizeText(text);
+      const words = cleanText.split(' ');
       const lines: string[] = [];
       let currentLine = '';
 
@@ -138,11 +177,11 @@ serve(async (req) => {
       yPosition -= lineHeight + 5;
     };
 
-    if (data.type === 'resume') {
+    if (sanitizedData.type === 'resume') {
       // === RESUME GENERATION ===
       
       // Header - Name
-      page.drawText(data.personalInfo.name, {
+      page.drawText(sanitizedData.personalInfo.name, {
         x: margin,
         y: yPosition,
         size: 24,
@@ -153,9 +192,9 @@ serve(async (req) => {
 
       // Contact info line
       const contactParts = [
-        data.personalInfo.phone,
-        data.personalInfo.email,
-        data.personalInfo.location,
+        sanitizedData.personalInfo.phone,
+        sanitizedData.personalInfo.email,
+        sanitizedData.personalInfo.location,
       ].filter(Boolean);
       
       page.drawText(contactParts.join(' | '), {
@@ -169,9 +208,9 @@ serve(async (req) => {
 
       // Links line
       const linkParts = [
-        data.personalInfo.linkedin ? `LinkedIn: ${data.personalInfo.linkedin}` : null,
-        data.personalInfo.github ? `GitHub: ${data.personalInfo.github}` : null,
-        data.personalInfo.portfolio ? `Portfolio: ${data.personalInfo.portfolio}` : null,
+        sanitizedData.personalInfo.linkedin ? `LinkedIn: ${sanitizedData.personalInfo.linkedin}` : null,
+        sanitizedData.personalInfo.github ? `GitHub: ${sanitizedData.personalInfo.github}` : null,
+        sanitizedData.personalInfo.portfolio ? `Portfolio: ${sanitizedData.personalInfo.portfolio}` : null,
       ].filter(Boolean);
       
       if (linkParts.length > 0) {
@@ -188,17 +227,17 @@ serve(async (req) => {
       yPosition -= sectionGap;
 
       // Summary
-      if (data.summary) {
+      if (sanitizedData.summary) {
         addSectionHeader('Professional Summary');
-        addWrappedText(data.summary, margin, 10, helvetica, colors.darkGray);
+        addWrappedText(sanitizedData.summary, margin, 10, helvetica, colors.darkGray);
         yPosition -= sectionGap / 2;
       }
 
       // Experience
-      if (data.experience && data.experience.length > 0) {
+      if (sanitizedData.experience && sanitizedData.experience.length > 0) {
         addSectionHeader('Work Experience');
         
-        for (const exp of data.experience) {
+        for (const exp of sanitizedData.experience) {
           // Company and Title
           page.drawText(exp.company, {
             x: margin,
@@ -228,7 +267,7 @@ serve(async (req) => {
 
           // Bullets
           for (const bullet of exp.bullets) {
-            page.drawText('•', {
+            page.drawText('-', {
               x: margin,
               y: yPosition,
               size: 10,
@@ -242,10 +281,10 @@ serve(async (req) => {
       }
 
       // Education
-      if (data.education && data.education.length > 0) {
+      if (sanitizedData.education && sanitizedData.education.length > 0) {
         addSectionHeader('Education');
         
-        for (const edu of data.education) {
+        for (const edu of sanitizedData.education) {
           page.drawText(edu.degree, {
             x: margin,
             y: yPosition,
@@ -276,10 +315,10 @@ serve(async (req) => {
       }
 
       // Skills
-      if (data.skills) {
+      if (sanitizedData.skills) {
         addSectionHeader('Skills');
         
-        if (data.skills.primary && data.skills.primary.length > 0) {
+        if (sanitizedData.skills.primary && sanitizedData.skills.primary.length > 0) {
           page.drawText('Primary:', {
             x: margin,
             y: yPosition,
@@ -287,10 +326,10 @@ serve(async (req) => {
             font: helveticaBold,
             color: colors.darkGray,
           });
-          addWrappedText(data.skills.primary.join(', '), margin + 50, 10, helvetica, colors.darkGray);
+          addWrappedText(sanitizedData.skills.primary.join(', '), margin + 50, 10, helvetica, colors.darkGray);
         }
         
-        if (data.skills.secondary && data.skills.secondary.length > 0) {
+        if (sanitizedData.skills.secondary && sanitizedData.skills.secondary.length > 0) {
           page.drawText('Additional:', {
             x: margin,
             y: yPosition,
@@ -298,21 +337,21 @@ serve(async (req) => {
             font: helveticaBold,
             color: colors.darkGray,
           });
-          addWrappedText(data.skills.secondary.join(', '), margin + 60, 10, helvetica, colors.darkGray);
+          addWrappedText(sanitizedData.skills.secondary.join(', '), margin + 60, 10, helvetica, colors.darkGray);
         }
       }
 
       // Certifications
-      if (data.certifications && data.certifications.length > 0) {
+      if (sanitizedData.certifications && sanitizedData.certifications.length > 0) {
         addSectionHeader('Certifications');
-        addWrappedText(data.certifications.join(' • '), margin, 10, helvetica, colors.darkGray);
+        addWrappedText(sanitizedData.certifications.join(' - '), margin, 10, helvetica, colors.darkGray);
       }
 
       // Achievements
-      if (data.achievements && data.achievements.length > 0) {
+      if (sanitizedData.achievements && sanitizedData.achievements.length > 0) {
         addSectionHeader('Achievements');
         
-        for (const achievement of data.achievements) {
+        for (const achievement of sanitizedData.achievements) {
           page.drawText(`${achievement.title} (${achievement.date})`, {
             x: margin,
             y: yPosition,
@@ -326,11 +365,11 @@ serve(async (req) => {
         }
       }
 
-    } else if (data.type === 'cover_letter' && data.coverLetter) {
+    } else if (sanitizedData.type === 'cover_letter' && sanitizedData.coverLetter) {
       // === COVER LETTER GENERATION ===
       
       // Header - Name
-      page.drawText(data.personalInfo.name, {
+      page.drawText(sanitizedData.personalInfo.name, {
         x: margin,
         y: yPosition,
         size: 20,
@@ -340,7 +379,7 @@ serve(async (req) => {
       yPosition -= 24;
 
       // Contact info
-      const contactLine = [data.personalInfo.phone, data.personalInfo.email].filter(Boolean).join(' | ');
+      const contactLine = [sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email].filter(Boolean).join(' | ');
       page.drawText(contactLine, {
         x: margin,
         y: yPosition,
@@ -375,7 +414,7 @@ serve(async (req) => {
       });
       yPosition -= lineHeight;
       
-      page.drawText(data.coverLetter.recipientCompany, {
+      page.drawText(sanitizedData.coverLetter.recipientCompany, {
         x: margin,
         y: yPosition,
         size: 10,
@@ -385,9 +424,9 @@ serve(async (req) => {
       yPosition -= lineHeight * 2;
 
       // Subject line
-      let subject = `Re: ${data.coverLetter.jobTitle}`;
-      if (data.coverLetter.jobId) {
-        subject += ` - Job ID: ${data.coverLetter.jobId}`;
+      let subject = `Re: ${sanitizedData.coverLetter.jobTitle}`;
+      if (sanitizedData.coverLetter.jobId) {
+        subject += ` - Job ID: ${sanitizedData.coverLetter.jobId}`;
       }
       page.drawText(subject, {
         x: margin,
@@ -409,7 +448,7 @@ serve(async (req) => {
       yPosition -= lineHeight * 1.5;
 
       // Body paragraphs
-      for (const paragraph of data.coverLetter.paragraphs) {
+      for (const paragraph of sanitizedData.coverLetter.paragraphs) {
         addWrappedText(paragraph, margin, 11, helvetica, colors.darkGray);
         yPosition -= lineHeight;
       }
@@ -426,7 +465,7 @@ serve(async (req) => {
       });
       yPosition -= lineHeight * 2;
 
-      page.drawText(data.personalInfo.name, {
+      page.drawText(sanitizedData.personalInfo.name, {
         x: margin,
         y: yPosition,
         size: 11,
@@ -439,10 +478,10 @@ serve(async (req) => {
     const pdfBytes = await pdfDoc.save();
     const base64Pdf = btoa(String.fromCharCode(...pdfBytes));
 
-    const fileName = data.fileName || 
-      (data.type === 'resume' 
-        ? `${data.personalInfo.name.replace(/\s+/g, '')}_CV.pdf`
-        : `${data.personalInfo.name.replace(/\s+/g, '')}_CoverLetter.pdf`);
+    const fileName = sanitizedData.fileName || 
+      (sanitizedData.type === 'resume' 
+        ? `${sanitizedData.personalInfo.name.replace(/\s+/g, '')}_CV.pdf`
+        : `${sanitizedData.personalInfo.name.replace(/\s+/g, '')}_CoverLetter.pdf`);
 
     console.log('PDF generated successfully:', fileName, 'Size:', pdfBytes.length);
 
