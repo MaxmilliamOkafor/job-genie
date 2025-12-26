@@ -5,8 +5,8 @@ import { Job } from './useJobs';
 import { toast } from 'sonner';
 
 // Reasonable page size to prevent browser crashes
-const PAGE_SIZE = 100;
-const INITIAL_LOAD = 200;
+const PAGE_SIZE = 200;
+const INITIAL_LOAD = 500;
 
 export function useJobScraper() {
   const { user } = useAuth();
