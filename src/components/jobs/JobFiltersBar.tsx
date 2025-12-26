@@ -26,7 +26,7 @@ import { Job } from '@/hooks/useJobs';
 interface JobFiltersBarProps {
   jobs: Job[];
   onFiltersChange: (filteredJobs: Job[]) => void;
-  onSearch?: (searchTerm: string) => Promise<void>;
+  onSearch?: (keywords: string, locations: string) => Promise<void>;
   isSearching?: boolean;
 }
 
@@ -215,7 +215,10 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: 
 
   const handleApiSearch = async () => {
     if (searchTerm && onSearch) {
-      await onSearch(searchTerm);
+      const locationsStr = selectedLocations.length > 0 
+        ? selectedLocations.join(', ') 
+        : 'Remote, Dublin, Ireland, United Kingdom, United States, Germany, Netherlands, France';
+      await onSearch(searchTerm, locationsStr);
       setSearchTerm('');
     }
   };
