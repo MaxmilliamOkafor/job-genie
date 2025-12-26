@@ -233,96 +233,129 @@ Examples:
 
       <!-- Settings Tab -->
       <section class="tab-content" id="tab-settings">
-        <!-- Connection Status -->
-        <div class="status-section">
-          <div class="status-card" id="connection-status">
-            <div class="status-icon">🔗</div>
-            <div class="status-info">
-              <div class="status-title">QuantumHire Backend</div>
-              <div class="status-value" id="backend-status">Checking...</div>
+        <!-- Auth Section (shown when not logged in) -->
+        <div class="auth-section" id="auth-section">
+          <div class="auth-card">
+            <div class="auth-header">
+              <span class="auth-icon">🔐</span>
+              <h2>Sign in to QuantumHire</h2>
+              <p class="auth-desc">Use your QuantumHire account to access job search</p>
+            </div>
+            <form id="login-form" class="auth-form">
+              <div class="form-group">
+                <label for="auth-email">Email</label>
+                <input type="email" id="auth-email" placeholder="you@email.com" required>
+              </div>
+              <div class="form-group">
+                <label for="auth-password">Password</label>
+                <input type="password" id="auth-password" placeholder="••••••••" required>
+              </div>
+              <div class="auth-error" id="auth-error" style="display: none;"></div>
+              <button type="submit" class="btn btn-primary btn-full" id="login-btn">
+                Sign In
+              </button>
+            </form>
+            <div class="auth-footer">
+              <span>Don't have an account?</span>
+              <a href="#" id="signup-link">Sign up on QuantumHire</a>
             </div>
           </div>
         </div>
 
-        <!-- Session Stats -->
-        <div class="stats-section">
-          <h2 class="section-title">Session Stats</h2>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-value" id="stat-searched">0</div>
-              <div class="stat-label">Jobs Found</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value" id="stat-queued">0</div>
-              <div class="stat-label">Queued</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value" id="stat-tailored">0</div>
-              <div class="stat-label">Tailored</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value" id="stat-applied">0</div>
-              <div class="stat-label">Applied</div>
+        <!-- Logged In Section (shown when authenticated) -->
+        <div class="loggedin-section" id="loggedin-section" style="display: none;">
+          <!-- Connection Status -->
+          <div class="status-section">
+            <div class="status-card" id="connection-status">
+              <div class="status-icon">✅</div>
+              <div class="status-info">
+                <div class="status-title">Connected</div>
+                <div class="status-value" id="backend-status">Ready</div>
+              </div>
+              <button class="btn btn-danger btn-sm" id="logout-btn">Logout</button>
             </div>
           </div>
-        </div>
 
-        <!-- Profile Section -->
-        <div class="profile-section">
-          <h2 class="section-title">Your Profile</h2>
-          <div class="profile-card" id="profile-card">
-            <div class="profile-placeholder">
-              <span class="profile-icon">👤</span>
-              <span class="profile-text">No profile loaded</span>
+          <!-- Session Stats -->
+          <div class="stats-section">
+            <h2 class="section-title">Session Stats</h2>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-searched">0</div>
+                <div class="stat-label">Jobs Found</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-queued">0</div>
+                <div class="stat-label">Queued</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-tailored">0</div>
+                <div class="stat-label">Tailored</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-applied">0</div>
+                <div class="stat-label">Applied</div>
+              </div>
             </div>
           </div>
-          <button class="btn btn-secondary" id="load-profile-btn">
-            📥 Load from QuantumHire
-          </button>
-        </div>
 
-        <!-- Settings List -->
-        <div class="settings-list">
-          <h2 class="section-title">Automation Settings</h2>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-title">Auto-Tailor on Apply</div>
-              <div class="setting-desc">Generate CV & cover letter for each job</div>
+          <!-- Profile Section -->
+          <div class="profile-section">
+            <h2 class="section-title">Your Profile</h2>
+            <div class="profile-card" id="profile-card">
+              <div class="profile-placeholder">
+                <span class="profile-icon">👤</span>
+                <span class="profile-text">Loading profile...</span>
+              </div>
             </div>
-            <label class="toggle">
-              <input type="checkbox" id="auto-tailor-toggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
+            <button class="btn btn-secondary btn-sm" id="refresh-profile-btn">
+              🔄 Refresh Profile
+            </button>
           </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-title">Show Floating Panel</div>
-              <div class="setting-desc">Display control on job pages</div>
+
+          <!-- Settings List -->
+          <div class="settings-list">
+            <h2 class="section-title">Automation Settings</h2>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">Auto-Tailor on Apply</div>
+                <div class="setting-desc">Generate CV & cover letter for each job</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="auto-tailor-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
             </div>
-            <label class="toggle">
-              <input type="checkbox" id="show-panel-toggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-title">Auto-Queue High Match</div>
-              <div class="setting-desc">Auto-add 85%+ match jobs to queue</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">Show Floating Panel</div>
+                <div class="setting-desc">Display control on job pages</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="show-panel-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
             </div>
-            <label class="toggle">
-              <input type="checkbox" id="auto-queue-toggle">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-title">Workday Multi-Page Mode</div>
-              <div class="setting-desc">Handle multi-step Workday applications</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">Auto-Queue High Match</div>
+                <div class="setting-desc">Auto-add 85%+ match jobs to queue</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="auto-queue-toggle">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
-            <label class="toggle">
-              <input type="checkbox" id="workday-multipage-toggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">Workday Multi-Page Mode</div>
+                <div class="setting-desc">Handle multi-step Workday applications</div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="workday-multipage-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
           </div>
         </div>
       </section>
