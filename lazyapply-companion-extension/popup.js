@@ -231,6 +231,19 @@ async function performBooleanSearch() {
     return;
   }
   
+  // Check for authentication first
+  const storage = await chrome.storage.local.get(['accessToken', 'userProfile']);
+  
+  if (!storage.accessToken) {
+    showToast('Please load your profile from QuantumHire first', 'error');
+    // Switch to settings tab
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="settings"]').classList.add('active');
+    document.getElementById('tab-settings').classList.add('active');
+    return;
+  }
+  
   // Save search
   chrome.storage.local.set({ lastBooleanSearch: input });
   
@@ -247,8 +260,6 @@ async function performBooleanSearch() {
   showJobsLoading();
   
   try {
-    const storage = await chrome.storage.local.get(['accessToken', 'userProfile']);
-    
     // Build query with location
     let query = input;
     if (location) {
@@ -260,14 +271,26 @@ async function performBooleanSearch() {
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_ANON_KEY,
-        ...(storage.accessToken ? { 'Authorization': `Bearer ${storage.accessToken}` } : {})
+        'Authorization': `Bearer ${storage.accessToken}`
       },
       body: JSON.stringify({ 
         keywords: query,
-        dateFilter: dateFilter,
-        user_id: storage.userProfile?.user_id
+        dateFilter: dateFilter
       })
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        // Token expired - need to re-authenticate
+        chrome.storage.local.remove(['accessToken']);
+        showToast('Session expired. Please reload your profile from QuantumHire.', 'error');
+        document.getElementById('backend-status').textContent = 'Session expired';
+        document.getElementById('backend-status').className = 'status-badge error';
+        throw new Error('Session expired');
+      }
+      throw new Error(errorData.error || `Search failed (${response.status})`);
+    }
     
     const data = await response.json();
     
@@ -280,8 +303,8 @@ async function performBooleanSearch() {
       showToast(`Found ${data.jobs.length} jobs!`, 'success');
       
       // Auto-queue high match if enabled
-      const autoQueue = (await chrome.storage.local.get(['autoQueue'])).autoQueue;
-      if (autoQueue) {
+      const autoQueueEnabled = (await chrome.storage.local.get(['autoQueue'])).autoQueue;
+      if (autoQueueEnabled) {
         autoQueueHighMatch();
       }
     } else if (data.jobs?.length === 0) {
@@ -293,8 +316,8 @@ async function performBooleanSearch() {
     }
   } catch (error) {
     console.error('Search error:', error);
-    showToast('Search failed. Check your connection.', 'error');
-    showJobsError('Search failed. Try again.');
+    showToast(error.message || 'Search failed. Check your connection.', 'error');
+    showJobsError(error.message || 'Search failed. Try again.');
   } finally {
     btn.disabled = false;
     btn.innerHTML = '🔍 Search Jobs';
@@ -320,16 +343,27 @@ function autoQueueHighMatch() {
 // =========================
 
 async function fetchJobsFromDatabase() {
+  const storage = await chrome.storage.local.get(['accessToken']);
+  
+  // If no token, show helpful message
+  if (!storage.accessToken) {
+    document.getElementById('jobs-list').innerHTML = `
+      <div class="jobs-empty">
+        <span>🔐 Not connected</span>
+        <span class="jobs-empty-hint">Go to Settings tab and click "Load Profile" to connect to QuantumHire</span>
+      </div>
+    `;
+    return;
+  }
+  
   showJobsLoading();
   
   try {
-    const storage = await chrome.storage.local.get(['accessToken']);
-    
     const response = await fetch(`${SUPABASE_URL}/rest/v1/jobs?select=*&order=created_at.desc&limit=200`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
         'Content-Type': 'application/json',
-        ...(storage.accessToken ? { 'Authorization': `Bearer ${storage.accessToken}` } : {})
+        'Authorization': `Bearer ${storage.accessToken}`
       }
     });
     
@@ -338,6 +372,14 @@ async function fetchJobsFromDatabase() {
       stats.searched = allJobs.length;
       updateStatsDisplay();
       filterJobsList();
+    } else if (response.status === 401) {
+      await chrome.storage.local.remove(['accessToken']);
+      document.getElementById('jobs-list').innerHTML = `
+        <div class="jobs-empty">
+          <span>⚠️ Session expired</span>
+          <span class="jobs-empty-hint">Go to Settings tab and reload your profile</span>
+        </div>
+      `;
     } else {
       throw new Error('Failed to fetch jobs');
     }
@@ -784,21 +826,67 @@ async function checkBackendConnection(token) {
 }
 
 async function loadProfileFromQuantumHire() {
-  showToast('Loading profile...', 'info');
+  const btn = document.getElementById('load-profile-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading...';
   
   try {
-    const storage = await chrome.storage.local.get(['accessToken']);
+    // First, try to get session from QuantumHire tab
+    const tabs = await chrome.tabs.query({ url: '*://*.lovable.app/*' });
+    let sessionToken = null;
     
-    if (!storage.accessToken) {
-      showToast('Please log in to QuantumHire first', 'error');
+    for (const tab of tabs) {
+      try {
+        // Inject script to get Supabase session from localStorage
+        const result = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => {
+            // Try to get the Supabase session from localStorage
+            const keys = Object.keys(localStorage);
+            for (const key of keys) {
+              if (key.includes('supabase') && key.includes('auth')) {
+                try {
+                  const data = JSON.parse(localStorage.getItem(key));
+                  if (data?.access_token) {
+                    return { 
+                      token: data.access_token,
+                      user: data.user 
+                    };
+                  }
+                } catch (e) {}
+              }
+            }
+            return null;
+          }
+        });
+        
+        if (result?.[0]?.result?.token) {
+          sessionToken = result[0].result.token;
+          console.log('✅ Got session token from QuantumHire tab');
+          break;
+        }
+      } catch (e) {
+        console.log('Could not access tab:', tab.url);
+      }
+    }
+    
+    if (!sessionToken) {
+      showToast('Open QuantumHire and log in first', 'error');
       chrome.tabs.create({ url: QUANTUMHIRE_URL });
+      btn.disabled = false;
+      btn.textContent = '📥 Load Profile';
       return;
     }
     
+    // Save the token
+    await chrome.storage.local.set({ accessToken: sessionToken });
+    
+    // Now fetch the profile
     const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&limit=1`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${storage.accessToken}`
+        'Authorization': `Bearer ${sessionToken}`,
+        'Content-Type': 'application/json'
       }
     });
     
@@ -808,14 +896,30 @@ async function loadProfileFromQuantumHire() {
         const profile = profiles[0];
         await chrome.storage.local.set({ userProfile: profile });
         displayProfile(profile);
-        showToast('Profile loaded!', 'success');
+        
+        // Update backend status
+        document.getElementById('backend-status').textContent = 'Connected ✓';
+        document.getElementById('backend-status').className = 'status-badge connected';
+        
+        showToast('Profile synced! Ready to search jobs.', 'success');
       } else {
         showToast('No profile found. Create one in QuantumHire.', 'info');
+        chrome.tabs.create({ url: `${QUANTUMHIRE_URL}/profile` });
       }
+    } else if (response.status === 401) {
+      // Token invalid
+      await chrome.storage.local.remove(['accessToken']);
+      showToast('Session expired. Please log in again.', 'error');
+      chrome.tabs.create({ url: QUANTUMHIRE_URL });
+    } else {
+      throw new Error('Failed to fetch profile');
     }
   } catch (error) {
     console.error('Profile load error:', error);
-    showToast('Failed to load profile', 'error');
+    showToast('Failed to load profile. Make sure you\'re logged in to QuantumHire.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📥 Load Profile';
   }
 }
 
