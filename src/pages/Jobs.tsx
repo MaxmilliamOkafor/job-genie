@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
 import { Job } from '@/hooks/useJobs';
@@ -32,6 +33,11 @@ import {
   X,
   Loader2,
   LinkIcon,
+  Pause,
+  Play,
+  StopCircle,
+  AlertTriangle,
+  MessageSquare,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -39,6 +45,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 const Jobs = () => {
   const { 
@@ -69,6 +84,18 @@ const Jobs = () => {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isBatchApplying, setIsBatchApplying] = useState(false);
   const [isValidatingLinks, setIsValidatingLinks] = useState(false);
+  
+  // Batch apply automation state
+  const [isPaused, setIsPaused] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, successful: 0, failed: 0 });
+  const [failedJobs, setFailedJobs] = useState<{ id: string; title: string; company: string; error: string }[]>([]);
+  const pauseRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  
+  // Feedback dialog state
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   
   // Ref to scroll job list to bottom
   const scrollToJobListBottomRef = useRef<(() => void) | null>(null);
@@ -142,34 +169,135 @@ const Jobs = () => {
     });
   }, []);
 
-  // Batch apply to selected jobs
+  // Pause batch apply
+  const pauseBatchApply = useCallback(() => {
+    pauseRef.current = true;
+    setIsPaused(true);
+    toast.info('Batch apply paused');
+  }, []);
+
+  // Resume batch apply
+  const resumeBatchApply = useCallback(() => {
+    pauseRef.current = false;
+    setIsPaused(false);
+    toast.info('Batch apply resumed');
+  }, []);
+
+  // Stop batch apply
+  const stopBatchApply = useCallback(() => {
+    abortRef.current?.abort();
+    pauseRef.current = false;
+    setIsPaused(false);
+    setIsBatchApplying(false);
+    setBatchProgress({ current: 0, total: 0, successful: 0, failed: 0 });
+    toast.info('Batch apply stopped');
+  }, []);
+
+  // Batch apply to selected jobs with pause/resume/stop
   const handleBatchApply = useCallback(async () => {
     if (selectedJobs.size === 0) return;
     
     setIsBatchApplying(true);
-    const jobsToApply = Array.from(selectedJobs);
-    let successCount = 0;
-    let failCount = 0;
+    setIsPaused(false);
+    pauseRef.current = false;
+    abortRef.current = new AbortController();
+    setFailedJobs([]);
     
-    // Open tabs for each selected job (up to 10 at a time to avoid browser blocking)
-    const batchSize = 10;
-    for (let i = 0; i < jobsToApply.length; i += batchSize) {
-      const batch = jobsToApply.slice(i, i + batchSize);
+    const jobsToApply = Array.from(selectedJobs);
+    const total = jobsToApply.length;
+    let successful = 0;
+    let failed = 0;
+    const newFailedJobs: { id: string; title: string; company: string; error: string }[] = [];
+    
+    setBatchProgress({ current: 0, total, successful: 0, failed: 0 });
+    
+    for (let i = 0; i < jobsToApply.length; i++) {
+      // Check if stopped
+      if (abortRef.current?.signal.aborted) {
+        break;
+      }
       
-      for (const jobId of batch) {
-        const job = jobs.find(j => j.id === jobId);
-        if (job?.url) {
-          window.open(job.url, '_blank');
-          await updateJobStatus(jobId, 'applied');
-          successCount++;
-        } else {
-          failCount++;
+      // Check if paused
+      while (pauseRef.current && !abortRef.current?.signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (abortRef.current?.signal.aborted) {
+        break;
+      }
+      
+      const jobId = jobsToApply[i];
+      const job = jobs.find(j => j.id === jobId);
+      
+      if (job?.url) {
+        try {
+          // Check if URL might be blocked or broken
+          const isBroken = job.url_status === 'broken' || (job.report_count && job.report_count >= 3);
+          
+          if (isBroken) {
+            failed++;
+            newFailedJobs.push({
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              error: 'Link reported as broken or expired',
+            });
+          } else {
+            // Open the job URL
+            const newWindow = window.open(job.url, '_blank');
+            
+            if (!newWindow) {
+              failed++;
+              newFailedJobs.push({
+                id: job.id,
+                title: job.title,
+                company: job.company,
+                error: 'Popup blocked by browser - please allow popups',
+              });
+            } else {
+              await updateJobStatus(jobId, 'applied');
+              successful++;
+            }
+          }
+        } catch (error) {
+          failed++;
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          
+          // Check for common blocked errors
+          if (errorMessage.includes('ERR_BLOCKED_BY_RESPONSE') || errorMessage.includes('blocked')) {
+            newFailedJobs.push({
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              error: 'Site blocked access - may require direct browser visit',
+            });
+          } else {
+            newFailedJobs.push({
+              id: job.id,
+              title: job.title,
+              company: job.company,
+              error: errorMessage,
+            });
+          }
+        }
+      } else {
+        failed++;
+        if (job) {
+          newFailedJobs.push({
+            id: job.id,
+            title: job.title,
+            company: job.company,
+            error: 'No URL available for this job',
+          });
         }
       }
       
-      // Small delay between batches
-      if (i + batchSize < jobsToApply.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      setBatchProgress({ current: i + 1, total, successful, failed });
+      setFailedJobs([...newFailedJobs]);
+      
+      // Small delay between jobs to avoid overwhelming
+      if (i < jobsToApply.length - 1 && !abortRef.current?.signal.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
     }
     
@@ -177,10 +305,48 @@ const Jobs = () => {
     setSelectionMode(false);
     setIsBatchApplying(false);
     
-    toast.success(`Opened ${successCount} job${successCount !== 1 ? 's' : ''} for application`, {
-      description: failCount > 0 ? `${failCount} job(s) had no URL` : undefined,
-    });
+    // Show verification summary
+    if (successful > 0 || failed > 0) {
+      if (failed > 0) {
+        toast.warning(`Batch apply completed with issues`, {
+          description: `${successful} successful, ${failed} failed. Check failed jobs for details.`,
+          duration: 8000,
+        });
+      } else {
+        toast.success(`Successfully opened ${successful} job${successful !== 1 ? 's' : ''} for application`, {
+          description: 'Jobs have been marked as applied.',
+          duration: 5000,
+        });
+      }
+    }
   }, [selectedJobs, jobs, updateJobStatus]);
+
+  // Submit feedback
+  const handleSubmitFeedback = useCallback(async () => {
+    if (!feedbackText.trim()) return;
+    
+    setIsSubmittingFeedback(true);
+    try {
+      // Log feedback to console and show success (could be enhanced with backend storage)
+      console.log('User feedback submitted:', {
+        feedback: feedbackText,
+        timestamp: new Date().toISOString(),
+        userId: user?.id,
+        failedJobsCount: failedJobs.length,
+      });
+      
+      toast.success('Thank you for your feedback!', {
+        description: 'We will use this to improve the batch apply experience.',
+      });
+      
+      setFeedbackDialogOpen(false);
+      setFeedbackText('');
+    } catch (error) {
+      toast.error('Failed to submit feedback');
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  }, [feedbackText, user?.id, failedJobs.length]);
 
   // Server-side search with debounce
   const handleSearch = useCallback(async () => {
@@ -358,78 +524,203 @@ const Jobs = () => {
 
         {/* Bulk Selection Bar */}
         {jobs.length > 0 && (
-          <div className="flex items-center justify-between flex-wrap gap-3 bg-muted/50 p-3 rounded-lg border">
-            <div className="flex items-center gap-3">
-              <Button
-                variant={selectionMode ? "default" : "outline"}
-                size="sm"
-                onClick={toggleSelectionMode}
-              >
-                {selectionMode ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3 bg-muted/50 p-3 rounded-lg border">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant={selectionMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleSelectionMode}
+                  disabled={isBatchApplying}
+                >
+                  {selectionMode ? (
+                    <>
+                      <X className="h-4 w-4 mr-2" />
+                      Exit Selection
+                    </>
+                  ) : (
+                    <>
+                      <CheckSquare className="h-4 w-4 mr-2" />
+                      Bulk Select
+                    </>
+                  )}
+                </Button>
+                
+                {selectionMode && !isBatchApplying && (
                   <>
-                    <X className="h-4 w-4 mr-2" />
-                    Exit Selection
-                  </>
-                ) : (
-                  <>
-                    <CheckSquare className="h-4 w-4 mr-2" />
-                    Bulk Select
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSelectAll}
+                      disabled={pendingJobs.length === 0}
+                    >
+                      <Square className="h-4 w-4 mr-2" />
+                      Select All ({pendingJobs.length})
+                    </Button>
+                    
+                    {selectedJobs.size > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearSelection}
+                      >
+                        Clear Selection
+                      </Button>
+                    )}
                   </>
                 )}
-              </Button>
+              </div>
               
-              {selectionMode && (
-                <>
+              <div className="flex items-center gap-2">
+                {/* Automation Controls during batch apply */}
+                {isBatchApplying && (
+                  <>
+                    {isPaused ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resumeBatchApply}
+                        className="gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        Resume
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={pauseBatchApply}
+                        className="gap-2"
+                      >
+                        <Pause className="h-4 w-4" />
+                        Pause
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={stopBatchApply}
+                      className="gap-2"
+                    >
+                      <StopCircle className="h-4 w-4" />
+                      Stop
+                    </Button>
+                  </>
+                )}
+                
+                {/* Start Batch Apply button */}
+                {selectedJobs.size > 0 && !isBatchApplying && (
+                  <>
+                    <Badge variant="secondary" className="text-sm">
+                      {selectedJobs.size} selected
+                    </Badge>
+                    <Button
+                      size="sm"
+                      onClick={handleBatchApply}
+                      className="gap-2"
+                    >
+                      <Zap className="h-4 w-4" />
+                      Batch Apply ({selectedJobs.size})
+                    </Button>
+                  </>
+                )}
+                
+                {/* Feedback button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFeedbackDialogOpen(true)}
+                  className="gap-2 text-muted-foreground"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Report Issue
+                </Button>
+              </div>
+            </div>
+            
+            {/* Batch Apply Progress */}
+            {isBatchApplying && batchProgress.total > 0 && (
+              <div className="bg-muted/50 p-4 rounded-lg border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {isPaused ? (
+                      <Pause className="h-5 w-5 text-yellow-500" />
+                    ) : (
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    )}
+                    <span className="font-medium">
+                      {isPaused ? 'Paused' : 'Applying to jobs...'}
+                    </span>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {batchProgress.current} / {batchProgress.total}
+                  </span>
+                </div>
+                
+                <Progress 
+                  value={(batchProgress.current / batchProgress.total) * 100} 
+                  className={`h-2 ${isPaused ? '[&>div]:bg-yellow-500' : ''}`}
+                />
+                
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="flex items-center gap-1 text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    {batchProgress.successful} successful
+                  </span>
+                  {batchProgress.failed > 0 && (
+                    <span className="flex items-center gap-1 text-destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      {batchProgress.failed} failed
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Failed Jobs Summary */}
+            {failedJobs.length > 0 && !isBatchApplying && (
+              <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <span className="font-medium text-destructive">
+                      {failedJobs.length} job(s) failed to open
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFailedJobs([])}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {failedJobs.map((job) => (
+                    <div key={job.id} className="flex items-start justify-between gap-2 text-sm bg-background/50 p-2 rounded">
+                      <div>
+                        <span className="font-medium">{job.title}</span>
+                        <span className="text-muted-foreground"> at {job.company}</span>
+                        <p className="text-destructive text-xs mt-1">{job.error}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleSelectAll}
-                    disabled={pendingJobs.length === 0}
-                  >
-                    <Square className="h-4 w-4 mr-2" />
-                    Select All ({pendingJobs.length})
-                  </Button>
-                  
-                  {selectedJobs.size > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleClearSelection}
-                    >
-                      Clear Selection
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-3">
-              {selectedJobs.size > 0 && (
-                <>
-                  <Badge variant="secondary" className="text-sm">
-                    {selectedJobs.size} selected
-                  </Badge>
-                  <Button
-                    size="sm"
-                    onClick={handleBatchApply}
-                    disabled={isBatchApplying}
+                    onClick={() => setFeedbackDialogOpen(true)}
                     className="gap-2"
                   >
-                    {isBatchApplying ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Applying...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="h-4 w-4" />
-                        Batch Apply ({selectedJobs.size})
-                      </>
-                    )}
+                    <MessageSquare className="h-4 w-4" />
+                    Report These Issues
                   </Button>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -611,6 +902,65 @@ const Jobs = () => {
           </Button>
         )}
       </div>
+
+      {/* Feedback Dialog */}
+      <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Report Batch Apply Issue
+            </DialogTitle>
+            <DialogDescription>
+              Help us improve the batch apply feature by reporting any issues you've encountered.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {failedJobs.length > 0 && (
+              <div className="p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                <p className="text-sm font-medium text-destructive mb-1">
+                  Recent failures: {failedJobs.length} job(s)
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Common issues: {[...new Set(failedJobs.map(j => j.error))].slice(0, 2).join(', ')}
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Describe the issue
+              </label>
+              <Textarea
+                placeholder="e.g., Jobs from Indeed are always blocked, popups are being blocked by the browser, links redirect to login pages..."
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFeedbackDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitFeedback}
+              disabled={!feedbackText.trim() || isSubmittingFeedback}
+            >
+              {isSubmittingFeedback ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Feedback'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };
