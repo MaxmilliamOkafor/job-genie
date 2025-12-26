@@ -63,6 +63,7 @@ export function LiveJobsPanel({ onJobsFetched, onLiveJobsUpdate, onFetchingChang
   const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours'>('minutes');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
 
   const fetchLiveJobs = useCallback(async () => {
     if (!user || isFetching) return;
@@ -151,16 +152,20 @@ export function LiveJobsPanel({ onJobsFetched, onLiveJobsUpdate, onFetchingChang
     toast.info('Live polling stopped');
   }, [pollInterval]);
 
-  // Auto-start polling on mount
+  // Auto-start polling on mount - only once
   useEffect(() => {
-    if (user && !isPolling && !pollInterval) {
-      // Delay auto-start slightly to let page settle
-      const autoStartTimer = setTimeout(() => {
-        startPolling();
-      }, 1000);
-      return () => clearTimeout(autoStartTimer);
+    if (user && !hasAutoStarted) {
+      setHasAutoStarted(true);
+      // Small delay to let UI settle
+      const timer = setTimeout(() => {
+        setIsPolling(true);
+        fetchLiveJobs();
+        const interval = setInterval(fetchLiveJobs, 2 * 60 * 1000);
+        setPollInterval(interval);
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [user]);
+  }, [user, hasAutoStarted]);
 
   // Cleanup on unmount
   useEffect(() => {
