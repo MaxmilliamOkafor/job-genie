@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.test-openai]
 verify_jwt = false
+
+[functions.validate-openai-key]
+verify_jwt = false

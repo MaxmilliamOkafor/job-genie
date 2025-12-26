@@ -263,6 +263,20 @@ async function getUserOpenAIKey(supabase: any, userId: string): Promise<string |
   return data.openai_api_key;
 }
 
+async function logApiUsage(supabase: any, userId: string, functionName: string, tokensUsed: number): Promise<void> {
+  try {
+    await supabase
+      .from('api_usage')
+      .insert({
+        user_id: userId,
+        function_name: functionName,
+        tokens_used: tokensUsed,
+      });
+  } catch (error) {
+    console.error('Failed to log API usage:', error);
+  }
+}
+
 // Check memory for matching questions
 async function checkMemory(
   supabase: any,
@@ -920,7 +934,11 @@ IMPORTANT:
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
+    const tokensUsed = data.usage?.total_tokens || 0;
     
+    // Log API usage
+    await logApiUsage(supabase, userId, 'answer-questions', tokensUsed);
+    console.log(`AI response received (${tokensUsed} tokens)`);
     let aiResult;
     try {
       let cleanContent = content;

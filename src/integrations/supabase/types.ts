@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_usage: {
+        Row: {
+          created_at: string
+          function_name: string
+          id: string
+          tokens_used: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          function_name: string
+          id?: string
+          tokens_used?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          function_name?: string
+          id?: string
+          tokens_used?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       applications: {
         Row: {
           applied_at: string | null

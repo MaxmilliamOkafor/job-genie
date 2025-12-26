@@ -10,9 +10,12 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useProfile, type Profile } from '@/hooks/useProfile';
 import { CVUpload } from '@/components/profile/CVUpload';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
-  Shield, CheckCircle, Globe, FileText, Languages, Key, Eye, EyeOff
+  Shield, CheckCircle, Globe, FileText, Languages, Key, Eye, EyeOff,
+  Loader2, Activity, Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,11 +39,83 @@ const DEFAULT_ATS_ANSWERS = {
 };
 
 const Profile = () => {
+  const { user } = useAuth();
   const { profile, isLoading, updateProfile, loadCVData } = useProfile();
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [apiUsageStats, setApiUsageStats] = useState<{ totalCalls: number; totalTokens: number; todayCalls: number } | null>(null);
+
+  // Fetch API usage stats
+  useEffect(() => {
+    if (user) {
+      fetchApiUsage();
+    }
+  }, [user]);
+
+  const fetchApiUsage = async () => {
+    if (!user) return;
+    
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Get all-time stats
+      const { data: allTime, error: allTimeError } = await supabase
+        .from('api_usage')
+        .select('tokens_used')
+        .eq('user_id', user.id);
+      
+      // Get today's stats
+      const { data: todayData, error: todayError } = await supabase
+        .from('api_usage')
+        .select('tokens_used')
+        .eq('user_id', user.id)
+        .gte('created_at', today.toISOString());
+      
+      if (!allTimeError && !todayError) {
+        const totalCalls = allTime?.length || 0;
+        const totalTokens = allTime?.reduce((sum, row) => sum + (row.tokens_used || 0), 0) || 0;
+        const todayCalls = todayData?.length || 0;
+        
+        setApiUsageStats({ totalCalls, totalTokens, todayCalls });
+      }
+    } catch (error) {
+      console.error('Error fetching API usage:', error);
+    }
+  };
+
+  const testApiKey = async () => {
+    if (!localProfile.openai_api_key) {
+      toast.error('Please enter an API key first');
+      return;
+    }
+    
+    setIsTestingKey(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-openai-key', {
+        body: { apiKey: localProfile.openai_api_key }
+      });
+      
+      if (error) throw error;
+      
+      if (data.valid) {
+        toast.success(data.message);
+        if (!data.hasGpt4oMini) {
+          toast.warning('Note: GPT-4o-mini may not be available on your account');
+        }
+      } else {
+        toast.error(data.error || 'Invalid API key');
+      }
+    } catch (error: any) {
+      console.error('API key test error:', error);
+      toast.error(error.message || 'Failed to validate API key');
+    } finally {
+      setIsTestingKey(false);
+    }
+  };
 
   useEffect(() => {
     if (profile) {
@@ -183,6 +258,23 @@ const Profile = () => {
                 </Button>
               </div>
               <Button 
+                variant="outline"
+                onClick={testApiKey}
+                disabled={!localProfile.openai_api_key || isTestingKey}
+              >
+                {isTestingKey ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Test Key
+                  </>
+                )}
+              </Button>
+              <Button 
                 onClick={() => {
                   if (localProfile.openai_api_key) {
                     updateProfile({ openai_api_key: localProfile.openai_api_key });
@@ -200,6 +292,31 @@ const Profile = () => {
                 API key configured - AI features enabled
               </div>
             )}
+            
+            {/* Usage Stats */}
+            {apiUsageStats && (
+              <div className="mt-4 p-4 bg-background rounded-lg border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Activity className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-sm">API Usage Statistics</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-primary">{apiUsageStats.todayCalls}</div>
+                    <div className="text-xs text-muted-foreground">Today's Calls</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{apiUsageStats.totalCalls}</div>
+                    <div className="text-xs text-muted-foreground">Total Calls</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{(apiUsageStats.totalTokens / 1000).toFixed(1)}k</div>
+                    <div className="text-xs text-muted-foreground">Total Tokens</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <p className="text-xs text-muted-foreground">
               Get your API key from{' '}
               <a 
