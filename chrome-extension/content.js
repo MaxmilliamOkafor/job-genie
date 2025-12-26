@@ -907,66 +907,115 @@ function isValidJobPage() {
   const jobData = extractJobDetails();
   const url = window.location.href.toLowerCase();
   const bodyText = document.body?.innerText?.toLowerCase() || '';
+  const pageTitle = document.title?.toLowerCase() || '';
   
-  // Check for error/404 page indicators
-  const errorIndicators = [
-    'page not found',
-    'page you are looking for doesn\'t exist',
-    'page doesn\'t exist',
-    'job not found',
-    'job no longer available',
-    'position has been filled',
-    'this job has been removed',
-    'job listing expired',
-    'posting is no longer active',
-    'this position is no longer available',
-    '404',
-    'error 404',
-    'not found',
-    'oops',
-    'sorry, we couldn\'t find',
-    'page cannot be found'
+  // FIRST: Check for obvious error/404 pages (very strict - only flag as invalid if truly an error page)
+  const errorPagePatterns = [
+    // Very explicit error indicators
+    /^404\s*$/,
+    /page\s*not\s*found/,
+    /this\s*page\s*(doesn't|does not)\s*exist/,
+    /job\s*(has been|was)\s*removed/,
+    /job\s*no\s*longer\s*available/,
+    /position\s*has\s*been\s*filled/,
+    /job\s*listing\s*expired/,
+    /posting\s*is\s*no\s*longer\s*active/,
+    /this\s*position\s*is\s*no\s*longer\s*available/,
+    /sorry.*we\s*couldn't\s*find/
   ];
   
-  for (const indicator of errorIndicators) {
-    // Check if page primarily shows error content
-    if (bodyText.includes(indicator) && bodyText.length < 2000) {
-      return { valid: false, reason: 'broken_link', message: 'Job posting not found or expired' };
+  // Only consider it an error if the page is very short (likely just an error message)
+  // AND matches an error pattern
+  const isShortPage = bodyText.length < 500;
+  if (isShortPage) {
+    for (const pattern of errorPagePatterns) {
+      if (pattern.test(bodyText) || pattern.test(pageTitle)) {
+        console.log('QuantumHire AI: Detected error page pattern:', pattern);
+        return { valid: false, reason: 'broken_link', message: 'Job posting not found or expired' };
+      }
     }
   }
   
-  // Check if we have meaningful job data
-  const hasTitle = jobData.title && jobData.title !== 'Unknown Position';
-  const hasDescription = jobData.description && jobData.description.length > 50;
-  const hasCompany = jobData.company && jobData.company !== 'Unknown Company';
+  // SECOND: Check for POSITIVE indicators - if ANY exist, the page is valid
+  
+  // Check for Apply button (strongest indicator)
+  const hasApplyButton = !!(
+    document.querySelector('button[class*="apply" i], a[class*="apply" i]') ||
+    document.querySelector('button:not([disabled])') && Array.from(document.querySelectorAll('button, a')).some(el => 
+      /^apply(\s+now)?$/i.test(el.innerText?.trim() || '')
+    ) ||
+    document.querySelector('[data-automation-id*="apply" i]') ||
+    document.querySelector('a[href*="apply"]')
+  );
+  
+  if (hasApplyButton) {
+    console.log('QuantumHire AI: Valid job page - Apply button detected');
+    return { valid: true, hasJobData: true, indicator: 'apply_button' };
+  }
+  
+  // Check for job-specific keywords in page content (common job posting elements)
+  const jobKeywords = [
+    'responsibilities', 'requirements', 'qualifications', 'experience required',
+    'job description', 'about the role', 'what you\'ll do', 'what we offer',
+    'benefits', 'salary', 'compensation', 'remote', 'hybrid', 'full-time', 
+    'part-time', 'contract', 'years of experience', 'degree required',
+    'skills required', 'about the team', 'who you are', 'your role'
+  ];
+  
+  const matchedKeywords = jobKeywords.filter(kw => bodyText.includes(kw));
+  if (matchedKeywords.length >= 2) {
+    console.log('QuantumHire AI: Valid job page - Job keywords detected:', matchedKeywords.slice(0, 3));
+    return { valid: true, hasJobData: true, indicator: 'job_keywords' };
+  }
   
   // Check for application form elements
   const hasApplicationElements = !!(
     document.querySelector('input[type="file"]') ||
-    document.querySelector('input[type="text"][name*="name"]') ||
+    document.querySelector('input[type="text"][name*="name" i]') ||
     document.querySelector('input[type="email"]') ||
     document.querySelector('[data-automation-id="applicationForm"]') ||
-    document.querySelector('form[action*="apply"]') ||
-    document.querySelector('button[type="submit"]')
+    document.querySelector('form[action*="apply" i]') ||
+    document.querySelector('form input[type="text"]')
   );
   
-  // If we're on what looks like an application page, it's valid even without full job details
   if (hasApplicationElements) {
-    return { valid: true, hasJobData: hasTitle || hasDescription };
+    console.log('QuantumHire AI: Valid job page - Application form detected');
+    return { valid: true, hasJobData: true, indicator: 'application_form' };
   }
   
-  // If we have job data (title AND description), it's valid
-  if (hasTitle && hasDescription) {
-    return { valid: true, hasJobData: true };
+  // Check if we have meaningful job data from extraction
+  const hasTitle = jobData.title && jobData.title !== 'Unknown Position';
+  const hasDescription = jobData.description && jobData.description.length > 100;
+  const hasCompany = jobData.company && jobData.company !== 'Unknown Company';
+  
+  // If we extracted any job data, it's valid
+  if (hasTitle || hasDescription || hasCompany) {
+    console.log('QuantumHire AI: Valid job page - Job data extracted:', { hasTitle, hasDescription, hasCompany });
+    return { valid: true, hasJobData: true, indicator: 'extracted_data' };
   }
   
-  // If only have company from URL but no other data, might be invalid
-  if (!hasTitle && !hasDescription && bodyText.length < 1000) {
-    return { valid: false, reason: 'no_job_data', message: 'No job detected on this page' };
+  // Check URL patterns that suggest job posting
+  const jobUrlPatterns = [
+    /\/jobs?\//i, /\/careers?\//i, /\/positions?\//i, /\/openings?\//i,
+    /\/apply/i, /\/job-/i, /\/vacancy/i, /\/opportunity/i,
+    /greenhouse\.io/i, /lever\.co/i, /workday/i, /smartrecruiters/i,
+    /ashbyhq/i, /icims/i, /taleo/i, /jobvite/i
+  ];
+  
+  if (jobUrlPatterns.some(pattern => pattern.test(url))) {
+    console.log('QuantumHire AI: Valid job page - URL pattern matched');
+    return { valid: true, hasJobData: false, indicator: 'url_pattern', warning: 'Limited job data detected' };
   }
   
-  // Default to valid but flag as potentially missing data
-  return { valid: true, hasJobData: hasTitle || hasDescription, warning: 'Limited job data detected' };
+  // If page has substantial content, assume it's valid (don't be overly aggressive about skipping)
+  if (bodyText.length > 1500) {
+    console.log('QuantumHire AI: Valid job page - Substantial content detected');
+    return { valid: true, hasJobData: false, indicator: 'content_length', warning: 'Could not extract job details, but page has content' };
+  }
+  
+  // Only flag as invalid if we really can't find anything
+  console.log('QuantumHire AI: No job indicators found, flagging as potentially invalid');
+  return { valid: false, reason: 'no_job_data', message: 'No job detected on this page' };
 }
 
 // Send skip signal to web app
