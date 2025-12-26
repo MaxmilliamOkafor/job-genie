@@ -118,37 +118,26 @@ async function fetchGreenhouseJobs(company: { name: string; token: string }): Pr
     if (!response.ok) return [];
     
     const data = await response.json();
-    const jobs: LiveJob[] = [];
     
     // Only take first 20 jobs per company for speed
-    for (const job of (data.jobs || []).slice(0, 20)) {
+    const jobs: LiveJob[] = (data.jobs || []).slice(0, 20).map((job: any) => {
       const locationName = job.location?.name || 'Remote';
       
-      // Greenhouse absolute_url is the direct job link
-      // If not provided, construct it (but these should always be valid)
-      const absoluteUrl = job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`;
-      
-      // Validate it's a direct job URL (contains /jobs/ with an ID)
-      if (!absoluteUrl.includes('/jobs/')) {
-        console.log(`GH ${company.name}: skipping non-direct URL: ${absoluteUrl}`);
-        continue;
-      }
-      
-      jobs.push({
+      return {
         id: `gh_${company.token}_${job.id}`,
         title: job.title || 'Unknown Position',
         company: company.name,
         location: locationName,
         updated_at: job.updated_at || new Date().toISOString(),
-        absolute_url: absoluteUrl,
+        absolute_url: job.absolute_url || `https://boards.greenhouse.io/${company.token}/jobs/${job.id}`,
         description_snippet: '',
         source: 'greenhouse',
         keywords_matched: [],
         score: 0,
         salary: null,
         requirements: [],
-      });
-    }
+      };
+    });
     
     return jobs;
   } catch (error) {

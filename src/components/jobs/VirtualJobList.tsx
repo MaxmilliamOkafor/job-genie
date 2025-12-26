@@ -145,9 +145,9 @@ const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode, onRep
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <h3 className="font-semibold text-lg leading-tight line-clamp-2">{job.title}</h3>
+                <h3 className="font-semibold text-lg truncate">{job.title}</h3>
                 {isNew && (
-                  <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0 shrink-0">NEW</Badge>
+                  <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0">NEW</Badge>
                 )}
                 {job.status === 'applied' && (
                   <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -156,21 +156,18 @@ const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode, onRep
                   <Star className="h-4 w-4 text-primary fill-primary flex-shrink-0" />
                 )}
               </div>
-              {/* Only show company if it's not a URL */}
-              {job.company && !job.company.toLowerCase().startsWith('http') && (
-                <p className="text-muted-foreground font-medium">{job.company}</p>
-              )}
+              <p className="text-muted-foreground">{job.company}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
             {getUrlStatusBadge(job.url_status, job.report_count)}
             {job.match_score > 0 && (
-              <Badge className={`text-xs font-semibold ${getMatchScoreColor(job.match_score)}`}>
-                {job.match_score}%
+              <Badge className={`text-xs ${getMatchScoreColor(job.match_score)}`}>
+                {job.match_score}% match
               </Badge>
             )}
-            {job.platform && job.platform.toLowerCase() !== 'unknown' && (
-              <Badge variant="outline" className="text-xs font-normal">
+            {job.platform && (
+              <Badge variant="outline" className="text-xs">
                 {job.platform}
               </Badge>
             )}
@@ -182,7 +179,7 @@ const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode, onRep
             <MapPin className="h-3.5 w-3.5" />
             {job.location}
           </span>
-          {job.salary && job.salary !== '0' && job.salary.trim() !== '' && (
+          {job.salary && (
             <span className="flex items-center gap-1 text-green-600">
               <DollarSign className="h-3.5 w-3.5" />
               {job.salary}
@@ -204,19 +201,16 @@ const JobCard = memo(({ job, isSelected, onSelect, onApply, selectionMode, onRep
           </div>
         )}
 
-        {job.requirements && job.requirements.filter(r => r && r.trim() && r !== '0').length > 0 && (
+        {job.requirements && job.requirements.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
-            {job.requirements
-              .filter(req => req && req.trim() && req !== '0')
-              .slice(0, 6)
-              .map((req, i) => (
-                <Badge key={i} variant="secondary" className="text-xs">
-                  {req}
-                </Badge>
-              ))}
-            {job.requirements.filter(r => r && r.trim() && r !== '0').length > 6 && (
+            {job.requirements.slice(0, 6).map((req, i) => (
+              <Badge key={i} variant="secondary" className="text-xs">
+                {req}
+              </Badge>
+            ))}
+            {job.requirements.length > 6 && (
               <Badge variant="outline" className="text-xs">
-                +{job.requirements.filter(r => r && r.trim() && r !== '0').length - 6}
+                +{job.requirements.length - 6}
               </Badge>
             )}
           </div>

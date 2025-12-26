@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
-
 import { useJobScraper } from '@/hooks/useJobScraper';
 import { useProfile } from '@/hooks/useProfile';
 import { Job } from '@/hooks/useJobs';
@@ -33,8 +32,6 @@ import {
   X,
   Loader2,
   LinkIcon,
-  Radio,
-  Search,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -70,12 +67,6 @@ const Jobs = () => {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [isBatchApplying, setIsBatchApplying] = useState(false);
   const [isValidatingLinks, setIsValidatingLinks] = useState(false);
-  
-  // View mode toggle - 'live' for live API jobs, 'database' for saved jobs
-  const [viewMode, setViewMode] = useState<'live' | 'database'>('live');
-  const [liveJobs, setLiveJobs] = useState<Job[]>([]);
-  const [liveJobsCount, setLiveJobsCount] = useState(0);
-  const [isLiveFetching, setIsLiveFetching] = useState(false);
   
   // Ref to scroll job list to bottom
   const scrollToJobListBottomRef = useRef<(() => void) | null>(null);
@@ -286,14 +277,7 @@ const Jobs = () => {
         </div>
 
         {/* Live Jobs Panel - Single unified search interface */}
-        <LiveJobsPanel 
-          onJobsFetched={refetch} 
-          onLiveJobsUpdate={(jobs, count) => {
-            setLiveJobs(jobs as Job[]);
-            setLiveJobsCount(count);
-          }}
-          onFetchingChange={setIsLiveFetching}
-        />
+        <LiveJobsPanel onJobsFetched={refetch} />
 
         {/* Filters Bar */}
         {jobs.length > 0 && (
@@ -362,178 +346,118 @@ const Jobs = () => {
           />
         )}
 
-        {/* Bulk Selection Bar - Simplified */}
+        {/* Bulk Selection Bar */}
         {jobs.length > 0 && (
-          <div className="flex items-center justify-between flex-wrap gap-3 p-3 rounded-xl bg-background/60 border shadow-sm">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between flex-wrap gap-3 bg-muted/50 p-3 rounded-lg border">
+            <div className="flex items-center gap-3">
               <Button
-                variant={selectionMode ? "default" : "ghost"}
+                variant={selectionMode ? "default" : "outline"}
                 size="sm"
                 onClick={toggleSelectionMode}
-                className="gap-2"
               >
                 {selectionMode ? (
                   <>
-                    <X className="h-4 w-4" />
-                    Cancel
+                    <X className="h-4 w-4 mr-2" />
+                    Exit Selection
                   </>
                 ) : (
                   <>
-                    <CheckSquare className="h-4 w-4" />
-                    Select
+                    <CheckSquare className="h-4 w-4 mr-2" />
+                    Bulk Select
                   </>
                 )}
               </Button>
               
               {selectionMode && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  disabled={pendingJobs.length === 0}
-                  className="gap-2 text-muted-foreground"
-                >
-                  <Square className="h-4 w-4" />
-                  All ({pendingJobs.length})
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    disabled={pendingJobs.length === 0}
+                  >
+                    <Square className="h-4 w-4 mr-2" />
+                    Select All ({pendingJobs.length})
+                  </Button>
+                  
+                  {selectedJobs.size > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearSelection}
+                    >
+                      Clear Selection
+                    </Button>
+                  )}
+                </>
               )}
             </div>
             
-            {selectedJobs.size > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedJobs.size} selected
-                </span>
-                <Button
-                  size="sm"
-                  onClick={handleBatchApply}
-                  disabled={isBatchApplying}
-                  className="gap-2"
-                >
-                  {isBatchApplying ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Zap className="h-4 w-4" />
-                  )}
-                  Apply All
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedJobs.size > 0 && (
+                <>
+                  <Badge variant="secondary" className="text-sm">
+                    {selectedJobs.size} selected
+                  </Badge>
+                  <Button
+                    size="sm"
+                    onClick={handleBatchApply}
+                    disabled={isBatchApplying}
+                    className="gap-2"
+                  >
+                    {isBatchApplying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Applying...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4" />
+                        Batch Apply ({selectedJobs.size})
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Results Header with View Toggle - Redesigned */}
-        {(jobs.length > 0 || liveJobs.length > 0) && (
-          <Card className="border-0 bg-gradient-to-r from-muted/30 via-muted/20 to-muted/30 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                {/* Toggle Pills - More Visual */}
-                <div className="flex items-center gap-3">
-                  <div className="flex bg-background/80 rounded-xl p-1 shadow-inner border">
-                    <button
-                      onClick={() => setViewMode('live')}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                        viewMode === 'live'
-                          ? 'bg-primary text-primary-foreground shadow-md'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                      }`}
-                    >
-                      <div className={`relative ${viewMode === 'live' ? 'animate-pulse' : ''}`}>
-                        <Radio className="h-4 w-4" />
-                        {viewMode === 'live' && liveJobsCount > 0 && (
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full" />
-                        )}
-                      </div>
-                      <span>Live Feed</span>
-                      {liveJobsCount > 0 && (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                          viewMode === 'live' 
-                            ? 'bg-primary-foreground/20' 
-                            : 'bg-primary/10 text-primary'
-                        }`}>
-                          {liveJobsCount.toLocaleString()}
-                        </span>
-                      )}
-                    </button>
-                    
-                    <button
-                      onClick={() => setViewMode('database')}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                        viewMode === 'database'
-                          ? 'bg-primary text-primary-foreground shadow-md'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                      }`}
-                    >
-                      <Search className="h-4 w-4" />
-                      <span>Search Results</span>
-                      {totalCount > 0 && (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                          viewMode === 'database' 
-                            ? 'bg-primary-foreground/20' 
-                            : 'bg-primary/10 text-primary'
-                        }`}>
-                          {totalCount.toLocaleString()}
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                  
-                  {/* Result Count */}
-                  <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground border-l pl-4">
-                    {viewMode === 'live' ? (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                        <span>{liveJobs.length.toLocaleString()} results</span>
-                      </>
-                    ) : (
-                      <span>{sortedJobs.length.toLocaleString()} of {totalCount.toLocaleString()}</span>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Sort Button */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2 bg-background/80">
-                      <ArrowUpDown className="h-4 w-4" />
-                      <span className="hidden sm:inline">Sort:</span>
-                      {sortBy === 'uploaded' ? 'Recent' : 'Posted'}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
-                    <DropdownMenuItem onClick={() => setSortBy('uploaded')}>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Recently Added
-                      {sortBy === 'uploaded' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setSortBy('posted')}>
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Posted Date
-                      {sortBy === 'posted' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Results Header */}
+        {jobs.length > 0 && (
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">
+              Job Results
+              <span className="text-muted-foreground font-normal ml-2">
+                ({sortedJobs.length.toLocaleString()} shown
+                {totalCount > sortedJobs.length && ` of ${totalCount.toLocaleString()} total`})
+              </span>
+            </h2>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Sort: {sortBy === 'uploaded' ? 'Recently Added' : 'Posted Date'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-popover border border-border z-50">
+                <DropdownMenuItem onClick={() => setSortBy('uploaded')}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Recently Added
+                  {sortBy === 'uploaded' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortBy('posted')}>
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Posted Date
+                  {sortBy === 'posted' && <CheckCircle className="h-4 w-4 ml-auto text-primary" />}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
 
-        {/* Virtual Job Listings - shows live or database jobs based on toggle */}
-        {viewMode === 'live' && liveJobs.length > 0 && (
-          <VirtualJobList
-            jobs={liveJobs}
-            hasMore={false}
-            isLoading={false}
-            onLoadMore={() => {}}
-            onApply={handleJobApplied}
-            selectedJobs={selectedJobs}
-            onSelectionChange={setSelectedJobs}
-            selectionMode={selectionMode}
-            scrollRef={scrollToJobListBottomRef}
-          />
-        )}
-        
-        {viewMode === 'database' && sortedJobs.length > 0 && (
+        {/* Virtual Job Listings - only renders visible items */}
+        {sortedJobs.length > 0 && (
           <VirtualJobList
             jobs={sortedJobs}
             hasMore={hasMore}
@@ -570,58 +494,26 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Empty state for live view - Enhanced */}
-        {viewMode === 'live' && liveJobs.length === 0 && !isLiveFetching && (
-          <Card className="border-dashed border-2 bg-gradient-to-br from-primary/5 via-background to-primary/5">
-            <CardContent className="py-16 text-center">
-              <div className="relative inline-block mb-6">
-                <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse" />
-                <div className="relative bg-gradient-to-br from-primary/20 to-primary/10 p-6 rounded-full">
-                  <Radio className="h-12 w-12 text-primary" />
-                </div>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Ready to Go Live</h3>
-              <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                Hit "Start Live" above to begin streaming fresh jobs from 60+ top tech companies in real-time.
-              </p>
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-green-400" />
-                <span>Auto-refreshes every 2 minutes</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        
-        {/* Empty state for search results view */}
-        {viewMode === 'database' && sortedJobs.length === 0 && !isLoading && !isScraping && (
-          <Card className="border-dashed border-2 bg-gradient-to-br from-muted/30 via-background to-muted/30">
-            <CardContent className="py-16 text-center">
-              <div className="relative inline-block mb-6">
-                <div className="relative bg-muted/50 p-6 rounded-full">
-                  <Search className="h-12 w-12 text-muted-foreground" />
-                </div>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">
-                {jobs.length > 0 ? 'No matches found' : 'No search results yet'}
-              </h3>
-              <p className="text-muted-foreground max-w-md mx-auto">
-                {jobs.length > 0 
-                  ? 'Try adjusting your filters to see more results.'
-                  : 'Use the search panel above to find jobs by keywords, location, or other criteria.'}
-              </p>
-            </CardContent>
-          </Card>
+        {/* Empty state */}
+        {sortedJobs.length === 0 && !isLoading && !isScraping && (
+          <div className="text-center py-16">
+            <Briefcase className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
+            <h3 className="text-lg font-medium mb-2">
+              {jobs.length > 0 ? 'No jobs match your filters' : 'No jobs yet'}
+            </h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              {jobs.length > 0 
+                ? 'Try adjusting your filters or search query.'
+                : 'Use the search above to find jobs from top tech companies.'}
+            </p>
+          </div>
         )}
 
-        {/* Stats footer - Only show in database view */}
-        {viewMode === 'database' && totalCount > 0 && (
-          <div className="text-center text-sm text-muted-foreground py-3">
-            {jobs.length.toLocaleString()} of {totalCount.toLocaleString()} jobs loaded
-            {hasMore && (
-              <span className="ml-2 text-primary cursor-pointer hover:underline" onClick={loadMore}>
-                • Load more
-              </span>
-            )}
+        {/* Stats footer */}
+        {totalCount > 0 && (
+          <div className="text-center text-sm text-muted-foreground py-4 border-t">
+            Loaded {jobs.length.toLocaleString()} of {totalCount.toLocaleString()} jobs
+            {hasMore && ' • Scroll down to load more'}
           </div>
         )}
       </div>

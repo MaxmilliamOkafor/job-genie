@@ -180,19 +180,11 @@ async function fetchWorkableJobs(company: { name: string; subdomain: string }): 
     }
     
     const data = await response.json();
-    const jobs: JobListing[] = [];
-    
-    for (const job of (data.results || []).slice(0, 30)) {
-      // Skip jobs without a shortcode - these can't have direct apply URLs
-      if (!job.shortcode) {
-        console.log(`Workable ${company.name}: skipping job without shortcode: ${job.title}`);
-        continue;
-      }
-      
+    const jobs: JobListing[] = (data.results || []).slice(0, 30).map((job: any) => {
       // Workable direct apply URL format uses shortcode
       const directUrl = `https://apply.workable.com/${company.subdomain}/j/${job.shortcode}/`;
       
-      jobs.push({
+      return {
         title: job.title || 'Unknown Position',
         company: company.name,
         location: job.location?.city || job.location?.country || 'Remote',
@@ -203,10 +195,10 @@ async function fetchWorkableJobs(company: { name: string; subdomain: string }): 
         url: directUrl,
         posted_date: job.published || new Date().toISOString(),
         match_score: 0,
-      });
-    }
+      };
+    });
     
-    console.log(`Workable ${company.name}: fetched ${jobs.length} jobs with valid shortcodes`);
+    console.log(`Workable ${company.name}: fetched ${jobs.length} jobs`);
     return jobs;
   } catch (error) {
     console.error(`Workable ${company.name} error:`, error);
