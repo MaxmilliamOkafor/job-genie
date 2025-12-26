@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.live-jobs]
 verify_jwt = false
+
+[functions.test-openai]
+verify_jwt = false
