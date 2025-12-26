@@ -506,15 +506,6 @@ async function handleTailorRequest(jobData, tabId) {
     
     if (!response.ok) {
       const errorText = await response.text();
-      if (response.status === 400 && errorText.includes('API key')) {
-        throw new Error('OpenAI API key not configured. Please add your API key in Profile settings on the web app.');
-      }
-      if (response.status === 401 && errorText.includes('Invalid OpenAI')) {
-        throw new Error('Invalid OpenAI API key. Please check your API key in Profile settings.');
-      }
-      if (response.status === 402) {
-        throw new Error('OpenAI billing issue. Please check your OpenAI account.');
-      }
       throw new Error(`API error: ${response.status} - ${errorText}`);
     }
     
