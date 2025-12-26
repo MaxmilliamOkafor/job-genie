@@ -192,11 +192,17 @@ serve(async (req) => {
     const keywords = validateString(rawData.keywords || '', MAX_KEYWORDS_LENGTH, 'keywords');
     const locations = validateString(rawData.locations || '', MAX_LOCATIONS_LENGTH, 'locations');
     const limit = validateNumber(rawData.limit, 1, MAX_LIMIT, 100);
+    const hoursFilter = parseFloat(rawData.hours) || 0; // Support fractional hours (e.g., 0.5 for 30 min)
     
-    console.log(`Live jobs fetch - ${GREENHOUSE_COMPANIES.length} companies for user ${user_id}`);
+    console.log(`Live jobs fetch - ${GREENHOUSE_COMPANIES.length} companies for user ${user_id}, filter: ${hoursFilter}h`);
     
     const keywordList = keywords.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k).slice(0, 30);
     const locationList = locations.split(',').map((l: string) => l.trim().toLowerCase()).filter((l: string) => l).slice(0, 20);
+    
+    // Calculate cutoff time for filtering
+    const cutoffTime = hoursFilter > 0 
+      ? new Date(Date.now() - hoursFilter * 60 * 60 * 1000)
+      : null;
     
     // Fetch in batches of 5 to avoid CPU limits
     const allJobs: LiveJob[] = [];
@@ -223,13 +229,32 @@ serve(async (req) => {
       return true;
     });
     
-    // Score and sort
-    for (const job of uniqueJobs) {
+    // Filter by time if specified
+    let filteredJobs = uniqueJobs;
+    if (cutoffTime) {
+      filteredJobs = uniqueJobs.filter(job => {
+        const jobDate = new Date(job.updated_at);
+        return jobDate >= cutoffTime;
+      });
+      console.log(`Filtered to ${filteredJobs.length} jobs within ${hoursFilter}h`);
+    }
+    
+    // Score jobs
+    for (const job of filteredJobs) {
       job.score = calculateScore(job, keywordList, locationList);
     }
-    uniqueJobs.sort((a, b) => b.score - a.score);
     
-    const topJobs = uniqueJobs.slice(0, limit);
+    // Sort by recency first, then by score (prioritize recently added)
+    filteredJobs.sort((a, b) => {
+      const dateA = new Date(a.updated_at).getTime();
+      const dateB = new Date(b.updated_at).getTime();
+      // Primary sort: most recent first
+      if (dateB !== dateA) return dateB - dateA;
+      // Secondary sort: higher score
+      return b.score - a.score;
+    });
+    
+    const topJobs = filteredJobs.slice(0, limit);
     
     // Save to database
     if (topJobs.length > 0) {
@@ -268,6 +293,7 @@ serve(async (req) => {
         success: true, 
         jobs: topJobs,
         totalFetched: allJobs.length,
+        totalFiltered: filteredJobs.length,
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
