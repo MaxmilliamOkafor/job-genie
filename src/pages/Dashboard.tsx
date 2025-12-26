@@ -129,60 +129,59 @@ const Dashboard = () => {
           />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Top Matches */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-5 w-5 text-primary" />
-                Top Matches Ready to Apply
-              </CardTitle>
-              <CardDescription>
-                Highest scoring jobs for auto-apply
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {topMatches.length > 0 ? (
-                <div className="space-y-3">
-                  {topMatches.map(job => (
-                    <div 
-                      key={job.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{job.title}</p>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {job.company} • {job.location}
-                        </p>
-                      </div>
-                      <Badge className="ml-2 bg-primary/10 text-primary">
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        {job.match_score}%
-                      </Badge>
+        {/* Top Matches */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5 text-primary" />
+              Top Matches Ready to Apply
+            </CardTitle>
+            <CardDescription>
+              Highest scoring jobs for auto-apply
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topMatches.length > 0 ? (
+              <div className="space-y-3">
+                {topMatches.map(job => (
+                  <div 
+                    key={job.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{job.title}</p>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {job.company} • {job.location}
+                      </p>
                     </div>
-                  ))}
-                  <Button variant="outline" className="w-full mt-2" asChild>
-                    <Link to="/jobs">
-                      View All Jobs
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </Link>
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Briefcase className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">No jobs yet</p>
-                  <Button className="mt-4" asChild>
-                    <Link to="/jobs">
-                      <Zap className="h-4 w-4 mr-2" />
-                      Generate Jobs
-                    </Link>
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                    <Badge className="ml-2 bg-primary/10 text-primary">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      {job.match_score}%
+                    </Badge>
+                  </div>
+                ))}
+                <Button variant="outline" className="w-full mt-2" asChild>
+                  <Link to="/jobs">
+                    View All Jobs
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Briefcase className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground">No jobs yet</p>
+                <Button className="mt-4" asChild>
+                  <Link to="/jobs">
+                    <Zap className="h-4 w-4 mr-2" />
+                    Generate Jobs
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
 
         {/* Quick Start */}
         <Card>
@@ -206,16 +205,16 @@ const Dashboard = () => {
                 </div>
               </Link>
               <Link 
-                to="/settings" 
+                to="/jobs" 
                 className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
               >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-sm font-bold text-primary">2</span>
                 </div>
                 <div>
-                  <p className="font-medium">Connect Gmail</p>
+                  <p className="font-medium">Find Jobs</p>
                   <p className="text-sm text-muted-foreground">
-                    Enable automatic email sending & detection
+                    Search across 60+ ATS platforms instantly
                   </p>
                 </div>
               </Link>
