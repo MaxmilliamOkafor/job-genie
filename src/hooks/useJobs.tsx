@@ -14,6 +14,7 @@ export interface Job {
   platform: string | null;
   url: string | null;
   posted_date: string;
+  created_at?: string;
   match_score: number;
   status: 'pending' | 'applied' | 'interviewing' | 'offered' | 'rejected';
   applied_at: string | null;
@@ -67,14 +68,82 @@ export function useJobs() {
     }
   }, [user]);
 
+  // Initial fetch and real-time subscription
   useEffect(() => {
-    if (user) {
-      setPage(0);
-      setJobs([]);
-      setHasMore(true);
-      setIsLoading(true);
-      fetchJobs(0);
-    }
+    if (!user) return;
+
+    setPage(0);
+    setJobs([]);
+    setHasMore(true);
+    setIsLoading(true);
+    fetchJobs(0);
+
+    // Subscribe to real-time updates for this user's jobs
+    const channel = supabase
+      .channel('jobs-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('New job received:', payload.new);
+          const newJob = {
+            ...payload.new,
+            requirements: payload.new.requirements || [],
+            status: payload.new.status as Job['status']
+          } as Job;
+          
+          // Add to beginning of list (most recent first)
+          setJobs(prev => {
+            // Avoid duplicates
+            if (prev.some(j => j.id === newJob.id)) return prev;
+            return [newJob, ...prev];
+          });
+          
+          toast.success(`New job added: ${newJob.title} at ${newJob.company}`);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const updatedJob = {
+            ...payload.new,
+            requirements: payload.new.requirements || [],
+            status: payload.new.status as Job['status']
+          } as Job;
+          
+          setJobs(prev => prev.map(j => 
+            j.id === updatedJob.id ? updatedJob : j
+          ));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          setJobs(prev => prev.filter(j => j.id !== payload.old.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, fetchJobs]);
 
   const loadMore = useCallback(() => {
