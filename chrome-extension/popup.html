@@ -353,20 +353,24 @@
           </label>
         </div>
 
-        <!-- Speed Control Slider -->
+        <!-- Speed Multiplier Control -->
         <div class="setting-row speed-control">
           <div class="setting-info">
-            <span class="setting-label">🏃 Form Fill Speed</span>
-            <span class="setting-desc">Delay between field fills</span>
+            <span class="setting-label">🏃 Speed Multiplier</span>
+            <span class="setting-desc">Controls automation speed</span>
           </div>
-          <div class="speed-slider-container">
-            <input type="range" id="speed-slider" min="100" max="2000" step="100" value="500">
-            <span class="speed-value" id="speed-value">500ms</span>
+          <div class="speed-selector-container">
+            <div class="speed-buttons" id="speed-buttons">
+              <button class="speed-btn active" data-speed="1">1x</button>
+              <button class="speed-btn" data-speed="1.5">1.5x</button>
+              <button class="speed-btn" data-speed="2">2x</button>
+              <button class="speed-btn" data-speed="3">3x</button>
+            </div>
           </div>
         </div>
-        <div class="speed-labels">
-          <span>Fast</span>
-          <span>Slow</span>
+        <div class="speed-info-row" id="speed-info">
+          <span class="speed-timing">~90-120s/job</span>
+          <span class="speed-note">Safest for anti-bot</span>
         </div>
 
         <!-- Memory Stats -->

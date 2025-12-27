@@ -500,14 +500,79 @@ function skipCurrentStep() {
   }
 }
 
-// Get delay from stored speed setting (100-2000ms, default 500ms)
-async function getDelayForSpeed() {
-  try {
-    const data = await chrome.storage.local.get(['formFillSpeed']);
-    return data.formFillSpeed || 500;
-  } catch (e) {
-    return 500; // Default fallback
+// Speed multiplier configuration based on user specification
+// 1x (Normal): 300-600ms typing, 1-2s page loads, ~90-120s per job
+// 1.5x: 200-400ms typing, 0.7-1.5s loads, ~60-80s per job
+// 2x: 150-300ms typing, 0.5-1s loads, ~45-60s per job
+// 3x: 100-200ms typing, 0.3-0.7s loads, ~30-45s per job
+const SPEED_CONFIGS = {
+  1: { 
+    typeMin: 300, typeMax: 600, 
+    clickMin: 400, clickMax: 600,
+    loadMin: 1000, loadMax: 2000,
+    label: 'Normal (Safest)'
+  },
+  1.5: { 
+    typeMin: 200, typeMax: 400, 
+    clickMin: 280, clickMax: 450,
+    loadMin: 700, loadMax: 1500,
+    label: 'Fast'
+  },
+  2: { 
+    typeMin: 150, typeMax: 300, 
+    clickMin: 200, clickMax: 350,
+    loadMin: 500, loadMax: 1000,
+    label: 'Faster'
+  },
+  3: { 
+    typeMin: 100, typeMax: 200, 
+    clickMin: 130, clickMax: 250,
+    loadMin: 300, loadMax: 700,
+    label: 'Aggressive'
   }
+};
+
+// Get current speed multiplier from storage
+async function getSpeedMultiplier() {
+  try {
+    const data = await chrome.storage.local.get(['speedMultiplier']);
+    return data.speedMultiplier || 1;
+  } catch (e) {
+    return 1;
+  }
+}
+
+// Get delay configuration for current speed
+async function getSpeedConfig() {
+  const multiplier = await getSpeedMultiplier();
+  return SPEED_CONFIGS[multiplier] || SPEED_CONFIGS[1];
+}
+
+// Get typing delay with jitter for human-like behavior
+async function getTypingDelay() {
+  const config = await getSpeedConfig();
+  const base = config.typeMin + Math.random() * (config.typeMax - config.typeMin);
+  // Add jitter (±20%) for realism
+  return Math.floor(base * (0.8 + Math.random() * 0.4));
+}
+
+// Get click delay with jitter
+async function getClickDelay() {
+  const config = await getSpeedConfig();
+  const base = config.clickMin + Math.random() * (config.clickMax - config.clickMin);
+  return Math.floor(base * (0.8 + Math.random() * 0.4));
+}
+
+// Get page load/transition delay with jitter
+async function getPageLoadDelay() {
+  const config = await getSpeedConfig();
+  const base = config.loadMin + Math.random() * (config.loadMax - config.loadMin);
+  return Math.floor(base * (0.8 + Math.random() * 0.4));
+}
+
+// Legacy function - returns page load delay for compatibility
+async function getDelayForSpeed() {
+  return await getPageLoadDelay();
 }
 
 async function waitWithControls(ms) {

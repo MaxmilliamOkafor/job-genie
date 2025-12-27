@@ -1089,72 +1089,65 @@ header {
   color: #64748b;
 }
 
-/* Speed Control Slider */
+/* Speed Multiplier Control */
 .setting-row.speed-control {
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.speed-slider-container {
+.speed-selector-container {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.speed-buttons {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 6px;
+  width: 100%;
 }
 
-.speed-slider-container input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100px;
-  height: 6px;
-  background: linear-gradient(90deg, #10b981 0%, #0ea5e9 100%);
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.speed-slider-container input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-  transition: transform 0.2s;
-}
-
-.speed-slider-container input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
-.speed-slider-container input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border-radius: 50%;
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-}
-
-.speed-value {
-  font-size: 11px;
+.speed-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  font-size: 12px;
   font-weight: 600;
-  color: #10b981;
-  min-width: 45px;
-  text-align: right;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.speed-labels {
+.speed-btn:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #e2e8f0;
+}
+
+.speed-btn.active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(14, 165, 233, 0.2) 100%);
+  border-color: #10b981;
+  color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.speed-info-row {
   display: flex;
   justify-content: space-between;
-  padding: 0 0 10px 0;
-  margin-top: -4px;
+  padding: 8px 0 12px 0;
+  margin-top: 4px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.speed-labels span {
-  font-size: 9px;
+.speed-timing {
+  font-size: 11px;
+  font-weight: 600;
+  color: #10b981;
+}
+
+.speed-note {
+  font-size: 10px;
   color: #64748b;
 }
 
