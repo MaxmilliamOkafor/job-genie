@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "QuantumHire AI - Job Application Assistant",
-  "version": "2.0.0",
-  "description": "AI-powered auto-fill for job applications across 50+ ATS platforms including LinkedIn, Indeed, Glassdoor, Workday, Greenhouse, and more",
+  "version": "2.1.0",
+  "description": "AI-powered auto-fill with Universal ATS Engine v4.0 - supports 50+ ATS platforms including LinkedIn, Indeed, Glassdoor, Workday, Greenhouse, and more",
   "permissions": [
     "storage",
     "activeTab",
@@ -157,6 +157,7 @@
         "utils/rateLimiter.js",
         "utils/selectorManager.js",
         "utils/encryptedStorage.js",
+        "utils/universalATS.js",
         "content.js"
       ],
       "css": ["content.css"],
