@@ -116,10 +116,10 @@
       <div class="action-buttons">
         <button id="apply-now-btn" class="btn action-btn" disabled>
           <div class="action-content">
-            <span class="action-icon">⚡</span>
+            <span class="action-icon">🚀</span>
             <div class="action-text">
-              <span class="action-title">Apply with AI</span>
-              <span class="action-subtitle">Tailor + Auto-fill + Submit</span>
+              <span class="action-title">Smart Apply</span>
+              <span class="action-subtitle">Tailor + Fill + Attach + Submit</span>
             </div>
           </div>
         </button>
@@ -293,6 +293,18 @@
           <button id="close-settings-btn" class="close-btn">×</button>
         </div>
         
+        <!-- SMART APPLY AUTOMATION TOGGLE (Main Feature) -->
+        <div class="setting-row highlight">
+          <div class="setting-info">
+            <span class="setting-label">🚀 Smart Apply Mode</span>
+            <span class="setting-desc">Full automation: tailor, fill, attach, submit</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="smartapply-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
         <!-- Auto-Fill Toggle -->
         <div class="setting-row">
           <div class="setting-info">
@@ -308,11 +320,23 @@
         <!-- Auto-Submit Toggle -->
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-label">🚀 Auto-Submit</span>
+            <span class="setting-label">📤 Auto-Submit</span>
             <span class="setting-desc">Submit applications automatically</span>
           </div>
           <label class="toggle-switch">
             <input type="checkbox" id="autosubmit-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Auto-Navigate Workday -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">➡️ Auto-Navigate</span>
+            <span class="setting-desc">Click Next on multi-page applications</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autonavigate-toggle" checked>
             <span class="toggle-slider"></span>
           </label>
         </div>

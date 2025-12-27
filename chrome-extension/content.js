@@ -430,6 +430,9 @@ let automationState = {
   shouldSkip: false,
   shouldQuit: false,
   autoMode: true, // Auto-advance through pages
+  autoSubmit: false, // Auto-submit final application
+  autoNavigate: true, // Auto-click Next on multi-page apps
+  smartApplyEnabled: true, // Full automation mode
   currentStep: 0, // Track which step we're on
   stepLock: false // Prevent concurrent step execution
 };
@@ -2391,22 +2394,153 @@ async function navigateToNextPage() {
 // ============= CHECK IF THIS IS FINAL PAGE =============
 
 function isFinalPage() {
-  const submitSelectors = [
-    'button[type="submit"]:contains("Submit")',
-    'input[type="submit"][value*="Submit"]',
-    'button:contains("Submit Application")',
-    'button:contains("Apply")',
-    '[data-automation-id="bottom-navigation-submit-button"]'
-  ];
-  
   const buttons = document.querySelectorAll('button, input[type="submit"]');
   for (const btn of buttons) {
-    const text = btn.innerText?.toLowerCase() || btn.value?.toLowerCase() || '';
-    if (text.includes('submit') && !text.includes('next')) return true;
-    if (text === 'apply' || text === 'apply now') return true;
+    const text = (btn.innerText?.toLowerCase() || btn.value?.toLowerCase() || '').trim();
+    // Look for submit-related text
+    if ((text.includes('submit') || text === 'apply' || text === 'apply now' || 
+         text.includes('submit application') || text.includes('complete application')) && 
+        !text.includes('next') && btn.offsetParent !== null && !btn.disabled) {
+      return true;
+    }
   }
   
+  // Check for Workday-specific submit button
+  const workdaySubmit = document.querySelector('[data-automation-id="bottom-navigation-submit-button"]');
+  if (workdaySubmit && workdaySubmit.offsetParent !== null) return true;
+  
   return false;
+}
+
+// ============= AUTO-SUBMIT APPLICATION =============
+
+async function autoSubmitApplication() {
+  console.log('QuantumHire AI: Attempting auto-submit...');
+  
+  // Find submit button
+  const submitSelectors = [
+    '[data-automation-id="bottom-navigation-submit-button"]',
+    'button[type="submit"]:not([disabled])',
+    'input[type="submit"]:not([disabled])',
+  ];
+  
+  // First try by selector
+  for (const selector of submitSelectors) {
+    try {
+      const submitBtn = document.querySelector(selector);
+      if (submitBtn && submitBtn.offsetParent !== null && !submitBtn.disabled) {
+        const btnText = (submitBtn.innerText?.toLowerCase() || submitBtn.value?.toLowerCase() || '').trim();
+        // Make sure it's actually a submit button, not next
+        if (btnText.includes('submit') || btnText === 'apply' || btnText === 'apply now' ||
+            submitBtn.getAttribute('data-automation-id')?.includes('submit')) {
+          console.log('QuantumHire AI: Clicking submit button:', selector);
+          submitBtn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          await new Promise(r => setTimeout(r, 300));
+          submitBtn.click();
+          showToast('🎉 Application submitted!', 'success');
+          return { success: true, message: 'Application submitted' };
+        }
+      }
+    } catch (e) {}
+  }
+  
+  // Try by button text
+  const buttons = document.querySelectorAll('button, input[type="submit"], a.btn');
+  for (const btn of buttons) {
+    const text = (btn.innerText?.toLowerCase() || btn.value?.toLowerCase() || '').trim();
+    if ((text.includes('submit') || text === 'apply' || text === 'apply now' || 
+         text.includes('submit application')) && 
+        !btn.disabled && btn.offsetParent !== null) {
+      console.log('QuantumHire AI: Clicking button by text:', text);
+      btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      await new Promise(r => setTimeout(r, 300));
+      btn.click();
+      showToast('🎉 Application submitted!', 'success');
+      return { success: true, message: 'Application submitted' };
+    }
+  }
+  
+  return { success: false, message: 'Submit button not found' };
+}
+
+// ============= FULL SMART APPLY WORKFLOW =============
+
+async function runSmartApplyWorkflow(options = {}) {
+  const { 
+    autoNavigate = true, 
+    autoSubmit = false, 
+    maxPages = 10 
+  } = options;
+  
+  console.log('QuantumHire AI: Starting Smart Apply workflow...', options);
+  
+  let currentPage = 0;
+  let completed = false;
+  
+  while (!completed && currentPage < maxPages && !automationState.shouldQuit) {
+    currentPage++;
+    console.log(`QuantumHire AI: Processing page ${currentPage}...`);
+    
+    // Wait for page to stabilize
+    await new Promise(r => setTimeout(r, 1500));
+    
+    // Check if this is the final page
+    const isFinal = isFinalPage();
+    
+    if (isFinal) {
+      console.log('QuantumHire AI: Final page detected');
+      
+      if (autoSubmit) {
+        // Auto-submit the application
+        const submitResult = await autoSubmitApplication();
+        completed = submitResult.success;
+        
+        if (completed) {
+          return { success: true, message: 'Application submitted successfully!', pagesProcessed: currentPage };
+        }
+      } else {
+        // Just notify user
+        showToast('🎉 Application ready! Click Submit when ready.', 'success');
+        return { success: true, message: 'Application ready to submit', pagesProcessed: currentPage, needsManualSubmit: true };
+      }
+    }
+    
+    // If not final and autoNavigate is enabled, go to next page
+    if (!isFinal && autoNavigate) {
+      const pageComplete = isPageComplete();
+      
+      if (pageComplete.complete) {
+        const navigated = await navigateToNextPage();
+        
+        if (navigated) {
+          showToast(`✅ Page ${currentPage} complete - moving to next`, 'success');
+          // Wait for next page to load
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          // Can't find next button, might be final page
+          console.log('QuantumHire AI: No next button found, checking if final...');
+          
+          if (isFinalPage()) {
+            if (autoSubmit) {
+              const submitResult = await autoSubmitApplication();
+              completed = submitResult.success;
+            }
+          }
+          
+          return { success: true, message: 'Completed available pages', pagesProcessed: currentPage };
+        }
+      } else {
+        // Page not complete, return for user review
+        showToast(`⚠️ Page ${currentPage} needs attention - ${pageComplete.totalIssues} fields need input`, 'warning');
+        return { success: false, message: 'Some fields need manual input', pagesProcessed: currentPage, incomplete: pageComplete };
+      }
+    } else if (!autoNavigate) {
+      // Not auto-navigating, just complete this page
+      return { success: true, message: 'Page processed', pagesProcessed: currentPage };
+    }
+  }
+  
+  return { success: completed, message: completed ? 'Workflow complete' : 'Max pages reached', pagesProcessed: currentPage };
 }
 
 // ============= MAIN AUTOFILL FUNCTION =============
@@ -4505,23 +4639,49 @@ async function initialize() {
     await new Promise(r => setTimeout(r, 1500));
     
     // Get stored settings
-    const data = await chrome.storage.local.get(['userProfile', 'autofillEnabled', 'autoApplyEnabled']);
+    const data = await chrome.storage.local.get([
+      'userProfile', 
+      'autofillEnabled', 
+      'smartApplyEnabled',
+      'autoSubmitEnabled',
+      'autoNavigateEnabled'
+    ]);
+    
+    // Update automation state with user settings
+    automationState.smartApplyEnabled = data.smartApplyEnabled !== false;
+    automationState.autoSubmit = data.autoSubmitEnabled === true;
+    automationState.autoNavigate = data.autoNavigateEnabled !== false;
     
     if (data.autofillEnabled !== false && data.userProfile) {
-      console.log('QuantumHire AI: Auto-fill enabled, starting...');
+      console.log('QuantumHire AI: Auto-fill enabled, starting...', {
+        smartApply: automationState.smartApplyEnabled,
+        autoSubmit: automationState.autoSubmit,
+        autoNavigate: automationState.autoNavigate
+      });
       
       // Show toast that we're auto-filling
-      showToast('QuantumHire AI detected - Auto-filling form...', 'info', 3000);
+      const modeText = automationState.smartApplyEnabled ? 'Smart Apply' : 'Auto-fill';
+      showToast(`QuantumHire AI - ${modeText} starting...`, 'info', 3000);
       
       // Trigger autofill
       setTimeout(async () => {
         try {
           await autofillForm({}, null, {
-            autoMode: true,
-            autoSubmit: false,
+            autoMode: automationState.smartApplyEnabled,
+            autoSubmit: automationState.autoSubmit,
+            autoNavigate: automationState.autoNavigate,
             generatePdfs: true,
           });
-          showToast('Form auto-filled! Review and submit.', 'success', 4000);
+          
+          // If Smart Apply mode is on and auto-navigate is enabled, run the workflow
+          if (automationState.smartApplyEnabled && automationState.autoNavigate) {
+            await runSmartApplyWorkflow({
+              autoNavigate: automationState.autoNavigate,
+              autoSubmit: automationState.autoSubmit
+            });
+          } else {
+            showToast('Form auto-filled! Review and submit.', 'success', 4000);
+          }
         } catch (error) {
           console.error('QuantumHire AI: Auto-fill error:', error);
           updatePanelStatus('error', 'Auto-fill had issues. Check form.');
