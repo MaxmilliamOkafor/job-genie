@@ -25,6 +25,9 @@ async function init() {
   // Initialize defaults first
   await initializeDefaults();
   
+  // Refresh token if needed before loading connection
+  await refreshTokenIfNeeded();
+  
   // Load data
   await loadConnection();
   await loadCredentials();
@@ -36,6 +39,61 @@ async function init() {
   setupEventListeners();
   
   console.log('QuantumHire: Ready!');
+}
+
+// Check and refresh token if expired or about to expire
+async function refreshTokenIfNeeded() {
+  try {
+    const data = await chrome.storage.local.get(['accessToken', 'refreshToken', 'tokenExpiry']);
+    
+    if (!data.refreshToken) {
+      console.log('QuantumHire: No refresh token, skipping refresh');
+      return;
+    }
+    
+    // Check if token is expired or will expire in next 5 minutes
+    const now = Date.now();
+    const expiry = data.tokenExpiry || 0;
+    const fiveMinutes = 5 * 60 * 1000;
+    
+    if (expiry > now + fiveMinutes) {
+      console.log('QuantumHire: Token still valid');
+      return;
+    }
+    
+    console.log('QuantumHire: Token expired or expiring soon, refreshing...');
+    
+    // Refresh the token
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+      },
+      body: JSON.stringify({ refresh_token: data.refreshToken }),
+    });
+    
+    if (!response.ok) {
+      console.log('QuantumHire: Token refresh failed, clearing session');
+      await chrome.storage.local.remove(['accessToken', 'refreshToken', 'tokenExpiry', 'userProfile', 'userId']);
+      return;
+    }
+    
+    const authData = await response.json();
+    
+    // Calculate expiry (tokens typically last 1 hour)
+    const newExpiry = Date.now() + (authData.expires_in || 3600) * 1000;
+    
+    await chrome.storage.local.set({
+      accessToken: authData.access_token,
+      refreshToken: authData.refresh_token,
+      tokenExpiry: newExpiry,
+    });
+    
+    console.log('QuantumHire: Token refreshed successfully');
+  } catch (e) {
+    console.error('QuantumHire: Token refresh error:', e);
+  }
 }
 
 // Load memory count from database
@@ -688,10 +746,14 @@ async function handleConnect(e) {
     const profiles = await profileResponse.json();
     const profile = profiles[0] || { email: authData.user.email };
     
+    // Calculate token expiry
+    const tokenExpiry = Date.now() + (authData.expires_in || 3600) * 1000;
+    
     // Save to storage
     await chrome.storage.local.set({
       accessToken: authData.access_token,
       refreshToken: authData.refresh_token,
+      tokenExpiry: tokenExpiry,
       userProfile: profile,
       userId: authData.user.id,
     });
@@ -714,7 +776,7 @@ async function handleConnect(e) {
 
 // Handle disconnect
 async function handleDisconnect() {
-  await chrome.storage.local.remove(['accessToken', 'refreshToken', 'userProfile', 'userId']);
+  await chrome.storage.local.remove(['accessToken', 'refreshToken', 'tokenExpiry', 'userProfile', 'userId']);
   userProfile = null;
   currentJob = null;
   showNotConnectedState();
