@@ -184,8 +184,8 @@ const Jobs = () => {
     return jobs.find(j => j.id === applyQueue[currentApplyIndex]);
   }, [isApplying, currentApplyIndex, applyQueue, jobs]);
 
-  // Start sequential apply - opens ONE tab at a time like LazyApply
-  const startApplying = useCallback(() => {
+  // Start sequential apply - immediately opens first job in new tab
+  const startApplying = useCallback(async () => {
     if (selectedJobs.size === 0) {
       toast.error('No jobs selected');
       return;
@@ -209,9 +209,14 @@ const Jobs = () => {
     setIsApplying(true);
     abortRef.current = false;
     
-    toast.success('Starting to apply', {
-      description: `${validJobs.length} jobs queued. Extension will handle automation.`,
-    });
+    // Immediately open the first job in a new tab
+    const firstJob = jobs.find(j => j.id === validJobs[0]);
+    if (firstJob?.url) {
+      window.open(firstJob.url, '_blank');
+      toast.success('Opening first job', {
+        description: `${validJobs.length} jobs queued. Extension popup will open automatically.`,
+      });
+    }
   }, [selectedJobs, jobs]);
 
   // Open current job and mark as applied

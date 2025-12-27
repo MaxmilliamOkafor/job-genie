@@ -163,6 +163,62 @@
         </div>
       </div>
 
+      <!-- Generated PDFs Section (Shows during/after application) -->
+      <div id="generated-pdfs-section" class="generated-pdfs-section hidden">
+        <div class="generated-pdfs-header">
+          <span class="generated-pdfs-title">📄 Generated PDFs</span>
+          <button id="preview-pdfs-btn" class="btn small ghost">
+            <span class="btn-icon">👁️</span> Preview
+          </button>
+        </div>
+        
+        <div class="pdf-files-list">
+          <div class="pdf-file-item" id="resume-pdf-item">
+            <div class="pdf-file-icon resume-icon">📄</div>
+            <div class="pdf-file-info">
+              <span class="pdf-file-name" id="resume-pdf-name">Resume.pdf</span>
+              <span class="pdf-file-size" id="resume-pdf-size">--</span>
+            </div>
+            <div class="pdf-file-actions">
+              <button class="btn-icon-only" id="preview-resume-pdf-btn" title="Preview">👁️</button>
+              <button class="btn-icon-only primary" id="download-resume-pdf-btn" title="Download">⬇️</button>
+            </div>
+          </div>
+          
+          <div class="pdf-file-item" id="cover-pdf-item">
+            <div class="pdf-file-icon cover-icon">📋</div>
+            <div class="pdf-file-info">
+              <span class="pdf-file-name" id="cover-pdf-name">CoverLetter.pdf</span>
+              <span class="pdf-file-size" id="cover-pdf-size">--</span>
+            </div>
+            <div class="pdf-file-actions">
+              <button class="btn-icon-only" id="preview-cover-pdf-btn" title="Preview">👁️</button>
+              <button class="btn-icon-only primary" id="download-cover-pdf-btn" title="Download">⬇️</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Resume/Cover Letter Tabs -->
+        <div class="pdf-content-tabs">
+          <button class="pdf-tab active" data-pdf-tab="resume">
+            Resume
+          </button>
+          <button class="pdf-tab" data-pdf-tab="cover">
+            Cover Letter
+          </button>
+        </div>
+        
+        <div class="pdf-preview-area" id="pdf-preview-area">
+          <div class="pdf-preview-placeholder">
+            Click Preview to view document
+          </div>
+        </div>
+        
+        <button id="copy-content-btn" class="btn ghost full">
+          <span class="btn-icon">📋</span> Copy
+        </button>
+      </div>
+
       <!-- Results Section -->
       <div id="results-section" class="results-section hidden">
         <!-- Compact Match Score -->

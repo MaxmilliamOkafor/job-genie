@@ -345,6 +345,45 @@ function setupEventListeners() {
   speedButtons.forEach(btn => {
     btn.addEventListener('click', () => handleSpeedButtonClick(btn));
   });
+
+  // Generated PDFs section - Tab switching
+  document.querySelectorAll('.pdf-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchPdfTab(tab.dataset.pdfTab));
+  });
+
+  // Preview PDFs button
+  const previewPdfsBtn = document.getElementById('preview-pdfs-btn');
+  if (previewPdfsBtn) {
+    previewPdfsBtn.addEventListener('click', togglePdfPreview);
+  }
+
+  // Preview individual PDF buttons
+  const previewResumePdfBtn = document.getElementById('preview-resume-pdf-btn');
+  if (previewResumePdfBtn) {
+    previewResumePdfBtn.addEventListener('click', () => previewPdf('resume'));
+  }
+
+  const previewCoverPdfBtn = document.getElementById('preview-cover-pdf-btn');
+  if (previewCoverPdfBtn) {
+    previewCoverPdfBtn.addEventListener('click', () => previewPdf('cover'));
+  }
+
+  // Download PDF buttons
+  const downloadResumePdfBtn = document.getElementById('download-resume-pdf-btn');
+  if (downloadResumePdfBtn) {
+    downloadResumePdfBtn.addEventListener('click', () => downloadGeneratedPdf('resume'));
+  }
+
+  const downloadCoverPdfBtn = document.getElementById('download-cover-pdf-btn');
+  if (downloadCoverPdfBtn) {
+    downloadCoverPdfBtn.addEventListener('click', () => downloadGeneratedPdf('cover'));
+  }
+
+  // Copy content button
+  const copyContentBtn = document.getElementById('copy-content-btn');
+  if (copyContentBtn) {
+    copyContentBtn.addEventListener('click', copyCurrentPdfContent);
+  }
 }
 
 // Speed multiplier info for UI
@@ -1178,6 +1217,12 @@ function displayResults(result) {
   // Make sure Resume tab is active and visible
   switchTab('resume');
   
+  // Show Generated PDFs section
+  const userName = userProfile?.first_name && userProfile?.last_name 
+    ? `${userProfile.first_name}${userProfile.last_name}`
+    : 'User';
+  showGeneratedPdfs(resumeContent, coverContent, userName);
+  
   // Display suggestions
   const suggestions = result.suggestedImprovements || [];
   const suggestionsSection = document.getElementById('suggestions-section');
@@ -1766,4 +1811,147 @@ function addBatchLog(message, type = 'info') {
   while (batchLog.children.length > 20) {
     batchLog.removeChild(batchLog.lastChild);
   }
+}
+
+// ============================================
+// Generated PDFs Section Functions
+// ============================================
+
+// Current PDF tab state
+let currentPdfTab = 'resume';
+let generatedPdfContent = { resume: '', cover: '' };
+
+// Switch PDF tab
+function switchPdfTab(tab) {
+  currentPdfTab = tab;
+  
+  // Update tab active states
+  document.querySelectorAll('.pdf-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.pdfTab === tab);
+  });
+  
+  // Update preview content
+  updatePdfPreviewContent();
+}
+
+// Toggle PDF preview visibility
+function togglePdfPreview() {
+  const previewArea = document.getElementById('pdf-preview-area');
+  if (!previewArea) return;
+  
+  const content = currentPdfTab === 'resume' ? generatedPdfContent.resume : generatedPdfContent.cover;
+  
+  if (content) {
+    previewArea.innerHTML = `<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-family: inherit;">${escapeHtml(content)}</pre>`;
+  } else {
+    previewArea.innerHTML = '<div class="pdf-preview-placeholder">No content generated yet. Apply to a job first.</div>';
+  }
+}
+
+// Preview specific PDF
+function previewPdf(type) {
+  currentPdfTab = type;
+  
+  // Update tab UI
+  document.querySelectorAll('.pdf-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.pdfTab === type);
+  });
+  
+  togglePdfPreview();
+}
+
+// Update PDF preview content
+function updatePdfPreviewContent() {
+  const previewArea = document.getElementById('pdf-preview-area');
+  if (!previewArea) return;
+  
+  const content = currentPdfTab === 'resume' ? generatedPdfContent.resume : generatedPdfContent.cover;
+  
+  if (content) {
+    previewArea.innerHTML = `<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-family: inherit;">${escapeHtml(content)}</pre>`;
+  } else {
+    previewArea.innerHTML = '<div class="pdf-preview-placeholder">No content generated yet.</div>';
+  }
+}
+
+// Escape HTML for safe rendering
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Download generated PDF
+async function downloadGeneratedPdf(type) {
+  const content = type === 'resume' ? generatedPdfContent.resume : generatedPdfContent.cover;
+  
+  if (!content) {
+    showStatus('No content to download. Apply to a job first.', 'error');
+    return;
+  }
+  
+  // Use the existing downloadAsPDF function
+  await downloadAsPDF(type);
+}
+
+// Copy current PDF content
+async function copyCurrentPdfContent() {
+  const content = currentPdfTab === 'resume' ? generatedPdfContent.resume : generatedPdfContent.cover;
+  
+  if (!content) {
+    showStatus('No content to copy', 'error');
+    return;
+  }
+  
+  try {
+    await navigator.clipboard.writeText(content);
+    showStatus(`${currentPdfTab === 'resume' ? 'Resume' : 'Cover letter'} copied!`, 'success');
+  } catch (e) {
+    console.error('Copy failed:', e);
+    showStatus('Failed to copy', 'error');
+  }
+}
+
+// Show generated PDFs section with content
+function showGeneratedPdfs(resumeContent, coverContent, userName = 'User') {
+  generatedPdfContent.resume = resumeContent || '';
+  generatedPdfContent.cover = coverContent || '';
+  
+  const section = document.getElementById('generated-pdfs-section');
+  if (section) {
+    section.classList.remove('hidden');
+  }
+  
+  // Update file names
+  const resumeName = document.getElementById('resume-pdf-name');
+  const coverName = document.getElementById('cover-pdf-name');
+  
+  if (resumeName) resumeName.textContent = `${userName.replace(/\s+/g, '')}_CV.pdf`;
+  if (coverName) coverName.textContent = `${userName.replace(/\s+/g, '')}_CoverLetter.pdf`;
+  
+  // Estimate file sizes (rough estimate: 1KB per 1000 chars)
+  const resumeSize = document.getElementById('resume-pdf-size');
+  const coverSize = document.getElementById('cover-pdf-size');
+  
+  if (resumeSize) {
+    const kb = Math.max(1, Math.round(resumeContent.length / 1000 * 1.5));
+    resumeSize.textContent = `${kb} KB`;
+  }
+  
+  if (coverSize) {
+    const kb = Math.max(1, Math.round(coverContent.length / 1000 * 1.5));
+    coverSize.textContent = `${kb} KB`;
+  }
+  
+  // Update preview
+  updatePdfPreviewContent();
+}
+
+// Hide generated PDFs section
+function hideGeneratedPdfs() {
+  const section = document.getElementById('generated-pdfs-section');
+  if (section) {
+    section.classList.add('hidden');
+  }
+  generatedPdfContent = { resume: '', cover: '' };
 }
