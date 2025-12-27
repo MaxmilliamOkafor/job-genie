@@ -155,7 +155,7 @@ const Dashboard = () => {
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate group-hover:text-primary transition-colors">{job.title}</p>
                         <p className="text-sm text-muted-foreground truncate">
-                          {job.company} • {job.salary || 'Salary not specified'} - {job.location}
+                          {job.company}{job.salary ? ` • ${job.salary}` : ''} - {job.location}
                         </p>
                       </div>
                       <Badge className="ml-2 bg-primary/10 text-primary shrink-0">
