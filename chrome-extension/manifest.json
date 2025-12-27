@@ -149,7 +149,14 @@
         "https://*.usajobs.gov/*",
         "https://*.otta.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "utils/humanTyping.js",
+        "utils/retryManager.js",
+        "utils/rateLimiter.js",
+        "utils/selectorManager.js",
+        "utils/encryptedStorage.js",
+        "content.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_end"
     }
