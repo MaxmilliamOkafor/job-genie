@@ -173,19 +173,68 @@ function extractCompanyFromUrl(url: string): string {
   return 'Unknown Company';
 }
 
+// Validates that a URL points to a SPECIFIC job listing, not a careers/company page
 function isValidJobUrl(url: string): boolean {
   if (!url) return false;
   
-  // Check if it matches any ATS pattern
-  for (const platform of Object.values(ATS_PLATFORMS)) {
-    if (platform.urlPattern.test(url)) {
-      return true;
-    }
+  // Greenhouse - MUST have /jobs/{id} pattern for direct job link
+  if (url.includes('greenhouse.io')) {
+    return /\/jobs\/\d+/.test(url);
   }
   
-  // Check for direct career pages with job identifiers
-  if (url.match(/\/(?:careers|jobs|employment|opportunities|openings)\/[a-zA-Z0-9-]+/)) {
-    return true;
+  // Workable - MUST have /j/{shortcode}/ pattern for direct job link
+  // Reject URLs like apply.workable.com/company-name/ (company careers page)
+  if (url.includes('workable.com')) {
+    return /\/j\/[a-zA-Z0-9]+\/?/.test(url);
+  }
+  
+  // Workday - MUST have /job/ in the path
+  if (url.includes('myworkdayjobs.com')) {
+    return /\/job\//.test(url);
+  }
+  
+  // SmartRecruiters - MUST have job ID in path
+  if (url.includes('smartrecruiters.com')) {
+    return /\/jobs\/\d+/.test(url) || /\/[a-zA-Z0-9-]+\/\d+/.test(url);
+  }
+  
+  // LinkedIn - MUST have /jobs/view/{id} pattern
+  if (url.includes('linkedin.com')) {
+    return /\/jobs\/view\/\d+/.test(url);
+  }
+  
+  // Indeed - MUST have /viewjob or /job/ with job key
+  if (url.includes('indeed.com')) {
+    return /\/(viewjob|job)\//.test(url) && /jk=|viewjob\?/.test(url);
+  }
+  
+  // ICIMS - MUST have /jobs/{id} pattern
+  if (url.includes('icims.com')) {
+    return /\/jobs\/\d+/.test(url);
+  }
+  
+  // Teamtailor - MUST have /jobs/{id} or specific job slug
+  if (url.includes('teamtailor.com')) {
+    return /\/jobs\/\d+/.test(url) || /\/jobs\/[a-zA-Z0-9-]+-\d+/.test(url);
+  }
+  
+  // Oracle Cloud - MUST have requisition ID
+  if (url.includes('oraclecloud.com')) {
+    return /requisitionId=\d+/.test(url) || /\/job\/\d+/.test(url);
+  }
+  
+  // Bullhorn - MUST have job ID
+  if (url.match(/bullhorn/i)) {
+    return /\/job\/\d+/.test(url);
+  }
+  
+  // Direct career pages - MUST have a specific job identifier (not just /careers/ or /jobs/)
+  // Require numeric ID or specific job slug pattern
+  if (url.match(/\/(?:careers|jobs|employment|opportunities|openings)\//)) {
+    // Must have a numeric ID or a specific slug after the path
+    return /\/(?:careers|jobs|employment|opportunities|openings)\/[a-zA-Z0-9-]+\/\d+/.test(url) ||
+           /\/(?:careers|jobs|employment|opportunities|openings)\/[a-zA-Z0-9]+-\d+/.test(url) ||
+           /[\?&]id=\d+/.test(url);
   }
   
   return false;
