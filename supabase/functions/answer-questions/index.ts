@@ -537,6 +537,210 @@ function validateRequest(data: any): QuestionRequest {
   };
 }
 
+// ============= COMPREHENSIVE ATS QUESTION ANSWER BANK =============
+// These patterns match common ATS knockout and screening questions
+
+const ATS_QUESTION_PATTERNS: Record<string, { answer: string; selectValue?: string; confidence: string; atsScore: number; reasoning: string; profileField?: string }> = {
+  // WORK AUTHORIZATION
+  'legally authorized|eligib.*employed|right to work|authorization to work|authorised to work|authorized.*work': 
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Work authorization - qualifying response' },
+  
+  // VISA SPONSORSHIP  
+  'require.*sponsorship|need.*sponsorship|sponsorship.*required|sponsor.*visa|visa.*sponsor|future.*sponsorship|h1b|h-1b|tn.*visa|l1.*visa':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Sponsorship not required - qualifying response' },
+  'work.*without.*sponsorship|employment.*without.*sponsorship':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Can work without sponsorship' },
+  
+  // AGE VERIFICATION
+  'age 18|over 18|18 years|eighteen|at least 18|older than 18|minimum age|legal age|are you.*18|21 years|over 21':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Age verification - qualifying response' },
+  
+  // BACKGROUND & DRUG SCREENING
+  'background check|criminal background|background investigation|submit.*background|consent.*background|background screening':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Background check consent' },
+  'drug screen|drug test|substance test|submit.*drug|pre-employment.*drug|toxicology':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Drug screening consent' },
+  
+  // DRIVER'S LICENSE & TRANSPORTATION
+  'driver.*license|driving license|valid license|valid driver|possess.*license':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Valid driver license', profileField: 'drivingLicense' },
+  'own.*vehicle|reliable.*transportation|access.*vehicle|means.*transportation':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Transportation availability' },
+  
+  // RELOCATION & AVAILABILITY
+  'willing.*relocate|open.*relocation|relocate.*position|able.*relocate':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Willing to relocate', profileField: 'willingToRelocate' },
+  'available.*start|start date|earliest.*start|when.*start|how soon|soonest.*start':
+    { answer: 'Immediately', selectValue: 'immediately', confidence: 'high', atsScore: 95, reasoning: 'Immediate availability' },
+  'notice period|current.*notice|weeks.*notice|days.*notice':
+    { answer: '2 weeks', selectValue: '2 weeks', confidence: 'high', atsScore: 90, reasoning: 'Standard notice period', profileField: 'noticePeriod' },
+  
+  // JOB FUNCTIONS & PHYSICAL REQUIREMENTS
+  'essential functions|perform.*duties|physical requirements|able to perform|perform.*job':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Can perform essential functions' },
+  'reasonable accommodation|disability accommodation|with or without.*accommodation':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Accommodation acknowledgment' },
+  'lift.*pounds|carry.*lbs|physical demands|standing.*hours|sitting.*hours':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Physical requirements acceptance' },
+  
+  // TRAVEL & SCHEDULE
+  'willing.*travel|travel.*required|travel.*percent|overnight.*travel|domestic.*travel|international.*travel':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Willing to travel' },
+  'work.*weekends|weekend.*availability|weekend.*work|saturday.*sunday':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Weekend availability' },
+  'work.*shifts|shift.*work|rotating.*shifts|night.*shift|evening.*shift|flexible.*hours':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Shift flexibility' },
+  'overtime|extra.*hours|additional.*hours|extended.*hours':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Overtime availability' },
+  'on-call|on call|standby|pager.*duty|after.*hours.*support':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'On-call availability' },
+  'full-time|full time|permanent.*position':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Full-time commitment' },
+  
+  // PREVIOUS EMPLOYMENT
+  'employed by.*before|worked.*before|previous.*employee|ever been employed|formerly employed':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not a former employee' },
+  'referred by|employee referral|know anyone|current employee.*refer':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 90, reasoning: 'No employee referral' },
+  'applied.*before|previously.*applied|past.*application':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 90, reasoning: 'First time applying' },
+  
+  // LEGAL & AGREEMENTS
+  'terms and conditions|agree.*terms|certification|certify|read and agree|acknowledge|attestation':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Terms acceptance' },
+  'non-compete|non-disclosure|nda|confidentiality|confidential.*agreement':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'NDA/confidentiality acceptance' },
+  'agree.*policy|accept.*terms|consent.*processing|consent.*data|privacy.*consent|gdpr.*consent':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Policy consent' },
+  'truthful.*information|accurate.*information|certify.*accurate|information.*true':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Information accuracy certification' },
+  
+  // CRIMINAL HISTORY
+  'convicted.*felony|criminal.*conviction|been convicted|pleaded guilty|pending.*charges|criminal.*record':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'No criminal history' },
+  
+  // SECURITY CLEARANCE
+  'security clearance|clearance.*level|active.*clearance|current.*clearance|secret.*clearance|top secret|ts/sci':
+    { answer: 'No, but willing to obtain', selectValue: 'no', confidence: 'medium', atsScore: 85, reasoning: 'Security clearance status', profileField: 'securityClearance' },
+  'obtain.*clearance|eligible.*clearance|pass.*clearance':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Eligible for clearance' },
+  
+  // EEO & DEMOGRAPHICS
+  'veteran status|military service|protected veteran|veteran.*self|served.*military|us.*veteran|armed forces':
+    { answer: 'I am not a protected veteran', selectValue: 'i am not a protected veteran', confidence: 'high', atsScore: 95, reasoning: 'Veteran status declaration', profileField: 'veteranStatus' },
+  'disability status|disabled|have.*disability|disability.*self|individual.*disability|form cc-305':
+    { answer: 'I do not wish to answer', selectValue: 'i do not wish to answer', confidence: 'high', atsScore: 95, reasoning: 'Disability status - optional', profileField: 'disability' },
+  'race|ethnicity|ethnic background|race.*ethnicity|racial.*identity':
+    { answer: 'Decline to self-identify', selectValue: 'decline', confidence: 'high', atsScore: 95, reasoning: 'Race/ethnicity - optional', profileField: 'raceEthnicity' },
+  'gender|sex|male.*female|gender.*identity|what is your gender':
+    { answer: 'Prefer not to disclose', selectValue: 'prefer not to disclose', confidence: 'high', atsScore: 95, reasoning: 'Gender - optional', profileField: 'gender' },
+  'hispanic.*latino|latino.*hispanic|are you hispanic':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Hispanic/Latino status', profileField: 'hispanicLatino' },
+  'sexual orientation|lgbtq|lgbtqia':
+    { answer: 'Prefer not to answer', selectValue: 'prefer not to answer', confidence: 'high', atsScore: 95, reasoning: 'Sexual orientation - optional' },
+  
+  // COMPANY-SPECIFIC
+  'worked.*microsoft|microsoft.*employee|microsoft.*vendor':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not a Microsoft employee' },
+  'worked.*google|google.*employee':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not a Google employee' },
+  'worked.*amazon|amazon.*employee':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not an Amazon employee' },
+  'worked.*apple|apple.*employee':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not an Apple employee' },
+  'worked.*meta|worked.*facebook|meta.*employee':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not a Meta employee' },
+  'former.*motive|motive.*employee':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'Not a former Motive employee' },
+  
+  // EDUCATION
+  'highest.*degree|degree.*obtained|education.*level|completed.*degree|highest.*education':
+    { answer: "Bachelor's Degree", selectValue: "bachelor", confidence: 'high', atsScore: 90, reasoning: 'Highest education level', profileField: 'highestEducation' },
+  'bachelor.*degree|undergraduate.*degree|college.*degree':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Bachelor degree confirmation' },
+  'gpa|grade point|academic.*average':
+    { answer: '3.5', selectValue: '3.5', confidence: 'medium', atsScore: 85, reasoning: 'GPA estimate' },
+  
+  // SKILLS & EXPERIENCE
+  'years.*total.*experience|total.*years.*experience|overall.*experience':
+    { answer: '8', selectValue: '8', confidence: 'high', atsScore: 90, reasoning: 'Total years of experience', profileField: 'totalExperience' },
+  'proficiency.*level|skill.*level|expertise.*level|experience.*level':
+    { answer: 'Expert', selectValue: 'expert', confidence: 'high', atsScore: 90, reasoning: 'Skill proficiency level' },
+  
+  // SALARY
+  'salary.*expectation|expected.*salary|desired.*salary|salary.*requirement|compensation.*expectation':
+    { answer: '$80,000 - $120,000', selectValue: 'negotiable', confidence: 'medium', atsScore: 85, reasoning: 'Salary expectation', profileField: 'expectedSalary' },
+  'current.*salary|present.*salary|current.*compensation':
+    { answer: 'Prefer not to disclose', selectValue: 'prefer not to disclose', confidence: 'high', atsScore: 85, reasoning: 'Current salary - private', profileField: 'currentSalary' },
+  
+  // LANGUAGE
+  'english.*proficiency|speak.*english|english.*fluent|english.*language':
+    { answer: 'Fluent/Native', selectValue: 'fluent', confidence: 'high', atsScore: 95, reasoning: 'English proficiency' },
+  
+  // CONTACT & SOURCE
+  'how did you hear|where did you find|source.*application|how.*learn.*position':
+    { answer: 'LinkedIn', selectValue: 'linkedin', confidence: 'high', atsScore: 90, reasoning: 'Application source' },
+  'contact.*method|preferred.*contact|best way.*reach':
+    { answer: 'Email', selectValue: 'email', confidence: 'high', atsScore: 90, reasoning: 'Contact preference' },
+  
+  // CERTIFICATIONS
+  'certification.*required|required.*certification|hold.*certification|possess.*certification':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Certification confirmation' },
+  'willing.*obtain.*certification|obtain.*required.*certification|get.*certified':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Willing to get certified' },
+  
+  // WORK PREFERENCES
+  'remote.*work.*capable|work.*from.*home|virtual.*work|telecommute':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Remote work capability' },
+  'hybrid.*work|in-office.*days|office.*attendance':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Hybrid work acceptance' },
+  'team.*environment|work.*team|collaborative.*environment|teamwork':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Team collaboration' },
+  'independent.*work|work.*independently|self-directed|autonomous.*work':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Independent work capability' },
+  
+  // ADDITIONAL
+  'conflict.*interest|competing.*interest|outside.*employment':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 95, reasoning: 'No conflicts of interest' },
+  'relative.*employee|family.*works|related.*anyone':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 90, reasoning: 'No family at company' },
+  'government.*employee|public.*sector|federal.*employee':
+    { answer: 'No', selectValue: 'no', confidence: 'high', atsScore: 90, reasoning: 'Not a government employee' },
+  'computer.*proficient|technology.*skills|software.*skills':
+    { answer: 'Yes', selectValue: 'yes', confidence: 'high', atsScore: 95, reasoning: 'Computer proficiency' },
+};
+
+// Match question against ATS patterns
+function matchATSPattern(questionLabel: string, userProfile: any): { answer: string; selectValue?: string; confidence: string; atsScore: number; reasoning: string } | null {
+  const lowerQuestion = questionLabel.toLowerCase().trim();
+  
+  for (const [pattern, response] of Object.entries(ATS_QUESTION_PATTERNS)) {
+    const regex = new RegExp(pattern, 'i');
+    if (regex.test(lowerQuestion)) {
+      // Check if there's a profile field to use
+      if (response.profileField && userProfile[response.profileField]) {
+        const profileValue = userProfile[response.profileField];
+        if (typeof profileValue === 'boolean') {
+          return {
+            ...response,
+            answer: profileValue ? 'Yes' : 'No',
+            selectValue: profileValue ? 'yes' : 'no'
+          };
+        } else if (profileValue) {
+          return {
+            ...response,
+            answer: String(profileValue),
+            selectValue: String(profileValue).toLowerCase()
+          };
+        }
+      }
+      return response;
+    }
+  }
+  
+  return null;
+}
+
 // Pre-process common questions that can be answered directly from profile
 function preProcessCommonQuestions(
   questions: { id: string; label: string; type: string; options?: string[] }[],
@@ -549,6 +753,13 @@ function preProcessCommonQuestions(
   for (const q of questions) {
     const label = labelLower(q);
     const options = q.options?.map(o => o.toLowerCase()) || [];
+    
+    // First try ATS pattern matching
+    const atsMatch = matchATSPattern(q.label, userProfile);
+    if (atsMatch) {
+      directAnswers.set(q.id, atsMatch);
+      continue;
+    }
     
     // Country questions
     if (label.includes('country') && !label.includes('authorized')) {
@@ -608,7 +819,7 @@ function preProcessCommonQuestions(
     }
     
     // Website/portfolio questions
-    if (label === 'website' || (label.includes('website') && label.length < 30)) {
+    if (label === 'website' || (label.includes('website') && label.length < 30) || label.includes('portfolio')) {
       const website = userProfile.portfolio || userProfile.linkedin || userProfile.github || '';
       if (website) {
         directAnswers.set(q.id, {
@@ -618,15 +829,23 @@ function preProcessCommonQuestions(
           atsScore: 95,
           reasoning: 'Portfolio/website from user profile'
         });
+      } else {
+        directAnswers.set(q.id, {
+          answer: 'N/A',
+          selectValue: 'n/a',
+          confidence: 'high',
+          atsScore: 90,
+          reasoning: 'No portfolio website available'
+        });
       }
       continue;
     }
     
     // "What makes X appealing" - motivational questions
-    if (label.includes('appealing') || label.includes('why') && (label.includes('company') || label.includes('role'))) {
-      const companyName = (userProfile as any).company || 'your team';
+    if (label.includes('appealing') || (label.includes('why') && (label.includes('company') || label.includes('role') || label.includes('interested')))) {
+      const companyName = (userProfile as any).company || 'this company';
       directAnswers.set(q.id, {
-        answer: `I'm excited about the opportunity to contribute to ${companyName} because of the innovative work being done and the chance to grow professionally while making an impact.`,
+        answer: `I'm excited about the opportunity to contribute to ${companyName} because of the innovative work being done, the company's strong reputation, and the chance to grow professionally while making a meaningful impact.`,
         confidence: 'high',
         atsScore: 85,
         reasoning: 'Generic but positive motivational response'
@@ -645,6 +864,14 @@ function preProcessCommonQuestions(
           atsScore: 95,
           reasoning: 'LinkedIn URL from user profile'
         });
+      } else {
+        directAnswers.set(q.id, {
+          answer: 'N/A',
+          selectValue: 'n/a',
+          confidence: 'high',
+          atsScore: 85,
+          reasoning: 'No LinkedIn URL available'
+        });
       }
       continue;
     }
@@ -659,6 +886,14 @@ function preProcessCommonQuestions(
           confidence: 'high',
           atsScore: 95,
           reasoning: 'GitHub URL from user profile'
+        });
+      } else {
+        directAnswers.set(q.id, {
+          answer: 'N/A',
+          selectValue: 'n/a',
+          confidence: 'high',
+          atsScore: 85,
+          reasoning: 'No GitHub URL available'
         });
       }
       continue;
@@ -691,7 +926,7 @@ function preProcessCommonQuestions(
     }
     
     // Desired salary / compensation expectations
-    if (label.includes('salary') || label.includes('compensation') && label.includes('expect')) {
+    if (label.includes('salary') || (label.includes('compensation') && label.includes('expect'))) {
       const salary = userProfile.expectedSalary || '$80,000 - $120,000';
       directAnswers.set(q.id, {
         answer: salary,
@@ -703,7 +938,7 @@ function preProcessCommonQuestions(
     }
     
     // Start date / availability
-    if (label.includes('start date') || label.includes('when can you') || label.includes('availability')) {
+    if (label.includes('start date') || label.includes('when can you') || label.includes('availability') || label.includes('earliest')) {
       const notice = userProfile.noticePeriod || '2 weeks';
       directAnswers.set(q.id, {
         answer: notice === 'Immediate' ? 'Immediately' : `Within ${notice}`,
@@ -712,6 +947,111 @@ function preProcessCommonQuestions(
         atsScore: 95,
         reasoning: 'Start date based on notice period'
       });
+      continue;
+    }
+    
+    // City/Location
+    if (label === 'city' || (label.includes('city') && label.length < 20)) {
+      const city = userProfile.city || '';
+      if (city) {
+        directAnswers.set(q.id, {
+          answer: city,
+          selectValue: city.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'City from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // State/Province
+    if (label === 'state' || label === 'province' || (label.includes('state') && label.length < 20)) {
+      const state = userProfile.state || '';
+      if (state) {
+        directAnswers.set(q.id, {
+          answer: state,
+          selectValue: state.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'State from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // Phone
+    if (label === 'phone' || label.includes('phone number') || label.includes('mobile')) {
+      const phone = userProfile.phone || '';
+      if (phone) {
+        directAnswers.set(q.id, {
+          answer: phone,
+          selectValue: phone,
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'Phone from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // Email
+    if (label === 'email' || label.includes('email address')) {
+      const email = userProfile.email || '';
+      if (email) {
+        directAnswers.set(q.id, {
+          answer: email,
+          selectValue: email.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'Email from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // First name
+    if (label === 'first name' || label.includes('first name') || label === 'given name') {
+      const firstName = userProfile.firstName || '';
+      if (firstName) {
+        directAnswers.set(q.id, {
+          answer: firstName,
+          selectValue: firstName.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'First name from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // Last name
+    if (label === 'last name' || label.includes('last name') || label === 'family name' || label === 'surname') {
+      const lastName = userProfile.lastName || '';
+      if (lastName) {
+        directAnswers.set(q.id, {
+          answer: lastName,
+          selectValue: lastName.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'Last name from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // Full name
+    if (label === 'name' || label === 'full name' || label.includes('your name')) {
+      const fullName = `${userProfile.firstName || ''} ${userProfile.lastName || ''}`.trim();
+      if (fullName) {
+        directAnswers.set(q.id, {
+          answer: fullName,
+          selectValue: fullName.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'Full name from user profile'
+        });
+      }
       continue;
     }
   }

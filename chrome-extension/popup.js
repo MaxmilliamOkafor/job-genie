@@ -29,7 +29,7 @@ async function init() {
   await loadConnection();
   await loadCredentials();
   await loadJobQueue();
-  await loadAutofillSetting();
+  await loadAutomationSettings();
   
   // Setup all event listeners
   setupEventListeners();
@@ -49,9 +49,12 @@ async function initializeDefaults() {
           password: DEFAULT_ATS_PASSWORD
         },
         credentialsInitialized: true,
-        autofillEnabled: true
+        autofillEnabled: true,
+        smartApplyEnabled: true,
+        autoSubmitEnabled: false,
+        autoNavigateEnabled: true
       });
-      console.log('QuantumHire: Default credentials initialized');
+      console.log('QuantumHire: Default settings initialized');
     }
   } catch (e) {
     console.error('Init defaults error:', e);
@@ -102,10 +105,25 @@ function setupEventListeners() {
     cancelBatchBtn.addEventListener('click', cancelBatchApply);
   }
   
-  // Auto-fill toggle
+  // Automation toggles
   const autofillToggle = document.getElementById('autofill-toggle');
   if (autofillToggle) {
-    autofillToggle.addEventListener('change', handleAutofillToggle);
+    autofillToggle.addEventListener('change', () => handleAutomationToggle('autofillEnabled', 'autofill-toggle'));
+  }
+  
+  const smartApplyToggle = document.getElementById('smartapply-toggle');
+  if (smartApplyToggle) {
+    smartApplyToggle.addEventListener('change', () => handleAutomationToggle('smartApplyEnabled', 'smartapply-toggle'));
+  }
+  
+  const autoSubmitToggle = document.getElementById('autosubmit-toggle');
+  if (autoSubmitToggle) {
+    autoSubmitToggle.addEventListener('change', () => handleAutomationToggle('autoSubmitEnabled', 'autosubmit-toggle'));
+  }
+  
+  const autoNavigateToggle = document.getElementById('autonavigate-toggle');
+  if (autoNavigateToggle) {
+    autoNavigateToggle.addEventListener('change', () => handleAutomationToggle('autoNavigateEnabled', 'autonavigate-toggle'));
   }
   
   // Credentials toggle (expand/collapse)
@@ -233,19 +251,48 @@ async function loadJobQueue() {
   }
 }
 
-// Load auto-fill setting
-async function loadAutofillSetting() {
+// Load automation settings
+async function loadAutomationSettings() {
   try {
-    const data = await chrome.storage.local.get(['autofillEnabled']);
-    const enabled = data.autofillEnabled !== false;
+    const data = await chrome.storage.local.get([
+      'autofillEnabled', 
+      'smartApplyEnabled', 
+      'autoSubmitEnabled', 
+      'autoNavigateEnabled'
+    ]);
+    
     const autofillToggle = document.getElementById('autofill-toggle');
-    if (autofillToggle) {
-      autofillToggle.checked = enabled;
-    }
-    updateAutofillUI(enabled);
+    const smartApplyToggle = document.getElementById('smartapply-toggle');
+    const autoSubmitToggle = document.getElementById('autosubmit-toggle');
+    const autoNavigateToggle = document.getElementById('autonavigate-toggle');
+    
+    if (autofillToggle) autofillToggle.checked = data.autofillEnabled !== false;
+    if (smartApplyToggle) smartApplyToggle.checked = data.smartApplyEnabled !== false;
+    if (autoSubmitToggle) autoSubmitToggle.checked = data.autoSubmitEnabled === true;
+    if (autoNavigateToggle) autoNavigateToggle.checked = data.autoNavigateEnabled !== false;
+    
+    updateAutofillUI(data.autofillEnabled !== false);
   } catch (e) {
-    console.error('Load autofill setting error:', e);
+    console.error('Load automation settings error:', e);
   }
+}
+
+// Handle automation toggle changes
+async function handleAutomationToggle(settingName, toggleId) {
+  const toggle = document.getElementById(toggleId);
+  if (!toggle) return;
+  
+  const enabled = toggle.checked;
+  await chrome.storage.local.set({ [settingName]: enabled });
+  
+  const labels = {
+    autofillEnabled: 'Auto-fill',
+    smartApplyEnabled: 'Smart Apply',
+    autoSubmitEnabled: 'Auto-submit',
+    autoNavigateEnabled: 'Auto-navigate'
+  };
+  
+  showStatus(`${labels[settingName]} ${enabled ? 'enabled' : 'disabled'}`, 'info');
 }
 
 // Handle auto-fill toggle
