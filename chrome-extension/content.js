@@ -790,27 +790,47 @@ const KNOCKOUT_ANSWER_BANK = {
   'worked.*amazon|ever worked.*amazon|amazon.*employee': { answer: 'No', selectValue: 'no' },
   'worked.*apple|ever worked.*apple|apple.*employee': { answer: 'No', selectValue: 'no' },
   'worked.*meta|worked.*facebook|ever worked.*meta|meta.*employee': { answer: 'No', selectValue: 'no' },
-  
+
+  // LOCATION & IDENTITY (auto-fill from profile)
+  '^country$|choose.*country|country.*located|country.*residence|current.*country|please choose the country': { answerFromProfile: 'country', defaultAnswer: 'United States' },
+  '^location \(city\)$|city of residence|current city|location \(city\)': { answerFromProfile: 'city', defaultAnswer: 'Remote' },
+  'pronouns|what pronouns': { customHandler: 'pronouns', defaultAnswer: 'They/Them' },
+
+  // REGION / LANGUAGE ELIGIBILITY
+  'are you based in europe|based in europe|located in europe': { customHandler: 'basedInEurope', defaultAnswer: 'No' },
+  'do you speak german|speak german|german language': { customHandler: 'speakGerman', defaultAnswer: 'No' },
+
+  // CONSENT / ACKNOWLEDGEMENTS (short labels often used by ATS)
+  '^privacy notice$|privacy notice|privacy policy': { answer: 'Yes', selectValue: 'yes' },
+  'transparency|committed to transparency|committed to innovation': { answer: 'Yes', selectValue: 'yes' },
+
+  // WORK ELIGIBILITY (short labels)
+  'work eligibility': { answer: 'Yes', selectValue: 'yes' },
+
+  // ROLE-SPECIFIC SCREENERS (best-effort automation)
+  'high growth b2b tech saas|high-growth b2b|b2b saas': { customHandler: 'b2bSaas', defaultAnswer: 'Yes' },
+  'solutions consulting|solution consulting': { customHandler: 'solutionsConsulting', defaultAnswer: 'Yes' },
+
   // U.S. CITIZENSHIP - Security Requirements
   'u\\.s\\. citizen|us citizen|united states citizen|american citizen|citizenship.*u\\.s|require.*u\\.s\\. citizenship|security requirements.*u\\.s': { answer: 'No', selectValue: 'no' },
-  
+
   // GREENHOUSE SPECIFIC
   'are you legally.*18|confirm.*legal age|minimum.*working age': { answer: 'Yes', selectValue: 'yes' },
   'linkedin.*profile|linkedin url|linkedin.*url': { answerFromProfile: 'linkedin' },
   'github.*profile|github url|github.*url': { answerFromProfile: 'github' },
   'portfolio.*url|website.*url|personal.*website': { answerFromProfile: 'portfolio' },
-  
+
   // WORKDAY SPECIFIC
   'have you ever worked for|previously.*employed.*by|past.*employment.*with': { answer: 'No', selectValue: 'no' },
   'current.*employment.*status|employment.*status|work.*status': { answer: 'Currently Employed', selectValue: 'employed' },
-  
+
   // LEVER SPECIFIC
   'how did you hear|where did you find|source.*application|how.*learn.*position': { answer: 'Company Website', selectValue: 'company website' },
   'why.*interested|interest.*role|interest.*position|attracted.*role': { answer: 'I am passionate about this opportunity and believe my skills align perfectly with the requirements.' },
-  
+
   // iCIMS SPECIFIC
   'shift.*preference|preferred.*shift|work.*schedule.*preference': { answer: 'Flexible/Any', selectValue: 'flexible' },
-  
+
   // TALEO SPECIFIC
   'country.*residence|residing.*country|current.*country': { answerFromProfile: 'country', defaultAnswer: 'United States' },
   
@@ -905,36 +925,89 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
   for (const [pattern, response] of Object.entries(KNOCKOUT_ANSWER_BANK)) {
     const regex = new RegExp(pattern, 'i');
     if (regex.test(lowerQuestion)) {
+      // Custom handlers (derived from profile)
+      if (response.customHandler) {
+        const handler = response.customHandler;
+
+        const gender = (userProfile?.gender || '').toString().toLowerCase();
+        const country = (userProfile?.country || '').toString();
+        const city = (userProfile?.city || '').toString();
+        const languagesRaw = userProfile?.languages;
+        const languages = Array.isArray(languagesRaw)
+          ? languagesRaw.map((l) => (typeof l === 'string' ? l : l?.name || l?.language || '')).join(', ')
+          : (languagesRaw ? String(languagesRaw) : '');
+        const languagesLower = languages.toLowerCase();
+
+        const workExpText = Array.isArray(userProfile?.work_experience)
+          ? userProfile.work_experience
+              .map((e) => `${e?.title || ''} ${e?.company || ''} ${e?.description || ''} ${(e?.bullets || []).join(' ')}`)
+              .join(' ')
+              .toLowerCase()
+          : '';
+
+        if (handler === 'pronouns') {
+          if (gender.includes('male')) return { answer: 'He/Him', selectValue: 'he/him' };
+          if (gender.includes('female')) return { answer: 'She/Her', selectValue: 'she/her' };
+          return { answer: 'They/Them', selectValue: 'they/them' };
+        }
+
+        if (handler === 'basedInEurope') {
+          const euCountries = [
+            'ireland','united kingdom','uk','germany','france','spain','italy','netherlands','belgium','sweden','norway','denmark','finland','switzerland','austria','portugal','poland','czech','czech republic','romania','bulgaria','greece','hungary','slovakia','slovenia','croatia','serbia','bosnia','estonia','latvia','lithuania'
+          ];
+          const c = country.toLowerCase();
+          const isEu = !!c && euCountries.some((x) => c.includes(x));
+          return { answer: isEu ? 'Yes' : (response.defaultAnswer || 'No'), selectValue: isEu ? 'yes' : 'no' };
+        }
+
+        if (handler === 'speakGerman') {
+          const speaks = languagesLower.includes('german') || languagesLower.includes('deutsch');
+          return { answer: speaks ? 'Yes' : (response.defaultAnswer || 'No'), selectValue: speaks ? 'yes' : 'no' };
+        }
+
+        if (handler === 'b2bSaas') {
+          const has = /saas|b2b|enterprise/.test(workExpText);
+          return { answer: has ? 'Yes' : (response.defaultAnswer || 'Yes'), selectValue: 'yes' };
+        }
+
+        if (handler === 'solutionsConsulting') {
+          const has = /solutions consult|solution consult|consultant|pre-sales|presales|sales engineer|sales engineering/.test(workExpText);
+          return { answer: has ? 'Yes' : (response.defaultAnswer || 'Yes'), selectValue: 'yes' };
+        }
+
+        return { answer: response.defaultAnswer || 'Yes', selectValue: (response.defaultAnswer || 'yes').toLowerCase() };
+      }
+
       if (response.answerFromProfile && userProfile) {
         const profileField = response.answerFromProfile;
-        
+
         // Try multiple field name formats
-        let profileValue = userProfile[profileField] 
-          || userProfile[profileField.replace(/_/g, '')] 
+        let profileValue = userProfile[profileField]
+          || userProfile[profileField.replace(/_/g, '')]
           || userProfile[toCamelCase(profileField)]
           || userProfile[profileField.toLowerCase()];
-        
+
         // Special handling for EEO fields with specific value mapping
         if (profileValue !== null && profileValue !== undefined && profileValue !== '') {
           // Handle boolean fields
           if (typeof profileValue === 'boolean') {
             // Special mapping for veteran status
             if (profileField === 'veteran_status') {
-              return { 
+              return {
                 answer: profileValue ? 'I identify as one or more of the classifications of protected veteran' : 'I am not a protected veteran',
                 selectValue: profileValue ? 'protected veteran' : 'i am not a protected veteran'
               };
             }
             // Special mapping for disability
             if (profileField === 'disability') {
-              return { 
+              return {
                 answer: profileValue ? 'Yes, I have a disability' : 'No, I do not have a disability',
                 selectValue: profileValue ? 'yes' : 'no'
               };
             }
             // Special mapping for hispanic/latino
             if (profileField === 'hispanic_latino') {
-              return { 
+              return {
                 answer: profileValue ? 'Yes' : 'No',
                 selectValue: profileValue ? 'yes' : 'no'
               };
@@ -942,11 +1015,11 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
             // Generic boolean
             return { answer: profileValue ? 'Yes' : 'No', selectValue: profileValue ? 'yes' : 'no' };
           }
-          
+
           // Handle string values with smart matching for dropdown values
           const stringValue = String(profileValue);
           const lowerValue = stringValue.toLowerCase();
-          
+
           // Special handling for race/ethnicity to match common dropdown options
           if (profileField === 'race_ethnicity') {
             const raceMapping = {
@@ -966,7 +1039,7 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
             const mapped = Object.entries(raceMapping).find(([key]) => lowerValue.includes(key));
             if (mapped) return mapped[1];
           }
-          
+
           // Special handling for gender
           if (profileField === 'gender') {
             const genderMapping = {
@@ -982,10 +1055,10 @@ function matchKnockoutQuestion(questionText, userProfile = null) {
             const mapped = Object.entries(genderMapping).find(([key]) => lowerValue.includes(key));
             if (mapped) return mapped[1];
           }
-          
+
           return { answer: stringValue, selectValue: lowerValue };
         }
-        
+
         // Use default answer if no profile value
         return { answer: response.defaultAnswer || 'Yes', selectValue: (response.defaultAnswer || 'yes').toLowerCase() };
       }
@@ -3638,45 +3711,44 @@ function setupPanelEvents(panel) {
         try {
           showToast('🤖 AI tailoring your CV for this role...', 'info');
           
-          const tailorResponse = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${profileData.accessToken}`
-            },
-            body: JSON.stringify({
-              jobTitle: jobData.title,
-              company: jobData.company,
-              jobDescription: jobData.description,
-              jobLocation: jobData.location,
-              userProfile: {
-                firstName: profile.first_name,
-                lastName: profile.last_name,
-                email: profile.email,
-                phone: profile.phone,
-                linkedin: profile.linkedin,
-                github: profile.github,
-                portfolio: profile.portfolio,
-                city: profile.city,
-                state: profile.state,
-                country: profile.country,
-                skills: profile.skills || [],
-                workExperience: profile.work_experience || [],
-                education: profile.education || [],
-                certifications: profile.certifications || [],
-                achievements: profile.achievements || [],
-                languages: profile.languages || [],
-                totalExperience: profile.total_experience,
-                highestEducation: profile.highest_education,
-                citizenship: profile.citizenship,
-                willingToRelocate: profile.willing_to_relocate,
-                visaRequired: profile.visa_required,
-                expectedSalary: profile.expected_salary,
-                noticePeriod: profile.notice_period
-              }
-            })
-          });
+           const tailorResponse = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+             method: 'POST',
+             headers: {
+               'Content-Type': 'application/json',
+               'apikey': SUPABASE_KEY,
+               'Authorization': `Bearer ${profileData.accessToken}`
+             },
+             body: JSON.stringify({
+               jobTitle: jobData.title,
+               company: jobData.company,
+               description: jobData.description || '',
+               requirements: [],
+               location: jobData.location || '',
+               jobId: null,
+               userProfile: {
+                 firstName: String(profile.first_name || ''),
+                 lastName: String(profile.last_name || ''),
+                 email: String(profile.email || ''),
+                 phone: String(profile.phone || ''),
+                 linkedin: String(profile.linkedin || ''),
+                 github: String(profile.github || ''),
+                 portfolio: String(profile.portfolio || ''),
+                 coverLetter: String(profile.cover_letter || ''),
+                 workExperience: Array.isArray(profile.work_experience) ? profile.work_experience : [],
+                 education: Array.isArray(profile.education) ? profile.education : [],
+                 skills: Array.isArray(profile.skills) ? profile.skills : [],
+                 certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
+                 achievements: Array.isArray(profile.achievements) ? profile.achievements : [],
+                 atsStrategy: String(profile.ats_strategy || 'Match keywords from job description'),
+                 city: profile.city ? String(profile.city) : undefined,
+                 country: profile.country ? String(profile.country) : undefined,
+                 address: profile.address ? String(profile.address) : undefined,
+                 state: profile.state ? String(profile.state) : undefined,
+                 zipCode: profile.zip_code ? String(profile.zip_code) : undefined,
+               },
+               includeReferral: false,
+             })
+           });
           
           if (tailorResponse.ok) {
             tailoredData = await tailorResponse.json();
@@ -4415,6 +4487,9 @@ function setupPanelEvents(panel) {
   // Auto-approve is now default - removed manual approval buttons
   
   // Auto-apply reviewed answers is now default behavior in Smart Apply
+
+  // Tabs / copy / PDF actions
+  setupPanelEventsContinued(panel);
   
   // Next Page
   panel.querySelector('#qh-next-page').addEventListener('click', async () => {
