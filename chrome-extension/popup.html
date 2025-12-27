@@ -476,6 +476,54 @@
 
     <!-- Status Message -->
     <div id="status-message" class="status-message hidden"></div>
+
+    <!-- PDF Preview Modal -->
+    <div id="pdf-preview-modal" class="modal-overlay hidden">
+      <div class="modal-container pdf-modal">
+        <div class="modal-header">
+          <span class="modal-title" id="pdf-modal-title">📄 Resume Preview</span>
+          <button id="close-pdf-modal-btn" class="close-btn">×</button>
+        </div>
+        <div class="modal-tabs">
+          <button class="modal-tab active" data-modal-tab="resume">Resume</button>
+          <button class="modal-tab" data-modal-tab="cover">Cover Letter</button>
+        </div>
+        <div class="pdf-modal-content" id="pdf-modal-content">
+          <div class="pdf-document">
+            <div class="pdf-page" id="pdf-page-content">
+              <!-- Formatted PDF content will be rendered here -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="modal-copy-btn" class="btn ghost">
+            <span class="btn-icon">📋</span> Copy
+          </button>
+          <button id="modal-download-btn" class="btn primary">
+            <span class="btn-icon">⬇️</span> Download PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Queue Progress Floating Bar -->
+    <div id="queue-progress-bar" class="queue-progress-bar hidden">
+      <div class="queue-progress-content">
+        <div class="queue-progress-info">
+          <span class="queue-progress-icon">🚀</span>
+          <span class="queue-progress-text">
+            <strong id="queue-remaining">0</strong> jobs remaining
+          </span>
+        </div>
+        <div class="queue-progress-stats">
+          <span class="queue-stat success">✓ <span id="queue-applied">0</span></span>
+          <span class="queue-stat failed">✗ <span id="queue-skipped">0</span></span>
+        </div>
+        <div class="queue-mini-progress">
+          <div class="queue-mini-fill" id="queue-mini-fill"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>
