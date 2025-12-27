@@ -351,10 +351,10 @@ function setupEventListeners() {
     tab.addEventListener('click', () => switchPdfTab(tab.dataset.pdfTab));
   });
 
-  // Preview PDFs button
+  // Preview PDFs button - opens modal
   const previewPdfsBtn = document.getElementById('preview-pdfs-btn');
   if (previewPdfsBtn) {
-    previewPdfsBtn.addEventListener('click', togglePdfPreview);
+    previewPdfsBtn.addEventListener('click', () => openPdfModal('resume'));
   }
 
   // Preview individual PDF buttons
@@ -384,6 +384,39 @@ function setupEventListeners() {
   if (copyContentBtn) {
     copyContentBtn.addEventListener('click', copyCurrentPdfContent);
   }
+
+  // PDF Preview Modal events
+  const closePdfModalBtn = document.getElementById('close-pdf-modal-btn');
+  if (closePdfModalBtn) {
+    closePdfModalBtn.addEventListener('click', closePdfModal);
+  }
+
+  // Modal tab switching
+  document.querySelectorAll('.modal-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchModalTab(tab.dataset.modalTab));
+  });
+
+  // Modal action buttons
+  const modalCopyBtn = document.getElementById('modal-copy-btn');
+  if (modalCopyBtn) {
+    modalCopyBtn.addEventListener('click', () => copyCurrentPdfContent());
+  }
+
+  const modalDownloadBtn = document.getElementById('modal-download-btn');
+  if (modalDownloadBtn) {
+    modalDownloadBtn.addEventListener('click', () => downloadAsPDF(currentPdfTab));
+  }
+
+  // Close modal on overlay click
+  const pdfModal = document.getElementById('pdf-preview-modal');
+  if (pdfModal) {
+    pdfModal.addEventListener('click', (e) => {
+      if (e.target === pdfModal) closePdfModal();
+    });
+  }
+
+  // Load queue progress on init
+  loadQueueProgress();
 }
 
 // Speed multiplier info for UI
@@ -1954,4 +1987,226 @@ function hideGeneratedPdfs() {
     section.classList.add('hidden');
   }
   generatedPdfContent = { resume: '', cover: '' };
+}
+
+// ============================================
+// PDF Preview Modal Functions
+// ============================================
+
+// Open PDF preview modal
+function openPdfModal(type = 'resume') {
+  currentPdfTab = type;
+  const modal = document.getElementById('pdf-preview-modal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    updateModalTab(type);
+    renderFormattedPdf(type);
+  }
+}
+
+// Close PDF preview modal
+function closePdfModal() {
+  const modal = document.getElementById('pdf-preview-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+// Switch modal tab
+function switchModalTab(tab) {
+  currentPdfTab = tab;
+  updateModalTab(tab);
+  renderFormattedPdf(tab);
+}
+
+// Update modal tab UI
+function updateModalTab(tab) {
+  document.querySelectorAll('.modal-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.modalTab === tab);
+  });
+  
+  const title = document.getElementById('pdf-modal-title');
+  if (title) {
+    title.textContent = tab === 'resume' ? '📄 Resume Preview' : '✉️ Cover Letter Preview';
+  }
+}
+
+// Render formatted PDF content
+function renderFormattedPdf(type) {
+  const content = type === 'resume' ? generatedPdfContent.resume : generatedPdfContent.cover;
+  const pageEl = document.getElementById('pdf-page-content');
+  
+  if (!pageEl) return;
+  
+  if (!content) {
+    pageEl.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 40px;">No content generated yet. Apply to a job first.</div>';
+    return;
+  }
+  
+  if (type === 'resume') {
+    pageEl.innerHTML = formatResumeHtml(content);
+  } else {
+    pageEl.innerHTML = formatCoverLetterHtml(content);
+  }
+}
+
+// Format resume content as styled HTML
+function formatResumeHtml(content) {
+  const name = userProfile ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() : 'Applicant';
+  const email = userProfile?.email || '';
+  const phone = userProfile?.phone || '';
+  const linkedin = userProfile?.linkedin || '';
+  
+  const contactParts = [email, phone, linkedin].filter(Boolean);
+  
+  // Parse sections from content
+  const sections = parseResumeSections(content);
+  
+  let html = `
+    <h1>${name}</h1>
+    <div class="contact-line">${contactParts.join(' | ')}</div>
+  `;
+  
+  if (sections.summary) {
+    html += `<h2>Professional Summary</h2><p>${sections.summary}</p>`;
+  }
+  
+  if (sections.experience) {
+    html += `<h2>Experience</h2>${sections.experience}`;
+  }
+  
+  if (sections.education) {
+    html += `<h2>Education</h2>${sections.education}`;
+  }
+  
+  if (sections.skills) {
+    html += `<h2>Skills</h2><div class="skills-list">${sections.skills}</div>`;
+  }
+  
+  return html;
+}
+
+// Parse resume sections from text
+function parseResumeSections(content) {
+  const lines = content.split('\n');
+  const sections = { summary: '', experience: '', education: '', skills: '' };
+  let currentSection = 'summary';
+  let sectionContent = [];
+  
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase().trim();
+    
+    if (lowerLine.includes('experience') || lowerLine.includes('employment')) {
+      if (sectionContent.length) sections[currentSection] = sectionContent.join('<br>');
+      currentSection = 'experience';
+      sectionContent = [];
+    } else if (lowerLine.includes('education')) {
+      if (sectionContent.length) sections[currentSection] = sectionContent.join('<br>');
+      currentSection = 'education';
+      sectionContent = [];
+    } else if (lowerLine.includes('skill')) {
+      if (sectionContent.length) sections[currentSection] = sectionContent.join('<br>');
+      currentSection = 'skills';
+      sectionContent = [];
+    } else if (line.trim()) {
+      sectionContent.push(escapeHtml(line.trim()));
+    }
+  }
+  
+  if (sectionContent.length) sections[currentSection] = sectionContent.join('<br>');
+  
+  return sections;
+}
+
+// Format cover letter content as styled HTML
+function formatCoverLetterHtml(content) {
+  const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+  const company = currentJob?.company || 'Company';
+  
+  let html = '<div class="cover-letter-body">';
+  
+  paragraphs.forEach((para, idx) => {
+    const trimmed = para.trim();
+    if (idx === 0 && (trimmed.toLowerCase().startsWith('dear') || trimmed.toLowerCase().startsWith('to '))) {
+      html += `<p class="salutation">${escapeHtml(trimmed)}</p>`;
+    } else if (trimmed.toLowerCase().includes('sincerely') || trimmed.toLowerCase().includes('regards') || trimmed.toLowerCase().includes('best,')) {
+      html += `<p class="closing">${escapeHtml(trimmed)}</p>`;
+    } else {
+      html += `<p>${escapeHtml(trimmed)}</p>`;
+    }
+  });
+  
+  html += '</div>';
+  return html;
+}
+
+// Preview PDF (open modal)
+function previewPdf(type) {
+  openPdfModal(type);
+}
+
+// ============================================
+// Queue Progress Functions
+// ============================================
+
+// Load and display queue progress
+async function loadQueueProgress() {
+  try {
+    const data = await chrome.storage.local.get(['batchProgress', 'jobQueue']);
+    
+    const progress = data.batchProgress || { total: 0, current: 0, applied: 0, skipped: 0 };
+    const queue = data.jobQueue || [];
+    
+    updateQueueProgressBar(progress, queue.length);
+  } catch (e) {
+    console.log('Failed to load queue progress:', e);
+  }
+}
+
+// Update queue progress bar UI
+function updateQueueProgressBar(progress, queueLength) {
+  const bar = document.getElementById('queue-progress-bar');
+  if (!bar) return;
+  
+  const remaining = queueLength;
+  const total = progress.total || queueLength;
+  const applied = progress.applied || 0;
+  const skipped = progress.skipped || 0;
+  
+  if (remaining === 0 && applied === 0 && !batchProcessing) {
+    bar.classList.add('hidden');
+    return;
+  }
+  
+  bar.classList.remove('hidden');
+  
+  const remainingEl = document.getElementById('queue-remaining');
+  const appliedEl = document.getElementById('queue-applied');
+  const skippedEl = document.getElementById('queue-skipped');
+  const fillEl = document.getElementById('queue-mini-fill');
+  
+  if (remainingEl) remainingEl.textContent = remaining;
+  if (appliedEl) appliedEl.textContent = applied;
+  if (skippedEl) skippedEl.textContent = skipped;
+  
+  if (fillEl && total > 0) {
+    const percent = ((applied + skipped) / total) * 100;
+    fillEl.style.width = `${percent}%`;
+  }
+}
+
+// Save and update batch progress
+async function updateBatchProgress(applied, skipped, total) {
+  const progress = { applied, skipped, total };
+  await chrome.storage.local.set({ batchProgress: progress });
+  
+  const data = await chrome.storage.local.get(['jobQueue']);
+  updateQueueProgressBar(progress, (data.jobQueue || []).length);
+}
+
+// Clear batch progress
+async function clearBatchProgress() {
+  await chrome.storage.local.remove('batchProgress');
+  const bar = document.getElementById('queue-progress-bar');
+  if (bar) bar.classList.add('hidden');
 }

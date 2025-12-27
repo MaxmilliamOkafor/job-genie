@@ -44,6 +44,9 @@ window.addEventListener('message', async (event) => {
           // Get profile and tailored data from storage
           const storageData = await chrome.storage.local.get(['userProfile', 'accessToken', 'autofillEnabled']);
           
+          // Auto-show the control panel
+          autoShowControlPanel(data);
+          
           if (storageData.autofillEnabled !== false && storageData.userProfile) {
             // Start autofill process
             setTimeout(() => {
@@ -65,6 +68,11 @@ window.addEventListener('message', async (event) => {
           }, '*');
         }
       }
+      break;
+    
+    case 'SHOW_CONTROL_PANEL':
+      // Trigger to show the floating control panel
+      autoShowControlPanel(data);
       break;
       
     case 'CHECK_EXTENSION':
@@ -122,6 +130,104 @@ async function startAutofillProcess(profile, tailoredData) {
       error: error.message,
     }, '*');
   }
+}
+
+// Auto-show control panel when triggered from webapp
+async function autoShowControlPanel(data = {}) {
+  console.log('QuantumHire AI: Auto-showing control panel');
+  
+  // Wait a moment for page to load
+  await new Promise(r => setTimeout(r, 500));
+  
+  // Create and show the control panel if QHControlPanel is available
+  if (typeof window.QHControlPanel !== 'undefined' && window.QHControlPanel.create) {
+    window.QHControlPanel.create();
+    
+    // Update with job info if available
+    if (data?.jobTitle || data?.company) {
+      setTimeout(() => {
+        window.QHControlPanel.showCurrentJob(data.jobTitle || 'Job Application', data.company || 'Company');
+        window.QHControlPanel.updateStatus('ready', 'Ready to Apply', 'Extension panel auto-opened');
+      }, 300);
+    }
+    
+    // Load queue progress from storage
+    try {
+      const storageData = await chrome.storage.local.get(['batchProgress', 'jobQueue']);
+      const progress = storageData.batchProgress || { total: 0, applied: 0, skipped: 0 };
+      const queue = storageData.jobQueue || [];
+      
+      if (queue.length > 0 || progress.total > 0) {
+        // Show stats row with queue info
+        const panel = document.getElementById('qh-control-panel');
+        if (panel) {
+          const statsRow = panel.querySelector('#qh-stats-row');
+          if (statsRow) {
+            statsRow.style.display = 'flex';
+            panel.querySelector('#qh-stat-applied').textContent = progress.applied || 0;
+            panel.querySelector('#qh-stat-failed').textContent = progress.skipped || 0;
+            panel.querySelector('#qh-stat-skipped').textContent = queue.length;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Failed to load queue progress:', e);
+    }
+  } else {
+    console.log('QuantumHire AI: Control panel not available, creating fallback');
+    // Fallback: create a simple notification
+    showSimpleNotification('QuantumHire AI is ready!', 'The extension will auto-fill the application form.');
+  }
+  
+  // Notify webapp that panel is shown
+  window.postMessage({
+    type: 'QUANTUMHIRE_EXTENSION',
+    action: 'PANEL_SHOWN',
+    success: true,
+  }, '*');
+}
+
+// Simple notification fallback
+function showSimpleNotification(title, message) {
+  const existing = document.getElementById('qh-simple-notification');
+  if (existing) existing.remove();
+  
+  const notification = document.createElement('div');
+  notification.id = 'qh-simple-notification';
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    z-index: 999999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: slideIn 0.3s ease;
+  `;
+  notification.innerHTML = `
+    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${title}</div>
+    <div style="font-size: 12px; opacity: 0.9;">${message}</div>
+  `;
+  
+  // Add animation styles
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  `;
+  document.head.appendChild(style);
+  document.body.appendChild(notification);
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    notification.style.animation = 'slideIn 0.3s ease reverse';
+    setTimeout(() => notification.remove(), 300);
+  }, 5000);
 }
 
 // ============= PLATFORM DETECTION & CONFIGURATION =============
