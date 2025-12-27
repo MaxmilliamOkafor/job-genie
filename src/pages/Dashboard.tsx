@@ -145,21 +145,24 @@ const Dashboard = () => {
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   {topMatches.map(job => (
-                    <div 
+                    <a 
                       key={job.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      href={job.url || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted hover:border-primary/30 border border-transparent transition-all cursor-pointer group"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{job.title}</p>
+                        <p className="font-medium truncate group-hover:text-primary transition-colors">{job.title}</p>
                         <p className="text-sm text-muted-foreground truncate">
-                          {job.company} • {job.location}
+                          {job.company} • {job.salary || 'Salary not specified'} - {job.location}
                         </p>
                       </div>
                       <Badge className="ml-2 bg-primary/10 text-primary shrink-0">
                         <Sparkles className="h-3 w-3 mr-1" />
-                        {job.match_score}%
+                        {job.match_score || 0}%
                       </Badge>
-                    </div>
+                    </a>
                   ))}
                 </div>
                 <Button variant="outline" className="w-full" asChild>
