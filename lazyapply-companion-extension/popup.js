@@ -189,6 +189,24 @@ function setupEventListeners() {
   document.getElementById('logout-btn').addEventListener('click', handleLogout);
   document.getElementById('refresh-profile-btn').addEventListener('click', refreshProfile);
   
+  // Password toggle
+  const togglePasswordBtn = document.getElementById('toggle-password');
+  if (togglePasswordBtn) {
+    togglePasswordBtn.addEventListener('click', () => {
+      const passwordInput = document.getElementById('auth-password');
+      const eyeIcon = togglePasswordBtn.querySelector('.eye-icon');
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        eyeIcon.textContent = '🙈';
+        togglePasswordBtn.title = 'Hide password';
+      } else {
+        passwordInput.type = 'password';
+        eyeIcon.textContent = '👁️';
+        togglePasswordBtn.title = 'Show password';
+      }
+    });
+  }
+  
   document.getElementById('open-dashboard-btn').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: QUANTUMHIRE_URL });
@@ -860,6 +878,11 @@ async function handleLogin(e) {
     return;
   }
   
+  if (password.length < 6) {
+    showAuthError('Password must be at least 6 characters');
+    return;
+  }
+  
   btn.disabled = true;
   btn.textContent = '⏳ Signing in...';
   errorEl.style.display = 'none';
@@ -878,7 +901,15 @@ async function handleLogin(e) {
     const data = await response.json();
     
     if (!response.ok) {
-      throw new Error(data.error_description || data.msg || 'Invalid credentials');
+      // Handle specific error cases
+      const errorMsg = data.error_description || data.msg || data.error || 'Login failed';
+      if (errorMsg.toLowerCase().includes('invalid') || errorMsg.toLowerCase().includes('credentials')) {
+        throw new Error('Invalid email or password. Please check your credentials.');
+      } else if (errorMsg.toLowerCase().includes('email not confirmed')) {
+        throw new Error('Please confirm your email first.');
+      } else {
+        throw new Error(errorMsg);
+      }
     }
     
     // Save token and user
@@ -913,7 +944,7 @@ async function handleLogin(e) {
     
   } catch (error) {
     console.error('Login error:', error);
-    showAuthError(error.message || 'Login failed');
+    showAuthError(error.message || 'Login failed. Please try again.');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Sign In';
