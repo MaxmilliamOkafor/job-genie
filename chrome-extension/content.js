@@ -4411,8 +4411,20 @@ async function initialize() {
   const platform = detectPlatform();
   console.log(`QuantumHire AI: Detected platform: ${platform.name}`);
   
+  // IMMEDIATE panel creation for recognized ATS platforms - don't wait!
+  const isRecognizedATS = platform.name !== 'generic';
+  const isApplicationPage = url.includes('apply') || url.includes('application') || 
+                            url.includes('careers') || url.includes('jobs');
+  
+  if (isRecognizedATS || isApplicationPage) {
+    console.log('QuantumHire AI: Recognized ATS/application page - showing panel immediately');
+    showToast('QuantumHire AI Ready', 'info', 2000);
+    // Create panel immediately for recognized platforms
+    createFloatingPanel();
+  }
+  
   // Wait a moment for page to render before checking validity
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 800));
   
   // Check if this is a valid job page
   const jobValidation = isValidJobPage();
@@ -4435,9 +4447,9 @@ async function initialize() {
     return;
   }
   
-  // Create floating panel on ATS pages
-  if (platform.name !== 'generic' || document.querySelector('input[type="file"], form input[type="text"]')) {
-    setTimeout(createFloatingPanel, 500);
+  // Create floating panel if not already created
+  if (!document.getElementById('quantumhire-panel')) {
+    createFloatingPanel();
   }
   
   // Auto-trigger autofill if we have stored profile and this looks like an application page

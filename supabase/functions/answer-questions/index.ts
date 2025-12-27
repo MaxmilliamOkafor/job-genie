@@ -537,6 +537,188 @@ function validateRequest(data: any): QuestionRequest {
   };
 }
 
+// Pre-process common questions that can be answered directly from profile
+function preProcessCommonQuestions(
+  questions: { id: string; label: string; type: string; options?: string[] }[],
+  userProfile: any
+): Map<string, { answer: string; selectValue?: string; confidence: string; atsScore: number; reasoning: string }> {
+  const directAnswers = new Map();
+  
+  const labelLower = (q: { label: string }) => q.label.toLowerCase().trim();
+  
+  for (const q of questions) {
+    const label = labelLower(q);
+    const options = q.options?.map(o => o.toLowerCase()) || [];
+    
+    // Country questions
+    if (label.includes('country') && !label.includes('authorized')) {
+      const country = userProfile.country || 'United States';
+      directAnswers.set(q.id, {
+        answer: country,
+        selectValue: country.toLowerCase(),
+        confidence: 'high',
+        atsScore: 95,
+        reasoning: 'Country from user profile'
+      });
+      continue;
+    }
+    
+    // Pronouns
+    if (label.includes('pronoun')) {
+      const defaultPronouns = userProfile.gender === 'Female' ? 'She/Her' : 
+                              userProfile.gender === 'Male' ? 'He/Him' : 'They/Them';
+      directAnswers.set(q.id, {
+        answer: options.length > 0 ? (options.find(o => o.includes('prefer not') || o.includes('decline')) || defaultPronouns) : 'Prefer not to disclose',
+        selectValue: 'prefer not to disclose',
+        confidence: 'high',
+        atsScore: 90,
+        reasoning: 'Neutral pronoun response for privacy'
+      });
+      continue;
+    }
+    
+    // Former employee questions
+    if (label.includes('former') && (label.includes('employee') || label.includes('worked'))) {
+      directAnswers.set(q.id, {
+        answer: 'No',
+        selectValue: 'no',
+        confidence: 'high',
+        atsScore: 95,
+        reasoning: 'Standard response for former employee status'
+      });
+      continue;
+    }
+    
+    // Priority/importance rating questions (Career Growth, Work-life Balance, Leadership, etc.)
+    if (label.includes('career growth') || label.includes('work-life') || label.includes('work life') ||
+        label.includes('leadership') || label.includes('compensation') || label.includes('benefits') ||
+        label.includes('pto') || label.includes('career stability') || label.includes('culture') ||
+        label.includes('company outlook')) {
+      // These are typically importance ratings - answer positively
+      const importanceOptions = ['very important', 'important', 'somewhat important', 'high', 'medium'];
+      const matchedOption = options.find(o => importanceOptions.some(imp => o.includes(imp)));
+      directAnswers.set(q.id, {
+        answer: matchedOption || 'Important',
+        selectValue: matchedOption || 'important',
+        confidence: 'high',
+        atsScore: 90,
+        reasoning: 'Standard positive response for workplace priority question'
+      });
+      continue;
+    }
+    
+    // Website/portfolio questions
+    if (label === 'website' || (label.includes('website') && label.length < 30)) {
+      const website = userProfile.portfolio || userProfile.linkedin || userProfile.github || '';
+      if (website) {
+        directAnswers.set(q.id, {
+          answer: website,
+          selectValue: website.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'Portfolio/website from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // "What makes X appealing" - motivational questions
+    if (label.includes('appealing') || label.includes('why') && (label.includes('company') || label.includes('role'))) {
+      const companyName = (userProfile as any).company || 'your team';
+      directAnswers.set(q.id, {
+        answer: `I'm excited about the opportunity to contribute to ${companyName} because of the innovative work being done and the chance to grow professionally while making an impact.`,
+        confidence: 'high',
+        atsScore: 85,
+        reasoning: 'Generic but positive motivational response'
+      });
+      continue;
+    }
+    
+    // LinkedIn URL
+    if (label.includes('linkedin')) {
+      const linkedin = userProfile.linkedin || '';
+      if (linkedin) {
+        directAnswers.set(q.id, {
+          answer: linkedin,
+          selectValue: linkedin.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'LinkedIn URL from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // GitHub URL
+    if (label.includes('github')) {
+      const github = userProfile.github || '';
+      if (github) {
+        directAnswers.set(q.id, {
+          answer: github,
+          selectValue: github.toLowerCase(),
+          confidence: 'high',
+          atsScore: 95,
+          reasoning: 'GitHub URL from user profile'
+        });
+      }
+      continue;
+    }
+    
+    // How did you hear about us
+    if (label.includes('how did you hear') || label.includes('how did you find') || label.includes('source')) {
+      const sources = ['linkedin', 'job board', 'online search', 'company website', 'internet'];
+      const matchedSource = options.find(o => sources.some(s => o.includes(s)));
+      directAnswers.set(q.id, {
+        answer: matchedSource || 'LinkedIn',
+        selectValue: matchedSource || 'linkedin',
+        confidence: 'high',
+        atsScore: 90,
+        reasoning: 'Standard referral source response'
+      });
+      continue;
+    }
+    
+    // Referral questions
+    if (label.includes('refer') && label.includes('employee')) {
+      directAnswers.set(q.id, {
+        answer: 'No',
+        selectValue: 'no',
+        confidence: 'high',
+        atsScore: 90,
+        reasoning: 'Standard referral response'
+      });
+      continue;
+    }
+    
+    // Desired salary / compensation expectations
+    if (label.includes('salary') || label.includes('compensation') && label.includes('expect')) {
+      const salary = userProfile.expectedSalary || '$80,000 - $120,000';
+      directAnswers.set(q.id, {
+        answer: salary,
+        confidence: 'medium',
+        atsScore: 85,
+        reasoning: 'Expected salary from user profile'
+      });
+      continue;
+    }
+    
+    // Start date / availability
+    if (label.includes('start date') || label.includes('when can you') || label.includes('availability')) {
+      const notice = userProfile.noticePeriod || '2 weeks';
+      directAnswers.set(q.id, {
+        answer: notice === 'Immediate' ? 'Immediately' : `Within ${notice}`,
+        selectValue: 'immediately',
+        confidence: 'high',
+        atsScore: 95,
+        reasoning: 'Start date based on notice period'
+      });
+      continue;
+    }
+  }
+  
+  return directAnswers;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -550,37 +732,63 @@ serve(async (req) => {
     const rawData = await req.json();
     const { questions, jobTitle, company, jobDescription, userProfile } = validateRequest(rawData);
     
+    // Pre-process common questions that can be answered directly
+    const directAnswers = preProcessCommonQuestions(questions, { ...userProfile, company });
+    console.log(`[Pre-process] Directly answered ${directAnswers.size} common questions`);
+    
     console.log(`[User ${userId}] Answering ${questions.length} questions for ${jobTitle} at ${company}`);
     
-    // Check memory for cached answers
-    const memoryMatches = await checkMemory(supabase, userId, questions);
+    // Check memory for cached answers (excluding already direct-answered questions)
+    const questionsForMemoryCheck = questions.filter(q => !directAnswers.has(q.id));
+    const memoryMatches = await checkMemory(supabase, userId, questionsForMemoryCheck);
     const cachedCount = memoryMatches.size;
     
-    console.log(`[Memory] Found ${cachedCount} cached answers out of ${questions.length} questions`);
+    console.log(`[Memory] Found ${cachedCount} cached answers out of ${questionsForMemoryCheck.length} questions`);
     
-    // Separate questions into cached and uncached
-    const uncachedQuestions = questions.filter(q => !memoryMatches.has(q.id));
+    // Separate questions into cached, direct, and uncached (need AI)
+    const uncachedQuestions = questions.filter(q => !memoryMatches.has(q.id) && !directAnswers.has(q.id));
     
-    // If all questions are cached, return immediately
+    // If all questions are answered (direct + memory), return immediately
     if (uncachedQuestions.length === 0) {
-      const cachedAnswers = questions.map(q => {
-        const match = memoryMatches.get(q.id)!;
-        return {
-          id: q.id,
-          answer: match.answer.answer,
-          selectValue: match.answer.selectValue,
-          confidence: match.confidence,
-          atsScore: 95,
-          needsReview: false,
-          reasoning: `[From Memory - ${(match.similarity * 100).toFixed(0)}% match] ${match.answer.reasoning || 'Previously answered successfully'}`,
-          fromMemory: true
-        };
+      const allAnswers = questions.map(q => {
+        // Check direct answers first
+        const directMatch = directAnswers.get(q.id);
+        if (directMatch) {
+          return {
+            id: q.id,
+            answer: directMatch.answer,
+            selectValue: directMatch.selectValue,
+            confidence: directMatch.confidence,
+            atsScore: directMatch.atsScore,
+            needsReview: false,
+            reasoning: `[Direct Profile Match] ${directMatch.reasoning}`,
+            fromMemory: false,
+            directAnswer: true
+          };
+        }
+        
+        // Then check memory
+        const memMatch = memoryMatches.get(q.id);
+        if (memMatch) {
+          return {
+            id: q.id,
+            answer: memMatch.answer.answer,
+            selectValue: memMatch.answer.selectValue,
+            confidence: memMatch.confidence,
+            atsScore: 95,
+            needsReview: false,
+            reasoning: `[From Memory - ${(memMatch.similarity * 100).toFixed(0)}% match] ${memMatch.answer.reasoning || 'Previously answered successfully'}`,
+            fromMemory: true
+          };
+        }
+        
+        return { id: q.id, answer: '', confidence: 'low', atsScore: 0, needsReview: true, reasoning: 'No answer' };
       });
       
-      console.log(`[Memory] All ${questions.length} answers served from memory!`);
+      console.log(`[Fast Path] All ${questions.length} answers served (${directAnswers.size} direct, ${cachedCount} memory)!`);
       
       return new Response(JSON.stringify({
-        answers: cachedAnswers,
+        answers: allAnswers,
         totalQuestions: questions.length,
         overallAtsScore: 95,
         reviewCount: 0,
@@ -588,6 +796,7 @@ serve(async (req) => {
         reviewRecommendations: [],
         memoryStats: {
           cached: cachedCount,
+          direct: directAnswers.size,
           generated: 0,
           cacheHitRate: '100%'
         }
@@ -990,8 +1199,25 @@ IMPORTANT:
         .catch(err => console.error('Failed to store in memory:', err));
     }
 
-    // Merge cached and AI-generated answers
+    // Merge direct, cached and AI-generated answers
     const allAnswers = questions.map(q => {
+      // Priority 1: Direct profile-based answers
+      const directMatch = directAnswers.get(q.id);
+      if (directMatch) {
+        return {
+          id: q.id,
+          answer: directMatch.answer,
+          selectValue: directMatch.selectValue,
+          confidence: directMatch.confidence,
+          atsScore: directMatch.atsScore,
+          needsReview: false,
+          reasoning: `[Direct Profile Match] ${directMatch.reasoning}`,
+          fromMemory: false,
+          directAnswer: true
+        };
+      }
+      
+      // Priority 2: Memory-cached answers
       const cachedMatch = memoryMatches.get(q.id);
       if (cachedMatch) {
         return {
@@ -1006,6 +1232,7 @@ IMPORTANT:
         };
       }
       
+      // Priority 3: AI-generated answers
       const aiAnswer = aiResult.answers?.find((a: any) => a.id === q.id);
       return aiAnswer || {
         id: q.id,
@@ -1030,6 +1257,7 @@ IMPORTANT:
       reviewRecommendations: aiResult.reviewRecommendations || [],
       memoryStats: {
         cached: cachedCount,
+        direct: directAnswers.size,
         generated: uncachedQuestions.length,
         cacheHitRate: `${((cachedCount / questions.length) * 100).toFixed(0)}%`
       },
