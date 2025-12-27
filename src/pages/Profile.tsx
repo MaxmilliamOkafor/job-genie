@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
 import { 
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
-  Shield, CheckCircle, Globe, FileText, Languages, Key, Eye, EyeOff,
+  Shield, CheckCircle, Globe, FileText, Languages, Key,
   Loader2, Activity, Zap, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -46,7 +46,7 @@ const Profile = () => {
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
-  const [showApiKey, setShowApiKey] = useState(false);
+  // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
 
   // Note: API usage stats are now shown in the ApiUsageChart component
@@ -220,24 +220,13 @@ const Profile = () => {
               Your key is stored securely and only used for your own applications.
             </p>
             <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input 
-                  type={showApiKey ? 'text' : 'password'}
-                  placeholder="sk-..."
-                  value={localProfile.openai_api_key || ''}
-                  onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
-                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
+              <Input 
+                type="password"
+                placeholder="sk-..."
+                value={localProfile.openai_api_key || ''}
+                onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
+                className="flex-1"
+              />
               <Button 
                 variant="outline"
                 onClick={testApiKey}
