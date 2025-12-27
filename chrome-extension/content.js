@@ -192,6 +192,25 @@ const PLATFORM_CONFIG = {
     nextButton: 'button[type="submit"]',
     submitButton: 'button[type="submit"]',
     selectors: { firstName: 'input[name="firstName"]', lastName: 'input[name="lastName"]', email: 'input[name="email"]', phone: 'input[name="phone"]' }
+  },
+  workable: {
+    detect: () => window.location.hostname.includes('workable.com') || window.location.hostname.includes('apply.workable.com'),
+    nextButton: 'button[type="submit"], button[data-ui="overview-apply-now"]',
+    submitButton: 'button[type="submit"]',
+    selectors: {
+      firstName: 'input[name="firstname"], input[data-ui="firstname"]',
+      lastName: 'input[name="lastname"], input[data-ui="lastname"]',
+      email: 'input[name="email"], input[type="email"]',
+      phone: 'input[name="phone"], input[type="tel"]',
+      resume: 'input[type="file"]',
+      coverLetter: 'textarea[name="cover_letter"], textarea[data-ui="cover-letter"]',
+      linkedin: 'input[name="linkedin"], input[placeholder*="linkedin"]',
+    },
+    // Workable job details extraction
+    jobTitle: 'h1[data-ui="job-title"], h1, .job-title',
+    company: '[data-ui="company-name"], .company-name, header a[href="/"]',
+    location: '[data-ui="job-location"], .location, [data-ui="job-info"] span',
+    description: '[data-ui="job-description"], .job-description, section[data-ui="description"]',
   }
 };
 
@@ -884,6 +903,12 @@ const JOB_EXTRACTION_SELECTORS = {
   workday: { title: '[data-automation-id="jobPostingHeader"] h1, .job-title, h1', company: '[data-automation-id="companyName"], .company-name', description: '[data-automation-id="jobPostingDescription"], .job-description, main', location: '[data-automation-id="locations"], .location' },
   greenhouse: { title: '.app-title, h1.heading', company: '.company-name, .logo-container img[alt]', description: '#content, .job-description', location: '.location, .job-location' },
   lever: { title: '.posting-headline h2, h1.posting-title', company: '.main-header-logo img[alt]', description: '.posting-description', location: '.location' },
+  workable: { 
+    title: 'h1[data-ui="job-title"], h1.job-title, h1, [data-ui="job-title"]', 
+    company: '[data-ui="company-name"], header a[href="/"], .company-logo img[alt], a[data-ui="company-link"]', 
+    description: '[data-ui="job-description"], .job-description, section[data-ui="description"], [data-ui="description"], main article', 
+    location: '[data-ui="job-location"], [data-ui="job-info"] span, .job-location, [data-testid="job-location"]' 
+  },
   generic: { title: 'h1, [class*="job-title"]', company: '[class*="company"], [class*="employer"]', description: '[class*="job-description"], [class*="description"], article, main', location: '[class*="location"]' }
 };
 
