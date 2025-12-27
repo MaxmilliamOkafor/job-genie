@@ -1,6 +1,24 @@
 // QuantumHire AI - Human-like Typing Simulation
 // Mimics natural human typing patterns to evade bot detection
 
+// Speed multiplier configuration (synced with content.js)
+const SPEED_CONFIGS = {
+  1: { typeMin: 300, typeMax: 600, clickMin: 400, clickMax: 600 },
+  1.5: { typeMin: 200, typeMax: 400, clickMin: 280, clickMax: 450 },
+  2: { typeMin: 150, typeMax: 300, clickMin: 200, clickMax: 350 },
+  3: { typeMin: 100, typeMax: 200, clickMin: 130, clickMax: 250 }
+};
+
+// Get current speed multiplier from storage
+async function getSpeedMultiplierLocal() {
+  try {
+    const data = await chrome.storage.local.get(['speedMultiplier']);
+    return data.speedMultiplier || 1;
+  } catch (e) {
+    return 1;
+  }
+}
+
 /**
  * Generate a random delay within a range
  * @param {number} min - Minimum delay in ms
@@ -19,14 +37,18 @@ function randomDelay(min, max) {
  * @returns {Promise<boolean>} Success status
  */
 async function humanTypeText(element, text, options = {}) {
+  // Get speed config
+  const multiplier = await getSpeedMultiplierLocal();
+  const speedConfig = SPEED_CONFIGS[multiplier] || SPEED_CONFIGS[1];
+  
   const {
-    baseDelay = 50,        // Base delay between keystrokes (ms)
-    variance = 30,         // Variance in delay (+/-)
-    pauseAfterPunctuation = 150, // Extra pause after punctuation
-    pauseChance = 0.05,    // 5% chance of random pause (simulates thinking)
-    pauseDuration = 300,   // Duration of random pauses
-    typoChance = 0.02,     // 2% chance of typo (we'll correct it)
-    clearFirst = false,    // Clear field before typing
+    baseDelay = (speedConfig.typeMin + speedConfig.typeMax) / 2,  // Dynamic based on speed
+    variance = (speedConfig.typeMax - speedConfig.typeMin) / 2,   // Variance range
+    pauseAfterPunctuation = Math.floor(150 / multiplier),         // Scale with speed
+    pauseChance = 0.05 / multiplier,    // Reduce thinking pauses at higher speeds
+    pauseDuration = Math.floor(300 / multiplier),
+    typoChance = multiplier === 1 ? 0.02 : 0,  // Only typos at 1x for realism
+    clearFirst = false,
   } = options;
 
   if (!element || !text) return false;
@@ -250,14 +272,22 @@ function getRandomTypoChar(original) {
 async function humanClick(element, options = {}) {
   const { delay = true } = options;
   
+  // Get speed config for click delays
+  const multiplier = await getSpeedMultiplierLocal();
+  const speedConfig = SPEED_CONFIGS[multiplier] || SPEED_CONFIGS[1];
+  
   if (!element) return false;
 
   try {
     // Scroll into view smoothly
     element.scrollIntoView({ block: 'center', behavior: 'smooth' });
     
-    // Wait for scroll
-    await new Promise(r => setTimeout(r, randomDelay(200, 400)));
+    // Wait for scroll - scaled by speed
+    const scrollWait = randomDelay(
+      Math.floor(200 / multiplier), 
+      Math.floor(400 / multiplier)
+    );
+    await new Promise(r => setTimeout(r, scrollWait));
 
     // Get element bounds
     const rect = element.getBoundingClientRect();
@@ -275,9 +305,13 @@ async function humanClick(element, options = {}) {
       clientY: y,
     }));
 
-    // Small delay before click (like real hover-then-click)
+    // Small delay before click (like real hover-then-click) - scaled by speed
     if (delay) {
-      await new Promise(r => setTimeout(r, randomDelay(50, 150)));
+      const hoverDelay = randomDelay(
+        Math.floor(speedConfig.clickMin / 4),
+        Math.floor(speedConfig.clickMax / 4)
+      );
+      await new Promise(r => setTimeout(r, hoverDelay));
     }
 
     // Mousedown

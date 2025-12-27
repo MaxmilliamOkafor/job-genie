@@ -340,25 +340,45 @@ function setupEventListeners() {
     clearMemoryBtn.addEventListener('click', handleClearMemory);
   }
 
-  // Speed slider
-  const speedSlider = document.getElementById('speed-slider');
-  if (speedSlider) {
-    speedSlider.addEventListener('input', handleSpeedChange);
-  }
+  // Speed multiplier buttons
+  const speedButtons = document.querySelectorAll('.speed-btn');
+  speedButtons.forEach(btn => {
+    btn.addEventListener('click', () => handleSpeedButtonClick(btn));
+  });
 }
 
-// Handle speed slider change
-async function handleSpeedChange() {
-  const speedSlider = document.getElementById('speed-slider');
-  const speedValue = document.getElementById('speed-value');
-  if (!speedSlider) return;
+// Speed multiplier info for UI
+const SPEED_MULTIPLIER_INFO = {
+  1: { timing: '~90-120s/job', note: 'Safest for anti-bot' },
+  1.5: { timing: '~60-80s/job', note: 'Good balance' },
+  2: { timing: '~45-60s/job', note: 'Higher ban risk' },
+  3: { timing: '~30-45s/job', note: 'Use with proxies' }
+};
+
+// Handle speed button click
+async function handleSpeedButtonClick(selectedBtn) {
+  const speed = parseFloat(selectedBtn.dataset.speed);
   
-  const speed = parseInt(speedSlider.value);
-  if (speedValue) speedValue.textContent = `${speed}ms`;
+  // Update button active states
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  selectedBtn.classList.add('active');
   
-  await chrome.storage.local.set({ formFillSpeed: speed });
+  // Update info display
+  const speedInfo = document.getElementById('speed-info');
+  if (speedInfo) {
+    const info = SPEED_MULTIPLIER_INFO[speed] || SPEED_MULTIPLIER_INFO[1];
+    speedInfo.innerHTML = `
+      <span class="speed-timing">${info.timing}</span>
+      <span class="speed-note">${info.note}</span>
+    `;
+  }
   
-  // Notify content script of speed change
+  // Save to storage
+  await chrome.storage.local.set({ speedMultiplier: speed });
+  
+  // Notify content script
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
@@ -367,7 +387,7 @@ async function handleSpeedChange() {
   } catch (e) {
     // Ignore if content script not ready
   }
-
+}
 // Load saved connection
 async function loadConnection() {
   try {
@@ -421,33 +441,42 @@ async function loadAutomationSettings() {
       'smartApplyEnabled', 
       'autoSubmitEnabled', 
       'autoNavigateEnabled',
-      'formFillSpeed'
+      'speedMultiplier'
     ]);
     
     const autofillToggle = document.getElementById('autofill-toggle');
     const smartApplyToggle = document.getElementById('smartapply-toggle');
     const autoSubmitToggle = document.getElementById('autosubmit-toggle');
     const autoNavigateToggle = document.getElementById('autonavigate-toggle');
-    const speedSlider = document.getElementById('speed-slider');
-    const speedValue = document.getElementById('speed-value');
     
     if (autofillToggle) autofillToggle.checked = data.autofillEnabled !== false;
     if (smartApplyToggle) smartApplyToggle.checked = data.smartApplyEnabled !== false;
     if (autoSubmitToggle) autoSubmitToggle.checked = data.autoSubmitEnabled === true;
     if (autoNavigateToggle) autoNavigateToggle.checked = data.autoNavigateEnabled !== false;
     
-    // Load speed setting (default 500ms)
-    const speed = data.formFillSpeed || 500;
-    if (speedSlider) speedSlider.value = speed;
-    if (speedValue) speedValue.textContent = `${speed}ms`;
+    // Load speed multiplier (default 1x)
+    const speedMultiplier = data.speedMultiplier || 1;
+    const speedButtons = document.querySelectorAll('.speed-btn');
+    speedButtons.forEach(btn => {
+      const btnSpeed = parseFloat(btn.dataset.speed);
+      btn.classList.toggle('active', btnSpeed === speedMultiplier);
+    });
+    
+    // Update speed info display
+    const speedInfo = document.getElementById('speed-info');
+    if (speedInfo) {
+      const info = SPEED_MULTIPLIER_INFO[speedMultiplier] || SPEED_MULTIPLIER_INFO[1];
+      speedInfo.innerHTML = `
+        <span class="speed-timing">${info.timing}</span>
+        <span class="speed-note">${info.note}</span>
+      `;
+    }
     
     updateAutofillUI(data.autofillEnabled !== false);
   } catch (e) {
     console.error('Load automation settings error:', e);
   }
 }
-
-// Handle automation toggle changes
 async function handleAutomationToggle(settingName, toggleId) {
   const toggle = document.getElementById(toggleId);
   if (!toggle) return;
