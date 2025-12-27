@@ -4,6 +4,7 @@ import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
 import { VirtualJobList } from '@/components/jobs/VirtualJobList';
 import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
+import { LiveJobFeed } from '@/components/jobs/LiveJobFeed';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -121,6 +122,9 @@ const Jobs = () => {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  
+  // Live Feed view toggle
+  const [showLiveFeed, setShowLiveFeed] = useState(false);
   
   // Ref to scroll job list to bottom
   const scrollToJobListBottomRef = useRef<(() => void) | null>(null);
@@ -911,8 +915,38 @@ const Jobs = () => {
           </div>
         </div>
 
-        {/* Live Jobs Panel - Single unified search interface */}
-        <LiveJobsPanel onJobsFetched={refetch} />
+        {/* Live Jobs Panel Toggle */}
+        <div className="flex items-center gap-2 mb-4">
+          <Button
+            variant={!showLiveFeed ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowLiveFeed(false)}
+          >
+            Search Jobs
+          </Button>
+          <Button
+            variant={showLiveFeed ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowLiveFeed(true)}
+          >
+            <Wifi className="h-4 w-4 mr-2" />
+            Live Feed
+          </Button>
+        </div>
+
+        {/* Live Jobs Panel - Conditional */}
+        {showLiveFeed ? (
+          <Card className="p-4 h-[600px]">
+            <LiveJobFeed 
+              onApply={(job) => updateJobStatus(job.id, 'applied')}
+              onJobSelect={(job) => {
+                if (job.url) window.open(job.url, '_blank');
+              }}
+            />
+          </Card>
+        ) : (
+          <LiveJobsPanel onJobsFetched={refetch} />
+        )}
 
         {/* Filters Bar */}
         {jobs.length > 0 && (
