@@ -68,64 +68,92 @@ function setupEventListeners() {
   if (loginForm) {
     loginForm.addEventListener('submit', handleConnect);
   }
-  
+
+  // Settings panel toggle
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsPanel = document.getElementById('settings-panel');
+  const closeSettingsBtn = document.getElementById('close-settings-btn');
+
+  const openSettings = () => {
+    if (!settingsPanel) return;
+    settingsPanel.classList.remove('hidden');
+  };
+
+  const closeSettings = () => {
+    if (!settingsPanel) return;
+    settingsPanel.classList.add('hidden');
+  };
+
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      if (!settingsPanel) return;
+      const isHidden = settingsPanel.classList.contains('hidden');
+      if (isHidden) openSettings();
+      else closeSettings();
+    });
+  }
+
+  if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', closeSettings);
+  }
+
   // Disconnect button
   const disconnectBtn = document.getElementById('disconnect-btn');
   if (disconnectBtn) {
     disconnectBtn.addEventListener('click', handleDisconnect);
   }
-  
+
   // Refresh button
   const refreshBtn = document.getElementById('refresh-btn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', refreshProfile);
   }
-  
+
   // Apply now button
   const applyNowBtn = document.getElementById('apply-now-btn');
   if (applyNowBtn) {
     applyNowBtn.addEventListener('click', handleApplyWithAI);
   }
-  
+
   // Add to queue button
   const addQueueBtn = document.getElementById('add-queue-btn');
   if (addQueueBtn) {
     addQueueBtn.addEventListener('click', handleAddToQueue);
   }
-  
+
   // Batch apply button
   const batchApplyBtn = document.getElementById('batch-apply-btn');
   if (batchApplyBtn) {
     batchApplyBtn.addEventListener('click', handleBatchApply);
   }
-  
+
   // Cancel batch button
   const cancelBatchBtn = document.getElementById('cancel-batch-btn');
   if (cancelBatchBtn) {
     cancelBatchBtn.addEventListener('click', cancelBatchApply);
   }
-  
+
   // Automation toggles
   const autofillToggle = document.getElementById('autofill-toggle');
   if (autofillToggle) {
     autofillToggle.addEventListener('change', () => handleAutomationToggle('autofillEnabled', 'autofill-toggle'));
   }
-  
+
   const smartApplyToggle = document.getElementById('smartapply-toggle');
   if (smartApplyToggle) {
     smartApplyToggle.addEventListener('change', () => handleAutomationToggle('smartApplyEnabled', 'smartapply-toggle'));
   }
-  
+
   const autoSubmitToggle = document.getElementById('autosubmit-toggle');
   if (autoSubmitToggle) {
     autoSubmitToggle.addEventListener('change', () => handleAutomationToggle('autoSubmitEnabled', 'autosubmit-toggle'));
   }
-  
+
   const autoNavigateToggle = document.getElementById('autonavigate-toggle');
   if (autoNavigateToggle) {
     autoNavigateToggle.addEventListener('change', () => handleAutomationToggle('autoNavigateEnabled', 'autonavigate-toggle'));
   }
-  
+
   // Credentials toggle (expand/collapse)
   const credentialsToggle = document.getElementById('credentials-toggle');
   const credentialsBody = document.getElementById('credentials-body');
@@ -138,19 +166,19 @@ function setupEventListeners() {
       }
     });
   }
-  
+
   // Save credentials button
   const saveCredentialsBtn = document.getElementById('save-credentials-btn');
   if (saveCredentialsBtn) {
     saveCredentialsBtn.addEventListener('click', saveCredentials);
   }
-  
+
   // Clear credentials button
   const clearCredentialsBtn = document.getElementById('clear-credentials-btn');
   if (clearCredentialsBtn) {
     clearCredentialsBtn.addEventListener('click', clearCredentials);
   }
-  
+
   // Password visibility toggle
   const togglePasswordBtn = document.getElementById('toggle-password-btn');
   const atsPasswordInput = document.getElementById('ats-password');
@@ -161,34 +189,34 @@ function setupEventListeners() {
       togglePasswordBtn.textContent = type === 'password' ? '👁️' : '🙈';
     });
   }
-  
+
   // Tab switching
   document.querySelectorAll('.content-tab').forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
-  
+
   // Copy buttons
   const copyResumeBtn = document.getElementById('copy-resume-btn');
   if (copyResumeBtn) {
     copyResumeBtn.addEventListener('click', () => copyToClipboard('tailored-resume'));
   }
-  
+
   const copyCoverBtn = document.getElementById('copy-cover-btn');
   if (copyCoverBtn) {
     copyCoverBtn.addEventListener('click', () => copyToClipboard('tailored-cover'));
   }
-  
+
   // Download buttons
   const downloadResumeBtn = document.getElementById('download-resume-btn');
   if (downloadResumeBtn) {
     downloadResumeBtn.addEventListener('click', () => downloadAsPDF('resume'));
   }
-  
+
   const downloadCoverBtn = document.getElementById('download-cover-btn');
   if (downloadCoverBtn) {
     downloadCoverBtn.addEventListener('click', () => downloadAsPDF('cover'));
   }
-  
+
   // Dashboard button
   const openDashboardBtn = document.getElementById('open-dashboard-btn');
   if (openDashboardBtn) {
@@ -196,7 +224,7 @@ function setupEventListeners() {
       chrome.tabs.create({ url: DASHBOARD_URL });
     });
   }
-  
+
   // View queue button
   const viewQueueBtn = document.getElementById('view-queue-btn');
   if (viewQueueBtn) {

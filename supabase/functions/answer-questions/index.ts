@@ -763,7 +763,10 @@ function preProcessCommonQuestions(
     
     // Country questions
     if (label.includes('country') && !label.includes('authorized')) {
-      const country = userProfile.country || 'United States';
+      const country = userProfile.country || userProfile.citizenship || '';
+      // If we don't have a reliable country, let the model handle it (don't guess)
+      if (!country) continue;
+
       directAnswers.set(q.id, {
         answer: country,
         selectValue: country.toLowerCase(),
@@ -951,7 +954,11 @@ function preProcessCommonQuestions(
     }
     
     // City/Location
-    if (label === 'city' || (label.includes('city') && label.length < 20)) {
+    if (
+      label === 'city' ||
+      label.includes('location (city') ||
+      (label.includes('city') && (label.includes('location') || label.includes('located') || label.length < 40))
+    ) {
       const city = userProfile.city || '';
       if (city) {
         directAnswers.set(q.id, {
