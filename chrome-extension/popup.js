@@ -1050,9 +1050,15 @@ function updateProgress(step, percent) {
 function displayResults(result) {
   const progressSection = document.getElementById('progress-section');
   const resultsSection = document.getElementById('results-section');
+  const expandedResults = document.getElementById('expanded-results');
+  const expandResultsBtn = document.getElementById('expand-results-btn');
   
   if (progressSection) progressSection.classList.add('hidden');
   if (resultsSection) resultsSection.classList.remove('hidden');
+  
+  // Auto-expand results when content is available
+  if (expandedResults) expandedResults.classList.remove('hidden');
+  if (expandResultsBtn) expandResultsBtn.textContent = '▲';
   
   // Update match score
   const score = result.matchScore || 0;
@@ -1074,7 +1080,7 @@ function displayResults(result) {
     
     keywordsMatched.slice(0, 10).forEach(keyword => {
       const tag = document.createElement('span');
-      tag.className = 'keyword-tag';
+      tag.className = 'keyword-tag matched';
       tag.textContent = keyword;
       keywordsList.appendChild(tag);
     });
@@ -1088,12 +1094,25 @@ function displayResults(result) {
     });
   }
   
-  // Display tailored content
+  // Display tailored content in textareas
   const tailoredResume = document.getElementById('tailored-resume');
   const tailoredCover = document.getElementById('tailored-cover');
   
-  if (tailoredResume) tailoredResume.value = result.tailoredResume || '';
-  if (tailoredCover) tailoredCover.value = result.tailoredCoverLetter || '';
+  const resumeContent = result.tailoredResume || '';
+  const coverContent = result.tailoredCoverLetter || '';
+  
+  if (tailoredResume) {
+    tailoredResume.value = resumeContent;
+    // Trigger input event to ensure content is rendered
+    tailoredResume.dispatchEvent(new Event('input'));
+  }
+  if (tailoredCover) {
+    tailoredCover.value = coverContent;
+    tailoredCover.dispatchEvent(new Event('input'));
+  }
+  
+  // Make sure Resume tab is active and visible
+  switchTab('resume');
   
   // Display suggestions
   const suggestions = result.suggestedImprovements || [];
@@ -1112,6 +1131,12 @@ function displayResults(result) {
   } else if (suggestionsSection) {
     suggestionsSection.classList.add('hidden');
   }
+  
+  console.log('QuantumHire: Results displayed', {
+    hasResume: resumeContent.length > 0,
+    hasCover: coverContent.length > 0,
+    matchScore: score
+  });
 }
 
 // Switch content tabs
