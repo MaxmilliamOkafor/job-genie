@@ -152,6 +152,18 @@ function setupEventListeners() {
     loginForm.addEventListener('submit', handleConnect);
   }
 
+  // Login password toggle
+  const loginTogglePassword = document.getElementById('login-toggle-password');
+  const passwordInput = document.getElementById('password');
+  if (loginTogglePassword && passwordInput) {
+    loginTogglePassword.addEventListener('click', () => {
+      const type = passwordInput.type === 'password' ? 'text' : 'password';
+      passwordInput.type = type;
+      loginTogglePassword.querySelector('.eye-icon').textContent = type === 'password' ? '👁️' : '🙈';
+      loginTogglePassword.title = type === 'password' ? 'Show password' : 'Hide password';
+    });
+  }
+
   // Settings panel toggle
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
