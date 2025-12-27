@@ -15,6 +15,15 @@ console.log('QuantumHire AI: Advanced content script v2.0 loaded');
   console.log('QuantumHire AI: Extension marker added');
 })();
 
+// ============= CHROME RUNTIME MESSAGE LISTENER =============
+// Listen for messages from the popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'SPEED_CHANGED') {
+    console.log('QuantumHire AI: Speed changed to', message.speed, 'ms');
+    // Speed is automatically picked up from storage on next getDelayForSpeed() call
+  }
+  return true;
+});
 // ============= WEB APP COMMUNICATION =============
 // Listen for messages from the web app for auto-apply mode
 window.addEventListener('message', async (event) => {
@@ -491,9 +500,14 @@ function skipCurrentStep() {
   }
 }
 
-function getDelayForSpeed() {
-  const delays = { 1: 1000, 1.5: 666, 2: 500, 3: 333 };
-  return delays[automationState.speed] || 1000;
+// Get delay from stored speed setting (100-2000ms, default 500ms)
+async function getDelayForSpeed() {
+  try {
+    const data = await chrome.storage.local.get(['formFillSpeed']);
+    return data.formFillSpeed || 500;
+  } catch (e) {
+    return 500; // Default fallback
+  }
 }
 
 async function waitWithControls(ms) {
@@ -3431,7 +3445,7 @@ function setupPanelEvents(panel) {
         showToast('⚠️ Not authenticated - using basic profile', 'warning');
       }
       
-      await waitWithControls(getDelayForSpeed());
+      await waitWithControls(await getDelayForSpeed());
       
       // ===== STEP 2: GENERATE & ATTACH PDFs =====
       setStep(2);
@@ -3515,7 +3529,7 @@ function setupPanelEvents(panel) {
       
       // Check controls before next step
       await checkControls();
-      await waitWithControls(getDelayForSpeed());
+      await waitWithControls(await getDelayForSpeed());
       
       // ===== STEP 3: FILL FORM FIELDS & QUESTIONS =====
       setStep(3);
@@ -3783,7 +3797,7 @@ function setupPanelEvents(panel) {
       
       // Check controls before Step 4
       await checkControls();
-      await waitWithControls(getDelayForSpeed());
+      await waitWithControls(await getDelayForSpeed());
       
       // ===== STEP 4: NAVIGATE TO NEXT PAGE =====
       setStep(4);
@@ -3795,7 +3809,7 @@ function setupPanelEvents(panel) {
         showToast('🎉 Application complete! Review and click Submit.', 'success');
       } else {
         updateStatus(statusEl, '➡️', 'Step 4: Moving to next page...');
-        await waitWithControls(getDelayForSpeed());
+        await waitWithControls(await getDelayForSpeed());
         
         const navigated = await navigateToNextPage();
         if (navigated) {

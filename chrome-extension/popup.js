@@ -339,7 +339,34 @@ function setupEventListeners() {
   if (clearMemoryBtn) {
     clearMemoryBtn.addEventListener('click', handleClearMemory);
   }
+
+  // Speed slider
+  const speedSlider = document.getElementById('speed-slider');
+  if (speedSlider) {
+    speedSlider.addEventListener('input', handleSpeedChange);
+  }
 }
+
+// Handle speed slider change
+async function handleSpeedChange() {
+  const speedSlider = document.getElementById('speed-slider');
+  const speedValue = document.getElementById('speed-value');
+  if (!speedSlider) return;
+  
+  const speed = parseInt(speedSlider.value);
+  if (speedValue) speedValue.textContent = `${speed}ms`;
+  
+  await chrome.storage.local.set({ formFillSpeed: speed });
+  
+  // Notify content script of speed change
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(tab.id, { type: 'SPEED_CHANGED', speed });
+    }
+  } catch (e) {
+    // Ignore if content script not ready
+  }
 
 // Load saved connection
 async function loadConnection() {
@@ -393,18 +420,26 @@ async function loadAutomationSettings() {
       'autofillEnabled', 
       'smartApplyEnabled', 
       'autoSubmitEnabled', 
-      'autoNavigateEnabled'
+      'autoNavigateEnabled',
+      'formFillSpeed'
     ]);
     
     const autofillToggle = document.getElementById('autofill-toggle');
     const smartApplyToggle = document.getElementById('smartapply-toggle');
     const autoSubmitToggle = document.getElementById('autosubmit-toggle');
     const autoNavigateToggle = document.getElementById('autonavigate-toggle');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
     
     if (autofillToggle) autofillToggle.checked = data.autofillEnabled !== false;
     if (smartApplyToggle) smartApplyToggle.checked = data.smartApplyEnabled !== false;
     if (autoSubmitToggle) autoSubmitToggle.checked = data.autoSubmitEnabled === true;
     if (autoNavigateToggle) autoNavigateToggle.checked = data.autoNavigateEnabled !== false;
+    
+    // Load speed setting (default 500ms)
+    const speed = data.formFillSpeed || 500;
+    if (speedSlider) speedSlider.value = speed;
+    if (speedValue) speedValue.textContent = `${speed}ms`;
     
     updateAutofillUI(data.autofillEnabled !== false);
   } catch (e) {

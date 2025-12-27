@@ -353,6 +353,22 @@
           </label>
         </div>
 
+        <!-- Speed Control Slider -->
+        <div class="setting-row speed-control">
+          <div class="setting-info">
+            <span class="setting-label">🏃 Form Fill Speed</span>
+            <span class="setting-desc">Delay between field fills</span>
+          </div>
+          <div class="speed-slider-container">
+            <input type="range" id="speed-slider" min="100" max="2000" step="100" value="500">
+            <span class="speed-value" id="speed-value">500ms</span>
+          </div>
+        </div>
+        <div class="speed-labels">
+          <span>Fast</span>
+          <span>Slow</span>
+        </div>
+
         <!-- Memory Stats -->
         <div class="memory-stats" id="memory-stats">
           <span class="memory-count">💾 <span id="saved-answers-count">0</span> answers saved</span>
