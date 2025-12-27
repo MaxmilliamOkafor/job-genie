@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Job } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,14 +14,26 @@ import {
   MessageCircle,
   Gift,
   XCircle,
-  Hourglass
+  Hourglass,
+  Flag,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface JobCardProps {
   job: Job;
   onApply?: (job: Job) => void;
   onViewDetails?: (job: Job) => void;
+  onReportBrokenLink?: (job: Job) => void;
 }
 
 const statusConfig = {
@@ -84,7 +97,11 @@ function formatRelativeTime(dateString: string | null | undefined): string {
   }
 }
 
-export function JobCard({ job, onApply, onViewDetails }: JobCardProps) {
+export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: JobCardProps) {
+  const [isReporting, setIsReporting] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
+  const { toast } = useToast();
+  
   const status = statusConfig[job.status] || statusConfig.pending;
   const StatusIcon = status.icon;
   
@@ -94,6 +111,72 @@ export function JobCard({ job, onApply, onViewDetails }: JobCardProps) {
   
   // Extract salary from description if not in dedicated field
   const displaySalary = extractSalary(job.salary, (job as any).description || job.description);
+
+  const handleReportBrokenLink = async () => {
+    if (!job.url || hasReported) return;
+    
+    setIsReporting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Not logged in",
+          description: "Please log in to report broken links.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase.from('broken_link_reports').insert({
+        user_id: user.id,
+        job_id: job.id,
+        url: job.url,
+        report_reason: 'User reported as broken or redirecting to careers page',
+      });
+
+      if (error) {
+        if (error.code === '23505') {
+          toast({
+            title: "Already reported",
+            description: "This link has already been reported.",
+          });
+        } else {
+          throw error;
+        }
+      } else {
+        // Increment report count on the job
+        await supabase
+          .from('jobs')
+          .update({ report_count: (job as any).report_count ? (job as any).report_count + 1 : 1 })
+          .eq('id', job.id);
+
+        toast({
+          title: "Link reported",
+          description: "Thanks for helping improve job quality!",
+        });
+        setHasReported(true);
+        onReportBrokenLink?.(job);
+      }
+    } catch (error) {
+      console.error('Error reporting broken link:', error);
+      toast({
+        title: "Error",
+        description: "Failed to report link. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
+  // Check if URL might be problematic
+  const isPotentiallyBrokenUrl = job.url && (
+    (job as any).url_status === 'broken' ||
+    // Workable company page without job ID
+    /apply\.workable\.com\/[a-zA-Z0-9-]+\/?$/.test(job.url) ||
+    // Greenhouse board without job ID
+    /boards\.greenhouse\.io\/[a-zA-Z0-9-]+\/?$/.test(job.url)
+  );
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 hover:border-primary/30 animate-fade-in">
@@ -108,10 +191,26 @@ export function JobCard({ job, onApply, onViewDetails }: JobCardProps) {
                 </h3>
                 <p className="text-muted-foreground font-medium mt-0.5">{job.company}</p>
               </div>
-              <Badge variant="outline" className={cn('shrink-0 ml-2', status.className)}>
-                <StatusIcon className="h-3 w-3 mr-1" />
-                {status.label}
-              </Badge>
+              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                {isPotentiallyBrokenUrl && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+                          <AlertTriangle className="h-3 w-3" />
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>This link may not go directly to the job listing</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                <Badge variant="outline" className={cn(status.className)}>
+                  <StatusIcon className="h-3 w-3 mr-1" />
+                  {status.label}
+                </Badge>
+              </div>
             </div>
 
             {/* Meta Info */}
@@ -187,6 +286,34 @@ export function JobCard({ job, onApply, onViewDetails }: JobCardProps) {
               >
                 View Details
               </Button>
+              
+              {/* Report Broken Link Button */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-8 w-8",
+                        hasReported && "text-amber-500"
+                      )}
+                      onClick={handleReportBrokenLink}
+                      disabled={isReporting || hasReported || !job.url}
+                    >
+                      {isReporting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Flag className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{hasReported ? 'Link reported' : 'Report broken link'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               <Button
                 variant="ghost"
                 size="icon"
