@@ -606,36 +606,13 @@ function skipCurrentStep() {
   }
 }
 
-// Speed multiplier configuration based on user specification
-// 1x (Normal): 300-600ms typing, 1-2s page loads, ~90-120s per job
-// 1.5x: 200-400ms typing, 0.7-1.5s loads, ~60-80s per job
-// 2x: 150-300ms typing, 0.5-1s loads, ~45-60s per job
-// 3x: 100-200ms typing, 0.3-0.7s loads, ~30-45s per job
-const SPEED_CONFIGS = {
-  1: { 
-    typeMin: 300, typeMax: 600, 
-    clickMin: 400, clickMax: 600,
-    loadMin: 1000, loadMax: 2000,
-    label: 'Normal (Safest)'
-  },
-  1.5: { 
-    typeMin: 200, typeMax: 400, 
-    clickMin: 280, clickMax: 450,
-    loadMin: 700, loadMax: 1500,
-    label: 'Fast'
-  },
-  2: { 
-    typeMin: 150, typeMax: 300, 
-    clickMin: 200, clickMax: 350,
-    loadMin: 500, loadMax: 1000,
-    label: 'Faster'
-  },
-  3: { 
-    typeMin: 100, typeMax: 200, 
-    clickMin: 130, clickMax: 250,
-    loadMin: 300, loadMax: 700,
-    label: 'Aggressive'
-  }
+// Speed multiplier configuration - uses SPEED_CONFIGS from humanTyping.js
+// Extended config with page load delays (humanTyping.js has the base config)
+const SPEED_CONFIGS_EXTENDED = {
+  1: { loadMin: 1000, loadMax: 2000, label: 'Normal (Safest)' },
+  1.5: { loadMin: 700, loadMax: 1500, label: 'Fast' },
+  2: { loadMin: 500, loadMax: 1000, label: 'Faster' },
+  3: { loadMin: 300, loadMax: 700, label: 'Aggressive' }
 };
 
 // Get current speed multiplier from storage
@@ -648,10 +625,13 @@ async function getSpeedMultiplier() {
   }
 }
 
-// Get delay configuration for current speed
+// Get delay configuration for current speed (merges with humanTyping config)
 async function getSpeedConfig() {
   const multiplier = await getSpeedMultiplier();
-  return SPEED_CONFIGS[multiplier] || SPEED_CONFIGS[1];
+  const baseConfig = (typeof SPEED_CONFIGS !== 'undefined' ? SPEED_CONFIGS[multiplier] : null) || 
+    { typeMin: 300, typeMax: 600, clickMin: 400, clickMax: 600 };
+  const extendedConfig = SPEED_CONFIGS_EXTENDED[multiplier] || SPEED_CONFIGS_EXTENDED[1];
+  return { ...baseConfig, ...extendedConfig };
 }
 
 // Get typing delay with jitter for human-like behavior
