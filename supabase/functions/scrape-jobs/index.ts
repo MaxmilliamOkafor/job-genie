@@ -257,14 +257,14 @@ function parseKeywords(keywordString: string): string[] {
 function isValidDirectJobUrl(url: string): boolean {
   if (!url) return false;
   
-  // Greenhouse direct job URLs always contain /jobs/ with a job ID
-  if (url.includes('greenhouse.io') && url.includes('/jobs/')) {
-    return true;
+  // Greenhouse - MUST have /jobs/{numeric_id} pattern
+  if (url.includes('greenhouse.io')) {
+    return /\/jobs\/\d+/.test(url);
   }
   
-  // Workable direct job URLs use /j/ with a shortcode
-  if (url.includes('workable.com') && url.includes('/j/')) {
-    return true;
+  // Workable - MUST have /j/{shortcode}/ pattern (NOT /company-name/ alone)
+  if (url.includes('workable.com')) {
+    return /\/j\/[a-zA-Z0-9]+\/?/.test(url);
   }
   
   return false;

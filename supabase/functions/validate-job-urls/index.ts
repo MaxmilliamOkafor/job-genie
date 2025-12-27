@@ -132,6 +132,10 @@ async function validateSingleUrl(url: string, jobId: string): Promise<Validation
           /\/jobs\/?$/,
           /\/search\/?$/,
           /\/home\/?$/,
+          // Workable company page without job ID (e.g., apply.workable.com/company-name/)
+          /apply\.workable\.com\/[a-zA-Z0-9-]+\/?$/,
+          // Greenhouse company board without job ID
+          /boards\.greenhouse\.io\/[a-zA-Z0-9-]+\/?$/,
         ];
         
         for (const pattern of genericPatterns) {
@@ -145,6 +149,26 @@ async function validateSingleUrl(url: string, jobId: string): Promise<Validation
             };
           }
         }
+      }
+      
+      // Additional check: ensure the URL itself is a direct job link, not a careers page
+      const isDirectJobUrl = 
+        (url.includes('greenhouse.io') && /\/jobs\/\d+/.test(url)) ||
+        (url.includes('workable.com') && /\/j\/[a-zA-Z0-9]+/.test(url)) ||
+        (url.includes('myworkdayjobs.com') && /\/job\//.test(url)) ||
+        (url.includes('linkedin.com') && /\/jobs\/view\/\d+/.test(url)) ||
+        (url.includes('indeed.com') && /\/(viewjob|job)\//.test(url)) ||
+        (!url.includes('greenhouse.io') && !url.includes('workable.com') && 
+         !url.includes('myworkdayjobs.com') && !url.includes('linkedin.com') && 
+         !url.includes('indeed.com'));
+      
+      if (!isDirectJobUrl) {
+        return {
+          url,
+          jobId,
+          isValid: false,
+          error: 'URL points to a company careers page, not a specific job listing',
+        };
       }
 
       return {
