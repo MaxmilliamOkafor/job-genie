@@ -30,11 +30,36 @@ async function init() {
   await loadCredentials();
   await loadJobQueue();
   await loadAutomationSettings();
+  await loadMemoryCount();
   
   // Setup all event listeners
   setupEventListeners();
   
   console.log('QuantumHire: Ready!');
+}
+
+// Load memory count from database
+async function loadMemoryCount() {
+  try {
+    const data = await chrome.storage.local.get(['accessToken', 'userId']);
+    
+    if (!data.accessToken || !data.userId) return;
+    
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/user_memories?user_id=eq.${data.userId}&select=id`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${data.accessToken}`,
+      },
+    });
+    
+    if (response.ok) {
+      const memories = await response.json();
+      const savedAnswersCount = document.getElementById('saved-answers-count');
+      if (savedAnswersCount) savedAnswersCount.textContent = memories.length || '0';
+    }
+  } catch (e) {
+    console.log('Failed to load memory count:', e);
+  }
 }
 
 // Initialize default values on first load
@@ -231,6 +256,88 @@ function setupEventListeners() {
     viewQueueBtn.addEventListener('click', () => {
       chrome.tabs.create({ url: `${DASHBOARD_URL}?tab=queue` });
     });
+  }
+
+  // Preview Match button
+  const previewMatchBtn = document.getElementById('preview-match-btn');
+  if (previewMatchBtn) {
+    previewMatchBtn.addEventListener('click', handlePreviewMatch);
+  }
+
+  // Close preview button
+  const closePreviewBtn = document.getElementById('close-preview-btn');
+  if (closePreviewBtn) {
+    closePreviewBtn.addEventListener('click', () => {
+      const atsPreviewCard = document.getElementById('ats-preview-card');
+      if (atsPreviewCard) atsPreviewCard.classList.add('hidden');
+    });
+  }
+
+  // Proceed Apply button
+  const proceedApplyBtn = document.getElementById('proceed-apply-btn');
+  if (proceedApplyBtn) {
+    proceedApplyBtn.addEventListener('click', () => {
+      const atsPreviewCard = document.getElementById('ats-preview-card');
+      if (atsPreviewCard) atsPreviewCard.classList.add('hidden');
+      handleApplyWithAI();
+    });
+  }
+
+  // Skip Job button
+  const skipJobBtn = document.getElementById('skip-job-btn');
+  if (skipJobBtn) {
+    skipJobBtn.addEventListener('click', () => {
+      const atsPreviewCard = document.getElementById('ats-preview-card');
+      if (atsPreviewCard) atsPreviewCard.classList.add('hidden');
+      showStatus('Job skipped', 'info');
+    });
+  }
+
+  // Expand/Collapse results button
+  const expandResultsBtn = document.getElementById('expand-results-btn');
+  if (expandResultsBtn) {
+    expandResultsBtn.addEventListener('click', () => {
+      const expandedResults = document.getElementById('expanded-results');
+      if (expandedResults) {
+        expandedResults.classList.toggle('hidden');
+        expandResultsBtn.textContent = expandedResults.classList.contains('hidden') ? '▼' : '▲';
+      }
+    });
+  }
+
+  // Queue header toggle (collapse/expand queue list)
+  const queueHeader = document.getElementById('queue-header');
+  if (queueHeader) {
+    queueHeader.addEventListener('click', (e) => {
+      // Don't toggle if clicking on buttons
+      if (e.target.closest('button')) return;
+      const queueList = document.getElementById('queue-list');
+      if (queueList) queueList.classList.toggle('hidden');
+    });
+  }
+
+  // Clear queue button
+  const clearQueueBtn = document.getElementById('clear-queue-btn');
+  if (clearQueueBtn) {
+    clearQueueBtn.addEventListener('click', handleClearQueue);
+  }
+
+  // Pause batch button
+  const pauseBatchBtn = document.getElementById('pause-batch-btn');
+  if (pauseBatchBtn) {
+    pauseBatchBtn.addEventListener('click', togglePauseBatch);
+  }
+
+  // Memory toggle
+  const memoryToggle = document.getElementById('memory-toggle');
+  if (memoryToggle) {
+    memoryToggle.addEventListener('change', () => handleAutomationToggle('memoryEnabled', 'memory-toggle'));
+  }
+
+  // Clear memory button
+  const clearMemoryBtn = document.getElementById('clear-memory-btn');
+  if (clearMemoryBtn) {
+    clearMemoryBtn.addEventListener('click', handleClearMemory);
   }
 }
 
@@ -553,9 +660,41 @@ async function clearCredentials() {
 function updateQueueDisplay() {
   const queueCountEl = document.getElementById('queue-count');
   const queueStatus = document.getElementById('queue-status');
+  const queueList = document.getElementById('queue-list');
+  const batchApplyBtn = document.getElementById('batch-apply-btn');
   
   if (queueCountEl) queueCountEl.textContent = jobQueue.length;
   if (queueStatus) queueStatus.classList.toggle('hidden', jobQueue.length === 0);
+  if (batchApplyBtn) batchApplyBtn.disabled = jobQueue.length === 0;
+  
+  // Render queue list
+  if (queueList) {
+    if (jobQueue.length === 0) {
+      queueList.innerHTML = '<div class="queue-empty">No jobs in queue</div>';
+    } else {
+      queueList.innerHTML = jobQueue.map((job, index) => `
+        <div class="queue-item" data-index="${index}">
+          <div class="queue-item-info">
+            <span class="queue-item-title">${job.title}</span>
+            <span class="queue-item-company">${job.company}</span>
+          </div>
+          <button class="queue-item-remove" data-index="${index}" title="Remove">✕</button>
+        </div>
+      `).join('');
+      
+      // Add remove handlers
+      queueList.querySelectorAll('.queue-item-remove').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const index = parseInt(btn.dataset.index);
+          jobQueue.splice(index, 1);
+          await chrome.storage.local.set({ jobQueue });
+          updateQueueDisplay();
+          showStatus('Job removed from queue', 'info');
+        });
+      });
+    }
+  }
 }
 
 // Detect ATS from URL
@@ -636,11 +775,13 @@ async function detectCurrentJob() {
 // Update job card display
 function updateJobCard(job) {
   const jobDetails = document.getElementById('job-details');
+  const jobActions = document.getElementById('job-actions');
   const applyNowBtn = document.getElementById('apply-now-btn');
   const addQueueBtn = document.getElementById('add-queue-btn');
   
   if (!job || job.title === 'Unknown Position') {
     if (jobDetails) jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
+    if (jobActions) jobActions.style.display = 'none';
     if (applyNowBtn) applyNowBtn.disabled = true;
     if (addQueueBtn) addQueueBtn.disabled = true;
     return;
@@ -653,6 +794,9 @@ function updateJobCard(job) {
       ${job.location ? `<div class="job-location">📍 ${job.location}</div>` : ''}
     `;
   }
+  
+  // Show job actions (Preview Match button)
+  if (jobActions) jobActions.style.display = 'flex';
   
   if (applyNowBtn) applyNowBtn.disabled = false;
   if (addQueueBtn) addQueueBtn.disabled = false;
@@ -1187,6 +1331,155 @@ async function downloadAsPDF(type) {
 // Utility: delay
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Handle Preview Match - show ATS preview before applying
+async function handlePreviewMatch() {
+  if (!currentJob || !userProfile) {
+    showStatus('No job detected or profile not loaded', 'error');
+    return;
+  }
+
+  const atsPreviewCard = document.getElementById('ats-preview-card');
+  const previewMatchBtn = document.getElementById('preview-match-btn');
+  
+  if (previewMatchBtn) {
+    previewMatchBtn.disabled = true;
+    previewMatchBtn.innerHTML = '<span class="btn-icon">⏳</span> Analyzing...';
+  }
+
+  try {
+    // Extract keywords from job description
+    const jobText = `${currentJob.title} ${currentJob.description || ''} ${(currentJob.requirements || []).join(' ')}`.toLowerCase();
+    
+    // Get user skills
+    const userSkills = (userProfile.skills || []).map(s => 
+      typeof s === 'string' ? s.toLowerCase() : (s.name || '').toLowerCase()
+    );
+    
+    // Common tech keywords to look for
+    const techKeywords = [
+      'python', 'javascript', 'react', 'node', 'sql', 'aws', 'docker', 'kubernetes',
+      'typescript', 'java', 'c++', 'go', 'rust', 'machine learning', 'ai', 'ml',
+      'data science', 'analytics', 'api', 'rest', 'graphql', 'agile', 'scrum',
+      'leadership', 'management', 'communication', 'problem solving', 'teamwork'
+    ];
+    
+    // Find matched and missing keywords
+    const matchedKeywords = [];
+    const missingKeywords = [];
+    
+    techKeywords.forEach(keyword => {
+      if (jobText.includes(keyword)) {
+        if (userSkills.some(skill => skill.includes(keyword) || keyword.includes(skill))) {
+          matchedKeywords.push(keyword);
+        } else {
+          missingKeywords.push(keyword);
+        }
+      }
+    });
+    
+    // Calculate match score
+    const totalKeywords = matchedKeywords.length + missingKeywords.length;
+    const matchScore = totalKeywords > 0 ? Math.round((matchedKeywords.length / totalKeywords) * 100) : 85;
+    
+    // Update preview UI
+    const previewScoreCircle = document.getElementById('preview-score-circle');
+    const previewScoreText = document.getElementById('preview-score-text');
+    const matchedCount = document.getElementById('matched-count');
+    const missingCount = document.getElementById('missing-count');
+    const matchedKeywordsEl = document.getElementById('matched-keywords');
+    const missingKeywordsEl = document.getElementById('missing-keywords');
+    
+    if (previewScoreCircle) previewScoreCircle.setAttribute('stroke-dasharray', `${matchScore}, 100`);
+    if (previewScoreText) previewScoreText.textContent = `${matchScore}%`;
+    if (matchedCount) matchedCount.textContent = matchedKeywords.length;
+    if (missingCount) missingCount.textContent = missingKeywords.length;
+    
+    if (matchedKeywordsEl) {
+      matchedKeywordsEl.innerHTML = matchedKeywords.slice(0, 8).map(k => 
+        `<span class="keyword-chip matched">${k}</span>`
+      ).join('') || '<span class="no-keywords">No matches found</span>';
+    }
+    
+    if (missingKeywordsEl) {
+      missingKeywordsEl.innerHTML = missingKeywords.slice(0, 5).map(k => 
+        `<span class="keyword-chip missing">${k}</span>`
+      ).join('') || '<span class="no-keywords">All keywords matched!</span>';
+    }
+    
+    // Show preview card
+    if (atsPreviewCard) atsPreviewCard.classList.remove('hidden');
+    
+  } catch (error) {
+    console.error('Preview match error:', error);
+    showStatus('Failed to analyze match', 'error');
+  } finally {
+    if (previewMatchBtn) {
+      previewMatchBtn.disabled = false;
+      previewMatchBtn.innerHTML = '<span class="btn-icon">📊</span> Preview Match';
+    }
+  }
+}
+
+// Clear job queue
+async function handleClearQueue() {
+  if (jobQueue.length === 0) {
+    showStatus('Queue is already empty', 'info');
+    return;
+  }
+  
+  if (!confirm(`Clear all ${jobQueue.length} jobs from queue?`)) {
+    return;
+  }
+  
+  jobQueue = [];
+  await chrome.storage.local.set({ jobQueue: [] });
+  updateQueueDisplay();
+  showStatus('Queue cleared', 'success');
+}
+
+// Toggle pause batch processing
+let batchPaused = false;
+function togglePauseBatch() {
+  batchPaused = !batchPaused;
+  const pauseBatchBtn = document.getElementById('pause-batch-btn');
+  if (pauseBatchBtn) {
+    pauseBatchBtn.textContent = batchPaused ? '▶️' : '⏸️';
+    pauseBatchBtn.title = batchPaused ? 'Resume' : 'Pause';
+  }
+  showStatus(batchPaused ? 'Batch paused' : 'Batch resumed', 'info');
+}
+
+// Clear saved answer memory
+async function handleClearMemory() {
+  if (!confirm('Clear all saved answers? This cannot be undone.')) {
+    return;
+  }
+  
+  try {
+    const data = await chrome.storage.local.get(['accessToken', 'userId']);
+    
+    if (data.accessToken && data.userId) {
+      // Clear from Supabase
+      await fetch(`${SUPABASE_URL}/rest/v1/user_memories?user_id=eq.${data.userId}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${data.accessToken}`,
+        },
+      });
+    }
+    
+    // Update UI
+    const savedAnswersCount = document.getElementById('saved-answers-count');
+    if (savedAnswersCount) savedAnswersCount.textContent = '0';
+    
+    showStatus('Answer memory cleared', 'success');
+  } catch (error) {
+    console.error('Clear memory error:', error);
+    showStatus('Failed to clear memory', 'error');
+  }
 }
 
 // ============= BATCH AUTO-APPLY FUNCTIONS =============
