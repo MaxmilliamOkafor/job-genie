@@ -67,6 +67,11 @@ const PLATFORM_HANDLERS = {
     type: 'ats_form',
     needsAuth: false
   },
+  workable: {
+    detect: (url) => url.includes('workable.com') || url.includes('apply.workable.com'),
+    type: 'ats_form',
+    needsAuth: false
+  },
   dice: {
     detect: (url) => url.includes('dice.com'),
     type: 'easy_apply',

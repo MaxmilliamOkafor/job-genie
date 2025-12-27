@@ -162,6 +162,62 @@ const SelectorManager = {
       resume: ['input[type="file"]'],
       submitButton: ['button[type="submit"]'],
     },
+    workable: {
+      firstName: [
+        'input[name="firstname"]',
+        'input[data-ui="firstname"]',
+        'input[id*="firstname" i]',
+        'input[placeholder*="first name" i]',
+        'input[aria-label*="first name" i]',
+      ],
+      lastName: [
+        'input[name="lastname"]',
+        'input[data-ui="lastname"]',
+        'input[id*="lastname" i]',
+        'input[placeholder*="last name" i]',
+        'input[aria-label*="last name" i]',
+      ],
+      email: [
+        'input[name="email"]',
+        'input[type="email"]',
+        'input[data-ui="email"]',
+        'input[id*="email" i]',
+      ],
+      phone: [
+        'input[name="phone"]',
+        'input[type="tel"]',
+        'input[data-ui="phone"]',
+        'input[id*="phone" i]',
+      ],
+      linkedin: [
+        'input[name="linkedin"]',
+        'input[placeholder*="linkedin" i]',
+        'input[id*="linkedin" i]',
+      ],
+      resume: [
+        'input[type="file"]',
+        'input[name="resume"]',
+        'input[data-ui="resume"]',
+      ],
+      coverLetter: [
+        'textarea[name="cover_letter"]',
+        'textarea[data-ui="cover-letter"]',
+        'textarea[id*="cover" i]',
+        'textarea[placeholder*="cover" i]',
+      ],
+      applyButton: [
+        'button[data-ui="overview-apply-now"]',
+        'button[data-ui="apply-now"]',
+        'a[data-ui="apply-now"]',
+        'button:contains("Apply")',
+        'a:contains("Apply")',
+      ],
+      submitButton: [
+        'button[type="submit"]',
+        'button[data-ui="submit"]',
+        'button:contains("Submit")',
+      ],
+    },
   },
 
   // Custom selectors (can be updated remotely)
