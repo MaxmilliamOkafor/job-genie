@@ -3119,22 +3119,18 @@ function createFloatingPanel() {
         <span class="qh-status-text">Ready to apply</span>
       </div>
       
-      <!-- Question Review Panel -->
+      <!-- Question Review Panel (auto-applies, no manual approval needed) -->
       <div class="qh-review-panel hidden" id="qh-review-panel">
         <div class="qh-review-header">
-          <span class="qh-review-title">📋 Question Review</span>
+          <span class="qh-review-title">📋 Questions Filled</span>
           <div class="qh-ats-score-badge" id="qh-ats-score-badge">ATS: --</div>
         </div>
         <div class="qh-review-summary" id="qh-review-summary">
           <span class="qh-review-stat">✅ <span id="qh-auto-filled">0</span> Auto-filled</span>
-          <span class="qh-review-stat">⚠️ <span id="qh-needs-review">0</span> Need Review</span>
-          <span class="qh-review-stat">❓ <span id="qh-unfamiliar">0</span> Unfamiliar</span>
+          <span class="qh-review-stat">⚠️ <span id="qh-needs-review">0</span> Review</span>
+          <span class="qh-review-stat">❓ <span id="qh-unfamiliar">0</span> Manual</span>
         </div>
-        <div class="qh-review-list" id="qh-review-list"></div>
-        <div class="qh-review-actions">
-          <button class="qh-btn secondary" id="qh-approve-all">✅ Approve All</button>
-          <button class="qh-btn primary" id="qh-apply-reviewed">⚡ Apply Reviewed</button>
-        </div>
+        <div class="qh-review-list" id="qh-review-list" style="max-height: 150px;"></div>
       </div>
       
       <div class="qh-actions">
@@ -3172,8 +3168,7 @@ function createFloatingPanel() {
         
         <div class="qh-pdf-preview" id="qh-pdf-preview">
           <div class="qh-pdf-header">
-            <span>📄 Generated PDFs</span>
-            <button class="qh-pdf-preview-btn" id="qh-preview-pdfs-btn">👁️ Preview</button>
+            <span>📄 Generated Documents</span>
           </div>
           <div class="qh-pdf-cards">
             <div class="qh-pdf-card" id="qh-resume-pdf-card">
@@ -3182,10 +3177,7 @@ function createFloatingPanel() {
                 <div class="qh-pdf-name" id="qh-resume-pdf-name">Resume.pdf</div>
                 <div class="qh-pdf-size" id="qh-resume-pdf-size">-</div>
               </div>
-              <div class="qh-pdf-actions">
-                <button class="qh-pdf-action-btn" data-action="preview" data-type="resume" title="Preview">👁️</button>
-                <button class="qh-pdf-download-btn" data-type="resume" title="Download">⬇️</button>
-              </div>
+              <button class="qh-pdf-download-btn" data-type="resume" title="Download">⬇️</button>
             </div>
             <div class="qh-pdf-card" id="qh-cover-pdf-card">
               <div class="qh-pdf-icon">📝</div>
@@ -3193,10 +3185,7 @@ function createFloatingPanel() {
                 <div class="qh-pdf-name" id="qh-cover-pdf-name">CoverLetter.pdf</div>
                 <div class="qh-pdf-size" id="qh-cover-pdf-size">-</div>
               </div>
-              <div class="qh-pdf-actions">
-                <button class="qh-pdf-action-btn" data-action="preview" data-type="cover" title="Preview">👁️</button>
-                <button class="qh-pdf-download-btn" data-type="cover" title="Download">⬇️</button>
-              </div>
+              <button class="qh-pdf-download-btn" data-type="cover" title="Download">⬇️</button>
             </div>
           </div>
         </div>
@@ -3206,11 +3195,11 @@ function createFloatingPanel() {
           <button class="qh-tab" data-tab="cover">Cover Letter</button>
         </div>
         <div class="qh-tab-content" id="qh-resume-tab">
-          <textarea id="qh-resume" readonly></textarea>
+          <textarea id="qh-resume" readonly placeholder="Tailored resume text will appear here..."></textarea>
           <button class="qh-copy-btn" data-target="qh-resume">📋 Copy</button>
         </div>
         <div class="qh-tab-content hidden" id="qh-cover-tab">
-          <textarea id="qh-cover" readonly></textarea>
+          <textarea id="qh-cover" readonly placeholder="Tailored cover letter will appear here..."></textarea>
           <button class="qh-copy-btn" data-target="qh-cover">📋 Copy</button>
         </div>
       </div>
@@ -4423,49 +4412,9 @@ function setupPanelEvents(panel) {
     }
   });
   
-  // Approve All reviewed answers
-  panel.querySelector('#qh-approve-all')?.addEventListener('click', () => {
-    const reviewList = panel.querySelector('#qh-review-list');
-    reviewList.querySelectorAll('.qh-review-item').forEach(item => {
-      item.classList.remove('needs-review', 'unfamiliar');
-      item.classList.add('approved');
-    });
-    panel.querySelector('#qh-needs-review').textContent = '0';
-    panel.querySelector('#qh-unfamiliar').textContent = '0';
-    showToast('All answers approved', 'success');
-  });
+  // Auto-approve is now default - removed manual approval buttons
   
-  // Apply Reviewed answers
-  panel.querySelector('#qh-apply-reviewed')?.addEventListener('click', async () => {
-    const btn = panel.querySelector('#qh-apply-reviewed');
-    const statusEl = panel.querySelector('#qh-status');
-    btn.disabled = true;
-    
-    try {
-      updateStatus(statusEl, '📝', 'Applying reviewed answers...');
-      
-      const reviewedAnswers = JSON.parse(panel.dataset.reviewedAnswers || '{}');
-      const profileData = await chrome.storage.local.get(['userProfile']);
-      const profile = profileData.userProfile || {};
-      const jobData = extractJobDetails();
-      
-      // Fill form with reviewed answers
-      const result = await fillAllQuestions(profile, jobData, reviewedAnswers);
-      
-      updateStatus(statusEl, '✅', `Applied ${result.filledCount} answers`);
-      showToast(`✅ Applied ${result.filledCount} of ${result.totalQuestions} answers`, 'success');
-      
-      // Hide review panel
-      panel.querySelector('#qh-review-panel').classList.add('hidden');
-      
-    } catch (error) {
-      console.error('Apply reviewed error:', error);
-      updateStatus(statusEl, '❌', error.message);
-      showToast(error.message, 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  });
+  // Auto-apply reviewed answers is now default behavior in Smart Apply
   
   // Next Page
   panel.querySelector('#qh-next-page').addEventListener('click', async () => {

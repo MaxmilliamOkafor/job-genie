@@ -1490,35 +1490,82 @@ IMPORTANT:
       }
     }
 
+    // If OpenAI fails, try Lovable AI as fallback
     if (!response || !response.ok) {
       const errorText = lastError || "Unknown error";
       console.error("OpenAI API final error:", errorText);
+      console.log("Attempting Lovable AI fallback...");
       
-      if (errorText.includes("Rate limit")) {
-        return new Response(JSON.stringify({ 
-          error: "Rate limit exceeded. Please wait 30 seconds and try again.",
-          retryAfter: 30
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      
+      if (LOVABLE_API_KEY) {
+        try {
+          const lovableResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+              ],
+            }),
+          });
+          
+          if (lovableResponse.ok) {
+            console.log("Lovable AI fallback succeeded!");
+            response = lovableResponse;
+          } else {
+            const lovableError = await lovableResponse.text();
+            console.error("Lovable AI fallback failed:", lovableResponse.status, lovableError);
+            
+            // Return original OpenAI error
+            if (errorText.includes("Rate limit") || errorText.includes("quota")) {
+              return new Response(JSON.stringify({ 
+                error: "AI service temporarily unavailable. Your OpenAI quota may be exceeded. Please try again later or add credits to your OpenAI account.",
+                retryAfter: 60
+              }), {
+                status: 429,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          }
+        } catch (lovableErr) {
+          console.error("Lovable AI fallback error:", lovableErr);
+        }
       }
       
-      if (response?.status === 401) {
-        return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      // If still no valid response, return error
+      if (!response || !response.ok) {
+        if (errorText.includes("Rate limit") || errorText.includes("quota")) {
+          return new Response(JSON.stringify({ 
+            error: "Rate limit exceeded. Please wait and try again, or check your OpenAI billing.",
+            retryAfter: 30
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        
+        if (response?.status === 401) {
+          return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        
+        if (response?.status === 402 || response?.status === 403) {
+          return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        
+        throw new Error(`OpenAI API error: ${response?.status || 'unknown'}`);
       }
-      
-      if (response?.status === 402 || response?.status === 403) {
-        return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      throw new Error(`OpenAI API error: ${response?.status || 'unknown'}`);
     }
 
     const data = await response.json();
