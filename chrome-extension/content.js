@@ -1629,17 +1629,47 @@ function detectAllQuestions() {
   });
 
   // Detect TEXT inputs and TEXTAREAS that look like questions
+  // Expanded detection to catch more application questions for AI answering
   document.querySelectorAll('input[type="text"], input[type="number"], input[type="tel"], input[type="url"], textarea').forEach((input) => {
     if (input.offsetParent === null) return;
+    // Skip already-filled fields
+    if (input.value && input.value.trim() !== '') return;
+    // Skip basic form fields that are handled separately
+    if (input.type === 'email' || input.type === 'password') return;
 
     let label = '';
     const labelEl = document.querySelector(`label[for="${input.id}"]`) || input.closest('label');
     if (labelEl) label = labelEl.innerText.replace(/\*$/, '').trim();
     if (!label) label = input.getAttribute('aria-label') || input.placeholder || input.name || '';
+    
+    // Get container text for more context
+    const container = input.closest('.form-field, .question, [class*="question"], [class*="field"], fieldset, div');
+    const containerText = container?.innerText?.substring(0, 200) || '';
 
+    // Expanded pattern matching for application questions
     const isQuestion =
       label.includes('?') ||
-      /years.*experience|how many|salary|expectation|linkedin|github|portfolio|website|optional|if applicable|not applicable|n\/a/i.test(label);
+      // Experience questions
+      /years.*experience|how many|experience.*years|total.*experience/i.test(label) ||
+      // Compensation
+      /salary|expectation|compensation|pay|hourly.*rate/i.test(label) ||
+      // URLs
+      /linkedin|github|portfolio|website|personal.*site|url/i.test(label) ||
+      // Optional fields
+      /optional|if applicable|not applicable|n\/a/i.test(label) ||
+      // Behavioral/essay questions (key for AI)
+      /why.*want|why.*interested|tell.*about|describe|explain|what.*makes|motivat|strength|weakness|challenge|accomplishment|achievement/i.test(label) ||
+      /cover letter|additional.*info|anything.*else|message|comments/i.test(label) ||
+      // Skills and qualifications
+      /proficiency|skill|certif|language|tool|software|technology/i.test(label) ||
+      // Availability and logistics
+      /start.*date|available|notice|relocat|travel|commute/i.test(label) ||
+      // Education
+      /degree|major|school|gpa|graduat/i.test(label) ||
+      // References
+      /reference|referral|hear.*about|source|how.*find/i.test(label) ||
+      // Textarea elements are usually essay questions
+      (input.tagName === 'TEXTAREA' && label.length > 5);
 
     if (label && isQuestion) {
       questions.push({ type: 'text', element: input, label, id: input.id || input.name || label });
@@ -2755,8 +2785,8 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     }
   }
   
-  // Get user profile
-  const data = await chrome.storage.local.get(['userProfile']);
+  // Get user profile + access token
+  const data = await chrome.storage.local.get(['userProfile', 'accessToken']);
   const profile = data.userProfile;
   if (!profile) return { success: false, message: 'No profile found. Please connect your account.' };
   
@@ -2789,8 +2819,111 @@ async function autofillForm(tailoredData = null, atsCredentials = null, options 
     }
   }
   
-  // Step 2: Fill all questions (dropdowns, checkboxes, radios, text)
-  const questionResults = await fillAllQuestions(profile, jobData);
+  // Step 2: Detect questions and get AI answers for unfilled ones
+  const questions = detectAllQuestions();
+  let aiAnswers = {};
+  
+  // First pass: identify questions that need AI answers (not matched by knockout patterns)
+  const questionsNeedingAI = [];
+  for (const q of questions) {
+    const knockoutMatch = matchKnockoutQuestion(q.label, profile);
+    if (!knockoutMatch) {
+      questionsNeedingAI.push(q);
+    }
+  }
+  
+  // If we have questions that need AI and have access token, call the backend
+  if (questionsNeedingAI.length > 0 && data.accessToken) {
+    console.log(`QuantumHire AI: ${questionsNeedingAI.length} questions need AI answers`);
+    showToast(`🤖 Generating AI answers for ${questionsNeedingAI.length} questions...`, 'info');
+    
+    try {
+      const questionsForAI = questionsNeedingAI.map((q, i) => ({
+        id: q.id || `q_${i}`,
+        label: q.label,
+        type: q.type,
+        options: q.type === 'select' ? Array.from(q.element?.options || []).map(o => o.text).filter(t => t) : undefined,
+        required: q.element?.required || q.element?.getAttribute('aria-required') === 'true' || false
+      }));
+      
+      const aiResponse = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${data.accessToken}`
+        },
+        body: JSON.stringify({
+          questions: questionsForAI,
+          jobTitle: jobData.title || 'Position',
+          company: jobData.company || 'Company',
+          jobDescription: jobData.description || '',
+          userProfile: {
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+            email: profile.email,
+            phone: profile.phone,
+            skills: profile.skills || [],
+            workExperience: profile.work_experience || [],
+            education: profile.education || [],
+            certifications: profile.certifications || [],
+            city: profile.city,
+            state: profile.state,
+            country: profile.country,
+            citizenship: profile.citizenship,
+            willingToRelocate: profile.willing_to_relocate,
+            visaRequired: profile.visa_required,
+            veteranStatus: profile.veteran_status,
+            disability: profile.disability,
+            raceEthnicity: profile.race_ethnicity,
+            gender: profile.gender,
+            hispanicLatino: profile.hispanic_latino,
+            drivingLicense: profile.driving_license,
+            securityClearance: profile.security_clearance,
+            expectedSalary: profile.expected_salary,
+            currentSalary: profile.current_salary,
+            noticePeriod: profile.notice_period,
+            totalExperience: profile.total_experience,
+            linkedin: profile.linkedin,
+            github: profile.github,
+            portfolio: profile.portfolio,
+            highestEducation: profile.highest_education,
+            languages: profile.languages || [],
+            achievements: profile.achievements || []
+          }
+        })
+      });
+      
+      if (aiResponse.ok) {
+        const aiResult = await aiResponse.json();
+        if (aiResult.answers) {
+          aiResult.answers.forEach(a => {
+            aiAnswers[a.id] = {
+              answer: a.answer,
+              selectValue: a.selectValue,
+              confidence: a.confidence,
+              atsScore: a.atsScore,
+              needsReview: a.needsReview,
+              reasoning: a.reasoning
+            };
+          });
+          console.log(`QuantumHire AI: Received ${Object.keys(aiAnswers).length} AI answers`);
+          showToast(`✅ AI generated ${Object.keys(aiAnswers).length} answers`, 'success');
+        }
+      } else {
+        const errorText = await aiResponse.text();
+        console.error('QuantumHire AI: AI answer error:', aiResponse.status, errorText);
+        if (aiResponse.status === 400 && errorText.includes('API key')) {
+          showToast('⚠️ OpenAI API key required - add in Profile settings', 'warning');
+        }
+      }
+    } catch (aiError) {
+      console.error('QuantumHire AI: AI request error:', aiError);
+    }
+  }
+  
+  // Step 2b: Fill all questions with AI answers included
+  const questionResults = await fillAllQuestions(profile, jobData, aiAnswers);
   results.questions = questionResults.filledCount;
   
   // Step 3: Handle file uploads - detect button-based AND input-based upload sections
