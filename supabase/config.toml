@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.report-broken-link]
 verify_jwt = false
+
+[functions.live-jobs-feed]
+verify_jwt = false
