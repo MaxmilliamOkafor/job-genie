@@ -1096,49 +1096,82 @@ IMPORTANT:
 - Include atsScore (0-100) for each answer
 - Include brief reasoning explaining why you chose each answer`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${userOpenAIKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
+    // Retry logic for rate limits
+    const maxRetries = 3;
+    let lastError: string | null = null;
+    let response: Response | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`OpenAI API attempt ${attempt}/${maxRetries}...`);
+      
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userOpenAIKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          max_tokens: 4000,
+          temperature: 0.7,
+        }),
+      });
+      
+      if (response.ok) {
+        break; // Success, exit retry loop
+      }
+      
       const errorText = await response.text();
-      console.error("OpenAI API error:", response.status, errorText);
+      console.error(`OpenAI API error (attempt ${attempt}):`, response.status, errorText);
       
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again." }), {
+        lastError = "Rate limit exceeded";
+        if (attempt < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s
+          const waitTime = Math.pow(2, attempt) * 1000;
+          console.log(`Rate limited. Waiting ${waitTime}ms before retry...`);
+          await new Promise(r => setTimeout(r, waitTime));
+          continue;
+        }
+      } else {
+        lastError = errorText;
+        break; // Non-rate-limit error, don't retry
+      }
+    }
+
+    if (!response || !response.ok) {
+      const errorText = lastError || "Unknown error";
+      console.error("OpenAI API final error:", errorText);
+      
+      if (errorText.includes("Rate limit")) {
+        return new Response(JSON.stringify({ 
+          error: "Rate limit exceeded. Please wait 30 seconds and try again.",
+          retryAfter: 30
+        }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      if (response.status === 401) {
+      if (response?.status === 401) {
         return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      if (response.status === 402 || response.status === 403) {
+      if (response?.status === 402 || response?.status === 403) {
         return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response?.status || 'unknown'}`);
     }
 
     const data = await response.json();

@@ -3760,77 +3760,107 @@ function setupPanelEvents(panel) {
       let knockoutRisks = [];
       
       if (profileData.accessToken) {
-        try {
-          const response = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${profileData.accessToken}`
-            },
-            body: JSON.stringify({
-              questions: questionsForAI,
-              jobTitle: jobData.title,
-              company: jobData.company,
-              jobDescription: jobData.description,
-              userProfile: {
-                firstName: profile.first_name,
-                lastName: profile.last_name,
-                email: profile.email,
-                phone: profile.phone,
-                skills: profile.skills || [],
-                workExperience: profile.work_experience || [],
-                education: profile.education || [],
-                certifications: profile.certifications || [],
-                city: profile.city,
-                state: profile.state,
-                country: profile.country,
-                citizenship: profile.citizenship,
-                willingToRelocate: profile.willing_to_relocate,
-                visaRequired: profile.visa_required,
-                veteranStatus: profile.veteran_status,
-                disability: profile.disability,
-                raceEthnicity: profile.race_ethnicity,
-                drivingLicense: profile.driving_license,
-                securityClearance: profile.security_clearance,
-                expectedSalary: profile.expected_salary,
-                currentSalary: profile.current_salary,
-                noticePeriod: profile.notice_period,
-                totalExperience: profile.total_experience,
-                linkedin: profile.linkedin,
-                github: profile.github,
-                portfolio: profile.portfolio,
-                highestEducation: profile.highest_education,
-                languages: profile.languages || [],
-                achievements: profile.achievements || []
-              }
-            })
-          });
-          
-          if (response.ok) {
-            const aiResult = await response.json();
-            overallAtsScore = aiResult.overallAtsScore || 0;
-            reviewRecommendations = aiResult.reviewRecommendations || [];
-            knockoutRisks = aiResult.knockoutRisks || [];
+        const maxRetries = 3;
+        let retryCount = 0;
+        let success = false;
+        
+        while (retryCount < maxRetries && !success) {
+          try {
+            updateStatus(statusEl, '🤖', `Analyzing with AI... ${retryCount > 0 ? `(retry ${retryCount})` : ''}`);
             
-            if (aiResult.answers) {
-              aiResult.answers.forEach(a => {
-                aiAnswers[a.id] = {
-                  answer: a.answer,
-                  selectValue: a.selectValue,
-                  confidence: a.confidence,
-                  atsScore: a.atsScore,
-                  needsReview: a.needsReview,
-                  reasoning: a.reasoning
-                };
-              });
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/answer-questions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${profileData.accessToken}`
+              },
+              body: JSON.stringify({
+                questions: questionsForAI,
+                jobTitle: jobData.title,
+                company: jobData.company,
+                jobDescription: jobData.description,
+                userProfile: {
+                  firstName: profile.first_name,
+                  lastName: profile.last_name,
+                  email: profile.email,
+                  phone: profile.phone,
+                  skills: profile.skills || [],
+                  workExperience: profile.work_experience || [],
+                  education: profile.education || [],
+                  certifications: profile.certifications || [],
+                  city: profile.city,
+                  state: profile.state,
+                  country: profile.country,
+                  citizenship: profile.citizenship,
+                  willingToRelocate: profile.willing_to_relocate,
+                  visaRequired: profile.visa_required,
+                  veteranStatus: profile.veteran_status,
+                  disability: profile.disability,
+                  raceEthnicity: profile.race_ethnicity,
+                  drivingLicense: profile.driving_license,
+                  securityClearance: profile.security_clearance,
+                  expectedSalary: profile.expected_salary,
+                  currentSalary: profile.current_salary,
+                  noticePeriod: profile.notice_period,
+                  totalExperience: profile.total_experience,
+                  linkedin: profile.linkedin,
+                  github: profile.github,
+                  portfolio: profile.portfolio,
+                  highestEducation: profile.highest_education,
+                  languages: profile.languages || [],
+                  achievements: profile.achievements || []
+                }
+              })
+            });
+            
+            if (response.ok) {
+              const aiResult = await response.json();
+              overallAtsScore = aiResult.overallAtsScore || 0;
+              reviewRecommendations = aiResult.reviewRecommendations || [];
+              knockoutRisks = aiResult.knockoutRisks || [];
+              
+              if (aiResult.answers) {
+                aiResult.answers.forEach(a => {
+                  aiAnswers[a.id] = {
+                    answer: a.answer,
+                    selectValue: a.selectValue,
+                    confidence: a.confidence,
+                    atsScore: a.atsScore,
+                    needsReview: a.needsReview,
+                    reasoning: a.reasoning
+                  };
+                });
+              }
+              console.log('QuantumHire AI: AI answered', Object.keys(aiAnswers).length, 'questions');
+              success = true;
+            } else if (response.status === 429) {
+              // Rate limit - wait and retry
+              retryCount++;
+              const errorData = await response.json().catch(() => ({}));
+              const waitTime = errorData.retryAfter || Math.pow(2, retryCount) * 5;
+              
+              if (retryCount < maxRetries) {
+                updateStatus(statusEl, '⏳', `Rate limited. Waiting ${waitTime}s before retry...`);
+                showToast(`Rate limited. Retrying in ${waitTime}s...`, 'warning');
+                await new Promise(r => setTimeout(r, waitTime * 1000));
+              } else {
+                throw new Error(`Rate limit exceeded after ${maxRetries} retries. Please wait a moment and try again.`);
+              }
+            } else {
+              const errorText = await response.text();
+              console.error('AI response error:', errorText);
+              throw new Error('AI analysis failed');
             }
-            console.log('QuantumHire AI: AI answered', Object.keys(aiAnswers).length, 'questions');
-          } else {
-            console.error('AI response error:', await response.text());
+          } catch (aiError) {
+            if (retryCount >= maxRetries - 1) {
+              console.error('AI analysis error:', aiError);
+              showToast(`⚠️ ${aiError.message || 'AI analysis failed'}. Continuing with local answers.`, 'warning');
+              success = true; // Continue with whatever answers we have
+            } else {
+              retryCount++;
+            }
           }
-        } catch (aiError) {
-          console.error('AI analysis error:', aiError);
         }
       }
       
@@ -4451,6 +4481,15 @@ async function initialize() {
   if (!document.getElementById('quantumhire-panel')) {
     createFloatingPanel();
   }
+  
+  // Monitor for panel removal and re-create if needed (some sites remove injected elements)
+  const panelObserver = new MutationObserver(() => {
+    if (!document.getElementById('quantumhire-panel') && !document.querySelector('.qh-invalid-panel')) {
+      console.log('QuantumHire AI: Panel was removed, re-creating...');
+      createFloatingPanel();
+    }
+  });
+  panelObserver.observe(document.body, { childList: true, subtree: false });
   
   // Auto-trigger autofill if we have stored profile and this looks like an application page
   const shouldAutoFill = platform.name !== 'generic' || 
