@@ -556,13 +556,38 @@
       const resumePdf = result.resumePdf;
       const coverLetterPdf = result.coverLetterPdf;
 
-      // Try to auto-attach if the form has file inputs
-      const resumeInput = findFileInput('cv');
-      const coverInput = findFileInput('cover');
-
       // Prefer filenames returned by backend (based on user profile)
       const resumeName = result.cvFileName || 'Tailored_CV.pdf';
       const coverName = result.coverLetterFileName || 'Tailored_Cover_Letter.pdf';
+
+      // CRITICAL: Store generated documents for popup viewing
+      const generatedDocuments = {
+        cv: result.tailoredResume || null,
+        coverLetter: result.tailoredCoverLetter || null,
+        cvPdf: resumePdf || null,
+        coverPdf: coverLetterPdf || null,
+        cvFileName: resumeName,
+        coverFileName: coverName,
+        matchScore: result.matchScore || 0,
+        matchedKeywords: result.keywordsMatched || [],
+        missingKeywords: result.keywordsMissing || []
+      };
+
+      await storageSet({
+        ats_lastGeneratedDocuments: generatedDocuments,
+        ats_lastJob: job
+      });
+
+      console.log('[ATS Tailor] Documents saved for popup viewing:', {
+        hasCv: !!resumePdf,
+        hasCover: !!coverLetterPdf,
+        cvFileName: resumeName,
+        coverFileName: coverName
+      });
+
+      // Try to auto-attach if the form has file inputs
+      const resumeInput = findFileInput('cv');
+      const coverInput = findFileInput('cover');
 
       let attachedAny = false;
 
