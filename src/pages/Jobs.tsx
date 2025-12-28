@@ -94,6 +94,9 @@ const Jobs = () => {
   const [lastSearchResultCount, setLastSearchResultCount] = useState<number | null>(null);
   const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
   const [isFetchingNew, setIsFetchingNew] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
+  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -379,8 +382,8 @@ const Jobs = () => {
   }, [searchInput, searchJobs, refetch]);
 
   // Fetch fresh new jobs using live-jobs function
-  const handleFetchNewJobs = useCallback(async () => {
-    if (!user) return;
+  const handleFetchNewJobs = useCallback(async (silent = false) => {
+    if (!user || isFetchingNew) return;
     
     setIsFetchingNew(true);
     try {
@@ -417,6 +420,8 @@ const Jobs = () => {
       
       if (error) throw error;
       
+      setLastFetchTime(new Date());
+      
       if (data?.success) {
         await refetch();
         const newCount = data.totalFiltered || 0;
@@ -426,19 +431,48 @@ const Jobs = () => {
           });
           // Reset filter to show new jobs
           setPostedWithinFilter('1h');
-        } else {
+        } else if (!silent) {
           toast.info('No new jobs found', {
-            description: `Checked ${data.totalFetched || 0} listings - all duplicates or older`,
+            description: `Checked ${data.totalFetched || 0} listings`,
           });
         }
       }
     } catch (error) {
       console.error('Error fetching new jobs:', error);
-      toast.error('Failed to fetch new jobs');
+      if (!silent) {
+        toast.error('Failed to fetch new jobs');
+      }
     } finally {
       setIsFetchingNew(false);
     }
-  }, [user, refetch]);
+  }, [user, refetch, isFetchingNew]);
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    if (!autoRefreshEnabled || !user) {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+        autoRefreshIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Initial fetch on mount
+    handleFetchNewJobs(true);
+
+    // Set up 5-minute interval
+    autoRefreshIntervalRef.current = setInterval(() => {
+      handleFetchNewJobs(true);
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+        autoRefreshIntervalRef.current = null;
+      }
+    };
+  }, [autoRefreshEnabled, user]);
+
 
   // Validate job URLs
   const handleValidateLinks = useCallback(async () => {
@@ -963,20 +997,35 @@ const Jobs = () => {
               )}
             </div>
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleFetchNewJobs}
-              disabled={isFetchingNew}
-              className="gap-2"
-            >
-              {isFetchingNew ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              {lastFetchTime && (
+                <span className="text-xs text-muted-foreground">
+                  Last: {lastFetchTime.toLocaleTimeString()}
+                </span>
               )}
-              Fetch New Jobs
-            </Button>
+              <Button
+                variant={autoRefreshEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                className="gap-1 h-7 px-2 text-xs"
+              >
+                {autoRefreshEnabled ? 'Auto: ON' : 'Auto: OFF'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleFetchNewJobs(false)}
+                disabled={isFetchingNew}
+                className="gap-2"
+              >
+                {isFetchingNew ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Fetch Now
+              </Button>
+            </div>
           </div>
         )}
 
