@@ -211,6 +211,18 @@ class ATSTailor {
     document.getElementById('todayCount').textContent = this.stats.today;
     document.getElementById('totalCount').textContent = this.stats.total;
     document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
+    
+    // Initialize auto-tailor toggle from stored state
+    const autoTailorToggle = document.getElementById('autoTailorToggle');
+    if (autoTailorToggle) {
+      autoTailorToggle.checked = this.autoTailorEnabled;
+    }
+    
+    // Show documents card if we have previously generated documents
+    if (this.generatedDocuments.cv || this.generatedDocuments.coverLetter) {
+      document.getElementById('documentsCard')?.classList.remove('hidden');
+      this.updatePreviewContent();
+    }
   }
 
   setStatus(text, type = 'ready') {
@@ -469,9 +481,11 @@ class ATSTailor {
 
       this.generatedDocuments = {
         cv: result.tailoredResume,
-        coverLetter: result.coverLetter,
+        coverLetter: result.tailoredCoverLetter || result.coverLetter,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
+        cvFileName: result.resumePdfFileName || result.cvFileName || `${result.candidateName || 'Applicant'}_CV.pdf`,
+        coverFileName: result.coverLetterPdfFileName || result.coverLetterFileName || `${result.candidateName || 'Applicant'}_CoverLetter.pdf`,
       };
 
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
@@ -508,13 +522,17 @@ class ATSTailor {
   downloadDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    // Use the filename from backend which includes user's name
+    const filename = type === 'cv' 
+      ? (this.generatedDocuments.cvFileName || `Applicant_CV.pdf`)
+      : (this.generatedDocuments.coverFileName || `Applicant_CoverLetter.pdf`);
     
     if (doc) {
       const blob = this.base64ToBlob(doc, 'application/pdf');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${this.currentJob?.company || 'Tailored'}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.pdf`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
       this.showToast('Downloaded!', 'success');
@@ -523,7 +541,7 @@ class ATSTailor {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${this.currentJob?.company || 'Tailored'}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.txt`;
+      a.download = filename.replace('.pdf', '.txt');
       a.click();
       URL.revokeObjectURL(url);
       this.showToast('Downloaded!', 'success');
@@ -544,6 +562,10 @@ class ATSTailor {
   async attachDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    // Use filename from backend which includes user's name
+    const filename = type === 'cv' 
+      ? (this.generatedDocuments.cvFileName || `Applicant_CV.pdf`)
+      : (this.generatedDocuments.coverFileName || `Applicant_CoverLetter.pdf`);
     
     if (!doc && !textDoc) {
       this.showToast('No document available', 'error');
@@ -553,8 +575,6 @@ class ATSTailor {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error('No active tab');
-
-      const filename = `${(this.currentJob?.company || 'Tailored').replace(/[^a-z0-9-_]+/gi, '_')}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.pdf`;
 
       await chrome.tabs.sendMessage(tab.id, {
         action: 'attachDocument',
