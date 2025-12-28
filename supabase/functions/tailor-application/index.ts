@@ -160,83 +160,114 @@ function validateRequest(data: any): TailorRequest {
   };
 }
 
-// Smart location logic - prioritize job listing location for ATS compliance
-function getSmartLocation(jdLocation: string | undefined, jdDescription: string, profileCity?: string, profileCountry?: string): string {
-  // Priority 1: If job listing has a specific location, use it directly for ATS matching
-  // Examples: "Cardiff, London or Remote (UK)", "New York, NY", "Remote (US)"
+// Extract city from job location/description/URL for ATS optimization
+function extractJobCity(jdLocation: string | undefined, jdDescription: string, jobUrl?: string): string | null {
+  // Common city patterns to extract
+  const cityPatterns = [
+    // Major US cities
+    'New York', 'San Francisco', 'Los Angeles', 'Chicago', 'Seattle', 'Austin', 'Boston', 'Denver', 'Atlanta', 'Dallas', 'Houston', 'Miami', 'Phoenix', 'Philadelphia', 'San Diego', 'San Jose', 'Portland', 'Minneapolis', 'Detroit', 'Washington DC', 'D.C.',
+    // Major UK cities  
+    'London', 'Manchester', 'Birmingham', 'Edinburgh', 'Glasgow', 'Bristol', 'Cambridge', 'Oxford', 'Cardiff', 'Leeds', 'Liverpool', 'Newcastle', 'Belfast', 'Southampton', 'Nottingham', 'Sheffield',
+    // Major EU cities
+    'Dublin', 'Paris', 'Berlin', 'Amsterdam', 'Munich', 'Frankfurt', 'Vienna', 'Zurich', 'Barcelona', 'Madrid', 'Milan', 'Rome', 'Stockholm', 'Copenhagen', 'Oslo', 'Helsinki', 'Brussels', 'Lisbon', 'Prague', 'Warsaw',
+    // Major Canadian cities
+    'Toronto', 'Vancouver', 'Montreal', 'Ottawa', 'Calgary', 'Edmonton',
+    // Major APAC cities
+    'Singapore', 'Hong Kong', 'Tokyo', 'Sydney', 'Melbourne', 'Auckland', 'Bangalore', 'Mumbai', 'Delhi', 'Hyderabad', 'Seoul', 'Shanghai', 'Beijing',
+    // Ireland cities
+    'Cork', 'Galway', 'Limerick', 'Waterford'
+  ];
+  
+  // Priority 1: Extract from job location field
   if (jdLocation && jdLocation.trim().length > 0) {
-    const cleanLocation = jdLocation.trim();
-    // If the job location contains remote, just use it as-is
-    if (/remote|hybrid/i.test(cleanLocation)) {
-      return cleanLocation;
+    const locationText = jdLocation.trim();
+    
+    // Check for direct city match in location
+    for (const city of cityPatterns) {
+      if (new RegExp(`\\b${city}\\b`, 'i').test(locationText)) {
+        return city;
+      }
     }
-    // For specific locations, append "| Open to relocation" for flexibility
-    return `${cleanLocation} | Open to relocation`;
+    
+    // If location is simple (no "or", no "Remote" as primary), use first part
+    if (!/\bremote\b/i.test(locationText) && !locationText.includes(',') && locationText.length < 50) {
+      return locationText;
+    }
+    
+    // Extract first city from "City, State" or "City or Remote" patterns
+    const firstCityMatch = locationText.match(/^([A-Za-z\s]+?)(?:,|\s+or\s+|\s*\|)/i);
+    if (firstCityMatch && firstCityMatch[1].length > 2) {
+      return firstCityMatch[1].trim();
+    }
   }
   
-  const jdText = jdDescription.toLowerCase();
-  
-  // Priority 2: Extract location from job description if not in location field
-  // US locations
-  if (/\b(united states|usa|u\.s\.|us only|us-based|new york|san francisco|seattle|austin|boston|chicago|los angeles|denver)\b/i.test(jdText)) {
-    return "Remote (Open to US relocation)";
+  // Priority 2: Extract from URL params (e.g., ?city=London)
+  if (jobUrl) {
+    try {
+      const url = new URL(jobUrl);
+      const cityParam = url.searchParams.get('city') || url.searchParams.get('location');
+      if (cityParam) {
+        for (const city of cityPatterns) {
+          if (new RegExp(`\\b${city}\\b`, 'i').test(cityParam)) {
+            return city;
+          }
+        }
+        return cityParam;
+      }
+    } catch (e) {
+      // URL parsing failed, continue
+    }
   }
   
-  // UK locations
-  if (/\b(united kingdom|uk|london|manchester|birmingham|edinburgh|glasgow|bristol|cambridge|oxford|cardiff)\b/i.test(jdText)) {
-    // Use profile location + UK relocation willingness
+  // Priority 3: Extract from job description
+  const descLower = jdDescription.toLowerCase();
+  
+  // Look for "Based in [City]" or "[City] Role" patterns
+  const basedInMatch = jdDescription.match(/based in\s+([A-Za-z\s]+?)(?:\.|,|\s+and|\s+or|$)/i);
+  if (basedInMatch && basedInMatch[1].length > 2) {
+    const potentialCity = basedInMatch[1].trim();
+    for (const city of cityPatterns) {
+      if (new RegExp(`\\b${city}\\b`, 'i').test(potentialCity)) {
+        return city;
+      }
+    }
+  }
+  
+  // Check for any city mention in description
+  for (const city of cityPatterns) {
+    if (new RegExp(`\\b${city}\\b`, 'i').test(jdDescription)) {
+      return city;
+    }
+  }
+  
+  return null;
+}
+
+// Smart location logic - formats as "[CITY] | open to relocation" for CV ONLY
+function getSmartLocation(jdLocation: string | undefined, jdDescription: string, profileCity?: string, profileCountry?: string, jobUrl?: string): string {
+  // Extract city from job listing
+  const extractedCity = extractJobCity(jdLocation, jdDescription, jobUrl);
+  
+  // If we found a city in the job listing, use it with relocation suffix
+  if (extractedCity) {
+    return `${extractedCity} | open to relocation`;
+  }
+  
+  // Check if job is remote
+  const jdText = `${jdLocation || ''} ${jdDescription}`.toLowerCase();
+  if (/\b(remote|worldwide|global|anywhere|distributed|work from home|wfh)\b/.test(jdText)) {
     if (profileCity && profileCountry) {
-      return `${profileCity}, ${profileCountry} | Open to UK relocation`;
+      return `${profileCity} | Remote`;
     }
-    return "Dublin, Ireland | Open to UK relocation";
+    return "Remote | open to relocation";
   }
   
-  // Ireland/Dublin
-  if (/\b(ireland|dublin|cork|galway|limerick)\b/i.test(jdText)) {
-    if (profileCity && profileCountry) {
-      return `${profileCity}, ${profileCountry}`;
-    }
-    return "Dublin, Ireland";
+  // Fallback to profile location with relocation suffix
+  if (profileCity) {
+    return `${profileCity} | open to relocation`;
   }
   
-  // Europe/EU
-  if (/\b(europe|eu|european union|germany|france|netherlands|spain|italy|switzerland|austria|belgium|portugal|sweden|norway|denmark|finland)\b/i.test(jdText)) {
-    if (profileCity && profileCountry) {
-      return `${profileCity}, ${profileCountry} (EU)`;
-    }
-    return "Dublin, Ireland (EU)";
-  }
-  
-  // Canada
-  if (/\b(canada|canadian|toronto|vancouver|montreal|ottawa|calgary)\b/i.test(jdText)) {
-    if (profileCity && profileCountry) {
-      return `${profileCity}, ${profileCountry} | Open to Canada relocation`;
-    }
-    return "Dublin, Ireland | Open to Canada relocation";
-  }
-  
-  // Remote worldwide
-  if (/\b(remote|worldwide|global|anywhere|distributed|work from home|wfh)\b/i.test(jdText)) {
-    if (profileCity && profileCountry) {
-      return `${profileCity}, ${profileCountry} | Remote`;
-    }
-    return "Remote | Open to relocation worldwide";
-  }
-  
-  // APAC
-  if (/\b(asia|apac|singapore|hong kong|tokyo|japan|australia|sydney|melbourne)\b/i.test(jdText)) {
-    if (profileCity && profileCountry) {
-      return `${profileCity}, ${profileCountry} | Open to APAC relocation`;
-    }
-    return "Remote | Open to APAC relocation";
-  }
-  
-  // Priority 3: Fallback to profile location with "Open to relocation"
-  if (profileCity && profileCountry) {
-    return `${profileCity}, ${profileCountry} | Open to relocation`;
-  }
-  
-  return "Remote | Open to relocation";
+  return "Remote | open to relocation";
 }
 
 // Jobscan-style keyword extraction - enhanced for ATS ranking
@@ -619,8 +650,8 @@ serve(async (req) => {
 
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
-    // Smart location logic
-    const smartLocation = getSmartLocation(location, description, userProfile.city, userProfile.country);
+    // Smart location logic - extract job city and format as "[CITY] | open to relocation"
+    const smartLocation = getSmartLocation(location, description, userProfile.city, userProfile.country, jobId);
     console.log(`Smart location determined: ${smartLocation}`);
     
     // Jobscan keyword extraction
