@@ -359,6 +359,97 @@
     }, 4000);
   }
 
+  // ============ CITY EXTRACTION FOR ATS LOCATION OPTIMIZATION ============
+  // Extract city from job location/description/URL for CV summary: "[CITY] | open to relocation"
+  const KNOWN_CITIES = [
+    // Major US cities
+    'New York', 'San Francisco', 'Los Angeles', 'Chicago', 'Seattle', 'Austin', 'Boston', 'Denver', 'Atlanta', 'Dallas', 'Houston', 'Miami', 'Phoenix', 'Philadelphia', 'San Diego', 'San Jose', 'Portland', 'Minneapolis', 'Detroit', 'Washington DC', 'D.C.',
+    // Major UK cities  
+    'London', 'Manchester', 'Birmingham', 'Edinburgh', 'Glasgow', 'Bristol', 'Cambridge', 'Oxford', 'Cardiff', 'Leeds', 'Liverpool', 'Newcastle', 'Belfast', 'Southampton', 'Nottingham', 'Sheffield',
+    // Major EU cities
+    'Dublin', 'Paris', 'Berlin', 'Amsterdam', 'Munich', 'Frankfurt', 'Vienna', 'Zurich', 'Barcelona', 'Madrid', 'Milan', 'Rome', 'Stockholm', 'Copenhagen', 'Oslo', 'Helsinki', 'Brussels', 'Lisbon', 'Prague', 'Warsaw',
+    // Major Canadian cities
+    'Toronto', 'Vancouver', 'Montreal', 'Ottawa', 'Calgary', 'Edmonton',
+    // Major APAC cities
+    'Singapore', 'Hong Kong', 'Tokyo', 'Sydney', 'Melbourne', 'Auckland', 'Bangalore', 'Mumbai', 'Delhi', 'Hyderabad', 'Seoul', 'Shanghai', 'Beijing',
+    // Ireland cities
+    'Cork', 'Galway', 'Limerick', 'Waterford'
+  ];
+
+  function extractJobCity(locationText, descriptionText, jobUrl) {
+    // Priority 1: Extract from location field
+    if (locationText && locationText.trim().length > 0) {
+      const locText = locationText.trim();
+      
+      // Check for direct city match
+      for (const city of KNOWN_CITIES) {
+        if (new RegExp(`\\b${city}\\b`, 'i').test(locText)) {
+          console.log(`[ATS Tailor] Extracted city from location: ${city}`);
+          return city;
+        }
+      }
+      
+      // If location is simple and not primarily "Remote", use first part
+      if (!/^remote$/i.test(locText) && !locText.includes(',') && locText.length < 50) {
+        console.log(`[ATS Tailor] Using location as city: ${locText}`);
+        return locText;
+      }
+      
+      // Extract first city from "City, State" or "City or Remote" patterns
+      const firstCityMatch = locText.match(/^([A-Za-z\s]+?)(?:,|\s+or\s+|\s*\|)/i);
+      if (firstCityMatch && firstCityMatch[1].length > 2) {
+        console.log(`[ATS Tailor] Extracted city from pattern: ${firstCityMatch[1].trim()}`);
+        return firstCityMatch[1].trim();
+      }
+    }
+    
+    // Priority 2: Extract from URL params (e.g., ?city=London)
+    if (jobUrl) {
+      try {
+        const url = new URL(jobUrl);
+        const cityParam = url.searchParams.get('city') || url.searchParams.get('location');
+        if (cityParam) {
+          for (const city of KNOWN_CITIES) {
+            if (new RegExp(`\\b${city}\\b`, 'i').test(cityParam)) {
+              console.log(`[ATS Tailor] Extracted city from URL param: ${city}`);
+              return city;
+            }
+          }
+          console.log(`[ATS Tailor] Using URL city param: ${cityParam}`);
+          return cityParam;
+        }
+      } catch (e) {
+        // URL parsing failed
+      }
+    }
+    
+    // Priority 3: Extract from job description
+    if (descriptionText) {
+      // Look for "Based in [City]" pattern
+      const basedInMatch = descriptionText.match(/based in\s+([A-Za-z\s]+?)(?:\.|,|\s+and|\s+or|$)/i);
+      if (basedInMatch && basedInMatch[1].length > 2) {
+        const potentialCity = basedInMatch[1].trim();
+        for (const city of KNOWN_CITIES) {
+          if (new RegExp(`\\b${city}\\b`, 'i').test(potentialCity)) {
+            console.log(`[ATS Tailor] Extracted city from "based in" pattern: ${city}`);
+            return city;
+          }
+        }
+      }
+      
+      // Check for any known city in description
+      for (const city of KNOWN_CITIES) {
+        if (new RegExp(`\\b${city}\\b`, 'i').test(descriptionText)) {
+          console.log(`[ATS Tailor] Extracted city from description: ${city}`);
+          return city;
+        }
+      }
+    }
+    
+    console.log('[ATS Tailor] No city extracted');
+    return null;
+  }
+
   function extractJobInfoFromDom() {
     const hostname = window.location.hostname;
 
@@ -481,11 +572,15 @@
 
     const raw = getText(s.description);
     const description = raw && raw.trim().length > 80 ? raw.trim().slice(0, 3000) : '';
+    
+    // Extract city for ATS location optimization
+    const extractedCity = extractJobCity(location, description, window.location.href);
 
     return {
       title: title.substring(0, 200),
       company: company.substring(0, 100),
       location: location.substring(0, 100),
+      extractedCity: extractedCity, // For "[CITY] | open to relocation" format in CV
       description,
       url: window.location.href,
     };
@@ -527,6 +622,11 @@
     await storageSet({ ats_lastTailoredUrl: job.url, ats_lastTailoredAt: now });
 
     showNotification('ATS Tailor: Generating CV & cover letter...', 'info');
+    
+    // Log extracted city for debugging
+    if (job.extractedCity) {
+      console.log(`[ATS Tailor] Using extracted city for CV location: "${job.extractedCity} | open to relocation"`);
+    }
 
     try {
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
@@ -540,6 +640,7 @@
           jobTitle: job.title,
           company: job.company,
           location: job.location,
+          extractedCity: job.extractedCity, // For "[CITY] | open to relocation" CV optimization
           jobDescription: job.description,
           jobUrl: job.url,
         }),
