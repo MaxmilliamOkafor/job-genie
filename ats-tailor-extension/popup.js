@@ -27,7 +27,17 @@ class ATSTailor {
   constructor() {
     this.session = null;
     this.currentJob = null;
-    this.generatedDocuments = { cv: null, coverLetter: null, cvPdf: null, coverPdf: null, cvFileName: null, coverFileName: null };
+    this.generatedDocuments = { 
+      cv: null, 
+      coverLetter: null, 
+      cvPdf: null, 
+      coverPdf: null, 
+      cvFileName: null, 
+      coverFileName: null,
+      matchScore: 0,
+      matchedKeywords: [],
+      missingKeywords: []
+    };
     this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
     this.currentPreviewTab = 'cv';
     this.autoTailorEnabled = true;
@@ -142,9 +152,8 @@ class ATSTailor {
     document.getElementById('refreshJob')?.addEventListener('click', () => this.detectCurrentJob());
     document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocument('cv'));
     document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocument('cover'));
-    document.getElementById('attachCv')?.addEventListener('click', () => this.attachDocument('cv'));
-    document.getElementById('attachCover')?.addEventListener('click', () => this.attachDocument('cover'));
     document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
+    document.getElementById('copyContent')?.addEventListener('click', () => this.copyCurrentContent());
 
     // Settings
     document.getElementById('autoTailorToggle')?.addEventListener('change', (e) => {
@@ -162,6 +171,20 @@ class ATSTailor {
     document.getElementById('password')?.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.login();
     });
+  }
+
+  copyCurrentContent() {
+    const content = this.currentPreviewTab === 'cv' 
+      ? this.generatedDocuments.cv 
+      : this.generatedDocuments.coverLetter;
+    
+    if (content) {
+      navigator.clipboard.writeText(content)
+        .then(() => this.showToast('Copied to clipboard!', 'success'))
+        .catch(() => this.showToast('Failed to copy', 'error'));
+    } else {
+      this.showToast('No content to copy', 'error');
+    }
   }
 
   switchPreviewTab(tab) {
@@ -184,12 +207,44 @@ class ATSTailor {
       : this.generatedDocuments.coverLetter;
     
     if (content) {
-      previewContent.textContent = content;
+      // Format content for better readability
+      previewContent.innerHTML = this.formatPreviewContent(content, this.currentPreviewTab);
       previewContent.classList.remove('placeholder');
     } else {
       previewContent.textContent = 'Generated content will appear here...';
       previewContent.classList.add('placeholder');
     }
+  }
+
+  formatPreviewContent(content, type) {
+    if (!content) return '';
+    
+    // Escape HTML
+    const escapeHtml = (text) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    };
+    
+    let formatted = escapeHtml(content);
+    
+    if (type === 'cv') {
+      // Format resume sections
+      formatted = formatted
+        .replace(/^(PROFESSIONAL SUMMARY|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)/gm, 
+          '<span class="section-header">$1</span>')
+        .replace(/^([A-Z][A-Za-z\s&]+)\s*\|\s*(.+)$/gm, 
+          '<strong>$1</strong> | <span class="date-line">$2</span>')
+        .replace(/^•\s*/gm, '• ');
+    } else {
+      // Format cover letter with date header
+      formatted = formatted
+        .replace(/^(Date:.+)$/m, '<span class="date-line">$1</span>')
+        .replace(/^(Dear .+,)$/m, '<strong>$1</strong>')
+        .replace(/^(Sincerely,|Best regards,|Regards,)$/m, '<br><strong>$1</strong>');
+    }
+    
+    return formatted;
   }
 
   updateUI() {
@@ -221,7 +276,63 @@ class ATSTailor {
     // Show documents card if we have previously generated documents
     if (this.generatedDocuments.cv || this.generatedDocuments.coverLetter) {
       document.getElementById('documentsCard')?.classList.remove('hidden');
+      this.updateDocumentDisplay();
       this.updatePreviewContent();
+    }
+  }
+
+  updateDocumentDisplay() {
+    // Update filenames
+    const cvFileName = document.getElementById('cvFileName');
+    const coverFileName = document.getElementById('coverFileName');
+    
+    if (cvFileName && this.generatedDocuments.cvFileName) {
+      cvFileName.textContent = this.generatedDocuments.cvFileName;
+      cvFileName.title = this.generatedDocuments.cvFileName;
+    }
+    
+    if (coverFileName && this.generatedDocuments.coverFileName) {
+      coverFileName.textContent = this.generatedDocuments.coverFileName;
+      coverFileName.title = this.generatedDocuments.coverFileName;
+    }
+    
+    // Update file sizes
+    const cvSize = document.getElementById('cvSize');
+    const coverSize = document.getElementById('coverSize');
+    
+    if (cvSize && this.generatedDocuments.cvPdf) {
+      const sizeKB = Math.round(this.generatedDocuments.cvPdf.length * 0.75 / 1024);
+      cvSize.textContent = `${sizeKB} KB`;
+    }
+    
+    if (coverSize && this.generatedDocuments.coverPdf) {
+      const sizeKB = Math.round(this.generatedDocuments.coverPdf.length * 0.75 / 1024);
+      coverSize.textContent = `${sizeKB} KB`;
+    }
+    
+    // Update ATS match score
+    const atsScore = document.getElementById('atsMatchScore');
+    const atsSection = document.getElementById('atsMatchSection');
+    const atsKeywords = document.getElementById('atsKeywords');
+    const matchedKeywords = document.getElementById('matchedKeywords');
+    const missingKeywords = document.getElementById('missingKeywords');
+    
+    if (atsScore && this.generatedDocuments.matchScore) {
+      atsScore.textContent = `${this.generatedDocuments.matchScore}%`;
+      atsSection?.classList.remove('hidden');
+      
+      // Show keywords
+      if (atsKeywords && (this.generatedDocuments.matchedKeywords?.length || this.generatedDocuments.missingKeywords?.length)) {
+        atsKeywords.classList.remove('hidden');
+        
+        if (matchedKeywords && this.generatedDocuments.matchedKeywords?.length) {
+          matchedKeywords.textContent = `✓ ${this.generatedDocuments.matchedKeywords.slice(0, 8).join(', ')}`;
+        }
+        
+        if (missingKeywords && this.generatedDocuments.missingKeywords?.length) {
+          missingKeywords.textContent = `⚠ Missing: ${this.generatedDocuments.missingKeywords.slice(0, 5).join(', ')}`;
+        }
+      }
     }
   }
 
@@ -484,8 +595,11 @@ class ATSTailor {
         coverLetter: result.tailoredCoverLetter || result.coverLetter,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
-        cvFileName: result.resumePdfFileName || result.cvFileName || `${result.candidateName || 'Applicant'}_CV.pdf`,
-        coverFileName: result.coverLetterPdfFileName || result.coverLetterFileName || `${result.candidateName || 'Applicant'}_CoverLetter.pdf`,
+        cvFileName: result.resumePdfFileName || `${result.candidateName || 'Applicant'}_CV.pdf`,
+        coverFileName: result.coverLetterPdfFileName || `${result.candidateName || 'Applicant'}_CoverLetter.pdf`,
+        matchScore: result.matchScore || 0,
+        matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
+        missingKeywords: result.keywordsMissing || result.missingKeywords || []
       };
 
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
@@ -503,9 +617,10 @@ class ATSTailor {
 
       // Show documents card and preview
       document.getElementById('documentsCard')?.classList.remove('hidden');
+      this.updateDocumentDisplay();
       this.updatePreviewContent();
       
-      this.showToast(`Done in ${elapsed.toFixed(1)}s!`, 'success');
+      this.showToast(`Done in ${elapsed.toFixed(1)}s! Match: ${this.generatedDocuments.matchScore}%`, 'success');
       this.setStatus('Complete', 'ready');
 
     } catch (error) {
