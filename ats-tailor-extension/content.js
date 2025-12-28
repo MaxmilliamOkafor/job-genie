@@ -1,14 +1,32 @@
 // ATS Tailored CV & Cover Letter - Content Script
 // Auto-start tailoring on supported ATS pages + attach generated PDFs to form inputs
+// LAZYAPPLY CONFLICT PREVENTION: Waits 12s+, then monitors & re-attaches if overwritten
 
 (function () {
   'use strict';
 
   console.log('[ATS Tailor] Content script loaded on:', window.location.hostname);
 
-  // Used to avoid conflicts with other auto-fill extensions (e.g., LazyApply)
+  // ============ LAZYAPPLY CONFLICT PREVENTION ============
+  // LazyApply typically attaches CV at 8-12s mark. We wait until 14s to override.
   const PAGE_LOAD_TS = Date.now();
-  const SAFE_CV_ATTACH_AFTER_MS = 12_000;
+  const SAFE_CV_ATTACH_AFTER_MS = 14_000; // Wait 14s to let LazyApply finish
+  const MONITOR_DURATION_MS = 30_000; // Monitor for 30s after our attach
+  const MONITOR_INTERVAL_MS = 2_000; // Check every 2s
+
+  // Track our attached files to detect overwrites
+  let ourAttachedFiles = { cv: null, cover: null };
+  let monitoringActive = false;
+
+  // Detect LazyApply-style filenames (ALL CAPS with underscores)
+  function isLazyApplyFilename(filename) {
+    if (!filename) return false;
+    // LazyApply uses patterns like "FIRSTNAME_LASTNAME CV.pdf" or "FIRSTNAME_LASTNAME_CV.pdf"
+    const upperPattern = /^[A-Z_\s]+\.pdf$/i;
+    const hasAllCapsName = filename.split(/[_\s]/)[0] === filename.split(/[_\s]/)[0].toUpperCase();
+    const hasSpaceBeforeCV = / CV\.pdf$/i.test(filename);
+    return hasAllCapsName && (hasSpaceBeforeCV || upperPattern.test(filename));
+  }
 
   const SUPPORTED_HOSTS = [
     'greenhouse.io',
@@ -55,7 +73,7 @@
     const elapsed = Date.now() - PAGE_LOAD_TS;
     if (elapsed >= SAFE_CV_ATTACH_AFTER_MS) return;
     const waitMs = SAFE_CV_ATTACH_AFTER_MS - elapsed;
-    console.log(`[ATS Tailor] Waiting ${waitMs}ms to avoid LazyApply CV conflict...`);
+    console.log(`[ATS Tailor] Waiting ${waitMs}ms to override LazyApply CV...`);
     await sleep(waitMs);
   }
 
@@ -146,20 +164,54 @@
     return true;
   }
 
-  async function attachWithSingleRetry(input, file, { retryDelayMs = 1500 } = {}) {
+  // Monitor file inputs and re-attach if LazyApply overwrites
+  function startFileMonitoring(type, file, input) {
+    if (monitoringActive) return;
+    monitoringActive = true;
+
+    const startTime = Date.now();
+    const intervalId = setInterval(() => {
+      if (Date.now() - startTime > MONITOR_DURATION_MS) {
+        clearInterval(intervalId);
+        monitoringActive = false;
+        console.log('[ATS Tailor] Stopped monitoring for overwrites');
+        return;
+      }
+
+      const currentFile = input?.files?.[0];
+      const currentName = currentFile?.name;
+      const ourName = ourAttachedFiles[type]?.name;
+
+      if (currentName && ourName && currentName !== ourName) {
+        // Another extension overwrote our file
+        if (isLazyApplyFilename(currentName)) {
+          console.log(`[ATS Tailor] LazyApply overwrite detected: "${currentName}" -> re-attaching "${ourName}"`);
+          attachFileToInput(input, ourAttachedFiles[type]);
+          showNotification(`LazyApply override blocked - using ATS-optimized ${type.toUpperCase()}`, 'success');
+        } else {
+          console.log(`[ATS Tailor] Unknown overwrite: "${currentName}" (not re-attaching)`);
+        }
+      }
+    }, MONITOR_INTERVAL_MS);
+  }
+
+  async function attachWithMonitoring(input, file, type) {
+    // Store our file for monitoring
+    ourAttachedFiles[type] = file;
+
     attachFileToInput(input, file);
 
-    // If another extension overwrites right after we attach, re-attach once.
-    await sleep(retryDelayMs);
+    // Wait a moment then check if immediately overwritten
+    await sleep(1500);
 
     const currentName = input?.files?.[0]?.name;
     if (currentName && currentName !== file.name) {
-      console.log('[ATS Tailor] Detected overwrite, re-attaching our file:', {
-        expected: file.name,
-        found: currentName,
-      });
+      console.log('[ATS Tailor] Immediate overwrite detected, re-attaching:', { expected: file.name, found: currentName });
       attachFileToInput(input, file);
     }
+
+    // Start continuous monitoring for LazyApply overwrites
+    startFileMonitoring(type, file, input);
   }
 
   function showNotification(message, type = 'success') {
@@ -415,14 +467,14 @@
       let attachedAny = false;
 
       if (resumePdf && resumeInput) {
-        // LazyApply attaches its CV early; we wait, then override.
+        // LazyApply attaches its CV early; we wait, then override + monitor.
         await waitForSafeCvWindow();
-        await attachWithSingleRetry(resumeInput, base64ToFile(resumePdf, resumeName));
+        await attachWithMonitoring(resumeInput, base64ToFile(resumePdf, resumeName), 'cv');
         attachedAny = true;
       }
 
       if (coverLetterPdf && coverInput) {
-        await attachWithSingleRetry(coverInput, base64ToFile(coverLetterPdf, coverName));
+        await attachWithMonitoring(coverInput, base64ToFile(coverLetterPdf, coverName), 'cover');
         attachedAny = true;
       }
 
@@ -465,7 +517,7 @@
 
           if (pdf) {
             const file = base64ToFile(pdf, filename, 'application/pdf');
-            await attachWithSingleRetry(input, file);
+            await attachWithMonitoring(input, file, type);
             showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
             sendResponse({ success: true });
             return;
@@ -474,7 +526,7 @@
           if (text) {
             const blob = new Blob([text], { type: 'text/plain' });
             const txtFilename = filename.replace(/\.pdf$/i, '.txt');
-            await attachWithSingleRetry(input, new File([blob], txtFilename, { type: 'text/plain' }));
+            await attachWithMonitoring(input, new File([blob], txtFilename, { type: 'text/plain' }), type);
             showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
             sendResponse({ success: true });
             return;
