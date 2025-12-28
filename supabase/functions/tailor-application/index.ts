@@ -727,49 +727,15 @@ ${includeReferral ? `
       }
     }
     
-    // If all retries exhausted due to rate limit, try Lovable AI fallback
+    // If all retries exhausted due to rate limit
     if (!response || !response.ok) {
-      console.log("OpenAI failed, attempting Lovable AI fallback...");
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      
-      if (LOVABLE_API_KEY) {
-        try {
-          const lovableResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt }
-              ],
-            }),
-          });
-          
-          if (lovableResponse.ok) {
-            console.log("Lovable AI fallback succeeded!");
-            response = lovableResponse;
-          } else {
-            console.error("Lovable AI fallback failed:", lovableResponse.status);
-          }
-        } catch (lovableErr) {
-          console.error("Lovable AI fallback error:", lovableErr);
-        }
-      }
-      
-      // If still no valid response
-      if (!response || !response.ok) {
-        return new Response(JSON.stringify({ 
-          error: "AI service temporarily unavailable. Your OpenAI quota may be exceeded. Please try again later.",
-          retryable: true
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      return new Response(JSON.stringify({ 
+        error: "OpenAI API temporarily unavailable. Your quota may be exceeded. Please check your OpenAI billing and try again later.",
+        retryable: true
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
