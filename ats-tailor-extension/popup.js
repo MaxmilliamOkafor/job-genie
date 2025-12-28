@@ -167,7 +167,18 @@ class ATSTailor {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
-      if (!tab?.id) throw new Error('No active tab');
+      if (!tab?.id || !tab?.url) {
+        throw new Error('No active tab');
+      }
+
+      // Skip chrome://, about:, edge:// URLs
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('about:') || 
+          tab.url.startsWith('edge://') || tab.url.startsWith('chrome-extension://')) {
+        this.currentJob = null;
+        this.updateJobDisplay();
+        this.setStatus('Navigate to job page', 'error');
+        return;
+      }
 
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -187,7 +198,7 @@ class ATSTailor {
       console.error('Job detection error:', error);
       this.currentJob = null;
       this.updateJobDisplay();
-      this.setStatus('Detection failed', 'error');
+      this.setStatus('Navigate to job page', 'error');
     }
   }
 
