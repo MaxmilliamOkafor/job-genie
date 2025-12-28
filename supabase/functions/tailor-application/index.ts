@@ -239,48 +239,122 @@ function getSmartLocation(jdLocation: string | undefined, jdDescription: string,
   return "Remote | Open to relocation";
 }
 
-// Jobscan-style keyword extraction
+// Jobscan-style keyword extraction - enhanced for ATS ranking
 function extractJobscanKeywords(description: string, requirements: string[]): { 
   hardSkills: string[], 
   softSkills: string[], 
   tools: string[], 
   titles: string[],
+  certifications: string[],
+  responsibilities: string[],
   allKeywords: string[]
 } {
   const text = `${description} ${requirements.join(' ')}`.toLowerCase();
   
-  // Hard skills (tech stack)
+  // Hard skills (expanded tech stack - covers most ATS systems)
   const hardSkillPatterns = [
-    'python', 'javascript', 'typescript', 'java', 'c\\+\\+', 'c#', 'go', 'golang', 'rust', 'ruby', 'php', 'scala', 'kotlin', 'swift',
-    'react', 'angular', 'vue', 'node\\.?js', 'next\\.?js', 'express', 'django', 'flask', 'fastapi', 'spring', 'rails',
-    'sql', 'nosql', 'postgresql', 'mysql', 'mongodb', 'redis', 'elasticsearch', 'cassandra', 'dynamodb',
-    'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'k8s', 'terraform', 'ansible', 'jenkins', 'circleci', 'github actions',
-    'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'pandas', 'numpy', 'spark', 'hadoop', 'kafka', 'airflow', 'dbt',
-    'rest api', 'graphql', 'grpc', 'microservices', 'serverless', 'ci/cd', 'devops', 'mlops',
-    'machine learning', 'deep learning', 'nlp', 'computer vision', 'data science', 'data engineering', 'etl',
-    'snowflake', 'databricks', 'looker', 'tableau', 'power bi', 'metabase', 'git', 'linux', 'unix', 'bash'
+    // Programming languages
+    'python', 'javascript', 'typescript', 'java', 'c\\+\\+', 'c#', 'go', 'golang', 'rust', 'ruby', 'php', 'scala', 'kotlin', 'swift', 'r', 'matlab', 'perl', 'bash', 'powershell', 'sql', 'plsql', 'tsql', 'vba', 'solidity', 'haskell', 'elixir', 'clojure', 'f#', 'dart', 'lua', 'groovy', 'objective-c',
+    // Web frameworks
+    'react', 'react\\.?js', 'angular', 'vue', 'vue\\.?js', 'svelte', 'next\\.?js', 'nuxt', 'gatsby', 'remix', 'ember', 'backbone', 'jquery', 'node\\.?js', 'express', 'express\\.?js', 'fastify', 'nest\\.?js', 'koa', 'hapi', 'django', 'flask', 'fastapi', 'pyramid', 'spring', 'spring boot', 'rails', 'ruby on rails', 'laravel', 'symfony', 'asp\\.?net', 'blazor', 'gin', 'echo', 'fiber', 'phoenix',
+    // Databases
+    'sql', 'nosql', 'postgresql', 'postgres', 'mysql', 'mariadb', 'mongodb', 'redis', 'elasticsearch', 'opensearch', 'cassandra', 'dynamodb', 'couchdb', 'couchbase', 'neo4j', 'graphdb', 'arangodb', 'firestore', 'firebase', 'supabase', 'sqlite', 'oracle', 'sql server', 'mssql', 'db2', 'teradata', 'redshift', 'bigquery', 'athena', 'presto', 'trino', 'clickhouse', 'timescaledb', 'influxdb',
+    // Cloud & infrastructure
+    'aws', 'amazon web services', 'azure', 'microsoft azure', 'gcp', 'google cloud', 'google cloud platform', 'docker', 'kubernetes', 'k8s', 'terraform', 'ansible', 'puppet', 'chef', 'cloudformation', 'pulumi', 'helm', 'istio', 'linkerd', 'consul', 'vault', 'nomad', 'ecs', 'eks', 'aks', 'gke', 'fargate', 'lambda', 'step functions', 'cloud functions', 'azure functions', 'cloudflare', 'vercel', 'netlify', 'heroku', 'digitalocean', 'linode', 'vagrant', 'openstack', 'vmware', 'proxmox',
+    // DevOps/CI-CD
+    'jenkins', 'circleci', 'github actions', 'gitlab ci', 'travis ci', 'bamboo', 'teamcity', 'azure devops', 'argo cd', 'argocd', 'flux', 'spinnaker', 'tekton', 'buildkite', 'drone', 'concourse', 'ci/cd', 'ci cd', 'continuous integration', 'continuous deployment', 'continuous delivery', 'devops', 'devsecops', 'sre', 'site reliability', 'infrastructure as code', 'iac', 'gitops',
+    // Data & ML
+    'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'sklearn', 'pandas', 'numpy', 'scipy', 'matplotlib', 'seaborn', 'plotly', 'spark', 'pyspark', 'hadoop', 'hive', 'pig', 'kafka', 'confluent', 'airflow', 'dagster', 'prefect', 'luigi', 'dbt', 'great expectations', 'mlflow', 'kubeflow', 'vertex ai', 'sagemaker', 'databricks', 'snowflake', 'fivetran', 'stitch', 'airbyte', 'meltano', 'looker', 'tableau', 'power bi', 'metabase', 'superset', 'quicksight', 'mode', 'amplitude', 'mixpanel', 'segment', 'heap', 'hugging face', 'transformers', 'langchain', 'llamaindex', 'openai', 'gpt', 'llm', 'large language model', 'nlp', 'natural language processing', 'computer vision', 'cv', 'opencv', 'yolo', 'bert', 'word2vec', 'xgboost', 'lightgbm', 'catboost', 'random forest', 'neural network', 'deep learning', 'machine learning', 'ml', 'ai', 'artificial intelligence', 'reinforcement learning', 'supervised learning', 'unsupervised learning', 'feature engineering', 'model training', 'model serving', 'mlops', 'data science', 'data engineering', 'data analytics', 'etl', 'elt', 'data warehouse', 'data lake', 'data lakehouse', 'data pipeline', 'streaming', 'real-time', 'batch processing',
+    // API & Architecture
+    'rest', 'rest api', 'restful', 'graphql', 'grpc', 'soap', 'websocket', 'webhook', 'api gateway', 'microservices', 'micro-services', 'serverless', 'event-driven', 'event driven', 'message queue', 'pub/sub', 'pubsub', 'rabbitmq', 'activemq', 'sqs', 'sns', 'kinesis', 'eventbridge', 'domain driven design', 'ddd', 'cqrs', 'saga pattern', 'circuit breaker', 'load balancer', 'reverse proxy', 'nginx', 'apache', 'haproxy', 'traefik', 'kong', 'envoy',
+    // Security
+    'oauth', 'oauth2', 'oidc', 'openid connect', 'jwt', 'saml', 'sso', 'single sign-on', 'mfa', 'multi-factor', '2fa', 'rbac', 'role based access', 'iam', 'identity management', 'encryption', 'tls', 'ssl', 'https', 'penetration testing', 'security audit', 'vulnerability', 'owasp', 'soc2', 'soc 2', 'gdpr', 'hipaa', 'pci dss', 'iso 27001', 'compliance', 'cybersecurity', 'infosec', 'devsecops',
+    // Frontend
+    'html', 'html5', 'css', 'css3', 'sass', 'scss', 'less', 'tailwind', 'tailwindcss', 'bootstrap', 'material ui', 'mui', 'chakra ui', 'ant design', 'styled components', 'emotion', 'webpack', 'vite', 'parcel', 'rollup', 'esbuild', 'swc', 'babel', 'eslint', 'prettier', 'responsive design', 'mobile-first', 'accessibility', 'a11y', 'wcag', 'aria', 'pwa', 'progressive web app', 'spa', 'single page application', 'ssr', 'server side rendering', 'ssg', 'static site generation', 'jamstack',
+    // Mobile
+    'ios', 'android', 'react native', 'flutter', 'xamarin', 'ionic', 'cordova', 'capacitor', 'expo', 'mobile development', 'cross-platform', 'native app',
+    // Testing
+    'unit testing', 'integration testing', 'e2e', 'end-to-end', 'test automation', 'tdd', 'test driven', 'bdd', 'behavior driven', 'jest', 'mocha', 'chai', 'jasmine', 'karma', 'cypress', 'playwright', 'selenium', 'webdriver', 'puppeteer', 'pytest', 'unittest', 'junit', 'testng', 'rspec', 'cucumber', 'postman', 'newman', 'load testing', 'performance testing', 'jmeter', 'locust', 'k6', 'gatling', 'qa', 'quality assurance',
+    // Misc tech
+    'git', 'github', 'gitlab', 'bitbucket', 'svn', 'linux', 'unix', 'windows server', 'macos', 'shell scripting', 'regex', 'regular expressions', 'json', 'xml', 'yaml', 'protobuf', 'avro', 'parquet', 'orc', 'csv', 'markdown', 'agile', 'scrum', 'kanban', 'lean', 'safe', 'waterfall', 'sdlc', 'software development lifecycle',
+    // Blockchain & Web3
+    'blockchain', 'web3', 'ethereum', 'solana', 'polygon', 'smart contracts', 'defi', 'nft', 'dapp', 'ipfs', 'hardhat', 'truffle', 'foundry'
   ];
   
-  // Soft skills
+  // Soft skills (critical for ATS)
   const softSkillPatterns = [
-    'communication', 'leadership', 'problem-solving', 'problem solving', 'teamwork', 'collaboration', 
-    'critical thinking', 'adaptability', 'time management', 'attention to detail', 'analytical',
-    'project management', 'stakeholder management', 'mentoring', 'coaching', 'cross-functional'
+    'communication', 'communication skills', 'written communication', 'verbal communication', 'presentation skills',
+    'leadership', 'team leadership', 'technical leadership', 'thought leadership', 'people management',
+    'problem-solving', 'problem solving', 'critical thinking', 'analytical thinking', 'strategic thinking',
+    'teamwork', 'collaboration', 'cross-functional', 'cross functional', 'interdisciplinary',
+    'adaptability', 'flexibility', 'learning agility', 'growth mindset', 'self-motivated', 'proactive',
+    'time management', 'prioritization', 'multitasking', 'deadline-driven', 'results-oriented',
+    'attention to detail', 'detail-oriented', 'quality-focused', 'accuracy',
+    'project management', 'program management', 'stakeholder management', 'client-facing', 'customer-focused',
+    'mentoring', 'coaching', 'training', 'knowledge sharing', 'onboarding',
+    'negotiation', 'conflict resolution', 'decision-making', 'decision making', 'consensus building',
+    'innovation', 'creativity', 'design thinking', 'user-centric', 'empathy',
+    'accountability', 'ownership', 'initiative', 'self-starter', 'independent'
   ];
   
   // Tools/platforms
   const toolPatterns = [
-    'jira', 'confluence', 'slack', 'notion', 'asana', 'trello', 'monday', 'figma', 'sketch', 
-    'postman', 'swagger', 'openapi', 'datadog', 'splunk', 'grafana', 'prometheus', 'new relic',
-    'sentry', 'pagerduty', 'cloudwatch', 'segment', 'amplitude', 'mixpanel'
+    'jira', 'confluence', 'slack', 'microsoft teams', 'teams', 'zoom', 'notion', 'asana', 'trello', 'monday', 'clickup', 'linear', 'shortcut', 'pivotal tracker',
+    'figma', 'sketch', 'adobe xd', 'invision', 'zeplin', 'miro', 'lucidchart', 'draw\\.io', 'excalidraw',
+    'postman', 'insomnia', 'swagger', 'openapi', 'graphiql', 'graphql playground',
+    'datadog', 'splunk', 'grafana', 'prometheus', 'new relic', 'dynatrace', 'appdynamics', 'elastic apm', 'honeycomb', 'lightstep', 'jaeger', 'zipkin',
+    'sentry', 'bugsnag', 'rollbar', 'logrocket', 'fullstory', 'hotjar',
+    'pagerduty', 'opsgenie', 'victorops', 'statuspage', 'incident\\.io',
+    'cloudwatch', 'stackdriver', 'azure monitor',
+    'sonarqube', 'snyk', 'dependabot', 'renovate', 'whitesource', 'black duck', 'veracode', 'checkmarx',
+    'salesforce', 'hubspot', 'zendesk', 'intercom', 'freshdesk',
+    'stripe', 'plaid', 'twilio', 'sendgrid', 'mailchimp', 'brevo',
+    '1password', 'lastpass', 'okta', 'auth0', 'onelogin', 'ping identity'
   ];
   
-  // Job titles
+  // Job titles/roles
   const titlePatterns = [
-    'software engineer', 'senior software engineer', 'staff engineer', 'principal engineer',
-    'data scientist', 'data engineer', 'ml engineer', 'machine learning engineer', 
-    'ai engineer', 'ai research', 'solution architect', 'cloud architect', 'devops engineer',
-    'frontend', 'backend', 'full stack', 'fullstack', 'platform engineer', 'sre', 'site reliability'
+    'software engineer', 'senior software engineer', 'staff engineer', 'principal engineer', 'distinguished engineer', 'fellow',
+    'software developer', 'senior software developer', 'application developer', 'web developer', 'frontend developer', 'backend developer', 'full stack developer', 'fullstack developer',
+    'data scientist', 'senior data scientist', 'lead data scientist', 'principal data scientist',
+    'data engineer', 'senior data engineer', 'analytics engineer', 'bi engineer', 'business intelligence',
+    'data analyst', 'business analyst', 'product analyst', 'marketing analyst', 'financial analyst',
+    'ml engineer', 'machine learning engineer', 'ai engineer', 'applied scientist', 'research scientist', 'research engineer',
+    'solution architect', 'solutions architect', 'cloud architect', 'enterprise architect', 'technical architect', 'software architect', 'system architect',
+    'devops engineer', 'platform engineer', 'infrastructure engineer', 'reliability engineer', 'sre', 'site reliability engineer',
+    'security engineer', 'security analyst', 'information security', 'application security', 'cloud security',
+    'qa engineer', 'sdet', 'test engineer', 'quality engineer', 'automation engineer',
+    'technical lead', 'tech lead', 'team lead', 'engineering manager', 'engineering director', 'vp of engineering', 'cto', 'chief technology officer',
+    'product manager', 'product owner', 'program manager', 'project manager', 'scrum master', 'agile coach',
+    'frontend', 'backend', 'full stack', 'fullstack', 'mobile developer', 'ios developer', 'android developer'
+  ];
+  
+  // Certifications (highly valued by ATS)
+  const certificationPatterns = [
+    'aws certified', 'aws solutions architect', 'aws developer', 'aws sysops', 'aws devops', 'aws security', 'aws data analytics', 'aws machine learning',
+    'azure certified', 'azure administrator', 'azure developer', 'azure solutions architect', 'azure data engineer', 'azure ai engineer',
+    'gcp certified', 'google cloud certified', 'professional cloud architect', 'professional data engineer', 'professional cloud developer',
+    'cka', 'ckad', 'cks', 'kubernetes certified', 'certified kubernetes',
+    'terraform certified', 'hashicorp certified',
+    'pmp', 'project management professional', 'prince2', 'capm', 'agile certified', 'csm', 'certified scrum master', 'psm', 'safe certified',
+    'cissp', 'cism', 'cisa', 'comptia security\\+', 'ceh', 'certified ethical hacker', 'oscp',
+    'comptia a\\+', 'comptia network\\+', 'ccna', 'ccnp', 'ccie',
+    'ocjp', 'ocpjp', 'java certified', 'oracle certified',
+    'mcsa', 'mcse', 'microsoft certified',
+    'salesforce certified', 'servicenow certified', 'databricks certified', 'snowflake certified'
+  ];
+  
+  // Key action verbs / responsibilities (ATS loves these)
+  const responsibilityPatterns = [
+    'designed', 'developed', 'implemented', 'built', 'created', 'architected',
+    'led', 'managed', 'supervised', 'mentored', 'coached', 'trained',
+    'optimized', 'improved', 'enhanced', 'streamlined', 'automated',
+    'collaborated', 'partnered', 'coordinated', 'communicated',
+    'analyzed', 'evaluated', 'assessed', 'reviewed', 'audited',
+    'deployed', 'released', 'launched', 'shipped', 'delivered',
+    'scaled', 'migrated', 'integrated', 'refactored', 'modernized',
+    'reduced', 'increased', 'achieved', 'exceeded', 'accomplished',
+    'documented', 'maintained', 'supported', 'troubleshot', 'debugged', 'resolved'
   ];
   
   const extractMatches = (patterns: string[]): string[] => {
@@ -288,24 +362,38 @@ function extractJobscanKeywords(description: string, requirements: string[]): {
     for (const pattern of patterns) {
       const regex = new RegExp(`\\b${pattern}\\b`, 'gi');
       if (regex.test(text)) {
-        // Capitalize properly
-        const cleaned = pattern.replace(/\\\./g, '.').replace(/\\+/g, '+');
+        // Capitalize properly and clean up escaped characters
+        const cleaned = pattern.replace(/\\\./g, '.').replace(/\\+/g, '+').replace(/\\?/g, '');
         if (!matches.some(m => m.toLowerCase() === cleaned.toLowerCase())) {
-          matches.push(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
+          // Smart capitalization
+          const capitalized = cleaned.split(' ').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+          ).join(' ');
+          matches.push(capitalized);
         }
       }
     }
     return matches;
   };
   
-  const hardSkills = extractMatches(hardSkillPatterns).slice(0, 18);
-  const softSkills = extractMatches(softSkillPatterns).slice(0, 3);
-  const tools = extractMatches(toolPatterns).slice(0, 4);
-  const titles = extractMatches(titlePatterns).slice(0, 4);
+  // Extract with higher limits for better ATS coverage
+  const hardSkills = extractMatches(hardSkillPatterns).slice(0, 25);
+  const softSkills = extractMatches(softSkillPatterns).slice(0, 8);
+  const tools = extractMatches(toolPatterns).slice(0, 10);
+  const titles = extractMatches(titlePatterns).slice(0, 5);
+  const certifications = extractMatches(certificationPatterns).slice(0, 5);
+  const responsibilities = extractMatches(responsibilityPatterns).slice(0, 10);
   
-  const allKeywords = [...hardSkills, ...titles, ...softSkills].slice(0, 25);
+  // Combined keywords prioritized for ATS scoring
+  const allKeywords = [
+    ...hardSkills,       // Primary skills - most important
+    ...titles,           // Job title matches
+    ...certifications,   // Certifications are high value
+    ...tools,            // Tools/platforms
+    ...softSkills        // Soft skills for culture fit
+  ].slice(0, 35);
   
-  return { hardSkills, softSkills, tools, titles, allKeywords };
+  return { hardSkills, softSkills, tools, titles, certifications, responsibilities, allKeywords };
 }
 
 // Calculate accurate match score
@@ -397,7 +485,7 @@ serve(async (req) => {
     console.log(`Match score calculated: ${matchResult.score}%, matched: ${matchResult.matched.length}, missing: ${matchResult.missing.length}`);
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`;
-    const candidateNameNoSpaces = `${userProfile.firstName}${userProfile.lastName}`;
+    const candidateNameForFile = `${userProfile.firstName} ${userProfile.lastName}`;
 
     const systemPrompt = `You are a SENIOR PROFESSIONAL RESUME WRITER with 10+ years expertise in ATS optimization, humanized writing, and recruiter-friendly document design.
 
@@ -408,7 +496,7 @@ ABSOLUTE RULES:
 2. Use Jobscan-style ATS keyword extraction - match 85%+ keyword density naturally
 3. Location in CV header MUST be: "${smartLocation}"
 4. NO typos, grammatical errors, or formatting issues - PROOFREAD CAREFULLY
-5. File naming: ${candidateNameNoSpaces}_CV.pdf and ${candidateNameNoSpaces}_Cover_Letter.pdf
+5. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 
 HUMANIZED TONE RULES (CRITICAL):
 - Active voice only
@@ -556,9 +644,9 @@ ${includeReferral ? `
     "keywordDensity": "${Math.round((matchResult.matched.length / jdKeywords.allKeywords.length) * 100)}%",
     "locationIncluded": true
   },
-  "candidateName": "${candidateNameNoSpaces}",
-  "cvFileName": "${candidateNameNoSpaces}_CV.pdf",
-  "coverLetterFileName": "${candidateNameNoSpaces}_CoverLetter.pdf"${includeReferral ? `,
+  "candidateName": "${candidateNameForFile}",
+  "cvFileName": "${candidateNameForFile}_CV.pdf",
+  "coverLetterFileName": "${candidateNameForFile}_Cover_Letter.pdf"${includeReferral ? `,
   "referralEmail": "[Subject + email body]"` : ''}
 }`;
 
@@ -721,16 +809,16 @@ ${includeReferral ? `
         keywordsMissing: matchResult.missing,
         smartLocation: smartLocation,
         suggestedImprovements: ["Please retry for better results"],
-        candidateName: candidateNameNoSpaces,
-        cvFileName: `${candidateNameNoSpaces}_CV.pdf`,
-        coverLetterFileName: `${candidateNameNoSpaces}_Cover_Letter.pdf`
+        candidateName: candidateNameForFile,
+        cvFileName: `${candidateNameForFile}_CV.pdf`,
+        coverLetterFileName: `${candidateNameForFile}_Cover_Letter.pdf`
       };
     }
 
     // Ensure all required fields with our pre-calculated values
-    result.candidateName = result.candidateName || candidateNameNoSpaces;
-    result.cvFileName = result.cvFileName || `${candidateNameNoSpaces}_CV.pdf`;
-    result.coverLetterFileName = result.coverLetterFileName || `${candidateNameNoSpaces}_Cover_Letter.pdf`;
+    result.candidateName = result.candidateName || candidateNameForFile;
+    result.cvFileName = result.cvFileName || `${candidateNameForFile}_CV.pdf`;
+    result.coverLetterFileName = result.coverLetterFileName || `${candidateNameForFile}_Cover_Letter.pdf`;
     result.company = company;
     result.jobTitle = jobTitle;
     result.jobId = jobId;
