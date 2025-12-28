@@ -206,12 +206,20 @@ class ATSTailor {
       ? this.generatedDocuments.cv 
       : this.generatedDocuments.coverLetter;
     
+    // Also check if we have PDFs even if text content is missing
+    const hasPdf = this.currentPreviewTab === 'cv' 
+      ? this.generatedDocuments.cvPdf 
+      : this.generatedDocuments.coverPdf;
+    
     if (content) {
       // Format content for better readability
       previewContent.innerHTML = this.formatPreviewContent(content, this.currentPreviewTab);
       previewContent.classList.remove('placeholder');
+    } else if (hasPdf) {
+      previewContent.textContent = `PDF generated - click Download to view the ${this.currentPreviewTab === 'cv' ? 'CV' : 'Cover Letter'}`;
+      previewContent.classList.add('placeholder');
     } else {
-      previewContent.textContent = 'Generated content will appear here...';
+      previewContent.textContent = 'Click "Tailor CV & Cover Letter" to generate...';
       previewContent.classList.add('placeholder');
     }
   }
@@ -273,8 +281,12 @@ class ATSTailor {
       autoTailorToggle.checked = this.autoTailorEnabled;
     }
     
-    // Show documents card if we have previously generated documents
-    if (this.generatedDocuments.cv || this.generatedDocuments.coverLetter) {
+    // Show documents card if we have previously generated documents (text or PDF)
+    const hasDocuments = this.generatedDocuments.cv || 
+                         this.generatedDocuments.coverLetter || 
+                         this.generatedDocuments.cvPdf || 
+                         this.generatedDocuments.coverPdf;
+    if (hasDocuments) {
       document.getElementById('documentsCard')?.classList.remove('hidden');
       this.updateDocumentDisplay();
       this.updatePreviewContent();
@@ -595,8 +607,8 @@ class ATSTailor {
         coverLetter: result.tailoredCoverLetter || result.coverLetter,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
-        cvFileName: result.resumePdfFileName || `${result.candidateName || 'Applicant'}_CV.pdf`,
-        coverFileName: result.coverLetterPdfFileName || `${result.candidateName || 'Applicant'}_CoverLetter.pdf`,
+        cvFileName: result.cvFileName || result.resumePdfFileName || `${p.first_name || ''} ${p.last_name || ''}_CV.pdf`.trim() || 'Applicant_CV.pdf',
+        coverFileName: result.coverLetterFileName || result.coverLetterPdfFileName || `${p.first_name || ''} ${p.last_name || ''}_Cover_Letter.pdf`.trim() || 'Applicant_Cover_Letter.pdf',
         matchScore: result.matchScore || 0,
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || []
@@ -637,10 +649,10 @@ class ATSTailor {
   downloadDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
-    // Use the filename from backend which includes user's name
+    // Use the filename from backend which includes user's name with proper format
     const filename = type === 'cv' 
       ? (this.generatedDocuments.cvFileName || `Applicant_CV.pdf`)
-      : (this.generatedDocuments.coverFileName || `Applicant_CoverLetter.pdf`);
+      : (this.generatedDocuments.coverFileName || `Applicant_Cover_Letter.pdf`);
     
     if (doc) {
       const blob = this.base64ToBlob(doc, 'application/pdf');
@@ -677,10 +689,10 @@ class ATSTailor {
   async attachDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
-    // Use filename from backend which includes user's name
+    // Use filename from backend which includes user's name with proper format
     const filename = type === 'cv' 
       ? (this.generatedDocuments.cvFileName || `Applicant_CV.pdf`)
-      : (this.generatedDocuments.coverFileName || `Applicant_CoverLetter.pdf`);
+      : (this.generatedDocuments.coverFileName || `Applicant_Cover_Letter.pdf`);
     
     if (!doc && !textDoc) {
       this.showToast('No document available', 'error');
