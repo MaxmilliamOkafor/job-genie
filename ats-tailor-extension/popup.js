@@ -39,13 +39,54 @@ class ATSTailor {
     this.bindEvents();
     this.updateUI();
 
-    // Auto-detect + auto-tailor immediately when popup opens
+    // Auto-detect job when popup opens (but do NOT auto-tailor)
     if (this.session) {
-      const found = await this.detectCurrentJob();
-      if (found && this.currentJob) {
-        // Auto-start tailoring immediately
-        this.tailorDocuments();
+      await this.refreshSessionIfNeeded();
+      await this.detectCurrentJob();
+    }
+  }
+
+  async refreshSessionIfNeeded() {
+    try {
+      if (!this.session?.refresh_token || !this.session?.access_token) return;
+
+      // If we don't have expiry info, do a lightweight call to validate token first.
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${this.session.access_token}`,
+        },
+      });
+
+      if (res.ok) return;
+
+      // Refresh
+      const refreshRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ refresh_token: this.session.refresh_token }),
+      });
+
+      if (!refreshRes.ok) {
+        console.warn('[ATS Tailor] refresh failed; clearing session');
+        this.session = null;
+        await chrome.storage.local.remove(['ats_session']);
+        this.updateUI();
+        return;
       }
+
+      const data = await refreshRes.json();
+      this.session = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user || this.session.user,
+      };
+      await this.saveSession();
+    } catch (e) {
+      console.warn('[ATS Tailor] refreshSessionIfNeeded error', e);
     }
   }
 
@@ -270,6 +311,7 @@ class ATSTailor {
 
       if (results?.[0]?.result) {
         this.currentJob = results[0].result;
+        await chrome.storage.local.set({ ats_lastJob: this.currentJob });
         this.updateJobDisplay();
         this.setStatus('Job found!', 'ready');
         return true;
@@ -330,22 +372,67 @@ class ATSTailor {
     };
 
     try {
-      updateProgress(20, 'Generating tailored documents...');
-      
+      updateProgress(20, 'Loading your profile...');
+
+      await this.refreshSessionIfNeeded();
+      if (!this.session?.access_token || !this.session?.user?.id) {
+        throw new Error('Please sign in again');
+      }
+
+      const profileRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${this.session.access_token}`,
+          },
+        }
+      );
+
+      if (!profileRes.ok) {
+        throw new Error('Could not load profile. Open the QuantumHire app and complete your profile.');
+      }
+
+      const profileRows = await profileRes.json();
+      const p = profileRows?.[0] || {};
+
+      updateProgress(35, 'Generating tailored documents...');
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.session.access_token}`,
-          'apikey': SUPABASE_ANON_KEY
+          Authorization: `Bearer ${this.session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
-          jobTitle: this.currentJob.title,
-          company: this.currentJob.company,
-          location: this.currentJob.location,
-          jobDescription: this.currentJob.description,
-          jobUrl: this.currentJob.url
-        })
+          jobTitle: this.currentJob.title || '',
+          company: this.currentJob.company || '',
+          location: this.currentJob.location || '',
+          description: this.currentJob.description || '',
+          requirements: [],
+          userProfile: {
+            firstName: p.first_name || '',
+            lastName: p.last_name || '',
+            email: p.email || this.session.user.email || '',
+            phone: p.phone || '',
+            linkedin: p.linkedin || '',
+            github: p.github || '',
+            portfolio: p.portfolio || '',
+            coverLetter: p.cover_letter || '',
+            workExperience: Array.isArray(p.work_experience) ? p.work_experience : [],
+            education: Array.isArray(p.education) ? p.education : [],
+            skills: Array.isArray(p.skills) ? p.skills : [],
+            certifications: Array.isArray(p.certifications) ? p.certifications : [],
+            achievements: Array.isArray(p.achievements) ? p.achievements : [],
+            atsStrategy: p.ats_strategy || '',
+            city: p.city || undefined,
+            country: p.country || undefined,
+            address: p.address || undefined,
+            state: p.state || undefined,
+            zipCode: p.zip_code || undefined,
+          },
+        }),
       });
 
       updateProgress(70, 'Processing results...');
@@ -362,8 +449,10 @@ class ATSTailor {
         cv: result.tailoredResume,
         coverLetter: result.coverLetter,
         cvPdf: result.resumePdf,
-        coverPdf: result.coverLetterPdf
+        coverPdf: result.coverLetterPdf,
       };
+
+      await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
 
       updateProgress(100, 'Complete!');
 
