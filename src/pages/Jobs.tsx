@@ -39,7 +39,6 @@ import {
   SkipForward,
   Wifi,
   Play,
-  Clock,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -95,9 +94,6 @@ const Jobs = () => {
   const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
   const postedWithinFilterRef = useRef<string>('all');
   const [isFetchingNew, setIsFetchingNew] = useState(false);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
-  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -453,7 +449,7 @@ const Jobs = () => {
 
       if (error) throw error;
 
-      setLastFetchTime(new Date());
+      
 
       if (data?.success) {
         await refetch();
@@ -480,31 +476,6 @@ const Jobs = () => {
     }
   }, [user, refetch, isFetchingNew]);
 
-  // Auto-refresh every 5 minutes
-  useEffect(() => {
-    if (!autoRefreshEnabled || !user) {
-      if (autoRefreshIntervalRef.current) {
-        clearInterval(autoRefreshIntervalRef.current);
-        autoRefreshIntervalRef.current = null;
-      }
-      return;
-    }
-
-    // Initial fetch on mount
-    handleFetchNewJobs(true);
-
-    // Set up 5-minute interval
-    autoRefreshIntervalRef.current = setInterval(() => {
-      handleFetchNewJobs(true);
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => {
-      if (autoRefreshIntervalRef.current) {
-        clearInterval(autoRefreshIntervalRef.current);
-        autoRefreshIntervalRef.current = null;
-      }
-    };
-  }, [autoRefreshEnabled, user, handleFetchNewJobs]);
 
 
   // Validate job URLs
@@ -1002,38 +973,7 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Auto-refresh controls */}
-        {jobs.length > 0 && (
-          <div className="flex items-center justify-end gap-2 bg-muted/30 p-3 rounded-lg border">
-            {lastFetchTime && (
-              <span className="text-xs text-muted-foreground">
-                Last: {lastFetchTime.toLocaleTimeString()}
-              </span>
-            )}
-            <Button
-              variant={autoRefreshEnabled ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-              className="gap-1 h-7 px-2 text-xs"
-            >
-              {autoRefreshEnabled ? 'Auto: ON' : 'Auto: OFF'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleFetchNewJobs(false)}
-              disabled={isFetchingNew}
-              className="gap-2"
-            >
-              {isFetchingNew ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Fetch Now
-            </Button>
-          </div>
-        )}
+
 
         {sortedJobs.length > 0 && (
           <VirtualJobList
