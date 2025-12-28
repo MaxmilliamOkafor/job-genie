@@ -93,6 +93,7 @@ const Jobs = () => {
   const [activeSearchQuery, setActiveSearchQuery] = useState<string>('');
   const [lastSearchResultCount, setLastSearchResultCount] = useState<number | null>(null);
   const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
+  const [isFetchingNew, setIsFetchingNew] = useState(false);
   
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -376,6 +377,68 @@ const Jobs = () => {
     await searchJobs(searchInput);
     setIsSearching(false);
   }, [searchInput, searchJobs, refetch]);
+
+  // Fetch fresh new jobs using live-jobs function
+  const handleFetchNewJobs = useCallback(async () => {
+    if (!user) return;
+    
+    setIsFetchingNew(true);
+    try {
+      // Get user's profile for keywords
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('skills')
+        .eq('user_id', user.id)
+        .single();
+      
+      // Default keywords if no profile skills
+      const defaultKeywords = "Software Engineer, Data Scientist, Product Manager, UX Designer, Full Stack Developer";
+      let keywords = defaultKeywords;
+      
+      if (profileData?.skills) {
+        const skillsArr = Array.isArray(profileData.skills) 
+          ? profileData.skills 
+          : Object.keys(profileData.skills);
+        if (skillsArr.length > 0) {
+          keywords = skillsArr.slice(0, 10).join(', ');
+        }
+      }
+      
+      const { data, error } = await supabase.functions.invoke('live-jobs', {
+        body: {
+          keywords,
+          locations: 'Remote, United States, United Kingdom',
+          hours: 1, // Last 1 hour
+          limit: 50,
+          user_id: user.id,
+          sortBy: 'recent',
+        },
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        await refetch();
+        const newCount = data.totalFiltered || 0;
+        if (newCount > 0) {
+          toast.success(`Found ${newCount} new jobs!`, {
+            description: 'Fresh listings added to your queue',
+          });
+          // Reset filter to show new jobs
+          setPostedWithinFilter('1h');
+        } else {
+          toast.info('No new jobs found', {
+            description: `Checked ${data.totalFetched || 0} listings - all duplicates or older`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching new jobs:', error);
+      toast.error('Failed to fetch new jobs');
+    } finally {
+      setIsFetchingNew(false);
+    }
+  }, [user, refetch]);
 
   // Validate job URLs
   const handleValidateLinks = useCallback(async () => {
@@ -874,29 +937,46 @@ const Jobs = () => {
 
         {/* Posted Within Time Filter */}
         {jobs.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>Added within:</span>
+          <div className="flex items-center justify-between gap-4 flex-wrap bg-muted/30 p-3 rounded-lg border">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>Added within:</span>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                {POSTED_WITHIN_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={postedWithinFilter === option.value ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => setPostedWithinFilter(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              {postedWithinFilter !== 'all' && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  ({sortedJobs.length} job{sortedJobs.length !== 1 ? 's' : ''})
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1 flex-wrap">
-              {POSTED_WITHIN_OPTIONS.map((option) => (
-                <Button
-                  key={option.value}
-                  variant={postedWithinFilter === option.value ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 px-3 text-xs"
-                  onClick={() => setPostedWithinFilter(option.value)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-            {postedWithinFilter !== 'all' && (
-              <span className="text-xs text-muted-foreground ml-2">
-                ({sortedJobs.length} job{sortedJobs.length !== 1 ? 's' : ''})
-              </span>
-            )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleFetchNewJobs}
+              disabled={isFetchingNew}
+              className="gap-2"
+            >
+              {isFetchingNew ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Fetch New Jobs
+            </Button>
           </div>
         )}
 
