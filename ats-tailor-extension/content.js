@@ -1,55 +1,79 @@
 // ATS Tailored CV & Cover Letter - Content Script
-// Handles file attachment to job application forms
-// Works alongside LazyApply - does NOT handle autofill or submission
+// Auto-start tailoring on supported ATS pages + attach generated PDFs to form inputs
 
-(function() {
+(function () {
   'use strict';
 
   console.log('[ATS Tailor] Content script loaded');
 
-  // File input selectors for different platforms
+  const SUPPORTED_HOSTS = [
+    'greenhouse.io',
+    'workday.com',
+    'myworkdayjobs.com',
+    'smartrecruiters.com',
+    'bullhornstaffing.com',
+    'bullhorn.com',
+    'teamtailor.com',
+    'workable.com',
+    'icims.com',
+    'oracle.com',
+    'oraclecloud.com',
+    'taleo.net',
+  ];
+
+  // NOTE: This extension explicitly excludes Lever + Ashby by not matching those hosts in the manifest.
+
+  const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+  const SUPABASE_ANON_KEY =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
+  const isSupportedHost = (hostname) =>
+    SUPPORTED_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
+
+  if (!isSupportedHost(window.location.hostname)) {
+    console.log('[ATS Tailor] Not a supported ATS host, skipping');
+    return;
+  }
+
+  // Prevent re-tailoring the same URL too frequently
+  const AUTO_TAILOR_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+  const storageGet = (keys) =>
+    new Promise((resolve) => chrome.storage.local.get(keys, (res) => resolve(res)));
+  const storageSet = (obj) => new Promise((resolve) => chrome.storage.local.set(obj, resolve));
+
   const FILE_INPUT_SELECTORS = {
     resume: [
-      'input[type="file"][name*="resume" i]',
-      'input[type="file"][name*="cv" i]',
-      'input[type="file"][id*="resume" i]',
-      'input[type="file"][id*="cv" i]',
-      'input[type="file"][accept*=".pdf"][name*="resume" i]',
-      'input[type="file"][data-automation-id*="resume" i]',
-      'input[type="file"][aria-label*="resume" i]',
-      'input[type="file"][aria-label*="cv" i]',
       // Greenhouse
       '#resume_file',
       '#s3_upload_for_resume',
       'input[name="resume"]',
-      // Lever
-      'input[name="resume"]',
-      'input.resume-upload',
       // Workday
       'input[data-automation-id="file-upload-input-ref"]',
       // Generic
-      'input[type="file"]:first-of-type'
+      'input[type="file"][name*="resume" i]',
+      'input[type="file"][name*="cv" i]',
+      'input[type="file"][id*="resume" i]',
+      'input[type="file"][id*="cv" i]',
+      'input[type="file"][accept*=".pdf"]',
+      'input[type="file"]:first-of-type',
     ],
     coverLetter: [
-      'input[type="file"][name*="cover" i]',
-      'input[type="file"][name*="letter" i]',
-      'input[type="file"][id*="cover" i]',
-      'input[type="file"][aria-label*="cover" i]',
       // Greenhouse
       '#cover_letter_file',
       '#s3_upload_for_cover_letter',
       'input[name="cover_letter"]',
-      // Lever
-      'input[name="coverLetter"]',
-      // Generic fallback - second file input
-      'input[type="file"]:nth-of-type(2)'
-    ]
+      // Generic
+      'input[type="file"][name*="cover" i]',
+      'input[type="file"][name*="letter" i]',
+      'input[type="file"][id*="cover" i]',
+      'input[type="file"]:nth-of-type(2)',
+    ],
   };
 
-  // Find file input element
   function findFileInput(type) {
     const selectors = type === 'cv' ? FILE_INPUT_SELECTORS.resume : FILE_INPUT_SELECTORS.coverLetter;
-    
+
     for (const selector of selectors) {
       try {
         const input = document.querySelector(selector);
@@ -57,129 +81,55 @@
           console.log(`[ATS Tailor] Found ${type} input:`, selector);
           return input;
         }
-      } catch (e) {
-        // Invalid selector, skip
+      } catch {
+        // ignore invalid selectors
       }
     }
 
-    // Fallback: search by labels
+    // Label fallback
     const labels = document.querySelectorAll('label');
     for (const label of labels) {
-      const text = label.textContent.toLowerCase();
-      const isMatch = type === 'cv' 
-        ? (text.includes('resume') || text.includes('cv'))
-        : text.includes('cover');
-      
-      if (isMatch) {
-        // Check for associated input
-        const forId = label.getAttribute('for');
-        if (forId) {
-          const input = document.getElementById(forId);
-          if (input?.type === 'file') {
-            console.log(`[ATS Tailor] Found ${type} input via label:`, forId);
-            return input;
-          }
-        }
-        
-        // Check for nested input
-        const nestedInput = label.querySelector('input[type="file"]');
-        if (nestedInput) {
-          console.log(`[ATS Tailor] Found ${type} input nested in label`);
-          return nestedInput;
-        }
+      const text = (label.textContent || '').toLowerCase();
+      const isMatch =
+        type === 'cv' ? text.includes('resume') || text.includes('cv') : text.includes('cover');
+
+      if (!isMatch) continue;
+
+      const forId = label.getAttribute('for');
+      if (forId) {
+        const input = document.getElementById(forId);
+        if (input?.type === 'file') return input;
       }
+
+      const nested = label.querySelector('input[type="file"]');
+      if (nested) return nested;
     }
 
-    console.log(`[ATS Tailor] No ${type} input found`);
     return null;
   }
 
-  // Convert base64 to File object
   function base64ToFile(base64, filename, type = 'application/pdf') {
-    try {
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type });
-      return new File([blob], filename, { type });
-    } catch (e) {
-      console.error('[ATS Tailor] Error converting base64:', e);
-      return null;
-    }
+    const byteCharacters = atob(base64);
+    const byteArray = new Uint8Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) byteArray[i] = byteCharacters.charCodeAt(i);
+    const blob = new Blob([byteArray], { type });
+    return new File([blob], filename, { type });
   }
 
-  // Attach file to input
   function attachFileToInput(input, file) {
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
     input.files = dataTransfer.files;
 
-    // Trigger change events
-    const events = ['change', 'input'];
-    events.forEach(eventType => {
-      const event = new Event(eventType, { bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
+    ['change', 'input'].forEach((eventType) => {
+      input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
     });
 
-    // React-specific handling
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    if (nativeInputValueSetter) {
-      const changeEvent = new Event('change', { bubbles: true });
-      input.dispatchEvent(changeEvent);
-    }
-
-    console.log(`[ATS Tailor] File attached:`, file.name);
+    console.log('[ATS Tailor] File attached:', file.name);
     return true;
   }
 
-  // Handle document attachment
-  async function handleAttachDocument(data) {
-    const { type, pdf, text, filename } = data;
-    
-    console.log(`[ATS Tailor] Attaching ${type}:`, filename);
-
-    // Find the appropriate input
-    const input = findFileInput(type);
-    
-    if (!input) {
-      console.error(`[ATS Tailor] No file input found for ${type}`);
-      showNotification(`Could not find ${type === 'cv' ? 'resume' : 'cover letter'} upload field. Please attach manually.`, 'error');
-      return { success: false, message: 'File input not found' };
-    }
-
-    // Create file from base64 PDF or text
-    let file;
-    if (pdf) {
-      file = base64ToFile(pdf, filename, 'application/pdf');
-    } else if (text) {
-      // Create a text file if no PDF
-      const blob = new Blob([text], { type: 'text/plain' });
-      const txtFilename = filename.replace('.pdf', '.txt');
-      file = new File([blob], txtFilename, { type: 'text/plain' });
-    }
-
-    if (!file) {
-      console.error('[ATS Tailor] Could not create file');
-      return { success: false, message: 'Could not create file' };
-    }
-
-    // Attach the file
-    const success = attachFileToInput(input, file);
-    
-    if (success) {
-      showNotification(`${type === 'cv' ? 'Resume' : 'Cover Letter'} attached successfully!`, 'success');
-      return { success: true };
-    } else {
-      return { success: false, message: 'Failed to attach file' };
-    }
-  }
-
-  // Show notification
   function showNotification(message, type = 'success') {
-    // Remove existing notification
     const existing = document.getElementById('ats-tailor-notification');
     if (existing) existing.remove();
 
@@ -190,45 +140,262 @@
       top: 20px;
       right: 20px;
       padding: 12px 20px;
-      background: ${type === 'success' ? '#10b981' : '#ef4444'};
+      background: ${type === 'success' ? '#10b981' : type === 'info' ? '#3b82f6' : '#ef4444'};
       color: white;
-      border-radius: 8px;
+      border-radius: 10px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       z-index: 999999;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      animation: slideIn 0.3s ease;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      max-width: 360px;
     `;
     notification.textContent = message;
-
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideIn {
-        from { opacity: 0; transform: translateX(20px); }
-        to { opacity: 1; transform: translateX(0); }
-      }
-    `;
-    document.head.appendChild(style);
     document.body.appendChild(notification);
 
-    // Auto remove
-    setTimeout(() => {
-      notification.style.animation = 'slideIn 0.3s ease reverse';
-      setTimeout(() => notification.remove(), 300);
-    }, 4000);
+    setTimeout(() => notification.remove(), 4500);
   }
 
-  // Listen for messages from popup
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('[ATS Tailor] Message received:', message.action);
+  function extractJobInfoFromDom() {
+    const hostname = window.location.hostname;
 
+    const getText = (selectors) => {
+      for (const sel of selectors) {
+        try {
+          const el = document.querySelector(sel);
+          const t = el?.textContent?.trim();
+          if (t) return t;
+        } catch {
+          // ignore
+        }
+      }
+      return '';
+    };
+
+    const getMeta = (name) =>
+      document.querySelector(`meta[property="${name}"]`)?.getAttribute('content') ||
+      document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ||
+      '';
+
+    const platformKey = (() => {
+      if (hostname.includes('greenhouse.io')) return 'greenhouse';
+      if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) return 'workday';
+      if (hostname.includes('smartrecruiters.com')) return 'smartrecruiters';
+      if (hostname.includes('teamtailor.com')) return 'teamtailor';
+      if (hostname.includes('workable.com')) return 'workable';
+      if (hostname.includes('icims.com')) return 'icims';
+      if (hostname.includes('bullhorn')) return 'bullhorn';
+      if (hostname.includes('oracle') || hostname.includes('taleo.net')) return 'oracle';
+      return 'generic';
+    })();
+
+    const selectorsByPlatform = {
+      greenhouse: {
+        title: ['h1.app-title', 'h1.posting-headline', 'h1'],
+        company: ['#company-name', '.company-name'],
+        location: ['.location', '.posting-categories .location'],
+        description: ['#content', '.posting-description', '.posting'],
+      },
+      workday: {
+        title: ['h1[data-automation-id="jobPostingHeader"]', 'h1[data-automation-id="jobPostingTitle"]', 'h1'],
+        company: ['div[data-automation-id="jobPostingCompany"]', '[data-automation-id="companyName"]'],
+        location: ['div[data-automation-id="locations"]', '[data-automation-id="jobPostingLocation"]'],
+        description: ['div[data-automation-id="jobPostingDescription"]', '[data-automation-id="jobDescription"]'],
+      },
+      smartrecruiters: {
+        title: ['h1[data-test="job-title"]', 'h1'],
+        company: ['[data-test="job-company-name"]', '[class*="company" i]'],
+        location: ['[data-test="job-location"]', '[class*="location" i]'],
+        description: ['[data-test="job-description"]', '[class*="job-description" i]'],
+      },
+      teamtailor: {
+        title: ['h1', '[data-qa="job-title"]'],
+        company: ['[data-qa="job-company"]', '[class*="company" i]'],
+        location: ['[data-qa="job-location"]', '[class*="location" i]'],
+        description: ['[data-qa="job-description"]', 'main'],
+      },
+      workable: {
+        title: ['h1', '[data-ui="job-title"]'],
+        company: ['[data-ui="company-name"]', '[class*="company" i]'],
+        location: ['[data-ui="job-location"]', '[class*="location" i]'],
+        description: ['[data-ui="job-description"]', '[class*="description" i]'],
+      },
+      icims: {
+        title: ['h1', '.iCIMS_Header'],
+        company: ['[class*="company" i]'],
+        location: ['[class*="location" i]'],
+        description: ['#job-content', '[class*="description" i]', 'main'],
+      },
+      oracle: {
+        title: ['h1', '[class*="job-title" i]'],
+        company: ['[class*="company" i]'],
+        location: ['[class*="location" i]'],
+        description: ['[class*="description" i]', 'main'],
+      },
+      bullhorn: {
+        title: ['h1', '[class*="job-title" i]'],
+        company: ['[class*="company" i]'],
+        location: ['[class*="location" i]'],
+        description: ['[class*="description" i]', 'main'],
+      },
+      generic: {
+        title: ['h1', '[data-test*="title" i]'],
+        company: ['[class*="company" i]'],
+        location: ['[class*="location" i]'],
+        description: ['main', '[class*="description" i]'],
+      },
+    };
+
+    const s = selectorsByPlatform[platformKey] || selectorsByPlatform.generic;
+
+    const title =
+      getText(s.title) || getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';
+
+    if (!title || title.length < 2) return null;
+
+    const company = getText(s.company) || getMeta('og:site_name') || '';
+    const location = getText(s.location) || '';
+
+    const raw = getText(s.description);
+    const description = raw && raw.trim().length > 80 ? raw.trim().slice(0, 3000) : '';
+
+    return {
+      title,
+      company,
+      location,
+      description,
+      url: window.location.href,
+    };
+  }
+
+  async function autoTailorIfPossible() {
+    const job = extractJobInfoFromDom();
+    if (!job) {
+      console.log('[ATS Tailor] No job detected on this page');
+      return;
+    }
+
+    const now = Date.now();
+    const { ats_lastTailoredUrl, ats_lastTailoredAt, ats_session } = await storageGet([
+      'ats_lastTailoredUrl',
+      'ats_lastTailoredAt',
+      'ats_session',
+    ]);
+
+    if (ats_lastTailoredUrl === job.url && ats_lastTailoredAt && now - ats_lastTailoredAt < AUTO_TAILOR_COOLDOWN_MS) {
+      console.log('[ATS Tailor] Cooldown active, skipping auto-tailor');
+      return;
+    }
+
+    if (!ats_session?.access_token) {
+      showNotification('ATS Tailor: please sign in (open extension once).', 'error');
+      return;
+    }
+
+    await storageSet({ ats_lastTailoredUrl: job.url, ats_lastTailoredAt: now });
+
+    showNotification('ATS Tailor: tailoring CV + cover letter…', 'info');
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${ats_session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          jobTitle: job.title,
+          company: job.company,
+          location: job.location,
+          jobDescription: job.description,
+          jobUrl: job.url,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Tailor request failed');
+      }
+
+      const result = await response.json();
+      if (result?.error) throw new Error(result.error);
+
+      const resumePdf = result.resumePdf;
+      const coverLetterPdf = result.coverLetterPdf;
+
+      // Try to auto-attach if the form has file inputs
+      const resumeInput = findFileInput('cv');
+      const coverInput = findFileInput('cover');
+
+      const companySafe = (job.company || 'Tailored').replace(/[^a-z0-9-_]+/gi, '_');
+      const resumeName = `${companySafe}_CV.pdf`;
+      const coverName = `${companySafe}_Cover_Letter.pdf`;
+
+      let attachedAny = false;
+
+      if (resumePdf && resumeInput) {
+        attachFileToInput(resumeInput, base64ToFile(resumePdf, resumeName));
+        attachedAny = true;
+      }
+
+      if (coverLetterPdf && coverInput) {
+        attachFileToInput(coverInput, base64ToFile(coverLetterPdf, coverName));
+        attachedAny = true;
+      }
+
+      if (attachedAny) {
+        showNotification('ATS Tailor: tailored PDFs attached to the form.', 'success');
+      } else {
+        showNotification('ATS Tailor: done. Open extension to download/attach.', 'success');
+      }
+    } catch (e) {
+      console.error('[ATS Tailor] Auto-tailor error:', e);
+      showNotification('ATS Tailor: tailoring failed (open extension for details).', 'error');
+    }
+  }
+
+  // Some ATS pages render content after load; try a few times quickly.
+  const tryTimes = [500, 1500, 3000, 5000];
+  tryTimes.forEach((ms) => setTimeout(autoTailorIfPossible, ms));
+
+  // Keep existing attachment message support (popup -> content)
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'attachDocument') {
-      handleAttachDocument(message)
-        .then(result => sendResponse(result))
-        .catch(error => sendResponse({ success: false, message: error.message }));
-      return true; // Keep channel open for async response
+      try {
+        const { type, pdf, text, filename } = message;
+        const input = findFileInput(type);
+        if (!input) {
+          showNotification(
+            `Could not find ${type === 'cv' ? 'resume' : 'cover letter'} upload field.`,
+            'error'
+          );
+          sendResponse({ success: false, message: 'File input not found' });
+          return true;
+        }
+
+        if (pdf) {
+          attachFileToInput(input, base64ToFile(pdf, filename, 'application/pdf'));
+          showNotification(`${type === 'cv' ? 'Resume' : 'Cover Letter'} attached!`, 'success');
+          sendResponse({ success: true });
+          return true;
+        }
+
+        if (text) {
+          const blob = new Blob([text], { type: 'text/plain' });
+          const txtFilename = filename.replace(/\.pdf$/i, '.txt');
+          attachFileToInput(input, new File([blob], txtFilename, { type: 'text/plain' }));
+          showNotification(`${type === 'cv' ? 'Resume' : 'Cover Letter'} attached!`, 'success');
+          sendResponse({ success: true });
+          return true;
+        }
+
+        sendResponse({ success: false, message: 'No document provided' });
+        return true;
+      } catch (err) {
+        sendResponse({ success: false, message: err?.message || 'Attach failed' });
+        return true;
+      }
     }
 
     if (message.action === 'ping') {
@@ -236,8 +403,4 @@
       return true;
     }
   });
-
-  // Notify that content script is ready
-  console.log('[ATS Tailor] Content script ready for file attachment');
-
 })();
