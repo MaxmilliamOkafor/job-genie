@@ -4,10 +4,12 @@
 (function () {
   'use strict';
 
-  console.log('[ATS Tailor] Content script loaded');
+  console.log('[ATS Tailor] Content script loaded on:', window.location.hostname);
 
   const SUPPORTED_HOSTS = [
     'greenhouse.io',
+    'job-boards.greenhouse.io',
+    'boards.greenhouse.io',
     'workday.com',
     'myworkdayjobs.com',
     'smartrecruiters.com',
@@ -15,13 +17,12 @@
     'bullhorn.com',
     'teamtailor.com',
     'workable.com',
+    'apply.workable.com',
     'icims.com',
     'oracle.com',
     'oraclecloud.com',
     'taleo.net',
   ];
-
-  // NOTE: This extension explicitly excludes Lever + Ashby by not matching those hosts in the manifest.
 
   const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
   const SUPABASE_ANON_KEY =
@@ -34,6 +35,8 @@
     console.log('[ATS Tailor] Not a supported ATS host, skipping');
     return;
   }
+
+  console.log('[ATS Tailor] Supported ATS detected!');
 
   // Prevent re-tailoring the same URL too frequently
   const AUTO_TAILOR_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
@@ -48,12 +51,12 @@
       '#resume_file',
       '#s3_upload_for_resume',
       'input[name="resume"]',
+      'input[id*="resume" i]',
       // Workday
       'input[data-automation-id="file-upload-input-ref"]',
       // Generic
       'input[type="file"][name*="resume" i]',
       'input[type="file"][name*="cv" i]',
-      'input[type="file"][id*="resume" i]',
       'input[type="file"][id*="cv" i]',
       'input[type="file"][accept*=".pdf"]',
       'input[type="file"]:first-of-type',
@@ -63,10 +66,10 @@
       '#cover_letter_file',
       '#s3_upload_for_cover_letter',
       'input[name="cover_letter"]',
+      'input[id*="cover" i]',
       // Generic
       'input[type="file"][name*="cover" i]',
       'input[type="file"][name*="letter" i]',
-      'input[type="file"][id*="cover" i]',
       'input[type="file"]:nth-of-type(2)',
     ],
   };
@@ -139,21 +142,39 @@
       position: fixed;
       top: 20px;
       right: 20px;
-      padding: 12px 20px;
-      background: ${type === 'success' ? '#10b981' : type === 'info' ? '#3b82f6' : '#ef4444'};
+      padding: 14px 20px;
+      background: ${type === 'success' ? '#22c55e' : type === 'info' ? '#818cf8' : '#ef4444'};
       color: white;
-      border-radius: 10px;
+      border-radius: 12px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
       font-weight: 600;
       z-index: 999999;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
       max-width: 360px;
+      animation: slideInRight 0.3s ease;
     `;
     notification.textContent = message;
+    
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+    `;
+    if (!document.getElementById('ats-tailor-styles')) {
+      style.id = 'ats-tailor-styles';
+      document.head.appendChild(style);
+    }
+    
     document.body.appendChild(notification);
 
-    setTimeout(() => notification.remove(), 4500);
+    setTimeout(() => {
+      notification.style.animation = 'slideInRight 0.3s ease reverse';
+      setTimeout(() => notification.remove(), 300);
+    }, 4000);
   }
 
   function extractJobInfoFromDom() {
@@ -185,16 +206,16 @@
       if (hostname.includes('workable.com')) return 'workable';
       if (hostname.includes('icims.com')) return 'icims';
       if (hostname.includes('bullhorn')) return 'bullhorn';
-      if (hostname.includes('oracle') || hostname.includes('taleo.net')) return 'oracle';
+      if (hostname.includes('oracle') || hostname.includes('taleo.net') || hostname.includes('oraclecloud')) return 'oracle';
       return 'generic';
     })();
 
     const selectorsByPlatform = {
       greenhouse: {
-        title: ['h1.app-title', 'h1.posting-headline', 'h1'],
-        company: ['#company-name', '.company-name'],
-        location: ['.location', '.posting-categories .location'],
-        description: ['#content', '.posting-description', '.posting'],
+        title: ['h1.app-title', 'h1.posting-headline', 'h1', '[data-test="posting-title"]'],
+        company: ['#company-name', '.company-name', '[data-test="company-name"]'],
+        location: ['.location', '.posting-categories .location', '[data-test="location"]'],
+        description: ['#content', '.posting-description', '.posting', '[data-test="description"]'],
       },
       workday: {
         title: ['h1[data-automation-id="jobPostingHeader"]', 'h1[data-automation-id="jobPostingTitle"]', 'h1'],
@@ -248,32 +269,44 @@
 
     const s = selectorsByPlatform[platformKey] || selectorsByPlatform.generic;
 
-    const title =
-      getText(s.title) || getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';
+    let title = getText(s.title) || getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';
 
     if (!title || title.length < 2) return null;
 
-    const company = getText(s.company) || getMeta('og:site_name') || '';
+    let company = getText(s.company) || getMeta('og:site_name') || '';
+    
+    // Try to extract company from title if format is "Role at Company"
+    if (!company && document.title.includes(' at ')) {
+      const parts = document.title.split(' at ');
+      if (parts.length > 1) {
+        company = parts[parts.length - 1].split('|')[0].split('-')[0].trim();
+      }
+    }
+    
     const location = getText(s.location) || '';
 
     const raw = getText(s.description);
     const description = raw && raw.trim().length > 80 ? raw.trim().slice(0, 3000) : '';
 
     return {
-      title,
-      company,
-      location,
+      title: title.substring(0, 200),
+      company: company.substring(0, 100),
+      location: location.substring(0, 100),
       description,
       url: window.location.href,
     };
   }
 
   async function autoTailorIfPossible() {
+    console.log('[ATS Tailor] Attempting auto-tailor...');
+    
     const job = extractJobInfoFromDom();
     if (!job) {
       console.log('[ATS Tailor] No job detected on this page');
       return;
     }
+
+    console.log('[ATS Tailor] Job found:', job.title, 'at', job.company);
 
     const now = Date.now();
     const { ats_lastTailoredUrl, ats_lastTailoredAt, ats_session } = await storageGet([
@@ -288,13 +321,14 @@
     }
 
     if (!ats_session?.access_token) {
-      showNotification('ATS Tailor: please sign in (open extension once).', 'error');
+      console.log('[ATS Tailor] Not logged in');
+      showNotification('ATS Tailor: Please sign in (click extension icon)', 'error');
       return;
     }
 
     await storageSet({ ats_lastTailoredUrl: job.url, ats_lastTailoredAt: now });
 
-    showNotification('ATS Tailor: tailoring CV + cover letter…', 'info');
+    showNotification('ATS Tailor: Generating CV & cover letter...', 'info');
 
     try {
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
@@ -345,21 +379,21 @@
       }
 
       if (attachedAny) {
-        showNotification('ATS Tailor: tailored PDFs attached to the form.', 'success');
+        showNotification('✓ Tailored PDFs attached to the form!', 'success');
       } else {
-        showNotification('ATS Tailor: done. Open extension to download/attach.', 'success');
+        showNotification('✓ Done! Click extension icon to download/attach.', 'success');
       }
     } catch (e) {
       console.error('[ATS Tailor] Auto-tailor error:', e);
-      showNotification('ATS Tailor: tailoring failed (open extension for details).', 'error');
+      showNotification('Tailoring failed - click extension for details', 'error');
     }
   }
 
-  // Some ATS pages render content after load; try a few times quickly.
-  const tryTimes = [500, 1500, 3000, 5000];
+  // Some ATS pages render content after load; try a few times quickly
+  const tryTimes = [800, 2000, 4000];
   tryTimes.forEach((ms) => setTimeout(autoTailorIfPossible, ms));
 
-  // Keep existing attachment message support (popup -> content)
+  // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'attachDocument') {
       try {
@@ -376,7 +410,7 @@
 
         if (pdf) {
           attachFileToInput(input, base64ToFile(pdf, filename, 'application/pdf'));
-          showNotification(`${type === 'cv' ? 'Resume' : 'Cover Letter'} attached!`, 'success');
+          showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
           sendResponse({ success: true });
           return true;
         }
@@ -385,7 +419,7 @@
           const blob = new Blob([text], { type: 'text/plain' });
           const txtFilename = filename.replace(/\.pdf$/i, '.txt');
           attachFileToInput(input, new File([blob], txtFilename, { type: 'text/plain' }));
-          showNotification(`${type === 'cv' ? 'Resume' : 'Cover Letter'} attached!`, 'success');
+          showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
           sendResponse({ success: true });
           return true;
         }
@@ -402,5 +436,7 @@
       sendResponse({ pong: true });
       return true;
     }
+    
+    return true;
   });
 })();
