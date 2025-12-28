@@ -524,7 +524,12 @@ async function handleSpeedButtonClick(selectedBtn) {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, { type: 'SPEED_CHANGED', speed });
+      chrome.tabs.sendMessage(tab.id, { type: 'SPEED_CHANGED', speed }, () => {
+        // Ignore chrome.runtime.lastError - content script may not be loaded
+        if (chrome.runtime.lastError) {
+          console.log('Speed change: content script not available');
+        }
+      });
     }
   } catch (e) {
     // Ignore if content script not ready
@@ -962,17 +967,34 @@ async function detectCurrentJob() {
     }
     
     // Send message to content script to extract job
-    chrome.tabs.sendMessage(tab.id, { action: 'extractJob' }, (response) => {
-      if (chrome.runtime.lastError || !response) {
-        if (jobDetails) jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
-        if (applyNowBtn) applyNowBtn.disabled = true;
-        if (addQueueBtn) addQueueBtn.disabled = true;
-        return;
-      }
-      
-      currentJob = response;
-      updateJobCard(response);
-    });
+    // Use try-catch and check lastError to prevent "Receiving end does not exist" errors
+    try {
+      chrome.tabs.sendMessage(tab.id, { action: 'extractJob' }, (response) => {
+        // Must check lastError to prevent uncaught errors
+        if (chrome.runtime.lastError) {
+          console.log('Content script not loaded:', chrome.runtime.lastError.message);
+          if (jobDetails) jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
+          if (applyNowBtn) applyNowBtn.disabled = true;
+          if (addQueueBtn) addQueueBtn.disabled = true;
+          return;
+        }
+        
+        if (!response) {
+          if (jobDetails) jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
+          if (applyNowBtn) applyNowBtn.disabled = true;
+          if (addQueueBtn) addQueueBtn.disabled = true;
+          return;
+        }
+        
+        currentJob = response;
+        updateJobCard(response);
+      });
+    } catch (e) {
+      console.log('Failed to send message to content script:', e);
+      if (jobDetails) jobDetails.innerHTML = '<span class="no-job">No job detected on this page</span>';
+      if (applyNowBtn) applyNowBtn.disabled = true;
+      if (addQueueBtn) addQueueBtn.disabled = true;
+    }
     
   } catch (error) {
     console.error('Job detection error:', error);
