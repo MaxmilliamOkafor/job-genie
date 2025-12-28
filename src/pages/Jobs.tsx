@@ -93,11 +93,12 @@ const Jobs = () => {
   const [activeSearchQuery, setActiveSearchQuery] = useState<string>('');
   const [lastSearchResultCount, setLastSearchResultCount] = useState<number | null>(null);
   const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
+  const postedWithinFilterRef = useRef<string>('all');
   const [isFetchingNew, setIsFetchingNew] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
@@ -381,10 +382,15 @@ const Jobs = () => {
     setIsSearching(false);
   }, [searchInput, searchJobs, refetch]);
 
+  // Keep a ref so auto-refresh doesn't restart when the user changes the UI filter
+  useEffect(() => {
+    postedWithinFilterRef.current = postedWithinFilter;
+  }, [postedWithinFilter]);
+
   // Fetch fresh new jobs using live-jobs function
   const handleFetchNewJobs = useCallback(async (silent = false) => {
     if (!user || isFetchingNew) return;
-    
+
     setIsFetchingNew(true);
     try {
       // Get user's profile for keywords
@@ -392,21 +398,35 @@ const Jobs = () => {
         .from('profiles')
         .select('skills')
         .eq('user_id', user.id)
-        .single();
-      
+        .maybeSingle();
+
       // Default keywords if no profile skills
-      const defaultKeywords = "Software Engineer, Data Scientist, Product Manager, UX Designer, Full Stack Developer";
+      const defaultKeywords =
+        'Software Engineer, Data Scientist, Product Manager, UX Designer, Full Stack Developer';
       let keywords = defaultKeywords;
-      
-      if (profileData?.skills) {
-        const skillsArr = Array.isArray(profileData.skills) 
-          ? profileData.skills 
-          : Object.keys(profileData.skills);
-        if (skillsArr.length > 0) {
-          keywords = skillsArr.slice(0, 10).join(', ');
+
+      const skillsRaw = profileData?.skills as any;
+      if (skillsRaw) {
+        // Supports skills stored as:
+        // - array of { name: string }
+        // - array of strings
+        // - object map
+        const skillsArr = Array.isArray(skillsRaw)
+          ? skillsRaw
+          : typeof skillsRaw === 'object'
+            ? Object.values(skillsRaw)
+            : [];
+
+        const skillNames = skillsArr
+          .map((s: any) => (typeof s === 'string' ? s : s?.name))
+          .filter(Boolean)
+          .slice(0, 10);
+
+        if (skillNames.length > 0) {
+          keywords = skillNames.join(', ');
         }
       }
-      
+
       const hoursMap: Record<string, number> = {
         '15m': 0.25,
         '30m': 0.5,
@@ -417,10 +437,8 @@ const Jobs = () => {
         '1w': 168,
       };
 
-      // Fetch a wider window by default so you actually get results even if you haven't searched recently
-      const hoursToFetch = postedWithinFilter === 'all'
-        ? 24
-        : (hoursMap[postedWithinFilter] ?? 24);
+      const currentWindow = postedWithinFilterRef.current;
+      const hoursToFetch = currentWindow === 'all' ? 24 : (hoursMap[currentWindow] ?? 24);
 
       const { data, error } = await supabase.functions.invoke('live-jobs', {
         body: {
@@ -432,11 +450,11 @@ const Jobs = () => {
           sortBy: 'recent',
         },
       });
-      
+
       if (error) throw error;
-      
+
       setLastFetchTime(new Date());
-      
+
       if (data?.success) {
         await refetch();
         const newCount = data.totalFiltered || 0;
@@ -445,7 +463,7 @@ const Jobs = () => {
             description: 'Fresh listings added to your queue',
           });
           // If user hasn't chosen a window yet, default them to 1h so they immediately see the fresh batch
-          if (postedWithinFilter === 'all') setPostedWithinFilter('1h');
+          if (postedWithinFilterRef.current === 'all') setPostedWithinFilter('1h');
         } else if (!silent) {
           toast.info('No new jobs found', {
             description: `Checked ${data.totalFetched || 0} listings`,
@@ -460,7 +478,7 @@ const Jobs = () => {
     } finally {
       setIsFetchingNew(false);
     }
-  }, [user, refetch, isFetchingNew, postedWithinFilter]);
+  }, [user, refetch, isFetchingNew]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
