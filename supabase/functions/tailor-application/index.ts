@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// We reuse the existing generate-pdf backend function to keep a single client call per job.
+// This function calls generate-pdf server-side and returns base64 PDFs alongside the tailored text.
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -760,6 +763,127 @@ ${includeReferral ? `
     }
 
     console.log(`Successfully tailored application. Match score: ${result.matchScore}, Resume: ${result.resumeGenerationStatus}, Cover Letter: ${result.coverLetterGenerationStatus}`);
+
+    // --- Generate PDFs (server-side) so the extension only needs 1 backend call per job ---
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const authHeader = req.headers.get("authorization") || "";
+
+      const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim() || "Applicant";
+      const candidateNameNoSpaces = (candidateName || "Applicant").replace(/\s+/g, "");
+      const companyName = (company || "Company").replace(/[^a-zA-Z0-9]/g, "");
+
+      const resumeFileName = `${candidateNameNoSpaces}_${companyName}_CV.pdf`;
+      const coverFileName = `${candidateNameNoSpaces}_${companyName}_CoverLetter.pdf`;
+
+      const skills = Array.isArray(userProfile.skills) ? userProfile.skills : [];
+      const primarySkills = Array.isArray(skills)
+        ? skills.filter((s: any) => s?.category === "technical" || s?.proficiency === "expert" || s?.proficiency === "advanced")
+        : [];
+      const secondarySkills = Array.isArray(skills)
+        ? skills.filter((s: any) => s?.category !== "technical" && s?.proficiency !== "expert" && s?.proficiency !== "advanced")
+        : [];
+
+      const resumePayload = {
+        type: "resume",
+        candidateName: candidateNameNoSpaces,
+        customFileName: resumeFileName,
+        personalInfo: {
+          name: candidateName,
+          email: userProfile.email,
+          phone: userProfile.phone,
+          location: smartLocation,
+          linkedin: userProfile.linkedin,
+          github: userProfile.github,
+          portfolio: userProfile.portfolio,
+        },
+        summary: (result.tailoredResume || "").substring(0, 500),
+        experience: (Array.isArray(userProfile.workExperience) ? userProfile.workExperience : []).map((exp: any) => ({
+          company: exp?.company || "",
+          title: exp?.title || "",
+          dates: exp?.dates || `${exp?.startDate || exp?.start_date || ""} – ${exp?.endDate || exp?.end_date || "Present"}`,
+          bullets: Array.isArray(exp?.description)
+            ? exp.description
+            : typeof exp?.description === "string"
+              ? exp.description.split("\n").filter((b: string) => b.trim())
+              : [],
+        })),
+        education: (Array.isArray(userProfile.education) ? userProfile.education : []).map((edu: any) => ({
+          degree: edu?.degree || "",
+          school: edu?.school || edu?.institution || "",
+          dates: edu?.dates || `${edu?.startDate || ""} – ${edu?.endDate || ""}`,
+          gpa: edu?.gpa || "",
+        })),
+        skills: {
+          primary: primarySkills.map((s: any) => s?.name || s).filter(Boolean),
+          secondary: secondarySkills.map((s: any) => s?.name || s).filter(Boolean),
+        },
+        certifications: Array.isArray(userProfile.certifications) ? userProfile.certifications : [],
+        achievements: (Array.isArray(userProfile.achievements) ? userProfile.achievements : []).map((a: any) => ({
+          title: a?.title || "",
+          date: a?.date || "",
+          description: a?.description || "",
+        })),
+      };
+
+      const coverText = result.tailoredCoverLetter || "";
+      const paragraphs = coverText.split(/\n\n+/).map((p: string) => p.trim()).filter((p: string) => p.length > 20);
+
+      const coverPayload = {
+        type: "cover_letter",
+        candidateName: candidateNameNoSpaces,
+        customFileName: coverFileName,
+        personalInfo: {
+          name: candidateName,
+          email: userProfile.email,
+          phone: userProfile.phone,
+          location: smartLocation,
+          linkedin: userProfile.linkedin,
+          github: userProfile.github,
+          portfolio: userProfile.portfolio,
+        },
+        coverLetter: {
+          recipientCompany: company || "Company",
+          jobTitle: jobTitle || "Position",
+          jobId: jobId || "",
+          paragraphs: paragraphs.length ? paragraphs : [coverText.trim()],
+        },
+      };
+
+      const generatePdf = async (payload: any) => {
+        const pdfRes = await fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: supabaseAnonKey,
+            authorization: authHeader,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!pdfRes.ok) {
+          const t = await pdfRes.text();
+          throw new Error(`generate-pdf failed: ${pdfRes.status} ${t}`);
+        }
+
+        return await pdfRes.json();
+      };
+
+      const [resumePdfResp, coverPdfResp] = await Promise.all([
+        generatePdf(resumePayload),
+        generatePdf(coverPayload),
+      ]);
+
+      result.resumePdf = resumePdfResp?.pdf || null;
+      result.coverLetterPdf = coverPdfResp?.pdf || null;
+      result.resumePdfFileName = resumePdfResp?.fileName || resumeFileName;
+      result.coverLetterPdfFileName = coverPdfResp?.fileName || coverFileName;
+    } catch (pdfErr) {
+      console.error("PDF generation (inline) failed:", pdfErr);
+      result.resumePdf = null;
+      result.coverLetterPdf = null;
+    }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

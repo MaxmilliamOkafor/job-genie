@@ -27,10 +27,12 @@ class ATSTailor {
   constructor() {
     this.session = null;
     this.currentJob = null;
-    this.generatedDocuments = { cv: null, coverLetter: null, cvPdf: null, coverPdf: null };
+    this.generatedDocuments = { cv: null, coverLetter: null, cvPdf: null, coverPdf: null, cvFileName: null, coverFileName: null };
     this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
     this.currentPreviewTab = 'cv';
-    
+    this.autoTailorEnabled = true;
+    this.jobCache = {};
+
     this.init();
   }
 
@@ -92,21 +94,33 @@ class ATSTailor {
 
   async loadSession() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(['ats_session', 'ats_stats', 'ats_todayDate'], (result) => {
-        this.session = result.ats_session || null;
-        
-        if (result.ats_stats) {
-          this.stats = result.ats_stats;
+      chrome.storage.local.get(
+        ['ats_session', 'ats_stats', 'ats_todayDate', 'ats_autoTailorEnabled', 'ats_jobCache', 'ats_lastGeneratedDocuments', 'ats_lastJob'],
+        (result) => {
+          this.session = result.ats_session || null;
+
+          this.autoTailorEnabled = typeof result.ats_autoTailorEnabled === 'boolean' ? result.ats_autoTailorEnabled : true;
+          this.jobCache = result.ats_jobCache || {};
+
+          // Restore last job/documents for preview continuity
+          this.currentJob = result.ats_lastJob || this.currentJob;
+          if (result.ats_lastGeneratedDocuments) {
+            this.generatedDocuments = { ...this.generatedDocuments, ...result.ats_lastGeneratedDocuments };
+          }
+
+          if (result.ats_stats) {
+            this.stats = result.ats_stats;
+          }
+
+          const today = new Date().toDateString();
+          if (result.ats_todayDate !== today) {
+            this.stats.today = 0;
+            chrome.storage.local.set({ ats_todayDate: today });
+          }
+
+          resolve();
         }
-        
-        const today = new Date().toDateString();
-        if (result.ats_todayDate !== today) {
-          this.stats.today = 0;
-          chrome.storage.local.set({ ats_todayDate: today });
-        }
-        
-        resolve();
-      });
+      );
     });
   }
 
@@ -124,18 +138,26 @@ class ATSTailor {
   bindEvents() {
     document.getElementById('loginBtn')?.addEventListener('click', () => this.login());
     document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
-    document.getElementById('tailorBtn')?.addEventListener('click', () => this.tailorDocuments());
+    document.getElementById('tailorBtn')?.addEventListener('click', () => this.tailorDocuments({ force: true }));
     document.getElementById('refreshJob')?.addEventListener('click', () => this.detectCurrentJob());
     document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocument('cv'));
     document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocument('cover'));
     document.getElementById('attachCv')?.addEventListener('click', () => this.attachDocument('cv'));
     document.getElementById('attachCover')?.addEventListener('click', () => this.attachDocument('cover'));
     document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
-    
+
+    // Settings
+    document.getElementById('autoTailorToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      this.autoTailorEnabled = enabled;
+      chrome.storage.local.set({ ats_autoTailorEnabled: enabled });
+      this.showToast(enabled ? 'Auto tailor enabled' : 'Auto tailor disabled', 'success');
+    });
+
     // Preview tabs
     document.getElementById('previewCvTab')?.addEventListener('click', () => this.switchPreviewTab('cv'));
     document.getElementById('previewCoverTab')?.addEventListener('click', () => this.switchPreviewTab('cover'));
-    
+
     // Enter key for login
     document.getElementById('password')?.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.login();

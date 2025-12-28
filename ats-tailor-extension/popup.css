@@ -138,6 +138,35 @@ body {
   font-size: 11px;
 }
 
+.mini-settings {
+  padding: 10px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.9);
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #00d4ff;
+}
+
+.toggle-help {
+  margin-top: 6px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  line-height: 1.2;
+}
 .user-email {
   color: rgba(255,255,255,0.8);
 }
