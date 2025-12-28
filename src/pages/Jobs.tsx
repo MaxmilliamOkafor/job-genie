@@ -1002,63 +1002,36 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Posted Within Time Filter */}
+        {/* Auto-refresh controls */}
         {jobs.length > 0 && (
-          <div className="flex items-center justify-between gap-4 flex-wrap bg-muted/30 p-3 rounded-lg border">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span>Added within:</span>
-              </div>
-              <div className="flex items-center gap-1 flex-wrap">
-                {POSTED_WITHIN_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={postedWithinFilter === option.value ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 px-3 text-xs"
-                    onClick={() => setPostedWithinFilter(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-              {postedWithinFilter !== 'all' && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  ({sortedJobs.length} job{sortedJobs.length !== 1 ? 's' : ''})
-                </span>
+          <div className="flex items-center justify-end gap-2 bg-muted/30 p-3 rounded-lg border">
+            {lastFetchTime && (
+              <span className="text-xs text-muted-foreground">
+                Last: {lastFetchTime.toLocaleTimeString()}
+              </span>
+            )}
+            <Button
+              variant={autoRefreshEnabled ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              {autoRefreshEnabled ? 'Auto: ON' : 'Auto: OFF'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleFetchNewJobs(false)}
+              disabled={isFetchingNew}
+              className="gap-2"
+            >
+              {isFetchingNew ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
               )}
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {lastFetchTime && (
-                <span className="text-xs text-muted-foreground">
-                  Last: {lastFetchTime.toLocaleTimeString()}
-                </span>
-              )}
-              <Button
-                variant={autoRefreshEnabled ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                className="gap-1 h-7 px-2 text-xs"
-              >
-                {autoRefreshEnabled ? 'Auto: ON' : 'Auto: OFF'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleFetchNewJobs(false)}
-                disabled={isFetchingNew}
-                className="gap-2"
-              >
-                {isFetchingNew ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Fetch Now
-              </Button>
-            </div>
+              Fetch Now
+            </Button>
           </div>
         )}
 
