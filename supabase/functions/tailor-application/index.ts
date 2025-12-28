@@ -745,7 +745,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    
    Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
    
-   Re: Application for ${jobTitle}${jobId ? ` (Job ID: ${jobId})` : ''}
+   Re: Application for ${jobTitle}
    
    Dear Hiring Committee,
    
