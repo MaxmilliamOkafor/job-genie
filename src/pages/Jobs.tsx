@@ -57,16 +57,16 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 
-// Posted within time filter options
+// Posted within time filter options (based on when job was added to your queue)
 const POSTED_WITHIN_OPTIONS = [
-  { value: 'all', label: 'All', minutes: null },
-  { value: '15m', label: '15m', minutes: 15 },
-  { value: '30m', label: '30m', minutes: 30 },
-  { value: '1h', label: '1h', minutes: 60 },
-  { value: '6h', label: '6h', minutes: 360 },
-  { value: '24h', label: '24h', minutes: 1440 },
-  { value: '3d', label: '3d', minutes: 4320 },
-  { value: '1w', label: '1w', minutes: 10080 },
+  { value: 'all', label: 'All' },
+  { value: '15m', label: '15m' },
+  { value: '30m', label: '30m' },
+  { value: '1h', label: '1h' },
+  { value: '6h', label: '6h' },
+  { value: '24h', label: '24h' },
+  { value: '3d', label: '3d' },
+  { value: '1w', label: '1w' },
 ];
 
 const Jobs = () => {
@@ -154,17 +154,26 @@ const Jobs = () => {
   const sortedJobs = useMemo(() => {
     const now = Date.now();
     
-    // First apply time filter
+    // Time filter in minutes
+    const filterMinutes: Record<string, number> = {
+      '15m': 15,
+      '30m': 30,
+      '1h': 60,
+      '6h': 360,
+      '24h': 1440,
+      '3d': 4320,
+      '1w': 10080,
+    };
+    
+    // First apply time filter based on created_at (when added to your queue)
     let jobsToSort = filteredJobs;
-    if (postedWithinFilter !== 'all') {
-      const filterOption = POSTED_WITHIN_OPTIONS.find(o => o.value === postedWithinFilter);
-      if (filterOption?.minutes) {
-        const cutoffTime = now - (filterOption.minutes * 60 * 1000);
-        jobsToSort = filteredJobs.filter(job => {
-          const jobDate = new Date(job.posted_date || (job as any).created_at).getTime();
-          return jobDate >= cutoffTime;
-        });
-      }
+    if (postedWithinFilter !== 'all' && filterMinutes[postedWithinFilter]) {
+      const cutoffTime = now - (filterMinutes[postedWithinFilter] * 60 * 1000);
+      jobsToSort = filteredJobs.filter(job => {
+        // Use created_at (when added to DB) for filtering
+        const jobDate = new Date((job as any).created_at || job.posted_date).getTime();
+        return jobDate >= cutoffTime;
+      });
     }
     
     // Then sort
@@ -868,7 +877,7 @@ const Jobs = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
-              <span>Posted within:</span>
+              <span>Added within:</span>
             </div>
             <div className="flex items-center gap-1 flex-wrap">
               {POSTED_WITHIN_OPTIONS.map((option) => (
