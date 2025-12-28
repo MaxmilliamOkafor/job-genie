@@ -602,13 +602,16 @@ class ATSTailor {
       const result = await response.json();
       if (result.error) throw new Error(result.error);
 
+      // Generate fallback filename with FirstName_LastName format
+      const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
+      
       this.generatedDocuments = {
         cv: result.tailoredResume,
         coverLetter: result.tailoredCoverLetter || result.coverLetter,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
-        cvFileName: result.cvFileName || result.resumePdfFileName || `${p.first_name || ''} ${p.last_name || ''}_CV.pdf`.trim() || 'Applicant_CV.pdf',
-        coverFileName: result.coverLetterFileName || result.coverLetterPdfFileName || `${p.first_name || ''} ${p.last_name || ''}_Cover_Letter.pdf`.trim() || 'Applicant_Cover_Letter.pdf',
+        cvFileName: result.cvFileName || result.resumePdfFileName || `${fallbackName}_CV.pdf`,
+        coverFileName: result.coverLetterFileName || result.coverLetterPdfFileName || `${fallbackName}_Cover_Letter.pdf`,
         matchScore: result.matchScore || 0,
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || []
