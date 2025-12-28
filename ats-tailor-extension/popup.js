@@ -1,52 +1,39 @@
 // ATS Tailored CV & Cover Letter - Popup Script
 // Streamlined for speed - only tailoring, no autofill
+// Uses existing QuantumHire account authentication
+
+const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 class ATSTailor {
   constructor() {
-    this.supabaseUrl = '';
-    this.supabaseKey = '';
+    this.session = null;
     this.currentJob = null;
-    this.generatedDocuments = {
-      cv: null,
-      coverLetter: null
-    };
-    this.stats = {
-      today: 0,
-      total: 0,
-      avgTime: 0,
-      times: []
-    };
+    this.generatedDocuments = { cv: null, coverLetter: null };
+    this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
     
     this.init();
   }
 
   async init() {
-    await this.loadSettings();
+    await this.loadSession();
     this.bindEvents();
     this.updateUI();
     
-    if (this.supabaseUrl && this.supabaseKey) {
+    if (this.session) {
       this.detectCurrentJob();
     }
   }
 
-  async loadSettings() {
+  async loadSession() {
     return new Promise((resolve) => {
-      chrome.storage.local.get([
-        'ats_supabaseUrl', 
-        'ats_supabaseKey', 
-        'ats_stats',
-        'ats_todayDate'
-      ], (result) => {
-        this.supabaseUrl = result.ats_supabaseUrl || '';
-        this.supabaseKey = result.ats_supabaseKey || '';
+      chrome.storage.local.get(['ats_session', 'ats_stats', 'ats_todayDate'], (result) => {
+        this.session = result.ats_session || null;
         
-        // Load stats
         if (result.ats_stats) {
           this.stats = result.ats_stats;
         }
         
-        // Reset daily count if new day
         const today = new Date().toDateString();
         if (result.ats_todayDate !== today) {
           this.stats.today = 0;
@@ -58,11 +45,8 @@ class ATSTailor {
     });
   }
 
-  async saveSettings() {
-    await chrome.storage.local.set({
-      ats_supabaseUrl: this.supabaseUrl,
-      ats_supabaseKey: this.supabaseKey
-    });
+  async saveSession() {
+    await chrome.storage.local.set({ ats_session: this.session });
   }
 
   async saveStats() {
@@ -73,39 +57,38 @@ class ATSTailor {
   }
 
   bindEvents() {
-    // Setup
-    document.getElementById('saveSetup')?.addEventListener('click', () => this.saveSetupAndConnect());
-    
-    // Main actions
+    document.getElementById('loginBtn')?.addEventListener('click', () => this.login());
+    document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
     document.getElementById('tailorBtn')?.addEventListener('click', () => this.tailorDocuments());
     document.getElementById('refreshJob')?.addEventListener('click', () => this.detectCurrentJob());
-    
-    // Document actions
     document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocument('cv'));
     document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocument('cover'));
     document.getElementById('attachCv')?.addEventListener('click', () => this.attachDocument('cv'));
     document.getElementById('attachCover')?.addEventListener('click', () => this.attachDocument('cover'));
     document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
     
-    // Settings
-    document.getElementById('settingsBtn')?.addEventListener('click', () => this.toggleSettings());
+    // Enter key for login
+    document.getElementById('password')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.login();
+    });
   }
 
   updateUI() {
-    const setupSection = document.getElementById('setupSection');
+    const loginSection = document.getElementById('loginSection');
     const mainSection = document.getElementById('mainSection');
+    const userEmail = document.getElementById('userEmail');
     
-    if (!this.supabaseUrl || !this.supabaseKey) {
-      setupSection?.classList.remove('hidden');
+    if (!this.session) {
+      loginSection?.classList.remove('hidden');
       mainSection?.classList.add('hidden');
-      this.setStatus('Setup Required', 'error');
+      this.setStatus('Login Required', 'error');
     } else {
-      setupSection?.classList.add('hidden');
+      loginSection?.classList.add('hidden');
       mainSection?.classList.remove('hidden');
+      if (userEmail) userEmail.textContent = this.session.user?.email || 'Logged in';
       this.setStatus('Ready', 'ready');
     }
     
-    // Update stats
     document.getElementById('todayCount').textContent = this.stats.today;
     document.getElementById('totalCount').textContent = this.stats.total;
     document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
@@ -115,30 +98,67 @@ class ATSTailor {
     const indicator = document.getElementById('statusIndicator');
     const statusText = indicator?.querySelector('.status-text');
     
-    if (indicator) {
-      indicator.className = `status-indicator ${type}`;
-    }
-    if (statusText) {
-      statusText.textContent = text;
-    }
+    if (indicator) indicator.className = `status-indicator ${type}`;
+    if (statusText) statusText.textContent = text;
   }
 
-  async saveSetupAndConnect() {
-    const urlInput = document.getElementById('supabaseUrl');
-    const keyInput = document.getElementById('supabaseKey');
+  async login() {
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
     
-    this.supabaseUrl = urlInput?.value?.trim() || '';
-    this.supabaseKey = keyInput?.value?.trim() || '';
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value;
     
-    if (!this.supabaseUrl || !this.supabaseKey) {
-      this.showToast('Please fill in all fields', 'error');
+    if (!email || !password) {
+      this.showToast('Please enter email and password', 'error');
       return;
     }
     
-    await this.saveSettings();
-    this.showToast('Connected successfully!', 'success');
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in...';
+    
+    try {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ email, password })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error_description || data.error || 'Login failed');
+      }
+      
+      this.session = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user
+      };
+      
+      await this.saveSession();
+      this.showToast('Logged in successfully!', 'success');
+      this.updateUI();
+      this.detectCurrentJob();
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      this.showToast(error.message || 'Login failed', 'error');
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Sign In';
+    }
+  }
+
+  async logout() {
+    this.session = null;
+    await chrome.storage.local.remove(['ats_session']);
+    this.showToast('Logged out', 'success');
     this.updateUI();
-    this.detectCurrentJob();
   }
 
   async detectCurrentJob() {
@@ -147,17 +167,14 @@ class ATSTailor {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
-      if (!tab?.id) {
-        throw new Error('No active tab');
-      }
+      if (!tab?.id) throw new Error('No active tab');
 
-      // Inject and execute job detection
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: this.extractJobInfoFromPage
       });
 
-      if (results && results[0]?.result) {
+      if (results?.[0]?.result) {
         this.currentJob = results[0].result;
         this.updateJobDisplay();
         this.setStatus('Ready', 'ready');
@@ -175,116 +192,70 @@ class ATSTailor {
   }
 
   extractJobInfoFromPage() {
-    // Comprehensive job info extraction
     const getText = (selectors) => {
       for (const sel of selectors) {
         const el = document.querySelector(sel);
-        if (el?.textContent?.trim()) {
-          return el.textContent.trim();
-        }
+        if (el?.textContent?.trim()) return el.textContent.trim();
       }
       return '';
     };
 
-    const getJobTitle = () => {
-      return getText([
-        'h1.t-24', // LinkedIn
-        'h1.jobsearch-JobInfoHeader-title', // Indeed
-        '[data-test="job-title"]', // Glassdoor
-        'h1.app-title', // Greenhouse
-        'h1.posting-headline', // Lever
-        'h1[data-automation-id="jobPostingTitle"]', // Workday
-        'h1.job-title',
-        'h1[class*="title"]',
-        '.job-title h1',
-        'h1'
-      ]);
-    };
+    const getJobTitle = () => getText([
+      'h1.t-24', 'h1.jobsearch-JobInfoHeader-title', '[data-test="job-title"]',
+      'h1.app-title', 'h1.posting-headline', 'h1[data-automation-id="jobPostingTitle"]',
+      'h1.job-title', 'h1[class*="title"]', '.job-title h1', 'h1'
+    ]);
 
-    const getCompany = () => {
-      return getText([
-        '.jobs-unified-top-card__company-name', // LinkedIn
-        'div[data-testid="inlineHeader-companyName"]', // Indeed
-        '[data-test="employer-name"]', // Glassdoor
-        '.company-name', // Greenhouse
-        '.posting-categories .sort-by-time', // Lever
-        'div[data-automation-id="companyName"]', // Workday
-        '[class*="company"]',
-        '.employer-name'
-      ]);
-    };
+    const getCompany = () => getText([
+      '.jobs-unified-top-card__company-name', 'div[data-testid="inlineHeader-companyName"]',
+      '[data-test="employer-name"]', '.company-name', '.posting-categories .sort-by-time',
+      'div[data-automation-id="companyName"]', '[class*="company"]', '.employer-name'
+    ]);
 
-    const getLocation = () => {
-      return getText([
-        '.jobs-unified-top-card__bullet', // LinkedIn
-        'div[data-testid="job-location"]', // Indeed
-        '[data-test="location"]', // Glassdoor
-        '.location', // Greenhouse
-        '.posting-categories .location', // Lever
-        'div[data-automation-id="locations"]', // Workday
-        '[class*="location"]'
-      ]);
-    };
+    const getLocation = () => getText([
+      '.jobs-unified-top-card__bullet', 'div[data-testid="job-location"]',
+      '[data-test="location"]', '.location', '.posting-categories .location',
+      'div[data-automation-id="locations"]', '[class*="location"]'
+    ]);
 
     const getDescription = () => {
       const selectors = [
-        '.jobs-description__content', // LinkedIn
-        '#jobDescriptionText', // Indeed
-        '[data-test="job-description"]', // Glassdoor
-        '#content', // Greenhouse
-        '.posting-description', // Lever
-        '[data-automation-id="jobPostingDescription"]', // Workday
-        '.job-description',
-        '[class*="description"]'
+        '.jobs-description__content', '#jobDescriptionText', '[data-test="job-description"]',
+        '#content', '.posting-description', '[data-automation-id="jobPostingDescription"]',
+        '.job-description', '[class*="description"]'
       ];
-      
       for (const sel of selectors) {
         const el = document.querySelector(sel);
-        if (el?.textContent?.trim() && el.textContent.length > 100) {
-          return el.textContent.trim().substring(0, 5000);
+        if (el?.textContent?.trim()?.length > 100) {
+          return el.textContent.trim().substring(0, 3000); // Reduced to save tokens
         }
       }
       return '';
     };
 
     const title = getJobTitle();
-    const company = getCompany();
-    const location = getLocation();
-    const description = getDescription();
-
     if (title) {
       return {
         title,
-        company,
-        location,
-        description,
+        company: getCompany(),
+        location: getLocation(),
+        description: getDescription(),
         url: window.location.href,
         platform: window.location.hostname.replace('www.', '').split('.')[0]
       };
     }
-
     return null;
   }
 
   updateJobDisplay() {
-    const titleEl = document.getElementById('jobTitle');
-    const companyEl = document.getElementById('jobCompany');
-    const locationEl = document.getElementById('jobLocation');
-
-    if (this.currentJob) {
-      titleEl.textContent = this.currentJob.title || 'Unknown Title';
-      companyEl.textContent = this.currentJob.company || 'Unknown Company';
-      locationEl.textContent = this.currentJob.location || '';
-    } else {
-      titleEl.textContent = 'No job detected';
-      companyEl.textContent = 'Navigate to a job posting';
-      locationEl.textContent = '';
-    }
+    document.getElementById('jobTitle').textContent = this.currentJob?.title || 'No job detected';
+    document.getElementById('jobCompany').textContent = this.currentJob?.company || 'Navigate to a job posting';
+    document.getElementById('jobLocation').textContent = this.currentJob?.location || '';
   }
 
   async tailorDocuments() {
     if (!this.currentJob) {
-      this.showToast('No job detected. Please navigate to a job posting.', 'error');
+      this.showToast('No job detected', 'error');
       return;
     }
 
@@ -304,15 +275,14 @@ class ATSTailor {
     };
 
     try {
-      updateProgress(10, 'Connecting to server...');
+      updateProgress(20, 'Generating tailored documents...');
       
-      // Call the tailor-application edge function
-      const response = await fetch(`${this.supabaseUrl}/functions/v1/tailor-application`, {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.supabaseKey}`,
-          'apikey': this.supabaseKey
+          'Authorization': `Bearer ${this.session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
         },
         body: JSON.stringify({
           jobTitle: this.currentJob.title,
@@ -323,21 +293,16 @@ class ATSTailor {
         })
       });
 
-      updateProgress(50, 'Generating tailored documents...');
+      updateProgress(70, 'Processing results...');
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+        throw new Error(errorText || 'Server error');
       }
 
       const result = await response.json();
-      updateProgress(80, 'Processing results...');
+      if (result.error) throw new Error(result.error);
 
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      // Store generated documents
       this.generatedDocuments = {
         cv: result.tailoredResume,
         coverLetter: result.coverLetter,
@@ -347,7 +312,6 @@ class ATSTailor {
 
       updateProgress(100, 'Complete!');
 
-      // Update stats
       const elapsed = (Date.now() - startTime) / 1000;
       this.stats.today++;
       this.stats.total++;
@@ -357,20 +321,17 @@ class ATSTailor {
       await this.saveStats();
       this.updateUI();
 
-      // Show documents section
       document.getElementById('documentsCard')?.classList.remove('hidden');
-      this.showToast(`Tailored in ${elapsed.toFixed(1)}s!`, 'success');
+      this.showToast(`Done in ${elapsed.toFixed(1)}s!`, 'success');
       this.setStatus('Complete', 'ready');
 
     } catch (error) {
       console.error('Tailoring error:', error);
-      this.showToast(error.message || 'Failed to tailor documents', 'error');
+      this.showToast(error.message || 'Failed', 'error');
       this.setStatus('Error', 'error');
     } finally {
       btn.disabled = false;
-      setTimeout(() => {
-        progressContainer?.classList.add('hidden');
-      }, 2000);
+      setTimeout(() => progressContainer?.classList.add('hidden'), 2000);
     }
   }
 
@@ -379,26 +340,20 @@ class ATSTailor {
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
     
     if (doc) {
-      // Download PDF
       const blob = this.base64ToBlob(doc, 'application/pdf');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = type === 'cv' 
-        ? `${this.currentJob?.company || 'Tailored'}_CV.pdf`
-        : `${this.currentJob?.company || 'Tailored'}_Cover_Letter.pdf`;
+      a.download = `${this.currentJob?.company || 'Tailored'}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       this.showToast('Downloaded!', 'success');
     } else if (textDoc) {
-      // Download as text file if no PDF
       const blob = new Blob([textDoc], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = type === 'cv' 
-        ? `${this.currentJob?.company || 'Tailored'}_CV.txt`
-        : `${this.currentJob?.company || 'Tailored'}_Cover_Letter.txt`;
+      a.download = `${this.currentJob?.company || 'Tailored'}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.txt`;
       a.click();
       URL.revokeObjectURL(url);
       this.showToast('Downloaded!', 'success');
@@ -409,11 +364,10 @@ class ATSTailor {
 
   base64ToBlob(base64, type) {
     const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
+    const byteArray = new Uint8Array(byteCharacters.length);
     for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
+      byteArray[i] = byteCharacters.charCodeAt(i);
     }
-    const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type });
   }
 
@@ -428,27 +382,19 @@ class ATSTailor {
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
-      if (!tab?.id) {
-        throw new Error('No active tab');
-      }
+      if (!tab?.id) throw new Error('No active tab');
 
-      // Send document to content script for attachment
       await chrome.tabs.sendMessage(tab.id, {
         action: 'attachDocument',
-        type: type,
+        type,
         pdf: doc,
         text: textDoc,
-        filename: type === 'cv' 
-          ? `${this.currentJob?.company || 'Tailored'}_CV.pdf`
-          : `${this.currentJob?.company || 'Tailored'}_Cover_Letter.pdf`
+        filename: `${this.currentJob?.company || 'Tailored'}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.pdf`
       });
 
       this.showToast(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
     } catch (error) {
-      console.error('Attach error:', error);
-      // If content script not available, download instead
-      this.showToast('Please download and attach manually', 'error');
+      this.showToast('Download and attach manually', 'error');
       this.downloadDocument(type);
     }
   }
@@ -461,25 +407,8 @@ class ATSTailor {
     this.setStatus('Ready', 'ready');
   }
 
-  toggleSettings() {
-    const setupSection = document.getElementById('setupSection');
-    const mainSection = document.getElementById('mainSection');
-    
-    if (setupSection?.classList.contains('hidden')) {
-      setupSection?.classList.remove('hidden');
-      mainSection?.classList.add('hidden');
-      
-      // Prefill current values
-      document.getElementById('supabaseUrl').value = this.supabaseUrl;
-      document.getElementById('supabaseKey').value = this.supabaseKey;
-    } else {
-      this.updateUI();
-    }
-  }
-
   showToast(message, type = 'success') {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
+    document.querySelector('.toast')?.remove();
     
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -490,7 +419,4 @@ class ATSTailor {
   }
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-  new ATSTailor();
-});
+document.addEventListener('DOMContentLoaded', () => new ATSTailor());

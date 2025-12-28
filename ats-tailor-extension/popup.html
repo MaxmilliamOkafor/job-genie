@@ -22,24 +22,31 @@
       </div>
     </header>
 
-    <!-- Setup Section -->
-    <section id="setupSection" class="section hidden">
-      <div class="setup-card">
-        <h2>⚡ Quick Setup</h2>
+    <!-- Login Section -->
+    <section id="loginSection" class="section hidden">
+      <div class="login-card">
+        <h2>🔐 Sign In</h2>
+        <p class="login-subtitle">Use your QuantumHire account</p>
         <div class="input-group">
-          <label for="supabaseUrl">Supabase URL</label>
-          <input type="url" id="supabaseUrl" placeholder="https://your-project.supabase.co">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="your@email.com" autocomplete="email">
         </div>
         <div class="input-group">
-          <label for="supabaseKey">Supabase Anon Key</label>
-          <input type="password" id="supabaseKey" placeholder="Your anon key">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Password" autocomplete="current-password">
         </div>
-        <button id="saveSetup" class="btn btn-primary">Save & Connect</button>
+        <button id="loginBtn" class="btn btn-primary btn-large">Sign In</button>
       </div>
     </section>
 
     <!-- Main Section -->
     <section id="mainSection" class="section hidden">
+      <!-- User Info -->
+      <div class="user-bar">
+        <span id="userEmail" class="user-email"></span>
+        <button id="logoutBtn" class="btn-link">Logout</button>
+      </div>
+
       <!-- Job Detection -->
       <div class="job-card" id="jobCard">
         <div class="job-header">
@@ -122,9 +129,7 @@
       </div>
     </section>
 
-    <!-- Settings Toggle -->
     <footer class="footer">
-      <button id="settingsBtn" class="btn-link">⚙️ Settings</button>
       <span class="version">v1.0.0</span>
     </footer>
   </div>
