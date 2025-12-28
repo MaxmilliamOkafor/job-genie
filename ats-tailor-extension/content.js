@@ -79,40 +79,109 @@
 
   const FILE_INPUT_SELECTORS = {
     resume: [
-      // Greenhouse
+      // Greenhouse - specific
       '#resume_file',
       '#s3_upload_for_resume',
       'input[name="resume"]',
-      'input[id*="resume" i]',
       // Workday
       'input[data-automation-id="file-upload-input-ref"]',
-      // Generic
-      'input[type="file"][name*="resume" i]',
-      'input[type="file"][name*="cv" i]',
-      'input[type="file"][id*="cv" i]',
-      'input[type="file"][accept*=".pdf"]',
-      'input[type="file"]:first-of-type',
+      // Specific ID/name patterns (avoid matching cover letter)
+      'input[type="file"][id*="resume" i]:not([id*="cover" i])',
+      'input[type="file"][name*="resume" i]:not([name*="cover" i])',
+      'input[type="file"][id*="cv" i]:not([id*="cover" i])',
+      'input[type="file"][name*="cv" i]:not([name*="cover" i])',
     ],
     coverLetter: [
-      // Greenhouse
+      // Greenhouse - specific
       '#cover_letter_file',
       '#s3_upload_for_cover_letter',
       'input[name="cover_letter"]',
-      'input[id*="cover" i]',
-      // Generic
+      // Specific patterns
+      'input[type="file"][id*="cover" i]',
       'input[type="file"][name*="cover" i]',
+      'input[type="file"][id*="letter" i]',
       'input[type="file"][name*="letter" i]',
-      'input[type="file"]:nth-of-type(2)',
     ],
   };
+
+  // Check if input is likely for cover letter based on context
+  function isLikelyCoverLetterInput(input) {
+    // Check input attributes
+    const id = (input.id || '').toLowerCase();
+    const name = (input.name || '').toLowerCase();
+    if (id.includes('cover') || name.includes('cover') || id.includes('letter') || name.includes('letter')) {
+      return true;
+    }
+
+    // Check parent/ancestor labels and text
+    let parent = input.parentElement;
+    for (let i = 0; i < 5 && parent; i++) {
+      const text = (parent.textContent || '').toLowerCase();
+      if (text.includes('cover letter') || text.includes('cover_letter')) {
+        return true;
+      }
+      parent = parent.parentElement;
+    }
+
+    // Check associated label
+    if (input.id) {
+      const label = document.querySelector(`label[for="${input.id}"]`);
+      if (label) {
+        const labelText = (label.textContent || '').toLowerCase();
+        if (labelText.includes('cover')) return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Check if input is likely for resume/CV based on context
+  function isLikelyResumeInput(input) {
+    const id = (input.id || '').toLowerCase();
+    const name = (input.name || '').toLowerCase();
+    if (id.includes('resume') || name.includes('resume') || id.includes('cv') || name.includes('cv')) {
+      return true;
+    }
+
+    let parent = input.parentElement;
+    for (let i = 0; i < 5 && parent; i++) {
+      const text = (parent.textContent || '').toLowerCase();
+      if ((text.includes('resume') || text.includes('cv') || text.includes('curriculum')) && !text.includes('cover')) {
+        return true;
+      }
+      parent = parent.parentElement;
+    }
+
+    if (input.id) {
+      const label = document.querySelector(`label[for="${input.id}"]`);
+      if (label) {
+        const labelText = (label.textContent || '').toLowerCase();
+        if ((labelText.includes('resume') || labelText.includes('cv')) && !labelText.includes('cover')) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
 
   function findFileInput(type) {
     const selectors = type === 'cv' ? FILE_INPUT_SELECTORS.resume : FILE_INPUT_SELECTORS.coverLetter;
 
+    // First pass: try specific selectors
     for (const selector of selectors) {
       try {
         const input = document.querySelector(selector);
         if (input && input.type === 'file') {
+          // Double-check we're not attaching CV to cover letter field
+          if (type === 'cv' && isLikelyCoverLetterInput(input)) {
+            console.log(`[ATS Tailor] Skipping ${selector} - appears to be cover letter field`);
+            continue;
+          }
+          if (type === 'cover' && isLikelyResumeInput(input)) {
+            console.log(`[ATS Tailor] Skipping ${selector} - appears to be resume field`);
+            continue;
+          }
           console.log(`[ATS Tailor] Found ${type} input:`, selector);
           return input;
         }
@@ -121,25 +190,56 @@
       }
     }
 
-    // Label fallback
+    // Label-based fallback with strict matching
     const labels = document.querySelectorAll('label');
     for (const label of labels) {
-      const text = (label.textContent || '').toLowerCase();
-      const isMatch =
-        type === 'cv' ? text.includes('resume') || text.includes('cv') : text.includes('cover');
+      const text = (label.textContent || '').toLowerCase().trim();
+      
+      let isMatch = false;
+      if (type === 'cv') {
+        // Match resume/CV but NOT cover letter
+        isMatch = (text.includes('resume') || text.includes('cv') || text.includes('curriculum')) 
+                  && !text.includes('cover');
+      } else {
+        // Match cover letter specifically
+        isMatch = text.includes('cover');
+      }
 
       if (!isMatch) continue;
 
       const forId = label.getAttribute('for');
       if (forId) {
         const input = document.getElementById(forId);
-        if (input?.type === 'file') return input;
+        if (input?.type === 'file') {
+          console.log(`[ATS Tailor] Found ${type} input via label:`, text.substring(0, 50));
+          return input;
+        }
       }
 
       const nested = label.querySelector('input[type="file"]');
-      if (nested) return nested;
+      if (nested) {
+        console.log(`[ATS Tailor] Found ${type} input nested in label:`, text.substring(0, 50));
+        return nested;
+      }
     }
 
+    // Last resort: find all file inputs and pick by position
+    const allFileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    if (allFileInputs.length >= 2) {
+      // Typically: first = resume, second = cover letter
+      if (type === 'cv') {
+        const resumeInput = allFileInputs.find(inp => isLikelyResumeInput(inp) && !isLikelyCoverLetterInput(inp));
+        if (resumeInput) return resumeInput;
+        // Fall back to first non-cover-letter input
+        const firstNonCover = allFileInputs.find(inp => !isLikelyCoverLetterInput(inp));
+        if (firstNonCover) return firstNonCover;
+      } else {
+        const coverInput = allFileInputs.find(inp => isLikelyCoverLetterInput(inp));
+        if (coverInput) return coverInput;
+      }
+    }
+
+    console.log(`[ATS Tailor] Could not find ${type} input`);
     return null;
   }
 
