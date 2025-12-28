@@ -56,6 +56,7 @@
         <h3 id="jobTitle" class="job-title">Scanning page...</h3>
         <p id="jobCompany" class="job-company"></p>
         <p id="jobLocation" class="job-location"></p>
+        <span id="noJobBadge" class="no-job-badge hidden">No job detected</span>
       </div>
 
       <!-- Tailor Actions -->
@@ -77,6 +78,17 @@
       <!-- Generated Documents -->
       <div class="documents-card hidden" id="documentsCard">
         <h3>📄 Generated Documents</h3>
+        
+        <!-- Preview Tabs -->
+        <div class="preview-tabs">
+          <button id="previewCvTab" class="preview-tab active">CV</button>
+          <button id="previewCoverTab" class="preview-tab">Cover Letter</button>
+        </div>
+        
+        <!-- Preview Content -->
+        <div class="preview-content-wrapper">
+          <pre id="previewContent" class="preview-content placeholder">Generated content will appear here...</pre>
+        </div>
         
         <div class="document-item" id="cvDocument">
           <div class="document-info">

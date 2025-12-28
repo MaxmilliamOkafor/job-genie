@@ -1,16 +1,35 @@
 // ATS Tailored CV & Cover Letter - Popup Script
-// Streamlined for speed - only tailoring, no autofill
-// Uses existing QuantumHire account authentication
+// Uses same approach as chrome-extension for reliable job detection
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
+// Supported ATS platforms (excluding Lever and Ashby)
+const SUPPORTED_HOSTS = [
+  'greenhouse.io',
+  'job-boards.greenhouse.io',
+  'boards.greenhouse.io',
+  'workday.com',
+  'myworkdayjobs.com',
+  'smartrecruiters.com',
+  'bullhornstaffing.com',
+  'bullhorn.com',
+  'teamtailor.com',
+  'workable.com',
+  'apply.workable.com',
+  'icims.com',
+  'oracle.com',
+  'oraclecloud.com',
+  'taleo.net',
+];
 
 class ATSTailor {
   constructor() {
     this.session = null;
     this.currentJob = null;
-    this.generatedDocuments = { cv: null, coverLetter: null };
+    this.generatedDocuments = { cv: null, coverLetter: null, cvPdf: null, coverPdf: null };
     this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
+    this.currentPreviewTab = 'cv';
     
     this.init();
   }
@@ -23,8 +42,8 @@ class ATSTailor {
     // Auto-detect + auto-tailor immediately when popup opens
     if (this.session) {
       const found = await this.detectCurrentJob();
-      if (found) {
-        // No click required
+      if (found && this.currentJob) {
+        // Auto-start tailoring immediately
         this.tailorDocuments();
       }
     }
@@ -72,10 +91,42 @@ class ATSTailor {
     document.getElementById('attachCover')?.addEventListener('click', () => this.attachDocument('cover'));
     document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
     
+    // Preview tabs
+    document.getElementById('previewCvTab')?.addEventListener('click', () => this.switchPreviewTab('cv'));
+    document.getElementById('previewCoverTab')?.addEventListener('click', () => this.switchPreviewTab('cover'));
+    
     // Enter key for login
     document.getElementById('password')?.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.login();
     });
+  }
+
+  switchPreviewTab(tab) {
+    this.currentPreviewTab = tab;
+    
+    // Update tab buttons
+    document.getElementById('previewCvTab')?.classList.toggle('active', tab === 'cv');
+    document.getElementById('previewCoverTab')?.classList.toggle('active', tab === 'cover');
+    
+    // Update preview content
+    this.updatePreviewContent();
+  }
+
+  updatePreviewContent() {
+    const previewContent = document.getElementById('previewContent');
+    if (!previewContent) return;
+    
+    const content = this.currentPreviewTab === 'cv' 
+      ? this.generatedDocuments.cv 
+      : this.generatedDocuments.coverLetter;
+    
+    if (content) {
+      previewContent.textContent = content;
+      previewContent.classList.remove('placeholder');
+    } else {
+      previewContent.textContent = 'Generated content will appear here...';
+      previewContent.classList.add('placeholder');
+    }
   }
 
   updateUI() {
@@ -148,7 +199,12 @@ class ATSTailor {
       await this.saveSession();
       this.showToast('Logged in successfully!', 'success');
       this.updateUI();
-      this.detectCurrentJob();
+      
+      // Auto-detect and tailor
+      const found = await this.detectCurrentJob();
+      if (found && this.currentJob) {
+        this.tailorDocuments();
+      }
       
     } catch (error) {
       console.error('Login error:', error);
@@ -166,29 +222,21 @@ class ATSTailor {
     this.updateUI();
   }
 
+  isSupportedHost(hostname) {
+    return SUPPORTED_HOSTS.some(h => hostname === h || hostname.endsWith(`.${h}`));
+  }
+
   async detectCurrentJob() {
     this.setStatus('Scanning...', 'working');
-
-    const supportedHosts = [
-      'greenhouse.io',
-      'workday.com',
-      'myworkdayjobs.com',
-      'smartrecruiters.com',
-      'bullhornstaffing.com',
-      'bullhorn.com',
-      'teamtailor.com',
-      'workable.com',
-      'icims.com',
-      'oracle.com',
-      'oraclecloud.com',
-      'taleo.net',
-    ];
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       if (!tab?.id || !tab?.url) {
-        throw new Error('No active tab');
+        this.currentJob = null;
+        this.updateJobDisplay();
+        this.setStatus('No active tab', 'error');
+        return false;
       }
 
       // Skip restricted URLs
@@ -196,7 +244,8 @@ class ATSTailor {
         tab.url.startsWith('chrome://') ||
         tab.url.startsWith('about:') ||
         tab.url.startsWith('edge://') ||
-        tab.url.startsWith('chrome-extension://')
+        tab.url.startsWith('chrome-extension://') ||
+        tab.url.startsWith('moz-extension://')
       ) {
         this.currentJob = null;
         this.updateJobDisplay();
@@ -204,31 +253,31 @@ class ATSTailor {
         return false;
       }
 
-      // Only run on supported ATS platforms
+      // Check if on supported ATS platform
       const url = new URL(tab.url);
-      const isSupported = supportedHosts.some((h) => url.hostname === h || url.hostname.endsWith(`.${h}`));
-      if (!isSupported) {
+      if (!this.isSupportedHost(url.hostname)) {
         this.currentJob = null;
         this.updateJobDisplay();
-        this.setStatus('Unsupported site', 'error');
+        this.setStatus(`Unsupported: ${url.hostname}`, 'error');
         return false;
       }
 
+      // Execute extraction script in the page context
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: this.extractJobInfoFromPage,
+        func: extractJobInfoFromPageInjected,
       });
 
       if (results?.[0]?.result) {
         this.currentJob = results[0].result;
         this.updateJobDisplay();
-        this.setStatus('Ready', 'ready');
+        this.setStatus('Job found!', 'ready');
         return true;
       }
 
       this.currentJob = null;
       this.updateJobDisplay();
-      this.setStatus('No job found on this page', 'error');
+      this.setStatus('No job found on page', 'error');
       return false;
     } catch (error) {
       console.error('Job detection error:', error);
@@ -239,120 +288,23 @@ class ATSTailor {
     }
   }
 
-  extractJobInfoFromPage() {
-    const hostname = window.location.hostname;
-
-    const getText = (selectors) => {
-      for (const sel of selectors) {
-        try {
-          const el = document.querySelector(sel);
-          if (el?.textContent?.trim()) return el.textContent.trim();
-        } catch {
-          // ignore
-        }
-      }
-      return '';
-    };
-
-    const getMeta = (name) =>
-      document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ||
-      document.querySelector(`meta[property="${name}"]`)?.getAttribute('content') ||
-      '';
-
-    const platformSelectors = {
-      greenhouse: {
-        title: ['h1.app-title', 'h1.posting-headline', 'h1'],
-        company: ['#company-name', '.company-name', '.posting-categories strong', '[data-company]'],
-        location: ['.location', '.posting-categories .location', '[data-location]'],
-        description: ['#content', '.posting', '.posting-description', '[id*="description" i]'],
-      },
-      workday: {
-        title: ['h1[data-automation-id="jobPostingHeader"]', 'h1[data-automation-id="jobPostingTitle"]', 'h1'],
-        company: ['div[data-automation-id="jobPostingCompany"]', '[data-automation-id="companyName"]'],
-        location: ['div[data-automation-id="locations"]', '[data-automation-id="jobPostingLocation"]'],
-        description: ['div[data-automation-id="jobPostingDescription"]', '[data-automation-id="jobDescription"]'],
-      },
-      smartrecruiters: {
-        title: ['h1[data-test="job-title"]', 'h1'],
-        company: ['[data-test="job-company-name"]', '[class*="company" i]'],
-        location: ['[data-test="job-location"]', '[class*="location" i]'],
-        description: ['[data-test="job-description"]', '[class*="job-description" i]'],
-      },
-      teamtailor: {
-        title: ['h1', '[data-qa="job-title"]'],
-        company: ['[data-qa="job-company"]', '[class*="company" i]'],
-        location: ['[data-qa="job-location"]', '[class*="location" i]'],
-        description: ['[data-qa="job-description"]', 'main'],
-      },
-      workable: {
-        title: ['h1', '[data-ui="job-title"]'],
-        company: ['[data-ui="company-name"]', '[class*="company" i]'],
-        location: ['[data-ui="job-location"]', '[class*="location" i]'],
-        description: ['[data-ui="job-description"]', '[class*="description" i]'],
-      },
-      icims: {
-        title: ['h1', '.iCIMS_Header', '[class*="header" i] h1'],
-        company: ['[class*="company" i]'],
-        location: ['[class*="location" i]'],
-        description: ['#job-content', '[class*="description" i]', 'main'],
-      },
-      oracle: {
-        title: ['h1', '[class*="job-title" i]'],
-        company: ['[class*="company" i]'],
-        location: ['[class*="location" i]'],
-        description: ['[class*="description" i]', 'main'],
-      },
-      bullhorn: {
-        title: ['h1', '[class*="job-title" i]'],
-        company: ['[class*="company" i]'],
-        location: ['[class*="location" i]'],
-        description: ['[class*="description" i]', 'main'],
-      },
-    };
-
-    const detectPlatformKey = () => {
-      if (hostname.includes('greenhouse.io')) return 'greenhouse';
-      if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) return 'workday';
-      if (hostname.includes('smartrecruiters.com')) return 'smartrecruiters';
-      if (hostname.includes('teamtailor.com')) return 'teamtailor';
-      if (hostname.includes('workable.com')) return 'workable';
-      if (hostname.includes('icims.com')) return 'icims';
-      if (hostname.includes('bullhorn')) return 'bullhorn';
-      if (hostname.includes('oracle') || hostname.includes('taleo.net')) return 'oracle';
-      return null;
-    };
-
-    const platformKey = detectPlatformKey();
-    const selectors = platformKey ? platformSelectors[platformKey] : null;
-
-    const title =
-      (selectors ? getText(selectors.title) : '') ||
-      getMeta('og:title') ||
-      document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() ||
-      '';
-
-    if (!title || title.length < 2) return null;
-
-    const company = (selectors ? getText(selectors.company) : '') || getMeta('og:site_name') || '';
-    const location = (selectors ? getText(selectors.location) : '') || '';
-
-    const rawDesc = selectors ? getText(selectors.description) : '';
-    const description = rawDesc?.trim()?.length > 80 ? rawDesc.trim().substring(0, 3000) : '';
-
-    return {
-      title,
-      company,
-      location,
-      description,
-      url: window.location.href,
-      platform: hostname.replace('www.', '').split('.')[0],
-    };
-  }
-
   updateJobDisplay() {
-    document.getElementById('jobTitle').textContent = this.currentJob?.title || 'No job detected';
-    document.getElementById('jobCompany').textContent = this.currentJob?.company || 'Navigate to a job posting';
-    document.getElementById('jobLocation').textContent = this.currentJob?.location || '';
+    const titleEl = document.getElementById('jobTitle');
+    const companyEl = document.getElementById('jobCompany');
+    const locationEl = document.getElementById('jobLocation');
+    const noJobBadge = document.getElementById('noJobBadge');
+    
+    if (this.currentJob) {
+      if (titleEl) titleEl.textContent = this.currentJob.title || 'Job Position';
+      if (companyEl) companyEl.textContent = this.currentJob.company || '';
+      if (locationEl) locationEl.textContent = this.currentJob.location || '';
+      if (noJobBadge) noJobBadge.classList.add('hidden');
+    } else {
+      if (titleEl) titleEl.textContent = 'No job detected';
+      if (companyEl) companyEl.textContent = 'Navigate to a job posting';
+      if (locationEl) locationEl.textContent = '';
+      if (noJobBadge) noJobBadge.classList.remove('hidden');
+    }
   }
 
   async tailorDocuments() {
@@ -368,6 +320,7 @@ class ATSTailor {
     const progressText = document.getElementById('progressText');
     
     btn.disabled = true;
+    btn.querySelector('.btn-text').textContent = 'Tailoring...';
     progressContainer?.classList.remove('hidden');
     this.setStatus('Tailoring...', 'working');
 
@@ -423,7 +376,10 @@ class ATSTailor {
       await this.saveStats();
       this.updateUI();
 
+      // Show documents card and preview
       document.getElementById('documentsCard')?.classList.remove('hidden');
+      this.updatePreviewContent();
+      
       this.showToast(`Done in ${elapsed.toFixed(1)}s!`, 'success');
       this.setStatus('Complete', 'ready');
 
@@ -433,6 +389,7 @@ class ATSTailor {
       this.setStatus('Error', 'error');
     } finally {
       btn.disabled = false;
+      btn.querySelector('.btn-text').textContent = 'Tailor CV & Cover Letter';
       setTimeout(() => progressContainer?.classList.add('hidden'), 2000);
     }
   }
@@ -486,39 +443,168 @@ class ATSTailor {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error('No active tab');
 
+      const filename = `${(this.currentJob?.company || 'Tailored').replace(/[^a-z0-9-_]+/gi, '_')}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.pdf`;
+
       await chrome.tabs.sendMessage(tab.id, {
         action: 'attachDocument',
         type,
         pdf: doc,
         text: textDoc,
-        filename: `${this.currentJob?.company || 'Tailored'}_${type === 'cv' ? 'CV' : 'Cover_Letter'}.pdf`
+        filename
       });
 
       this.showToast(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
     } catch (error) {
-      this.showToast('Download and attach manually', 'error');
-      this.downloadDocument(type);
+      console.error('Attach error:', error);
+      this.showToast('Failed to attach document', 'error');
     }
   }
 
   async attachBothDocuments() {
-    this.setStatus('Attaching...', 'working');
     await this.attachDocument('cv');
     await new Promise(r => setTimeout(r, 500));
     await this.attachDocument('cover');
-    this.setStatus('Ready', 'ready');
   }
 
   showToast(message, type = 'success') {
-    document.querySelector('.toast')?.remove();
-    
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
+    toast.className = `toast toast-${type}`;
     toast.textContent = message;
     document.body.appendChild(toast);
-    
-    setTimeout(() => toast.remove(), 3000);
+
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => new ATSTailor());
+// This function is injected into the page context - it must be self-contained
+function extractJobInfoFromPageInjected() {
+  const hostname = window.location.hostname;
+
+  const getText = (selectors) => {
+    for (const sel of selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (el?.textContent?.trim()) return el.textContent.trim();
+      } catch {
+        // ignore
+      }
+    }
+    return '';
+  };
+
+  const getMeta = (name) =>
+    document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ||
+    document.querySelector(`meta[property="${name}"]`)?.getAttribute('content') ||
+    '';
+
+  // Platform-specific selectors
+  const platformSelectors = {
+    greenhouse: {
+      title: ['h1.app-title', 'h1.posting-headline', 'h1', '[data-test="posting-title"]'],
+      company: ['#company-name', '.company-name', '.posting-categories strong', '[data-test="company-name"]', 'a[href*="/jobs"] span'],
+      location: ['.location', '.posting-categories .location', '[data-test="location"]'],
+      description: ['#content', '.posting', '.posting-description', '[data-test="description"]'],
+    },
+    workday: {
+      title: ['h1[data-automation-id="jobPostingHeader"]', 'h1[data-automation-id="jobPostingTitle"]', 'h1', '[data-automation-id="job-title"]'],
+      company: ['div[data-automation-id="jobPostingCompany"]', '[data-automation-id="companyName"]', '.css-1f9qtsv'],
+      location: ['div[data-automation-id="locations"]', '[data-automation-id="jobPostingLocation"]', '[data-automation-id="location"]'],
+      description: ['div[data-automation-id="jobPostingDescription"]', '[data-automation-id="jobDescription"]', '.jobPostingDescription'],
+    },
+    smartrecruiters: {
+      title: ['h1[data-test="job-title"]', 'h1', '.job-title'],
+      company: ['[data-test="job-company-name"]', '[class*="company" i]', '.company-name'],
+      location: ['[data-test="job-location"]', '[class*="location" i]', '.job-location'],
+      description: ['[data-test="job-description"]', '[class*="job-description" i]', '.job-description'],
+    },
+    teamtailor: {
+      title: ['h1', '[data-qa="job-title"]', '.job-title'],
+      company: ['[data-qa="job-company"]', '[class*="company" i]', '.department-name'],
+      location: ['[data-qa="job-location"]', '[class*="location" i]', '.location'],
+      description: ['[data-qa="job-description"]', 'main', '.job-description'],
+    },
+    workable: {
+      title: ['h1', '[data-ui="job-title"]', '.job-title'],
+      company: ['[data-ui="company-name"]', '[class*="company" i]', 'header a'],
+      location: ['[data-ui="job-location"]', '[class*="location" i]', '.location'],
+      description: ['[data-ui="job-description"]', '[class*="description" i]', 'section'],
+    },
+    icims: {
+      title: ['h1', '.iCIMS_Header', '[class*="header" i] h1', '.job-title'],
+      company: ['[class*="company" i]', '.company'],
+      location: ['[class*="location" i]', '.location'],
+      description: ['#job-content', '[class*="description" i]', 'main', '.job-description'],
+    },
+    oracle: {
+      title: ['h1', '[class*="job-title" i]', '.job-title'],
+      company: ['[class*="company" i]', '.company'],
+      location: ['[class*="location" i]', '.location'],
+      description: ['[class*="description" i]', 'main', '.job-description'],
+    },
+    bullhorn: {
+      title: ['h1', '[class*="job-title" i]', '.job-title'],
+      company: ['[class*="company" i]', '.company'],
+      location: ['[class*="location" i]', '.location'],
+      description: ['[class*="description" i]', 'main', '.job-description'],
+    },
+  };
+
+  const detectPlatformKey = () => {
+    if (hostname.includes('greenhouse.io')) return 'greenhouse';
+    if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) return 'workday';
+    if (hostname.includes('smartrecruiters.com')) return 'smartrecruiters';
+    if (hostname.includes('teamtailor.com')) return 'teamtailor';
+    if (hostname.includes('workable.com')) return 'workable';
+    if (hostname.includes('icims.com')) return 'icims';
+    if (hostname.includes('bullhorn')) return 'bullhorn';
+    if (hostname.includes('oracle') || hostname.includes('taleo.net') || hostname.includes('oraclecloud')) return 'oracle';
+    return null;
+  };
+
+  const platformKey = detectPlatformKey();
+  const selectors = platformKey ? platformSelectors[platformKey] : null;
+
+  // Try platform-specific selectors first, then fallback to meta tags and document title
+  let title = selectors ? getText(selectors.title) : '';
+  if (!title) title = getMeta('og:title') || '';
+  if (!title) title = document.title?.split('|')?.[0]?.split('-')?.[0]?.split('at ')?.[0]?.trim() || '';
+
+  if (!title || title.length < 2) return null;
+
+  let company = selectors ? getText(selectors.company) : '';
+  if (!company) company = getMeta('og:site_name') || '';
+  
+  // Try to extract company from title if format is "Role at Company"
+  if (!company && title.includes(' at ')) {
+    const parts = document.title.split(' at ');
+    if (parts.length > 1) {
+      company = parts[parts.length - 1].split('|')[0].split('-')[0].trim();
+    }
+  }
+
+  const location = selectors ? getText(selectors.location) : '';
+
+  const rawDesc = selectors ? getText(selectors.description) : '';
+  const description = rawDesc?.trim()?.length > 80 ? rawDesc.trim().substring(0, 3000) : '';
+
+  return {
+    title: title.substring(0, 200),
+    company: company.substring(0, 100),
+    location: location.substring(0, 100),
+    description,
+    url: window.location.href,
+    platform: platformKey || hostname.replace('www.', '').split('.')[0],
+  };
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  new ATSTailor();
+});
