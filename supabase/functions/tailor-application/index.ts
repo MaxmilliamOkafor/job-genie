@@ -740,6 +740,8 @@ ${includeReferral ? `
     result.matchScore = matchResult.score;
     result.keywordsMatched = result.keywordsMatched || matchResult.matched;
     result.keywordsMissing = result.keywordsMissing || matchResult.missing;
+    result.matchedKeywords = result.keywordsMatched; // Alias for extension compatibility
+    result.missingKeywords = result.keywordsMissing; // Alias for extension compatibility
     result.keywordAnalysis = result.keywordAnalysis || {
       hardSkills: jdKeywords.hardSkills,
       softSkills: jdKeywords.softSkills,

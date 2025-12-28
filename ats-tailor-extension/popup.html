@@ -86,30 +86,31 @@
 
       <!-- Generated Documents -->
       <div class="documents-card hidden" id="documentsCard">
+        <!-- ATS Match Score -->
+        <div class="ats-match-section" id="atsMatchSection">
+          <div class="ats-match-header">
+            <span class="ats-label">ATS Match</span>
+            <span class="ats-score" id="atsMatchScore">0%</span>
+          </div>
+          <div class="ats-keywords hidden" id="atsKeywords">
+            <div class="keywords-matched" id="matchedKeywords"></div>
+            <div class="keywords-missing" id="missingKeywords"></div>
+          </div>
+        </div>
+
         <h3>📄 Generated Documents</h3>
         
-        <!-- Preview Tabs -->
-        <div class="preview-tabs">
-          <button id="previewCvTab" class="preview-tab active">CV</button>
-          <button id="previewCoverTab" class="preview-tab">Cover Letter</button>
-        </div>
-        
-        <!-- Preview Content -->
-        <div class="preview-content-wrapper">
-          <pre id="previewContent" class="preview-content placeholder">Generated content will appear here...</pre>
-        </div>
-        
+        <!-- Document List with Filenames -->
         <div class="document-item" id="cvDocument">
           <div class="document-info">
             <span class="document-icon">📋</span>
             <div class="document-details">
-              <span class="document-name">Tailored CV</span>
-              <span class="document-status" id="cvStatus">Ready</span>
+              <span class="document-name" id="cvFileName">Tailored CV</span>
+              <span class="document-size" id="cvSize"></span>
             </div>
           </div>
           <div class="document-actions">
-            <button id="downloadCv" class="btn btn-small">Download</button>
-            <button id="attachCv" class="btn btn-small btn-secondary">Attach</button>
+            <button id="downloadCv" class="btn btn-small btn-icon-only" title="Download">⬇️</button>
           </div>
         </div>
 
@@ -117,15 +118,30 @@
           <div class="document-info">
             <span class="document-icon">✉️</span>
             <div class="document-details">
-              <span class="document-name">Cover Letter</span>
-              <span class="document-status" id="coverStatus">Ready</span>
+              <span class="document-name" id="coverFileName">Cover Letter</span>
+              <span class="document-size" id="coverSize"></span>
             </div>
           </div>
           <div class="document-actions">
-            <button id="downloadCover" class="btn btn-small">Download</button>
-            <button id="attachCover" class="btn btn-small btn-secondary">Attach</button>
+            <button id="downloadCover" class="btn btn-small btn-icon-only" title="Download">⬇️</button>
           </div>
         </div>
+
+        <!-- Preview Tabs -->
+        <div class="preview-tabs">
+          <button id="previewCvTab" class="preview-tab active">Resume</button>
+          <button id="previewCoverTab" class="preview-tab">Cover Letter</button>
+        </div>
+        
+        <!-- Preview Content -->
+        <div class="preview-content-wrapper">
+          <div id="previewContent" class="preview-content placeholder">Generated content will appear here...</div>
+        </div>
+        
+        <!-- Copy Button -->
+        <button id="copyContent" class="btn btn-secondary btn-copy">
+          <span class="btn-icon-left">📋</span> Copy
+        </button>
 
         <button id="attachBoth" class="btn btn-success btn-large">
           <span class="btn-icon-left">📎</span>
