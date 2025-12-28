@@ -408,7 +408,7 @@ ABSOLUTE RULES:
 2. Use Jobscan-style ATS keyword extraction - match 85%+ keyword density naturally
 3. Location in CV header MUST be: "${smartLocation}"
 4. NO typos, grammatical errors, or formatting issues - PROOFREAD CAREFULLY
-5. File naming: ${candidateNameNoSpaces}_CV.pdf and ${candidateNameNoSpaces}_CoverLetter.pdf
+5. File naming: ${candidateNameNoSpaces}_CV.pdf and ${candidateNameNoSpaces}_Cover_Letter.pdf
 
 HUMANIZED TONE RULES (CRITICAL):
 - Active voice only
@@ -723,14 +723,14 @@ ${includeReferral ? `
         suggestedImprovements: ["Please retry for better results"],
         candidateName: candidateNameNoSpaces,
         cvFileName: `${candidateNameNoSpaces}_CV.pdf`,
-        coverLetterFileName: `${candidateNameNoSpaces}_CoverLetter.pdf`
+        coverLetterFileName: `${candidateNameNoSpaces}_Cover_Letter.pdf`
       };
     }
 
     // Ensure all required fields with our pre-calculated values
     result.candidateName = result.candidateName || candidateNameNoSpaces;
     result.cvFileName = result.cvFileName || `${candidateNameNoSpaces}_CV.pdf`;
-    result.coverLetterFileName = result.coverLetterFileName || `${candidateNameNoSpaces}_CoverLetter.pdf`;
+    result.coverLetterFileName = result.coverLetterFileName || `${candidateNameNoSpaces}_Cover_Letter.pdf`;
     result.company = company;
     result.jobTitle = jobTitle;
     result.jobId = jobId;
@@ -774,10 +774,9 @@ ${includeReferral ? `
 
       const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim() || "Applicant";
       const candidateNameNoSpaces = (candidateName || "Applicant").replace(/\s+/g, "");
-      const companyName = (company || "Company").replace(/[^a-zA-Z0-9]/g, "");
 
-      const resumeFileName = `${candidateNameNoSpaces}_${companyName}_CV.pdf`;
-      const coverFileName = `${candidateNameNoSpaces}_${companyName}_CoverLetter.pdf`;
+      const resumeFileName = `${candidateNameNoSpaces}_CV.pdf`;
+      const coverFileName = `${candidateNameNoSpaces}_Cover_Letter.pdf`;
 
       const skills = Array.isArray(userProfile.skills) ? userProfile.skills : [];
       const primarySkills = Array.isArray(skills)
