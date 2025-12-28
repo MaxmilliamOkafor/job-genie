@@ -256,7 +256,7 @@ const PLATFORM_CONFIG = {
     listboxOption: '[data-automation-id*="promptOption"], [role="option"]',
   },
   greenhouse: {
-    detect: () => window.location.hostname.includes('greenhouse.io') || window.location.hostname.includes('boards.greenhouse.io'),
+    detect: () => window.location.hostname.includes('greenhouse.io') || window.location.hostname.includes('boards.greenhouse.io') || window.location.hostname.includes('job-boards.greenhouse.io'),
     nextButton: 'button[type="submit"], input[type="submit"]',
     submitButton: '#submit_app, button[type="submit"]',
     selectors: {
@@ -264,9 +264,17 @@ const PLATFORM_CONFIG = {
       lastName: '#last_name',
       email: '#email',
       phone: '#phone',
-      linkedin: 'input[name*="linkedin"]',
-      resume: 'input[type="file"][name*="resume"]',
-      coverLetter: 'textarea[name*="cover_letter"]',
+      linkedin: 'input[name*="linkedin"], input[id*="linkedin"]',
+      resume: 'input[type="file"][name*="resume"], input[type="file"][id*="resume"]',
+      coverLetter: 'textarea[name*="cover_letter"], textarea[id*="cover_letter"]',
+      city: 'input[name*="location"], input[id*="location"], input[name*="city"]',
+      country: 'select[name*="country"], select[id*="country"]',
+    },
+    // Greenhouse custom field patterns - for dynamic dropdown detection
+    dropdownPatterns: {
+      location: 'where would you like to be based|preferred.*location|work.*location',
+      usStatus: 'us person|us.*person',
+      ukWorkRight: 'right to work.*uk|uk.*right.*work',
     }
   },
   lever: {
@@ -819,6 +827,29 @@ const KNOCKOUT_ANSWER_BANK = {
   'linkedin.*profile|linkedin url|linkedin.*url': { answerFromProfile: 'linkedin' },
   'github.*profile|github url|github.*url': { answerFromProfile: 'github' },
   'portfolio.*url|website.*url|personal.*website': { answerFromProfile: 'portfolio' },
+  
+  // GREENHOUSE LOCATION QUESTIONS
+  'where would you like to be based|where.*based|prefer.*location|preferred.*office|work.*location.*preference|which.*location|office.*location': { answerFromProfile: 'city', defaultAnswer: 'Remote' },
+  
+  // US PERSON QUESTION (Monzo-style)
+  'are you a us person|us person|born.*united states|parent.*born.*us|naturalised citizen.*us|green card.*holder|us tax resident': { answer: 'No', selectValue: 'no' },
+  
+  // UK RIGHT TO WORK
+  'uk right to work|right to work.*uk|right to work status|confirm.*uk.*right.*work|uk work.*status|work.*uk.*status': { answer: 'Require sponsorship - Skilled Worker', selectValue: 'require sponsorship' },
+  
+  // UK/EU SPECIFIC WORK AUTHORIZATION
+  'settled status|pre-settled status|share code|biometric residence': { answer: 'Require sponsorship - Skilled Worker', selectValue: 'require sponsorship' },
+  'uk.*citizen|british citizen|irish citizen|eu citizen.*uk': { answer: 'No', selectValue: 'no' },
+  
+  // NEURODIVERGENT / DIVERSITY QUESTIONS
+  'neurodivergent|neurodiverse|adhd|autism|dyslexia|consider yourself.*neurodivergent': { answer: 'I do not wish to answer', selectValue: 'i do not wish to answer' },
+  'transgender|identify as transgender|gender identity.*transgender': { answer: 'I do not wish to answer', selectValue: 'i do not wish to answer' },
+  
+  // CANDIDATE DATA PRIVACY
+  'candidate data privacy|data privacy notice|keeping.*data safe|privacy.*notice.*confirm|looked at.*privacy': { answer: 'Yes', selectValue: 'yes' },
+  
+  // PRONUNCIATION / NAME
+  'spell out your name|name.*pronounced|pronunciation|how.*say.*name': { answer: '' },
 
   // WORKDAY SPECIFIC
   'have you ever worked for|previously.*employed.*by|past.*employment.*with': { answer: 'No', selectValue: 'no' },

@@ -157,46 +157,78 @@ function validateRequest(data: any): TailorRequest {
   };
 }
 
-// Smart location logic based on job description
+// Smart location logic - prioritize job listing location for ATS compliance
 function getSmartLocation(jdLocation: string | undefined, jdDescription: string, profileCity?: string, profileCountry?: string): string {
-  const jdText = `${jdLocation || ''} ${jdDescription}`.toLowerCase();
+  // Priority 1: If job listing has a specific location, use it directly for ATS matching
+  // Examples: "Cardiff, London or Remote (UK)", "New York, NY", "Remote (US)"
+  if (jdLocation && jdLocation.trim().length > 0) {
+    const cleanLocation = jdLocation.trim();
+    // If the job location contains remote, just use it as-is
+    if (/remote|hybrid/i.test(cleanLocation)) {
+      return cleanLocation;
+    }
+    // For specific locations, append "| Open to relocation" for flexibility
+    return `${cleanLocation} | Open to relocation`;
+  }
   
+  const jdText = jdDescription.toLowerCase();
+  
+  // Priority 2: Extract location from job description if not in location field
   // US locations
   if (/\b(united states|usa|u\.s\.|us only|us-based|new york|san francisco|seattle|austin|boston|chicago|los angeles|denver)\b/i.test(jdText)) {
     return "Remote (Open to US relocation)";
   }
   
   // UK locations
-  if (/\b(united kingdom|uk|london|manchester|birmingham|edinburgh|glasgow|bristol|cambridge|oxford)\b/i.test(jdText)) {
-    return "Ireland (EU) | Remote | Open to UK relocation";
+  if (/\b(united kingdom|uk|london|manchester|birmingham|edinburgh|glasgow|bristol|cambridge|oxford|cardiff)\b/i.test(jdText)) {
+    // Use profile location + UK relocation willingness
+    if (profileCity && profileCountry) {
+      return `${profileCity}, ${profileCountry} | Open to UK relocation`;
+    }
+    return "Dublin, Ireland | Open to UK relocation";
   }
   
   // Ireland/Dublin
   if (/\b(ireland|dublin|cork|galway|limerick)\b/i.test(jdText)) {
-    return "Lucan, County Dublin, Ireland";
+    if (profileCity && profileCountry) {
+      return `${profileCity}, ${profileCountry}`;
+    }
+    return "Dublin, Ireland";
   }
   
   // Europe/EU
   if (/\b(europe|eu|european union|germany|france|netherlands|spain|italy|switzerland|austria|belgium|portugal|sweden|norway|denmark|finland)\b/i.test(jdText)) {
-    return "Lucan, Dublin, Ireland (EU Remote)";
+    if (profileCity && profileCountry) {
+      return `${profileCity}, ${profileCountry} (EU)`;
+    }
+    return "Dublin, Ireland (EU)";
   }
   
   // Canada
   if (/\b(canada|canadian|toronto|vancouver|montreal|ottawa|calgary)\b/i.test(jdText)) {
-    return "Ireland (EU) | Remote | Open to Canada relocation";
+    if (profileCity && profileCountry) {
+      return `${profileCity}, ${profileCountry} | Open to Canada relocation`;
+    }
+    return "Dublin, Ireland | Open to Canada relocation";
   }
   
   // Remote worldwide
   if (/\b(remote|worldwide|global|anywhere|distributed|work from home|wfh)\b/i.test(jdText)) {
+    if (profileCity && profileCountry) {
+      return `${profileCity}, ${profileCountry} | Remote`;
+    }
     return "Remote | Open to relocation worldwide";
   }
   
   // APAC
   if (/\b(asia|apac|singapore|hong kong|tokyo|japan|australia|sydney|melbourne)\b/i.test(jdText)) {
+    if (profileCity && profileCountry) {
+      return `${profileCity}, ${profileCountry} | Open to APAC relocation`;
+    }
     return "Remote | Open to APAC relocation";
   }
   
-  // Default: use profile location or generic remote
+  // Priority 3: Fallback to profile location with "Open to relocation"
   if (profileCity && profileCountry) {
     return `${profileCity}, ${profileCountry} | Open to relocation`;
   }
@@ -447,12 +479,11 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    
    Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
    
-   Hiring Team
-   ${company}
-   ${jobId ? `Re: ${jobTitle} - Job ID: ${jobId}` : `Re: ${jobTitle}`}
+   Re: Application for ${jobTitle}${jobId ? ` (Job ID: ${jobId})` : ''}
    
-   Dear Hiring Team,
-   [4 paragraphs: Hook, Proof with metrics, Skills alignment, Close with availability]
+   Dear Hiring Committee,
+   
+   [4 paragraphs: Hook showing genuine interest, Proof with specific metrics and achievements, Skills alignment with job requirements, Close with availability and enthusiasm]
    
    Sincerely,
    ${candidateName}
