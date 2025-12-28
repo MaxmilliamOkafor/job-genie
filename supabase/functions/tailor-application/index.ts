@@ -44,6 +44,7 @@ interface TailorRequest {
   description: string;
   requirements: string[];
   location?: string;
+  extractedCity?: string; // City extracted by extension for "[CITY] | open to relocation" CV format
   jobId?: string;
   userProfile: {
     firstName: string;
@@ -123,6 +124,7 @@ function validateRequest(data: any): TailorRequest {
   const description = validateString(data.description || '', MAX_STRING_LONG, 'description');
   const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, 'requirements');
   const location = data.location ? validateString(data.location, MAX_STRING_SHORT, 'location') : undefined;
+  const extractedCity = data.extractedCity ? validateString(data.extractedCity, MAX_STRING_SHORT, 'extractedCity') : undefined;
   const jobId = data.jobId ? validateString(data.jobId, MAX_STRING_SHORT, 'jobId') : undefined;
   
   const profile = data.userProfile || {};
@@ -154,6 +156,7 @@ function validateRequest(data: any): TailorRequest {
     description,
     requirements,
     location,
+    extractedCity,
     jobId,
     userProfile,
     includeReferral: !!data.includeReferral,
@@ -244,8 +247,14 @@ function extractJobCity(jdLocation: string | undefined, jdDescription: string, j
 }
 
 // Smart location logic - formats as "[CITY] | open to relocation" for CV ONLY
-function getSmartLocation(jdLocation: string | undefined, jdDescription: string, profileCity?: string, profileCountry?: string, jobUrl?: string): string {
-  // Extract city from job listing
+function getSmartLocation(jdLocation: string | undefined, jdDescription: string, profileCity?: string, profileCountry?: string, jobUrl?: string, preExtractedCity?: string): string {
+  // Priority 1: Use city pre-extracted by extension if provided
+  if (preExtractedCity && preExtractedCity.trim().length > 0) {
+    console.log(`Using pre-extracted city from extension: ${preExtractedCity}`);
+    return `${preExtractedCity} | open to relocation`;
+  }
+  
+  // Priority 2: Extract city from job listing
   const extractedCity = extractJobCity(jdLocation, jdDescription, jobUrl);
   
   // If we found a city in the job listing, use it with relocation suffix
@@ -624,7 +633,7 @@ serve(async (req) => {
       console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
     }
     
-    const { jobTitle, company, description, requirements, location, jobId, userProfile, includeReferral } = validateRequest(rawData);
+    const { jobTitle, company, description, requirements, location, extractedCity, jobId, userProfile, includeReferral } = validateRequest(rawData);
     
     // Validate that profile has required info
     if (!userProfile.firstName || !userProfile.lastName) {
@@ -651,8 +660,9 @@ serve(async (req) => {
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
     // Smart location logic - extract job city and format as "[CITY] | open to relocation"
-    const smartLocation = getSmartLocation(location, description, userProfile.city, userProfile.country, jobId);
-    console.log(`Smart location determined: ${smartLocation}`);
+    // Priority: 1) extractedCity from extension, 2) extract from location/description, 3) profile city
+    const smartLocation = getSmartLocation(location, description, userProfile.city, userProfile.country, jobId, extractedCity);
+    console.log(`Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ''}`);
     
     // Jobscan keyword extraction
     const jdKeywords = extractJobscanKeywords(description, requirements);
