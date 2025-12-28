@@ -204,6 +204,36 @@ const Profile = () => {
               cv_uploaded_at: null,
             });
           }}
+          onParsedData={(parsedData) => {
+            // Update local profile with parsed data
+            const updates: Partial<typeof localProfile> = {};
+            
+            if (parsedData.first_name) updates.first_name = parsedData.first_name;
+            if (parsedData.last_name) updates.last_name = parsedData.last_name;
+            if (parsedData.email) updates.email = parsedData.email;
+            if (parsedData.phone) updates.phone = parsedData.phone;
+            if (parsedData.city) updates.city = parsedData.city;
+            if (parsedData.country) updates.country = parsedData.country;
+            if (parsedData.linkedin) updates.linkedin = parsedData.linkedin;
+            if (parsedData.github) updates.github = parsedData.github;
+            if (parsedData.portfolio) updates.portfolio = parsedData.portfolio;
+            if (parsedData.total_experience) updates.total_experience = parsedData.total_experience;
+            if (parsedData.highest_education) updates.highest_education = parsedData.highest_education;
+            if (parsedData.current_salary) updates.current_salary = parsedData.current_salary;
+            if (parsedData.expected_salary) updates.expected_salary = parsedData.expected_salary;
+            if (parsedData.skills && parsedData.skills.length > 0) updates.skills = parsedData.skills;
+            if (parsedData.certifications && parsedData.certifications.length > 0) updates.certifications = parsedData.certifications;
+            if (parsedData.work_experience && parsedData.work_experience.length > 0) updates.work_experience = parsedData.work_experience;
+            if (parsedData.education && parsedData.education.length > 0) updates.education = parsedData.education;
+            if (parsedData.languages && parsedData.languages.length > 0) updates.languages = parsedData.languages;
+            if (parsedData.cover_letter) updates.cover_letter = parsedData.cover_letter;
+            
+            // Update local state
+            setLocalProfile(prev => ({ ...prev, ...updates }));
+            
+            // Save to database
+            updateProfile(updates);
+          }}
         />
 
         {/* OpenAI API Key */}
