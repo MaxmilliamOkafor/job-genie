@@ -407,12 +407,27 @@ const Jobs = () => {
         }
       }
       
+      const hoursMap: Record<string, number> = {
+        '15m': 0.25,
+        '30m': 0.5,
+        '1h': 1,
+        '6h': 6,
+        '24h': 24,
+        '3d': 72,
+        '1w': 168,
+      };
+
+      // Fetch a wider window by default so you actually get results even if you haven't searched recently
+      const hoursToFetch = postedWithinFilter === 'all'
+        ? 24
+        : (hoursMap[postedWithinFilter] ?? 24);
+
       const { data, error } = await supabase.functions.invoke('live-jobs', {
         body: {
           keywords,
           locations: 'Remote, United States, United Kingdom',
-          hours: 1, // Last 1 hour
-          limit: 50,
+          hours: hoursToFetch,
+          limit: 100,
           user_id: user.id,
           sortBy: 'recent',
         },
@@ -429,8 +444,8 @@ const Jobs = () => {
           toast.success(`Found ${newCount} new jobs!`, {
             description: 'Fresh listings added to your queue',
           });
-          // Reset filter to show new jobs
-          setPostedWithinFilter('1h');
+          // If user hasn't chosen a window yet, default them to 1h so they immediately see the fresh batch
+          if (postedWithinFilter === 'all') setPostedWithinFilter('1h');
         } else if (!silent) {
           toast.info('No new jobs found', {
             description: `Checked ${data.totalFetched || 0} listings`,
@@ -445,7 +460,7 @@ const Jobs = () => {
     } finally {
       setIsFetchingNew(false);
     }
-  }, [user, refetch, isFetchingNew]);
+  }, [user, refetch, isFetchingNew, postedWithinFilter]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
@@ -471,7 +486,7 @@ const Jobs = () => {
         autoRefreshIntervalRef.current = null;
       }
     };
-  }, [autoRefreshEnabled, user]);
+  }, [autoRefreshEnabled, user, handleFetchNewJobs]);
 
 
   // Validate job URLs
