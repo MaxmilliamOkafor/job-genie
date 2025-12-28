@@ -396,28 +396,106 @@ function extractJobscanKeywords(description: string, requirements: string[]): {
   return { hardSkills, softSkills, tools, titles, certifications, responsibilities, allKeywords };
 }
 
-// Calculate accurate match score
+// Calculate accurate match score with fuzzy matching and synonym detection
 function calculateMatchScore(
   jdKeywords: string[], 
   profileSkills: any[], 
-  profileExperience: any[]
-): { score: number, matched: string[], missing: string[] } {
+  profileExperience: any[],
+  profileEducation: any[] = [],
+  profileCertifications: string[] = []
+): { score: number, matched: string[], missing: string[], partialMatches: string[] } {
+  
+  // Synonym mapping for common tech terms (helps with ATS variations)
+  const synonyms: Record<string, string[]> = {
+    'javascript': ['js', 'ecmascript', 'es6', 'es2015'],
+    'typescript': ['ts'],
+    'python': ['py'],
+    'kubernetes': ['k8s'],
+    'postgresql': ['postgres', 'psql'],
+    'mongodb': ['mongo'],
+    'amazon web services': ['aws'],
+    'google cloud': ['gcp', 'google cloud platform'],
+    'microsoft azure': ['azure'],
+    'node.js': ['nodejs', 'node'],
+    'react.js': ['reactjs', 'react'],
+    'vue.js': ['vuejs', 'vue'],
+    'next.js': ['nextjs', 'next'],
+    'machine learning': ['ml'],
+    'artificial intelligence': ['ai'],
+    'natural language processing': ['nlp'],
+    'continuous integration': ['ci'],
+    'continuous deployment': ['cd'],
+    'ci/cd': ['cicd', 'ci cd', 'continuous integration', 'continuous deployment'],
+    'rest api': ['restful', 'rest'],
+    'graphql': ['gql'],
+    'sql': ['structured query language'],
+    'nosql': ['no-sql', 'non-relational'],
+    'agile': ['scrum', 'kanban'],
+    'full stack': ['fullstack', 'full-stack'],
+    'frontend': ['front-end', 'front end'],
+    'backend': ['back-end', 'back end'],
+    'devops': ['dev ops', 'dev-ops'],
+  };
+  
+  // Build comprehensive profile text for matching
   const profileSkillsLower = profileSkills.map(s => 
     (typeof s === 'string' ? s : s.name || '').toLowerCase()
   );
   
-  // Also extract skills from work experience
   const experienceText = profileExperience.map(exp => 
-    `${exp.title || ''} ${exp.description || ''} ${(exp.bullets || []).join(' ')}`
+    `${exp.title || ''} ${exp.company || ''} ${exp.description || ''} ${(exp.bullets || []).join(' ')}`
   ).join(' ').toLowerCase();
+  
+  const educationText = profileEducation.map(edu =>
+    `${edu.degree || ''} ${edu.field || ''} ${edu.school || ''} ${edu.description || ''}`
+  ).join(' ').toLowerCase();
+  
+  const certText = profileCertifications.join(' ').toLowerCase();
+  
+  const fullProfileText = `${profileSkillsLower.join(' ')} ${experienceText} ${educationText} ${certText}`;
   
   const matched: string[] = [];
   const missing: string[] = [];
+  const partialMatches: string[] = [];
   
   for (const keyword of jdKeywords) {
     const keywordLower = keyword.toLowerCase();
-    const isMatched = profileSkillsLower.some(s => s.includes(keywordLower) || keywordLower.includes(s)) ||
-                      experienceText.includes(keywordLower);
+    
+    // Direct match
+    let isMatched = fullProfileText.includes(keywordLower);
+    
+    // Check synonyms if no direct match
+    if (!isMatched) {
+      const keywordSynonyms = synonyms[keywordLower] || [];
+      for (const syn of keywordSynonyms) {
+        if (fullProfileText.includes(syn)) {
+          isMatched = true;
+          partialMatches.push(`${keyword} (via ${syn})`);
+          break;
+        }
+      }
+      
+      // Check reverse synonyms (if profile has synonym, match the keyword)
+      if (!isMatched) {
+        for (const [mainTerm, syns] of Object.entries(synonyms)) {
+          if (syns.includes(keywordLower) && fullProfileText.includes(mainTerm)) {
+            isMatched = true;
+            partialMatches.push(`${keyword} (via ${mainTerm})`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // Fuzzy match: check if keyword is substring or has high overlap
+    if (!isMatched) {
+      const words = keywordLower.split(/[\s\-\/]+/);
+      const matchedWords = words.filter(w => w.length > 2 && fullProfileText.includes(w));
+      if (matchedWords.length >= Math.ceil(words.length * 0.6)) {
+        isMatched = true;
+        partialMatches.push(`${keyword} (partial: ${matchedWords.join(', ')})`);
+      }
+    }
     
     if (isMatched) {
       matched.push(keyword);
@@ -426,12 +504,13 @@ function calculateMatchScore(
     }
   }
   
-  // Calculate score: 3 points for primary skills (first 15), 2 for secondary, 1 for soft skills
+  // Calculate score with weighted importance
+  // Hard skills (first 15) = 4 points, Tools/Certs (15-25) = 3 points, Soft skills = 2 points
   let totalPoints = 0;
   let earnedPoints = 0;
   
   jdKeywords.forEach((kw, i) => {
-    const points = i < 15 ? 3 : (i < 20 ? 2 : 1);
+    const points = i < 15 ? 4 : (i < 25 ? 3 : 2);
     totalPoints += points;
     if (matched.includes(kw)) {
       earnedPoints += points;
@@ -440,7 +519,12 @@ function calculateMatchScore(
   
   const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 50;
   
-  return { score: Math.min(100, Math.max(0, score)), matched, missing };
+  return { 
+    score: Math.min(100, Math.max(0, score)), 
+    matched, 
+    missing,
+    partialMatches
+  };
 }
 
 serve(async (req) => {
@@ -476,46 +560,69 @@ serve(async (req) => {
     const jdKeywords = extractJobscanKeywords(description, requirements);
     console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
     
-    // Calculate accurate match score
+    // Calculate accurate match score with enhanced matching
     const matchResult = calculateMatchScore(
       jdKeywords.allKeywords, 
       userProfile.skills, 
-      userProfile.workExperience
+      userProfile.workExperience,
+      userProfile.education,
+      userProfile.certifications
     );
-    console.log(`Match score calculated: ${matchResult.score}%, matched: ${matchResult.matched.length}, missing: ${matchResult.missing.length}`);
+    console.log(`Match score calculated: ${matchResult.score}%, matched: ${matchResult.matched.length}, missing: ${matchResult.missing.length}, partial: ${matchResult.partialMatches?.length || 0}`);
 
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`;
     const candidateNameForFile = `${userProfile.firstName} ${userProfile.lastName}`;
+    
+    // Calculate target score - we want 95-100% after AI integration
+    const currentMatchPercent = matchResult.matched.length / jdKeywords.allKeywords.length * 100;
+    const keywordsNeededFor95 = Math.ceil(jdKeywords.allKeywords.length * 0.95) - matchResult.matched.length;
 
-    const systemPrompt = `You are a SENIOR PROFESSIONAL RESUME WRITER with 10+ years expertise in ATS optimization, humanized writing, and recruiter-friendly document design.
+    const systemPrompt = `You are an ELITE ATS OPTIMIZATION SPECIALIST who guarantees 95-100% keyword match scores. Your job is to get candidates past ATS filters and into interviews.
 
-CRITICAL MISSION: Create application materials that sound HUMAN, not robotic AI-generated text. Recruiters can spot AI-written content instantly.
+CRITICAL MISSION: Achieve 95-100% ATS KEYWORD MATCH while sounding HUMAN and natural.
+
+KEYWORD INTEGRATION STRATEGY (MANDATORY):
+- Current match: ${matchResult.matched.length}/${jdKeywords.allKeywords.length} keywords (${Math.round(currentMatchPercent)}%)
+- Target: 95-100% match (need to add ${keywordsNeededFor95} more keywords)
+- MISSING KEYWORDS THAT MUST BE ADDED: ${matchResult.missing.join(', ')}
+
+HOW TO ADD MISSING KEYWORDS NATURALLY:
+1. Skills Section: Add missing hard skills if candidate has related experience
+2. Summary: Weave in 3-5 missing keywords naturally
+3. Work Experience Bullets: Integrate keywords into achievement descriptions
+4. Cover Letter: Use missing keywords when describing qualifications
+5. If keyword is a technology: mention it as "experience with" or "proficient in"
+6. If keyword is a soft skill: demonstrate it through an achievement example
 
 ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES - Only tailor the bullet points
-2. Use Jobscan-style ATS keyword extraction - match 85%+ keyword density naturally
-3. Location in CV header MUST be: "${smartLocation}"
-4. NO typos, grammatical errors, or formatting issues - PROOFREAD CAREFULLY
-5. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
+2. Location in CV header MUST be: "${smartLocation}"
+3. NO typos, grammatical errors, or formatting issues
+4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
+5. EVERY keyword in the JD should appear at least once in the tailored resume
 
-HUMANIZED TONE RULES (CRITICAL):
+HUMANIZED TONE RULES:
 - Active voice only
-- Vary sentence structure - no repetitive patterns like "I developed...", "I built...", "I created..."
-- Use conversational connectors: "This enabled...", "Resulting in...", "To support...", "Which led to..."
-- Sound confident but approachable
-- BANNED PHRASES: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "synergy", "proactive", "innovative"
-- Read aloud test - must sound natural, like a real person wrote it
-- Mix short and long sentences
-- Include specific metrics and outcomes, not vague claims
+- Vary sentence structure - avoid repetitive patterns
+- Use connectors: "This enabled...", "Resulting in...", "Which led to..."
+- BANNED: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "synergy"
+- Include specific metrics (%, $, time saved, users impacted)
 
-JD KEYWORDS TO INTEGRATE (extracted via Jobscan method):
-Hard Skills: ${jdKeywords.hardSkills.join(', ')}
-Tools: ${jdKeywords.tools.join(', ')}
-Titles: ${jdKeywords.titles.join(', ')}
-Soft Skills: ${jdKeywords.softSkills.join(', ')}
+ATS KEYWORD DENSITY TARGETS:
+- Hard Skills: Each must appear 2-3 times across resume
+- Job Title Keywords: Must appear in summary and at least one role
+- Tools/Platforms: Mention in skills section AND in relevant experience bullets
+- Soft Skills: Demonstrate through specific examples, not just list them
 
-CANDIDATE'S MATCHED KEYWORDS: ${matchResult.matched.join(', ')}
-MISSING KEYWORDS TO ADD IF POSSIBLE: ${matchResult.missing.join(', ')}
+JD KEYWORDS TO INTEGRATE:
+Hard Skills (PRIORITY 1): ${jdKeywords.hardSkills.join(', ')}
+Tools (PRIORITY 2): ${jdKeywords.tools.join(', ')}
+Titles (PRIORITY 3): ${jdKeywords.titles.join(', ')}
+Soft Skills (PRIORITY 4): ${jdKeywords.softSkills.join(', ')}
+Certifications: ${jdKeywords.certifications.join(', ')}
+
+ALREADY MATCHED: ${matchResult.matched.join(', ')}
+MUST ADD THESE (${matchResult.missing.length} keywords): ${matchResult.missing.join(', ')}
 
 Return ONLY valid JSON - no markdown code blocks, no extra text.`;
 
@@ -790,12 +897,43 @@ ${includeReferral ? `
     result.jobId = jobId;
     result.smartLocation = smartLocation;
     
-    // Use our accurate match score
-    result.matchScore = matchResult.score;
-    result.keywordsMatched = result.keywordsMatched || matchResult.matched;
-    result.keywordsMissing = result.keywordsMissing || matchResult.missing;
-    result.matchedKeywords = result.keywordsMatched; // Alias for extension compatibility
-    result.missingKeywords = result.keywordsMissing; // Alias for extension compatibility
+    // Recalculate ACTUAL match score based on generated resume content
+    const generatedResumeText = (result.tailoredResume || '').toLowerCase();
+    const generatedCoverText = (result.tailoredCoverLetter || '').toLowerCase();
+    const combinedGeneratedText = `${generatedResumeText} ${generatedCoverText}`;
+    
+    // Count how many JD keywords appear in the generated content
+    const actualMatched: string[] = [];
+    const actualMissing: string[] = [];
+    
+    for (const keyword of jdKeywords.allKeywords) {
+      const keywordLower = keyword.toLowerCase();
+      // Check for exact or partial match
+      if (combinedGeneratedText.includes(keywordLower) || 
+          combinedGeneratedText.includes(keywordLower.replace(/[.\-\/]/g, ' ')) ||
+          combinedGeneratedText.includes(keywordLower.replace(/\s+/g, ''))) {
+        actualMatched.push(keyword);
+      } else {
+        actualMissing.push(keyword);
+      }
+    }
+    
+    // Calculate actual score from generated content
+    const actualScore = jdKeywords.allKeywords.length > 0 
+      ? Math.round((actualMatched.length / jdKeywords.allKeywords.length) * 100)
+      : matchResult.score;
+    
+    console.log(`ACTUAL match score from generated content: ${actualScore}% (${actualMatched.length}/${jdKeywords.allKeywords.length} keywords)`);
+    if (actualMissing.length > 0) {
+      console.log(`Still missing keywords: ${actualMissing.slice(0, 10).join(', ')}${actualMissing.length > 10 ? '...' : ''}`);
+    }
+    
+    // Use actual calculated score
+    result.matchScore = actualScore;
+    result.keywordsMatched = actualMatched;
+    result.keywordsMissing = actualMissing;
+    result.matchedKeywords = actualMatched; // Alias for extension compatibility
+    result.missingKeywords = actualMissing; // Alias for extension compatibility
     result.keywordAnalysis = result.keywordAnalysis || {
       hardSkills: jdKeywords.hardSkills,
       softSkills: jdKeywords.softSkills,
