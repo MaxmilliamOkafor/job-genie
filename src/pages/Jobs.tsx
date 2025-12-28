@@ -39,6 +39,7 @@ import {
   SkipForward,
   Wifi,
   Play,
+  Clock,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -55,6 +56,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+
+// Posted within time filter options
+const POSTED_WITHIN_OPTIONS = [
+  { value: 'all', label: 'All', minutes: null },
+  { value: '15m', label: '15m', minutes: 15 },
+  { value: '30m', label: '30m', minutes: 30 },
+  { value: '1h', label: '1h', minutes: 60 },
+  { value: '6h', label: '6h', minutes: 360 },
+  { value: '24h', label: '24h', minutes: 1440 },
+  { value: '3d', label: '3d', minutes: 4320 },
+  { value: '1w', label: '1w', minutes: 10080 },
+];
 
 const Jobs = () => {
   const { 
@@ -79,6 +92,7 @@ const Jobs = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [activeSearchQuery, setActiveSearchQuery] = useState<string>('');
   const [lastSearchResultCount, setLastSearchResultCount] = useState<number | null>(null);
+  const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
   
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -136,9 +150,25 @@ const Jobs = () => {
     }
   }, [activeSearchQuery]);
 
-  // Sort jobs based on selected sort option
+  // Apply time filter and sort jobs
   const sortedJobs = useMemo(() => {
-    return [...filteredJobs].sort((a, b) => {
+    const now = Date.now();
+    
+    // First apply time filter
+    let jobsToSort = filteredJobs;
+    if (postedWithinFilter !== 'all') {
+      const filterOption = POSTED_WITHIN_OPTIONS.find(o => o.value === postedWithinFilter);
+      if (filterOption?.minutes) {
+        const cutoffTime = now - (filterOption.minutes * 60 * 1000);
+        jobsToSort = filteredJobs.filter(job => {
+          const jobDate = new Date(job.posted_date || (job as any).created_at).getTime();
+          return jobDate >= cutoffTime;
+        });
+      }
+    }
+    
+    // Then sort
+    return [...jobsToSort].sort((a, b) => {
       if (sortBy === 'posted') {
         const aDate = new Date(a.posted_date).getTime();
         const bDate = new Date(b.posted_date).getTime();
@@ -149,7 +179,7 @@ const Jobs = () => {
         return bCreated - aCreated;
       }
     });
-  }, [filteredJobs, sortBy]);
+  }, [filteredJobs, sortBy, postedWithinFilter]);
 
   // Get pending jobs for selection
   const pendingJobs = useMemo(() => 
@@ -833,7 +863,34 @@ const Jobs = () => {
           </div>
         )}
 
-        {/* Virtual Job Listings */}
+        {/* Posted Within Time Filter */}
+        {jobs.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span>Posted within:</span>
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              {POSTED_WITHIN_OPTIONS.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={postedWithinFilter === option.value ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setPostedWithinFilter(option.value)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            {postedWithinFilter !== 'all' && (
+              <span className="text-xs text-muted-foreground ml-2">
+                ({sortedJobs.length} job{sortedJobs.length !== 1 ? 's' : ''})
+              </span>
+            )}
+          </div>
+        )}
+
         {sortedJobs.length > 0 && (
           <VirtualJobList
             jobs={sortedJobs}
