@@ -6,6 +6,10 @@
 
   console.log('[ATS Tailor] Content script loaded on:', window.location.hostname);
 
+  // Used to avoid conflicts with other auto-fill extensions (e.g., LazyApply)
+  const PAGE_LOAD_TS = Date.now();
+  const SAFE_CV_ATTACH_AFTER_MS = 12_000;
+
   const SUPPORTED_HOSTS = [
     'greenhouse.io',
     'job-boards.greenhouse.io',
@@ -44,6 +48,16 @@
   const storageGet = (keys) =>
     new Promise((resolve) => chrome.storage.local.get(keys, (res) => resolve(res)));
   const storageSet = (obj) => new Promise((resolve) => chrome.storage.local.set(obj, resolve));
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function waitForSafeCvWindow() {
+    const elapsed = Date.now() - PAGE_LOAD_TS;
+    if (elapsed >= SAFE_CV_ATTACH_AFTER_MS) return;
+    const waitMs = SAFE_CV_ATTACH_AFTER_MS - elapsed;
+    console.log(`[ATS Tailor] Waiting ${waitMs}ms to avoid LazyApply CV conflict...`);
+    await sleep(waitMs);
+  }
 
   const FILE_INPUT_SELECTORS = {
     resume: [
@@ -124,12 +138,28 @@
     dataTransfer.items.add(file);
     input.files = dataTransfer.files;
 
-    ['change', 'input'].forEach((eventType) => {
+    ['change', 'input', 'blur'].forEach((eventType) => {
       input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
     });
 
     console.log('[ATS Tailor] File attached:', file.name);
     return true;
+  }
+
+  async function attachWithSingleRetry(input, file, { retryDelayMs = 1500 } = {}) {
+    attachFileToInput(input, file);
+
+    // If another extension overwrites right after we attach, re-attach once.
+    await sleep(retryDelayMs);
+
+    const currentName = input?.files?.[0]?.name;
+    if (currentName && currentName !== file.name) {
+      console.log('[ATS Tailor] Detected overwrite, re-attaching our file:', {
+        expected: file.name,
+        found: currentName,
+      });
+      attachFileToInput(input, file);
+    }
   }
 
   function showNotification(message, type = 'success') {
@@ -155,7 +185,7 @@
       animation: slideInRight 0.3s ease;
     `;
     notification.textContent = message;
-    
+
     // Add animation styles
     const style = document.createElement('style');
     style.textContent = `
@@ -168,7 +198,7 @@
       style.id = 'ats-tailor-styles';
       document.head.appendChild(style);
     }
-    
+
     document.body.appendChild(notification);
 
     setTimeout(() => {
@@ -206,7 +236,8 @@
       if (hostname.includes('workable.com')) return 'workable';
       if (hostname.includes('icims.com')) return 'icims';
       if (hostname.includes('bullhorn')) return 'bullhorn';
-      if (hostname.includes('oracle') || hostname.includes('taleo.net') || hostname.includes('oraclecloud')) return 'oracle';
+      if (hostname.includes('oracle') || hostname.includes('taleo.net') || hostname.includes('oraclecloud'))
+        return 'oracle';
       return 'generic';
     })();
 
@@ -218,10 +249,17 @@
         description: ['#content', '.posting-description', '.posting', '[data-test="description"]'],
       },
       workday: {
-        title: ['h1[data-automation-id="jobPostingHeader"]', 'h1[data-automation-id="jobPostingTitle"]', 'h1'],
+        title: [
+          'h1[data-automation-id="jobPostingHeader"]',
+          'h1[data-automation-id="jobPostingTitle"]',
+          'h1',
+        ],
         company: ['div[data-automation-id="jobPostingCompany"]', '[data-automation-id="companyName"]'],
         location: ['div[data-automation-id="locations"]', '[data-automation-id="jobPostingLocation"]'],
-        description: ['div[data-automation-id="jobPostingDescription"]', '[data-automation-id="jobDescription"]'],
+        description: [
+          'div[data-automation-id="jobPostingDescription"]',
+          '[data-automation-id="jobDescription"]',
+        ],
       },
       smartrecruiters: {
         title: ['h1[data-test="job-title"]', 'h1'],
@@ -269,12 +307,16 @@
 
     const s = selectorsByPlatform[platformKey] || selectorsByPlatform.generic;
 
-    let title = getText(s.title) || getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';
+    let title =
+      getText(s.title) ||
+      getMeta('og:title') ||
+      document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() ||
+      '';
 
     if (!title || title.length < 2) return null;
 
     let company = getText(s.company) || getMeta('og:site_name') || '';
-    
+
     // Try to extract company from title if format is "Role at Company"
     if (!company && document.title.includes(' at ')) {
       const parts = document.title.split(' at ');
@@ -282,7 +324,7 @@
         company = parts[parts.length - 1].split('|')[0].split('-')[0].trim();
       }
     }
-    
+
     const location = getText(s.location) || '';
 
     const raw = getText(s.description);
@@ -299,7 +341,7 @@
 
   async function autoTailorIfPossible() {
     console.log('[ATS Tailor] Attempting auto-tailor...');
-    
+
     const job = extractJobInfoFromDom();
     if (!job) {
       console.log('[ATS Tailor] No job detected on this page');
@@ -315,7 +357,11 @@
       'ats_session',
     ]);
 
-    if (ats_lastTailoredUrl === job.url && ats_lastTailoredAt && now - ats_lastTailoredAt < AUTO_TAILOR_COOLDOWN_MS) {
+    if (
+      ats_lastTailoredUrl === job.url &&
+      ats_lastTailoredAt &&
+      now - ats_lastTailoredAt < AUTO_TAILOR_COOLDOWN_MS
+    ) {
       console.log('[ATS Tailor] Cooldown active, skipping auto-tailor');
       return;
     }
@@ -362,19 +408,21 @@
       const resumeInput = findFileInput('cv');
       const coverInput = findFileInput('cover');
 
-      const companySafe = (job.company || 'Tailored').replace(/[^a-z0-9-_]+/gi, '_');
-      const resumeName = `${companySafe}_CV.pdf`;
-      const coverName = `${companySafe}_Cover_Letter.pdf`;
+      // Prefer filenames returned by backend (based on user profile)
+      const resumeName = result.cvFileName || 'Tailored_CV.pdf';
+      const coverName = result.coverLetterFileName || 'Tailored_Cover_Letter.pdf';
 
       let attachedAny = false;
 
       if (resumePdf && resumeInput) {
-        attachFileToInput(resumeInput, base64ToFile(resumePdf, resumeName));
+        // LazyApply attaches its CV early; we wait, then override.
+        await waitForSafeCvWindow();
+        await attachWithSingleRetry(resumeInput, base64ToFile(resumePdf, resumeName));
         attachedAny = true;
       }
 
       if (coverLetterPdf && coverInput) {
-        attachFileToInput(coverInput, base64ToFile(coverLetterPdf, coverName));
+        await attachWithSingleRetry(coverInput, base64ToFile(coverLetterPdf, coverName));
         attachedAny = true;
       }
 
@@ -396,47 +444,57 @@
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'attachDocument') {
-      try {
-        const { type, pdf, text, filename } = message;
-        const input = findFileInput(type);
-        if (!input) {
-          showNotification(
-            `Could not find ${type === 'cv' ? 'resume' : 'cover letter'} upload field.`,
-            'error'
-          );
-          sendResponse({ success: false, message: 'File input not found' });
-          return true;
-        }
+      (async () => {
+        try {
+          const { type, pdf, text, filename } = message;
 
-        if (pdf) {
-          attachFileToInput(input, base64ToFile(pdf, filename, 'application/pdf'));
-          showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
-          sendResponse({ success: true });
-          return true;
-        }
+          const input = findFileInput(type);
+          if (!input) {
+            showNotification(
+              `Could not find ${type === 'cv' ? 'resume' : 'cover letter'} upload field.`,
+              'error'
+            );
+            sendResponse({ success: false, message: 'File input not found' });
+            return;
+          }
 
-        if (text) {
-          const blob = new Blob([text], { type: 'text/plain' });
-          const txtFilename = filename.replace(/\.pdf$/i, '.txt');
-          attachFileToInput(input, new File([blob], txtFilename, { type: 'text/plain' }));
-          showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
-          sendResponse({ success: true });
-          return true;
-        }
+          // Ensure we override LazyApply CV if it attaches first.
+          if (type === 'cv') {
+            await waitForSafeCvWindow();
+          }
 
-        sendResponse({ success: false, message: 'No document provided' });
-        return true;
-      } catch (err) {
-        sendResponse({ success: false, message: err?.message || 'Attach failed' });
-        return true;
-      }
+          if (pdf) {
+            const file = base64ToFile(pdf, filename, 'application/pdf');
+            await attachWithSingleRetry(input, file);
+            showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
+            sendResponse({ success: true });
+            return;
+          }
+
+          if (text) {
+            const blob = new Blob([text], { type: 'text/plain' });
+            const txtFilename = filename.replace(/\.pdf$/i, '.txt');
+            await attachWithSingleRetry(input, new File([blob], txtFilename, { type: 'text/plain' }));
+            showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
+            sendResponse({ success: true });
+            return;
+          }
+
+          sendResponse({ success: false, message: 'No document provided' });
+        } catch (err) {
+          sendResponse({ success: false, message: err?.message || 'Attach failed' });
+        }
+      })();
+
+      return true; // keep sendResponse async
     }
 
     if (message.action === 'ping') {
       sendResponse({ pong: true });
       return true;
     }
-    
+
     return true;
   });
 })();
+
