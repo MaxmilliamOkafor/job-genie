@@ -556,9 +556,9 @@
       const resumePdf = result.resumePdf;
       const coverLetterPdf = result.coverLetterPdf;
 
-      // Prefer filenames returned by backend (based on user profile)
-      const resumeName = result.cvFileName || 'Tailored_CV.pdf';
-      const coverName = result.coverLetterFileName || 'Tailored_Cover_Letter.pdf';
+      // Prefer filenames returned by backend (FirstName_LastName format)
+      const resumeName = result.cvFileName || result.resumePdfFileName || 'Tailored_CV.pdf';
+      const coverName = result.coverLetterFileName || result.coverLetterPdfFileName || 'Tailored_Cover_Letter.pdf';
 
       // CRITICAL: Store generated documents for popup viewing
       const generatedDocuments = {
