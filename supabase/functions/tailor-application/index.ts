@@ -536,7 +536,74 @@ serve(async (req) => {
     const { userId, supabase } = await verifyAuth(req);
     
     const rawData = await req.json();
+    
+    // Support both 'description' and 'jobDescription' for extension compatibility
+    if (rawData.jobDescription && !rawData.description) {
+      rawData.description = rawData.jobDescription;
+    }
+    
+    // Support 'jobUrl' as 'jobId' if no jobId provided
+    if (rawData.jobUrl && !rawData.jobId) {
+      rawData.jobId = rawData.jobUrl;
+    }
+    
+    // If userProfile not provided, fetch from database
+    if (!rawData.userProfile || Object.keys(rawData.userProfile).length === 0) {
+      console.log(`[User ${userId}] Fetching profile from database...`);
+      
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (profileError || !profileData) {
+        console.error('Failed to fetch user profile:', profileError);
+        return new Response(JSON.stringify({ 
+          error: "Profile not found. Please complete your profile in settings." 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      // Map database profile to expected userProfile format
+      rawData.userProfile = {
+        firstName: profileData.first_name || '',
+        lastName: profileData.last_name || '',
+        email: profileData.email || '',
+        phone: profileData.phone || '',
+        linkedin: profileData.linkedin || '',
+        github: profileData.github || '',
+        portfolio: profileData.portfolio || '',
+        coverLetter: profileData.cover_letter || '',
+        workExperience: profileData.work_experience || [],
+        education: profileData.education || [],
+        skills: profileData.skills || [],
+        certifications: profileData.certifications || [],
+        achievements: profileData.achievements || [],
+        atsStrategy: profileData.ats_strategy || '',
+        city: profileData.city || '',
+        country: profileData.country || '',
+        address: profileData.address || '',
+        state: profileData.state || '',
+        zipCode: profileData.zip_code || '',
+      };
+      
+      console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
+    }
+    
     const { jobTitle, company, description, requirements, location, jobId, userProfile, includeReferral } = validateRequest(rawData);
+    
+    // Validate that profile has required info
+    if (!userProfile.firstName || !userProfile.lastName) {
+      return new Response(JSON.stringify({ 
+        error: "Profile incomplete. Please add your first and last name in Profile settings." 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     
     // Get user's OpenAI API key from their profile
     const userOpenAIKey = await getUserOpenAIKey(supabase, userId);
@@ -570,8 +637,9 @@ serve(async (req) => {
     );
     console.log(`Match score calculated: ${matchResult.score}%, matched: ${matchResult.matched.length}, missing: ${matchResult.missing.length}, partial: ${matchResult.partialMatches?.length || 0}`);
 
-    const candidateName = `${userProfile.firstName} ${userProfile.lastName}`;
-    const candidateNameForFile = `${userProfile.firstName} ${userProfile.lastName}`;
+    const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim();
+    // File naming: FirstName_LastName format with underscores
+    const candidateNameForFile = `${userProfile.firstName}_${userProfile.lastName}`.replace(/\s+/g, '_').trim();
     
     // Calculate target score - we want 95-100% after AI integration
     const currentMatchPercent = matchResult.matched.length / jdKeywords.allKeywords.length * 100;
