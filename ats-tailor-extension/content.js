@@ -227,16 +227,28 @@
 
     // Last resort: find all file inputs and pick by position
     const allFileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+
+    // If only one file input exists on the page, it's almost always the resume/CV.
+    // Many ATS pages have a cover letter TEXT field (not a file upload), so don't fail CV detection.
+    if (allFileInputs.length === 1) {
+      const only = allFileInputs[0];
+      if (type === 'cv') {
+        console.log('[ATS Tailor] Using the only file input on page as CV input');
+        return only;
+      }
+      // For cover letter, don't assume the only input is cover
+    }
+
     if (allFileInputs.length >= 2) {
       // Typically: first = resume, second = cover letter
       if (type === 'cv') {
-        const resumeInput = allFileInputs.find(inp => isLikelyResumeInput(inp) && !isLikelyCoverLetterInput(inp));
+        const resumeInput = allFileInputs.find((inp) => isLikelyResumeInput(inp) && !isLikelyCoverLetterInput(inp));
         if (resumeInput) return resumeInput;
         // Fall back to first non-cover-letter input
-        const firstNonCover = allFileInputs.find(inp => !isLikelyCoverLetterInput(inp));
+        const firstNonCover = allFileInputs.find((inp) => !isLikelyCoverLetterInput(inp));
         if (firstNonCover) return firstNonCover;
       } else {
-        const coverInput = allFileInputs.find(inp => isLikelyCoverLetterInput(inp));
+        const coverInput = allFileInputs.find((inp) => isLikelyCoverLetterInput(inp));
         if (coverInput) return coverInput;
       }
     }
@@ -366,32 +378,41 @@
   }
 
   async function attachWithMonitoring(input, file, type) {
-    // Store our file for monitoring
-    ourAttachedFiles[type] = file;
+    // Only CV needs LazyApply overwrite protection.
+    // Cover letter is often NOT a file upload and we should avoid interfering with other autofill tools.
 
-    // First attach attempt
-    let attachedOk = attachFileToInput(input, file);
+    if (type === 'cv') {
+      // Store our file for monitoring
+      ourAttachedFiles[type] = file;
 
-    // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
-    if (!attachedOk) {
-      await sleep(350);
-      attachedOk = attachFileToInput(input, file);
+      // First attach attempt
+      let attachedOk = attachFileToInput(input, file);
+
+      // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
+      if (!attachedOk) {
+        await sleep(350);
+        attachedOk = attachFileToInput(input, file);
+      }
+
+      // Wait a moment then check if immediately overwritten
+      await sleep(1200);
+
+      const currentName = input?.files?.[0]?.name;
+      if (currentName && currentName !== file.name && isLazyApplyFilename(currentName)) {
+        console.log('[ATS Tailor] Immediate LazyApply overwrite detected, re-attaching:', {
+          expected: file.name,
+          found: currentName,
+        });
+        attachFileToInput(input, file);
+      }
+
+      // Start lightweight monitoring for overwrites (CV only)
+      startFileMonitoring(type, input);
+      return;
     }
 
-    // Wait a moment then check if immediately overwritten
-    await sleep(1200);
-
-    const currentName = input?.files?.[0]?.name;
-    if (currentName && currentName !== file.name && isLazyApplyFilename(currentName)) {
-      console.log('[ATS Tailor] Immediate LazyApply overwrite detected, re-attaching:', {
-        expected: file.name,
-        found: currentName,
-      });
-      attachFileToInput(input, file);
-    }
-
-    // Start lightweight monitoring for overwrites
-    startFileMonitoring(type, input);
+    // Non-CV: just attach (no monitoring)
+    attachFileToInput(input, file);
   }
 
   function showNotification(message, type = 'success') {
@@ -890,11 +911,17 @@
 
           const input = findFileInput(type);
           if (!input) {
-            showNotification(
-              `Could not find ${type === 'cv' ? 'resume' : 'cover letter'} upload field.`,
-              'error'
-            );
-            sendResponse({ success: false, message: 'File input not found' });
+            // Cover letter is very often a TEXT field, not a file upload.
+            // Do not treat this as an error (and don't spam users).
+            if (type === 'cover') {
+              console.log('[ATS Tailor] No cover letter upload field found (likely a text field)');
+              showNotification('No cover letter upload field on this page (CV will still attach).', 'info');
+              sendResponse({ success: true, skipped: true, message: 'Cover letter file input not found' });
+              return;
+            }
+
+            showNotification('Could not find resume/CV upload field.', 'error');
+            sendResponse({ success: false, message: 'CV file input not found' });
             return;
           }
 
