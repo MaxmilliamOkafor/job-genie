@@ -97,9 +97,124 @@ function formatRelativeTime(dateString: string | null | undefined): string {
   }
 }
 
+// Extract domain from job URL for logo fetching
+function extractDomainForLogo(url: string | null | undefined, company: string): string | null {
+  if (!url) return null;
+  
+  try {
+    // Try to extract company domain from various ATS URL patterns
+    const patterns = [
+      /https?:\/\/([^\.]+)\.wd\d+\.myworkdayjobs\.com/i, // Workday
+      /https?:\/\/boards\.greenhouse\.io\/([^\/]+)/i, // Greenhouse
+      /https?:\/\/([^\.]+)\.workable\.com/i, // Workable
+      /https?:\/\/jobs\.smartrecruiters\.com\/([^\/]+)/i, // SmartRecruiters
+      /https?:\/\/([^\.]+)\.teamtailor\.com/i, // Teamtailor
+      /https?:\/\/careers-?([^\.]+)\.icims\.com/i, // ICIMS
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        const companySlug = match[1].toLowerCase();
+        // Common company domain mappings
+        const domainMap: Record<string, string> = {
+          'stripe': 'stripe.com',
+          'figma': 'figma.com',
+          'notion': 'notion.so',
+          'coinbase': 'coinbase.com',
+          'databricks': 'databricks.com',
+          'plaid': 'plaid.com',
+          'discord': 'discord.com',
+          'airbnb': 'airbnb.com',
+          'disney': 'disney.com',
+          'netflix': 'netflix.com',
+          'google': 'google.com',
+          'microsoft': 'microsoft.com',
+          'apple': 'apple.com',
+          'amazon': 'amazon.com',
+          'meta': 'meta.com',
+          'tesla': 'tesla.com',
+          'nvidia': 'nvidia.com',
+          'adobe': 'adobe.com',
+          'salesforce': 'salesforce.com',
+          'oracle': 'oracle.com',
+          'ibm': 'ibm.com',
+          'intel': 'intel.com',
+          'cisco': 'cisco.com',
+          'dell': 'dell.com',
+          'hp': 'hp.com',
+          'spotify': 'spotify.com',
+          'uber': 'uber.com',
+          'lyft': 'lyft.com',
+          'doordash': 'doordash.com',
+          'instacart': 'instacart.com',
+          'pinterest': 'pinterest.com',
+          'reddit': 'reddit.com',
+          'twitter': 'twitter.com',
+          'linkedin': 'linkedin.com',
+          'snap': 'snap.com',
+          'tiktok': 'tiktok.com',
+          'zoom': 'zoom.us',
+          'slack': 'slack.com',
+          'dropbox': 'dropbox.com',
+          'canva': 'canva.com',
+          'revolut': 'revolut.com',
+          'wise': 'wise.com',
+          'klarna': 'klarna.com',
+          'mongodb': 'mongodb.com',
+          'snowflake': 'snowflake.com',
+          'datadog': 'datadoghq.com',
+          'cloudflare': 'cloudflare.com',
+          'twilio': 'twilio.com',
+          'hashicorp': 'hashicorp.com',
+          'gitlab': 'gitlab.com',
+          'github': 'github.com',
+          'atlassian': 'atlassian.com',
+          'sysco': 'sysco.com',
+          'abbott': 'abbott.com',
+          'peraton': 'peraton.com',
+        };
+        
+        if (domainMap[companySlug]) {
+          return domainMap[companySlug];
+        }
+        
+        // Guess the domain
+        return `${companySlug}.com`;
+      }
+    }
+    
+    // Fallback: try to extract domain from the URL directly
+    const urlObj = new URL(url);
+    const host = urlObj.hostname;
+    
+    // Skip ATS domains
+    if (host.includes('greenhouse.io') || host.includes('workday') || 
+        host.includes('smartrecruiters') || host.includes('icims') ||
+        host.includes('workable') || host.includes('teamtailor')) {
+      return null;
+    }
+    
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+// Get company initials for fallback
+function getCompanyInitials(company: string): string {
+  return company
+    .split(' ')
+    .filter(word => word.length > 0 && !word.startsWith('Https'))
+    .slice(0, 2)
+    .map(word => word[0].toUpperCase())
+    .join('') || '?';
+}
+
 export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: JobCardProps) {
   const [isReporting, setIsReporting] = useState(false);
   const [hasReported, setHasReported] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const { toast } = useToast();
   
   const status = statusConfig[job.status] || statusConfig.pending;
@@ -111,6 +226,11 @@ export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: Job
   
   // Extract salary from description if not in dedicated field
   const displaySalary = extractSalary(job.salary, (job as any).description || job.description);
+  
+  // Get company logo URL
+  const logoDomain = extractDomainForLogo(job.url, job.company);
+  const logoUrl = logoDomain && !logoError ? `https://logo.clearbit.com/${logoDomain}` : null;
+  const companyInitials = getCompanyInitials(job.company);
 
   const handleReportBrokenLink = async () => {
     if (!job.url || hasReported) return;
@@ -185,11 +305,28 @@ export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: Job
           <div className="flex-1 min-w-0">
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-lg leading-tight group-hover:text-primary transition-colors">
-                  {job.title}
-                </h3>
-                <p className="text-muted-foreground font-medium mt-0.5">{job.company}</p>
+              <div className="flex items-start gap-3">
+                {/* Company Logo */}
+                <div className="shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center overflow-hidden border border-border/50">
+                  {logoUrl ? (
+                    <img 
+                      src={logoUrl} 
+                      alt={`${job.company} logo`}
+                      className="w-full h-full object-contain p-1"
+                      onError={() => setLogoError(true)}
+                    />
+                  ) : (
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      {companyInitials}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-lg leading-tight group-hover:text-primary transition-colors">
+                    {job.title}
+                  </h3>
+                  <p className="text-muted-foreground font-medium mt-0.5">{job.company}</p>
+                </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 ml-2">
                 {isPotentiallyBrokenUrl && (
