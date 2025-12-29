@@ -1,6 +1,6 @@
 // ATS Tailored CV & Cover Letter - Content Script
 // Auto-start tailoring on supported ATS pages + attach generated PDFs to form inputs
-// LAZYAPPLY CONFLICT PREVENTION: Waits 12s+, then monitors & re-attaches if overwritten
+// LAZYAPPLY CONFLICT PREVENTION: Waits 28s+, then monitors & re-attaches if overwritten
 
 (function () {
   'use strict';
