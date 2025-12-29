@@ -578,13 +578,20 @@
       return;
     }
 
-    // Non-CV: Click remove button first, then attach
+  // Non-CV: Click remove button first, clear input, then attach
     console.log(`[ATS Tailor] Attempting to click remove button for existing ${type}...`);
     const clickedRemove = clickRemoveFileButton(type);
     if (clickedRemove) {
-      await sleep(500);
+      await sleep(500); // Wait for UI to update
     }
-    attachFileToInput(input, file);
+    
+    // Clear input programmatically as backup
+    clearFileInput(input);
+    await sleep(200);
+    
+    // Now attach the tailored file
+    const ok = attachFileToInput(input, file);
+    console.log(`[ATS Tailor] ${type} attachment result:`, ok ? 'success' : 'failed');
   }
 
   function showNotification(message, type = 'success') {
