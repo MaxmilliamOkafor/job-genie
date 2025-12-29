@@ -8,10 +8,10 @@
   console.log('[ATS Tailor] Content script loaded on:', window.location.hostname);
 
   // ============ LAZYAPPLY CONFLICT PREVENTION ============
-  // LazyApply typically attaches CV at 8-12s mark. We wait until 14s to override.
+  // LazyApply typically attaches CV around 26s mark. We wait until 28s to override.
   const PAGE_LOAD_TS = Date.now();
-  const SAFE_CV_ATTACH_AFTER_MS = 14_000; // Wait 14s to let LazyApply finish
-  const MONITOR_DURATION_MS = 30_000; // Monitor for 30s after our attach
+  const SAFE_CV_ATTACH_AFTER_MS = 28_000; // Wait 28s to let LazyApply finish
+  const MONITOR_DURATION_MS = 45_000; // Monitor for 45s after our attach
 
   // Track our attached files to detect overwrites
   let ourAttachedFiles = { cv: null, cover: null };
