@@ -329,6 +329,89 @@
     });
   }
 
+  // Find and click the "X" remove button for existing file attachments (e.g., Greenhouse)
+  function clickRemoveFileButton(type) {
+    const headingRegex = type === 'cv' 
+      ? /(resume\s*\/?\s*cv|resume\b|\bcv\b)/i 
+      : /(cover\s*letter)/i;
+    
+    // Find sections with the appropriate heading
+    const nodes = Array.from(document.querySelectorAll('label, h1, h2, h3, h4, h5, p, span, div, fieldset'));
+    
+    for (const node of nodes) {
+      const text = (node.textContent || '').trim();
+      if (!text || text.length > 100) continue;
+      if (!headingRegex.test(text)) continue;
+      
+      // Avoid cross-matching
+      if (type === 'cv' && /cover\s*letter/i.test(text)) continue;
+      if (type === 'cover' && /(resume\s*\/?\s*cv|resume\b|\bcv\b)/i.test(text)) continue;
+      
+      const container = node.closest('fieldset, section, form, [role="group"], div') || node.parentElement;
+      if (!container) continue;
+      
+      // Look for remove/delete/X buttons in this section
+      const removeButtons = container.querySelectorAll('button, a, span, div[role="button"], [class*="remove"], [class*="delete"], [class*="close"], [aria-label*="remove" i], [aria-label*="delete" i], [title*="remove" i], [title*="delete" i]');
+      
+      for (const btn of removeButtons) {
+        const btnText = (btn.textContent || '').trim().toLowerCase();
+        const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+        const title = (btn.getAttribute('title') || '').toLowerCase();
+        const className = (btn.className || '').toLowerCase();
+        
+        // Check if it's a remove/delete/X button
+        const isRemoveBtn = 
+          btnText === 'x' || 
+          btnText === '×' || 
+          btnText === 'remove' || 
+          btnText === 'delete' ||
+          btnText.includes('remove') ||
+          ariaLabel.includes('remove') || 
+          ariaLabel.includes('delete') ||
+          title.includes('remove') || 
+          title.includes('delete') ||
+          className.includes('remove') ||
+          className.includes('delete') ||
+          className.includes('close') ||
+          (btn.tagName === 'BUTTON' && btnText.length <= 2); // Short button text like "X"
+        
+        if (isRemoveBtn) {
+          console.log(`[ATS Tailor] Found remove button for ${type}:`, btnText || ariaLabel || 'X button');
+          try {
+            btn.click();
+            console.log(`[ATS Tailor] Clicked remove button for ${type}`);
+            return true;
+          } catch (e) {
+            console.warn('[ATS Tailor] Failed to click remove button:', e);
+          }
+        }
+      }
+      
+      // Also look for SVG close icons (common pattern)
+      const svgCloseIcons = container.querySelectorAll('svg');
+      for (const svg of svgCloseIcons) {
+        const parent = svg.closest('button, a, span, div[role="button"]');
+        if (parent) {
+          const parentText = (parent.textContent || '').trim();
+          // If SVG's parent is clickable and has minimal text (likely an icon button)
+          if (parentText.length <= 3) {
+            console.log(`[ATS Tailor] Found SVG close icon for ${type}`);
+            try {
+              parent.click();
+              console.log(`[ATS Tailor] Clicked SVG remove button for ${type}`);
+              return true;
+            } catch (e) {
+              console.warn('[ATS Tailor] Failed to click SVG remove button:', e);
+            }
+          }
+        }
+      }
+    }
+    
+    console.log(`[ATS Tailor] No remove button found for ${type}`);
+    return false;
+  }
+
   function clearFileInput(input) {
     if (!input) return;
 
@@ -440,7 +523,14 @@
       // Store our file for monitoring
       ourAttachedFiles[type] = file;
 
-      // AGGRESSIVE CLEAR: Remove any existing file first
+      // STEP 1: Click the "X" remove button if there's an existing file displayed in the UI
+      console.log('[ATS Tailor] Attempting to click remove button for existing CV...');
+      const clickedRemove = clickRemoveFileButton('cv');
+      if (clickedRemove) {
+        await sleep(500); // Wait for UI to update after clicking remove
+      }
+
+      // STEP 2: Clear the file input programmatically as backup
       const existingFile = input?.files?.[0];
       if (existingFile) {
         console.log(`[ATS Tailor] Pre-attach clear of: "${existingFile.name}"`);
@@ -454,6 +544,8 @@
       // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
       if (!attachedOk) {
         await sleep(350);
+        clickRemoveFileButton('cv'); // Try clicking remove again
+        await sleep(300);
         clearFileInput(input);
         await sleep(200);
         attachedOk = attachFileToInput(input, file);
@@ -470,8 +562,10 @@
           console.log(`[ATS Tailor] File was cleared at ${delay}ms - re-attaching`);
           attachFileToInput(input, file);
         } else if (currentName !== file.name) {
-          // Different file attached (likely LazyApply)
+          // Different file attached (likely LazyApply) - click X button first, then re-attach
           console.log(`[ATS Tailor] Overwrite detected at ${delay}ms: "${currentName}" -> re-attaching "${file.name}"`);
+          clickRemoveFileButton('cv');
+          await sleep(300);
           clearFileInput(input);
           await sleep(200);
           attachFileToInput(input, file);
@@ -484,7 +578,12 @@
       return;
     }
 
-    // Non-CV: just attach (no monitoring)
+    // Non-CV: Click remove button first, then attach
+    console.log(`[ATS Tailor] Attempting to click remove button for existing ${type}...`);
+    const clickedRemove = clickRemoveFileButton(type);
+    if (clickedRemove) {
+      await sleep(500);
+    }
     attachFileToInput(input, file);
   }
 
