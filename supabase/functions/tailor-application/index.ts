@@ -1113,6 +1113,54 @@ ${includeReferral ? `
       const resumeFileName = `${candidateNameNoSpaces}_CV.pdf`;
       const coverFileName = `${candidateNameNoSpaces}_Cover_Letter.pdf`;
 
+      const extractProfessionalSummary = (raw: string): string => {
+        const text = String(raw || "");
+
+        // Prefer the explicit Professional Summary section if present
+        const summaryMatch = text.match(/\bPROFESSIONAL\s+SUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(WORK\s+EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b|$)/i);
+        let summary = (summaryMatch?.[1] ?? text).trim();
+
+        // If we fell back to the whole resume, keep it short and avoid grabbing headers
+        summary = summary.replace(/\r/g, "");
+
+        // Remove common header duplication lines (pipes, contact info, urls)
+        const removeParts = [
+          candidateName,
+          userProfile.email,
+          userProfile.phone,
+          userProfile.linkedin,
+          userProfile.github,
+          userProfile.portfolio,
+          smartLocation,
+          userProfile.city,
+          userProfile.country,
+        ].filter(Boolean).map((s) => String(s));
+
+        const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const removeRegex = removeParts.length ? new RegExp(removeParts.map(escaped).join("|"), "gi") : null;
+
+        summary = summary
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .filter((l) => {
+            if (/\|/.test(l) && (l.includes("http") || l.includes("@") || /\+?\d{6,}/.test(l))) return false;
+            if (removeRegex && removeRegex.test(l)) {
+              // Keep lines that still have substantive content after removing personal info
+              const cleaned = l.replace(removeRegex, "").replace(/\s+/g, " ").trim();
+              return cleaned.length >= 20;
+            }
+            return true;
+          })
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .replace(/^PROFESSIONAL\s+SUMMARY\s*:?\s*/i, "")
+          .trim();
+
+        // Hard cap for PDF wrapping
+        return summary.substring(0, 700).trim();
+      };
+
       const skills = Array.isArray(userProfile.skills) ? userProfile.skills : [];
       const primarySkills = Array.isArray(skills)
         ? skills.filter((s: any) => s?.category === "technical" || s?.proficiency === "expert" || s?.proficiency === "advanced")
@@ -1134,7 +1182,7 @@ ${includeReferral ? `
           github: userProfile.github,
           portfolio: userProfile.portfolio,
         },
-        summary: (result.tailoredResume || "").substring(0, 500),
+        summary: extractProfessionalSummary(result.tailoredResume || ""),
         experience: (Array.isArray(userProfile.workExperience) ? userProfile.workExperience : []).map((exp: any) => ({
           company: exp?.company || "",
           title: exp?.title || "",
