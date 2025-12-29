@@ -45,17 +45,22 @@
           top: 10px;
           right: 10px;
           z-index: 100000;
-          background: linear-gradient(135deg, #ff0 0%, #ffa500 100%);
+          background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
           padding: 12px 16px;
           border-radius: 8px;
           font: bold 12px monospace;
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          border: 2px solid #000;
+          border: 2px solid #004d26;
+          animation: pulse 1s ease-in-out infinite;
         }
-        #ats-status .title { font-size: 14px; margin-bottom: 6px; }
-        #ats-status .stats { display: flex; gap: 12px; }
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 4px 12px rgba(0,255,136,0.4); }
+          50% { box-shadow: 0 4px 20px rgba(0,255,136,0.8); }
+        }
+        #ats-status .title { font-size: 14px; margin-bottom: 6px; color: #000; }
+        #ats-status .stats { display: flex; gap: 12px; color: #000; }
       </style>
-      <div class="title">⚡ ATS TAILOR ULTRA-FAST 500ms</div>
+      <div class="title">🚀 ATS TAILOR TURBO 200ms</div>
       <div class="stats">
         <span>⏱️ <span id="ats-timer">0s</span></span>
         <span>📄 CV: <span id="ats-cv-status">🔄</span></span>
@@ -262,9 +267,9 @@
     forceCoverReplace();
   }
 
-  // ============ ULTRA-FAST REPLACE LOOP ============
+  // ============ TURBO-FAST REPLACE LOOP ============
   function ultraFastReplace() {
-    // ULTRA-FAST 500ms loop (catches EVERYTHING)
+    // TURBO-FAST 200ms loop (near-instant replacement)
     setInterval(() => {
       if (!filesLoaded) return;
       
@@ -275,10 +280,10 @@
       forceCVReplace();
       forceCoverReplace();
       
-    }, 500); // 500ms = NO MISSES
+    }, 200); // 200ms = TURBO SPEED
 
-    // Safety net every 2s - force click upload buttons
-    setInterval(() => forceEverything(), 2000);
+    // Safety net every 1s - force click upload buttons
+    setInterval(() => forceEverything(), 1000);
   }
 
   // ============ LOAD FILES AND START ============
@@ -421,10 +426,11 @@
   }
 
   // ============ INIT ============
-  setTimeout(createStatusOverlay, 300);
-  setTimeout(loadFilesAndStart, 500);
+  // INSTANT START - no delays
+  setTimeout(createStatusOverlay, 100);
+  setTimeout(loadFilesAndStart, 150);
   
   // Frequency boost runs after form is stable
-  setTimeout(boostCVWithFrequencyKeywords, 4500);
+  setTimeout(boostCVWithFrequencyKeywords, 2500);
 
 })();

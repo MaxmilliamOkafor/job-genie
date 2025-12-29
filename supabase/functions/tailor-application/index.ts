@@ -709,8 +709,18 @@ ABSOLUTE RULES:
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. EVERY keyword in the JD should appear at least once in the tailored resume
-6. NEVER REPEAT contact info (name, email, phone, links) in the Professional Summary - the header already contains them!
-7. Professional Summary should start directly with qualifications/experience description, NOT with the candidate's name
+
+=== CRITICAL: PROFESSIONAL SUMMARY MUST NOT DUPLICATE HEADER ===
+The resume header already contains: Name, Phone, Email, Location, LinkedIn, GitHub, Portfolio URLs.
+The PROFESSIONAL SUMMARY section MUST:
+- Start DIRECTLY with a qualifier like "Accomplished...", "Senior...", "Experienced..."
+- NEVER repeat the candidate name "${candidateName}"
+- NEVER repeat email "${userProfile.email}"
+- NEVER repeat phone "${userProfile.phone}"
+- NEVER repeat any URLs (linkedin, github, portfolio)
+- NEVER repeat location information
+VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
+=== END CRITICAL RULE ===
 
 HUMANIZED TONE RULES:
 - Active voice only
@@ -777,8 +787,18 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    - Header: ${candidateName}
    - Contact Line: ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ''} | ${userProfile.portfolio || ''}
-   - PROFESSIONAL SUMMARY: 4-6 lines summarizing qualifications with ${jdKeywords.hardSkills.slice(0, 5).join(', ')} keywords
-     CRITICAL: Do NOT repeat name, contact info, email, phone, or links in the summary - they are already in the header!
+   - PROFESSIONAL SUMMARY: 4-6 lines STARTING DIRECTLY with qualifications/experience.
+     === ABSOLUTE BAN - NEVER INCLUDE IN SUMMARY ===
+     ❌ "${candidateName}" - BANNED (already in header)
+     ❌ "${userProfile.email}" - BANNED (already in header)
+     ❌ "${userProfile.phone}" - BANNED (already in header)
+     ❌ Any LinkedIn/GitHub/Portfolio URLs - BANNED (already in header)
+     ❌ Any location text - BANNED (already in header)
+     === CORRECT SUMMARY START EXAMPLES ===
+     ✅ "Accomplished technology leader with 8+ years..."
+     ✅ "Senior Software Engineer specializing in..."
+     ✅ "Results-focused Product Manager with expertise in..."
+     === END SUMMARY RULES ===
    - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics
    - Education
    - Skills: Prioritize JD keywords (list as: Python, AWS, React, etc. - NO years of experience)
