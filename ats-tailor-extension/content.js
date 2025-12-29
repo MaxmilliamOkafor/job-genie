@@ -12,11 +12,9 @@
   const PAGE_LOAD_TS = Date.now();
   const SAFE_CV_ATTACH_AFTER_MS = 14_000; // Wait 14s to let LazyApply finish
   const MONITOR_DURATION_MS = 30_000; // Monitor for 30s after our attach
-  const MONITOR_INTERVAL_MS = 2_000; // Check every 2s
 
   // Track our attached files to detect overwrites
   let ourAttachedFiles = { cv: null, cover: null };
-  let monitoringActive = false;
 
   // Detect LazyApply-style filenames (ALL CAPS with underscores)
   function isLazyApplyFilename(filename) {
@@ -251,96 +249,145 @@
     return new File([blob], filename, { type });
   }
 
+  function safeSetFiles(input, fileList) {
+    if (!input) return false;
+    try {
+      // Preferred (works in Chrome extensions on most ATS forms)
+      input.files = fileList;
+      return true;
+    } catch (e) {
+      // Fallback for sites that block direct assignment
+      try {
+        Object.defineProperty(input, 'files', {
+          value: fileList,
+          configurable: true,
+        });
+        return true;
+      } catch (e2) {
+        console.warn('[ATS Tailor] Could not set input.files (blocked by page)', e2);
+        return false;
+      }
+    }
+  }
+
+  function dispatchFileEvents(input) {
+    if (!input) return;
+    ['input', 'change', 'blur'].forEach((eventType) => {
+      input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+    });
+  }
+
   function clearFileInput(input) {
     if (!input) return;
-    
+
     const existingFile = input.files?.[0];
     if (existingFile) {
       console.log('[ATS Tailor] Clearing existing file:', existingFile.name);
     }
-    
-    // Clear by setting empty DataTransfer
+
     const emptyTransfer = new DataTransfer();
-    input.files = emptyTransfer.files;
-    
-    // Also try resetting value for older browsers
+    safeSetFiles(input, emptyTransfer.files);
+
     try {
       input.value = '';
-    } catch (e) {
-      // Some browsers don't allow setting value on file inputs
+    } catch {
+      // ignore
     }
-    
-    // Dispatch events to notify the form
-    ['change', 'input'].forEach((eventType) => {
-      input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
-    });
+
+    dispatchFileEvents(input);
   }
 
   function attachFileToInput(input, file) {
-    // First, clear any existing file
+    // Clear any existing file first
     clearFileInput(input);
-    
-    // Small delay to let the form process the clear
+
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
-    input.files = dataTransfer.files;
 
-    ['change', 'input', 'blur'].forEach((eventType) => {
-      input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+    const ok = safeSetFiles(input, dataTransfer.files);
+    dispatchFileEvents(input);
+
+    const attachedName = input?.files?.[0]?.name;
+    console.log('[ATS Tailor] Attach attempt:', {
+      requested: file?.name,
+      attached: attachedName,
+      ok,
     });
 
-    console.log('[ATS Tailor] File attached:', file.name);
-    return true;
+    return ok && attachedName === file.name;
   }
 
-  // Monitor file inputs and re-attach if LazyApply overwrites
-  function startFileMonitoring(type, file, input) {
-    if (monitoringActive) return;
-    monitoringActive = true;
+  // Monitor file inputs and re-attach if LazyApply overwrites (event-based to avoid polling)
+  const activeMonitors = new Map(); // key: input element, value: cleanup()
+
+  function startFileMonitoring(type, input) {
+    if (!input) return;
+    if (activeMonitors.has(input)) return;
 
     const startTime = Date.now();
-    const intervalId = setInterval(() => {
-      if (Date.now() - startTime > MONITOR_DURATION_MS) {
-        clearInterval(intervalId);
-        monitoringActive = false;
-        console.log('[ATS Tailor] Stopped monitoring for overwrites');
-        return;
-      }
+
+    const onChange = () => {
+      if (Date.now() - startTime > MONITOR_DURATION_MS) return;
 
       const currentFile = input?.files?.[0];
       const currentName = currentFile?.name;
       const ourName = ourAttachedFiles[type]?.name;
 
-      if (currentName && ourName && currentName !== ourName) {
-        // Another extension overwrote our file
-        if (isLazyApplyFilename(currentName)) {
-          console.log(`[ATS Tailor] LazyApply overwrite detected: "${currentName}" -> re-attaching "${ourName}"`);
-          attachFileToInput(input, ourAttachedFiles[type]);
+      if (!currentName || !ourName) return;
+
+      if (currentName !== ourName && isLazyApplyFilename(currentName)) {
+        console.log(`[ATS Tailor] Overwrite detected: "${currentName}" -> re-attaching "${ourName}"`);
+        const ok = attachFileToInput(input, ourAttachedFiles[type]);
+        if (ok) {
           showNotification(`LazyApply override blocked - using ATS-optimized ${type.toUpperCase()}`, 'success');
-        } else {
-          console.log(`[ATS Tailor] Unknown overwrite: "${currentName}" (not re-attaching)`);
         }
       }
-    }, MONITOR_INTERVAL_MS);
+    };
+
+    input.addEventListener('change', onChange, true);
+
+    const timeoutId = setTimeout(() => {
+      const cleanup = activeMonitors.get(input);
+      if (cleanup) cleanup();
+    }, MONITOR_DURATION_MS);
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      input.removeEventListener('change', onChange, true);
+      activeMonitors.delete(input);
+      console.log('[ATS Tailor] Stopped monitoring for overwrites');
+    };
+
+    activeMonitors.set(input, cleanup);
   }
 
   async function attachWithMonitoring(input, file, type) {
     // Store our file for monitoring
     ourAttachedFiles[type] = file;
 
-    attachFileToInput(input, file);
+    // First attach attempt
+    let attachedOk = attachFileToInput(input, file);
+
+    // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
+    if (!attachedOk) {
+      await sleep(350);
+      attachedOk = attachFileToInput(input, file);
+    }
 
     // Wait a moment then check if immediately overwritten
-    await sleep(1500);
+    await sleep(1200);
 
     const currentName = input?.files?.[0]?.name;
-    if (currentName && currentName !== file.name) {
-      console.log('[ATS Tailor] Immediate overwrite detected, re-attaching:', { expected: file.name, found: currentName });
+    if (currentName && currentName !== file.name && isLazyApplyFilename(currentName)) {
+      console.log('[ATS Tailor] Immediate LazyApply overwrite detected, re-attaching:', {
+        expected: file.name,
+        found: currentName,
+      });
       attachFileToInput(input, file);
     }
 
-    // Start continuous monitoring for LazyApply overwrites
-    startFileMonitoring(type, file, input);
+    // Start lightweight monitoring for overwrites
+    startFileMonitoring(type, input);
   }
 
   function showNotification(message, type = 'success') {
