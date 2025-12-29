@@ -16,6 +16,211 @@
   // Track our attached files to detect overwrites
   let ourAttachedFiles = { cv: null, cover: null };
 
+  // ============ DEBUG PANEL ============
+  let debugPanelVisible = false;
+  let debugLogs = [];
+  const MAX_DEBUG_LOGS = 30;
+
+  function debugLog(category, message, status = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = { timestamp, category, message, status };
+    debugLogs.push(entry);
+    if (debugLogs.length > MAX_DEBUG_LOGS) debugLogs.shift();
+    console.log(`[ATS Tailor] [${category}] ${message}`);
+    updateDebugPanel();
+  }
+
+  function createDebugPanel() {
+    if (document.getElementById('ats-tailor-debug-panel')) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'ats-tailor-debug-panel';
+    panel.innerHTML = `
+      <style>
+        #ats-tailor-debug-panel {
+          position: fixed;
+          bottom: 20px;
+          left: 20px;
+          width: 420px;
+          max-height: 400px;
+          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          border: 1px solid #0f3460;
+          border-radius: 12px;
+          font-family: 'SF Mono', 'Consolas', monospace;
+          font-size: 11px;
+          z-index: 999998;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+          overflow: hidden;
+          display: none;
+        }
+        #ats-tailor-debug-panel.visible { display: block; }
+        #ats-debug-header {
+          background: linear-gradient(90deg, #e94560 0%, #0f3460 100%);
+          color: white;
+          padding: 10px 14px;
+          font-weight: 600;
+          font-size: 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          cursor: move;
+        }
+        #ats-debug-header span { display: flex; align-items: center; gap: 8px; }
+        #ats-debug-close {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          cursor: pointer;
+          font-size: 14px;
+          line-height: 1;
+        }
+        #ats-debug-close:hover { background: rgba(255,255,255,0.3); }
+        #ats-debug-status {
+          padding: 10px 14px;
+          background: rgba(0,0,0,0.2);
+          border-bottom: 1px solid #0f3460;
+        }
+        .ats-status-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 6px;
+          color: #a0a0a0;
+        }
+        .ats-status-row:last-child { margin-bottom: 0; }
+        .ats-status-label { color: #888; }
+        .ats-status-value { font-weight: 600; }
+        .ats-status-value.success { color: #22c55e; }
+        .ats-status-value.error { color: #ef4444; }
+        .ats-status-value.pending { color: #f59e0b; }
+        .ats-status-value.info { color: #60a5fa; }
+        #ats-debug-logs {
+          max-height: 220px;
+          overflow-y: auto;
+          padding: 10px 14px;
+        }
+        .ats-log-entry {
+          padding: 6px 8px;
+          margin-bottom: 4px;
+          background: rgba(255,255,255,0.03);
+          border-radius: 6px;
+          border-left: 3px solid #444;
+        }
+        .ats-log-entry.success { border-left-color: #22c55e; }
+        .ats-log-entry.error { border-left-color: #ef4444; }
+        .ats-log-entry.warning { border-left-color: #f59e0b; }
+        .ats-log-entry.info { border-left-color: #60a5fa; }
+        .ats-log-time { color: #666; margin-right: 8px; }
+        .ats-log-cat { 
+          background: #0f3460;
+          color: #60a5fa;
+          padding: 2px 6px;
+          border-radius: 4px;
+          margin-right: 8px;
+          font-size: 10px;
+        }
+        .ats-log-msg { color: #e0e0e0; }
+        #ats-debug-toggle {
+          position: fixed;
+          bottom: 20px;
+          left: 20px;
+          width: 48px;
+          height: 48px;
+          background: linear-gradient(135deg, #e94560 0%, #0f3460 100%);
+          border: none;
+          border-radius: 50%;
+          color: white;
+          font-size: 20px;
+          cursor: pointer;
+          z-index: 999997;
+          box-shadow: 0 4px 20px rgba(233, 69, 96, 0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        #ats-debug-toggle:hover {
+          transform: scale(1.1);
+          box-shadow: 0 6px 25px rgba(233, 69, 96, 0.5);
+        }
+      </style>
+      <div id="ats-debug-header">
+        <span>🔧 ATS Tailor Debug</span>
+        <button id="ats-debug-close">×</button>
+      </div>
+      <div id="ats-debug-status">
+        <div class="ats-status-row">
+          <span class="ats-status-label">CV Input:</span>
+          <span id="ats-cv-status" class="ats-status-value pending">Scanning...</span>
+        </div>
+        <div class="ats-status-row">
+          <span class="ats-status-label">Cover Letter:</span>
+          <span id="ats-cover-status" class="ats-status-value pending">Scanning...</span>
+        </div>
+        <div class="ats-status-row">
+          <span class="ats-status-label">CV Attach:</span>
+          <span id="ats-cv-attach" class="ats-status-value pending">—</span>
+        </div>
+        <div class="ats-status-row">
+          <span class="ats-status-label">Cover Attach:</span>
+          <span id="ats-cover-attach" class="ats-status-value pending">—</span>
+        </div>
+      </div>
+      <div id="ats-debug-logs"></div>
+    `;
+    document.body.appendChild(panel);
+
+    // Toggle button
+    const toggle = document.createElement('button');
+    toggle.id = 'ats-debug-toggle';
+    toggle.innerHTML = '🐛';
+    toggle.title = 'Toggle ATS Tailor Debug Panel';
+    document.body.appendChild(toggle);
+
+    toggle.addEventListener('click', () => {
+      debugPanelVisible = !debugPanelVisible;
+      panel.classList.toggle('visible', debugPanelVisible);
+      toggle.style.display = debugPanelVisible ? 'none' : 'flex';
+    });
+
+    document.getElementById('ats-debug-close').addEventListener('click', () => {
+      debugPanelVisible = false;
+      panel.classList.remove('visible');
+      toggle.style.display = 'flex';
+    });
+  }
+
+  function updateDebugPanel() {
+    const logsContainer = document.getElementById('ats-debug-logs');
+    if (!logsContainer) return;
+
+    logsContainer.innerHTML = debugLogs
+      .slice()
+      .reverse()
+      .map(
+        (log) => `
+        <div class="ats-log-entry ${log.status}">
+          <span class="ats-log-time">${log.timestamp}</span>
+          <span class="ats-log-cat">${log.category}</span>
+          <span class="ats-log-msg">${log.message}</span>
+        </div>
+      `
+      )
+      .join('');
+  }
+
+  function setDebugStatus(id, text, status) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = `ats-status-value ${status}`;
+  }
+
+  // Initialize debug panel on supported pages
+  setTimeout(createDebugPanel, 500);
+
+
   // Detect LazyApply-style filenames (ALL CAPS with underscores)
   function isLazyApplyFilename(filename) {
     if (!filename) return false;
@@ -203,7 +408,12 @@
   function findFileInput(type) {
     // Greenhouse pages often use a custom uploader UI; section-heading lookup is the most reliable.
     const ghInput = findGreenhouseFileInput(type);
-    if (ghInput) return ghInput;
+    if (ghInput) {
+      const inputInfo = ghInput.id || ghInput.name || 'Greenhouse section';
+      debugLog('Detect', `${type.toUpperCase()} input found via Greenhouse: ${inputInfo}`, 'success');
+      setDebugStatus(type === 'cv' ? 'ats-cv-status' : 'ats-cover-status', `Found (${inputInfo})`, 'success');
+      return ghInput;
+    }
 
     const selectors = type === 'cv' ? FILE_INPUT_SELECTORS.resume : FILE_INPUT_SELECTORS.coverLetter;
 
@@ -221,7 +431,8 @@
             console.log(`[ATS Tailor] Skipping ${selector} - appears to be resume field`);
             continue;
           }
-          console.log(`[ATS Tailor] Found ${type} input:`, selector);
+          debugLog('Detect', `${type.toUpperCase()} input found: ${selector}`, 'success');
+          setDebugStatus(type === 'cv' ? 'ats-cv-status' : 'ats-cover-status', `Found (${selector.substring(0, 30)})`, 'success');
           return input;
         }
       } catch {
@@ -249,14 +460,16 @@
       if (forId) {
         const input = document.getElementById(forId);
         if (input?.type === 'file') {
-          console.log(`[ATS Tailor] Found ${type} input via label:`, text.substring(0, 50));
+          debugLog('Detect', `${type.toUpperCase()} input found via label: "${text.substring(0, 30)}"`, 'success');
+          setDebugStatus(type === 'cv' ? 'ats-cv-status' : 'ats-cover-status', `Found (label)`, 'success');
           return input;
         }
       }
 
       const nested = label.querySelector('input[type="file"]');
       if (nested) {
-        console.log(`[ATS Tailor] Found ${type} input nested in label:`, text.substring(0, 50));
+        debugLog('Detect', `${type.toUpperCase()} input nested in label: "${text.substring(0, 30)}"`, 'success');
+        setDebugStatus(type === 'cv' ? 'ats-cv-status' : 'ats-cover-status', `Found (nested)`, 'success');
         return nested;
       }
     }
@@ -269,7 +482,8 @@
     if (allFileInputs.length === 1) {
       const only = allFileInputs[0];
       if (type === 'cv') {
-        console.log('[ATS Tailor] Using the only file input on page as CV input');
+        debugLog('Detect', 'CV input: using only file input on page', 'success');
+        setDebugStatus('ats-cv-status', 'Found (only input)', 'success');
         return only;
       }
       // For cover letter, don't assume the only input is cover
@@ -289,7 +503,8 @@
       }
     }
 
-    console.log(`[ATS Tailor] Could not find ${type} input`);
+    debugLog('Detect', `${type.toUpperCase()} input NOT found`, 'error');
+    setDebugStatus(type === 'cv' ? 'ats-cv-status' : 'ats-cover-status', 'Not found', 'error');
     return null;
   }
 
@@ -487,7 +702,7 @@
     // ALWAYS clear any existing file first - this is the ONLY CV that should be attached
     const existingFile = input?.files?.[0];
     if (existingFile) {
-      console.log(`[ATS Tailor] Overriding existing file: "${existingFile.name}" with tailored: "${file.name}"`);
+      debugLog('Attach', `Overriding "${existingFile.name}" with "${file.name}"`, 'warning');
     }
     
     // Forcefully clear the input
@@ -513,13 +728,15 @@
     }
 
     const attachedName = input?.files?.[0]?.name;
-    console.log('[ATS Tailor] Attach result:', {
-      requested: file?.name,
-      attached: attachedName,
-      success: ok && attachedName === file.name,
-    });
+    const success = ok && attachedName === file.name;
+    
+    if (success) {
+      debugLog('Attach', `SUCCESS: "${file.name}" attached`, 'success');
+    } else {
+      debugLog('Attach', `FAILED: wanted "${file.name}", got "${attachedName || 'nothing'}"`, 'error');
+    }
 
-    return ok && attachedName === file.name;
+    return success;
   }
 
   // Monitor file inputs and re-attach if LazyApply overwrites (event-based to avoid polling)
@@ -541,7 +758,7 @@
       if (!currentName || !ourName) return;
 
       if (currentName !== ourName && isLazyApplyFilename(currentName)) {
-        console.log(`[ATS Tailor] Overwrite detected: "${currentName}" -> re-attaching "${ourName}"`);
+        debugLog('Monitor', `Overwrite detected: "${currentName}" -> re-attaching "${ourName}"`, 'warning');
         const ok = attachFileToInput(input, ourAttachedFiles[type]);
         if (ok) {
           showNotification(`LazyApply override blocked - using ATS-optimized ${type.toUpperCase()}`, 'success');
@@ -570,21 +787,25 @@
     // Only CV needs LazyApply overwrite protection.
     // Cover letter is often NOT a file upload and we should avoid interfering with other autofill tools.
 
+    debugLog('Attach', `Starting ${type.toUpperCase()} attachment: "${file.name}"`, 'info');
+    setDebugStatus(type === 'cv' ? 'ats-cv-attach' : 'ats-cover-attach', 'Attaching...', 'pending');
+
     if (type === 'cv') {
       // Store our file for monitoring
       ourAttachedFiles[type] = file;
 
       // STEP 1: Click the "X" remove button if there's an existing file displayed in the UI
-      console.log('[ATS Tailor] Attempting to click remove button for existing CV...');
+      debugLog('Attach', 'Clicking remove button for existing CV...', 'info');
       const clickedRemove = clickRemoveFileButton('cv');
       if (clickedRemove) {
+        debugLog('Attach', 'Remove button clicked, waiting for UI...', 'success');
         await sleep(500); // Wait for UI to update after clicking remove
       }
 
       // STEP 2: Clear the file input programmatically as backup
       const existingFile = input?.files?.[0];
       if (existingFile) {
-        console.log(`[ATS Tailor] Pre-attach clear of: "${existingFile.name}"`);
+        debugLog('Attach', `Pre-attach clear of: "${existingFile.name}"`, 'warning');
         clearFileInput(input);
         await sleep(300);
       }
@@ -594,12 +815,20 @@
 
       // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
       if (!attachedOk) {
+        debugLog('Attach', 'First attempt failed, retrying...', 'warning');
         await sleep(350);
         clickRemoveFileButton('cv'); // Try clicking remove again
         await sleep(300);
         clearFileInput(input);
         await sleep(200);
         attachedOk = attachFileToInput(input, file);
+      }
+
+      // Update status
+      if (attachedOk) {
+        setDebugStatus('ats-cv-attach', 'Attached ✓', 'success');
+      } else {
+        setDebugStatus('ats-cv-attach', 'Failed ✗', 'error');
       }
 
       // Multiple verification checks to catch LazyApply overwrites
@@ -610,11 +839,11 @@
         const currentName = input?.files?.[0]?.name;
         if (!currentName) {
           // File was cleared - re-attach
-          console.log(`[ATS Tailor] File was cleared at ${delay}ms - re-attaching`);
+          debugLog('Monitor', `File was cleared at ${delay}ms - re-attaching`, 'warning');
           attachFileToInput(input, file);
         } else if (currentName !== file.name) {
           // Different file attached (likely LazyApply) - click X button first, then re-attach
-          console.log(`[ATS Tailor] Overwrite detected at ${delay}ms: "${currentName}" -> re-attaching "${file.name}"`);
+          debugLog('Monitor', `Overwrite at ${delay}ms: "${currentName}" -> re-attaching`, 'warning');
           clickRemoveFileButton('cv');
           await sleep(300);
           clearFileInput(input);
@@ -625,14 +854,16 @@
       }
 
       // Start lightweight monitoring for future overwrites
+      debugLog('Monitor', 'Starting overwrite monitoring for 45s...', 'info');
       startFileMonitoring(type, input);
       return;
     }
 
-  // Non-CV: Click remove button first, clear input, then attach
-    console.log(`[ATS Tailor] Attempting to click remove button for existing ${type}...`);
+    // Non-CV: Click remove button first, clear input, then attach
+    debugLog('Attach', `Clicking remove button for existing ${type}...`, 'info');
     const clickedRemove = clickRemoveFileButton(type);
     if (clickedRemove) {
+      debugLog('Attach', 'Remove button clicked, waiting for UI...', 'success');
       await sleep(500); // Wait for UI to update
     }
     
@@ -642,7 +873,12 @@
     
     // Now attach the tailored file
     const ok = attachFileToInput(input, file);
-    console.log(`[ATS Tailor] ${type} attachment result:`, ok ? 'success' : 'failed');
+    
+    if (ok) {
+      setDebugStatus('ats-cover-attach', 'Attached ✓', 'success');
+    } else {
+      setDebugStatus('ats-cover-attach', 'Failed ✗', 'error');
+    }
   }
 
   function showNotification(message, type = 'success') {
