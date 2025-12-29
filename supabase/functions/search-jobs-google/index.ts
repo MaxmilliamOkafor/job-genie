@@ -146,31 +146,77 @@ function getPlatformFromUrl(url: string): string {
 
 function extractCompanyFromUrl(url: string): string {
   try {
-    const patterns = [
-      /boards\.greenhouse\.io\/([^\/]+)/,
-      /([^\.]+)\.workable\.com/,
-      /([^\.]+)\.wd\d+\.myworkdayjobs/,
-      /([^\.]+)\.teamtailor\.com/,
-      /jobs\.smartrecruiters\.com\/([^\/]+)/,
-      /linkedin\.com\/jobs\/view\/.*at-([^?\/]+)/,
-      /indeed\.com\/.*company\/([^?\/]+)/,
-      /https?:\/\/(?:careers|jobs)\.([^\.\/]+)\./,
-      /https?:\/\/([^\.]+)\.com\/(?:careers|jobs)/,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) {
-        return match[1]
-          .replace(/-/g, ' ')
-          .replace(/_/g, ' ')
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-      }
+    // Workday pattern - extract company name from subdomain: company.wd5.myworkdayjobs.com
+    const workdayMatch = url.match(/https?:\/\/([^\.]+)\.wd\d+\.myworkdayjobs\.com/i);
+    if (workdayMatch && workdayMatch[1]) {
+      return formatCompanyName(workdayMatch[1]);
     }
+    
+    // ICIMS pattern - extract from careers-company.icims.com
+    const icimsMatch = url.match(/https?:\/\/careers-?([^\.]+)\.icims\.com/i);
+    if (icimsMatch && icimsMatch[1]) {
+      return formatCompanyName(icimsMatch[1]);
+    }
+    
+    // Greenhouse pattern
+    const greenhouseMatch = url.match(/boards\.greenhouse\.io\/([^\/]+)/);
+    if (greenhouseMatch && greenhouseMatch[1]) {
+      return formatCompanyName(greenhouseMatch[1]);
+    }
+    
+    // Workable pattern
+    const workableMatch = url.match(/(?:apply|jobs)\.workable\.com\/([^\/]+)/);
+    if (workableMatch && workableMatch[1]) {
+      return formatCompanyName(workableMatch[1]);
+    }
+    
+    // Teamtailor pattern
+    const teamtailorMatch = url.match(/([^\.]+)\.teamtailor\.com/);
+    if (teamtailorMatch && teamtailorMatch[1]) {
+      return formatCompanyName(teamtailorMatch[1]);
+    }
+    
+    // SmartRecruiters pattern
+    const smartMatch = url.match(/jobs\.smartrecruiters\.com\/([^\/]+)/);
+    if (smartMatch && smartMatch[1]) {
+      return formatCompanyName(smartMatch[1]);
+    }
+    
+    // LinkedIn pattern
+    const linkedinMatch = url.match(/linkedin\.com\/jobs\/view\/.*at-([^?\/]+)/);
+    if (linkedinMatch && linkedinMatch[1]) {
+      return formatCompanyName(linkedinMatch[1]);
+    }
+    
+    // Indeed pattern
+    const indeedMatch = url.match(/indeed\.com\/.*company\/([^?\/]+)/);
+    if (indeedMatch && indeedMatch[1]) {
+      return formatCompanyName(indeedMatch[1]);
+    }
+    
+    // Generic career page patterns
+    const careerMatch = url.match(/https?:\/\/(?:careers|jobs)\.([^\.\/]+)\./);
+    if (careerMatch && careerMatch[1]) {
+      return formatCompanyName(careerMatch[1]);
+    }
+    
+    // Oracle Cloud pattern
+    const oracleMatch = url.match(/https?:\/\/([^\.]+)\.fa\./);
+    if (oracleMatch && oracleMatch[1]) {
+      return formatCompanyName(oracleMatch[1]);
+    }
+    
   } catch (e) {}
   return 'Unknown Company';
+}
+
+function formatCompanyName(name: string): string {
+  return name
+    .replace(/-/g, ' ')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 // Validates that a URL points to a SPECIFIC job listing, not a careers/company page
