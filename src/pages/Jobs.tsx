@@ -80,6 +80,7 @@ const Jobs = () => {
     clearAndRefresh,
     refetch,
     searchJobs,
+    filterByLocation,
   } = useJobScraper();
   const { profile } = useProfile();
   const { user } = useAuth();
@@ -605,6 +606,9 @@ const Jobs = () => {
           <JobFiltersBar 
             jobs={jobs} 
             onFiltersChange={handleFiltersChange}
+            onLocationChange={async (locations) => {
+              await filterByLocation(locations);
+            }}
             onSearch={async (keywords, locations, filters) => {
               if (!user) return;
               setIsSearching(true);

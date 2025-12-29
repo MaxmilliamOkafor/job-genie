@@ -22,7 +22,7 @@ export function useJobScraper() {
   const loadedCountRef = useRef(0);
 
   // Fetch jobs with pagination - NOT all at once
-  const fetchExistingJobs = useCallback(async (append = false, search = '') => {
+  const fetchExistingJobs = useCallback(async (append = false, search = '', locations: string[] = []) => {
     if (!user) return;
 
     setIsLoading(true);
@@ -41,6 +41,12 @@ export function useJobScraper() {
       if (search.trim()) {
         const searchTerm = `%${search.trim()}%`;
         query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm},location.ilike.${searchTerm}`);
+      }
+      
+      // Server-side location filter - use OR for multiple locations
+      if (locations.length > 0) {
+        const locationFilters = locations.map(loc => `location.ilike.%${loc}%`).join(',');
+        query = query.or(locationFilters);
       }
 
       const { data, error, count } = await query.range(from, to);
@@ -110,11 +116,17 @@ export function useJobScraper() {
   }, [user]);
 
   // Search jobs with server-side filtering
-  const searchJobs = useCallback(async (query: string) => {
+  const searchJobs = useCallback(async (query: string, locations: string[] = []) => {
     setSearchQuery(query);
     loadedCountRef.current = 0;
-    await fetchExistingJobs(false, query);
+    await fetchExistingJobs(false, query, locations);
   }, [fetchExistingJobs]);
+  
+  // Filter by location only (for location dropdown changes)
+  const filterByLocation = useCallback(async (locations: string[]) => {
+    loadedCountRef.current = 0;
+    await fetchExistingJobs(false, searchQuery, locations);
+  }, [fetchExistingJobs, searchQuery]);
 
   // Scrape new jobs from edge function
   const scrapeJobs = useCallback(async (keywordString: string, append = false) => {
@@ -306,6 +318,7 @@ export function useJobScraper() {
     loadMore,
     scrapeJobs,
     searchJobs,
+    filterByLocation,
     startContinuousScraping,
     stopScraping,
     updateJobStatus,

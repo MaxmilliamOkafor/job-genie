@@ -25,6 +25,7 @@ interface JobFiltersBarProps {
   jobs: Job[];
   onFiltersChange: (filteredJobs: Job[]) => void;
   onSearch?: (keywords: string, locations: string, filters: SearchFilters) => Promise<void>;
+  onLocationChange?: (locations: string[]) => Promise<void>;
   isSearching?: boolean;
 }
 
@@ -176,7 +177,7 @@ const LOCATION_OPTIONS = [
   { value: 'APAC', label: 'APAC', group: 'Asia Pacific' },
 ];
 
-export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: JobFiltersBarProps) {
+export function JobFiltersBar({ jobs, onFiltersChange, onSearch, onLocationChange, isSearching }: JobFiltersBarProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [quickFilter, setQuickFilter] = useState('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
@@ -187,6 +188,7 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: 
   const [selectedWorkType, setSelectedWorkType] = useState('all');
   const [selectedExperienceLevel, setSelectedExperienceLevel] = useState('all');
   const [locationPopoverOpen, setLocationPopoverOpen] = useState(false);
+  const [isFilteringByLocation, setIsFilteringByLocation] = useState(false);
 
   // Extract unique values
   const uniquePlatforms = useMemo(() => 
@@ -230,8 +232,9 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: 
         if (!matchesSearch) return false;
       }
       
-      // Location filter (multi-select)
-      if (selectedLocations.length > 0) {
+      // Location filter (multi-select) - skip if server-side filtering is being used
+      // When onLocationChange is provided, filtering is done server-side
+      if (selectedLocations.length > 0 && !onLocationChange) {
         const locationLower = job.location.toLowerCase();
         const matchesAnyLocation = selectedLocations.some(loc => 
           locationLower.includes(loc.toLowerCase())
@@ -314,12 +317,30 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, isSearching }: 
     setSelectedExperienceLevel('all');
   };
 
-  const toggleLocation = (location: string) => {
-    setSelectedLocations(prev => 
-      prev.includes(location) 
-        ? prev.filter(l => l !== location)
-        : [...prev, location]
-    );
+  const toggleLocation = async (location: string) => {
+    const newLocations = selectedLocations.includes(location) 
+      ? selectedLocations.filter(l => l !== location)
+      : [...selectedLocations, location];
+    
+    setSelectedLocations(newLocations);
+    
+    // Trigger server-side location filter if callback provided
+    if (onLocationChange && newLocations.length > 0) {
+      setIsFilteringByLocation(true);
+      try {
+        await onLocationChange(newLocations);
+      } finally {
+        setIsFilteringByLocation(false);
+      }
+    } else if (onLocationChange && newLocations.length === 0) {
+      // Reset to all jobs when no locations selected
+      setIsFilteringByLocation(true);
+      try {
+        await onLocationChange([]);
+      } finally {
+        setIsFilteringByLocation(false);
+      }
+    }
   };
 
   // Group locations by region
