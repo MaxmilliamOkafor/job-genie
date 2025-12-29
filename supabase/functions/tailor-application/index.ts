@@ -761,7 +761,7 @@ EDUCATION:
 ${JSON.stringify(userProfile.education, null, 2)}
 
 SKILLS:
-${userProfile.skills?.map((s: any) => typeof s === 'string' ? s : `${s.name} (${s.years || s.level || 'proficient'})`).join(", ") || 'Not specified'}
+${userProfile.skills?.map((s: any) => typeof s === 'string' ? s : s.name).join(", ") || 'Not specified'}
 
 CERTIFICATIONS:
 ${userProfile.certifications?.join(", ") || 'None listed'}
