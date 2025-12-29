@@ -440,28 +440,46 @@
       // Store our file for monitoring
       ourAttachedFiles[type] = file;
 
+      // AGGRESSIVE CLEAR: Remove any existing file first
+      const existingFile = input?.files?.[0];
+      if (existingFile) {
+        console.log(`[ATS Tailor] Pre-attach clear of: "${existingFile.name}"`);
+        clearFileInput(input);
+        await sleep(300);
+      }
+
       // First attach attempt
       let attachedOk = attachFileToInput(input, file);
 
       // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
       if (!attachedOk) {
         await sleep(350);
+        clearFileInput(input);
+        await sleep(200);
         attachedOk = attachFileToInput(input, file);
       }
 
-      // Wait a moment then check if immediately overwritten
-      await sleep(1200);
-
-      const currentName = input?.files?.[0]?.name;
-      if (currentName && currentName !== file.name && isLazyApplyFilename(currentName)) {
-        console.log('[ATS Tailor] Immediate LazyApply overwrite detected, re-attaching:', {
-          expected: file.name,
-          found: currentName,
-        });
-        attachFileToInput(input, file);
+      // Multiple verification checks to catch LazyApply overwrites
+      const checkIntervals = [1500, 3000, 5000, 8000];
+      for (const delay of checkIntervals) {
+        await sleep(delay - (checkIntervals.indexOf(delay) > 0 ? checkIntervals[checkIntervals.indexOf(delay) - 1] : 0));
+        
+        const currentName = input?.files?.[0]?.name;
+        if (!currentName) {
+          // File was cleared - re-attach
+          console.log(`[ATS Tailor] File was cleared at ${delay}ms - re-attaching`);
+          attachFileToInput(input, file);
+        } else if (currentName !== file.name) {
+          // Different file attached (likely LazyApply)
+          console.log(`[ATS Tailor] Overwrite detected at ${delay}ms: "${currentName}" -> re-attaching "${file.name}"`);
+          clearFileInput(input);
+          await sleep(200);
+          attachFileToInput(input, file);
+          showNotification(`LazyApply override blocked - using ATS-optimized CV`, 'success');
+        }
       }
 
-      // Start lightweight monitoring for overwrites (CV only)
+      // Start lightweight monitoring for future overwrites
       startFileMonitoring(type, input);
       return;
     }
