@@ -202,8 +202,8 @@ function extractDomainForLogo(url: string | null | undefined, company: string): 
 }
 
 // Get company initials for fallback
-function getCompanyInitials(company: string): string {
-  const cleanName = cleanCompanyName(company);
+function getCompanyInitials(company: string, url?: string | null): string {
+  const cleanName = cleanCompanyName(company, url);
   return cleanName
     .split(' ')
     .filter(word => word.length > 0)
@@ -213,11 +213,29 @@ function getCompanyInitials(company: string): string {
 }
 
 // Clean company name by removing URL prefixes
-function cleanCompanyName(company: string): string {
-  return company
+function cleanCompanyName(company: string, url?: string | null): string {
+  // First, clean the raw company value
+  let cleaned = company
     .replace(/^https?:\/\//i, '') // Remove http:// or https://
-    .replace(/^Https?:\/\//i, '') // Remove Https:// (capitalized)
-    .replace(/^www\./i, '') // Remove www.
+    .replace(/^www\./i, ''); // Remove www.
+  
+  // Check if the cleaned name is a generic ATS subdomain
+  const genericNames = ['apply', 'careers', 'jobs', 'hire', 'recruiting', 'talent', 'unknown company', 'unknown'];
+  const firstPart = cleaned.split('.')[0].toLowerCase();
+  
+  if (genericNames.includes(firstPart) || cleaned.toLowerCase().includes('unknown')) {
+    // Try to extract company from URL
+    if (url) {
+      const extracted = extractCompanyFromJobUrl(url);
+      if (extracted && !genericNames.includes(extracted.toLowerCase())) {
+        return extracted;
+      }
+    }
+    return 'Unknown Company';
+  }
+  
+  // Format the company name nicely
+  return cleaned
     .split('.')[0] // Take first part before any dots
     .replace(/-/g, ' ') // Replace dashes with spaces
     .replace(/_/g, ' ') // Replace underscores with spaces
@@ -225,6 +243,60 @@ function cleanCompanyName(company: string): string {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
     .trim() || 'Unknown Company';
+}
+
+// Extract company name from job URL
+function extractCompanyFromJobUrl(url: string): string | null {
+  try {
+    // Workable pattern: apply.workable.com/company-name/
+    const workableMatch = url.match(/apply\.workable\.com\/([^\/]+)/i);
+    if (workableMatch && workableMatch[1] && workableMatch[1] !== 'j') {
+      return formatName(workableMatch[1]);
+    }
+    
+    // Workday pattern: company.wd5.myworkdayjobs.com
+    const workdayMatch = url.match(/https?:\/\/([^\.]+)\.wd\d+\.myworkdayjobs\.com/i);
+    if (workdayMatch && workdayMatch[1]) {
+      return formatName(workdayMatch[1]);
+    }
+    
+    // Greenhouse pattern: boards.greenhouse.io/company
+    const greenhouseMatch = url.match(/boards\.greenhouse\.io\/([^\/]+)/i);
+    if (greenhouseMatch && greenhouseMatch[1]) {
+      return formatName(greenhouseMatch[1]);
+    }
+    
+    // SmartRecruiters pattern: jobs.smartrecruiters.com/Company
+    const smartMatch = url.match(/jobs\.smartrecruiters\.com\/([^\/]+)/i);
+    if (smartMatch && smartMatch[1]) {
+      return formatName(smartMatch[1]);
+    }
+    
+    // ICIMS pattern: careers-company.icims.com
+    const icimsMatch = url.match(/careers-?([^\.]+)\.icims\.com/i);
+    if (icimsMatch && icimsMatch[1]) {
+      return formatName(icimsMatch[1]);
+    }
+    
+    // Teamtailor pattern: company.teamtailor.com
+    const teamtailorMatch = url.match(/([^\.]+)\.teamtailor\.com/i);
+    if (teamtailorMatch && teamtailorMatch[1] && teamtailorMatch[1] !== 'career') {
+      return formatName(teamtailorMatch[1]);
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function formatName(name: string): string {
+  return name
+    .replace(/-/g, ' ')
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: JobCardProps) {
@@ -244,12 +316,12 @@ export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: Job
   const displaySalary = extractSalary(job.salary, (job as any).description || job.description);
   
   // Clean and format company name
-  const displayCompany = cleanCompanyName(job.company);
+  const displayCompany = cleanCompanyName(job.company, job.url);
   
   // Get company logo URL
-  const logoDomain = extractDomainForLogo(job.url, job.company);
+  const logoDomain = extractDomainForLogo(job.url, displayCompany);
   const logoUrl = logoDomain && !logoError ? `https://logo.clearbit.com/${logoDomain}` : null;
-  const companyInitials = getCompanyInitials(job.company);
+  const companyInitials = getCompanyInitials(displayCompany, job.url);
 
   const handleReportBrokenLink = async () => {
     if (!job.url || hasReported) return;
