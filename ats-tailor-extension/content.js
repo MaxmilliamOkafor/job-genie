@@ -297,8 +297,129 @@
     });
   }
 
+// ============ FREQUENCY BOOST (3-5 mentions/keyword) ============
+  const HIGH_VALUE_SKILLS = [
+    'Python', 'Machine Learning', 'AI', 'PyTorch', 'TensorFlow',
+    'AWS', 'Docker', 'Kubernetes', 'PostgreSQL', 'API', 'Agile',
+    'React', 'JavaScript', 'TypeScript', 'Node.js', 'SQL', 'Azure',
+    'GCP', 'CI/CD', 'DevOps', 'Microservices', 'REST', 'GraphQL',
+    'Java', 'C++', 'Go', 'Rust', 'Scala', 'Spark', 'Hadoop',
+    'MongoDB', 'Redis', 'Elasticsearch', 'Kafka', 'RabbitMQ'
+  ];
+
+  function extractJobDescription() {
+    // Try to find JD content on page
+    const selectors = [
+      '.job-description', '#job-description', '[data-qa="job-description"]',
+      '.description', '#description', '.posting-requirements',
+      'article', '.job-details', '.job-content', '.job-posting'
+    ];
+    
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el && el.textContent.length > 200) {
+        return el.textContent;
+      }
+    }
+    
+    // Fallback: get main content
+    const main = document.querySelector('main') || document.body;
+    return main.textContent.substring(0, 5000);
+  }
+
+  function extractHighValueKeywords(jdText) {
+    const jdLower = jdText.toLowerCase();
+    const matches = [];
+    
+    HIGH_VALUE_SKILLS.forEach(skill => {
+      const skillLower = skill.toLowerCase();
+      // Count occurrences
+      const regex = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      const count = (jdText.match(regex) || []).length;
+      
+      if (count >= 2) {
+        matches.push({ skill, count });
+      }
+    });
+    
+    // Sort by frequency and return top 4
+    matches.sort((a, b) => b.count - a.count);
+    return matches.slice(0, 4).map(m => m.skill);
+  }
+
+  function generateNaturalPhrase(keyword) {
+    const patterns = [
+      `leveraged ${keyword} extensively`,
+      `advanced ${keyword} proficiency`,
+      `${keyword} implementation expertise`,
+      `deep ${keyword} architecture experience`,
+      `production ${keyword} deployments`,
+      `${keyword}-driven solutions`,
+      `expert-level ${keyword} skills`,
+      `${keyword} optimization specialist`
+    ];
+    return patterns[Math.floor(Math.random() * patterns.length)];
+  }
+
+  function boostCVWithFrequencyKeywords() {
+    const jdText = extractJobDescription();
+    const keywords = extractHighValueKeywords(jdText);
+    
+    if (keywords.length === 0) {
+      console.log('[ATS Tailor] No high-value keywords found in JD');
+      return;
+    }
+    
+    console.log('[ATS Tailor] Frequency boost keywords:', keywords);
+    
+    // Find editable fields
+    const fields = document.querySelectorAll('textarea, [contenteditable="true"]');
+    
+    fields.forEach(field => {
+      const text = field.value || field.innerText || '';
+      if (text.length < 50) return; // Skip short fields
+      
+      // Check if this looks like a CV/summary field
+      const label = field.labels?.[0]?.textContent || field.name || field.id || '';
+      if (!/summary|objective|about|profile|experience/i.test(label + text.substring(0, 100))) return;
+      
+      // Inject keywords naturally
+      let newText = text;
+      keywords.forEach((keyword, idx) => {
+        // Only inject if keyword not already present 3+ times
+        const regex = new RegExp(keyword, 'gi');
+        const existingCount = (newText.match(regex) || []).length;
+        
+        if (existingCount < 3) {
+          const phrase = generateNaturalPhrase(keyword);
+          // Find a good insertion point (end of sentence or bullet)
+          const insertPoints = [...newText.matchAll(/[.•\-]\s/g)];
+          if (insertPoints.length > idx) {
+            const pos = insertPoints[idx].index + 2;
+            newText = newText.slice(0, pos) + `(${phrase}) ` + newText.slice(pos);
+          }
+        }
+      });
+      
+      if (newText !== text) {
+        if (field.value !== undefined) {
+          field.value = newText;
+        } else {
+          field.innerText = newText;
+        }
+        fireEvents(field);
+        console.log('[ATS Tailor] Frequency boost applied to field');
+      }
+    });
+    
+    updateStatus('cv', '✅🚀');
+  }
+
   // ============ INIT ============
   setTimeout(createStatusOverlay, 300);
   setTimeout(loadFilesAndStart, 500);
+  
+  // Frequency boost runs after form is stable
+  setTimeout(boostCVWithFrequencyKeywords, 4500);
 
 })();
