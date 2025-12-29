@@ -37,16 +37,38 @@ export function useJobScraper() {
         .neq('status', 'applied')
         .order('created_at', { ascending: false });
 
-      // Server-side search if provided
-      if (search.trim()) {
-        const searchTerm = `%${search.trim()}%`;
-        query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm},location.ilike.${searchTerm}`);
+      // Server-side location filter - expand countries to include their cities
+      if (locations.length > 0) {
+        const locationExpansions: Record<string, string[]> = {
+          'Ireland': ['Ireland', 'Dublin', 'Cork', 'Galway', 'Limerick'],
+          'United Kingdom': ['United Kingdom', 'UK', 'London', 'Manchester', 'Birmingham', 'Edinburgh', 'Glasgow', 'Bristol', 'Leeds', 'Cambridge', 'Oxford'],
+          'Germany': ['Germany', 'Berlin', 'Munich', 'Frankfurt', 'Hamburg', 'Cologne', 'Stuttgart'],
+          'Netherlands': ['Netherlands', 'Amsterdam', 'Rotterdam', 'The Hague', 'Utrecht'],
+          'France': ['France', 'Paris', 'Lyon', 'Marseille', 'Toulouse'],
+          'United States': ['United States', 'USA', 'US', 'New York', 'San Francisco', 'Seattle', 'Austin', 'Boston', 'Chicago', 'Los Angeles'],
+          'Canada': ['Canada', 'Toronto', 'Vancouver', 'Montreal', 'Ottawa', 'Calgary'],
+        };
+        
+        // Expand selected locations to include related cities/variations
+        const expandedLocations: string[] = [];
+        locations.forEach(loc => {
+          if (locationExpansions[loc]) {
+            expandedLocations.push(...locationExpansions[loc]);
+          } else {
+            expandedLocations.push(loc);
+          }
+        });
+        
+        const uniqueLocations = [...new Set(expandedLocations)];
+        const locationFilters = uniqueLocations.map(loc => `location.ilike.%${loc}%`).join(',');
+        query = query.or(locationFilters);
+        console.log('Filtering by locations:', locations, '→', uniqueLocations.length, 'terms');
       }
       
-      // Server-side location filter - use OR for multiple locations
-      if (locations.length > 0) {
-        const locationFilters = locations.map(loc => `location.ilike.%${loc}%`).join(',');
-        query = query.or(locationFilters);
+      // Server-side search if provided (only if no location filter - otherwise they conflict)
+      if (search.trim() && locations.length === 0) {
+        const searchTerm = `%${search.trim()}%`;
+        query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm},location.ilike.${searchTerm}`);
       }
 
       const { data, error, count } = await query.range(from, to);
