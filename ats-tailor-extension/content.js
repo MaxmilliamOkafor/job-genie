@@ -844,7 +844,7 @@
     debugLog('Attach', `Starting ${type.toUpperCase()} attachment: "${file.name}"`, 'info');
     setDebugStatus(type === 'cv' ? 'ats-cv-attach' : 'ats-cover-attach', 'Attaching...', 'pending');
 
-    if (type === 'cv') {
+  if (type === 'cv') {
       // Store our file for monitoring
       ourAttachedFiles[type] = file;
 
@@ -852,8 +852,8 @@
       debugLog('Attach', 'Clicking remove button for existing CV...', 'info');
       const clickedRemove = clickRemoveFileButton('cv');
       if (clickedRemove) {
-        debugLog('Attach', 'Remove button clicked, waiting for UI...', 'success');
-        await sleep(500); // Wait for UI to update after clicking remove
+        debugLog('Attach', 'Remove button clicked, attaching immediately...', 'success');
+        await sleep(50); // Minimal wait - attach IMMEDIATELY after remove
       }
 
       // STEP 2: Clear the file input programmatically as backup
@@ -861,20 +861,20 @@
       if (existingFile) {
         debugLog('Attach', `Pre-attach clear of: "${existingFile.name}"`, 'warning');
         clearFileInput(input);
-        await sleep(300);
+        await sleep(50); // Minimal wait
       }
 
-      // First attach attempt
+      // First attach attempt - IMMEDIATELY
       let attachedOk = attachFileToInput(input, file);
 
       // If blocked, try once more shortly after (some ATS scripts mutate the DOM right after)
       if (!attachedOk) {
         debugLog('Attach', 'First attempt failed, retrying...', 'warning');
-        await sleep(350);
+        await sleep(100);
         clickRemoveFileButton('cv'); // Try clicking remove again
-        await sleep(300);
+        await sleep(50);
         clearFileInput(input);
-        await sleep(200);
+        await sleep(50);
         attachedOk = attachFileToInput(input, file);
       }
 
@@ -892,16 +892,16 @@
         
         const currentName = input?.files?.[0]?.name;
         if (!currentName) {
-          // File was cleared - re-attach
+          // File was cleared - re-attach IMMEDIATELY
           debugLog('Monitor', `File was cleared at ${delay}ms - re-attaching`, 'warning');
           attachFileToInput(input, file);
         } else if (currentName !== file.name) {
-          // Different file attached (likely LazyApply) - click X button first, then re-attach
+          // Different file attached (likely LazyApply) - click X button first, then re-attach FAST
           debugLog('Monitor', `Overwrite at ${delay}ms: "${currentName}" -> re-attaching`, 'warning');
           clickRemoveFileButton('cv');
-          await sleep(300);
+          await sleep(50); // Fast removal
           clearFileInput(input);
-          await sleep(200);
+          await sleep(50);
           attachFileToInput(input, file);
           showNotification(`LazyApply override blocked - using ATS-optimized CV`, 'success');
         }
@@ -913,19 +913,19 @@
       return;
     }
 
-    // Non-CV: Click remove button first, clear input, then attach
+    // Non-CV: Click remove button first, clear input, then attach IMMEDIATELY
     debugLog('Attach', `Clicking remove button for existing ${type}...`, 'info');
     const clickedRemove = clickRemoveFileButton(type);
     if (clickedRemove) {
-      debugLog('Attach', 'Remove button clicked, waiting for UI...', 'success');
-      await sleep(500); // Wait for UI to update
+      debugLog('Attach', 'Remove button clicked, attaching immediately...', 'success');
+      await sleep(50); // Minimal wait - attach IMMEDIATELY after remove
     }
     
     // Clear input programmatically as backup
     clearFileInput(input);
-    await sleep(200);
+    await sleep(50); // Minimal wait
     
-    // Now attach the tailored file
+    // Now attach the tailored file IMMEDIATELY
     const ok = attachFileToInput(input, file);
     
     if (ok) {
@@ -1285,9 +1285,16 @@
     // Acquire lock
     autoTailorRunning = true;
 
-    // Show automation panel
+    // Show automation panel and notify background to show badge
     setAutomationStatus(true, 'Checking cooldown...');
     debugLog('Auto', `Starting automation for: ${job.title} @ ${job.company}`, 'info');
+    
+    // Signal background script to show automation badge on extension icon
+    try {
+      chrome.runtime.sendMessage({ action: 'openPopup' });
+    } catch (e) {
+      // Ignore if background is not ready
+    }
 
     // Double-check cooldown after acquiring lock (race condition guard)
     const freshData = await storageGet(['ats_lastTailoredUrl', 'ats_lastTailoredAt']);
@@ -1432,7 +1439,12 @@
         showNotification('✓ Done! Click extension icon to download/attach.', 'success');
       }
 
-      // Hide automation banner after 3s
+      // Hide automation banner after 3s and clear badge
+      try {
+        chrome.runtime.sendMessage({ action: 'clearBadge' });
+      } catch (e) {
+        // Ignore
+      }
       setTimeout(() => setAutomationStatus(false), 3000);
 
       // Mark completed for this URL this page load
