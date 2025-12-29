@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ATS Tailored CV & Cover Letter",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Lightning-fast ATS-optimized CV and cover letter tailoring for Greenhouse, Workday, SmartRecruiters, Bullhorn, Teamtailor, Workable, ICIMS, Oracle Cloud.",
   "permissions": [
     "storage",
