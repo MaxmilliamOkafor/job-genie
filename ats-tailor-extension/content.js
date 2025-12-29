@@ -301,6 +301,57 @@
     return new File([blob], filename, { type });
   }
 
+  // Cover letter is often a TEXT field (not a file upload). Try to find a suitable textarea.
+  function findCoverLetterTextField() {
+    const headingRegex = /(cover\s*letter)/i;
+
+    // Prefer Greenhouse-like sections: find the "Cover Letter" heading then search nearby
+    const nodes = Array.from(document.querySelectorAll('label, h1, h2, h3, h4, h5, p, span, div'));
+    for (const node of nodes) {
+      const text = (node.textContent || '').trim();
+      if (!text || text.length > 100) continue;
+      if (!headingRegex.test(text)) continue;
+
+      const container = node.closest('fieldset, section, form, [role="group"], div') || node.parentElement;
+      if (!container) continue;
+
+      const textarea = container.querySelector('textarea');
+      if (textarea) return textarea;
+
+      const textInput = container.querySelector('input[type="text"], input:not([type])');
+      if (textInput) return textInput;
+    }
+
+    // Fallback: first textarea with an aria/placeholder hint
+    const candidates = Array.from(document.querySelectorAll('textarea'));
+    return (
+      candidates.find((t) => /(cover\s*letter|letter)/i.test(t.getAttribute('aria-label') || '')) ||
+      candidates.find((t) => /(cover\s*letter|letter)/i.test(t.getAttribute('placeholder') || '')) ||
+      null
+    );
+  }
+
+  function setTextFieldValue(el, value) {
+    if (!el) return false;
+    try {
+      el.focus();
+      // Some React-based forms track value via property setter
+      const proto = Object.getPrototypeOf(el);
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (desc?.set) desc.set.call(el, value);
+      else el.value = value;
+
+      ['input', 'change', 'blur'].forEach((eventType) => {
+        el.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+      });
+      return true;
+    } catch (e) {
+      console.warn('[ATS Tailor] Failed to set text field value', e);
+      return false;
+    }
+  }
+
+
   function safeSetFiles(input, fileList) {
     if (!input) return false;
     try {
@@ -1031,17 +1082,18 @@
       let attachedAny = false;
 
       if (resumePdf && resumeInput) {
-        // LazyApply attaches its CV early; we wait, then override + monitor.
-        await waitForSafeCvWindow();
-        
+        // Attach immediately; overwrite monitoring will handle LazyApply if it attaches later.
+
         // CRITICAL: Check and clear any existing file (LazyApply or other)
         const existingCvFile = resumeInput.files?.[0];
         if (existingCvFile) {
-          console.log(`[ATS Tailor] Found existing CV file: "${existingCvFile.name}" - removing before attaching optimized version`);
+          console.log(
+            `[ATS Tailor] Found existing CV file: "${existingCvFile.name}" - removing before attaching optimized version`
+          );
           clearFileInput(resumeInput);
           await sleep(500); // Give form time to process the clear
         }
-        
+
         await attachWithMonitoring(resumeInput, base64ToFile(resumePdf, resumeName), 'cv');
         attachedAny = true;
       }
@@ -1050,13 +1102,24 @@
         // Check and clear any existing cover letter
         const existingCoverFile = coverInput.files?.[0];
         if (existingCoverFile) {
-          console.log(`[ATS Tailor] Found existing cover letter: "${existingCoverFile.name}" - removing before attaching optimized version`);
+          console.log(
+            `[ATS Tailor] Found existing cover letter: "${existingCoverFile.name}" - removing before attaching optimized version`
+          );
           clearFileInput(coverInput);
           await sleep(500);
         }
-        
+
         await attachWithMonitoring(coverInput, base64ToFile(coverLetterPdf, coverName), 'cover');
         attachedAny = true;
+      } else if (!coverInput && result?.tailoredCoverLetter) {
+        const textField = findCoverLetterTextField();
+        if (textField) {
+          const ok = setTextFieldValue(textField, result.tailoredCoverLetter);
+          if (ok) {
+            showNotification('✓ Tailored cover letter filled in the form!', 'success');
+            attachedAny = true;
+          }
+        }
       }
 
       if (attachedAny) {
@@ -1088,21 +1151,30 @@
         try {
           const { type, pdf, text, filename } = message;
 
-          const input = findFileInput(type);
-          if (!input) {
-            // Cover letter is very often a TEXT field, not a file upload.
-            // Do not treat this as an error (and don't spam users).
-            if (type === 'cover') {
-              console.log('[ATS Tailor] No cover letter upload field found (likely a text field)');
-              showNotification('No cover letter upload field on this page (CV will still attach).', 'info');
-              sendResponse({ success: true, skipped: true, message: 'Cover letter file input not found' });
-              return;
-            }
+           const input = findFileInput(type);
+           if (!input) {
+             // Cover letter is very often a TEXT field, not a file upload.
+             if (type === 'cover') {
+               const textField = findCoverLetterTextField();
+               if (textField && text) {
+                 const ok = setTextFieldValue(textField, text);
+                 if (ok) {
+                   showNotification('Cover letter filled in the form!', 'success');
+                   sendResponse({ success: true, filled: true });
+                   return;
+                 }
+               }
 
-            showNotification('Could not find resume/CV upload field.', 'error');
-            sendResponse({ success: false, message: 'CV file input not found' });
-            return;
-          }
+               console.log('[ATS Tailor] No cover letter upload field found (and no text field detected)');
+               showNotification('No cover letter field found on this page.', 'info');
+               sendResponse({ success: true, skipped: true, message: 'Cover letter field not found' });
+               return;
+             }
+
+             showNotification('Could not find resume/CV upload field.', 'error');
+             sendResponse({ success: false, message: 'CV file input not found' });
+             return;
+           }
 
           // ALWAYS clear any existing file before attaching tailored version
           // This ensures we override LazyApply or any other tool's attachment
@@ -1113,17 +1185,8 @@
             await sleep(300); // Give form time to register the clear
           }
 
-          // For CV: wait for LazyApply window then override
-          if (type === 'cv') {
-            await waitForSafeCvWindow();
-            // Re-check and clear again after wait (LazyApply may have attached during wait)
-            const afterWaitFile = input?.files?.[0];
-            if (afterWaitFile) {
-              console.log(`[ATS Tailor] Post-wait clear of: "${afterWaitFile.name}"`);
-              clearFileInput(input);
-              await sleep(200);
-            }
-          }
+          // For CV: attach immediately; overwrite monitoring handles LazyApply if it attaches later.
+
 
           if (pdf) {
             const file = base64ToFile(pdf, filename, 'application/pdf');
