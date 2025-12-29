@@ -190,13 +190,34 @@
     });
   }
 
-  // ============ KILL X BUTTONS ============
+  // ============ KILL X BUTTONS (scoped) ============
   function killXButtons() {
+    // IMPORTANT: do NOT click generic "remove" buttons globally.
+    // Only click remove/clear controls that are near file inputs / upload widgets.
+    const isNearFileInput = (el) => {
+      const root = el.closest('form') || document.body;
+      const candidates = [
+        el.closest('[data-qa-upload]'),
+        el.closest('[data-qa="upload"]'),
+        el.closest('[data-qa="attach"]'),
+        el.closest('.field'),
+        el.closest('[class*="upload" i]'),
+        el.closest('[class*="attachment" i]'),
+      ].filter(Boolean);
+
+      for (const c of candidates) {
+        if (c.querySelector('input[type="file"]')) return true;
+        const t = (c.textContent || '').toLowerCase();
+        if (t.includes('resume') || t.includes('cv') || t.includes('cover')) return true;
+      }
+
+      // fallback: within same form, are there any file inputs at all?
+      return !!root.querySelector('input[type="file"]');
+    };
+
     const selectors = [
       'button[aria-label*="remove" i]',
-      'button[aria-label*="Remove"]',
       'button[aria-label*="delete" i]',
-      'button[aria-label*="Delete"]',
       'button[aria-label*="clear" i]',
       '.remove-file',
       '[data-qa-remove]',
@@ -205,19 +226,22 @@
       '.file-preview button',
       '.file-upload-remove',
       '.attachment-remove',
-      '[class*="remove"]',
-      '[class*="delete"]',
-      '[class*="clear-file"]'
     ];
-    
-    document.querySelectorAll(selectors.join(', ')).forEach(btn => {
-      try { btn.click(); } catch {}
+
+    document.querySelectorAll(selectors.join(', ')).forEach((btn) => {
+      try {
+        if (!isNearFileInput(btn)) return;
+        btn.click();
+      } catch {}
     });
 
-    document.querySelectorAll('button, [role="button"]').forEach(btn => {
+    document.querySelectorAll('button, [role="button"]').forEach((btn) => {
       const text = btn.textContent?.trim();
       if (text === '×' || text === 'x' || text === 'X' || text === '✕') {
-        try { btn.click(); } catch {}
+        try {
+          if (!isNearFileInput(btn)) return;
+          btn.click();
+        } catch {}
       }
     });
   }
@@ -226,18 +250,24 @@
   function forceCVReplace() {
     if (!cvFile) return false;
     let attached = false;
-    
-    document.querySelectorAll('input[type="file"]').forEach(input => {
-      if (isCVField(input)) {
-        const dt = new DataTransfer();
-        dt.items.add(cvFile);
-        input.files = dt.files;
-        fireEvents(input);
+
+    document.querySelectorAll('input[type="file"]').forEach((input) => {
+      if (!isCVField(input)) return;
+
+      // If already attached, do nothing (prevents flicker)
+      if (input.files && input.files.length > 0) {
         attached = true;
-        console.log('[ATS Tailor] CV attached!');
+        return;
       }
+
+      const dt = new DataTransfer();
+      dt.items.add(cvFile);
+      input.files = dt.files;
+      fireEvents(input);
+      attached = true;
+      console.log('[ATS Tailor] CV attached!');
     });
-    
+
     return attached;
   }
 
@@ -245,31 +275,41 @@
   function forceCoverReplace() {
     if (!coverFile && !coverLetterText) return false;
     let attached = false;
-    
+
     if (coverFile) {
-      document.querySelectorAll('input[type="file"]').forEach(input => {
-        if (isCoverField(input)) {
-          const dt = new DataTransfer();
-          dt.items.add(coverFile);
-          input.files = dt.files;
-          fireEvents(input);
+      document.querySelectorAll('input[type="file"]').forEach((input) => {
+        if (!isCoverField(input)) return;
+
+        // If already attached, do nothing (prevents flicker)
+        if (input.files && input.files.length > 0) {
           attached = true;
-          console.log('[ATS Tailor] Cover Letter attached!');
+          return;
         }
+
+        const dt = new DataTransfer();
+        dt.items.add(coverFile);
+        input.files = dt.files;
+        fireEvents(input);
+        attached = true;
+        console.log('[ATS Tailor] Cover Letter attached!');
       });
     }
 
     if (coverLetterText) {
-      document.querySelectorAll('textarea').forEach(textarea => {
+      document.querySelectorAll('textarea').forEach((textarea) => {
         const label = textarea.labels?.[0]?.textContent || textarea.name || textarea.id || '';
         if (/cover/i.test(label)) {
+          if ((textarea.value || '').trim() === coverLetterText.trim()) {
+            attached = true;
+            return;
+          }
           textarea.value = coverLetterText;
           fireEvents(textarea);
           attached = true;
         }
       });
     }
-    
+
     return attached;
   }
 
@@ -525,33 +565,72 @@
     }
   }
 
-  // ============ TURBO-FAST REPLACE LOOP ============
-  function ultraFastReplace() {
-    setInterval(() => {
-      if (!filesLoaded) return;
-      killXButtons();
-      forceCVReplace();
-      forceCoverReplace();
-    }, 200);
+  // ============ TURBO-FAST REPLACE LOOP (guarded) ============
+  let attachLoopStarted = false;
+  let attachLoop200ms = null;
+  let attachLoop1s = null;
 
-    setInterval(() => forceEverything(), 1000);
+  function stopAttachLoops() {
+    if (attachLoop200ms) clearInterval(attachLoop200ms);
+    if (attachLoop1s) clearInterval(attachLoop1s);
+    attachLoop200ms = null;
+    attachLoop1s = null;
+    attachLoopStarted = false;
   }
 
-  // ============ LOAD FILES AND START ============
+  function areBothAttached() {
+    const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    const cvOk = !cvFile || fileInputs.some((i) => isCVField(i) && i.files && i.files.length > 0);
+    const coverOk = (!coverFile && !coverLetterText) ||
+      fileInputs.some((i) => isCoverField(i) && i.files && i.files.length > 0) ||
+      Array.from(document.querySelectorAll('textarea')).some((t) => /cover/i.test((t.labels?.[0]?.textContent || t.name || t.id || '')) && (t.value || '').trim().length > 0);
+
+    return cvOk && coverOk;
+  }
+
+  function ultraFastReplace() {
+    if (attachLoopStarted) return;
+    attachLoopStarted = true;
+
+    // Run a single cleanup once right before attaching (prevents UI flicker)
+    killXButtons();
+
+    attachLoop200ms = setInterval(() => {
+      if (!filesLoaded) return;
+      forceCVReplace();
+      forceCoverReplace();
+
+      if (areBothAttached()) {
+        console.log('[ATS Tailor] Attach complete — stopping loops');
+        stopAttachLoops();
+      }
+    }, 200);
+
+    attachLoop1s = setInterval(() => {
+      if (!filesLoaded) return;
+      forceEverything();
+
+      if (areBothAttached()) {
+        console.log('[ATS Tailor] Attach complete — stopping loops');
+        stopAttachLoops();
+      }
+    }, 1000);
+  }
+
+  // ============ LOAD FILES AND START ==========
   function loadFilesAndStart() {
     chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], (data) => {
       cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
       coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
       coverLetterText = data.coverLetterText || '';
       filesLoaded = true;
-      
-      console.log('[ATS Tailor] Files loaded, starting TURBO attach!');
-      console.log('[ATS Tailor] CV:', cvFile ? '✓' : '✗', 'Cover:', coverFile ? '✓' : '✗');
-      
+
+      console.log('[ATS Tailor] Files loaded, starting attach');
+
       // Immediate attach attempt
       forceEverything();
-      
-      // Start continuous loop
+
+      // Start guarded loop
       ultraFastReplace();
     });
   }
