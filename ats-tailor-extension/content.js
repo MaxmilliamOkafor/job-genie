@@ -349,21 +349,40 @@
     dispatchFileEvents(input);
   }
 
-  function attachFileToInput(input, file) {
-    // Clear any existing file first
+  function attachFileToInput(input, file, forceOverride = true) {
+    // ALWAYS clear any existing file first - this is the ONLY CV that should be attached
+    const existingFile = input?.files?.[0];
+    if (existingFile) {
+      console.log(`[ATS Tailor] Overriding existing file: "${existingFile.name}" with tailored: "${file.name}"`);
+    }
+    
+    // Forcefully clear the input
     clearFileInput(input);
 
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
 
     const ok = safeSetFiles(input, dataTransfer.files);
-    dispatchFileEvents(input);
+    
+    // Dispatch multiple event types to ensure all ATS systems recognize the change
+    ['input', 'change', 'blur', 'focus'].forEach((eventType) => {
+      input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+    });
+    
+    // Also dispatch a more detailed change event for React-based forms
+    try {
+      const changeEvent = new Event('change', { bubbles: true });
+      Object.defineProperty(changeEvent, 'target', { value: input, writable: false });
+      input.dispatchEvent(changeEvent);
+    } catch (e) {
+      // ignore
+    }
 
     const attachedName = input?.files?.[0]?.name;
-    console.log('[ATS Tailor] Attach attempt:', {
+    console.log('[ATS Tailor] Attach result:', {
       requested: file?.name,
       attached: attachedName,
-      ok,
+      success: ok && attachedName === file.name,
     });
 
     return ok && attachedName === file.name;
@@ -961,16 +980,41 @@
             return;
           }
 
-          // Ensure we override LazyApply CV if it attaches first.
+          // ALWAYS clear any existing file before attaching tailored version
+          // This ensures we override LazyApply or any other tool's attachment
+          const existingFile = input?.files?.[0];
+          if (existingFile) {
+            console.log(`[ATS Tailor] Clearing existing ${type} file: "${existingFile.name}"`);
+            clearFileInput(input);
+            await sleep(300); // Give form time to register the clear
+          }
+
+          // For CV: wait for LazyApply window then override
           if (type === 'cv') {
             await waitForSafeCvWindow();
+            // Re-check and clear again after wait (LazyApply may have attached during wait)
+            const afterWaitFile = input?.files?.[0];
+            if (afterWaitFile) {
+              console.log(`[ATS Tailor] Post-wait clear of: "${afterWaitFile.name}"`);
+              clearFileInput(input);
+              await sleep(200);
+            }
           }
 
           if (pdf) {
             const file = base64ToFile(pdf, filename, 'application/pdf');
             await attachWithMonitoring(input, file, type);
-            showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
-            sendResponse({ success: true });
+            
+            // Verify attachment succeeded
+            const finalFile = input?.files?.[0];
+            if (finalFile?.name === filename) {
+              showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
+              sendResponse({ success: true });
+            } else {
+              console.warn('[ATS Tailor] Attachment verification failed:', { expected: filename, got: finalFile?.name });
+              showNotification(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached (verify in form)`, 'success');
+              sendResponse({ success: true, warning: 'Verification unclear' });
+            }
             return;
           }
 
