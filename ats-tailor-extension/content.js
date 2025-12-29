@@ -586,8 +586,36 @@
     };
   }
 
+  // Check if we're on a Workable page but NOT on the actual application form
+  function isWorkableApplicationPage() {
+    const hostname = window.location.hostname;
+    if (!hostname.includes('workable.com')) return true; // Not Workable, proceed normally
+    
+    // Look for the specific text that indicates the actual application form
+    const pageText = document.body?.textContent || '';
+    const hasAutofillText = pageText.includes('Autofill application') || 
+                            pageText.includes('importing your resume') ||
+                            pageText.includes('.pdf, .doc, .docx, .odt, or .rtf');
+    
+    // Also check for file upload inputs which indicate application form
+    const hasFileInputs = document.querySelector('input[type="file"]') !== null;
+    
+    if (hasAutofillText || hasFileInputs) {
+      console.log('[ATS Tailor] Workable application form detected');
+      return true;
+    }
+    
+    console.log('[ATS Tailor] Workable page but not application form - waiting for apply page');
+    return false;
+  }
+
   async function autoTailorIfPossible() {
     console.log('[ATS Tailor] Attempting auto-tailor...');
+    
+    // For Workable, only proceed if we're on the actual application form
+    if (!isWorkableApplicationPage()) {
+      return;
+    }
 
     const job = extractJobInfoFromDom();
     if (!job) {
