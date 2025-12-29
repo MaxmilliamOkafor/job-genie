@@ -413,6 +413,11 @@
     });
     
     updateStatus('cv', '✅🚀');
+    
+    // IMMEDIATELY attach tailored CV and cover after boost
+    console.log('[ATS Tailor] Triggering immediate attachment after frequency boost');
+    forceCVReplace();
+    forceCoverReplace();
   }
 
   // ============ INIT ============
