@@ -42,7 +42,7 @@
           bottom: 20px;
           left: 20px;
           width: 420px;
-          max-height: 400px;
+          max-height: 450px;
           background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
           border: 1px solid #0f3460;
           border-radius: 12px;
@@ -78,6 +78,27 @@
           line-height: 1;
         }
         #ats-debug-close:hover { background: rgba(255,255,255,0.3); }
+        #ats-automation-banner {
+          display: none;
+          padding: 12px 14px;
+          background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+          color: #000;
+          font-weight: 700;
+          font-size: 13px;
+          text-align: center;
+          animation: ats-pulse 1.5s infinite;
+        }
+        #ats-automation-banner.active { display: block; }
+        @keyframes ats-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+        #ats-automation-step {
+          font-weight: 400;
+          font-size: 11px;
+          margin-top: 4px;
+          opacity: 0.9;
+        }
         #ats-debug-status {
           padding: 10px 14px;
           background: rgba(0,0,0,0.2);
@@ -97,7 +118,7 @@
         .ats-status-value.pending { color: #f59e0b; }
         .ats-status-value.info { color: #60a5fa; }
         #ats-debug-logs {
-          max-height: 220px;
+          max-height: 200px;
           overflow-y: auto;
           padding: 10px 14px;
         }
@@ -144,10 +165,18 @@
           transform: scale(1.1);
           box-shadow: 0 6px 25px rgba(233, 69, 96, 0.5);
         }
+        #ats-debug-toggle.automating {
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          animation: ats-pulse 1s infinite;
+        }
       </style>
       <div id="ats-debug-header">
         <span>🔧 ATS Tailor Debug</span>
         <button id="ats-debug-close">×</button>
+      </div>
+      <div id="ats-automation-banner">
+        🤖 AUTOMATION IN PROGRESS
+        <div id="ats-automation-step">Initializing...</div>
       </div>
       <div id="ats-debug-status">
         <div class="ats-status-row">
@@ -189,6 +218,31 @@
       panel.classList.remove('visible');
       toggle.style.display = 'flex';
     });
+  }
+
+  // Show/hide automation banner and auto-open panel during automation
+  function setAutomationStatus(active, stepText = '') {
+    const banner = document.getElementById('ats-automation-banner');
+    const stepEl = document.getElementById('ats-automation-step');
+    const toggle = document.getElementById('ats-debug-toggle');
+    const panel = document.getElementById('ats-tailor-debug-panel');
+
+    if (banner) {
+      banner.classList.toggle('active', active);
+    }
+    if (stepEl && stepText) {
+      stepEl.textContent = stepText;
+    }
+    if (toggle) {
+      toggle.classList.toggle('automating', active);
+    }
+
+    // Auto-open panel when automation starts
+    if (active && panel && !debugPanelVisible) {
+      debugPanelVisible = true;
+      panel.classList.add('visible');
+      if (toggle) toggle.style.display = 'none';
+    }
   }
 
   function updateDebugPanel() {
@@ -1231,6 +1285,10 @@
     // Acquire lock
     autoTailorRunning = true;
 
+    // Show automation panel
+    setAutomationStatus(true, 'Checking cooldown...');
+    debugLog('Auto', `Starting automation for: ${job.title} @ ${job.company}`, 'info');
+
     // Double-check cooldown after acquiring lock (race condition guard)
     const freshData = await storageGet(['ats_lastTailoredUrl', 'ats_lastTailoredAt']);
     if (
@@ -1238,7 +1296,8 @@
       freshData.ats_lastTailoredAt &&
       Date.now() - freshData.ats_lastTailoredAt < AUTO_TAILOR_COOLDOWN_MS
     ) {
-      console.log('[ATS Tailor] Cooldown active (double-check), skipping');
+      debugLog('Auto', 'Cooldown active, skipping', 'warning');
+      setAutomationStatus(false);
       autoTailorRunning = false;
       autoTailorCompletedForUrl = job.url;
       return;
@@ -1246,6 +1305,7 @@
 
     await storageSet({ ats_lastTailoredUrl: job.url, ats_lastTailoredAt: Date.now() });
 
+    setAutomationStatus(true, 'Generating tailored CV & cover letter...');
     showNotification('ATS Tailor: Generating CV & cover letter...', 'info');
     
     // Log extracted city for debugging
@@ -1311,11 +1371,15 @@
         coverFileName: coverName
       });
 
+      setAutomationStatus(true, 'Finding upload fields...');
+
       // Try to auto-attach if the form has file inputs
       const resumeInput = findFileInput('cv');
       const coverInput = findFileInput('cover');
 
       let attachedAny = false;
+
+      setAutomationStatus(true, 'Attaching tailored documents...');
 
       if (resumePdf && resumeInput) {
         // Attach immediately; overwrite monitoring will handle LazyApply if it attaches later.
@@ -1359,15 +1423,25 @@
       }
 
       if (attachedAny) {
+        setAutomationStatus(true, 'Complete! Documents attached ✓');
+        debugLog('Auto', 'Automation complete - documents attached', 'success');
         showNotification('✓ Tailored PDFs attached to the form!', 'success');
       } else {
+        setAutomationStatus(true, 'Complete! Click extension to download.');
+        debugLog('Auto', 'Automation complete - no inputs found for attach', 'warning');
         showNotification('✓ Done! Click extension icon to download/attach.', 'success');
       }
+
+      // Hide automation banner after 3s
+      setTimeout(() => setAutomationStatus(false), 3000);
 
       // Mark completed for this URL this page load
       autoTailorCompletedForUrl = job.url;
     } catch (e) {
       console.error('[ATS Tailor] Auto-tailor error:', e);
+      debugLog('Auto', `Error: ${e.message || 'Unknown error'}`, 'error');
+      setAutomationStatus(true, `Error: ${e.message?.substring(0, 40) || 'Failed'}`);
+      setTimeout(() => setAutomationStatus(false), 5000);
       showNotification('Tailoring failed - click extension for details', 'error');
     } finally {
       // Always release the lock
