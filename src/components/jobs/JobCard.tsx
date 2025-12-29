@@ -203,12 +203,28 @@ function extractDomainForLogo(url: string | null | undefined, company: string): 
 
 // Get company initials for fallback
 function getCompanyInitials(company: string): string {
-  return company
+  const cleanName = cleanCompanyName(company);
+  return cleanName
     .split(' ')
-    .filter(word => word.length > 0 && !word.startsWith('Https'))
+    .filter(word => word.length > 0)
     .slice(0, 2)
     .map(word => word[0].toUpperCase())
     .join('') || '?';
+}
+
+// Clean company name by removing URL prefixes
+function cleanCompanyName(company: string): string {
+  return company
+    .replace(/^https?:\/\//i, '') // Remove http:// or https://
+    .replace(/^Https?:\/\//i, '') // Remove Https:// (capitalized)
+    .replace(/^www\./i, '') // Remove www.
+    .split('.')[0] // Take first part before any dots
+    .replace(/-/g, ' ') // Replace dashes with spaces
+    .replace(/_/g, ' ') // Replace underscores with spaces
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+    .trim() || 'Unknown Company';
 }
 
 export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: JobCardProps) {
@@ -226,6 +242,9 @@ export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: Job
   
   // Extract salary from description if not in dedicated field
   const displaySalary = extractSalary(job.salary, (job as any).description || job.description);
+  
+  // Clean and format company name
+  const displayCompany = cleanCompanyName(job.company);
   
   // Get company logo URL
   const logoDomain = extractDomainForLogo(job.url, job.company);
@@ -325,7 +344,7 @@ export function JobCard({ job, onApply, onViewDetails, onReportBrokenLink }: Job
                   <h3 className="font-semibold text-lg leading-tight group-hover:text-primary transition-colors">
                     {job.title}
                   </h3>
-                  <p className="text-muted-foreground font-medium mt-0.5">{job.company}</p>
+                  <p className="text-muted-foreground font-medium mt-0.5">{displayCompany}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 ml-2">
