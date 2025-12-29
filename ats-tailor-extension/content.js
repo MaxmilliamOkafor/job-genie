@@ -61,6 +61,10 @@
   // Prevent re-tailoring the same URL too frequently
   const AUTO_TAILOR_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
+  // Lock to prevent concurrent/duplicate auto-tailor runs
+  let autoTailorRunning = false;
+  let autoTailorCompletedForUrl = null; // Track URL we successfully processed this page load
+
   const storageGet = (keys) =>
     new Promise((resolve) => chrome.storage.local.get(keys, (res) => resolve(res)));
   const storageSet = (obj) => new Promise((resolve) => chrome.storage.local.set(obj, resolve));
@@ -686,8 +690,20 @@
   }
 
   async function autoTailorIfPossible() {
+    // Prevent concurrent runs (multiple setTimeout triggers)
+    if (autoTailorRunning) {
+      console.log('[ATS Tailor] Auto-tailor already running, skipping duplicate call');
+      return;
+    }
+
+    // Already completed for this URL this page load
+    if (autoTailorCompletedForUrl === window.location.href) {
+      console.log('[ATS Tailor] Already completed for this URL, skipping');
+      return;
+    }
+
     console.log('[ATS Tailor] Attempting auto-tailor...');
-    
+
     // For Workable, only proceed if we're on the actual application form
     if (!isWorkableApplicationPage()) {
       return;
@@ -708,12 +724,14 @@
       'ats_session',
     ]);
 
+    // Check cooldown BEFORE acquiring lock to avoid unnecessary blocking
     if (
       ats_lastTailoredUrl === job.url &&
       ats_lastTailoredAt &&
       now - ats_lastTailoredAt < AUTO_TAILOR_COOLDOWN_MS
     ) {
       console.log('[ATS Tailor] Cooldown active, skipping auto-tailor');
+      autoTailorCompletedForUrl = job.url; // Mark as done so future calls skip immediately
       return;
     }
 
@@ -723,7 +741,23 @@
       return;
     }
 
-    await storageSet({ ats_lastTailoredUrl: job.url, ats_lastTailoredAt: now });
+    // Acquire lock
+    autoTailorRunning = true;
+
+    // Double-check cooldown after acquiring lock (race condition guard)
+    const freshData = await storageGet(['ats_lastTailoredUrl', 'ats_lastTailoredAt']);
+    if (
+      freshData.ats_lastTailoredUrl === job.url &&
+      freshData.ats_lastTailoredAt &&
+      Date.now() - freshData.ats_lastTailoredAt < AUTO_TAILOR_COOLDOWN_MS
+    ) {
+      console.log('[ATS Tailor] Cooldown active (double-check), skipping');
+      autoTailorRunning = false;
+      autoTailorCompletedForUrl = job.url;
+      return;
+    }
+
+    await storageSet({ ats_lastTailoredUrl: job.url, ats_lastTailoredAt: Date.now() });
 
     showNotification('ATS Tailor: Generating CV & cover letter...', 'info');
     
@@ -830,14 +864,21 @@
       } else {
         showNotification('✓ Done! Click extension icon to download/attach.', 'success');
       }
+
+      // Mark completed for this URL this page load
+      autoTailorCompletedForUrl = job.url;
     } catch (e) {
       console.error('[ATS Tailor] Auto-tailor error:', e);
       showNotification('Tailoring failed - click extension for details', 'error');
+    } finally {
+      // Always release the lock
+      autoTailorRunning = false;
     }
   }
 
   // Some ATS pages render content after load; try a few times quickly
-  const tryTimes = [800, 2000, 4000];
+  // The lock prevents duplicate API calls if multiple triggers fire
+  const tryTimes = [1000, 3000, 6000];
   tryTimes.forEach((ms) => setTimeout(autoTailorIfPossible, ms));
 
   // Listen for messages from popup
