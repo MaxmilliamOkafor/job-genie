@@ -485,7 +485,17 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, onLocationChang
                         variant="ghost" 
                         size="sm" 
                         className="h-6 text-xs"
-                        onClick={() => setSelectedLocations([])}
+                        onClick={async () => {
+                          setSelectedLocations([]);
+                          if (onLocationChange) {
+                            setIsFilteringByLocation(true);
+                            try {
+                              await onLocationChange([]);
+                            } finally {
+                              setIsFilteringByLocation(false);
+                            }
+                          }
+                        }}
                       >
                         Clear All
                       </Button>
@@ -523,8 +533,8 @@ export function JobFiltersBar({ jobs, onFiltersChange, onSearch, onLocationChang
                           >
                             <Checkbox 
                               checked={selectedLocations.includes(loc.value)}
-                              onCheckedChange={() => toggleLocation(loc.value)}
-                              className="h-3.5 w-3.5"
+                              className="h-3.5 w-3.5 pointer-events-none"
+                              aria-hidden="true"
                             />
                             <span className="text-xs">{loc.label}</span>
                           </div>
