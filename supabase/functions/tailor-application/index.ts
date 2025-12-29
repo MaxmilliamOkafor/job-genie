@@ -709,6 +709,8 @@ ABSOLUTE RULES:
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. EVERY keyword in the JD should appear at least once in the tailored resume
+6. NEVER REPEAT contact info (name, email, phone, links) in the Professional Summary - the header already contains them!
+7. Professional Summary should start directly with qualifications/experience description, NOT with the candidate's name
 
 HUMANIZED TONE RULES:
 - Active voice only
@@ -772,12 +774,14 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 === INSTRUCTIONS ===
 
 1) CREATE RESUME with these exact sections:
-   - Header: ${candidateName} | ${smartLocation} | ${userProfile.email} | ${userProfile.phone}
-   - Links: LinkedIn, GitHub, Portfolio
-   - Summary: 4-6 lines with ${jdKeywords.hardSkills.slice(0, 5).join(', ')} keywords
+   - Header: ${candidateName}
+   - Contact Line: ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
+   - Links Line: ${userProfile.linkedin} | ${userProfile.github || ''} | ${userProfile.portfolio || ''}
+   - PROFESSIONAL SUMMARY: 4-6 lines summarizing qualifications with ${jdKeywords.hardSkills.slice(0, 5).join(', ')} keywords
+     CRITICAL: Do NOT repeat name, contact info, email, phone, or links in the summary - they are already in the header!
    - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics
    - Education
-   - Skills: Prioritize JD keywords
+   - Skills: Prioritize JD keywords (list as: Python, AWS, React, etc. - NO years of experience)
    - Certifications
 
 2) CREATE COVER LETTER:
@@ -825,7 +829,7 @@ ${includeReferral ? `
       "github": "${userProfile.github}",
       "portfolio": "${userProfile.portfolio}"
     },
-    "summary": "[4-6 line professional summary]",
+    "summary": "[4-6 line professional summary - DO NOT include name, email, phone, or links here - header has them]",
     "experience": [
       {
         "company": "[Company Name]",
