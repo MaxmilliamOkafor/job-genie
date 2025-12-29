@@ -787,18 +787,28 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    - Header: ${candidateName}
    - Contact Line: ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ''} | ${userProfile.portfolio || ''}
-   - PROFESSIONAL SUMMARY: 4-6 lines STARTING DIRECTLY with qualifications/experience.
-     === ABSOLUTE BAN - NEVER INCLUDE IN SUMMARY ===
-     ❌ "${candidateName}" - BANNED (already in header)
-     ❌ "${userProfile.email}" - BANNED (already in header)
-     ❌ "${userProfile.phone}" - BANNED (already in header)
-     ❌ Any LinkedIn/GitHub/Portfolio URLs - BANNED (already in header)
-     ❌ Any location text - BANNED (already in header)
-     === CORRECT SUMMARY START EXAMPLES ===
-     ✅ "Accomplished technology leader with 8+ years..."
-     ✅ "Senior Software Engineer specializing in..."
-     ✅ "Results-focused Product Manager with expertise in..."
-     === END SUMMARY RULES ===
+   - PROFESSIONAL SUMMARY: 4-6 lines of PURE QUALIFICATIONS ONLY.
+      
+      ███ CRITICAL DUPLICATION BAN ███
+      The header ALREADY contains name/email/phone/links.
+      The PROFESSIONAL SUMMARY text must contain ZERO of these:
+      • Name: "${candidateName}" → FORBIDDEN in summary
+      • Email: "${userProfile.email}" → FORBIDDEN in summary  
+      • Phone: "${userProfile.phone}" → FORBIDDEN in summary
+      • LinkedIn URL → FORBIDDEN in summary
+      • GitHub URL → FORBIDDEN in summary
+      • Portfolio URL → FORBIDDEN in summary
+      • Location/city → FORBIDDEN in summary
+      
+      CORRECT FIRST WORDS: "Experienced", "Senior", "Accomplished", "Strategic", "Innovative"
+      WRONG FIRST WORD: "${candidateName.split(' ')[0]}" (this is the name - BANNED)
+      
+      EXAMPLE OF CORRECT SUMMARY:
+      "Experienced Principal Cloud Architect with over 8 years of expertise in cloud computing, data analytics, and machine learning. Proven track record in designing scalable solutions..."
+      
+      EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
+      "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
+      ███ END DUPLICATION BAN ███
    - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics
    - Education
    - Skills: Prioritize JD keywords (list as: Python, AWS, React, etc. - NO years of experience)
@@ -849,7 +859,7 @@ ${includeReferral ? `
       "github": "${userProfile.github}",
       "portfolio": "${userProfile.portfolio}"
     },
-    "summary": "[4-6 line professional summary - DO NOT include name, email, phone, or links here - header has them]",
+    "summary": "[PURE QUALIFICATIONS ONLY - Start with 'Experienced/Senior/Accomplished...' - ZERO contact info, names, emails, phones, or URLs - those are ALREADY in header above]",
     "experience": [
       {
         "company": "[Company Name]",
