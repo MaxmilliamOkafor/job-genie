@@ -20,11 +20,14 @@ const LOCATIONS = [
   { value: 'Remote', label: 'Remote' },
   { value: 'United States', label: 'United States' },
   { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Ireland', label: 'Ireland' },
   { value: 'Europe', label: 'Europe' },
   { value: 'London', label: 'London, UK' },
+  { value: 'Dublin', label: 'Dublin, Ireland' },
   { value: 'New York', label: 'New York, US' },
   { value: 'San Francisco', label: 'San Francisco, US' },
-  { value: 'Dublin', label: 'Dublin, Ireland' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'Netherlands', label: 'Netherlands' },
 ];
 
 const DATE_FILTERS = [
