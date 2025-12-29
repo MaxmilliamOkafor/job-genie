@@ -693,10 +693,11 @@ class ATSTailor {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
     // Use filename from backend which includes user's name with proper format
-    const filename = type === 'cv' 
-      ? (this.generatedDocuments.cvFileName || `Applicant_CV.pdf`)
-      : (this.generatedDocuments.coverFileName || `Applicant_Cover_Letter.pdf`);
-    
+    const filename =
+      type === 'cv'
+        ? this.generatedDocuments.cvFileName || `Applicant_CV.pdf`
+        : this.generatedDocuments.coverFileName || `Applicant_Cover_Letter.pdf`;
+
     if (!doc && !textDoc) {
       this.showToast('No document available', 'error');
       return;
@@ -706,18 +707,39 @@ class ATSTailor {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error('No active tab');
 
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'attachDocument',
-        type,
-        pdf: doc,
-        text: textDoc,
-        filename
+      const res = await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(
+          tab.id,
+          {
+            action: 'attachDocument',
+            type,
+            pdf: doc,
+            text: textDoc,
+            filename,
+          },
+          (response) => {
+            const err = chrome.runtime.lastError;
+            if (err) return reject(new Error(err.message || 'Send message failed'));
+            resolve(response);
+          }
+        );
       });
 
-      this.showToast(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
+      if (res?.success && res?.skipped) {
+        // Common for Greenhouse: cover letter may be a button/text flow rather than file upload.
+        this.showToast(res.message || 'Skipped (no upload field)', 'success');
+        return;
+      }
+
+      if (res?.success) {
+        this.showToast(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
+        return;
+      }
+
+      this.showToast(res?.message || 'Failed to attach document', 'error');
     } catch (error) {
       console.error('Attach error:', error);
-      this.showToast('Failed to attach document', 'error');
+      this.showToast(error?.message || 'Failed to attach document', 'error');
     }
   }
 

@@ -167,7 +167,44 @@
     return false;
   }
 
+  function findGreenhouseFileInput(type) {
+    const isGreenhouse = window.location.hostname.includes('greenhouse.io');
+    if (!isGreenhouse) return null;
+
+    const headingRegex =
+      type === 'cv'
+        ? /(resume\s*\/\s*cv|resume\b|\bcv\b|curriculum)/i
+        : /(cover\s*letter)/i;
+
+    // Look for a section heading like "Resume/CV" or "Cover Letter" and then find a file input within that section.
+    const nodes = Array.from(document.querySelectorAll('label, h1, h2, h3, h4, h5, p, span, div'));
+    for (const node of nodes) {
+      const text = (node.textContent || '').trim();
+      if (!text || text.length > 80) continue;
+      if (!headingRegex.test(text)) continue;
+
+      // Avoid cross-matching
+      if (type === 'cv' && /cover\s*letter/i.test(text)) continue;
+      if (type === 'cover' && /(resume\s*\/\s*cv|resume\b|\bcv\b)/i.test(text)) continue;
+
+      const container = node.closest('fieldset, section, form, [role="group"], div') || node.parentElement;
+      if (!container) continue;
+
+      const input = container.querySelector('input[type="file"]');
+      if (input) {
+        console.log(`[ATS Tailor] Found ${type} input via Greenhouse section heading:`, text);
+        return input;
+      }
+    }
+
+    return null;
+  }
+
   function findFileInput(type) {
+    // Greenhouse pages often use a custom uploader UI; section-heading lookup is the most reliable.
+    const ghInput = findGreenhouseFileInput(type);
+    if (ghInput) return ghInput;
+
     const selectors = type === 'cv' ? FILE_INPUT_SELECTORS.resume : FILE_INPUT_SELECTORS.coverLetter;
 
     // First pass: try specific selectors
@@ -196,12 +233,11 @@
     const labels = document.querySelectorAll('label');
     for (const label of labels) {
       const text = (label.textContent || '').toLowerCase().trim();
-      
+
       let isMatch = false;
       if (type === 'cv') {
         // Match resume/CV but NOT cover letter
-        isMatch = (text.includes('resume') || text.includes('cv') || text.includes('curriculum')) 
-                  && !text.includes('cover');
+        isMatch = (text.includes('resume') || text.includes('cv') || text.includes('curriculum')) && !text.includes('cover');
       } else {
         // Match cover letter specifically
         isMatch = text.includes('cover');
