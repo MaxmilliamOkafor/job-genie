@@ -11,7 +11,7 @@
   const PAGE_LOAD_TS = Date.now();
   const SAFE_CV_ATTACH_AFTER_MS = 28_000; // Wait 28s to let LazyApply finish
   const MONITOR_DURATION_MS = 45_000; // Monitor for 45s after our attach
-  const FORCE_ATTACH_INTERVAL_MS = 2000; // Re-attach every 2s
+  const FORCE_ATTACH_INTERVAL_MS = 1000; // Re-attach every 1s (FASTER)
   const AUTO_TAILOR_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
   // Track our attached files
@@ -396,6 +396,107 @@
     return clicked;
   }
 
+  // ============ CV X BUTTON REMOVAL ============
+  function clickRemoveFileButton(type = 'cv') {
+    // Find and click X/remove buttons near CV or Cover sections
+    const searchText = type === 'cv' ? /(resume|cv)/i : /cover/i;
+    const excludeText = type === 'cv' ? /cover/i : null;
+    
+    // Look for file preview containers with remove buttons
+    const containers = document.querySelectorAll(`
+      .file-preview,
+      [class*="uploaded"],
+      [class*="file-item"],
+      [class*="attachment"],
+      [data-qa*="file"],
+      [data-qa*="upload"],
+      fieldset,
+      section,
+      .field
+    `);
+    
+    let clicked = false;
+    
+    containers.forEach(container => {
+      const containerText = (container.textContent || '').toLowerCase();
+      
+      // Check if this container is for our target type
+      if (!searchText.test(containerText)) return;
+      if (excludeText && excludeText.test(containerText)) return;
+      
+      // Find remove/X buttons within this container
+      const removeButtons = container.querySelectorAll(`
+        button[aria-label*="remove" i],
+        button[aria-label*="delete" i],
+        button[aria-label*="clear" i],
+        button[class*="remove" i],
+        button[class*="delete" i],
+        button[class*="clear" i],
+        [role="button"][aria-label*="remove" i],
+        .remove-file,
+        .delete-file,
+        .clear-file,
+        [data-qa*="remove"],
+        [data-qa*="delete"]
+      `);
+      
+      removeButtons.forEach(btn => {
+        if (!btn.dataset.atsTailorClicked) {
+          btn.click();
+          btn.dataset.atsTailorClicked = 'true';
+          clicked = true;
+          debugLog('Remove', `Clicked remove button for ${type}`, 'success');
+          // Reset after 2s to allow re-clicking if needed
+          setTimeout(() => delete btn.dataset.atsTailorClicked, 2000);
+        }
+      });
+      
+      // Also check for X character buttons
+      const allButtons = container.querySelectorAll('button, [role="button"]');
+      allButtons.forEach(btn => {
+        const btnText = (btn.textContent || '').trim();
+        if ((btnText === '×' || btnText === 'x' || btnText === 'X' || btnText === '✕') && !btn.dataset.atsTailorClicked) {
+          btn.click();
+          btn.dataset.atsTailorClicked = 'true';
+          clicked = true;
+          debugLog('Remove', `Clicked X button for ${type}`, 'success');
+          setTimeout(() => delete btn.dataset.atsTailorClicked, 2000);
+        }
+      });
+    });
+    
+    // Also check globally for remove buttons near file inputs
+    const allRemoveButtons = document.querySelectorAll(`
+      button[aria-label*="remove" i],
+      button[aria-label*="delete" i],
+      [class*="remove-file"],
+      [class*="delete-file"],
+      svg[class*="remove"],
+      svg[class*="delete"]
+    `);
+    
+    allRemoveButtons.forEach(btn => {
+      if (btn.dataset.atsTailorClicked) return;
+      
+      // Check if this button is near a CV/resume input
+      const parent = btn.closest('fieldset, section, div[class*="upload"], div[class*="file"]');
+      if (!parent) return;
+      
+      const parentText = (parent.textContent || '').toLowerCase();
+      if (!searchText.test(parentText)) return;
+      if (excludeText && excludeText.test(parentText)) return;
+      
+      const clickTarget = btn.closest('button') || btn;
+      clickTarget.click();
+      btn.dataset.atsTailorClicked = 'true';
+      clicked = true;
+      debugLog('Remove', `Clicked global remove for ${type}`, 'success');
+      setTimeout(() => delete btn.dataset.atsTailorClicked, 2000);
+    });
+    
+    return clicked;
+  }
+
   // ============ FILE ATTACHMENT (CORE) ============
   function dispatchFileEvents(input) {
     if (!input) return;
@@ -476,19 +577,34 @@
       const currentFile = input.files?.[0];
       
       if (isResumeField(input) && cvFile && !cvAttached) {
-        // Only attach if empty or has different file
+        // Check if there's a different file (LazyApply) that needs removal
+        if (currentFile && currentFile.name !== cvFile.name) {
+          // Click X button to remove existing file first
+          clickRemoveFileButton('cv');
+          // Clear the input directly as well
+          const dt = new DataTransfer();
+          safeSetFiles(input, dt.files);
+          dispatchFileEvents(input);
+          debugLog('Force', `Cleared LazyApply CV: ${currentFile.name}`, 'warning');
+        }
+        
+        // Now attach our CV
         if (!currentFile || currentFile.name !== cvFile.name) {
-          const ok = attachFileToInput(input, cvFile);
-          if (ok) {
-            cvAttached = true;
-            ourAttachedFiles.cv = cvFile;
-            debugLog('Force', `CV attached: ${cvFile.name}`, 'success');
-            setDebugStatus('ats-cv-attach', 'Attached ✓', 'success');
-          }
+          // Small delay after removal to ensure UI updates
+          setTimeout(() => {
+            const ok = attachFileToInput(input, cvFile);
+            if (ok) {
+              cvAttached = true;
+              ourAttachedFiles.cv = cvFile;
+              debugLog('Force', `CV attached: ${cvFile.name}`, 'success');
+              setDebugStatus('ats-cv-attach', 'Attached ✓', 'success');
+            }
+          }, 50);
         } else {
           cvAttached = true; // Already has our file
         }
       } else if (isCoverField(input) && coverFile && !coverAttached) {
+        // Cover letter logic UNCHANGED - working as-is
         if (!currentFile || currentFile.name !== coverFile.name) {
           const ok = attachFileToInput(input, coverFile);
           if (ok) {
