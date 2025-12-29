@@ -1129,8 +1129,41 @@ ${includeReferral ? `
         })),
       };
 
-      const coverText = result.tailoredCoverLetter || "";
-      const paragraphs = coverText.split(/\n\n+/).map((p: string) => p.trim()).filter((p: string) => p.length > 20);
+      // Clean the cover letter text - remove AI-generated headers/footers that duplicate our PDF formatting
+      let coverText = result.tailoredCoverLetter || "";
+      
+      // Remove common AI-generated letter headers that we add ourselves in the PDF
+      const cleanPatterns = [
+        // Remove name/email/phone/date headers at the start
+        /^[\s\S]*?Dear\s+(Hiring|Recruitment|HR|Team|Manager|Committee)/i,
+        // Keep "Dear..." but remove everything before it
+        /^[^\n]*\n[^\n]*\n[^\n]*\nDear/i,
+      ];
+      
+      // Find where the actual letter body starts (after "Dear...")
+      const dearMatch = coverText.match(/Dear\s+(?:Hiring|Recruitment|HR|Team|Manager|Committee)[^,]*,?\s*\n/i);
+      if (dearMatch && dearMatch.index !== undefined) {
+        // Extract only the body after the salutation
+        coverText = coverText.substring(dearMatch.index + dearMatch[0].length);
+      }
+      
+      // Remove closing signatures - we add these ourselves
+      coverText = coverText
+        .replace(/\n\s*(Sincerely|Best regards|Kind regards|Regards|Warmly|Respectfully|Thank you)[,]?\s*\n[\s\S]*$/i, '')
+        .replace(/\n\s*(Sincerely|Best regards|Kind regards|Regards|Warmly|Respectfully|Thank you)[,]?\s*$/i, '')
+        .trim();
+      
+      // Split into paragraphs, filtering out very short ones and duplicate-looking content
+      const rawParagraphs = coverText.split(/\n\n+/).map((p: string) => p.trim());
+      const paragraphs = rawParagraphs.filter((p: string) => {
+        // Skip very short paragraphs
+        if (p.length < 30) return false;
+        // Skip paragraphs that look like headers/signatures
+        if (/^(sincerely|regards|thank you|dear|date:|re:|subject:)/i.test(p)) return false;
+        // Skip lines that are just a name or contact info
+        if (p.split(/\s+/).length <= 3 && !p.includes('.')) return false;
+        return true;
+      });
 
       const coverPayload = {
         type: "cover_letter",
