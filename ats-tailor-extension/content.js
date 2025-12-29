@@ -340,10 +340,12 @@
 
   const FILE_INPUT_SELECTORS = {
     resume: [
-      // Greenhouse - specific
+      // Greenhouse - specific (including hidden inputs)
       '#resume_file',
       '#s3_upload_for_resume',
       'input[name="resume"]',
+      '[data-qa-upload] input[type="file"]',
+      '[data-qa-file-upload] input[type="file"]',
       // Workday
       'input[data-automation-id="file-upload-input-ref"]',
       // Specific ID/name patterns (avoid matching cover letter)
@@ -353,10 +355,11 @@
       'input[type="file"][name*="cv" i]:not([name*="cover" i])',
     ],
     coverLetter: [
-      // Greenhouse - specific
+      // Greenhouse - specific (including hidden inputs)
       '#cover_letter_file',
       '#s3_upload_for_cover_letter',
       'input[name="cover_letter"]',
+      '[data-qa-cover-upload] input[type="file"]',
       // Specific patterns
       'input[type="file"][id*="cover" i]',
       'input[type="file"][name*="cover" i]',
@@ -426,6 +429,44 @@
     return false;
   }
 
+  // Greenhouse 2025: Find hidden file inputs by clicking "Attach" button first
+  function clickGreenhouseAttachButton(type) {
+    const headingRegex = type === 'cv'
+      ? /(resume\s*\/\s*cv|resume\b|\bcv\b|curriculum)/i
+      : /(cover\s*letter)/i;
+
+    const nodes = Array.from(document.querySelectorAll('label, h1, h2, h3, h4, h5, p, span, div, fieldset'));
+    for (const node of nodes) {
+      const text = (node.textContent || '').trim();
+      if (!text || text.length > 120) continue;
+      if (!headingRegex.test(text)) continue;
+
+      // Avoid cross-matching
+      if (type === 'cv' && /cover\s*letter/i.test(text)) continue;
+      if (type === 'cover' && /(resume\s*\/?\s*cv|resume\b|\bcv\b)/i.test(text)) continue;
+
+      const container = node.closest('fieldset, section, form, [role="group"], div') || node.parentElement;
+      if (!container) continue;
+
+      // Look for "Attach" button (Greenhouse custom UI)
+      const attachButtons = container.querySelectorAll('button, a, [role="button"], [data-qa-upload]');
+      for (const btn of attachButtons) {
+        const btnText = (btn.textContent || '').trim().toLowerCase();
+        if (btnText === 'attach' || btnText.includes('attach') || btn.matches('[data-qa-upload]')) {
+          debugLog('Greenhouse', `Found Attach button for ${type}: "${btnText}"`, 'info');
+          try {
+            btn.click();
+            debugLog('Greenhouse', `Clicked Attach button for ${type}`, 'success');
+            return true;
+          } catch (e) {
+            console.warn('[ATS Tailor] Failed to click Attach button:', e);
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   function findGreenhouseFileInput(type) {
     const isGreenhouse = window.location.hostname.includes('greenhouse.io');
     if (!isGreenhouse) return null;
@@ -449,8 +490,20 @@
       const container = node.closest('fieldset, section, form, [role="group"], div') || node.parentElement;
       if (!container) continue;
 
-      const input = container.querySelector('input[type="file"]');
-      if (input) {
+      // GREENHOUSE 2025 FIX: Look for hidden file inputs first
+      const allInputs = container.querySelectorAll('input[type="file"]');
+      for (const input of allInputs) {
+        // Check if it's a hidden input (Greenhouse pattern)
+        const isHidden = input.offsetParent === null || 
+                        input.style.display === 'none' || 
+                        getComputedStyle(input).display === 'none' ||
+                        getComputedStyle(input).visibility === 'hidden';
+        
+        if (isHidden) {
+          debugLog('Greenhouse', `Found HIDDEN ${type} input in section: "${text.substring(0, 40)}"`, 'info');
+        }
+        
+        // Return any file input found (hidden or visible)
         console.log(`[ATS Tailor] Found ${type} input via Greenhouse section heading:`, text);
         return input;
       }
@@ -460,6 +513,14 @@
   }
 
   function findFileInput(type) {
+    const isGreenhouse = window.location.hostname.includes('greenhouse.io');
+    
+    // GREENHOUSE 2025 FIX: Try clicking "Attach" button first to reveal hidden inputs
+    if (isGreenhouse) {
+      clickGreenhouseAttachButton(type);
+      // Small sync delay to let hidden input become available
+    }
+    
     // Greenhouse pages often use a custom uploader UI; section-heading lookup is the most reliable.
     const ghInput = findGreenhouseFileInput(type);
     if (ghInput) {
@@ -753,6 +814,21 @@
   }
 
   function attachFileToInput(input, file, forceOverride = true) {
+    if (!input || !file) {
+      debugLog('Attach', 'Missing input or file', 'error');
+      return false;
+    }
+    
+    // Check if input is hidden (Greenhouse pattern)
+    const isHidden = input.offsetParent === null || 
+                    input.style.display === 'none' || 
+                    getComputedStyle(input).display === 'none' ||
+                    getComputedStyle(input).visibility === 'hidden';
+    
+    if (isHidden) {
+      debugLog('Attach', `Input is HIDDEN - proceeding with direct attachment`, 'info');
+    }
+    
     // ALWAYS clear any existing file first - this is the ONLY CV that should be attached
     const existingFile = input?.files?.[0];
     if (existingFile) {
@@ -780,12 +856,23 @@
     } catch (e) {
       // ignore
     }
+    
+    // GREENHOUSE 2025: For hidden inputs, also trigger events on parent upload container
+    if (isHidden) {
+      const uploadContainer = input.closest('[data-qa-upload], [class*="upload"], [class*="file"]');
+      if (uploadContainer) {
+        ['change', 'input'].forEach((eventType) => {
+          uploadContainer.dispatchEvent(new Event(eventType, { bubbles: true }));
+        });
+        debugLog('Attach', 'Triggered events on parent upload container', 'info');
+      }
+    }
 
     const attachedName = input?.files?.[0]?.name;
     const success = ok && attachedName === file.name;
     
     if (success) {
-      debugLog('Attach', `SUCCESS: "${file.name}" attached`, 'success');
+      debugLog('Attach', `SUCCESS: "${file.name}" attached${isHidden ? ' (hidden input)' : ''}`, 'success');
     } else {
       debugLog('Attach', `FAILED: wanted "${file.name}", got "${attachedName || 'nothing'}"`, 'error');
     }
