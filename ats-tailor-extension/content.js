@@ -250,27 +250,24 @@
 
   // ============ FORCE EVERYTHING ============
   function forceEverything() {
-    // Find hidden file inputs and make them visible/accessible
+    // STEP 1: Greenhouse specific - click attach buttons to reveal hidden inputs
+    document.querySelectorAll('[data-qa-upload], [data-qa="upload"], [data-qa="attach"]').forEach(btn => {
+      // Only click if no file input is visible yet
+      const parent = btn.closest('.field') || btn.closest('[class*="upload"]') || btn.parentElement;
+      const existingInput = parent?.querySelector('input[type="file"]');
+      if (!existingInput || existingInput.offsetParent === null) {
+        try { btn.click(); } catch {}
+      }
+    });
+    
+    // STEP 2: Make any hidden file inputs visible and accessible
     document.querySelectorAll('input[type="file"]').forEach(input => {
-      // Ensure input is interactable
       if (input.offsetParent === null) {
-        // Input is hidden - try to find it through parent containers
-        input.style.display = 'block';
-        input.style.visibility = 'visible';
-        input.style.opacity = '1';
+        input.style.cssText = 'display:block !important; visibility:visible !important; opacity:1 !important; position:relative !important;';
       }
     });
     
-    // Greenhouse specific - reveal hidden inputs without clicking
-    document.querySelectorAll('[data-qa-upload], [data-qa="upload"]').forEach(container => {
-      const hiddenInput = container.querySelector('input[type="file"]');
-      if (hiddenInput) {
-        hiddenInput.style.display = 'block';
-        hiddenInput.style.visibility = 'visible';
-      }
-    });
-    
-    // Now attach files
+    // STEP 3: Attach files
     forceCVReplace();
     forceCoverReplace();
   }
