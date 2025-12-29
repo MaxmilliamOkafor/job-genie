@@ -1153,7 +1153,7 @@ ${includeReferral ? `
         },
       };
 
-      const generatePdf = async (payload: any) => {
+      const generatePdf = async (payload: any): Promise<{ pdf: string | null; fileName: string }> => {
         const pdfRes = await fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
           method: "POST",
           headers: {
@@ -1166,21 +1166,54 @@ ${includeReferral ? `
 
         if (!pdfRes.ok) {
           const t = await pdfRes.text();
-          throw new Error(`generate-pdf failed: ${pdfRes.status} ${t}`);
+          console.error(`generate-pdf failed: ${pdfRes.status} ${t}`);
+          return { pdf: null, fileName: payload.customFileName || 'document.pdf' };
         }
 
-        return await pdfRes.json();
+        // The generate-pdf function returns binary PDF data, not JSON
+        // We need to convert the binary response to base64
+        const contentType = pdfRes.headers.get('content-type') || '';
+        const contentDisposition = pdfRes.headers.get('content-disposition') || '';
+        
+        // Extract filename from Content-Disposition header
+        let fileName = payload.customFileName || 'document.pdf';
+        const filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/);
+        if (filenameMatch) {
+          fileName = filenameMatch[1];
+        }
+
+        if (contentType.includes('application/pdf')) {
+          // Binary PDF response - convert to base64
+          const arrayBuffer = await pdfRes.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          
+          // Convert to base64
+          let binary = '';
+          for (let i = 0; i < uint8Array.length; i++) {
+            binary += String.fromCharCode(uint8Array[i]);
+          }
+          const base64 = btoa(binary);
+          
+          console.log(`PDF generated successfully: ${fileName}, size: ${uint8Array.length} bytes`);
+          return { pdf: base64, fileName };
+        } else {
+          // Unexpected response type
+          console.error(`Unexpected response type from generate-pdf: ${contentType}`);
+          return { pdf: null, fileName };
+        }
       };
 
-      const [resumePdfResp, coverPdfResp] = await Promise.all([
+      const [resumePdfResult, coverPdfResult] = await Promise.all([
         generatePdf(resumePayload),
         generatePdf(coverPayload),
       ]);
 
-      result.resumePdf = resumePdfResp?.pdf || null;
-      result.coverLetterPdf = coverPdfResp?.pdf || null;
-      result.resumePdfFileName = resumePdfResp?.fileName || resumeFileName;
-      result.coverLetterPdfFileName = coverPdfResp?.fileName || coverFileName;
+      result.resumePdf = resumePdfResult.pdf;
+      result.coverLetterPdf = coverPdfResult.pdf;
+      result.resumePdfFileName = resumePdfResult.fileName;
+      result.coverLetterPdfFileName = coverPdfResult.fileName;
+      
+      console.log(`PDFs generated - Resume: ${result.resumePdf ? 'success' : 'failed'}, Cover: ${result.coverLetterPdf ? 'success' : 'failed'}`);
     } catch (pdfErr) {
       console.error("PDF generation (inline) failed:", pdfErr);
       result.resumePdf = null;
