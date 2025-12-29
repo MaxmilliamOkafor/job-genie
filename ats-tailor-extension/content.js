@@ -251,7 +251,36 @@
     return new File([blob], filename, { type });
   }
 
+  function clearFileInput(input) {
+    if (!input) return;
+    
+    const existingFile = input.files?.[0];
+    if (existingFile) {
+      console.log('[ATS Tailor] Clearing existing file:', existingFile.name);
+    }
+    
+    // Clear by setting empty DataTransfer
+    const emptyTransfer = new DataTransfer();
+    input.files = emptyTransfer.files;
+    
+    // Also try resetting value for older browsers
+    try {
+      input.value = '';
+    } catch (e) {
+      // Some browsers don't allow setting value on file inputs
+    }
+    
+    // Dispatch events to notify the form
+    ['change', 'input'].forEach((eventType) => {
+      input.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+    });
+  }
+
   function attachFileToInput(input, file) {
+    // First, clear any existing file
+    clearFileInput(input);
+    
+    // Small delay to let the form process the clear
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
     input.files = dataTransfer.files;
