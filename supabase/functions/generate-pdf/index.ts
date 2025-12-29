@@ -50,20 +50,30 @@ interface ResumeData {
   candidateName?: string;
 }
 
-// Helper: Sanitize text for WinAnsi encoding
+// ULTRA ATS-SAFE: Sanitize text - only ASCII, no special characters
 const sanitizeText = (text: string | null | undefined): string => {
   if (!text) return '';
   return String(text)
+    // Remove all newlines, tabs
     .replace(/[\n\r\t]/g, ' ')
+    // Normalize whitespace
     .replace(/\s+/g, ' ')
+    // Remove control characters
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    // Smart quotes to straight quotes
     .replace(/[\u2018\u2019\u201A\u2039\u203A]/g, "'")
     .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')
+    // Dashes to hyphen
     .replace(/[\u2013\u2014\u2015\u2212]/g, '-')
+    // Ellipsis to dots
     .replace(/\u2026/g, '...')
+    // All bullet points to hyphen
     .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25AB\u25A0\u25A1\u25CF\u25CB\u25D8\u25D9\u2B24\u2B58\u29BF\u25C6\u25C7\u2666\u2756\u2605\u2606\u2713\u2714\u2717\u2718\u2794\u27A4\u25B6\u25B8\u25BA\u25BC\u25BE\u25C0\u25C2\u25C4]/g, '-')
+    // Arrows to text
     .replace(/[\u2190-\u21FF]/g, '->')
+    // Check marks to asterisk
     .replace(/[\u2713\u2714\u2715\u2716\u2717\u2718]/g, '*')
+    // Symbols to text equivalents
     .replace(/\u00A9/g, '(c)')
     .replace(/\u00AE/g, '(R)')
     .replace(/\u2122/g, '(TM)')
@@ -74,7 +84,9 @@ const sanitizeText = (text: string | null | undefined): string => {
     .replace(/\u00B1/g, '+/-')
     .replace(/\u00D7/g, 'x')
     .replace(/\u00F7/g, '/')
+    // Remove any remaining non-ASCII
     .replace(/[^\x00-\x7F\u00A0-\u00FF]/g, ' ')
+    // Clean up multiple spaces
     .replace(/\s+/g, ' ')
     .trim();
 };
@@ -86,7 +98,7 @@ serve(async (req) => {
 
   try {
     const data: ResumeData = await req.json();
-    console.log('Generating PDF for:', data.type, data.personalInfo?.name);
+    console.log('Generating ULTRA ATS-COMPATIBLE PDF for:', data.type, data.personalInfo?.name);
 
     // Deep sanitize all string fields
     const sanitizeObject = (obj: unknown): unknown => {
@@ -105,25 +117,35 @@ serve(async (req) => {
     const sanitizedData = sanitizeObject(data) as ResumeData;
 
     const pdfDoc = await PDFDocument.create();
+    
+    // Set PDF metadata for better ATS parsing
+    pdfDoc.setTitle(sanitizedData.type === 'resume' 
+      ? `${sanitizedData.personalInfo.name} - Resume`
+      : `${sanitizedData.personalInfo.name} - Cover Letter`);
+    pdfDoc.setAuthor(sanitizedData.personalInfo.name);
+    pdfDoc.setSubject(sanitizedData.type === 'resume' ? 'Professional Resume' : 'Cover Letter');
+    pdfDoc.setKeywords(['resume', 'cv', 'professional']);
+    pdfDoc.setCreator('QuantumHire ATS Optimizer');
+    pdfDoc.setProducer('QuantumHire');
+    
+    // Use only standard fonts - maximum ATS compatibility
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
+    // Standard Letter size
     const PAGE_WIDTH = 612;
     const PAGE_HEIGHT = 792;
-    const MARGIN = 50;
+    const MARGIN = 54; // 0.75 inch margins - standard
     const LINE_HEIGHT = 14;
-    const SECTION_GAP = 18;
-    const BULLET_INDENT = 15;
+    const SECTION_GAP = 16;
 
+    // ULTRA ATS: Only black and dark gray - no colors
     const colors = {
       black: rgb(0, 0, 0),
-      darkGray: rgb(0.2, 0.2, 0.2),
-      mediumGray: rgb(0.4, 0.4, 0.4),
-      accent: rgb(0.1, 0.3, 0.6),
+      darkGray: rgb(0.15, 0.15, 0.15),
     };
 
-    // Page management - initialize first page immediately
+    // Page management
     const pages: PDFPage[] = [];
     const firstPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     pages.push(firstPage);
@@ -144,7 +166,7 @@ serve(async (req) => {
       }
     };
 
-    // Text wrapping helper
+    // Text wrapping - simple linear flow for ATS
     const wrapText = (text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] => {
       const cleanText = sanitizeText(text);
       const words = cleanText.split(' ');
@@ -152,6 +174,7 @@ serve(async (req) => {
       let currentLine = '';
 
       for (const word of words) {
+        if (!word) continue;
         const testLine = currentLine ? `${currentLine} ${word}` : word;
         const testWidth = font.widthOfTextAtSize(testLine, fontSize);
         
@@ -166,116 +189,81 @@ serve(async (req) => {
       return lines;
     };
 
-    // Draw text with automatic page breaks
-    const drawText = (text: string, x: number, fontSize: number, font: PDFFont, color = colors.darkGray): void => {
-      ensureSpace(fontSize + 2);
-      currentPage.drawText(sanitizeText(text), { x, y: yPosition, size: fontSize, font, color });
-      yPosition -= LINE_HEIGHT;
-    };
-
     // Draw wrapped text with automatic page breaks
-    const drawWrappedText = (text: string, x: number, fontSize: number, font: PDFFont, color = colors.darkGray, maxWidth?: number): void => {
+    const drawWrappedText = (text: string, x: number, fontSize: number, font: PDFFont, maxWidth?: number): void => {
       const effectiveMaxWidth = maxWidth || (PAGE_WIDTH - MARGIN - x);
       const lines = wrapText(text, effectiveMaxWidth, font, fontSize);
       
       for (const line of lines) {
-        ensureSpace(fontSize + 2);
-        currentPage.drawText(line, { x, y: yPosition, size: fontSize, font, color });
+        ensureSpace(fontSize + 4);
+        currentPage.drawText(line, { 
+          x, 
+          y: yPosition, 
+          size: fontSize, 
+          font, 
+          color: colors.black 
+        });
         yPosition -= LINE_HEIGHT;
       }
     };
 
-    // Draw section header
+    // ULTRA ATS SECTION HEADER - Plain text, bold, no decorations
     const drawSectionHeader = (title: string): void => {
-      yPosition -= SECTION_GAP / 2;
-      ensureSpace(25);
+      yPosition -= SECTION_GAP;
+      ensureSpace(20);
       
+      // Just bold uppercase text - no lines, no colors
       currentPage.drawText(title.toUpperCase(), {
         x: MARGIN,
         y: yPosition,
         size: 11,
         font: helveticaBold,
-        color: colors.accent,
+        color: colors.black,
       });
-      yPosition -= 3;
-      
-      currentPage.drawLine({
-        start: { x: MARGIN, y: yPosition },
-        end: { x: PAGE_WIDTH - MARGIN, y: yPosition },
-        thickness: 1,
-        color: colors.accent,
-      });
-      yPosition -= LINE_HEIGHT + 5;
-    };
-
-    // Draw text aligned to the right
-    const drawRightAlignedText = (text: string, fontSize: number, font: PDFFont, color = colors.mediumGray): void => {
-      const textWidth = font.widthOfTextAtSize(sanitizeText(text), fontSize);
-      currentPage.drawText(sanitizeText(text), {
-        x: PAGE_WIDTH - MARGIN - textWidth,
-        y: yPosition,
-        size: fontSize,
-        font,
-        color,
-      });
+      yPosition -= LINE_HEIGHT + 4;
     };
 
     if (sanitizedData.type === 'resume') {
-      // === RESUME GENERATION ===
+      // ============================================
+      // ULTRA ATS-COMPATIBLE RESUME FORMAT
+      // ============================================
       
-      // Header - Name (large, bold)
-      currentPage.drawText(sanitizedData.personalInfo.name, {
+      // NAME - Large, bold, centered would confuse some ATS, so left-aligned
+      currentPage.drawText(sanitizedData.personalInfo.name.toUpperCase(), {
         x: MARGIN,
         y: yPosition,
-        size: 24,
+        size: 18,
         font: helveticaBold,
         color: colors.black,
       });
-      yPosition -= 28;
+      yPosition -= 22;
 
-      // Contact info line
-      const contactParts = [
-        sanitizedData.personalInfo.phone,
-        sanitizedData.personalInfo.email,
-        sanitizedData.personalInfo.location,
-      ].filter(Boolean);
+      // CONTACT LINE - Simple pipe-separated, all on one or two lines
+      const contactParts: string[] = [];
+      if (sanitizedData.personalInfo.phone) contactParts.push(sanitizedData.personalInfo.phone);
+      if (sanitizedData.personalInfo.email) contactParts.push(sanitizedData.personalInfo.email);
+      if (sanitizedData.personalInfo.location) contactParts.push(sanitizedData.personalInfo.location);
       
       if (contactParts.length > 0) {
-        currentPage.drawText(contactParts.join(' | '), {
-          x: MARGIN,
-          y: yPosition,
-          size: 10,
-          font: helvetica,
-          color: colors.mediumGray,
-        });
-        yPosition -= LINE_HEIGHT;
+        const contactLine = contactParts.join(' | ');
+        drawWrappedText(contactLine, MARGIN, 10, helvetica);
       }
 
-      // Links line
-      const linkParts = [
-        sanitizedData.personalInfo.linkedin ? `LinkedIn: ${sanitizedData.personalInfo.linkedin}` : null,
-        sanitizedData.personalInfo.github ? `GitHub: ${sanitizedData.personalInfo.github}` : null,
-        sanitizedData.personalInfo.portfolio ? `Portfolio: ${sanitizedData.personalInfo.portfolio}` : null,
-      ].filter(Boolean);
+      // LINKS - Plain text URLs
+      const linkParts: string[] = [];
+      if (sanitizedData.personalInfo.linkedin) linkParts.push(sanitizedData.personalInfo.linkedin);
+      if (sanitizedData.personalInfo.github) linkParts.push(sanitizedData.personalInfo.github);
+      if (sanitizedData.personalInfo.portfolio) linkParts.push(sanitizedData.personalInfo.portfolio);
       
       if (linkParts.length > 0) {
-        currentPage.drawText(linkParts.join(' | '), {
-          x: MARGIN,
-          y: yPosition,
-          size: 9,
-          font: helvetica,
-          color: colors.accent,
-        });
-        yPosition -= LINE_HEIGHT;
+        const linksLine = linkParts.join(' | ');
+        drawWrappedText(linksLine, MARGIN, 9, helvetica);
       }
-
-      yPosition -= SECTION_GAP;
 
       // === PROFESSIONAL SUMMARY ===
       if (sanitizedData.summary) {
         drawSectionHeader('Professional Summary');
-        drawWrappedText(sanitizedData.summary, MARGIN, 10, helvetica, colors.darkGray);
-        yPosition -= SECTION_GAP / 2;
+        drawWrappedText(sanitizedData.summary, MARGIN, 10, helvetica);
       }
 
       // === WORK EXPERIENCE ===
@@ -283,17 +271,17 @@ serve(async (req) => {
         drawSectionHeader('Work Experience');
         
         for (const exp of sanitizedData.experience) {
-          ensureSpace(40); // Ensure space for company header
+          ensureSpace(50);
           
-          // Company name on left, dates on right
-          currentPage.drawText(exp.company, {
+          // Company and dates on same line
+          const companyLine = `${exp.company} | ${exp.dates}`;
+          currentPage.drawText(companyLine, {
             x: MARGIN,
             y: yPosition,
             size: 11,
             font: helveticaBold,
             color: colors.black,
           });
-          drawRightAlignedText(exp.dates, 10, helvetica, colors.mediumGray);
           yPosition -= LINE_HEIGHT;
 
           // Job title
@@ -301,24 +289,18 @@ serve(async (req) => {
             x: MARGIN,
             y: yPosition,
             size: 10,
-            font: helveticaOblique,
+            font: helvetica,
             color: colors.darkGray,
           });
-          yPosition -= LINE_HEIGHT + 3;
+          yPosition -= LINE_HEIGHT + 2;
 
-          // Bullet points
+          // Bullet points - simple dash prefix
           for (const bullet of exp.bullets) {
             ensureSpace(LINE_HEIGHT * 2);
-            currentPage.drawText('-', {
-              x: MARGIN,
-              y: yPosition,
-              size: 10,
-              font: helvetica,
-              color: colors.darkGray,
-            });
-            drawWrappedText(bullet, MARGIN + BULLET_INDENT, 10, helvetica, colors.darkGray, PAGE_WIDTH - MARGIN * 2 - BULLET_INDENT);
+            const bulletText = `- ${bullet}`;
+            drawWrappedText(bulletText, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
           }
-          yPosition -= 8;
+          yPosition -= 6;
         }
       }
 
@@ -329,25 +311,27 @@ serve(async (req) => {
         for (const edu of sanitizedData.education) {
           ensureSpace(30);
           
-          currentPage.drawText(edu.degree, {
+          // Degree and dates
+          const degreeLine = `${edu.degree} | ${edu.dates}`;
+          currentPage.drawText(degreeLine, {
             x: MARGIN,
             y: yPosition,
             size: 11,
             font: helveticaBold,
             color: colors.black,
           });
-          drawRightAlignedText(edu.dates, 10, helvetica, colors.mediumGray);
           yPosition -= LINE_HEIGHT;
 
+          // School and GPA
           const schoolLine = edu.gpa ? `${edu.school} | GPA: ${edu.gpa}` : edu.school;
           currentPage.drawText(schoolLine, {
             x: MARGIN,
             y: yPosition,
             size: 10,
             font: helvetica,
-            color: colors.darkGray,
+            color: colors.black,
           });
-          yPosition -= LINE_HEIGHT + 8;
+          yPosition -= LINE_HEIGHT + 6;
         }
       }
 
@@ -356,56 +340,31 @@ serve(async (req) => {
         drawSectionHeader('Skills');
         
         if (sanitizedData.skills.primary && sanitizedData.skills.primary.length > 0) {
-          ensureSpace(LINE_HEIGHT * 2);
-          currentPage.drawText('Primary:', {
-            x: MARGIN,
-            y: yPosition,
-            size: 10,
-            font: helveticaBold,
-            color: colors.darkGray,
-          });
-          const primaryText = sanitizedData.skills.primary.join(', ');
-          const primaryLines = wrapText(primaryText, PAGE_WIDTH - MARGIN * 2 - 55, helvetica, 10);
-          for (let i = 0; i < primaryLines.length; i++) {
-            currentPage.drawText(primaryLines[i], {
-              x: MARGIN + 55,
-              y: yPosition - (i * LINE_HEIGHT),
-              size: 10,
-              font: helvetica,
-              color: colors.darkGray,
-            });
-          }
-          yPosition -= LINE_HEIGHT * primaryLines.length;
+          const skillsLine = `Technical: ${sanitizedData.skills.primary.join(', ')}`;
+          drawWrappedText(skillsLine, MARGIN, 10, helvetica);
         }
         
         if (sanitizedData.skills.secondary && sanitizedData.skills.secondary.length > 0) {
-          ensureSpace(LINE_HEIGHT * 2);
-          currentPage.drawText('Additional:', {
-            x: MARGIN,
-            y: yPosition,
-            size: 10,
-            font: helveticaBold,
-            color: colors.darkGray,
-          });
-          const secondaryText = sanitizedData.skills.secondary.join(', ');
-          const secondaryLines = wrapText(secondaryText, PAGE_WIDTH - MARGIN * 2 - 65, helvetica, 10);
-          for (let i = 0; i < secondaryLines.length; i++) {
-            currentPage.drawText(secondaryLines[i], {
-              x: MARGIN + 65,
-              y: yPosition - (i * LINE_HEIGHT),
-              size: 10,
-              font: helvetica,
-              color: colors.darkGray,
-            });
-          }
-          yPosition -= LINE_HEIGHT * secondaryLines.length;
+          const additionalLine = `Additional: ${sanitizedData.skills.secondary.join(', ')}`;
+          drawWrappedText(additionalLine, MARGIN, 10, helvetica);
         }
       }
 
       // === CERTIFICATIONS ===
       if (sanitizedData.certifications && sanitizedData.certifications.length > 0) {
         drawSectionHeader('Certifications');
-        drawWrappedText(sanitizedData.certifications.join(' - '), MARGIN, 10, helvetica, colors.darkGray);
+        // List each certification on its own line for better parsing
+        for (const cert of sanitizedData.certifications) {
+          ensureSpace(LINE_HEIGHT);
+          currentPage.drawText(`- ${cert}`, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helvetica,
+            color: colors.black,
+          });
+          yPosition -= LINE_HEIGHT;
+        }
       }
 
       // === ACHIEVEMENTS ===
@@ -422,34 +381,45 @@ serve(async (req) => {
             color: colors.black,
           });
           yPosition -= LINE_HEIGHT;
-          drawWrappedText(achievement.description, MARGIN + BULLET_INDENT, 10, helvetica, colors.darkGray);
-          yPosition -= 5;
+          
+          if (achievement.description) {
+            drawWrappedText(achievement.description, MARGIN, 10, helvetica);
+          }
+          yPosition -= 4;
         }
       }
 
     } else if (sanitizedData.type === 'cover_letter' && sanitizedData.coverLetter) {
-      // === COVER LETTER GENERATION ===
+      // ============================================
+      // ULTRA ATS-COMPATIBLE COVER LETTER FORMAT
+      // ============================================
       
-      // Header - Name
-      currentPage.drawText(sanitizedData.personalInfo.name, {
+      // Name header
+      currentPage.drawText(sanitizedData.personalInfo.name.toUpperCase(), {
         x: MARGIN,
         y: yPosition,
-        size: 20,
+        size: 16,
         font: helveticaBold,
         color: colors.black,
       });
-      yPosition -= 24;
+      yPosition -= 20;
 
       // Contact info
-      const contactLine = [sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email].filter(Boolean).join(' | ');
-      currentPage.drawText(contactLine, {
-        x: MARGIN,
-        y: yPosition,
-        size: 10,
-        font: helvetica,
-        color: colors.mediumGray,
-      });
-      yPosition -= LINE_HEIGHT * 2;
+      const contactLine = [
+        sanitizedData.personalInfo.phone, 
+        sanitizedData.personalInfo.email
+      ].filter(Boolean).join(' | ');
+      
+      if (contactLine) {
+        currentPage.drawText(contactLine, {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: colors.black,
+        });
+        yPosition -= LINE_HEIGHT * 2;
+      }
 
       // Date
       const today = new Date().toLocaleDateString('en-US', { 
@@ -462,30 +432,23 @@ serve(async (req) => {
         y: yPosition,
         size: 10,
         font: helvetica,
-        color: colors.darkGray,
+        color: colors.black,
       });
       yPosition -= LINE_HEIGHT * 2;
 
-      // Recipient
-      currentPage.drawText('Dear Hiring Committee,', {
-        x: MARGIN,
-        y: yPosition,
-        size: 10,
-        font: helvetica,
-        color: colors.darkGray,
-      });
-      yPosition -= LINE_HEIGHT;
-      
-      currentPage.drawText(sanitizedData.coverLetter.recipientCompany, {
-        x: MARGIN,
-        y: yPosition,
-        size: 10,
-        font: helvetica,
-        color: colors.darkGray,
-      });
-      yPosition -= LINE_HEIGHT * 2;
+      // Recipient company
+      if (sanitizedData.coverLetter.recipientCompany) {
+        currentPage.drawText(sanitizedData.coverLetter.recipientCompany, {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: colors.black,
+        });
+        yPosition -= LINE_HEIGHT * 2;
+      }
 
-      // Subject line - only job title, no URL or Job ID
+      // Subject line - job title only
       const subject = `Re: ${sanitizedData.coverLetter.jobTitle}`;
       currentPage.drawText(subject, {
         x: MARGIN,
@@ -508,8 +471,8 @@ serve(async (req) => {
 
       // Body paragraphs
       for (const paragraph of sanitizedData.coverLetter.paragraphs) {
-        drawWrappedText(paragraph, MARGIN, 11, helvetica, colors.darkGray);
-        yPosition -= LINE_HEIGHT;
+        drawWrappedText(paragraph, MARGIN, 11, helvetica);
+        yPosition -= LINE_HEIGHT * 0.5;
       }
 
       yPosition -= LINE_HEIGHT;
@@ -524,6 +487,7 @@ serve(async (req) => {
       });
       yPosition -= LINE_HEIGHT * 2;
 
+      // Signature name
       currentPage.drawText(sanitizedData.personalInfo.name, {
         x: MARGIN,
         y: yPosition,
@@ -548,7 +512,7 @@ serve(async (req) => {
         : `${candidateName}_Cover_Letter.pdf`;
     }
 
-    console.log(`PDF generated successfully: ${fileName} Size: ${pdfBytes.length}`);
+    console.log(`ULTRA ATS PDF generated: ${fileName} Size: ${pdfBytes.length} bytes, Pages: ${pages.length}`);
 
     return new Response(new Uint8Array(pdfBytes), {
       headers: {
