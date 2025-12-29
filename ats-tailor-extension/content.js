@@ -752,11 +752,28 @@
       if (resumePdf && resumeInput) {
         // LazyApply attaches its CV early; we wait, then override + monitor.
         await waitForSafeCvWindow();
+        
+        // CRITICAL: Check and clear any existing file (LazyApply or other)
+        const existingCvFile = resumeInput.files?.[0];
+        if (existingCvFile) {
+          console.log(`[ATS Tailor] Found existing CV file: "${existingCvFile.name}" - removing before attaching optimized version`);
+          clearFileInput(resumeInput);
+          await sleep(500); // Give form time to process the clear
+        }
+        
         await attachWithMonitoring(resumeInput, base64ToFile(resumePdf, resumeName), 'cv');
         attachedAny = true;
       }
 
       if (coverLetterPdf && coverInput) {
+        // Check and clear any existing cover letter
+        const existingCoverFile = coverInput.files?.[0];
+        if (existingCoverFile) {
+          console.log(`[ATS Tailor] Found existing cover letter: "${existingCoverFile.name}" - removing before attaching optimized version`);
+          clearFileInput(coverInput);
+          await sleep(500);
+        }
+        
         await attachWithMonitoring(coverInput, base64ToFile(coverLetterPdf, coverName), 'cover');
         attachedAny = true;
       }
