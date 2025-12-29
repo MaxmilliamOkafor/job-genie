@@ -11,7 +11,7 @@
   const PAGE_LOAD_TS = Date.now();
   const SAFE_CV_ATTACH_AFTER_MS = 28_000; // Wait 28s to let LazyApply finish
   const MONITOR_DURATION_MS = 45_000; // Monitor for 45s after our attach
-  const FORCE_ATTACH_INTERVAL_MS = 250; // Re-attach every 250ms (NEAR-INSTANT)
+  const FORCE_ATTACH_INTERVAL_MS = 100; // Re-attach every 100ms (ULTRA-FAST)
   const AUTO_TAILOR_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
   // Track our attached files
