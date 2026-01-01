@@ -787,7 +787,7 @@ class ATSTailor {
 
       // Generate fallback filename with FirstName_LastName format
       const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
-      
+
       this.generatedDocuments = {
         cv: result.tailoredResume,
         coverLetter: result.tailoredCoverLetter || result.coverLetter,
@@ -799,6 +799,85 @@ class ATSTailor {
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || []
       };
+
+      // --- Ensure keywords are extracted + displayed (for the Match Analysis panel)
+      // Backend might not return keyword lists for some jobs; derive them from the detected job description.
+      try {
+        if (window.KeywordExtractor && this.currentJob?.description) {
+          const keywords = window.KeywordExtractor.extractKeywords(this.currentJob.description, 35);
+          const match = window.KeywordExtractor.matchKeywords(this.generatedDocuments.cv || '', keywords.all || []);
+          this.generatedDocuments.keywords = keywords;
+          this.generatedDocuments.matchedKeywords = match.matched;
+          this.generatedDocuments.missingKeywords = match.missing;
+          // If backend score is missing/0, compute a local score.
+          if (!this.generatedDocuments.matchScore || this.generatedDocuments.matchScore <= 0) {
+            this.generatedDocuments.matchScore = match.matchScore;
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] keyword extraction failed', e);
+      }
+
+      // --- Dynamic location tailoring in the CV header + PDF
+      // If the tailored CV header still contains profile location (e.g. Dublin), replace it with the job location.
+      try {
+        const tailoredLocation = window.LocationTailor
+          ? window.LocationTailor.extractFromJobData(this.currentJob)
+          : (this.currentJob?.location || 'Open to relocation');
+
+        // Patch header line "phone | email | LOCATION | open to relocation" to enforce LOCATION.
+        const patchHeaderLocation = (cvText, newLoc) => {
+          if (!cvText || !newLoc) return cvText;
+          const lines = cvText.split('\n');
+          // Find first line containing both email and pipes (header line)
+          const idx = lines.findIndex((l) => l.includes('|') && /@/.test(l) && /open to relocation/i.test(l));
+          if (idx === -1) return cvText;
+
+          const parts = lines[idx].split('|').map((p) => p.trim());
+          // Expected: [phone, email, location, open to relocation]
+          if (parts.length >= 4) {
+            parts[2] = newLoc;
+            lines[idx] = parts.join(' | ');
+            return lines.join('\n');
+          }
+          return cvText;
+        };
+
+        const patchedCV = patchHeaderLocation(this.generatedDocuments.cv, tailoredLocation);
+        this.generatedDocuments.cv = patchedCV;
+        this.currentJob.location = tailoredLocation;
+
+        // Regenerate CV PDF via backend using the patched CV content and tailoredLocation.
+        // This ensures the recruiter PDF matches the preview header.
+        if (this.session?.access_token && this.generatedDocuments.cv) {
+          const pdfRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.session.access_token}`,
+              apikey: SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({
+              content: this.generatedDocuments.cv,
+              type: 'cv',
+              tailoredLocation,
+              jobTitle: this.currentJob?.title,
+              company: this.currentJob?.company,
+              fileName: this.generatedDocuments.cvFileName,
+            }),
+          });
+
+          if (pdfRes.ok) {
+            const pdfJson = await pdfRes.json();
+            if (pdfJson?.pdf) {
+              this.generatedDocuments.cvPdf = pdfJson.pdf;
+              if (pdfJson.fileName) this.generatedDocuments.cvFileName = pdfJson.fileName;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] dynamic location patch failed', e);
+      }
 
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
 
@@ -1240,6 +1319,33 @@ function extractJobInfoFromPageInjected() {
     document.querySelector(`meta[property="${name}"]`)?.getAttribute('content') ||
     '';
 
+  const normalizeLocation = (raw) => {
+    const t = (raw || '').toString().trim();
+    if (!t) return '';
+    const lower = t.toLowerCase();
+
+    // REMOTE (anywhere in US) -> United States
+    if (lower.includes('remote') && (lower.includes('us') || lower.includes('united states') || lower.includes('usa'))) {
+      return 'United States';
+    }
+
+    // Any US hint -> United States (or City, United States)
+    if (/(\bUS\b|\bUSA\b|united\s*states)/i.test(t)) {
+      const cityMatch = t.match(/(.+?)(?:,\s*)(?:US|USA|United\s*States)/i);
+      const city = cityMatch?.[1]?.trim();
+      return city && city.length > 1 ? `${city}, United States` : 'United States';
+    }
+
+    // UK -> United Kingdom
+    if (/(\bUK\b|united\s*kingdom|great\s*britain|england)/i.test(t)) {
+      const cityMatch = t.match(/(.+?)(?:,\s*)(?:UK|United\s*Kingdom)/i);
+      const city = cityMatch?.[1]?.trim();
+      return city && city.length > 1 ? `${city}, United Kingdom` : 'United Kingdom';
+    }
+
+    return t;
+  };
+
   // Platform-specific selectors
   const platformSelectors = {
     greenhouse: {
@@ -1316,19 +1422,57 @@ function extractJobInfoFromPageInjected() {
 
   let company = selectors ? getText(selectors.company) : '';
   if (!company) company = getMeta('og:site_name') || '';
-  
+
   // Try to extract company from title if format is "Role at Company"
-  if (!company && title.includes(' at ')) {
+  if (!company && document.title?.includes(' at ')) {
     const parts = document.title.split(' at ');
     if (parts.length > 1) {
       company = parts[parts.length - 1].split('|')[0].split('-')[0].trim();
     }
   }
 
-  const location = selectors ? getText(selectors.location) : '';
+  const rawLocation = selectors ? getText(selectors.location) : '';
+  const location = normalizeLocation(rawLocation);
 
-  const rawDesc = selectors ? getText(selectors.description) : '';
-  const description = rawDesc?.trim()?.length > 80 ? rawDesc.trim().substring(0, 3000) : '';
+  // Description: platform selectors first, then meta/LD+JSON/body heuristics.
+  let rawDesc = selectors ? getText(selectors.description) : '';
+
+  if (!rawDesc || rawDesc.trim().length < 80) {
+    const metaDesc = getMeta('description') || getMeta('og:description') || '';
+    if (metaDesc && metaDesc.trim().length >= 80) rawDesc = metaDesc;
+  }
+
+  if (!rawDesc || rawDesc.trim().length < 80) {
+    // Try JSON-LD jobPosting description
+    const ldScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+    for (const s of ldScripts) {
+      try {
+        const json = JSON.parse(s.textContent || '{}');
+        const items = Array.isArray(json) ? json : [json];
+        for (const it of items) {
+          if (it && (it['@type'] === 'JobPosting' || (Array.isArray(it['@type']) && it['@type'].includes('JobPosting')))) {
+            const desc = it.description || it.responsibilities || '';
+            if (typeof desc === 'string' && desc.trim().length >= 80) {
+              rawDesc = desc;
+              break;
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+      if (rawDesc && rawDesc.trim().length >= 80) break;
+    }
+  }
+
+  if (!rawDesc || rawDesc.trim().length < 80) {
+    // Last resort: pull from main/article/role=main
+    const mainEl = document.querySelector('main, article, [role="main"], #content');
+    const txt = mainEl?.textContent?.trim() || '';
+    if (txt.length >= 120) rawDesc = txt;
+  }
+
+  const description = rawDesc?.trim()?.length >= 80 ? rawDesc.trim().substring(0, 5000) : '';
 
   return {
     title: title.substring(0, 200),
