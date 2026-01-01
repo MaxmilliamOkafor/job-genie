@@ -441,9 +441,10 @@ class ATSTailor {
     const matchScore = this.generatedDocuments.matchScore || 0;
     const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
     const missingKeywords = this.generatedDocuments.missingKeywords || [];
+    const keywords = this.generatedDocuments.keywords || null;
     const totalKeywords = matchedKeywords.length + missingKeywords.length;
     
-    // Use KeywordChips module if available for gauge update
+    // Update gauge using KeywordChips or fallback
     if (window.KeywordChips) {
       window.KeywordChips.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords);
     } else {
@@ -468,8 +469,6 @@ class ATSTailor {
       
       // Update subtitle and badge
       const matchSubtitle = document.getElementById('matchSubtitle');
-      const keywordCountBadge = document.getElementById('keywordCountBadge');
-      
       if (matchSubtitle && totalKeywords > 0) {
         matchSubtitle.textContent = matchScore >= 90 ? 'Excellent match!' : 
                                      matchScore >= 70 ? 'Good match' : 
@@ -482,13 +481,35 @@ class ATSTailor {
       }
     }
     
+    // Render keyword chips - build keywords object if not present
+    const cvText = this.generatedDocuments.cv || '';
+    let keywordsObj = keywords;
+    
+    // If no structured keywords, build from matched/missing arrays
+    if (!keywordsObj || (!keywordsObj.highPriority && !keywordsObj.all)) {
+      const allKeywords = [...matchedKeywords, ...missingKeywords];
+      if (allKeywords.length > 0) {
+        const highCount = Math.min(15, Math.ceil(allKeywords.length * 0.4));
+        const medCount = Math.min(10, Math.ceil(allKeywords.length * 0.35));
+        keywordsObj = {
+          all: allKeywords,
+          highPriority: allKeywords.slice(0, highCount),
+          mediumPriority: allKeywords.slice(highCount, highCount + medCount),
+          lowPriority: allKeywords.slice(highCount + medCount)
+        };
+      }
+    }
+    
     // Use KeywordChips module for chips if available
-    if (window.KeywordChips && this.generatedDocuments.keywords) {
-      const keywords = this.generatedDocuments.keywords;
-      const cvText = this.generatedDocuments.cv || '';
-      window.KeywordChips.updateAllKeywordSections(keywords, cvText);
-    } else {
-      // Fallback: Categorize keywords (roughly 40% high, 35% medium, 25% low)
+    if (window.KeywordChips && keywordsObj && (keywordsObj.highPriority || keywordsObj.all)) {
+      window.KeywordChips.updateAllKeywordSections(keywordsObj, cvText);
+      console.log('[ATS Tailor] Updated keyword chips:', {
+        high: keywordsObj.highPriority?.length || 0,
+        medium: keywordsObj.mediumPriority?.length || 0,
+        low: keywordsObj.lowPriority?.length || 0
+      });
+    } else if (totalKeywords > 0) {
+      // Fallback: manual chip rendering
       const highCount = Math.ceil(totalKeywords * 0.4);
       const medCount = Math.ceil(totalKeywords * 0.35);
       
@@ -925,8 +946,44 @@ class ATSTailor {
       return;
     }
 
-    if (!this.currentJob?.description) {
-      this.showToast('No job description detected', 'error');
+    // Try to get job description from multiple sources
+    let jobDescription = this.currentJob?.description || '';
+    if (!jobDescription || jobDescription.length < 50) {
+      // Try to re-detect from page
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          const result = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              // Try multiple selectors for job description
+              const selectors = [
+                '[data-automation-id="jobPostingDescription"]',
+                '#content', '.posting', '.job-description',
+                '[class*="description"]', 'main', 'article'
+              ];
+              for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el?.textContent?.trim()?.length > 100) {
+                  return el.textContent.trim().substring(0, 5000);
+                }
+              }
+              return document.body?.textContent?.substring(0, 5000) || '';
+            }
+          });
+          if (result?.[0]?.result) {
+            jobDescription = result[0].result;
+            this.currentJob = this.currentJob || {};
+            this.currentJob.description = jobDescription;
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] Could not re-detect job description:', e);
+      }
+    }
+
+    if (!jobDescription || jobDescription.length < 50) {
+      this.showToast('No job description found. Navigate to a job page and refresh.', 'error');
       return;
     }
 
