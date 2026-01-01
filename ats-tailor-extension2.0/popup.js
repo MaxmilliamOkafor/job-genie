@@ -180,6 +180,9 @@ class ATSTailor {
       chrome.storage.local.set({ ats_autoTailorEnabled: enabled });
       this.showToast(enabled ? 'Auto tailor enabled' : 'Auto tailor disabled', 'success');
     });
+    
+    // View Extracted Keywords Button
+    document.getElementById('viewKeywordsBtn')?.addEventListener('click', () => this.viewExtractedKeywords());
 
     // Workday Full Flow
     document.getElementById('runWorkdayFlow')?.addEventListener('click', () => this.runWorkdayFlow());
@@ -757,6 +760,69 @@ class ATSTailor {
     }
     
     return keywords;
+  }
+
+  /**
+   * View Extracted Keywords - extracts and displays keywords from current job
+   */
+  async viewExtractedKeywords() {
+    const btn = document.getElementById('viewKeywordsBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.querySelector('.btn-text').textContent = 'Extracting...';
+    }
+    
+    try {
+      // Ensure we have job info
+      if (!this.currentJob?.description) {
+        await this.detectCurrentJob();
+      }
+      
+      if (!this.currentJob?.description) {
+        this.showToast('No job description detected. Navigate to a job posting.', 'error');
+        return;
+      }
+      
+      // Extract keywords
+      const keywords = this.extractKeywordsOptimized(this.currentJob.description);
+      
+      if (!keywords.all || keywords.all.length === 0) {
+        this.showToast('No keywords found in job description.', 'error');
+        return;
+      }
+      
+      // Store keywords for UI display
+      this.generatedDocuments.structuredKeywords = keywords;
+      this.generatedDocuments.missingKeywords = keywords.all;
+      this.generatedDocuments.matchedKeywords = [];
+      this.generatedDocuments.matchScore = 0;
+      
+      // Update UI to show extracted keywords
+      this.updateMatchAnalysisUI();
+      
+      // Ensure documents card is visible to show keywords
+      const documentsCard = document.getElementById('documentsCard');
+      if (documentsCard) {
+        documentsCard.classList.remove('hidden');
+      }
+      
+      // Scroll to keywords section
+      const keywordsContainer = document.getElementById('keywordsContainer');
+      if (keywordsContainer) {
+        keywordsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      
+      this.showToast(`Extracted ${keywords.all.length} keywords from job description`, 'success');
+      
+    } catch (error) {
+      console.error('[ATS Tailor] Error extracting keywords:', error);
+      this.showToast('Failed to extract keywords: ' + error.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'View Extracted Keywords';
+      }
+    }
   }
 
   /**
