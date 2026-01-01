@@ -97,7 +97,15 @@ serve(async (req) => {
   }
 
   try {
-    const data: ResumeData = await req.json();
+    const requestBody = await req.json();
+    
+    // Check if this is a raw content request (from extension)
+    if (requestBody.content && typeof requestBody.content === 'string') {
+      return handleRawContentRequest(requestBody);
+    }
+    
+    // Otherwise, handle structured data request
+    const data: ResumeData = requestBody;
     console.log('Generating ULTRA ATS-COMPATIBLE PDF for:', data.type, data.personalInfo?.name);
 
     // Deep sanitize all string fields
@@ -533,3 +541,234 @@ serve(async (req) => {
     );
   }
 });
+
+/**
+ * Handle raw content request from extension
+ * Parses text content, applies tailoredLocation, and returns base64 PDF in JSON
+ */
+async function handleRawContentRequest(body: {
+  content: string;
+  type?: string;
+  tailoredLocation?: string;
+  jobTitle?: string;
+  company?: string;
+  fileName?: string;
+}): Promise<Response> {
+  const { content, type = 'cv', tailoredLocation, jobTitle, company, fileName } = body;
+  
+  console.log('[generate-pdf] Raw content request, tailoredLocation:', tailoredLocation);
+  
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    
+    const PAGE_WIDTH = 612;
+    const PAGE_HEIGHT = 792;
+    const MARGIN = 54;
+    const LINE_HEIGHT = 14;
+    
+    let currentPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    let yPosition = PAGE_HEIGHT - MARGIN;
+    
+    const addNewPage = () => {
+      currentPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      yPosition = PAGE_HEIGHT - MARGIN;
+      return currentPage;
+    };
+    
+    const ensureSpace = (needed: number) => {
+      if (yPosition < MARGIN + needed) {
+        addNewPage();
+      }
+    };
+    
+    // Process content line by line
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let isFirstLine = true;
+    let headerProcessed = false;
+    
+    for (const line of lines) {
+      // Handle header line with dynamic location replacement
+      if (!headerProcessed && line.includes('|') && line.includes('@') && /open to relocation/i.test(line)) {
+        const parts = line.split('|').map(p => p.trim());
+        // Expected format: phone | email | location | open to relocation
+        if (parts.length >= 4 && tailoredLocation) {
+          // Replace the location part (index 2) with tailoredLocation
+          parts[2] = tailoredLocation;
+        }
+        
+        ensureSpace(LINE_HEIGHT);
+        currentPage.drawText(parts.join(' | '), {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT;
+        headerProcessed = true;
+        continue;
+      }
+      
+      // Handle name line (first line, typically uppercase)
+      if (isFirstLine && line === line.toUpperCase() && line.length < 50) {
+        ensureSpace(22);
+        currentPage.drawText(line, {
+          x: MARGIN,
+          y: yPosition,
+          size: 18,
+          font: helveticaBold,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= 22;
+        isFirstLine = false;
+        continue;
+      }
+      isFirstLine = false;
+      
+      // Handle section headers (all caps)
+      const sectionHeaders = ['PROFESSIONAL SUMMARY', 'EXPERIENCE', 'EDUCATION', 'SKILLS', 'CERTIFICATIONS', 'ACHIEVEMENTS', 'PROJECTS'];
+      if (sectionHeaders.some(h => line.toUpperCase().startsWith(h))) {
+        yPosition -= 12;
+        ensureSpace(20);
+        currentPage.drawText(line.toUpperCase().replace(':', ''), {
+          x: MARGIN,
+          y: yPosition,
+          size: 11,
+          font: helveticaBold,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT + 4;
+        continue;
+      }
+      
+      // Handle bullet points
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+        ensureSpace(LINE_HEIGHT * 2);
+        const bulletText = line.replace(/^[-•*]\s*/, '- ');
+        
+        // Wrap long bullet points
+        const words = bulletText.split(' ');
+        let currentLine = '';
+        const maxWidth = PAGE_WIDTH - MARGIN * 2;
+        
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          const testWidth = helvetica.widthOfTextAtSize(testLine, 10);
+          
+          if (testWidth > maxWidth && currentLine) {
+            currentPage.drawText(currentLine, {
+              x: MARGIN,
+              y: yPosition,
+              size: 10,
+              font: helvetica,
+              color: rgb(0, 0, 0),
+            });
+            yPosition -= LINE_HEIGHT;
+            ensureSpace(LINE_HEIGHT);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) {
+          currentPage.drawText(currentLine, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helvetica,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT;
+        }
+        continue;
+      }
+      
+      // Handle URLs line (contains http)
+      if (line.includes('http')) {
+        ensureSpace(LINE_HEIGHT);
+        currentPage.drawText(line.length > 90 ? line.substring(0, 90) + '...' : line, {
+          x: MARGIN,
+          y: yPosition,
+          size: 9,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT;
+        continue;
+      }
+      
+      // Regular text - wrap if needed
+      ensureSpace(LINE_HEIGHT);
+      const words = line.split(' ');
+      let currentLineText = '';
+      const maxWidth = PAGE_WIDTH - MARGIN * 2;
+      
+      for (const word of words) {
+        const testLine = currentLineText ? `${currentLineText} ${word}` : word;
+        const testWidth = helvetica.widthOfTextAtSize(testLine, 10);
+        
+        if (testWidth > maxWidth && currentLineText) {
+          currentPage.drawText(currentLineText, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helvetica,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT;
+          ensureSpace(LINE_HEIGHT);
+          currentLineText = word;
+        } else {
+          currentLineText = testLine;
+        }
+      }
+      if (currentLineText) {
+        currentPage.drawText(currentLineText, {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT;
+      }
+    }
+    
+    const pdfBytes = await pdfDoc.save();
+    
+    // Convert to base64
+    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+    
+    // Generate filename
+    let finalFileName = fileName;
+    if (!finalFileName) {
+      const nameLine = lines.find(l => l === l.toUpperCase() && l.length < 50);
+      const name = nameLine?.replace(/\s+/g, '_') || 'Applicant';
+      finalFileName = type === 'cv' ? `${name}_CV.pdf` : `${name}_Cover_Letter.pdf`;
+    }
+    
+    console.log(`[generate-pdf] Generated ${finalFileName}, size: ${pdfBytes.length} bytes, location: ${tailoredLocation}`);
+    
+    return new Response(
+      JSON.stringify({
+        pdf: base64Pdf,
+        fileName: finalFileName,
+        location: tailoredLocation || 'Open to relocation',
+        pages: pdfDoc.getPageCount()
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('[generate-pdf] Raw content processing error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate PDF';
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+}
