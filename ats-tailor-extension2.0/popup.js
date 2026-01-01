@@ -847,15 +847,21 @@ class ATSTailor {
       const result = await response.json();
       if (result.error) throw new Error(result.error);
 
-      const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
+      // Correct filename format: [FirstName]_[LastName]_CV.pdf or [FirstName]_[LastName]_Cover_Letter.pdf
+      const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const fallbackName = (firstName && lastName) ? `${firstName}_${lastName}` : 'Applicant';
+      
+      // Store profile info for PDF generation
+      this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
       this.generatedDocuments = {
         cv: result.tailoredResume,
         coverLetter: result.tailoredCoverLetter || result.coverLetter,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
-        cvFileName: result.cvFileName || result.resumePdfFileName || `${fallbackName}_CV.pdf`,
-        coverFileName: result.coverLetterFileName || result.coverLetterPdfFileName || `${fallbackName}_Cover_Letter.pdf`,
+        cvFileName: `${fallbackName}_CV.pdf`,
+        coverFileName: `${fallbackName}_Cover_Letter.pdf`,
         matchScore: result.matchScore || 0,
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || [],
@@ -973,6 +979,8 @@ class ATSTailor {
               jobTitle: this.currentJob?.title,
               company: this.currentJob?.company,
               fileName: this.generatedDocuments.cvFileName,
+              firstName: this.profileInfo?.firstName,
+              lastName: this.profileInfo?.lastName,
             }),
           });
 

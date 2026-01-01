@@ -553,10 +553,12 @@ async function handleRawContentRequest(body: {
   jobTitle?: string;
   company?: string;
   fileName?: string;
+  firstName?: string;
+  lastName?: string;
 }): Promise<Response> {
-  const { content, type = 'cv', tailoredLocation, jobTitle, company, fileName } = body;
+  const { content, type = 'cv', tailoredLocation, jobTitle, company, fileName, firstName, lastName } = body;
   
-  console.log('[generate-pdf] Raw content request, tailoredLocation:', tailoredLocation);
+  console.log('[generate-pdf] Raw content request, tailoredLocation:', tailoredLocation, 'firstName:', firstName, 'lastName:', lastName);
   
   try {
     const pdfDoc = await PDFDocument.create();
@@ -741,12 +743,28 @@ async function handleRawContentRequest(body: {
     // Convert to base64
     const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
     
-    // Generate filename
+    // Generate filename using [FirstName]_[LastName]_CV.pdf or [FirstName]_[LastName]_Cover_Letter.pdf format
     let finalFileName = fileName;
     if (!finalFileName) {
-      const nameLine = lines.find(l => l === l.toUpperCase() && l.length < 50);
-      const name = nameLine?.replace(/\s+/g, '_') || 'Applicant';
-      finalFileName = type === 'cv' ? `${name}_CV.pdf` : `${name}_Cover_Letter.pdf`;
+      // Use provided firstName/lastName, or extract from content
+      let nameForFile = '';
+      if (firstName && lastName) {
+        nameForFile = `${firstName.trim()}_${lastName.trim()}`;
+      } else {
+        // Try to extract name from first line (usually uppercase name)
+        const nameLine = lines.find(l => l === l.toUpperCase() && l.length < 50 && !l.includes('|') && !l.includes('@'));
+        if (nameLine) {
+          // Convert "JOHN DOE" to "John_Doe"
+          nameForFile = nameLine.split(/\s+/).map(w => 
+            w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+          ).join('_');
+        } else {
+          nameForFile = 'Applicant';
+        }
+      }
+      // Sanitize filename - remove special chars
+      nameForFile = nameForFile.replace(/[^a-zA-Z0-9_]/g, '');
+      finalFileName = type === 'cv' ? `${nameForFile}_CV.pdf` : `${nameForFile}_Cover_Letter.pdf`;
     }
     
     console.log(`[generate-pdf] Generated ${finalFileName}, size: ${pdfBytes.length} bytes, location: ${tailoredLocation}`);

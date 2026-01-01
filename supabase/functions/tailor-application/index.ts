@@ -1108,10 +1108,13 @@ ${includeReferral ? `
       const authHeader = req.headers.get("authorization") || "";
 
       const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim() || "Applicant";
-      const candidateNameNoSpaces = (candidateName || "Applicant").replace(/\s+/g, "");
+      // File naming: [FirstName]_[LastName]_CV.pdf and [FirstName]_[LastName]_Cover_Letter.pdf
+      const candidateNameForFile = `${userProfile.firstName.trim()}_${userProfile.lastName.trim()}`
+        .replace(/\s+/g, '_')
+        .replace(/[^a-zA-Z0-9_]/g, '') || "Applicant";
 
-      const resumeFileName = `${candidateNameNoSpaces}_CV.pdf`;
-      const coverFileName = `${candidateNameNoSpaces}_Cover_Letter.pdf`;
+      const resumeFileName = `${candidateNameForFile}_CV.pdf`;
+      const coverFileName = `${candidateNameForFile}_Cover_Letter.pdf`;
 
       const extractProfessionalSummary = (raw: string): string => {
         const text = String(raw || "");
@@ -1171,7 +1174,7 @@ ${includeReferral ? `
 
       const resumePayload = {
         type: "resume",
-        candidateName: candidateNameNoSpaces,
+        candidateName: candidateNameForFile,
         customFileName: resumeFileName,
         personalInfo: {
           name: candidateName,
@@ -1249,7 +1252,7 @@ ${includeReferral ? `
 
       const coverPayload = {
         type: "cover_letter",
-        candidateName: candidateNameNoSpaces,
+        candidateName: candidateNameForFile,
         customFileName: coverFileName,
         personalInfo: {
           name: candidateName,
