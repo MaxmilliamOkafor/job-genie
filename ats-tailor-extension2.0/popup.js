@@ -23,6 +23,10 @@ const SUPPORTED_HOSTS = [
   'taleo.net',
 ];
 
+// Performance constants
+const MAX_JD_LENGTH = 10000; // Limit JD to 10k chars for faster processing
+const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
 class ATSTailor {
   constructor() {
     this.session = null;
@@ -36,14 +40,29 @@ class ATSTailor {
       coverFileName: null,
       matchScore: 0,
       matchedKeywords: [],
-      missingKeywords: []
+      missingKeywords: [],
+      keywords: null
     };
     this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
     this.currentPreviewTab = 'cv';
     this.autoTailorEnabled = true;
-    this.jobCache = {};
+    
+    // Performance: Caches for JD text and keywords per job URL
+    this.jdCache = new Map(); // url -> { jd, timestamp }
+    this.keywordCache = new Map(); // url -> { keywords, timestamp }
+    
+    // DOM element references (query once, reuse)
+    this._domRefs = {};
 
     this.init();
+  }
+
+  // Cache DOM references for performance
+  getDomRef(id) {
+    if (!this._domRefs[id]) {
+      this._domRefs[id] = document.getElementById(id);
+    }
+    return this._domRefs[id];
   }
 
   async init() {
@@ -62,7 +81,6 @@ class ATSTailor {
     try {
       if (!this.session?.refresh_token || !this.session?.access_token) return;
 
-      // If we don't have expiry info, do a lightweight call to validate token first.
       const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         headers: {
           apikey: SUPABASE_ANON_KEY,
@@ -72,7 +90,6 @@ class ATSTailor {
 
       if (res.ok) return;
 
-      // Refresh
       const refreshRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
         method: 'POST',
         headers: {
@@ -105,12 +122,10 @@ class ATSTailor {
   async loadSession() {
     return new Promise((resolve) => {
       chrome.storage.local.get(
-        ['ats_session', 'ats_stats', 'ats_todayDate', 'ats_autoTailorEnabled', 'ats_jobCache', 'ats_lastGeneratedDocuments', 'ats_lastJob'],
+        ['ats_session', 'ats_stats', 'ats_todayDate', 'ats_autoTailorEnabled', 'ats_lastGeneratedDocuments', 'ats_lastJob'],
         (result) => {
           this.session = result.ats_session || null;
-
           this.autoTailorEnabled = typeof result.ats_autoTailorEnabled === 'boolean' ? result.ats_autoTailorEnabled : true;
-          this.jobCache = result.ats_jobCache || {};
 
           // Restore last job/documents for preview continuity
           this.currentJob = result.ats_lastJob || this.currentJob;
@@ -155,8 +170,6 @@ class ATSTailor {
     document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
     document.getElementById('copyContent')?.addEventListener('click', () => this.copyCurrentContent());
     
-    // Boost Match Button
-    document.getElementById('boostMatchBtn')?.addEventListener('click', () => this.boostMatchScore());
     // Bulk Apply Dashboard
     document.getElementById('openBulkApply')?.addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('bulk-apply.html') });
@@ -218,7 +231,6 @@ class ATSTailor {
       return;
     }
     
-    // Update the display
     const emailDisplay = document.getElementById('workdayEmailDisplay');
     if (emailDisplay) emailDisplay.textContent = email;
     
@@ -244,7 +256,6 @@ class ATSTailor {
       return;
     }
 
-    // Get current tab to check if on Workday
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.url?.includes('workday')) {
       this.showToast('Navigate to a Workday job page first', 'error');
@@ -254,7 +265,6 @@ class ATSTailor {
     this.showToast('Starting Workday automation...', 'success');
     this.setStatus('Running Workday Flow...', 'working');
 
-    // Get user profile for autofill
     let candidateData = null;
     try {
       const profileRes = await fetch(
@@ -272,13 +282,11 @@ class ATSTailor {
       console.log('Could not fetch profile for Workday flow');
     }
 
-    // Trigger Workday flow via background script
     chrome.runtime.sendMessage({
       action: 'TRIGGER_WORKDAY_FLOW',
       candidateData: candidateData
     });
 
-    // Close popup after a moment
     setTimeout(() => {
       window.close();
     }, 1000);
@@ -301,11 +309,9 @@ class ATSTailor {
   switchPreviewTab(tab) {
     this.currentPreviewTab = tab;
     
-    // Update tab buttons
     document.getElementById('previewCvTab')?.classList.toggle('active', tab === 'cv');
     document.getElementById('previewCoverTab')?.classList.toggle('active', tab === 'cover');
     
-    // Update preview content
     this.updatePreviewContent();
   }
 
@@ -317,13 +323,11 @@ class ATSTailor {
       ? this.generatedDocuments.cv 
       : this.generatedDocuments.coverLetter;
     
-    // Also check if we have PDFs even if text content is missing
     const hasPdf = this.currentPreviewTab === 'cv' 
       ? this.generatedDocuments.cvPdf 
       : this.generatedDocuments.coverPdf;
     
     if (content) {
-      // Format content for better readability
       previewContent.innerHTML = this.formatPreviewContent(content, this.currentPreviewTab);
       previewContent.classList.remove('placeholder');
     } else if (hasPdf) {
@@ -338,7 +342,6 @@ class ATSTailor {
   formatPreviewContent(content, type) {
     if (!content) return '';
     
-    // Escape HTML
     const escapeHtml = (text) => {
       const div = document.createElement('div');
       div.textContent = text;
@@ -348,7 +351,6 @@ class ATSTailor {
     let formatted = escapeHtml(content);
     
     if (type === 'cv') {
-      // Format resume sections
       formatted = formatted
         .replace(/^(PROFESSIONAL SUMMARY|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)/gm, 
           '<span class="section-header">$1</span>')
@@ -356,7 +358,6 @@ class ATSTailor {
           '<strong>$1</strong> | <span class="date-line">$2</span>')
         .replace(/^•\s*/gm, '• ');
     } else {
-      // Format cover letter with date header
       formatted = formatted
         .replace(/^(Date:.+)$/m, '<span class="date-line">$1</span>')
         .replace(/^(Dear .+,)$/m, '<strong>$1</strong>')
@@ -386,13 +387,11 @@ class ATSTailor {
     document.getElementById('totalCount').textContent = this.stats.total;
     document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
     
-    // Initialize auto-tailor toggle from stored state
     const autoTailorToggle = document.getElementById('autoTailorToggle');
     if (autoTailorToggle) {
       autoTailorToggle.checked = this.autoTailorEnabled;
     }
     
-    // Show documents card if we have previously generated documents (text or PDF)
     const hasDocuments = this.generatedDocuments.cv || 
                          this.generatedDocuments.coverLetter || 
                          this.generatedDocuments.cvPdf || 
@@ -405,7 +404,6 @@ class ATSTailor {
   }
 
   updateDocumentDisplay() {
-    // Update filenames
     const cvFileName = document.getElementById('cvFileName');
     const coverFileName = document.getElementById('coverFileName');
     
@@ -419,7 +417,6 @@ class ATSTailor {
       coverFileName.title = this.generatedDocuments.coverFileName;
     }
     
-    // Update file sizes
     const cvSize = document.getElementById('cvSize');
     const coverSize = document.getElementById('coverSize');
     
@@ -433,10 +430,14 @@ class ATSTailor {
       coverSize.textContent = `${sizeKB} KB`;
     }
     
-    // Update AI Match Analysis Panel with new UI
+    // Update AI Match Analysis Panel
     this.updateMatchAnalysisUI();
   }
 
+  /**
+   * OPTIMIZED: Update AI Match Analysis panel with keyword chips
+   * Uses batch DOM updates for performance
+   */
   updateMatchAnalysisUI() {
     const matchScore = this.generatedDocuments.matchScore || 0;
     const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
@@ -444,48 +445,13 @@ class ATSTailor {
     const keywords = this.generatedDocuments.keywords || null;
     const totalKeywords = matchedKeywords.length + missingKeywords.length;
     
-    // Update gauge using KeywordChips or fallback
-    if (window.KeywordChips) {
-      window.KeywordChips.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords);
-    } else {
-      // Fallback: Update gauge circle (SVG-safe using setAttribute)
-      const gaugeCircle = document.getElementById('matchGaugeCircle');
-      if (gaugeCircle) {
-        const circumference = 2 * Math.PI * 45; // ~283
-        const dashOffset = circumference - (matchScore / 100) * circumference;
-        gaugeCircle.setAttribute('stroke-dashoffset', dashOffset.toString());
-        
-        // Update color based on score
-        let strokeColor = '#ff4757'; // red < 50%
-        if (matchScore >= 90) strokeColor = '#2ed573';
-        else if (matchScore >= 70) strokeColor = '#00d4ff';
-        else if (matchScore >= 50) strokeColor = '#ffa502';
-        gaugeCircle.setAttribute('stroke', strokeColor);
-      }
-      
-      // Update percentage text
-      const matchPercentage = document.getElementById('matchPercentage');
-      if (matchPercentage) matchPercentage.textContent = `${matchScore}%`;
-      
-      // Update subtitle and badge
-      const matchSubtitle = document.getElementById('matchSubtitle');
-      if (matchSubtitle && totalKeywords > 0) {
-        matchSubtitle.textContent = matchScore >= 90 ? 'Excellent match!' : 
-                                     matchScore >= 70 ? 'Good match' : 
-                                     matchScore >= 50 ? 'Fair match - consider improvements' : 
-                                     'Needs improvement';
-      }
-      
-      if (keywordCountBadge) {
-        keywordCountBadge.textContent = `${matchedKeywords.length} of ${totalKeywords} keywords matched`;
-      }
-    }
+    // Update gauge
+    this.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords);
     
-    // Render keyword chips - build keywords object if not present
+    // Build keywords object if not present
     const cvText = this.generatedDocuments.cv || '';
     let keywordsObj = keywords;
     
-    // If no structured keywords, build from matched/missing arrays
     if (!keywordsObj || (!keywordsObj.highPriority && !keywordsObj.all)) {
       const allKeywords = [...matchedKeywords, ...missingKeywords];
       if (allKeywords.length > 0) {
@@ -500,52 +466,97 @@ class ATSTailor {
       }
     }
     
-    // Use KeywordChips module for chips if available
-    if (window.KeywordChips && keywordsObj && (keywordsObj.highPriority || keywordsObj.all)) {
-      window.KeywordChips.updateAllKeywordSections(keywordsObj, cvText);
-      console.log('[ATS Tailor] Updated keyword chips:', {
-        high: keywordsObj.highPriority?.length || 0,
-        medium: keywordsObj.mediumPriority?.length || 0,
-        low: keywordsObj.lowPriority?.length || 0
-      });
+    // BATCH DOM update for keyword chips
+    if (keywordsObj && (keywordsObj.highPriority || keywordsObj.all)) {
+      this.batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords);
     } else if (totalKeywords > 0) {
-      // Fallback: manual chip rendering
+      // Fallback: manual chip rendering with batch update
       const highCount = Math.ceil(totalKeywords * 0.4);
       const medCount = Math.ceil(totalKeywords * 0.35);
       
       const allKeywords = [...matchedKeywords, ...missingKeywords];
-      const highPriority = allKeywords.slice(0, highCount);
-      const mediumPriority = allKeywords.slice(highCount, highCount + medCount);
-      const lowPriority = allKeywords.slice(highCount + medCount);
-      
-      // Update keyword chips
-      this.updateKeywordChips('highPriorityChips', 'highPriorityCount', highPriority, matchedKeywords);
-      this.updateKeywordChips('mediumPriorityChips', 'mediumPriorityCount', mediumPriority, matchedKeywords);
-      this.updateKeywordChips('lowPriorityChips', 'lowPriorityCount', lowPriority, matchedKeywords);
+      const fallbackObj = {
+        highPriority: allKeywords.slice(0, highCount),
+        mediumPriority: allKeywords.slice(highCount, highCount + medCount),
+        lowPriority: allKeywords.slice(highCount + medCount)
+      };
+      this.batchUpdateKeywordChips(fallbackObj, cvText, matchedKeywords);
     }
   }
 
-  updateKeywordChips(containerId, countId, keywords, matchedKeywords) {
-    const container = document.getElementById(containerId);
-    const countEl = document.getElementById(countId);
-    if (!container) return;
-    
-    container.innerHTML = '';
-    let matchCount = 0;
-    
-    keywords.forEach(kw => {
-      const isMatched = matchedKeywords.includes(kw);
-      if (isMatched) matchCount++;
+  /**
+   * OPTIMIZED: Update match gauge with animation
+   */
+  updateMatchGauge(score, matched, total) {
+    const gaugeCircle = document.getElementById('matchGaugeCircle');
+    if (gaugeCircle) {
+      const circumference = 2 * Math.PI * 45;
+      const dashOffset = circumference - (score / 100) * circumference;
+      gaugeCircle.setAttribute('stroke-dashoffset', dashOffset.toString());
       
-      const chip = document.createElement('span');
-      chip.className = `keyword-chip ${isMatched ? 'matched' : 'missing'}`;
-      chip.innerHTML = `<span class="chip-text">${kw}</span><span class="chip-icon">${isMatched ? '✓' : '✗'}</span>`;
-      container.appendChild(chip);
-    });
-    
-    if (countEl) {
-      countEl.textContent = `${matchCount}/${keywords.length}`;
+      let strokeColor = '#ff4757';
+      if (score >= 90) strokeColor = '#2ed573';
+      else if (score >= 70) strokeColor = '#00d4ff';
+      else if (score >= 50) strokeColor = '#ffa502';
+      gaugeCircle.setAttribute('stroke', strokeColor);
     }
+    
+    const matchPercentage = document.getElementById('matchPercentage');
+    if (matchPercentage) matchPercentage.textContent = `${score}%`;
+    
+    const matchSubtitle = document.getElementById('matchSubtitle');
+    if (matchSubtitle) {
+      matchSubtitle.textContent = score >= 90 ? 'Excellent match!' : 
+                                   score >= 70 ? 'Good match' : 
+                                   score >= 50 ? 'Fair match - consider improvements' : 
+                                   'Needs improvement';
+    }
+    
+    const keywordCountBadge = document.getElementById('keywordCountBadge');
+    if (keywordCountBadge) {
+      keywordCountBadge.textContent = `${matched} of ${total} keywords matched`;
+    }
+  }
+
+  /**
+   * OPTIMIZED: Batch update all keyword chips in one DOM operation
+   */
+  batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords) {
+    const cvTextLower = cvText.toLowerCase();
+    const matchedSet = new Set(matchedKeywords.map(k => k.toLowerCase()));
+    
+    const sections = [
+      { containerId: 'highPriorityChips', countId: 'highPriorityCount', keywords: keywordsObj.highPriority || [] },
+      { containerId: 'mediumPriorityChips', countId: 'mediumPriorityCount', keywords: keywordsObj.mediumPriority || [] },
+      { containerId: 'lowPriorityChips', countId: 'lowPriorityCount', keywords: keywordsObj.lowPriority || [] }
+    ];
+    
+    sections.forEach(({ containerId, countId, keywords }) => {
+      const container = document.getElementById(containerId);
+      const countEl = document.getElementById(countId);
+      if (!container) return;
+      
+      // Build HTML string for batch insert
+      let matchCount = 0;
+      const chipsHtml = keywords.map(kw => {
+        const kwLower = kw.toLowerCase();
+        const isMatched = matchedSet.has(kwLower) || cvTextLower.includes(kwLower);
+        if (isMatched) matchCount++;
+        
+        const escapedKw = this.escapeHtml(kw);
+        return `<span class="keyword-chip ${isMatched ? 'matched' : 'missing'}"><span class="chip-text">${escapedKw}</span><span class="chip-icon">${isMatched ? '✓' : '✗'}</span></span>`;
+      }).join('');
+      
+      // Single DOM update
+      container.innerHTML = chipsHtml;
+      if (countEl) countEl.textContent = `${matchCount}/${keywords.length}`;
+    });
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   setStatus(text, type = 'ready') {
@@ -553,7 +564,6 @@ class ATSTailor {
     const statusText = indicator?.querySelector('.status-text');
     
     if (indicator) {
-      // SVG-safe class manipulation - use classList instead of direct className assignment
       indicator.classList.remove('ready', 'error', 'working', 'success');
       indicator.classList.add(type);
     }
@@ -602,7 +612,6 @@ class ATSTailor {
       this.showToast('Logged in successfully!', 'success');
       this.updateUI();
       
-      // Auto-detect and tailor
       const found = await this.detectCurrentJob();
       if (found && this.currentJob) {
         this.tailorDocuments();
@@ -641,7 +650,6 @@ class ATSTailor {
         return false;
       }
 
-      // Skip restricted URLs
       if (
         tab.url.startsWith('chrome://') ||
         tab.url.startsWith('about:') ||
@@ -655,7 +663,6 @@ class ATSTailor {
         return false;
       }
 
-      // Check if on supported ATS platform
       const url = new URL(tab.url);
       if (!this.isSupportedHost(url.hostname)) {
         this.currentJob = null;
@@ -664,7 +671,6 @@ class ATSTailor {
         return false;
       }
 
-      // Execute extraction script in the page context
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: extractJobInfoFromPageInjected,
@@ -672,6 +678,12 @@ class ATSTailor {
 
       if (results?.[0]?.result) {
         this.currentJob = results[0].result;
+        
+        // PERFORMANCE: Limit JD length for faster processing
+        if (this.currentJob.description && this.currentJob.description.length > MAX_JD_LENGTH) {
+          this.currentJob.description = this.currentJob.description.substring(0, MAX_JD_LENGTH);
+        }
+        
         await chrome.storage.local.set({ ats_lastJob: this.currentJob });
         this.updateJobDisplay();
         this.setStatus('Job found!', 'ready');
@@ -711,11 +723,207 @@ class ATSTailor {
   }
 
   /**
-   * Full automatic tailoring pipeline:
-   * 1. Extract keywords from JD
-   * 2. Boost CV to 95-100% match
-   * 3. Generate ATS-tailored CV & Cover Letter
-   * 4. Replace any LazyApply CV with the new one
+   * OPTIMIZED: Extract keywords with caching and single-pass processing
+   */
+  extractKeywordsOptimized(jobDescription) {
+    if (!jobDescription || jobDescription.length < 50) {
+      return { all: [], highPriority: [], mediumPriority: [], lowPriority: [] };
+    }
+    
+    const jobUrl = this.currentJob?.url || '';
+    
+    // Check cache first
+    const cached = this.keywordCache.get(jobUrl);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_EXPIRY_MS) {
+      console.log('[ATS Tailor] Using cached keywords for:', jobUrl);
+      return cached.keywords;
+    }
+    
+    let keywords = { all: [], highPriority: [], mediumPriority: [], lowPriority: [] };
+    
+    // Use optimized extractor modules
+    if (window.ReliableExtractor) {
+      keywords = window.ReliableExtractor.extractReliableKeywords(jobDescription, 35);
+    } else if (window.KeywordExtractor) {
+      keywords = window.KeywordExtractor.extractKeywords(jobDescription, 35);
+    } else {
+      // FAST fallback: Single-pass frequency map
+      keywords = this.fastKeywordExtraction(jobDescription);
+    }
+    
+    // Cache the result
+    if (jobUrl) {
+      this.keywordCache.set(jobUrl, { keywords, timestamp: Date.now() });
+    }
+    
+    return keywords;
+  }
+
+  /**
+   * OPTIMIZED: Fast single-pass keyword extraction fallback
+   */
+  fastKeywordExtraction(text) {
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'it', 'its', 'you', 'your', 'we', 'our', 'they', 'their', 'who', 'what', 'which', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'if', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'once', 'any']);
+    
+    // Single-pass frequency map
+    const freq = new Map();
+    const words = text.toLowerCase().replace(/[^a-z0-9\-\/\+\#\.]+/g, ' ').split(/\s+/);
+    
+    for (const word of words) {
+      if (word.length > 2 && !stopWords.has(word)) {
+        freq.set(word, (freq.get(word) || 0) + 1);
+      }
+    }
+    
+    // Sort by frequency and get top 35
+    const sorted = [...freq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 35)
+      .map(([word]) => word);
+    
+    // Distribute into priority buckets
+    const highCount = Math.ceil(sorted.length * 0.4);
+    const medCount = Math.ceil(sorted.length * 0.35);
+    
+    return {
+      all: sorted,
+      highPriority: sorted.slice(0, highCount),
+      mediumPriority: sorted.slice(highCount, highCount + medCount),
+      lowPriority: sorted.slice(highCount + medCount)
+    };
+  }
+
+  /**
+   * OPTIMIZED: Calculate match score with single-pass matching
+   */
+  calculateMatchScore(cvText, keywords) {
+    if (!cvText || !keywords?.all || keywords.all.length === 0) {
+      return { matchScore: 0, matchedKeywords: [], missingKeywords: keywords?.all || [] };
+    }
+    
+    const cvTextLower = cvText.toLowerCase();
+    const matched = [];
+    const missing = [];
+    
+    for (const kw of keywords.all) {
+      if (cvTextLower.includes(kw.toLowerCase())) {
+        matched.push(kw);
+      } else {
+        missing.push(kw);
+      }
+    }
+    
+    const matchScore = keywords.all.length > 0 ? Math.round((matched.length / keywords.all.length) * 100) : 0;
+    
+    return { matchScore, matchedKeywords: matched, missingKeywords: missing };
+  }
+
+  /**
+   * OPTIMIZED: Boost CV to 95%+ match with internal keyword injection
+   * Called automatically by tailorDocuments - no separate button needed
+   */
+  async boostCVTo95Plus(cvText, keywords, updateProgress) {
+    if (!cvText || !keywords?.all || keywords.all.length === 0) {
+      return { tailoredCV: cvText, finalScore: 0, matchedKeywords: [], missingKeywords: [] };
+    }
+    
+    const initial = this.calculateMatchScore(cvText, keywords);
+    
+    if (initial.matchScore >= 95) {
+      return { 
+        tailoredCV: cvText, 
+        finalScore: initial.matchScore, 
+        matchedKeywords: initial.matchedKeywords, 
+        missingKeywords: initial.missingKeywords,
+        keywords 
+      };
+    }
+    
+    let tailorResult = null;
+    
+    // Try optimized tailoring modules
+    if (window.TailorUniversal) {
+      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords.all, { targetScore: 95 });
+    } else if (window.AutoTailor95) {
+      const tailor = new window.AutoTailor95({
+        onProgress: updateProgress,
+        onScoreUpdate: (score) => {
+          this.updateMatchGauge(score, 0, keywords.all.length);
+        }
+      });
+      tailorResult = await tailor.autoTailorTo95Plus(this.currentJob?.description || '', cvText);
+    } else if (window.CVTailor) {
+      tailorResult = window.CVTailor.tailorCV(cvText, keywords, { targetScore: 95 });
+    } else {
+      // FAST fallback: Simple keyword injection
+      tailorResult = this.fastKeywordInjection(cvText, keywords, initial.missingKeywords);
+    }
+    
+    if (tailorResult?.tailoredCV) {
+      const finalMatch = this.calculateMatchScore(tailorResult.tailoredCV, keywords);
+      return {
+        tailoredCV: tailorResult.tailoredCV,
+        finalScore: finalMatch.matchScore,
+        matchedKeywords: finalMatch.matchedKeywords,
+        missingKeywords: finalMatch.missingKeywords,
+        injectedKeywords: tailorResult.injectedKeywords || [],
+        keywords
+      };
+    }
+    
+    return { 
+      tailoredCV: cvText, 
+      finalScore: initial.matchScore, 
+      matchedKeywords: initial.matchedKeywords, 
+      missingKeywords: initial.missingKeywords,
+      keywords 
+    };
+  }
+
+  /**
+   * FAST fallback: Simple keyword injection into CV summary
+   */
+  fastKeywordInjection(cvText, keywords, missingKeywords) {
+    if (!missingKeywords || missingKeywords.length === 0) {
+      return { tailoredCV: cvText, injectedKeywords: [] };
+    }
+    
+    // Find summary section and inject missing keywords
+    const summaryMatch = cvText.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+    
+    if (summaryMatch) {
+      const summaryStart = summaryMatch.index;
+      const summaryEnd = summaryStart + summaryMatch[0].length;
+      const summaryText = summaryMatch[2];
+      
+      // Add top missing keywords naturally
+      const toInject = missingKeywords.slice(0, Math.min(10, missingKeywords.length));
+      const injectionPhrase = toInject.length > 0 
+        ? ` Proficient in ${toInject.join(', ')}.`
+        : '';
+      
+      const newSummary = summaryText.trim() + injectionPhrase;
+      const tailoredCV = cvText.substring(0, summaryStart) + 
+                         summaryMatch[1] + '\n' + newSummary + 
+                         cvText.substring(summaryEnd);
+      
+      return { tailoredCV, injectedKeywords: toInject };
+    }
+    
+    // Fallback: append to end of CV
+    const toInject = missingKeywords.slice(0, 5);
+    const tailoredCV = cvText + `\n\nAdditional Skills: ${toInject.join(', ')}`;
+    return { tailoredCV, injectedKeywords: toInject };
+  }
+
+  /**
+   * OPTIMIZED: Full automatic tailoring pipeline
+   * 1. Extract keywords from JD (with caching)
+   * 2. Generate base CV via backend
+   * 3. Boost CV to 95-100% match (internal, no button)
+   * 4. Generate PDFs & attach CV
+   * 
+   * UI updates at each stage for responsiveness
    */
   async tailorDocuments() {
     if (!this.currentJob) {
@@ -757,23 +965,27 @@ class ATSTailor {
     };
 
     try {
-      // ============ STEP 1: Extract Keywords ============
+      // ============ STEP 1: Extract Keywords (OPTIMIZED with caching) ============
       updateStep(1, 'working');
-      updateProgress(10, 'Step 1/3: Extracting keywords from job description...');
+      updateProgress(5, 'Step 1/3: Extracting keywords from job description...');
 
       await this.refreshSessionIfNeeded();
       if (!this.session?.access_token || !this.session?.user?.id) {
         throw new Error('Please sign in again');
       }
 
-      // Extract keywords from job description
-      let keywords = { all: [], highPriority: [], mediumPriority: [], lowPriority: [] };
-      if (this.currentJob?.description) {
-        if (window.ReliableExtractor) {
-          keywords = window.ReliableExtractor.extractReliableKeywords(this.currentJob.description, 35);
-        } else if (window.KeywordExtractor) {
-          keywords = window.KeywordExtractor.extractKeywords(this.currentJob.description, 35);
-        }
+      // OPTIMIZED: Extract keywords with caching
+      const keywords = this.extractKeywordsOptimized(this.currentJob?.description || '');
+      
+      // Store keywords immediately for UI
+      this.generatedDocuments.keywords = keywords;
+      
+      // UPDATE UI: Show extracted keywords immediately (before boost)
+      if (keywords.all.length > 0) {
+        this.generatedDocuments.matchedKeywords = [];
+        this.generatedDocuments.missingKeywords = keywords.all;
+        this.generatedDocuments.matchScore = 0;
+        this.updateMatchAnalysisUI(); // Show all keywords as "missing" initially
       }
 
       console.log('[ATS Tailor] Step 1 - Extracted keywords:', keywords.all?.length || 0);
@@ -781,7 +993,7 @@ class ATSTailor {
 
       // ============ STEP 2: Load Profile & Generate Base CV ============
       updateStep(2, 'working');
-      updateProgress(25, 'Step 2/3: Loading profile and generating base CV...');
+      updateProgress(20, 'Step 2/3: Generating tailored CV & Cover Letter...');
 
       const profileRes = await fetch(
         `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`,
@@ -800,7 +1012,7 @@ class ATSTailor {
       const profileRows = await profileRes.json();
       const p = profileRows?.[0] || {};
 
-      updateProgress(40, 'Step 2/3: Generating tailored documents...');
+      updateProgress(35, 'Step 2/3: AI generating tailored documents...');
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
         method: 'POST',
@@ -847,12 +1059,11 @@ class ATSTailor {
       const result = await response.json();
       if (result.error) throw new Error(result.error);
 
-      // Correct filename format: [FirstName]_[LastName]_CV.pdf or [FirstName]_[LastName]_Cover_Letter.pdf
+      // Filename format: [FirstName]_[LastName]_CV.pdf
       const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const fallbackName = (firstName && lastName) ? `${firstName}_${lastName}` : 'Applicant';
       
-      // Store profile info for PDF generation
       this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
       this.generatedDocuments = {
@@ -868,135 +1079,77 @@ class ATSTailor {
         keywords: keywords
       };
 
-      // Calculate initial match score
+      // Calculate initial match score against extracted keywords
       if (keywords.all?.length > 0 && this.generatedDocuments.cv) {
-        const extractor = window.ReliableExtractor || window.KeywordExtractor;
-        if (extractor) {
-          const match = extractor.matchKeywords(this.generatedDocuments.cv, keywords.all);
-          this.generatedDocuments.matchedKeywords = match.matched;
-          this.generatedDocuments.missingKeywords = match.missing;
-          this.generatedDocuments.matchScore = match.matchScore;
-        }
+        const initial = this.calculateMatchScore(this.generatedDocuments.cv, keywords);
+        this.generatedDocuments.matchedKeywords = initial.matchedKeywords;
+        this.generatedDocuments.missingKeywords = initial.missingKeywords;
+        this.generatedDocuments.matchScore = initial.matchScore;
+        
+        // UPDATE UI: Show initial match score
+        this.updateMatchAnalysisUI();
       }
 
       console.log('[ATS Tailor] Step 2 - Initial match score:', this.generatedDocuments.matchScore + '%');
       updateStep(2, 'complete');
 
-      // ============ STEP 3: Boost CV to 95%+ ============
+      // ============ STEP 3: INTERNAL BOOST to 95%+ (no button required) ============
       updateStep(3, 'working');
-      updateProgress(60, 'Step 3/3: Boosting CV to 95-100% keyword match...');
+      updateProgress(55, 'Step 3/3: Boosting CV to 95-100% keyword match...');
 
       const currentScore = this.generatedDocuments.matchScore || 0;
       
-      // Only boost if score is below target
+      // INTERNAL BOOST: Always attempt to boost if below target
       if (currentScore < 95 && keywords.all?.length > 0) {
         try {
-          let tailorResult;
+          const boostResult = await this.boostCVTo95Plus(
+            this.generatedDocuments.cv,
+            keywords,
+            (percent, text) => {
+              updateProgress(55 + (percent * 0.25), `Step 3/3: ${text}`);
+            }
+          );
 
-          if (window.TailorUniversal) {
-            tailorResult = await window.TailorUniversal.tailorCV(
-              this.generatedDocuments.cv,
-              keywords.all,
-              { targetScore: 95 }
-            );
-          } else if (window.AutoTailor95) {
-            const tailor = new window.AutoTailor95({
-              onProgress: (percent, text) => {
-                updateProgress(60 + (percent * 0.2), `Step 3/3: ${text}`);
-              },
-              onScoreUpdate: (score) => {
-                if (window.KeywordChips) {
-                  window.KeywordChips.updateMatchGauge(score, 0, 0);
-                }
-              }
-            });
-
-            tailorResult = await tailor.autoTailorTo95Plus(
-              this.currentJob.description,
-              this.generatedDocuments.cv
-            );
-          } else if (window.CVTailor) {
-            tailorResult = window.CVTailor.tailorCV(
-              this.generatedDocuments.cv,
-              keywords,
-              { targetScore: 95 }
-            );
-          }
-
-          if (tailorResult?.tailoredCV) {
-            this.generatedDocuments.cv = tailorResult.tailoredCV;
-            this.generatedDocuments.matchScore = tailorResult.finalScore || tailorResult.matchScore || currentScore;
-            this.generatedDocuments.matchedKeywords = tailorResult.matchedKeywords || this.generatedDocuments.matchedKeywords;
-            this.generatedDocuments.missingKeywords = tailorResult.missingKeywords || this.generatedDocuments.missingKeywords;
+          if (boostResult.tailoredCV) {
+            this.generatedDocuments.cv = boostResult.tailoredCV;
+            this.generatedDocuments.matchScore = boostResult.finalScore;
+            this.generatedDocuments.matchedKeywords = boostResult.matchedKeywords;
+            this.generatedDocuments.missingKeywords = boostResult.missingKeywords;
             
-            console.log('[ATS Tailor] Step 3 - Boosted score:', this.generatedDocuments.matchScore + '%');
+            // UPDATE UI: Show boosted match score and updated chips
+            this.updateMatchAnalysisUI();
+            
+            console.log('[ATS Tailor] Step 3 - Boosted to:', boostResult.finalScore + '%', 
+                        'injected:', boostResult.injectedKeywords?.length || 0, 'keywords');
           }
-        } catch (e) {
-          console.warn('[ATS Tailor] Boost step failed, continuing with base CV:', e);
+        } catch (boostError) {
+          console.warn('[ATS Tailor] Boost failed, continuing with base CV:', boostError);
+          // Don't throw - continue with base CV
         }
+      } else if (currentScore >= 95) {
+        console.log('[ATS Tailor] Step 3 - Already at', currentScore + '%, skipping boost');
       }
 
-      updateProgress(80, 'Step 3/3: Applying location and regenerating PDF...');
+      updateProgress(80, 'Step 3/3: Regenerating PDF with boosted CV...');
 
-      // Dynamic location tailoring
-      try {
-        const tailoredLocation = window.LocationTailor
-          ? window.LocationTailor.extractFromJobData(this.currentJob)
-          : (this.currentJob?.location || 'Open to relocation');
-
-        const patchHeaderLocation = (cvText, newLoc) => {
-          if (!cvText || !newLoc) return cvText;
-          const lines = cvText.split('\n');
-          const idx = lines.findIndex((l) => l.includes('|') && /@/.test(l) && /open to relocation/i.test(l));
-          if (idx === -1) return cvText;
-
-          const parts = lines[idx].split('|').map((p) => p.trim());
-          if (parts.length >= 4) {
-            parts[2] = newLoc;
-            lines[idx] = parts.join(' | ');
-            return lines.join('\n');
-          }
-          return cvText;
-        };
-
-        const patchedCV = patchHeaderLocation(this.generatedDocuments.cv, tailoredLocation);
-        this.generatedDocuments.cv = patchedCV;
-        this.currentJob.location = tailoredLocation;
-
-        // Regenerate CV PDF with boosted content
-        if (this.session?.access_token && this.generatedDocuments.cv) {
-          const pdfRes = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.session.access_token}`,
-              apikey: SUPABASE_ANON_KEY,
-            },
-            body: JSON.stringify({
-              content: this.generatedDocuments.cv,
-              type: 'cv',
-              tailoredLocation,
-              jobTitle: this.currentJob?.title,
-              company: this.currentJob?.company,
-              fileName: this.generatedDocuments.cvFileName,
-              firstName: this.profileInfo?.firstName,
-              lastName: this.profileInfo?.lastName,
-            }),
-          });
-
-          if (pdfRes.ok) {
-            const pdfJson = await pdfRes.json();
-            if (pdfJson?.pdf) {
-              this.generatedDocuments.cvPdf = pdfJson.pdf;
-              if (pdfJson.fileName) this.generatedDocuments.cvFileName = pdfJson.fileName;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[ATS Tailor] Dynamic location patch failed', e);
+      // Regenerate PDF with boosted CV and dynamic location
+      if (this.generatedDocuments.cv) {
+        await this.regeneratePDFAfterBoost();
       }
 
       updateStep(3, 'complete');
+
+      // ============ FINAL: Attach CV & Update UI ============
+      updateProgress(90, 'Attaching tailored CV to application...');
+
+      // Auto-attach CV to the page
+      try {
+        await this.attachDocument('cv');
+      } catch (attachError) {
+        console.warn('[ATS Tailor] Auto-attach failed:', attachError);
+        // Don't throw - document generation was successful
+      }
+
       updateProgress(100, 'Complete! ATS-tailored CV & Cover Letter ready.');
 
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
@@ -1017,7 +1170,7 @@ class ATSTailor {
       
       const finalScore = this.generatedDocuments.matchScore;
       this.showToast(
-        `Done in ${elapsed.toFixed(1)}s! ${finalScore}% keyword match from job description.`, 
+        `Done in ${elapsed.toFixed(1)}s! ${finalScore}% keyword match.`, 
         'success'
       );
       this.setStatus('Complete', 'ready');
@@ -1031,7 +1184,6 @@ class ATSTailor {
       btn.querySelector('.btn-text').textContent = 'Tailor CV & Cover Letter';
       setTimeout(() => {
         progressContainer?.classList.add('hidden');
-        // Reset step icons
         [1, 2, 3].forEach(n => {
           const step = document.getElementById(`step${n}`);
           if (step) {
@@ -1045,198 +1197,7 @@ class ATSTailor {
   }
 
   /**
-   * Boost match score using enhanced auto-tailor workflow
-   * Injects missing keywords to achieve 95%+ ATS match with dynamic score updates
-   */
-  async boostMatchScore() {
-    const btn = document.getElementById('boostMatchBtn');
-    if (!btn) return;
-
-    // Check prerequisites
-    if (!this.generatedDocuments.cv) {
-      this.showToast('Generate a tailored CV first', 'error');
-      return;
-    }
-
-    // Try to get job description from multiple sources
-    let jobDescription = this.currentJob?.description || '';
-    if (!jobDescription || jobDescription.length < 50) {
-      // Try to re-detect from page
-      try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.id) {
-          const result = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => {
-              // Try multiple selectors for job description
-              const selectors = [
-                '[data-automation-id="jobPostingDescription"]',
-                '#content', '.posting', '.job-description',
-                '[class*="description"]', 'main', 'article'
-              ];
-              for (const sel of selectors) {
-                const el = document.querySelector(sel);
-                if (el?.textContent?.trim()?.length > 100) {
-                  return el.textContent.trim().substring(0, 5000);
-                }
-              }
-              return document.body?.textContent?.substring(0, 5000) || '';
-            }
-          });
-          if (result?.[0]?.result) {
-            jobDescription = result[0].result;
-            this.currentJob = this.currentJob || {};
-            this.currentJob.description = jobDescription;
-          }
-        }
-      } catch (e) {
-        console.warn('[ATS Tailor] Could not re-detect job description:', e);
-      }
-    }
-
-    if (!jobDescription || jobDescription.length < 50) {
-      this.showToast('No job description found. Navigate to a job page and refresh.', 'error');
-      return;
-    }
-
-    const currentScore = this.generatedDocuments.matchScore || 0;
-    if (currentScore >= 95) {
-      this.showToast('Already at 95%+ match!', 'success');
-      return;
-    }
-
-    // Set loading state using ButtonFixer if available
-    if (window.ButtonFixer) {
-      window.ButtonFixer.setButtonLoading(btn, true, 'Boosting...');
-    } else {
-      btn.disabled = true;
-      const textEl = btn.querySelector('.btn-text');
-      if (textEl) textEl.textContent = 'Boosting...';
-      btn.classList.add('btn-loading');
-    }
-    this.setStatus('Boosting match score...', 'working');
-
-    try {
-      let tailorResult;
-
-      // Try using AutoTailor95 module first
-      if (window.AutoTailor95) {
-        const tailor = new window.AutoTailor95({
-          onProgress: (percent, text) => {
-            console.log(`[Boost] ${percent}%: ${text}`);
-          },
-          onScoreUpdate: (score, phase) => {
-            // Animate score change in real-time
-            if (window.KeywordChips) {
-              const matched = Math.round((score / 100) * (this.generatedDocuments.matchedKeywords?.length + this.generatedDocuments.missingKeywords?.length || 0));
-              window.KeywordChips.updateMatchGauge(score, matched, this.generatedDocuments.matchedKeywords?.length + this.generatedDocuments.missingKeywords?.length || 0);
-            }
-          },
-          onChipsUpdate: (keywords, cvText, phase) => {
-            // Update chips in real-time
-            if (window.KeywordChips) {
-              window.KeywordChips.updateAllKeywordSections(keywords, cvText);
-            }
-          }
-        });
-
-        tailorResult = await tailor.autoTailorTo95Plus(
-          this.currentJob.description,
-          this.generatedDocuments.cv
-        );
-      } 
-      // Fallback to CVTailor if AutoTailor95 not available
-      else if (window.CVTailor && window.KeywordExtractor) {
-        const keywords = window.KeywordExtractor.extractKeywords(this.currentJob.description, 35);
-        
-        if (!keywords.all || keywords.all.length === 0) {
-          throw new Error('Could not extract keywords from job description');
-        }
-
-        const cvResult = window.CVTailor.tailorCV(
-          this.generatedDocuments.cv,
-          keywords,
-          { targetScore: 95 }
-        );
-
-        tailorResult = {
-          tailoredCV: cvResult.tailoredCV,
-          finalScore: cvResult.matchScore,
-          matchedKeywords: cvResult.matchedKeywords,
-          missingKeywords: cvResult.missingKeywords,
-          injectedKeywords: cvResult.injectedKeywords || [],
-          keywords: keywords
-        };
-      } else {
-        throw new Error('Tailoring modules not loaded');
-      }
-
-      if (!tailorResult.tailoredCV) {
-        throw new Error('Tailoring failed');
-      }
-
-      // Update documents with boosted CV
-      this.generatedDocuments.cv = tailorResult.tailoredCV;
-      this.generatedDocuments.matchScore = tailorResult.finalScore;
-      this.generatedDocuments.matchedKeywords = tailorResult.matchedKeywords;
-      this.generatedDocuments.missingKeywords = tailorResult.missingKeywords;
-      this.generatedDocuments.keywords = tailorResult.keywords;
-
-      // Auto-regenerate PDF with boosted CV and dynamic location
-      await this.regeneratePDFAfterBoost();
-
-      // Save updated documents
-      await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
-
-      // Final UI update with animation
-      if (window.DynamicScore) {
-        window.DynamicScore.animateScore(currentScore, tailorResult.finalScore, (score) => {
-          const matchPercentage = document.getElementById('matchPercentage');
-          if (matchPercentage) matchPercentage.textContent = `${score}%`;
-        });
-      }
-
-      // Update all UI elements
-      this.updateDocumentDisplay();
-      this.updatePreviewContent();
-      
-      const improvement = tailorResult.finalScore - currentScore;
-      const injectedCount = tailorResult.injectedKeywords?.length || 0;
-
-      this.showToast(
-        `Boosted to ${tailorResult.finalScore}%! (+${improvement}%, ${injectedCount} keywords added, PDF regenerated)`, 
-        'success'
-      );
-      this.setStatus('Boost complete', 'ready');
-
-      // Log stats for debugging
-      console.log('[ATS Tailor] Boost result:', {
-        originalScore: currentScore,
-        newScore: tailorResult.finalScore,
-        injectedKeywords: tailorResult.injectedKeywords,
-        stats: tailorResult.stats
-      });
-
-    } catch (error) {
-      console.error('Boost error:', error);
-      this.showToast(error.message || 'Boost failed', 'error');
-      this.setStatus('Error', 'error');
-    } finally {
-      // Reset button state
-      if (window.ButtonFixer) {
-        window.ButtonFixer.setButtonLoading(btn, false);
-      } else {
-        btn.disabled = false;
-        const textEl = btn.querySelector('.btn-text');
-        if (textEl) textEl.textContent = 'Boost to 95%+';
-        btn.classList.remove('btn-loading');
-      }
-    }
-  }
-
-  /**
    * Regenerate PDF after CV boost with dynamic location tailoring
-   * Automatically called after boostMatchScore modifies CV text
    */
   async regeneratePDFAfterBoost() {
     try {
@@ -1246,8 +1207,10 @@ class ATSTailor {
       let tailoredLocation = 'Open to relocation';
       if (window.LocationTailor && this.currentJob) {
         tailoredLocation = window.LocationTailor.extractFromJobData(this.currentJob);
-        console.log('[ATS Tailor] Tailored location:', tailoredLocation);
+      } else if (this.currentJob?.location) {
+        tailoredLocation = this.currentJob.location;
       }
+      console.log('[ATS Tailor] Tailored location:', tailoredLocation);
 
       // Get user profile for header
       let candidateData = {};
@@ -1294,7 +1257,6 @@ class ATSTailor {
           this.generatedDocuments.tailoredLocation = pdfResult.location;
           console.log('[ATS Tailor] PDF regenerated:', pdfResult.fileName);
         } else if (pdfResult.requiresBackendGeneration) {
-          // Need to call backend for PDF generation
           await this.regeneratePDFViaBackend(pdfResult, tailoredLocation);
         }
       } else {
@@ -1304,14 +1266,11 @@ class ATSTailor {
     } catch (error) {
       console.error('[ATS Tailor] PDF regeneration failed:', error);
       // Don't throw - boost was successful, just PDF failed
-      this.generatedDocuments.cvPdf = null;
     }
   }
 
   /**
    * Regenerate PDF via Supabase edge function
-   * @param {Object} textFormat - Pre-formatted text from PDFATSPerfect
-   * @param {string} tailoredLocation - Location for CV header
    */
   async regeneratePDFViaBackend(textFormat, tailoredLocation) {
     try {
@@ -1333,7 +1292,9 @@ class ATSTailor {
           tailoredLocation: tailoredLocation,
           jobTitle: this.currentJob?.title,
           company: this.currentJob?.company,
-          fileName: textFormat?.fileName
+          firstName: this.profileInfo?.firstName,
+          lastName: this.profileInfo?.lastName,
+          fileName: this.generatedDocuments.cvFileName
         }),
       });
 
@@ -1341,8 +1302,8 @@ class ATSTailor {
         const result = await response.json();
         if (result.pdf) {
           this.generatedDocuments.cvPdf = result.pdf;
-          this.generatedDocuments.cvFileName = result.fileName || textFormat?.fileName;
-          console.log('[ATS Tailor] PDF regenerated via backend');
+          this.generatedDocuments.cvFileName = result.fileName || this.generatedDocuments.cvFileName;
+          console.log('[ATS Tailor] PDF regenerated via backend:', result.fileName);
         }
       }
     } catch (error) {
@@ -1353,7 +1314,6 @@ class ATSTailor {
   downloadDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
-    // Use the filename from backend which includes user's name with proper format
     const filename = type === 'cv' 
       ? (this.generatedDocuments.cvFileName || `Applicant_CV.pdf`)
       : (this.generatedDocuments.coverFileName || `Applicant_Cover_Letter.pdf`);
@@ -1393,7 +1353,6 @@ class ATSTailor {
   async attachDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
-    // Use filename from backend which includes user's name with proper format
     const filename =
       type === 'cv'
         ? this.generatedDocuments.cvFileName || `Applicant_CV.pdf`
@@ -1427,7 +1386,6 @@ class ATSTailor {
       });
 
       if (res?.success && res?.skipped) {
-        // Common for Greenhouse: cover letter may be a button/text flow rather than file upload.
         this.showToast(res.message || 'Skipped (no upload field)', 'success');
         return;
       }
@@ -1467,193 +1425,115 @@ class ATSTailor {
   }
 }
 
-// This function is injected into the page context - it must be self-contained
+/**
+ * Injected function to extract job information from the current page
+ * Runs in page context - self-contained with no external dependencies
+ */
 function extractJobInfoFromPageInjected() {
-  const hostname = window.location.hostname;
+  const result = {
+    title: '',
+    company: '',
+    location: '',
+    description: '',
+    url: window.location.href
+  };
 
-  const getText = (selectors) => {
-    for (const sel of selectors) {
+  try {
+    // Platform-specific extraction
+    const host = window.location.hostname.toLowerCase();
+
+    // Greenhouse
+    if (host.includes('greenhouse')) {
+      result.title = document.querySelector('h1.app-title, .job-title h1, h1[class*="job"]')?.textContent?.trim() || 
+                     document.querySelector('h1')?.textContent?.trim() || '';
+      result.company = document.querySelector('.company-name, [class*="company"]')?.textContent?.trim() || 
+                       document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = document.querySelector('.location, [class*="location"]')?.textContent?.trim() || '';
+      result.description = document.querySelector('#content, .content, [class*="description"]')?.textContent?.trim() || '';
+    }
+    // Workday
+    else if (host.includes('workday') || host.includes('myworkdayjobs')) {
+      result.title = document.querySelector('[data-automation-id="jobPostingHeader"] h2, h2[data-automation-id="jobTitle"]')?.textContent?.trim() ||
+                     document.querySelector('h1, h2')?.textContent?.trim() || '';
+      result.company = document.querySelector('[data-automation-id="company"]')?.textContent?.trim() ||
+                       document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = document.querySelector('[data-automation-id="locations"]')?.textContent?.trim() || 
+                        document.querySelector('[class*="location"]')?.textContent?.trim() || '';
+      result.description = document.querySelector('[data-automation-id="jobPostingDescription"]')?.textContent?.trim() || '';
+    }
+    // SmartRecruiters
+    else if (host.includes('smartrecruiters')) {
+      result.title = document.querySelector('h1.job-title, h1')?.textContent?.trim() || '';
+      result.company = document.querySelector('.company-name')?.textContent?.trim() || '';
+      result.location = document.querySelector('.job-location')?.textContent?.trim() || '';
+      result.description = document.querySelector('.job-description')?.textContent?.trim() || '';
+    }
+    // Workable
+    else if (host.includes('workable')) {
+      result.title = document.querySelector('h1[data-ui="job-title"]')?.textContent?.trim() ||
+                     document.querySelector('h1')?.textContent?.trim() || '';
+      result.company = document.querySelector('[data-ui="company-name"]')?.textContent?.trim() || '';
+      result.location = document.querySelector('[data-ui="job-location"]')?.textContent?.trim() || '';
+      result.description = document.querySelector('[data-ui="job-description"]')?.textContent?.trim() || '';
+    }
+    // iCIMS
+    else if (host.includes('icims')) {
+      result.title = document.querySelector('.iCIMS_Header h1, h1')?.textContent?.trim() || '';
+      result.company = document.querySelector('.iCIMS_CompanyName')?.textContent?.trim() || '';
+      result.location = document.querySelector('.iCIMS_JobLocation')?.textContent?.trim() || '';
+      result.description = document.querySelector('.iCIMS_JobContent')?.textContent?.trim() || '';
+    }
+    // Generic fallback
+    else {
+      result.title = document.querySelector('h1')?.textContent?.trim() || document.title.split('|')[0].trim();
+      result.company = document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = document.querySelector('[class*="location"]')?.textContent?.trim() || '';
+      result.description = document.querySelector('main, article, [class*="description"], #content')?.textContent?.trim() || '';
+    }
+
+    // Fallback from meta tags
+    if (!result.title) {
+      result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
+    }
+    if (!result.description) {
+      result.description = document.querySelector('meta[property="og:description"]')?.content || 
+                           document.querySelector('meta[name="description"]')?.content || '';
+    }
+
+    // Try JSON-LD structured data
+    const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of jsonLdScripts) {
       try {
-        const el = document.querySelector(sel);
-        if (el?.textContent?.trim()) return el.textContent.trim();
-      } catch {
-        // ignore
-      }
-    }
-    return '';
-  };
-
-  const getMeta = (name) =>
-    document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ||
-    document.querySelector(`meta[property="${name}"]`)?.getAttribute('content') ||
-    '';
-
-  const normalizeLocation = (raw) => {
-    const t = (raw || '').toString().trim();
-    if (!t) return '';
-    const lower = t.toLowerCase();
-
-    // REMOTE (anywhere in US) -> United States
-    if (lower.includes('remote') && (lower.includes('us') || lower.includes('united states') || lower.includes('usa'))) {
-      return 'United States';
-    }
-
-    // Any US hint -> United States (or City, United States)
-    if (/(\bUS\b|\bUSA\b|united\s*states)/i.test(t)) {
-      const cityMatch = t.match(/(.+?)(?:,\s*)(?:US|USA|United\s*States)/i);
-      const city = cityMatch?.[1]?.trim();
-      return city && city.length > 1 ? `${city}, United States` : 'United States';
-    }
-
-    // UK -> United Kingdom
-    if (/(\bUK\b|united\s*kingdom|great\s*britain|england)/i.test(t)) {
-      const cityMatch = t.match(/(.+?)(?:,\s*)(?:UK|United\s*Kingdom)/i);
-      const city = cityMatch?.[1]?.trim();
-      return city && city.length > 1 ? `${city}, United Kingdom` : 'United Kingdom';
-    }
-
-    return t;
-  };
-
-  // Platform-specific selectors
-  const platformSelectors = {
-    greenhouse: {
-      title: ['h1.app-title', 'h1.posting-headline', 'h1', '[data-test="posting-title"]'],
-      company: ['#company-name', '.company-name', '.posting-categories strong', '[data-test="company-name"]', 'a[href*="/jobs"] span'],
-      location: ['.location', '.posting-categories .location', '[data-test="location"]'],
-      description: ['#content', '.posting', '.posting-description', '[data-test="description"]'],
-    },
-    workday: {
-      title: ['h1[data-automation-id="jobPostingHeader"]', 'h1[data-automation-id="jobPostingTitle"]', 'h1', '[data-automation-id="job-title"]'],
-      company: ['div[data-automation-id="jobPostingCompany"]', '[data-automation-id="companyName"]', '.css-1f9qtsv'],
-      location: ['div[data-automation-id="locations"]', '[data-automation-id="jobPostingLocation"]', '[data-automation-id="location"]'],
-      description: ['div[data-automation-id="jobPostingDescription"]', '[data-automation-id="jobDescription"]', '.jobPostingDescription'],
-    },
-    smartrecruiters: {
-      title: ['h1[data-test="job-title"]', 'h1', '.job-title'],
-      company: ['[data-test="job-company-name"]', '[class*="company" i]', '.company-name'],
-      location: ['[data-test="job-location"]', '[class*="location" i]', '.job-location'],
-      description: ['[data-test="job-description"]', '[class*="job-description" i]', '.job-description'],
-    },
-    teamtailor: {
-      title: ['h1', '[data-qa="job-title"]', '.job-title'],
-      company: ['[data-qa="job-company"]', '[class*="company" i]', '.department-name'],
-      location: ['[data-qa="job-location"]', '[class*="location" i]', '.location'],
-      description: ['[data-qa="job-description"]', 'main', '.job-description'],
-    },
-    workable: {
-      title: ['h1', '[data-ui="job-title"]', '.job-title'],
-      company: ['[data-ui="company-name"]', '[class*="company" i]', 'header a'],
-      location: ['[data-ui="job-location"]', '[class*="location" i]', '.location'],
-      description: ['[data-ui="job-description"]', '[class*="description" i]', 'section'],
-    },
-    icims: {
-      title: ['h1', '.iCIMS_Header', '[class*="header" i] h1', '.job-title'],
-      company: ['[class*="company" i]', '.company'],
-      location: ['[class*="location" i]', '.location'],
-      description: ['#job-content', '[class*="description" i]', 'main', '.job-description'],
-    },
-    oracle: {
-      title: ['h1', '[class*="job-title" i]', '.job-title'],
-      company: ['[class*="company" i]', '.company'],
-      location: ['[class*="location" i]', '.location'],
-      description: ['[class*="description" i]', 'main', '.job-description'],
-    },
-    bullhorn: {
-      title: ['h1', '[class*="job-title" i]', '.job-title'],
-      company: ['[class*="company" i]', '.company'],
-      location: ['[class*="location" i]', '.location'],
-      description: ['[class*="description" i]', 'main', '.job-description'],
-    },
-  };
-
-  const detectPlatformKey = () => {
-    if (hostname.includes('greenhouse.io')) return 'greenhouse';
-    if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) return 'workday';
-    if (hostname.includes('smartrecruiters.com')) return 'smartrecruiters';
-    if (hostname.includes('teamtailor.com')) return 'teamtailor';
-    if (hostname.includes('workable.com')) return 'workable';
-    if (hostname.includes('icims.com')) return 'icims';
-    if (hostname.includes('bullhorn')) return 'bullhorn';
-    if (hostname.includes('oracle') || hostname.includes('taleo.net') || hostname.includes('oraclecloud')) return 'oracle';
-    return null;
-  };
-
-  const platformKey = detectPlatformKey();
-  const selectors = platformKey ? platformSelectors[platformKey] : null;
-
-  // Try platform-specific selectors first, then fallback to meta tags and document title
-  let title = selectors ? getText(selectors.title) : '';
-  if (!title) title = getMeta('og:title') || '';
-  if (!title) title = document.title?.split('|')?.[0]?.split('-')?.[0]?.split('at ')?.[0]?.trim() || '';
-
-  if (!title || title.length < 2) return null;
-
-  let company = selectors ? getText(selectors.company) : '';
-  if (!company) company = getMeta('og:site_name') || '';
-
-  // Try to extract company from title if format is "Role at Company"
-  if (!company && document.title?.includes(' at ')) {
-    const parts = document.title.split(' at ');
-    if (parts.length > 1) {
-      company = parts[parts.length - 1].split('|')[0].split('-')[0].trim();
-    }
-  }
-
-  const rawLocation = selectors ? getText(selectors.location) : '';
-  const location = normalizeLocation(rawLocation);
-
-  // Description: platform selectors first, then meta/LD+JSON/body heuristics.
-  let rawDesc = selectors ? getText(selectors.description) : '';
-
-  if (!rawDesc || rawDesc.trim().length < 80) {
-    const metaDesc = getMeta('description') || getMeta('og:description') || '';
-    if (metaDesc && metaDesc.trim().length >= 80) rawDesc = metaDesc;
-  }
-
-  if (!rawDesc || rawDesc.trim().length < 80) {
-    // Try JSON-LD jobPosting description
-    const ldScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
-    for (const s of ldScripts) {
-      try {
-        const json = JSON.parse(s.textContent || '{}');
-        const items = Array.isArray(json) ? json : [json];
-        for (const it of items) {
-          if (it && (it['@type'] === 'JobPosting' || (Array.isArray(it['@type']) && it['@type'].includes('JobPosting')))) {
-            const desc = it.description || it.responsibilities || '';
-            if (typeof desc === 'string' && desc.trim().length >= 80) {
-              rawDesc = desc;
-              break;
+        const data = JSON.parse(script.textContent);
+        if (data['@type'] === 'JobPosting') {
+          if (!result.title && data.title) result.title = data.title;
+          if (!result.company && data.hiringOrganization?.name) result.company = data.hiringOrganization.name;
+          if (!result.location && data.jobLocation?.address?.addressLocality) {
+            result.location = data.jobLocation.address.addressLocality;
+            if (data.jobLocation.address.addressRegion) {
+              result.location += ', ' + data.jobLocation.address.addressRegion;
             }
           }
+          if (!result.description && data.description) result.description = data.description;
+          break;
         }
-      } catch {
-        // ignore
-      }
-      if (rawDesc && rawDesc.trim().length >= 80) break;
+      } catch (e) {}
     }
+
+    // Clean up
+    result.title = result.title.replace(/\s+/g, ' ').trim().substring(0, 200);
+    result.company = result.company.replace(/\s+/g, ' ').trim().substring(0, 100);
+    result.location = result.location.replace(/\s+/g, ' ').trim().substring(0, 100);
+    result.description = result.description.replace(/\s+/g, ' ').trim().substring(0, 15000);
+
+  } catch (error) {
+    console.error('[ATS Tailor] Extraction error:', error);
   }
 
-  if (!rawDesc || rawDesc.trim().length < 80) {
-    // Last resort: pull from main/article/role=main
-    const mainEl = document.querySelector('main, article, [role="main"], #content');
-    const txt = mainEl?.textContent?.trim() || '';
-    if (txt.length >= 120) rawDesc = txt;
-  }
-
-  const description = rawDesc?.trim()?.length >= 80 ? rawDesc.trim().substring(0, 5000) : '';
-
-  return {
-    title: title.substring(0, 200),
-    company: company.substring(0, 100),
-    location: location.substring(0, 100),
-    description,
-    url: window.location.href,
-    platform: platformKey || hostname.replace('www.', '').split('.')[0],
-  };
+  return result;
 }
 
-// Initialize
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   new ATSTailor();
 });
