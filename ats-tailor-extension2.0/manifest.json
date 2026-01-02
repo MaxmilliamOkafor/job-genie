@@ -21,7 +21,8 @@
     "https://*.icims.com/*",
     "https://*.oracle.com/*",
     "https://*.oraclecloud.com/*",
-    "https://*.taleo.net/*"
+    "https://*.taleo.net/*",
+    "https://wntpldomgjutwufphnpg.supabase.co/*"
   ],
   "action": {
     "default_popup": "popup.html",
