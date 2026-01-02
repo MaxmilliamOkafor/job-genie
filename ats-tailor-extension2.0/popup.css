@@ -517,14 +517,24 @@ body {
   text-align: center;
 }
 
+.keyword-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.keyword-buttons .btn-boost {
+  flex: 1;
+  width: auto;
+}
+
 .btn-boost {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  font-size: 13px;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
   font-weight: 600;
   background: linear-gradient(135deg, #7c3aed 0%, #00d4ff 100%);
   border: none;
@@ -533,6 +543,17 @@ body {
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+}
+
+.btn-boost.btn-secondary {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: none;
+}
+
+.btn-boost.btn-secondary:hover {
+  background: rgba(255,255,255,0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 .btn-boost:hover {
@@ -551,7 +572,7 @@ body {
 }
 
 .btn-boost .btn-icon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .btn-boost.btn-loading .btn-text::after {

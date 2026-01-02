@@ -181,8 +181,11 @@ class ATSTailor {
       this.showToast(enabled ? 'Auto tailor enabled' : 'Auto tailor disabled', 'success');
     });
     
-    // View Extracted Keywords Button
+    // View Extracted Keywords Button (fast local extraction)
     document.getElementById('viewKeywordsBtn')?.addEventListener('click', () => this.viewExtractedKeywords());
+    
+    // AI Extract Keywords Button (GPT-4o-mini powered)
+    document.getElementById('aiExtractBtn')?.addEventListener('click', () => this.aiExtractKeywords());
 
     // Workday Full Flow
     document.getElementById('runWorkdayFlow')?.addEventListener('click', () => this.runWorkdayFlow());
@@ -826,6 +829,105 @@ class ATSTailor {
   }
 
   /**
+   * AI-powered keyword extraction using GPT-4o-mini (Resume-Matcher style)
+   * Uses user's OpenAI API key from profile
+   */
+  async aiExtractKeywords() {
+    const btn = document.getElementById('aiExtractBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.querySelector('.btn-text').textContent = 'AI Analyzing...';
+    }
+    
+    try {
+      // Ensure we have session
+      if (!this.session?.access_token) {
+        this.showToast('Please login to use AI keyword extraction', 'error');
+        return;
+      }
+      
+      // Ensure we have job info
+      if (!this.currentJob?.description) {
+        await this.detectCurrentJob();
+      }
+      
+      if (!this.currentJob?.description) {
+        this.showToast('No job description detected. Navigate to a job posting.', 'error');
+        return;
+      }
+      
+      // Call the AI extraction endpoint
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-keywords-ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          jobDescription: this.currentJob.description,
+          jobTitle: this.currentJob.title,
+          company: this.currentJob.company,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.all || result.all.length === 0) {
+        this.showToast('AI could not extract keywords from this job description.', 'error');
+        return;
+      }
+      
+      // Store structured keywords for UI display
+      const keywords = {
+        all: result.all,
+        highPriority: result.highPriority || [],
+        mediumPriority: result.mediumPriority || [],
+        lowPriority: result.lowPriority || [],
+        structured: result.structured, // Full Resume-Matcher style breakdown
+      };
+      
+      this.generatedDocuments.structuredKeywords = keywords;
+      this.generatedDocuments.keywords = keywords;
+      this.generatedDocuments.missingKeywords = keywords.all;
+      this.generatedDocuments.matchedKeywords = [];
+      this.generatedDocuments.matchScore = 0;
+      
+      // Update UI to show extracted keywords
+      this.updateMatchAnalysisUI();
+      
+      // Ensure documents card is visible to show keywords
+      const documentsCard = document.getElementById('documentsCard');
+      if (documentsCard) {
+        documentsCard.classList.remove('hidden');
+      }
+      
+      // Scroll to keywords section
+      const keywordsContainer = document.getElementById('keywordsContainer');
+      if (keywordsContainer) {
+        keywordsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      
+      this.showToast(`AI extracted ${result.total} keywords (${result.highPriority?.length || 0} high priority)`, 'success');
+      
+      // Log structured breakdown to console for debugging
+      console.log('[ATS Tailor] AI Structured Keywords:', result.structured);
+      
+    } catch (error) {
+      console.error('[ATS Tailor] AI keyword extraction error:', error);
+      this.showToast('AI extraction failed: ' + error.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'AI Extract Keywords';
+      }
+    }
+  }
    * OPTIMIZED: Fast single-pass keyword extraction fallback
    */
   fastKeywordExtraction(text) {
@@ -1505,88 +1607,140 @@ function extractJobInfoFromPageInjected() {
   };
 
   try {
-    // Platform-specific extraction
     const host = window.location.hostname.toLowerCase();
 
-    // Greenhouse
+    // --- Helper: get text from first matching selector ---
+    const getText = (...selectors) => {
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el?.textContent?.trim()) return el.textContent.trim();
+      }
+      return '';
+    };
+
+    // --- Greenhouse ---
     if (host.includes('greenhouse')) {
-      result.title = document.querySelector('h1.app-title, .job-title h1, h1[class*="job"]')?.textContent?.trim() || 
-                     document.querySelector('h1')?.textContent?.trim() || '';
-      result.company = document.querySelector('.company-name, [class*="company"]')?.textContent?.trim() || 
-                       document.querySelector('meta[property="og:site_name"]')?.content || '';
-      result.location = document.querySelector('.location, [class*="location"]')?.textContent?.trim() || '';
-      result.description = document.querySelector('#content, .content, [class*="description"]')?.textContent?.trim() || '';
+      result.title = getText('h1.app-title', '.job-title h1', 'h1[class*="job"]', '.posting-headline h1', 'h1');
+      result.company = getText('.company-name', '[class*="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = getText('.location', '[class*="location"]', '.posting-categories .location');
+      // Greenhouse uses #content or .content for full JD
+      result.description = getText('#content', '.content', '.posting-content', '.job-post-content', '[class*="description"]', 'main');
     }
-    // Workday
+    // --- Workday / myworkdayjobs ---
     else if (host.includes('workday') || host.includes('myworkdayjobs')) {
-      result.title = document.querySelector('[data-automation-id="jobPostingHeader"] h2, h2[data-automation-id="jobTitle"]')?.textContent?.trim() ||
-                     document.querySelector('h1, h2')?.textContent?.trim() || '';
-      result.company = document.querySelector('[data-automation-id="company"]')?.textContent?.trim() ||
-                       document.querySelector('meta[property="og:site_name"]')?.content || '';
-      result.location = document.querySelector('[data-automation-id="locations"]')?.textContent?.trim() || 
-                        document.querySelector('[class*="location"]')?.textContent?.trim() || '';
-      result.description = document.querySelector('[data-automation-id="jobPostingDescription"]')?.textContent?.trim() || '';
+      result.title = getText('[data-automation-id="jobPostingHeader"] h2', 'h2[data-automation-id="jobTitle"]', '[data-automation-id="jobPostingTitle"]', 'h1', 'h2');
+      result.company = getText('[data-automation-id="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = getText('[data-automation-id="locations"]', '[data-automation-id="location"]', '[class*="location"]');
+      // Workday stores JD in data-automation-id="jobPostingDescription" or a large container
+      const descEl = document.querySelector('[data-automation-id="jobPostingDescription"]');
+      if (descEl) {
+        result.description = descEl.innerText || descEl.textContent || '';
+      } else {
+        // Fallback: grab largest text block
+        const main = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+        result.description = main.innerText?.substring(0, 15000) || '';
+      }
     }
-    // SmartRecruiters
+    // --- SmartRecruiters ---
     else if (host.includes('smartrecruiters')) {
-      result.title = document.querySelector('h1.job-title, h1')?.textContent?.trim() || '';
-      result.company = document.querySelector('.company-name')?.textContent?.trim() || '';
-      result.location = document.querySelector('.job-location')?.textContent?.trim() || '';
-      result.description = document.querySelector('.job-description')?.textContent?.trim() || '';
+      result.title = getText('h1.job-title', 'h1[class*="title"]', 'h1');
+      result.company = getText('.company-name', '[class*="company"]');
+      result.location = getText('.job-location', '[class*="location"]');
+      result.description = getText('.job-description', '.job-sections', '[class*="description"]', 'main');
     }
-    // Workable
+    // --- Workable ---
     else if (host.includes('workable')) {
-      result.title = document.querySelector('h1[data-ui="job-title"]')?.textContent?.trim() ||
-                     document.querySelector('h1')?.textContent?.trim() || '';
-      result.company = document.querySelector('[data-ui="company-name"]')?.textContent?.trim() || '';
-      result.location = document.querySelector('[data-ui="job-location"]')?.textContent?.trim() || '';
-      result.description = document.querySelector('[data-ui="job-description"]')?.textContent?.trim() || '';
+      result.title = getText('h1[data-ui="job-title"]', 'h1');
+      result.company = getText('[data-ui="company-name"]', '.company-name');
+      result.location = getText('[data-ui="job-location"]', '.job-location');
+      result.description = getText('[data-ui="job-description"]', '.job-description', 'main');
     }
-    // iCIMS
+    // --- Teamtailor ---
+    else if (host.includes('teamtailor')) {
+      result.title = getText('h1.job-title', 'h1');
+      result.company = getText('.company-name', '[class*="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = getText('.location', '[class*="location"]');
+      result.description = getText('.job-ad-body', '.job-body', '.description', 'main');
+    }
+    // --- iCIMS ---
     else if (host.includes('icims')) {
-      result.title = document.querySelector('.iCIMS_Header h1, h1')?.textContent?.trim() || '';
-      result.company = document.querySelector('.iCIMS_CompanyName')?.textContent?.trim() || '';
-      result.location = document.querySelector('.iCIMS_JobLocation')?.textContent?.trim() || '';
-      result.description = document.querySelector('.iCIMS_JobContent')?.textContent?.trim() || '';
+      result.title = getText('.iCIMS_Header h1', 'h1.title', 'h1');
+      result.company = getText('.iCIMS_CompanyName', '[class*="company"]');
+      result.location = getText('.iCIMS_JobLocation', '[class*="location"]');
+      result.description = getText('.iCIMS_JobContent', '.iCIMS_MainWrapper', 'main');
     }
-    // Generic fallback
+    // --- Bullhorn ---
+    else if (host.includes('bullhorn')) {
+      result.title = getText('h1.job-title', 'h1');
+      result.company = getText('.company-name');
+      result.location = getText('.job-location', '[class*="location"]');
+      result.description = getText('.job-description', '.job-details', 'main');
+    }
+    // --- Oracle / Taleo ---
+    else if (host.includes('oracle') || host.includes('taleo')) {
+      result.title = getText('h1.job-title', 'h1');
+      result.company = getText('.company-name') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = getText('.job-location', '[class*="location"]');
+      result.description = getText('.job-description', '#requisitionDescriptionInterface', 'main');
+    }
+    // --- Generic fallback ---
     else {
-      result.title = document.querySelector('h1')?.textContent?.trim() || document.title.split('|')[0].trim();
+      result.title = getText('h1') || document.title.split('|')[0].split('-')[0].trim();
       result.company = document.querySelector('meta[property="og:site_name"]')?.content || '';
-      result.location = document.querySelector('[class*="location"]')?.textContent?.trim() || '';
-      result.description = document.querySelector('main, article, [class*="description"], #content')?.textContent?.trim() || '';
+      result.location = getText('[class*="location"]', '[data-testid*="location"]');
+      result.description = getText('main', 'article', '[class*="description"]', '#content', '[role="main"]');
     }
 
-    // Fallback from meta tags
+    // --- Fallback: Meta tags ---
     if (!result.title) {
       result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
     }
-    if (!result.description) {
-      result.description = document.querySelector('meta[property="og:description"]')?.content || 
+    if (!result.description || result.description.length < 100) {
+      // Try grabbing full body text as last resort
+      const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content ||
                            document.querySelector('meta[name="description"]')?.content || '';
+      if (fallbackDesc.length > result.description.length) {
+        result.description = fallbackDesc;
+      }
+      // If still short, grab main content
+      if (result.description.length < 200) {
+        const mainEl = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+        result.description = (mainEl.innerText || mainEl.textContent || '').substring(0, 15000);
+      }
     }
 
-    // Try JSON-LD structured data
+    // --- JSON-LD structured data ---
     const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
     for (const script of jsonLdScripts) {
       try {
-        const data = JSON.parse(script.textContent);
-        if (data['@type'] === 'JobPosting') {
+        let data = JSON.parse(script.textContent);
+        // Handle arrays
+        if (Array.isArray(data)) data = data.find(d => d['@type'] === 'JobPosting');
+        if (data?.['@type'] === 'JobPosting') {
           if (!result.title && data.title) result.title = data.title;
           if (!result.company && data.hiringOrganization?.name) result.company = data.hiringOrganization.name;
-          if (!result.location && data.jobLocation?.address?.addressLocality) {
-            result.location = data.jobLocation.address.addressLocality;
-            if (data.jobLocation.address.addressRegion) {
-              result.location += ', ' + data.jobLocation.address.addressRegion;
+          if (!result.location) {
+            const loc = data.jobLocation;
+            if (loc?.address?.addressLocality) {
+              result.location = loc.address.addressLocality;
+              if (loc.address.addressRegion) result.location += ', ' + loc.address.addressRegion;
+            } else if (typeof loc === 'string') {
+              result.location = loc;
             }
           }
-          if (!result.description && data.description) result.description = data.description;
+          if ((!result.description || result.description.length < 200) && data.description) {
+            // Strip HTML from structured data description
+            const temp = document.createElement('div');
+            temp.innerHTML = data.description;
+            const cleanDesc = temp.textContent || temp.innerText || '';
+            if (cleanDesc.length > result.description.length) result.description = cleanDesc;
+          }
           break;
         }
       } catch (e) {}
     }
 
-    // Clean up
+    // --- Cleanup ---
     result.title = result.title.replace(/\s+/g, ' ').trim().substring(0, 200);
     result.company = result.company.replace(/\s+/g, ' ').trim().substring(0, 100);
     result.location = result.location.replace(/\s+/g, ' ').trim().substring(0, 100);
