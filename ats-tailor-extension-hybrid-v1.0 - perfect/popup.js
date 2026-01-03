@@ -1342,19 +1342,26 @@ class ATSTailor {
     
     const getRandomPhrase = () => actionPhrases[Math.floor(Math.random() * actionPhrases.length)];
     
+    // IMPROVED: More flexible section pattern matching (handles markdown, plain text, etc.)
+    const sectionPatterns = {
+      experience: /(?:^|\n)(?:#\s*)?(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)[\s\n]*([\s\S]*?)(?=\n(?:#\s*)?(?:EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i,
+      summary: /(?:^|\n)(?:#\s*)?(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)[\s\n]*([\s\S]*?)(?=\n(?:#\s*)?[A-Z]{3,}|\n\n|$)/i,
+      skills: /(?:^|\n)(?:#\s*)?(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS)[\s\n]*([\s\S]*?)(?=\n(?:#\s*)?[A-Z]{3,}|\n\n|$)/i
+    };
+    
     // STEP 1: PRIMARY - Inject into Work Experience (25+ keywords naturally across bullets)
     if (remaining.length > 0) {
-      const experienceMatch = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
+      const experienceMatch = tailoredCV.match(sectionPatterns.experience);
       if (experienceMatch) {
         const expStart = experienceMatch.index;
         const expEnd = expStart + experienceMatch[0].length;
         let experienceText = experienceMatch[0];
         
-        // Find all bullet points
-        const bullets = experienceText.match(/^[•\-\*]\s*.+$/gm) || [];
+        // Find all bullet points (handles various bullet styles: •, -, *, and markdown)
+        const bullets = experienceText.match(/^[\s]*[•\-\*]\s*.+$/gm) || [];
+        
         // Target 2-3 keywords per bullet for natural integration
-        const keywordsPerBullet = Math.ceil(remaining.length * 0.7 / Math.max(bullets.length, 1));
-        const maxKeywordsInExp = Math.min(remaining.length, bullets.length * 3);
+        const maxKeywordsInExp = Math.min(remaining.length, Math.max(bullets.length * 3, 15));
         const toInject = remaining.slice(0, maxKeywordsInExp);
         remaining = remaining.slice(maxKeywordsInExp);
         
@@ -1363,7 +1370,7 @@ class ATSTailor {
           if (keywordIdx >= toInject.length) return;
           
           // Get 1-3 keywords for this bullet
-          const numToAdd = Math.min(3, Math.ceil((toInject.length - keywordIdx) / (bullets.length - idx)));
+          const numToAdd = Math.min(3, Math.ceil((toInject.length - keywordIdx) / Math.max(bullets.length - idx, 1)));
           const kwToAdd = toInject.slice(keywordIdx, keywordIdx + numToAdd);
           keywordIdx += numToAdd;
           
@@ -1374,16 +1381,13 @@ class ATSTailor {
           let enhanced = bullet;
           
           if (kwToAdd.length === 1) {
-            // Single keyword: "...by utilizing [keyword]"
             enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]}.`);
           } else if (kwToAdd.length === 2) {
-            // Two keywords: "...through [kw1] and [kw2]"
             enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]} and ${kwToAdd[1]}.`);
           } else {
-            // Multiple: "...incorporating [kw1], [kw2], and [kw3]"
             const last = kwToAdd.pop();
             enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd.join(', ')}, and ${last}.`);
-            kwToAdd.push(last); // Put it back for tracking
+            kwToAdd.push(last);
           }
           
           experienceText = experienceText.replace(bullet, enhanced);
@@ -1396,10 +1400,11 @@ class ATSTailor {
     
     // STEP 2: Inject 5-8 keywords into Summary as expertise
     if (remaining.length > 0) {
-      const summaryMatch = tailoredCV.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+      const summaryMatch = tailoredCV.match(sectionPatterns.summary);
       if (summaryMatch) {
         const summaryStart = summaryMatch.index;
         const summaryEnd = summaryStart + summaryMatch[0].length;
+        const summaryHeader = summaryMatch[1];
         const summaryText = summaryMatch[2];
         
         const toInject = remaining.slice(0, Math.min(8, remaining.length));
@@ -1416,8 +1421,10 @@ class ATSTailor {
         }
         
         const newSummary = summaryText.trim() + injectionPhrase;
+        const headerPrefix = summaryMatch[0].startsWith('\n') ? '\n' : '';
+        const headerMark = summaryMatch[0].includes('#') ? '# ' : '';
         tailoredCV = tailoredCV.substring(0, summaryStart) + 
-                     summaryMatch[1] + '\n' + newSummary + 
+                     headerPrefix + headerMark + summaryHeader + '\n' + newSummary + 
                      tailoredCV.substring(summaryEnd);
         injectedKeywords.push(...toInject);
       }
@@ -1425,29 +1432,47 @@ class ATSTailor {
     
     // STEP 3: Inject remaining into Skills section
     if (remaining.length > 0) {
-      const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+      const skillsMatch = tailoredCV.match(sectionPatterns.skills);
       if (skillsMatch) {
         const skillsStart = skillsMatch.index;
         const skillsEnd = skillsStart + skillsMatch[0].length;
+        const skillsHeader = skillsMatch[1];
         const skillsText = skillsMatch[2];
         
         const toInject = remaining.slice(0, 15);
         remaining = remaining.slice(15);
         
-        const newSkills = skillsText.trim() + '\n• Additional: ' + toInject.join(', ');
+        // Add keywords in a natural format
+        const headerPrefix = skillsMatch[0].startsWith('\n') ? '\n' : '';
+        const headerMark = skillsMatch[0].includes('#') ? '# ' : '';
+        const additionalLine = '\n• Additional: ' + toInject.join(', ');
+        const newSkills = skillsText.trim() + additionalLine;
+        
         tailoredCV = tailoredCV.substring(0, skillsStart) + 
-                     skillsMatch[1] + '\n' + newSkills + 
+                     headerPrefix + headerMark + skillsHeader + '\n' + newSkills + 
                      tailoredCV.substring(skillsEnd);
         injectedKeywords.push(...toInject);
       }
     }
     
-    // STEP 4: CATCH-ALL - Any remaining keywords as Technical Proficiencies
+    // STEP 4: CATCH-ALL - Any remaining keywords MUST be added
     if (remaining.length > 0) {
-      const additionalSection = `\n\nTECHNICAL PROFICIENCIES\n• ${remaining.join(' • ')}`;
+      // Group keywords by type for cleaner formatting
+      const techKeywords = remaining.filter(kw => 
+        /^[A-Z]|^[a-z]+\.[a-z]+$|aws|gcp|azure|docker|kubernetes|python|java|php|node|react|sql|mysql|postgresql|mongodb/i.test(kw)
+      );
+      const otherKeywords = remaining.filter(kw => !techKeywords.includes(kw));
+      
+      let additionalSection = '';
+      if (techKeywords.length > 0) {
+        additionalSection += `\n\nTECHNICAL PROFICIENCIES\n${techKeywords.join(' • ')}`;
+      }
+      if (otherKeywords.length > 0) {
+        additionalSection += `\n\nADDITIONAL COMPETENCIES\n${otherKeywords.join(' • ')}`;
+      }
       
       // Insert before certifications/achievements or append to end
-      const insertPoint = tailoredCV.search(/\n(CERTIFICATIONS|ACHIEVEMENTS|EDUCATION|PROJECTS)\n/i);
+      const insertPoint = tailoredCV.search(/\n(?:#\s*)?(CERTIFICATIONS|ACHIEVEMENTS|EDUCATION|PROJECTS)\s*\n/i);
       if (insertPoint > 0) {
         tailoredCV = tailoredCV.substring(0, insertPoint) + additionalSection + tailoredCV.substring(insertPoint);
       } else {
@@ -1456,6 +1481,7 @@ class ATSTailor {
       injectedKeywords.push(...remaining);
     }
     
+    console.log(`[ATS Tailor] Injected ${injectedKeywords.length} keywords into CV`);
     return { tailoredCV, injectedKeywords };
   }
 
@@ -2065,24 +2091,41 @@ class ATSTailor {
     this.showToast('Attaching documents...', 'success');
     
     try {
-      // PARALLEL: Attach both documents simultaneously for 40% speed boost
-      const [cvResult, coverResult] = await Promise.all([
-        this.attachDocument('cv').catch(e => ({ error: e.message })),
-        new Promise(r => setTimeout(r, 100)).then(() => this.attachDocument('cover').catch(e => ({ error: e.message })))
-      ]);
-      
-      // Check results
-      const cvOk = !cvResult?.error;
-      const coverOk = !coverResult?.error;
-      
-      if (cvOk && coverOk) {
-        this.showToast('Both documents attached!', 'success');
-      } else if (cvOk) {
-        this.showToast('CV attached, cover letter field not found', 'success');
-      } else if (coverOk) {
-        this.showToast('Cover letter attached, CV field not found', 'success');
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) throw new Error('No active tab');
+
+      // Use new attachBothDocuments message for simultaneous attachment
+      const res = await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(
+          tab.id,
+          {
+            action: 'attachBothDocuments',
+            cvPdf: this.generatedDocuments.cvPdf,
+            cvFilename: this.generatedDocuments.cvFileName || 'Applicant_CV.pdf',
+            coverPdf: this.generatedDocuments.coverPdf,
+            coverFilename: this.generatedDocuments.coverFileName || 'Applicant_Cover_Letter.pdf',
+            coverText: this.generatedDocuments.coverLetter,
+          },
+          (response) => {
+            const err = chrome.runtime.lastError;
+            if (err) return reject(new Error(err.message || 'Send message failed'));
+            resolve(response);
+          }
+        );
+      });
+
+      if (res?.success) {
+        if (res.cvAttached && res.coverAttached) {
+          this.showToast('Both documents attached!', 'success');
+        } else if (res.cvAttached) {
+          this.showToast('CV attached, cover letter field not found', 'success');
+        } else if (res.coverAttached) {
+          this.showToast('Cover letter attached, CV field not found', 'success');
+        } else {
+          this.showToast(res.message || 'Documents attached', 'success');
+        }
       } else {
-        this.showToast('Could not find file upload fields', 'error');
+        this.showToast(res?.message || 'Could not find file upload fields', 'error');
       }
     } catch (error) {
       console.error('[ATS Tailor] attachBothDocuments error:', error);

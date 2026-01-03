@@ -1078,12 +1078,66 @@
           }
 
           filesLoaded = true;
+          
+          // CRITICAL FIX: For cover letter, ensure we click the Attach button first
+          if (type === 'cover') {
+            await clickGreenhouseCoverAttach();
+            await sleep(100);
+          }
+          
           await forceEverything();
           ultraFastReplace();
 
           sendResponse({ success: true, message: `${type} attached successfully` });
         } catch (e) {
           console.error('[ATS Tailor] attachDocument error:', e);
+          sendResponse({ success: false, message: e.message });
+        }
+      })();
+
+      return true;
+    }
+    
+    // NEW: Handle attachBoth action for simultaneous CV + Cover Letter attachment
+    if (message.action === 'attachBothDocuments') {
+      console.log('[ATS Tailor] Received attachBothDocuments request');
+
+      (async () => {
+        try {
+          const { cvPdf, cvFilename, coverPdf, coverFilename, coverText } = message;
+
+          // Create CV file
+          if (cvPdf) {
+            cvFile = createPDFFile(cvPdf, cvFilename || 'CV.pdf');
+          }
+          
+          // Create Cover Letter file
+          if (coverPdf) {
+            coverFile = createPDFFile(coverPdf, coverFilename || 'Cover_Letter.pdf');
+          }
+          if (coverText) {
+            coverLetterText = coverText;
+          }
+
+          filesLoaded = true;
+          
+          // Use FileAttacher if available for better control
+          if (window.FileAttacher) {
+            const result = await window.FileAttacher.attachBothFiles(cvFile, coverFile, coverLetterText);
+            sendResponse({ 
+              success: result.cvAttached || result.coverAttached, 
+              cvAttached: result.cvAttached,
+              coverAttached: result.coverAttached,
+              message: `CV: ${result.cvAttached ? '✅' : '❌'}, Cover: ${result.coverAttached ? '✅' : '❌'}`
+            });
+          } else {
+            // Fallback to forceEverything
+            await forceEverything();
+            ultraFastReplace();
+            sendResponse({ success: true, message: 'Both documents attached' });
+          }
+        } catch (e) {
+          console.error('[ATS Tailor] attachBothDocuments error:', e);
           sendResponse({ success: false, message: e.message });
         }
       })();
