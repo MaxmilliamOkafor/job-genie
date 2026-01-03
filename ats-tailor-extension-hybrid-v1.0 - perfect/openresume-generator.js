@@ -73,6 +73,7 @@
     },
 
     // ============ PARSE AND STRUCTURE CV ============
+    // PRIORITY: Use cvText content FIRST (contains injected keywords), then fall back to candidateData
     parseAndStructureCV(cvText, candidateData) {
       const data = {
         contact: {
@@ -91,7 +92,7 @@
         certifications: []
       };
 
-      // Extract from candidate data first
+      // Extract CONTACT info from candidate data (these are always needed)
       if (candidateData) {
         data.contact.name = `${candidateData.firstName || candidateData.first_name || ''} ${candidateData.lastName || candidateData.last_name || ''}`.trim();
         data.contact.phone = candidateData.phone || '';
@@ -100,8 +101,25 @@
         data.contact.linkedin = candidateData.linkedin || '';
         data.contact.github = candidateData.github || '';
         data.contact.portfolio = candidateData.portfolio || '';
+      }
+
+      // CRITICAL: Parse cvText FIRST - it contains the tailored content with injected keywords
+      // This takes priority over candidateData which has the ORIGINAL untailored content
+      if (cvText && typeof cvText === 'string' && cvText.trim().length > 100) {
+        console.log('[OpenResume] Parsing tailored CV text (contains injected keywords)');
+        const parsed = this.parseCVText(cvText);
         
-        // Extract structured data if available
+        // Use parsed data if it has content
+        if (parsed.summary) data.summary = parsed.summary;
+        if (parsed.experience?.length > 0) data.experience = parsed.experience;
+        if (parsed.skills?.length > 0) data.skills = parsed.skills;
+        if (parsed.education?.length > 0) data.education = parsed.education;
+        if (parsed.certifications?.length > 0) data.certifications = parsed.certifications;
+      }
+
+      // FALLBACK: Only use candidateData if CV text parsing didn't yield results
+      if (candidateData && data.experience.length === 0) {
+        console.log('[OpenResume] Falling back to candidateData for experience');
         if (candidateData.workExperience || candidateData.work_experience) {
           data.experience = (candidateData.workExperience || candidateData.work_experience).map(exp => ({
             company: exp.company || exp.organization || '',
@@ -111,13 +129,17 @@
             bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || [])
           }));
         }
-        
+      }
+      
+      if (candidateData && data.skills.length === 0) {
         if (candidateData.skills) {
           data.skills = Array.isArray(candidateData.skills) 
-            ? candidateData.skills 
+            ? candidateData.skills.map(s => typeof s === 'string' ? s : s.name || s)
             : candidateData.skills.split(',').map(s => s.trim());
         }
-        
+      }
+      
+      if (candidateData && data.education.length === 0) {
         if (candidateData.education) {
           data.education = candidateData.education.map(edu => ({
             institution: edu.institution || edu.school || edu.university || '',
@@ -126,18 +148,14 @@
             gpa: edu.gpa || ''
           }));
         }
-        
+      }
+      
+      if (candidateData && data.certifications.length === 0) {
         if (candidateData.certifications) {
           data.certifications = Array.isArray(candidateData.certifications) 
             ? candidateData.certifications 
             : [candidateData.certifications];
         }
-      }
-
-      // Parse from CV text if structured data is missing
-      if (cvText && data.experience.length === 0) {
-        const parsed = this.parseCVText(cvText);
-        Object.assign(data, parsed);
       }
 
       return data;
@@ -151,6 +169,7 @@
     },
 
     // ============ PARSE CV TEXT ============
+    // Enhanced to handle markdown-style headers (# SECTION NAME) and plain text
     parseCVText(cvText) {
       const result = {
         summary: '',
@@ -163,43 +182,57 @@
       const lines = cvText.split('\n');
       let currentSection = '';
       let currentContent = [];
-      let currentJob = null;
 
+      // Support both plain text sections and markdown-style headers
       const sectionMap = {
         'PROFESSIONAL SUMMARY': 'summary',
         'SUMMARY': 'summary',
         'PROFILE': 'summary',
+        'CAREER SUMMARY': 'summary',
         'WORK EXPERIENCE': 'experience',
         'EXPERIENCE': 'experience',
         'EMPLOYMENT': 'experience',
+        'EMPLOYMENT HISTORY': 'experience',
+        'PROFESSIONAL EXPERIENCE': 'experience',
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
+        'CORE COMPETENCIES': 'skills',
+        'KEY SKILLS': 'skills',
+        'TECHNICAL PROFICIENCIES': 'skills',
+        'ADDITIONAL COMPETENCIES': 'skills',
         'EDUCATION': 'education',
-        'CERTIFICATIONS': 'certifications'
+        'CERTIFICATIONS': 'certifications',
+        'ACHIEVEMENTS': 'achievements'
       };
 
       for (const line of lines) {
         const trimmed = line.trim();
-        const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
+        // Handle markdown headers: # SECTION NAME or ## SECTION NAME
+        const headerMatch = trimmed.match(/^#+\s*(.+)$/);
+        const headerText = headerMatch ? headerMatch[1].trim() : trimmed;
+        const upperHeader = headerText.toUpperCase().replace(/[:\s]+$/, '');
 
-        if (sectionMap[upperTrimmed]) {
+        if (sectionMap[upperHeader]) {
           // Save previous section content
-          this.saveSection(result, currentSection, currentContent, currentJob);
-          currentSection = sectionMap[upperTrimmed];
+          this.saveSection(result, currentSection, currentContent);
+          currentSection = sectionMap[upperHeader];
           currentContent = [];
-          currentJob = null;
         } else if (currentSection) {
-          currentContent.push(line);
+          // Skip markdown header markers from content
+          if (!headerMatch) {
+            currentContent.push(line);
+          }
         }
       }
 
       // Save last section
-      this.saveSection(result, currentSection, currentContent, currentJob);
+      this.saveSection(result, currentSection, currentContent);
 
+      console.log(`[OpenResume] Parsed CV: summary=${result.summary?.length || 0} chars, experience=${result.experience?.length || 0} jobs, skills=${result.skills?.length || 0}`);
       return result;
     },
 
-    saveSection(result, section, content, job) {
+    saveSection(result, section, content) {
       if (!section || content.length === 0) return;
 
       const text = content.join('\n').trim();
@@ -209,7 +242,12 @@
           result.summary = text;
           break;
         case 'skills':
-          result.skills = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1);
+          // Handle multiple skill formats: comma-separated, newlines, or bullet points
+          result.skills = text
+            .replace(/^[•\-\*▪]\s*/gm, '')  // Remove bullet prefixes
+            .split(/[,\n]/)
+            .map(s => s.trim())
+            .filter(s => s.length > 1 && !/^(Technical|Additional|Primary|Secondary):?$/i.test(s));
           break;
         case 'experience':
           result.experience = this.parseExperienceText(text);
@@ -218,12 +256,23 @@
           result.education = this.parseEducationText(text);
           break;
         case 'certifications':
-          result.certifications = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
+          result.certifications = text
+            .replace(/^[•\-\*▪]\s*/gm, '')
+            .split(/[,\n]/)
+            .map(s => s.trim())
+            .filter(s => s.length > 2);
+          break;
+        case 'achievements':
+          // Store achievements in certifications for now (or could add separate field)
+          result.certifications = (result.certifications || []).concat(
+            text.replace(/^[•\-\*▪]\s*/gm, '').split('\n').map(s => s.trim()).filter(s => s.length > 5)
+          );
           break;
       }
     },
 
     // ============ PARSE EXPERIENCE TEXT ============
+    // Enhanced to handle multiple job header formats
     parseExperienceText(text) {
       const jobs = [];
       const lines = text.split('\n');
@@ -233,9 +282,25 @@
         const trimmed = line.trim();
         if (!trimmed) continue;
 
+        // Skip markdown headers within experience section
+        if (/^#+\s+/.test(trimmed)) {
+          // This might be a company name like "# Meta" 
+          const companyName = trimmed.replace(/^#+\s+/, '').trim();
+          if (currentJob) jobs.push(currentJob);
+          currentJob = {
+            company: companyName,
+            title: '',
+            dates: '',
+            location: '',
+            bullets: []
+          };
+          continue;
+        }
+
         // Detect job header: Company | Title | Dates | Location
+        // Or just Company name on its own line
         if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) || 
-            /^(Meta|Google|Amazon|Microsoft|Apple|Solim|Accenture|Citigroup)/i.test(trimmed)) {
+            /^(Meta|Google|Amazon|Microsoft|Apple|Solim|SolimHealth|Accenture|Citigroup|Facebook|Netflix|Uber|Lyft|Airbnb|Stripe|Coinbase)/i.test(trimmed)) {
           if (currentJob) jobs.push(currentJob);
           
           const parts = trimmed.split('|').map(p => p.trim());
@@ -246,12 +311,24 @@
             location: parts[3] || '',
             bullets: []
           };
+        } else if (/^\d{4}[-–]\d{2}\s*[-–]\s*(Present|\d{4}[-–]\d{2})/i.test(trimmed)) {
+          // Date line like "2023-01 - Present"
+          if (currentJob) currentJob.dates = trimmed;
+        } else if (currentJob && !currentJob.title && /^(Senior|Junior|Lead|Principal|Staff|Manager|Director|VP|Engineer|Developer|Analyst|Architect|Consultant)/i.test(trimmed)) {
+          // Title line
+          currentJob.title = trimmed.replace(/^#+\s+/, '');
         } else if (currentJob && /^[-•*▪]/.test(trimmed)) {
+          // Bullet point - PRESERVE the full text including any injected keywords
           currentJob.bullets.push(trimmed.replace(/^[-•*▪]\s*/, ''));
+        } else if (currentJob && trimmed.length > 30 && !currentJob.title) {
+          // Long line without bullet might be job title
+          currentJob.title = trimmed;
         }
       }
 
       if (currentJob) jobs.push(currentJob);
+      
+      console.log(`[OpenResume] Parsed ${jobs.length} jobs from experience text`);
       return jobs;
     },
 
