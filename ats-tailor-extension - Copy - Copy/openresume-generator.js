@@ -96,7 +96,9 @@
         data.contact.name = `${candidateData.firstName || candidateData.first_name || ''} ${candidateData.lastName || candidateData.last_name || ''}`.trim();
         data.contact.phone = candidateData.phone || '';
         data.contact.email = candidateData.email || '';
-        data.contact.location = candidateData.city || candidateData.location || '';
+        // CRITICAL: Strip "Remote" from location - user rule: never include Remote in CV
+        const rawLocation = candidateData.city || candidateData.location || '';
+        data.contact.location = this.normalizeLocation(rawLocation) || 'Dublin, IE';
         data.contact.linkedin = candidateData.linkedin || '';
         data.contact.github = candidateData.github || '';
         data.contact.portfolio = candidateData.portfolio || '';

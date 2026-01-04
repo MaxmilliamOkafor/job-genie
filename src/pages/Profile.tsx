@@ -744,10 +744,56 @@ const Profile = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {editMode && (
+              <div className="flex gap-2 mb-4">
+                <Input 
+                  placeholder="Language name" 
+                  id="newLangName"
+                  className="flex-1"
+                />
+                <Select defaultValue="Professional">
+                  <SelectTrigger className="w-40" id="newLangProf">
+                    <SelectValue placeholder="Proficiency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Native">Native</SelectItem>
+                    <SelectItem value="Fluent">Fluent</SelectItem>
+                    <SelectItem value="Professional">Professional</SelectItem>
+                    <SelectItem value="Intermediate">Intermediate</SelectItem>
+                    <SelectItem value="Basic">Basic</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button 
+                  onClick={() => {
+                    const nameInput = document.getElementById('newLangName') as HTMLInputElement;
+                    const profTrigger = document.getElementById('newLangProf');
+                    const proficiency = profTrigger?.textContent || 'Professional';
+                    if (nameInput.value.trim()) {
+                      const langs = [...(localProfile.languages || []), { name: nameInput.value.trim(), proficiency }];
+                      updateLocalField('languages', langs);
+                      nameInput.value = '';
+                    }
+                  }}
+                  size="icon"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               {(localProfile.languages || []).map((lang: any, i: number) => (
-                <Badge key={i} variant="secondary">
+                <Badge key={i} variant="secondary" className="flex items-center gap-1">
                   {lang.name} - {lang.proficiency}
+                  {editMode && (
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                      onClick={() => {
+                        const langs = [...(localProfile.languages || [])];
+                        langs.splice(i, 1);
+                        updateLocalField('languages', langs);
+                      }}
+                    />
+                  )}
                 </Badge>
               ))}
             </div>
@@ -763,14 +809,112 @@ const Profile = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(localProfile.work_experience || []).map((exp: any) => (
-              <div key={exp.id} className="border rounded-lg p-4">
+            {editMode && (
+              <Button 
+                variant="outline" 
+                className="w-full mb-4 gap-2"
+                onClick={() => {
+                  const newExp = {
+                    id: crypto.randomUUID(),
+                    title: 'New Position',
+                    company: 'Company Name',
+                    location: '',
+                    startDate: '2024-01',
+                    endDate: 'Present',
+                    skills: [],
+                    bullets: []
+                  };
+                  updateLocalField('work_experience', [...(localProfile.work_experience || []), newExp]);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                Add Work Experience
+              </Button>
+            )}
+            {(localProfile.work_experience || []).map((exp: any, expIndex: number) => (
+              <div key={exp.id} className="border rounded-lg p-4 relative">
+                {editMode && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 h-6 w-6"
+                    onClick={() => {
+                      const exps = [...(localProfile.work_experience || [])];
+                      exps.splice(expIndex, 1);
+                      updateLocalField('work_experience', exps);
+                    }}
+                  >
+                    <X className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
                 <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-semibold">{exp.title}</h3>
-                    <p className="text-muted-foreground">{exp.company} • {exp.location}</p>
+                  <div className="flex-1 mr-8">
+                    {editMode ? (
+                      <div className="space-y-2">
+                        <Input 
+                          value={exp.title || ''} 
+                          onChange={(e) => {
+                            const exps = [...(localProfile.work_experience || [])];
+                            exps[expIndex] = { ...exps[expIndex], title: e.target.value };
+                            updateLocalField('work_experience', exps);
+                          }}
+                          placeholder="Job Title"
+                          className="font-semibold"
+                        />
+                        <div className="flex gap-2">
+                          <Input 
+                            value={exp.company || ''} 
+                            onChange={(e) => {
+                              const exps = [...(localProfile.work_experience || [])];
+                              exps[expIndex] = { ...exps[expIndex], company: e.target.value };
+                              updateLocalField('work_experience', exps);
+                            }}
+                            placeholder="Company"
+                            className="flex-1"
+                          />
+                          <Input 
+                            value={exp.location || ''} 
+                            onChange={(e) => {
+                              const exps = [...(localProfile.work_experience || [])];
+                              exps[expIndex] = { ...exps[expIndex], location: e.target.value };
+                              updateLocalField('work_experience', exps);
+                            }}
+                            placeholder="Location"
+                            className="w-32"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Input 
+                            value={exp.startDate || ''} 
+                            onChange={(e) => {
+                              const exps = [...(localProfile.work_experience || [])];
+                              exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
+                              updateLocalField('work_experience', exps);
+                            }}
+                            placeholder="Start Date"
+                            className="w-28"
+                          />
+                          <span className="self-center">-</span>
+                          <Input 
+                            value={exp.endDate || ''} 
+                            onChange={(e) => {
+                              const exps = [...(localProfile.work_experience || [])];
+                              exps[expIndex] = { ...exps[expIndex], endDate: e.target.value };
+                              updateLocalField('work_experience', exps);
+                            }}
+                            placeholder="End Date"
+                            className="w-28"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="font-semibold">{exp.title}</h3>
+                        <p className="text-muted-foreground">{exp.company} • {exp.location}</p>
+                      </>
+                    )}
                   </div>
-                  <Badge variant="outline">{exp.startDate} - {exp.endDate}</Badge>
+                  {!editMode && <Badge variant="outline">{exp.startDate} - {exp.endDate}</Badge>}
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {(exp.skills || []).slice(0, 6).map((skill: string, i: number) => (
@@ -791,11 +935,92 @@ const Profile = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(localProfile.education || []).map((edu: any) => (
-              <div key={edu.id} className="border rounded-lg p-4">
-                <h3 className="font-semibold">{edu.degree}</h3>
-                <p className="text-muted-foreground">{edu.institution}</p>
-                <p className="text-sm text-muted-foreground mt-1">GPA: {edu.gpa}</p>
+            {editMode && (
+              <Button 
+                variant="outline" 
+                className="w-full mb-4 gap-2"
+                onClick={() => {
+                  const newEdu = {
+                    id: crypto.randomUUID(),
+                    degree: 'Degree Name',
+                    institution: 'Institution Name',
+                    gpa: '',
+                    graduationDate: ''
+                  };
+                  updateLocalField('education', [...(localProfile.education || []), newEdu]);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                Add Education
+              </Button>
+            )}
+            {(localProfile.education || []).map((edu: any, eduIndex: number) => (
+              <div key={edu.id} className="border rounded-lg p-4 relative">
+                {editMode && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 h-6 w-6"
+                    onClick={() => {
+                      const edus = [...(localProfile.education || [])];
+                      edus.splice(eduIndex, 1);
+                      updateLocalField('education', edus);
+                    }}
+                  >
+                    <X className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+                {editMode ? (
+                  <div className="space-y-2 mr-8">
+                    <Input 
+                      value={edu.degree || ''} 
+                      onChange={(e) => {
+                        const edus = [...(localProfile.education || [])];
+                        edus[eduIndex] = { ...edus[eduIndex], degree: e.target.value };
+                        updateLocalField('education', edus);
+                      }}
+                      placeholder="Degree"
+                      className="font-semibold"
+                    />
+                    <Input 
+                      value={edu.institution || ''} 
+                      onChange={(e) => {
+                        const edus = [...(localProfile.education || [])];
+                        edus[eduIndex] = { ...edus[eduIndex], institution: e.target.value };
+                        updateLocalField('education', edus);
+                      }}
+                      placeholder="Institution"
+                    />
+                    <div className="flex gap-2">
+                      <Input 
+                        value={edu.gpa || ''} 
+                        onChange={(e) => {
+                          const edus = [...(localProfile.education || [])];
+                          edus[eduIndex] = { ...edus[eduIndex], gpa: e.target.value };
+                          updateLocalField('education', edus);
+                        }}
+                        placeholder="GPA"
+                        className="w-24"
+                      />
+                      <Input 
+                        value={edu.graduationDate || ''} 
+                        onChange={(e) => {
+                          const edus = [...(localProfile.education || [])];
+                          edus[eduIndex] = { ...edus[eduIndex], graduationDate: e.target.value };
+                          updateLocalField('education', edus);
+                        }}
+                        placeholder="Graduation Date"
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="font-semibold">{edu.degree}</h3>
+                    <p className="text-muted-foreground">{edu.institution}</p>
+                    <p className="text-sm text-muted-foreground mt-1">GPA: {edu.gpa}</p>
+                  </>
+                )}
               </div>
             ))}
           </CardContent>
@@ -841,10 +1066,52 @@ const Profile = () => {
             <CardTitle>Excluded Companies</CardTitle>
           </CardHeader>
           <CardContent>
+            {editMode && (
+              <div className="flex gap-2 mb-4">
+                <Input 
+                  placeholder="Add company to exclude" 
+                  id="newExcludedCompany"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const input = e.target as HTMLInputElement;
+                      if (input.value.trim()) {
+                        const companies = [...(localProfile.excluded_companies || []), input.value.trim()];
+                        updateLocalField('excluded_companies', companies);
+                        input.value = '';
+                      }
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={() => {
+                    const input = document.getElementById('newExcludedCompany') as HTMLInputElement;
+                    if (input.value.trim()) {
+                      const companies = [...(localProfile.excluded_companies || []), input.value.trim()];
+                      updateLocalField('excluded_companies', companies);
+                      input.value = '';
+                    }
+                  }}
+                  size="icon"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               {(localProfile.excluded_companies || []).map((company: string, i: number) => (
-                <Badge key={i} variant="destructive" className="text-xs">
+                <Badge key={i} variant="destructive" className="text-xs flex items-center gap-1">
                   {company}
+                  {editMode && (
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-white" 
+                      onClick={() => {
+                        const companies = [...(localProfile.excluded_companies || [])];
+                        companies.splice(i, 1);
+                        updateLocalField('excluded_companies', companies);
+                      }}
+                    />
+                  )}
                 </Badge>
               ))}
             </div>
