@@ -77,6 +77,23 @@ class ATSTailor {
     this.currentPreviewTab = 'cv';
     this.autoTailorEnabled = true;
     
+    // AI Provider toggle (Kimi K2 or OpenAI)
+    this.aiProvider = 'kimi'; // 'kimi' or 'openai' - Kimi is default/primary
+    
+    // Workday multi-page state persistence
+    this.workdayState = {
+      currentStep: 0,
+      totalSteps: 0,
+      formData: {},
+      jobId: null,
+      startedAt: null,
+      lastUpdated: null
+    };
+    
+    // Base CV from profile (cached for fast reuse)
+    this.baseCVContent = null;
+    this.baseCVSource = null; // 'uploaded' or 'generated'
+    
     // Performance: Caches for JD text and keywords per job URL
     this.jdCache = new Map(); // url -> { jd, timestamp }
     this.keywordCache = new Map(); // url -> { keywords, timestamp }
@@ -101,13 +118,181 @@ class ATSTailor {
 
   async init() {
     await this.loadSession();
+    await this.loadAIProviderSettings();
+    await this.loadWorkdayState();
+    await this.loadBaseCVFromProfile();
     this.bindEvents();
     this.updateUI();
+    this.updateAIProviderUI();
 
     // Auto-detect job when popup opens (but do NOT auto-tailor)
     if (this.session) {
       await this.refreshSessionIfNeeded();
       await this.detectCurrentJob();
+    }
+  }
+  
+  // ============ AI PROVIDER TOGGLE LOGIC (Kimi K2 / OpenAI) ============
+  
+  async loadAIProviderSettings() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['ai_provider', 'kimi_enabled', 'openai_enabled'], (result) => {
+        // Default to Kimi K2 as primary
+        this.aiProvider = result.ai_provider || 'kimi';
+        resolve();
+      });
+    });
+  }
+  
+  async saveAIProviderSettings() {
+    await chrome.storage.local.set({ ai_provider: this.aiProvider });
+  }
+  
+  updateAIProviderUI() {
+    const toggle = document.getElementById('aiProviderToggle');
+    const kimiStatus = document.getElementById('kimiStatus');
+    const openaiStatus = document.getElementById('openaiStatus');
+    const providerLabel = document.getElementById('currentProviderLabel');
+    const modelLabel = document.getElementById('currentModelLabel');
+    
+    if (toggle) {
+      toggle.checked = this.aiProvider === 'openai';
+    }
+    
+    if (kimiStatus) {
+      kimiStatus.classList.toggle('active', this.aiProvider === 'kimi');
+    }
+    
+    if (openaiStatus) {
+      openaiStatus.classList.toggle('active', this.aiProvider === 'openai');
+    }
+    
+    if (providerLabel) {
+      providerLabel.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    }
+    
+    if (modelLabel) {
+      modelLabel.textContent = this.aiProvider === 'kimi' ? 'kimi-k2-0711-preview' : 'gpt-4o-mini';
+    }
+  }
+  
+  toggleAIProvider() {
+    this.aiProvider = this.aiProvider === 'kimi' ? 'openai' : 'kimi';
+    this.saveAIProviderSettings();
+    this.updateAIProviderUI();
+    this.showToast(`Switched to ${this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI'}`, 'success');
+  }
+  
+  // ============ WORKDAY MULTI-PAGE STATE PERSISTENCE ============
+  
+  async loadWorkdayState() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['workday_multi_page_state'], (result) => {
+        if (result.workday_multi_page_state) {
+          this.workdayState = { ...this.workdayState, ...result.workday_multi_page_state };
+        }
+        resolve();
+      });
+    });
+  }
+  
+  async saveWorkdayState() {
+    this.workdayState.lastUpdated = Date.now();
+    await chrome.storage.local.set({ workday_multi_page_state: this.workdayState });
+  }
+  
+  async clearWorkdayState() {
+    this.workdayState = {
+      currentStep: 0,
+      totalSteps: 0,
+      formData: {},
+      jobId: null,
+      startedAt: null,
+      lastUpdated: null
+    };
+    await chrome.storage.local.remove(['workday_multi_page_state']);
+  }
+  
+  updateWorkdayProgress(step, totalSteps, formData = {}) {
+    this.workdayState.currentStep = step;
+    this.workdayState.totalSteps = totalSteps;
+    this.workdayState.formData = { ...this.workdayState.formData, ...formData };
+    this.saveWorkdayState();
+    this.updateWorkdayProgressUI();
+  }
+  
+  updateWorkdayProgressUI() {
+    const progressEl = document.getElementById('workdayProgress');
+    const stepIndicators = document.querySelectorAll('.workday-step-indicator');
+    const statusEl = document.getElementById('workdayFlowStatus');
+    
+    if (progressEl && this.workdayState.totalSteps > 0) {
+      const percent = (this.workdayState.currentStep / this.workdayState.totalSteps) * 100;
+      progressEl.style.width = `${percent}%`;
+    }
+    
+    stepIndicators.forEach((indicator, idx) => {
+      indicator.classList.toggle('active', idx === this.workdayState.currentStep);
+      indicator.classList.toggle('complete', idx < this.workdayState.currentStep);
+    });
+    
+    if (statusEl) {
+      const stepNames = ['My Information', 'Experience', 'Review'];
+      statusEl.textContent = stepNames[this.workdayState.currentStep] || `Step ${this.workdayState.currentStep + 1}`;
+    }
+  }
+  
+  // ============ BASE CV FROM PROFILE (PDF/DOCX) ============
+  
+  async loadBaseCVFromProfile() {
+    if (!this.session?.access_token || !this.session?.user?.id) {
+      return;
+    }
+    
+    try {
+      // Fetch profile with CV file info
+      const profileRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=cv_file_path,cv_file_name,cv_uploaded_at`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${this.session.access_token}`,
+          },
+        }
+      );
+      
+      if (!profileRes.ok) return;
+      
+      const profiles = await profileRes.json();
+      const profile = profiles?.[0];
+      
+      if (profile?.cv_file_path) {
+        // CV file exists in storage - download and parse it
+        console.log('[ATS Tailor] Found uploaded CV:', profile.cv_file_name);
+        this.baseCVSource = 'uploaded';
+        
+        // Try to fetch the parsed CV content (cached from parse-cv function)
+        const parsedCVRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=work_experience,education,skills,certifications,achievements`,
+          {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${this.session.access_token}`,
+            },
+          }
+        );
+        
+        if (parsedCVRes.ok) {
+          const parsedData = await parsedCVRes.json();
+          if (parsedData?.[0]) {
+            // Store parsed CV data for use in tailoring
+            this.baseCVContent = parsedData[0];
+            console.log('[ATS Tailor] Loaded parsed CV content from profile');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] Could not load base CV from profile:', e);
     }
   }
 
@@ -214,6 +399,9 @@ class ATSTailor {
     // NEW: Text download buttons
     document.getElementById('downloadCvText')?.addEventListener('click', () => this.downloadTextVersion('cv'));
     document.getElementById('downloadCoverText')?.addEventListener('click', () => this.downloadTextVersion('cover'));
+    
+    // AI Provider Toggle (Kimi K2 / OpenAI)
+    document.getElementById('aiProviderToggle')?.addEventListener('change', () => this.toggleAIProvider());
 
     // Bulk Apply Dashboard
     document.getElementById('openBulkApply')?.addEventListener('click', () => {
@@ -240,14 +428,14 @@ class ATSTailor {
     // View Extracted Keywords Button (fast local extraction)
     document.getElementById('viewKeywordsBtn')?.addEventListener('click', () => this.viewExtractedKeywords());
     
-    // AI Extract Keywords Button (GPT-4o-mini powered)
+    // AI Extract Keywords Button (provider-aware)
     document.getElementById('aiExtractBtn')?.addEventListener('click', () => this.aiExtractKeywords());
     
     // Skill Gap Analysis Button
     document.getElementById('skillGapBtn')?.addEventListener('click', () => this.showSkillGapPanel());
     document.getElementById('closeSkillGap')?.addEventListener('click', () => this.hideSkillGapPanel());
 
-    // Workday Full Flow
+    // Workday Full Flow with Multi-Page State
     document.getElementById('runWorkdayFlow')?.addEventListener('click', () => this.runWorkdayFlow());
     document.getElementById('workdayAutoToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
@@ -255,6 +443,10 @@ class ATSTailor {
       this.showToast(enabled ? 'Workday automation enabled' : 'Workday automation disabled', 'success');
     });
     document.getElementById('saveWorkdayCreds')?.addEventListener('click', () => this.saveWorkdayCredentials());
+    document.getElementById('clearWorkdayState')?.addEventListener('click', () => {
+      this.clearWorkdayState();
+      this.showToast('Workday state cleared', 'success');
+    });
     
     // Workday Snapshot Panel buttons
     document.getElementById('captureSnapshotBtn')?.addEventListener('click', () => this.captureWorkdaySnapshot());
@@ -272,6 +464,9 @@ class ATSTailor {
     
     // Check and show Workday snapshot panel if on Workday
     this.checkWorkdayAndShowSnapshot();
+    
+    // Update Workday progress UI on load
+    this.updateWorkdayProgressUI();
 
     // Preview tabs
     document.getElementById('previewCvTab')?.addEventListener('click', () => this.switchPreviewTab('cv'));
@@ -2177,9 +2372,9 @@ class ATSTailor {
       updateStep(2, 'working');
       updateProgress(20, 'Step 2/3: Loading profile & generating tailored CV...');
 
-      // Fetch user profile (API call)
+      // Fetch user profile (API call) - includes CV file info
       const profileRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`,
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code,cv_file_path,cv_file_name,cv_uploaded_at,preferred_ai_provider`,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,
@@ -2194,6 +2389,23 @@ class ATSTailor {
 
       const profileRows = await profileRes.json();
       const p = profileRows?.[0] || {};
+      
+      // Update AI provider from profile if set
+      if (p.preferred_ai_provider && ['kimi', 'openai'].includes(p.preferred_ai_provider)) {
+        this.aiProvider = p.preferred_ai_provider;
+        this.saveAIProviderSettings();
+        this.updateAIProviderUI();
+      }
+      
+      // Check if user has uploaded a base CV
+      const hasUploadedCV = !!p.cv_file_path;
+      if (hasUploadedCV) {
+        console.log('[ATS Tailor] Using uploaded CV as base document:', p.cv_file_name);
+        this.baseCVSource = 'uploaded';
+      } else {
+        console.log('[ATS Tailor] No uploaded CV found, using profile data to generate CV');
+        this.baseCVSource = 'generated';
+      }
 
       // Apply user location rules for tailoring/output
       // IMPORTANT: never include "Remote" in the candidate location line.
@@ -2210,10 +2422,11 @@ class ATSTailor {
         : (this.currentJob.location || this._defaultLocation);
       this.currentJob.location = effectiveJobLocation;
       
-      console.log('[ATS Tailor] Step 2 - Profile loaded, generating base CV...');
+      console.log(`[ATS Tailor] Step 2 - Profile loaded (AI: ${this.aiProvider}), generating base CV...`);
 
-      // Update step text
-      updateProgress(35, 'Step 2/3: AI generating tailored documents...');
+      // Update step text with AI provider info
+      const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+      updateProgress(35, `Step 2/3: ${providerName} generating tailored documents...`);
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
         method: 'POST',
@@ -2228,6 +2441,7 @@ class ATSTailor {
           location: this.currentJob.location || '',
           description: this.currentJob.description || '',
           requirements: [],
+          aiProvider: this.aiProvider, // Pass selected AI provider
           userProfile: {
             firstName: p.first_name || '',
             lastName: p.last_name || '',
@@ -2248,6 +2462,9 @@ class ATSTailor {
             address: p.address || undefined,
             state: p.state || undefined,
             zipCode: p.zip_code || undefined,
+            // Pass CV file info so backend knows user has uploaded a base CV
+            cvFilePath: p.cv_file_path || undefined,
+            cvFileName: p.cv_file_name || undefined,
           },
         }),
       });
