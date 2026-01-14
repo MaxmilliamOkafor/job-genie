@@ -90,26 +90,23 @@ const Profile = () => {
     
     setIsTestingKimiKey(true);
     try {
-      // Test Kimi K2 API key by making a simple request
-      const response = await fetch('https://api.moonshot.cn/v1/models', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localProfile.kimi_api_key}`,
-          'Content-Type': 'application/json',
-        },
+      const { data, error } = await supabase.functions.invoke('validate-kimi-key', {
+        body: { apiKey: localProfile.kimi_api_key }
       });
       
-      if (response.ok) {
-        toast.success('Kimi K2 API key is valid!');
-      } else if (response.status === 401) {
-        toast.error('Invalid Kimi API key');
+      if (error) throw error;
+      
+      if (data.valid) {
+        toast.success(data.message);
+        if (data.availableModels?.length > 0) {
+          console.log('Available Kimi models:', data.availableModels);
+        }
       } else {
-        toast.error(`Kimi API error: ${response.status}`);
+        toast.error(data.error || 'Invalid API key');
       }
     } catch (error: any) {
       console.error('Kimi API key test error:', error);
-      // If CORS blocks direct test, try via edge function or show generic success
-      toast.info('Kimi API key saved. Test it by using AI features.');
+      toast.error(error.message || 'Failed to validate API key');
     } finally {
       setIsTestingKimiKey(false);
     }
