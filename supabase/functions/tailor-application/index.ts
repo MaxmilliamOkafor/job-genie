@@ -90,10 +90,17 @@ async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any
   return { userId: user.id, supabase };
 }
 
-async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
+interface AIProviderConfig {
+  provider: 'openai' | 'kimi';
+  apiKey: string;
+  openaiEnabled: boolean;
+  kimiEnabled: boolean;
+}
+
+async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('openai_api_key')
+    .select('openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled')
     .eq('user_id', userId)
     .single();
   
@@ -101,7 +108,46 @@ async function getUserOpenAIKey(supabase: any, userId: string): Promise<string |
     return null;
   }
   
-  return data.openai_api_key;
+  const preferredProvider = data.preferred_ai_provider || 'openai';
+  const openaiEnabled = data.openai_enabled ?? true;
+  const kimiEnabled = data.kimi_enabled ?? true;
+  
+  // Determine which provider to use based on preference and availability
+  let activeProvider: 'openai' | 'kimi' = 'openai';
+  let activeKey: string | null = null;
+  
+  if (preferredProvider === 'kimi' && kimiEnabled && data.kimi_api_key) {
+    activeProvider = 'kimi';
+    activeKey = data.kimi_api_key;
+  } else if (preferredProvider === 'openai' && openaiEnabled && data.openai_api_key) {
+    activeProvider = 'openai';
+    activeKey = data.openai_api_key;
+  } else if (kimiEnabled && data.kimi_api_key) {
+    // Fallback to Kimi if OpenAI not available
+    activeProvider = 'kimi';
+    activeKey = data.kimi_api_key;
+  } else if (openaiEnabled && data.openai_api_key) {
+    // Fallback to OpenAI if Kimi not available
+    activeProvider = 'openai';
+    activeKey = data.openai_api_key;
+  }
+  
+  if (!activeKey) {
+    return null;
+  }
+  
+  return {
+    provider: activeProvider,
+    apiKey: activeKey,
+    openaiEnabled,
+    kimiEnabled
+  };
+}
+
+// Legacy function for backward compatibility
+async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
+  const config = await getUserAIConfig(supabase, userId);
+  return config?.provider === 'openai' ? config.apiKey : null;
 }
 
 async function logApiUsage(supabase: any, userId: string, functionName: string, tokensUsed: number): Promise<void> {
@@ -645,17 +691,20 @@ serve(async (req) => {
       });
     }
     
-    // Get user's OpenAI API key from their profile
-    const userOpenAIKey = await getUserOpenAIKey(supabase, userId);
+    // Get user's AI provider configuration
+    const aiConfig = await getUserAIConfig(supabase, userId);
     
-    if (!userOpenAIKey) {
+    if (!aiConfig) {
       return new Response(JSON.stringify({ 
-        error: "OpenAI API key not configured. Please add your API key in Profile settings." 
+        error: "No AI provider configured. Please add an API key (OpenAI or Kimi K2) in Profile settings." 
       }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    
+    const { provider: aiProvider, apiKey: userApiKey } = aiConfig;
+    console.log(`[User ${userId}] Using AI provider: ${aiProvider}`);
 
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
@@ -905,6 +954,25 @@ ${includeReferral ? `
     let lastError: Error | null = null;
     let response: Response | null = null;
     
+    // Determine API endpoint and model based on provider
+    const getApiConfig = () => {
+      if (aiProvider === 'kimi') {
+        return {
+          endpoint: 'https://api.moonshot.cn/v1/chat/completions',
+          model: 'moonshot-v1-8k',
+          providerName: 'Kimi K2'
+        };
+      }
+      return {
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-4o-mini',
+        providerName: 'OpenAI'
+      };
+    };
+    
+    const apiConfig = getApiConfig();
+    console.log(`Using ${apiConfig.providerName} with model ${apiConfig.model}`);
+    
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
@@ -913,14 +981,14 @@ ${includeReferral ? `
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        response = await fetch("https://api.openai.com/v1/chat/completions", {
+        response = await fetch(apiConfig.endpoint, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${userOpenAIKey}`,
+            Authorization: `Bearer ${userApiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: apiConfig.model,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt }
@@ -937,7 +1005,7 @@ ${includeReferral ? `
         if (response.status === 429) {
           // Rate limit - will retry
           const errorText = await response.text();
-          console.warn(`OpenAI rate limit (attempt ${attempt + 1}):`, errorText);
+          console.warn(`${apiConfig.providerName} rate limit (attempt ${attempt + 1}):`, errorText);
           lastError = new Error("Rate limit exceeded");
           
           // Check for Retry-After header
@@ -952,22 +1020,22 @@ ${includeReferral ? `
         
         // Non-retryable errors
         const errorText = await response.text();
-        console.error("OpenAI API error:", response.status, errorText);
+        console.error(`${apiConfig.providerName} API error:`, response.status, errorText);
         
         if (response.status === 401) {
-          return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
+          return new Response(JSON.stringify({ error: `Invalid ${apiConfig.providerName} API key. Please check your API key in Profile settings.` }), {
             status: 401,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         if (response.status === 402 || response.status === 403) {
-          return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
+          return new Response(JSON.stringify({ error: `${apiConfig.providerName} API billing issue. Please check your account.` }), {
             status: 402,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         
-        throw new Error(`OpenAI API error: ${response.status}`);
+        throw new Error(`${apiConfig.providerName} API error: ${response.status}`);
       } catch (fetchError) {
         console.error(`Fetch error (attempt ${attempt + 1}):`, fetchError);
         lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
@@ -980,7 +1048,7 @@ ${includeReferral ? `
     // If all retries exhausted due to rate limit
     if (!response || !response.ok) {
       return new Response(JSON.stringify({ 
-        error: "OpenAI API temporarily unavailable. Your quota may be exceeded. Please check your OpenAI billing and try again later.",
+        error: `${apiConfig.providerName} API temporarily unavailable. Your quota may be exceeded. Please check your billing and try again later.`,
         retryable: true
       }), {
         status: 429,
@@ -992,8 +1060,9 @@ ${includeReferral ? `
     const content = data.choices?.[0]?.message?.content;
     const tokensUsed = data.usage?.total_tokens || 0;
     
-    // Log API usage
-    await logApiUsage(supabase, userId, 'tailor-application', tokensUsed);
+    // Log API usage with provider suffix
+    const usageFunctionName = aiProvider === 'kimi' ? 'tailor-application-kimi' : 'tailor-application';
+    await logApiUsage(supabase, userId, usageFunctionName, tokensUsed);
     
     console.log(`AI response received (${tokensUsed} tokens), parsing...`);
     

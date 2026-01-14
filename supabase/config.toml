@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.extract-keywords-ai]
 verify_jwt = false
+
+[functions.validate-kimi-key]
+verify_jwt = false
