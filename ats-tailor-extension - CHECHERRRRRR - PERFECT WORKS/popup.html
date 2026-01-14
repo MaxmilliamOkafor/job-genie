@@ -3,30 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ATS Tailored CV & Cover Letter</title>
+  <title>QuantumHire AI - ATS Tailor</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
+    <!-- Premium Header with AI Provider Toggle -->
     <header class="header">
       <div class="logo">
-        <img src="icons/icon48.png" alt="ATS Tailor" class="logo-icon">
+        <img src="icons/icon48.png" alt="QuantumHire AI" class="logo-icon">
         <div class="logo-text">
-          <h1>ATS Tailor</h1>
-          <span class="tagline">OpenResume ATS CV + Cover Letter</span>
+          <h1>QuantumHire AI</h1>
+          <span class="tagline">ATS Optimisation Engine</span>
         </div>
       </div>
-      <div class="status-indicator" id="statusIndicator">
-        <span class="status-dot"></span>
-        <span class="status-text">Ready</span>
+      <div class="header-controls">
+        <div class="ai-provider-toggle" id="aiProviderToggle" title="Switch AI Provider">
+          <span class="provider-label provider-openai" id="providerOpenAI">OpenAI</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="aiProviderSwitch">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="provider-label provider-kimi active" id="providerKimi">Kimi K2</span>
+        </div>
+        <div class="status-indicator" id="statusIndicator">
+          <span class="status-dot"></span>
+          <span class="status-text">Ready</span>
+        </div>
       </div>
     </header>
 
     <!-- Login Section -->
     <section id="loginSection" class="section hidden">
       <div class="login-card">
-        <h2>🔐 Sign In</h2>
-        <p class="login-subtitle">Use your QuantumHire account</p>
+        <div class="login-header">
+          <div class="login-icon">🔐</div>
+          <h2>Sign In</h2>
+          <p class="login-subtitle">Use your QuantumHire account</p>
+        </div>
         <div class="input-group">
           <label for="email">Email</label>
           <input type="email" id="email" placeholder="your@email.com" autocomplete="email">
@@ -35,44 +49,71 @@
           <label for="password">Password</label>
           <input type="password" id="password" placeholder="Password" autocomplete="current-password">
         </div>
-        <button id="loginBtn" class="btn btn-primary btn-large">Sign In</button>
+        <button id="loginBtn" class="btn btn-primary btn-large btn-glow">
+          <span class="btn-text">Sign In</span>
+          <span class="btn-icon">→</span>
+        </button>
       </div>
     </section>
 
     <!-- Main Section -->
     <section id="mainSection" class="section hidden">
-      <!-- User Info -->
+      <!-- User Info Bar -->
       <div class="user-bar">
-        <span id="userEmail" class="user-email"></span>
+        <div class="user-info">
+          <span class="user-avatar" id="userAvatar">U</span>
+          <span id="userEmail" class="user-email"></span>
+        </div>
         <button id="logoutBtn" class="btn-link">Logout</button>
       </div>
 
-      <!-- Settings -->
-      <div class="mini-settings" aria-label="ATS Tailor settings">
-        <label class="toggle-row" for="autoTailorToggle">
-          <span class="toggle-label">Automatic ATS tailor</span>
-          <input type="checkbox" id="autoTailorToggle" />
-        </label>
-        <p class="toggle-help">Runs once per job only when upload fields are detected.</p>
-        
-        <!-- Default Location Setting for Remote Jobs -->
-        <div class="location-setting">
-          <label for="defaultLocationInput" class="setting-label">
-            <span class="setting-icon">📍</span>
-            Default Location (for Remote jobs)
-          </label>
-          <div class="location-input-wrapper">
-            <input type="text" id="defaultLocationInput" class="location-input" placeholder="e.g., Dublin, Ireland" value="Dublin, IE">
-            <button id="saveLocationBtn" class="btn btn-small btn-save-location" title="Save location">💾</button>
+      <!-- AI Provider Status Banner -->
+      <div class="ai-status-banner" id="aiStatusBanner">
+        <div class="ai-status-left">
+          <span class="ai-icon" id="aiProviderIcon">🚀</span>
+          <div class="ai-status-info">
+            <span class="ai-provider-name" id="activeProviderName">Kimi K2</span>
+            <span class="ai-provider-model" id="activeProviderModel">kimi-k2-0711-preview</span>
           </div>
-          <p class="setting-help">Used when job is Remote-only or location unavailable.</p>
+        </div>
+        <div class="ai-status-right">
+          <span class="ai-speed-badge" id="aiSpeedBadge">⚡ Fast</span>
         </div>
       </div>
 
-      <!-- Job Detection -->
+      <!-- Settings Panel -->
+      <div class="settings-panel">
+        <div class="setting-row">
+          <label class="toggle-row" for="autoTailorToggle">
+            <span class="toggle-label">
+              <span class="setting-icon">⚙️</span>
+              Automatic ATS tailoring
+            </span>
+            <input type="checkbox" id="autoTailorToggle" />
+          </label>
+        </div>
+        <p class="setting-help">Runs once per job when upload fields are detected.</p>
+        
+        <!-- Default Location Setting -->
+        <div class="location-setting">
+          <label for="defaultLocationInput" class="setting-label">
+            <span class="setting-icon">📍</span>
+            Default Location (Remote jobs)
+          </label>
+          <div class="location-input-wrapper">
+            <input type="text" id="defaultLocationInput" class="location-input" placeholder="e.g., Dublin, Ireland" value="Dublin, IE">
+            <button id="saveLocationBtn" class="btn btn-small btn-accent" title="Save location">💾</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detected Job Card -->
       <div class="job-card" id="jobCard">
         <div class="job-header">
-          <span class="job-label">Detected Job</span>
+          <div class="job-header-left">
+            <span class="job-label">Detected Job</span>
+            <span class="tier-badge hidden" id="tierBadge">Tier 1</span>
+          </div>
           <div class="job-header-actions">
             <span id="companyIndicator" class="company-indicator hidden" title="Company detection source">🏢</span>
             <button id="editJobTitle" class="btn-icon btn-edit hidden" title="Edit job title">✏️</button>
@@ -90,25 +131,30 @@
 
       <!-- History Panel -->
       <details class="history-panel" id="historyPanel">
-        <summary class="history-header">📜 Recent Tailored Jobs</summary>
+        <summary class="history-header">
+          <span class="history-icon">📜</span>
+          <span>Recent Tailored Jobs</span>
+        </summary>
         <div class="history-list" id="historyList">
           <p class="history-empty">No recent jobs. Tailor a job to see history.</p>
         </div>
       </details>
 
-      <!-- Tailor Actions -->
+      <!-- Main Actions Card -->
       <div class="actions-card">
-        <button id="tailorBtn" class="btn btn-primary btn-large">
+        <!-- Primary Action Button -->
+        <button id="tailorBtn" class="btn btn-primary btn-large btn-gradient">
           <span class="btn-icon-left">⚡</span>
           <span class="btn-text">Extract & Apply Keywords to CV</span>
           <span class="btn-time">~5s</span>
         </button>
         
+        <!-- Progress Container -->
         <div class="progress-container hidden" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
           </div>
-          <p class="progress-text" id="progressText">Initializing...</p>
+          <p class="progress-text" id="progressText">Initialising...</p>
           
           <!-- Step-by-step progress -->
           <div class="pipeline-steps" id="pipelineSteps">
@@ -134,22 +180,22 @@
               <span class="btn-icon">🔍</span>
               <span class="btn-text">Quick Extract</span>
             </button>
-            <button id="aiExtractBtn" class="btn btn-accent btn-boost" title="AI-powered keyword extraction using GPT-4o-mini">
+            <button id="aiExtractBtn" class="btn btn-accent btn-boost" title="AI-powered keyword extraction">
               <span class="btn-icon">🤖</span>
-              <span class="btn-text">AI Extract Keywords</span>
+              <span class="btn-text">AI Extract</span>
             </button>
           </div>
-          <p class="boost-description">Extract keywords from job description for ATS optimization</p>
+          <p class="boost-description">Extract keywords from job description for ATS optimisation</p>
           
           <!-- Skill Gap Analysis -->
-          <button id="skillGapBtn" class="btn btn-outline btn-skill-gap" title="Compare keywords across job postings to identify skill gaps">
+          <button id="skillGapBtn" class="btn btn-outline btn-skill-gap" title="Compare keywords across job postings">
             <span class="btn-icon">📊</span>
             <span class="btn-text">Skill Gap Analysis</span>
           </button>
         </div>
       </div>
 
-      <!-- Skill Gap Results Panel (hidden by default) -->
+      <!-- Skill Gap Panel (hidden by default) -->
       <div class="skill-gap-panel hidden" id="skillGapPanel">
         <div class="skill-gap-header">
           <span class="panel-icon">📊</span>
@@ -171,7 +217,7 @@
         </div>
       </div>
 
-      <!-- Generated Documents -->
+      <!-- Generated Documents Card -->
       <div class="documents-card hidden" id="documentsCard">
         <!-- AI Match Analysis Panel -->
         <div class="ai-match-analysis" id="aiMatchAnalysis">
@@ -180,7 +226,7 @@
               <span class="logo-icon">🎯</span>
               <div class="logo-text">
                 <span class="panel-title">AI Match Analysis</span>
-                <span class="panel-subtitle">Powered by ATS Tailor</span>
+                <span class="panel-subtitle">Powered by <span id="matchPanelProvider">Kimi K2</span></span>
               </div>
             </div>
           </div>
@@ -198,7 +244,7 @@
               </div>
               <div class="gauge-label">
                 <span class="gauge-title">Profile Match</span>
-                <span class="gauge-subtitle" id="matchSubtitle">Click "Tailor" to analyze your match score</span>
+                <span class="gauge-subtitle" id="matchSubtitle">Click "Tailor" to analyse your match score</span>
                 <span class="keyword-count-badge" id="keywordCountBadge">0 of 0 keywords matched</span>
               </div>
             </div>
@@ -236,7 +282,7 @@
             </div>
           </div>
 
-          <!-- NEW: Keyword Coverage Report (shows WHERE keywords appear in CV) -->
+          <!-- Keyword Coverage Report -->
           <div class="coverage-container hidden" id="coverageContainer">
             <div class="coverage-header">
               <div class="coverage-header-left">
@@ -285,9 +331,9 @@
           </div>
         </div>
 
-        <h3>📄 Generated Documents</h3>
+        <h3 class="documents-title">📄 Generated Documents</h3>
         
-        <!-- Document List with Filenames -->
+        <!-- Document Items -->
         <div class="document-item" id="cvDocument">
           <div class="document-info">
             <span class="document-icon">📋</span>
@@ -328,7 +374,7 @@
           <div id="previewContent" class="preview-content placeholder">Generated content will appear here...</div>
         </div>
         
-        <!-- Copy Button -->
+        <!-- Action Buttons -->
         <button id="copyContent" class="btn btn-secondary btn-copy">
           <span class="btn-icon-left">📋</span> Copy
         </button>
@@ -355,198 +401,175 @@
         </div>
       </div>
 
-      <!-- WORKDAY TOP 1 - JD Snapshot Preview Panel -->
-      <div class="workday-snapshot-panel hidden" id="workdaySnapshotPanel">
-        <div class="snapshot-header">
-          <div class="snapshot-header-left">
-            <span class="snapshot-icon">📸</span>
-            <span class="snapshot-title">Workday JD Snapshot</span>
+      <!-- Workday Multi-Page Support Panel -->
+      <div class="workday-panel" id="workdayPanel">
+        <details class="workday-accordion">
+          <summary class="workday-header">
+            <span class="workday-icon">🔄</span>
+            <span class="workday-title">Workday Multi-Page Flow</span>
+            <span class="workday-status" id="workdayFlowStatus">Ready</span>
+          </summary>
+          
+          <div class="workday-content">
+            <!-- State Persistence Indicator -->
+            <div class="workday-state-row" id="workdayStateRow">
+              <div class="state-indicator">
+                <span class="state-dot" id="stateDot"></span>
+                <span class="state-text" id="stateText">No saved state</span>
+              </div>
+              <button id="clearWorkdayState" class="btn btn-small btn-outline" title="Clear saved state">Clear</button>
+            </div>
+            
+            <!-- JD Snapshot Panel -->
+            <div class="snapshot-section">
+              <div class="snapshot-header">
+                <span class="snapshot-icon">📸</span>
+                <span class="snapshot-title">JD Snapshot</span>
+                <span class="snapshot-badge" id="snapshotStatus">Not captured</span>
+              </div>
+              
+              <div class="snapshot-info" id="snapshotInfo">
+                <div class="snapshot-row">
+                  <span class="snapshot-label">Job Title:</span>
+                  <span class="snapshot-value" id="snapshotJobTitle">-</span>
+                </div>
+                <div class="snapshot-row">
+                  <span class="snapshot-label">Company:</span>
+                  <span class="snapshot-value" id="snapshotCompany">-</span>
+                </div>
+                <div class="snapshot-row">
+                  <span class="snapshot-label">Location:</span>
+                  <span class="snapshot-value" id="snapshotLocation">-</span>
+                </div>
+                <div class="snapshot-row">
+                  <span class="snapshot-label">Keywords:</span>
+                  <span class="snapshot-value snapshot-keywords" id="snapshotKeywords">0 extracted</span>
+                </div>
+              </div>
+              
+              <div class="snapshot-jd-preview">
+                <details>
+                  <summary>📄 View JD Preview</summary>
+                  <div class="jd-preview-content" id="snapshotJDPreview">No JD captured yet.</div>
+                </details>
+              </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="workday-actions">
+              <button id="captureSnapshotBtn" class="btn btn-secondary btn-snapshot">
+                <span class="btn-icon">📸</span>
+                <span class="btn-text">Capture JD Now</span>
+              </button>
+              <button id="forceWorkdayApplyBtn" class="btn btn-accent btn-apply">
+                <span class="btn-icon">🚀</span>
+                <span class="btn-text">Force Apply</span>
+              </button>
+            </div>
+            
+            <!-- Multi-Page Progress -->
+            <div class="multipage-progress" id="multipageProgress">
+              <div class="progress-step completed" id="mpStep1">
+                <span class="step-num">1</span>
+                <span class="step-label">JD Capture</span>
+              </div>
+              <div class="progress-connector"></div>
+              <div class="progress-step" id="mpStep2">
+                <span class="step-num">2</span>
+                <span class="step-label">Login/Create</span>
+              </div>
+              <div class="progress-connector"></div>
+              <div class="progress-step" id="mpStep3">
+                <span class="step-num">3</span>
+                <span class="step-label">Form Fill</span>
+              </div>
+              <div class="progress-connector"></div>
+              <div class="progress-step" id="mpStep4">
+                <span class="step-num">4</span>
+                <span class="step-label">Submit</span>
+              </div>
+            </div>
+            
+            <!-- Credentials (Collapsible) -->
+            <details class="credentials-section">
+              <summary>🔐 Workday Credentials</summary>
+              <div class="credentials-form">
+                <div class="input-group-small">
+                  <label>Email</label>
+                  <input type="email" id="workdayEmail" placeholder="your@email.com">
+                </div>
+                <div class="input-group-small">
+                  <label>Password</label>
+                  <input type="password" id="workdayPassword" placeholder="Password">
+                </div>
+                <div class="input-group-small">
+                  <label>Verify Password</label>
+                  <input type="password" id="workdayVerifyPassword" placeholder="Verify Password">
+                </div>
+                <button id="saveWorkdayCreds" class="btn btn-small btn-secondary">Save Credentials</button>
+              </div>
+            </details>
+            
+            <!-- Auto-Flow Toggle -->
+            <div class="workday-auto-row">
+              <label class="toggle-row" for="workdayAutoToggle">
+                <span class="toggle-label">Auto-fill on page changes</span>
+                <input type="checkbox" id="workdayAutoToggle" checked />
+              </label>
+            </div>
+            
+            <button id="runWorkdayFlow" class="btn btn-primary btn-full">
+              <span class="btn-icon">▶️</span>
+              <span class="btn-text">Run Full Workday Flow</span>
+            </button>
           </div>
-          <span class="snapshot-badge" id="snapshotStatus">Not captured</span>
-        </div>
-        
-        <div class="snapshot-info" id="snapshotInfo">
-          <div class="snapshot-row">
-            <span class="snapshot-label">Job Title:</span>
-            <span class="snapshot-value" id="snapshotJobTitle">-</span>
-          </div>
-          <div class="snapshot-row">
-            <span class="snapshot-label">Company:</span>
-            <span class="snapshot-value" id="snapshotCompany">-</span>
-          </div>
-          <div class="snapshot-row">
-            <span class="snapshot-label">Location:</span>
-            <span class="snapshot-value" id="snapshotLocation">-</span>
-          </div>
-          <div class="snapshot-row">
-            <span class="snapshot-label">Keywords:</span>
-            <span class="snapshot-value snapshot-keywords" id="snapshotKeywords">0 extracted</span>
-          </div>
-        </div>
-        
-        <div class="snapshot-jd-preview">
-          <details>
-            <summary>📄 View JD Preview</summary>
-            <div class="jd-preview-content" id="snapshotJDPreview">No JD captured yet. Navigate to a Workday job listing to capture.</div>
-          </details>
-        </div>
-        
-        <div class="snapshot-actions">
-          <button id="captureSnapshotBtn" class="btn btn-secondary btn-snapshot">
-            <span class="btn-icon">📸</span>
-            <span class="btn-text">Capture JD Now</span>
-          </button>
-          <button id="forceWorkdayApplyBtn" class="btn btn-accent btn-force-apply">
-            <span class="btn-icon">🚀</span>
-            <span class="btn-text">Force Apply</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- ATS TAILOR - Workday Profile Setup Section -->
-      <div class="workday-section ats-tailor-section">
-        <div class="section-header-badge">ATS TAILOR</div>
-        <h3>🚀 Workday Profile Setup</h3>
-        <p class="workday-hint">Automates: Apply → Create Account → Fill Form → Trigger ATS Tailor</p>
-        
-        <!-- Profile Status Display -->
-        <div class="workday-profile-status">
-          <div class="profile-row">
-            <span class="profile-label">Email:</span>
-            <span class="profile-value" id="workdayEmailDisplay">Maxokafordev@gmail.com</span>
-            <span class="status-check">✓</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">Password:</span>
-            <span class="profile-value">••••••••••</span>
-            <span class="status-check">✓</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">Verify Password:</span>
-            <span class="profile-value">••••••••••</span>
-            <span class="status-check">✓</span>
-          </div>
-        </div>
-        
-        <div class="workday-settings">
-          <label class="toggle-row" for="workdayAutoToggle">
-            <span class="toggle-label">Enable Workday Automation</span>
-            <input type="checkbox" id="workdayAutoToggle" checked />
-          </label>
-        </div>
-        
-        <button id="runWorkdayFlow" class="btn btn-accent btn-large btn-full btn-workday">
-          <span class="btn-icon-left">🚀</span>
-          <span class="btn-text">Start Workday Full Flow</span>
-        </button>
-        
-        <details class="workday-credentials">
-          <summary>Workday Account Settings</summary>
-          <div class="input-group">
-            <label for="workdayEmail">Email</label>
-            <input type="email" id="workdayEmail" value="Maxokafordev@gmail.com">
-          </div>
-          <div class="input-group">
-            <label for="workdayPassword">Password</label>
-            <input type="password" id="workdayPassword" value="May19315park@">
-          </div>
-          <div class="input-group">
-            <label for="workdayVerifyPassword">Verify Password</label>
-            <input type="password" id="workdayVerifyPassword" value="May19315park@">
-          </div>
-          <button id="saveWorkdayCreds" class="btn btn-secondary btn-sm">Save Credentials</button>
         </details>
       </div>
 
-      <!-- Bulk Apply Dashboard Entry -->
-      <div class="bulk-apply-entry">
-        <button id="openBulkApply" class="btn btn-secondary btn-large btn-full">
-          <span class="btn-icon-left">📊</span>
-          <span class="btn-text">Bulk Apply Dashboard</span>
-        </button>
-      </div>
-      
-      <!-- Bulk CSV Automation Section -->
-      <div id="bulkCsvSection" class="card bulk-csv-card">
-        <h3>📋 Bulk CSV Automation</h3>
-        <p class="bulk-csv-hint">Upload CSV with job URLs, auto-apply to all</p>
-        <input type="file" id="csvFileInput" accept=".csv" class="csv-input" />
-        <div class="bulk-csv-buttons">
-          <button id="parseCsvBtn" class="btn btn-secondary">Parse CSV</button>
-          <button id="startBulkAutomation" class="btn btn-success" disabled>🚀 Start</button>
-        </div>
-        <div class="bulk-controls hidden" id="bulkControls">
-          <button id="pauseBulkBtn" class="btn btn-warning btn-sm">⏸️ Pause</button>
-          <button id="resumeBulkBtn" class="btn btn-accent btn-sm hidden">▶️ Resume</button>
-          <button id="stopBulkBtn" class="btn btn-danger btn-sm">⏹️ Stop</button>
-        </div>
-        <div id="csvPreview" class="csv-preview hidden">
-          <p class="csv-stats" id="csvStats">0 jobs parsed</p>
-          <div class="progress-bar bulk-progress">
-            <div id="bulkProgressFill" class="progress-fill" style="width:0%"></div>
+      <!-- Bulk Automation Panel -->
+      <details class="bulk-panel">
+        <summary class="bulk-header">
+          <span class="bulk-icon">📦</span>
+          <span>Bulk CSV Automation</span>
+        </summary>
+        <div class="bulk-content">
+          <div class="bulk-upload">
+            <input type="file" id="csvFileInput" accept=".csv" class="csv-input">
+            <button id="parseCsvBtn" class="btn btn-secondary btn-small">Parse CSV</button>
           </div>
-          <p class="current-job-status" id="currentJobStatus">Ready</p>
+          <div class="csv-preview hidden" id="csvPreview">
+            <span id="csvStats" class="csv-stats">0 jobs parsed</span>
+            <button id="startBulkAutomation" class="btn btn-primary btn-small" disabled>Start Automation</button>
+          </div>
+          <div class="bulk-controls hidden" id="bulkControls">
+            <div class="bulk-progress-bar">
+              <div class="bulk-progress-fill" id="bulkProgressFill"></div>
+            </div>
+            <span id="currentJobStatus" class="current-job-status">Ready</span>
+            <div class="bulk-buttons">
+              <button id="pauseBulkBtn" class="btn btn-warning btn-small">Pause</button>
+              <button id="resumeBulkBtn" class="btn btn-success btn-small hidden">Resume</button>
+              <button id="stopBulkBtn" class="btn btn-danger btn-small">Stop</button>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
 
-      <!-- Simplify ATS Score Breakdown -->
-      <div class="simplify-score-section hidden" id="simplifyScoreSection">
-        <div class="simplify-header">
-          <span class="simplify-logo">📊</span>
-          <span class="simplify-title">Simplify ATS Score</span>
-        </div>
-        <div class="score-breakdown">
-          <div class="score-item">
-            <span class="score-label">Keyword Coverage</span>
-            <div class="score-bar">
-              <div class="score-fill" id="keywordCoverageBar" style="width: 0%"></div>
-            </div>
-            <span class="score-value" id="keywordCoverageValue">0%</span>
-          </div>
-          <div class="score-item">
-            <span class="score-label">Experience Match</span>
-            <div class="score-bar">
-              <div class="score-fill" id="experienceMatchBar" style="width: 0%"></div>
-            </div>
-            <span class="score-value" id="experienceMatchValue">0%</span>
-          </div>
-          <div class="score-item">
-            <span class="score-label">Technical Alignment</span>
-            <div class="score-bar">
-              <div class="score-fill" id="technicalAlignmentBar" style="width: 0%"></div>
-            </div>
-            <span class="score-value" id="technicalAlignmentValue">0%</span>
-          </div>
-        </div>
+      <!-- Footer with Dashboard Link -->
+      <div class="popup-footer">
+        <a href="https://id-preview--2777be38-8dd2-4b20-ad45-fa61a1988fa3.lovable.app" target="_blank" class="dashboard-link">
+          <span class="link-icon">📊</span>
+          <span>Open Dashboard</span>
+          <span class="link-arrow">→</span>
+        </a>
+        <button id="openBulkApply" class="btn btn-link">Bulk Apply Dashboard</button>
       </div>
     </section>
 
-    <footer class="footer">
-      <span class="version">v1.4.0 - OpenResume ATS</span>
-    </footer>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
   </div>
 
-  <!-- Core dependencies (load first) -->
-  <script src="mandatory-keywords.js"></script>
-  <script src="universal-jd-parser.js"></script>
-  <script src="reliable-extractor.js"></script>
-  <script src="tailor-universal.js"></script>
-  <script src="validation-engine.js"></script>
-  
-  <!-- Resume Builder (new) -->
-  <script src="resume-builder.js"></script>
-  
-  <!-- OpenResume Generator (NEW - perfect ATS PDFs) -->
-  <script src="openresume-generator.js"></script>
-  
-  <!-- Turbo Pipeline -->
-  <script src="turbo-pipeline.js"></script>
-  
-  <!-- UI and automation modules -->
-  <script src="dynamic-score.js"></script>
-  <script src="pdf-ats-turbo.js"></script>
-  
-  <!-- Main application (load last) -->
   <script src="popup.js"></script>
 </body>
 </html>
