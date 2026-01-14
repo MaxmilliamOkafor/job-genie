@@ -48,6 +48,10 @@ export interface Profile {
   cv_file_name: string | null;
   cv_uploaded_at: string | null;
   openai_api_key: string | null;
+  kimi_api_key: string | null;
+  preferred_ai_provider: string | null;
+  openai_enabled: boolean;
+  kimi_enabled: boolean;
 }
 
 export function useProfile() {
@@ -90,6 +94,10 @@ export function useProfile() {
           gender: data.gender || null,
           hispanic_latino: data.hispanic_latino ?? false,
           openai_api_key: (data as any).openai_api_key || null,
+          kimi_api_key: (data as any).kimi_api_key || null,
+          preferred_ai_provider: (data as any).preferred_ai_provider || 'openai',
+          openai_enabled: (data as any).openai_enabled ?? true,
+          kimi_enabled: (data as any).kimi_enabled ?? true,
         });
       }
     } catch (error) {

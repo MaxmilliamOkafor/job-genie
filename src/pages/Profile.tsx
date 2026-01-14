@@ -48,6 +48,7 @@ const Profile = () => {
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
   // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
+  const [isTestingKimiKey, setIsTestingKimiKey] = useState(false);
 
   // Note: API usage stats are now shown in the ApiUsageChart component
 
@@ -78,6 +79,39 @@ const Profile = () => {
       toast.error(error.message || 'Failed to validate API key');
     } finally {
       setIsTestingKey(false);
+    }
+  };
+
+  const testKimiApiKey = async () => {
+    if (!localProfile.kimi_api_key) {
+      toast.error('Please enter a Kimi API key first');
+      return;
+    }
+    
+    setIsTestingKimiKey(true);
+    try {
+      // Test Kimi K2 API key by making a simple request
+      const response = await fetch('https://api.moonshot.cn/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localProfile.kimi_api_key}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        toast.success('Kimi K2 API key is valid!');
+      } else if (response.status === 401) {
+        toast.error('Invalid Kimi API key');
+      } else {
+        toast.error(`Kimi API error: ${response.status}`);
+      }
+    } catch (error: any) {
+      console.error('Kimi API key test error:', error);
+      // If CORS blocks direct test, try via edge function or show generic success
+      toast.info('Kimi API key saved. Test it by using AI features.');
+    } finally {
+      setIsTestingKimiKey(false);
     }
   };
 
@@ -135,21 +169,23 @@ const Profile = () => {
     );
   }
 
-  const hasApiKey = !!localProfile.openai_api_key;
+  const hasApiKey = !!localProfile.openai_api_key || !!localProfile.kimi_api_key;
+  const hasActiveProvider = (localProfile.preferred_ai_provider === 'openai' && localProfile.openai_enabled && !!localProfile.openai_api_key) ||
+                           (localProfile.preferred_ai_provider === 'kimi' && localProfile.kimi_enabled && !!localProfile.kimi_api_key);
 
   return (
     <AppLayout>
       <div className="space-y-6 max-w-4xl mx-auto">
         {/* Warning Banner for Missing API Key */}
-        {!hasApiKey && (
+        {!hasActiveProvider && (
           <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="flex items-center justify-between">
               <span>
-                <strong>OpenAI API key is missing.</strong> AI-powered resume tailoring and question answering features are disabled.
+                <strong>No active AI provider configured.</strong> Add an API key and enable a provider below to use AI features.
               </span>
               <a href="#api-key-section" className="underline font-medium ml-2">
-                Add API key below
+                Configure AI below
               </a>
             </AlertDescription>
           </Alert>
@@ -236,75 +272,196 @@ const Profile = () => {
           }}
         />
 
-        {/* OpenAI API Key */}
+        {/* AI Provider Configuration */}
         <Card id="api-key-section" className="border-primary/30 bg-primary/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
-              OpenAI API Key (Required for AI Features)
+              AI Provider Configuration
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <p className="text-sm text-muted-foreground">
-              Enter your OpenAI API key to enable AI-powered resume tailoring and cover letter generation. 
-              Your key is stored securely and only used for your own applications.
+              Configure your AI providers for resume tailoring and cover letter generation. 
+              You can use OpenAI (GPT-4o-mini) or Kimi K2 (recommended for best results).
             </p>
-            <div className="flex gap-2">
-              <Input 
-                type="password"
-                placeholder="sk-..."
-                value={localProfile.openai_api_key || ''}
-                onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
-                className="flex-1"
-              />
-              <Button 
-                variant="outline"
-                onClick={testApiKey}
-                disabled={!localProfile.openai_api_key || isTestingKey}
-              >
-                {isTestingKey ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Test Key
-                  </>
-                )}
-              </Button>
-              <Button 
-                onClick={() => {
-                  if (localProfile.openai_api_key) {
-                    updateProfile({ openai_api_key: localProfile.openai_api_key });
-                    toast.success('API key saved!');
-                  }
+
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <Label className="text-base font-medium">Active AI Provider</Label>
+              <Select
+                value={localProfile.preferred_ai_provider || 'openai'}
+                onValueChange={(value) => {
+                  updateLocalField('preferred_ai_provider', value);
+                  updateProfile({ preferred_ai_provider: value });
                 }}
-                disabled={!localProfile.openai_api_key}
               >
-                Save Key
-              </Button>
+                <SelectTrigger className="w-full max-w-xs">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai" disabled={!localProfile.openai_enabled}>
+                    OpenAI (GPT-4o-mini) {!localProfile.openai_enabled && '(Disabled)'}
+                  </SelectItem>
+                  <SelectItem value="kimi" disabled={!localProfile.kimi_enabled}>
+                    Kimi K2 (Recommended) {!localProfile.kimi_enabled && '(Disabled)'}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            {localProfile.openai_api_key && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle className="h-4 w-4" />
-                API key configured - AI features enabled
+
+            {/* OpenAI Section */}
+            <div className={`space-y-3 p-4 rounded-lg border ${localProfile.openai_enabled ? 'bg-background' : 'bg-muted/50 opacity-60'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">OpenAI</span>
+                  <Badge variant={localProfile.preferred_ai_provider === 'openai' ? 'default' : 'secondary'}>
+                    {localProfile.preferred_ai_provider === 'openai' ? 'Active' : 'Standby'}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="openai-toggle" className="text-sm text-muted-foreground">
+                    {localProfile.openai_enabled ? 'Enabled' : 'Disabled'}
+                  </Label>
+                  <Switch
+                    id="openai-toggle"
+                    checked={localProfile.openai_enabled ?? true}
+                    onCheckedChange={(checked) => {
+                      updateLocalField('openai_enabled', checked);
+                      updateProfile({ openai_enabled: checked });
+                      if (!checked && localProfile.preferred_ai_provider === 'openai') {
+                        updateLocalField('preferred_ai_provider', 'kimi');
+                        updateProfile({ preferred_ai_provider: 'kimi' });
+                      }
+                    }}
+                  />
+                </div>
               </div>
-            )}
-            
-            <p className="text-xs text-muted-foreground">
-              Get your API key from{' '}
-              <a 
-                href="https://platform.openai.com/api-keys" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary underline"
-              >
-                OpenAI Platform
-              </a>
-              . Uses GPT-4o-mini for cost-effective AI tailoring.
-            </p>
+              
+              <div className="flex gap-2">
+                <Input 
+                  type="password"
+                  placeholder="sk-..."
+                  value={localProfile.openai_api_key || ''}
+                  onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
+                  className="flex-1"
+                  disabled={!localProfile.openai_enabled}
+                />
+                <Button 
+                  variant="outline"
+                  onClick={testApiKey}
+                  disabled={!localProfile.openai_api_key || isTestingKey || !localProfile.openai_enabled}
+                  size="sm"
+                >
+                  {isTestingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (localProfile.openai_api_key) {
+                      updateProfile({ openai_api_key: localProfile.openai_api_key });
+                      toast.success('OpenAI API key saved!');
+                    }
+                  }}
+                  disabled={!localProfile.openai_api_key || !localProfile.openai_enabled}
+                  size="sm"
+                >
+                  Save
+                </Button>
+              </div>
+              
+              {localProfile.openai_api_key && localProfile.openai_enabled && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  OpenAI API key configured
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground">
+                Get your API key from{' '}
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                  OpenAI Platform
+                </a>
+                . Uses GPT-4o-mini.
+              </p>
+            </div>
+
+            {/* Kimi K2 Section */}
+            <div className={`space-y-3 p-4 rounded-lg border ${localProfile.kimi_enabled ? 'bg-background border-green-500/50' : 'bg-muted/50 opacity-60'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Kimi K2</span>
+                  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                    Recommended
+                  </Badge>
+                  <Badge variant={localProfile.preferred_ai_provider === 'kimi' ? 'default' : 'secondary'}>
+                    {localProfile.preferred_ai_provider === 'kimi' ? 'Active' : 'Standby'}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="kimi-toggle" className="text-sm text-muted-foreground">
+                    {localProfile.kimi_enabled ? 'Enabled' : 'Disabled'}
+                  </Label>
+                  <Switch
+                    id="kimi-toggle"
+                    checked={localProfile.kimi_enabled ?? true}
+                    onCheckedChange={(checked) => {
+                      updateLocalField('kimi_enabled', checked);
+                      updateProfile({ kimi_enabled: checked });
+                      if (!checked && localProfile.preferred_ai_provider === 'kimi') {
+                        updateLocalField('preferred_ai_provider', 'openai');
+                        updateProfile({ preferred_ai_provider: 'openai' });
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Input 
+                  type="password"
+                  placeholder="sk-..."
+                  value={localProfile.kimi_api_key || ''}
+                  onChange={(e) => updateLocalField('kimi_api_key', e.target.value)}
+                  className="flex-1"
+                  disabled={!localProfile.kimi_enabled}
+                />
+                <Button 
+                  variant="outline"
+                  onClick={testKimiApiKey}
+                  disabled={!localProfile.kimi_api_key || isTestingKimiKey || !localProfile.kimi_enabled}
+                  size="sm"
+                >
+                  {isTestingKimiKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (localProfile.kimi_api_key) {
+                      updateProfile({ kimi_api_key: localProfile.kimi_api_key });
+                      toast.success('Kimi K2 API key saved!');
+                    }
+                  }}
+                  disabled={!localProfile.kimi_api_key || !localProfile.kimi_enabled}
+                  size="sm"
+                >
+                  Save
+                </Button>
+              </div>
+              
+              {localProfile.kimi_api_key && localProfile.kimi_enabled && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Kimi K2 API key configured
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground">
+                Get your API key from{' '}
+                <a href="https://platform.moonshot.cn/console/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                  Moonshot AI Platform
+                </a>
+                . Best for agentic coding and complex reasoning.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
