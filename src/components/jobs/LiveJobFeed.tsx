@@ -22,6 +22,8 @@ import {
   Bell,
   X,
   Loader2,
+  Crown,
+  Star,
 } from 'lucide-react';
 import {
   Select,
@@ -35,6 +37,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { getCompanyTier, prioritiseJobsByTier } from '@/data/tierCompanies';
 
 interface LiveJobFeedProps {
   onJobSelect?: (job: Job) => void;
@@ -59,7 +62,7 @@ function formatRelativeTime(dateStr: string): string {
   if (diffDay < 7) return `${diffDay}d ago`;
   if (diffWeek < 4) return `${diffWeek}w ago`;
   
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
 }
 
 // Check if job is new (less than 5 minutes old)
@@ -69,16 +72,49 @@ function isNewJob(dateStr: string): boolean {
   return (now.getTime() - date.getTime()) < 5 * 60 * 1000;
 }
 
-// Job Card Component with animations
+// Tier Badge Component
+function TierBadge({ tier }: { tier: number | null }) {
+  if (!tier) return null;
+  
+  if (tier === 1) {
+    return (
+      <Badge 
+        variant="default" 
+        className="bg-gradient-to-r from-amber-500 to-yellow-400 text-white border-0 text-[10px] px-1.5 py-0 font-semibold shadow-sm"
+      >
+        <Crown className="w-3 h-3 mr-0.5" />
+        TIER 1
+      </Badge>
+    );
+  }
+  
+  if (tier === 2) {
+    return (
+      <Badge 
+        variant="secondary" 
+        className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-0 text-[10px] px-1.5 py-0 font-medium"
+      >
+        <Star className="w-3 h-3 mr-0.5" />
+        TIER 2
+      </Badge>
+    );
+  }
+  
+  return null;
+}
+
+// Job Card Component with animations and tier badges
 function JobFeedCard({ 
   job, 
   isNew, 
+  tier,
   onSelect, 
   onApply,
   index 
 }: { 
   job: Job; 
   isNew: boolean;
+  tier: number | null;
   onSelect?: (job: Job) => void;
   onApply?: (job: Job) => void;
   index: number;
@@ -107,6 +143,8 @@ function JobFeedCard({
       className={cn(
         'group cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.01] border-border/50',
         isNew && 'ring-2 ring-primary/30 bg-primary/5',
+        tier === 1 && 'ring-1 ring-amber-400/50 bg-gradient-to-r from-amber-50/30 to-transparent dark:from-amber-950/20',
+        tier === 2 && 'ring-1 ring-blue-400/30 bg-gradient-to-r from-blue-50/20 to-transparent dark:from-blue-950/10',
         isHovered && 'border-primary/50',
       )}
       style={{ animationDelay: `${index * 50}ms` }}
@@ -118,7 +156,7 @@ function JobFeedCard({
         <div className="flex items-start justify-between gap-3">
           {/* Left: Job Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               {isNew && (
                 <Badge 
                   variant="default" 
@@ -128,6 +166,7 @@ function JobFeedCard({
                   NEW
                 </Badge>
               )}
+              <TierBadge tier={tier} />
               <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                 {job.title}
               </h3>
@@ -297,11 +336,16 @@ export function LiveJobFeed({ onJobSelect, onApply, className }: LiveJobFeedProp
     onApply?.(job);
   }, [onApply]);
 
-  // Track which jobs are "new" (less than 5 min old)
-  const jobsWithNewStatus = useMemo(() => {
-    return jobs.map(job => ({
+  // Apply tier prioritisation and track new status
+  const prioritisedJobs = useMemo(() => {
+    // Prioritise by tier (distributes tier 1/2 companies throughout, avoiding clustering)
+    const sorted = prioritiseJobsByTier(jobs);
+    
+    // Add computed fields
+    return sorted.map(job => ({
       ...job,
       _isNew: isNewJob(job.created_at || job.posted_date),
+      _tier: getCompanyTier(job.company),
     }));
   }, [jobs]);
 
@@ -446,13 +490,14 @@ export function LiveJobFeed({ onJobSelect, onApply, className }: LiveJobFeedProp
             </CardContent>
           </Card>
         ) : (
-          // Jobs list
+          // Jobs list with tier prioritisation
           <>
-            {jobsWithNewStatus.map((job, index) => (
+            {prioritisedJobs.map((job, index) => (
               <JobFeedCard
                 key={job.id}
                 job={job}
                 isNew={job._isNew}
+                tier={job._tier}
                 onSelect={onJobSelect}
                 onApply={handleApply}
                 index={index}
