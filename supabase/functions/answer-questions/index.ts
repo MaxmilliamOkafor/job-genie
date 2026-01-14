@@ -1494,8 +1494,8 @@ IMPORTANT:
     const getApiConfig = () => {
       if (aiProvider === 'kimi') {
         return {
-          endpoint: 'https://api.moonshot.cn/v1/chat/completions',
-          model: 'moonshot-v1-8k',
+          endpoint: 'https://api.moonshot.ai/v1/chat/completions',
+          model: 'kimi-k2-0711-preview',
           providerName: 'Kimi K2'
         };
       }

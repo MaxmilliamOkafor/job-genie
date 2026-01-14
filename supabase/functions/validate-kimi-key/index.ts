@@ -22,7 +22,8 @@ serve(async (req) => {
     }
 
     // Test Kimi K2 API key by fetching available models
-    const response = await fetch("https://api.moonshot.cn/v1/models", {
+    // Note: The correct endpoint is api.moonshot.ai (not .cn)
+    const response = await fetch("https://api.moonshot.ai/v1/models", {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
