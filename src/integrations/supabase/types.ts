@@ -405,14 +405,18 @@ export type Database = {
           highest_education: string | null
           hispanic_latino: boolean | null
           id: string
+          kimi_api_key: string | null
+          kimi_enabled: boolean | null
           languages: Json | null
           last_name: string | null
           learned_preferences: Json | null
           linkedin: string | null
           notice_period: string | null
           openai_api_key: string | null
+          openai_enabled: boolean | null
           phone: string | null
           portfolio: string | null
+          preferred_ai_provider: string | null
           race_ethnicity: string | null
           security_clearance: boolean | null
           skills: Json | null
@@ -453,14 +457,18 @@ export type Database = {
           highest_education?: string | null
           hispanic_latino?: boolean | null
           id?: string
+          kimi_api_key?: string | null
+          kimi_enabled?: boolean | null
           languages?: Json | null
           last_name?: string | null
           learned_preferences?: Json | null
           linkedin?: string | null
           notice_period?: string | null
           openai_api_key?: string | null
+          openai_enabled?: boolean | null
           phone?: string | null
           portfolio?: string | null
+          preferred_ai_provider?: string | null
           race_ethnicity?: string | null
           security_clearance?: boolean | null
           skills?: Json | null
@@ -501,14 +509,18 @@ export type Database = {
           highest_education?: string | null
           hispanic_latino?: boolean | null
           id?: string
+          kimi_api_key?: string | null
+          kimi_enabled?: boolean | null
           languages?: Json | null
           last_name?: string | null
           learned_preferences?: Json | null
           linkedin?: string | null
           notice_period?: string | null
           openai_api_key?: string | null
+          openai_enabled?: boolean | null
           phone?: string | null
           portfolio?: string | null
+          preferred_ai_provider?: string | null
           race_ethnicity?: string | null
           security_clearance?: boolean | null
           skills?: Json | null
