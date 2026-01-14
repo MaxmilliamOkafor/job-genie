@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
+import { AIProviderStatus } from '@/components/dashboard/AIProviderStatus';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +72,9 @@ const Dashboard = () => {
             </Button>
           </div>
         </div>
+
+        {/* AI Provider Status */}
+        <AIProviderStatus />
 
         {/* Quick Actions */}
         {!profile?.first_name && (

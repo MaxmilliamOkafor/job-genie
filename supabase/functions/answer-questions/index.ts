@@ -249,10 +249,17 @@ async function getUserFromToken(req: Request, supabase: any): Promise<string | n
   return user.id;
 }
 
-async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
+interface AIProviderConfig {
+  provider: 'openai' | 'kimi';
+  apiKey: string;
+  openaiEnabled: boolean;
+  kimiEnabled: boolean;
+}
+
+async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('openai_api_key')
+    .select('openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled')
     .eq('user_id', userId)
     .single();
   
@@ -260,7 +267,44 @@ async function getUserOpenAIKey(supabase: any, userId: string): Promise<string |
     return null;
   }
   
-  return data.openai_api_key;
+  const preferredProvider = data.preferred_ai_provider || 'openai';
+  const openaiEnabled = data.openai_enabled ?? true;
+  const kimiEnabled = data.kimi_enabled ?? true;
+  
+  // Determine which provider to use based on preference and availability
+  let activeProvider: 'openai' | 'kimi' = 'openai';
+  let activeKey: string | null = null;
+  
+  if (preferredProvider === 'kimi' && kimiEnabled && data.kimi_api_key) {
+    activeProvider = 'kimi';
+    activeKey = data.kimi_api_key;
+  } else if (preferredProvider === 'openai' && openaiEnabled && data.openai_api_key) {
+    activeProvider = 'openai';
+    activeKey = data.openai_api_key;
+  } else if (kimiEnabled && data.kimi_api_key) {
+    activeProvider = 'kimi';
+    activeKey = data.kimi_api_key;
+  } else if (openaiEnabled && data.openai_api_key) {
+    activeProvider = 'openai';
+    activeKey = data.openai_api_key;
+  }
+  
+  if (!activeKey) {
+    return null;
+  }
+  
+  return {
+    provider: activeProvider,
+    apiKey: activeKey,
+    openaiEnabled,
+    kimiEnabled
+  };
+}
+
+// Legacy function for backward compatibility
+async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
+  const config = await getUserAIConfig(supabase, userId);
+  return config?.provider === 'openai' ? config.apiKey : null;
 }
 
 async function logApiUsage(supabase: any, userId: string, functionName: string, tokensUsed: number): Promise<void> {
@@ -1153,17 +1197,20 @@ serve(async (req) => {
     }
     
     // Need to generate answers for uncached questions
-    // Get user's OpenAI API key from their profile
-    const userOpenAIKey = await getUserOpenAIKey(supabase, userId);
+    // Get user's AI provider configuration
+    const aiConfig = await getUserAIConfig(supabase, userId);
     
-    if (!userOpenAIKey) {
+    if (!aiConfig) {
       return new Response(JSON.stringify({ 
-        error: "OpenAI API key not configured. Please add your API key in Profile settings." 
+        error: "No AI provider configured. Please add an API key (OpenAI or Kimi K2) in Profile settings." 
       }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    
+    const { provider: aiProvider, apiKey: userApiKey } = aiConfig;
+    console.log(`[User ${userId}] Using AI provider: ${aiProvider}`);
 
     // Fetch company research from Perplexity (parallel with other prep)
     const companyResearchPromise = getCompanyResearch(company, jobTitle);
@@ -1443,28 +1490,47 @@ IMPORTANT:
 - Include atsScore (0-100) for each answer
 - Include brief reasoning explaining why you chose each answer`;
 
+    // Determine API endpoint and model based on provider
+    const getApiConfig = () => {
+      if (aiProvider === 'kimi') {
+        return {
+          endpoint: 'https://api.moonshot.cn/v1/chat/completions',
+          model: 'moonshot-v1-8k',
+          providerName: 'Kimi K2'
+        };
+      }
+      return {
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-4o-mini',
+        providerName: 'OpenAI'
+      };
+    };
+    
+    const apiConfig = getApiConfig();
+    console.log(`Using ${apiConfig.providerName} with model ${apiConfig.model}`);
+
     // Retry logic for rate limits
     const maxRetries = 3;
     let lastError: string | null = null;
     let response: Response | null = null;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(`OpenAI API attempt ${attempt}/${maxRetries}...`);
+      console.log(`${apiConfig.providerName} API attempt ${attempt}/${maxRetries}...`);
       
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
+      response = await fetch(apiConfig.endpoint, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${userOpenAIKey}`,
+          Authorization: `Bearer ${userApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
+          model: apiConfig.model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
           ],
           max_tokens: 4000,
-          temperature: 0.6, // Lower temperature for more consistent, reliable answers (LazyApply-style)
+          temperature: 0.6,
         }),
       });
       
@@ -1473,12 +1539,11 @@ IMPORTANT:
       }
       
       const errorText = await response.text();
-      console.error(`OpenAI API error (attempt ${attempt}):`, response.status, errorText);
+      console.error(`${apiConfig.providerName} API error (attempt ${attempt}):`, response.status, errorText);
       
       if (response.status === 429) {
         lastError = "Rate limit exceeded";
         if (attempt < maxRetries) {
-          // Exponential backoff: 2s, 4s, 8s
           const waitTime = Math.pow(2, attempt) * 1000;
           console.log(`Rate limited. Waiting ${waitTime}ms before retry...`);
           await new Promise(r => setTimeout(r, waitTime));
@@ -1486,14 +1551,14 @@ IMPORTANT:
         }
       } else {
         lastError = errorText;
-        break; // Non-rate-limit error, don't retry
+        break;
       }
     }
 
-    // If OpenAI fails, try Lovable AI as fallback
+    // If primary provider fails, try Lovable AI as fallback
     if (!response || !response.ok) {
       const errorText = lastError || "Unknown error";
-      console.error("OpenAI API final error:", errorText);
+      console.error(`${apiConfig.providerName} API final error:`, errorText);
       console.log("Attempting Lovable AI fallback...");
       
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -1522,10 +1587,9 @@ IMPORTANT:
             const lovableError = await lovableResponse.text();
             console.error("Lovable AI fallback failed:", lovableResponse.status, lovableError);
             
-            // Return original OpenAI error
             if (errorText.includes("Rate limit") || errorText.includes("quota")) {
               return new Response(JSON.stringify({ 
-                error: "AI service temporarily unavailable. Your OpenAI quota may be exceeded. Please try again later or add credits to your OpenAI account.",
+                error: `${apiConfig.providerName} temporarily unavailable. Your quota may be exceeded. Please try again later.`,
                 retryAfter: 60
               }), {
                 status: 429,
@@ -1542,7 +1606,7 @@ IMPORTANT:
       if (!response || !response.ok) {
         if (errorText.includes("Rate limit") || errorText.includes("quota")) {
           return new Response(JSON.stringify({ 
-            error: "Rate limit exceeded. Please wait and try again, or check your OpenAI billing.",
+            error: `Rate limit exceeded. Please wait and try again, or check your ${apiConfig.providerName} billing.`,
             retryAfter: 30
           }), {
             status: 429,
@@ -1551,20 +1615,20 @@ IMPORTANT:
         }
         
         if (response?.status === 401) {
-          return new Response(JSON.stringify({ error: "Invalid OpenAI API key. Please check your API key in Profile settings." }), {
+          return new Response(JSON.stringify({ error: `Invalid ${apiConfig.providerName} API key. Please check your API key in Profile settings.` }), {
             status: 401,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         
         if (response?.status === 402 || response?.status === 403) {
-          return new Response(JSON.stringify({ error: "OpenAI API billing issue. Please check your OpenAI account." }), {
+          return new Response(JSON.stringify({ error: `${apiConfig.providerName} API billing issue. Please check your account.` }), {
             status: 402,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         
-        throw new Error(`OpenAI API error: ${response?.status || 'unknown'}`);
+        throw new Error(`${apiConfig.providerName} API error: ${response?.status || 'unknown'}`);
       }
     }
 
@@ -1572,8 +1636,9 @@ IMPORTANT:
     const content = data.choices?.[0]?.message?.content;
     const tokensUsed = data.usage?.total_tokens || 0;
     
-    // Log API usage
-    await logApiUsage(supabase, userId, 'answer-questions', tokensUsed);
+    // Log API usage with provider suffix
+    const usageFunctionName = aiProvider === 'kimi' ? 'answer-questions-kimi' : 'answer-questions';
+    await logApiUsage(supabase, userId, usageFunctionName, tokensUsed);
     console.log(`AI response received (${tokensUsed} tokens)`);
     let aiResult;
     try {
