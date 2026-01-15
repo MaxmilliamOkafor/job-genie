@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Tailor v2.1 - QuantumHire AI</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo">
+                        <span class="icon">🎯</span>
+                        <span class="title">ATS Tailor v2.1</span>
+                    </div>
+                    <div class="subtitle">
+                        <span id="aiProviderIcon">🚀</span>
+                        <span id="activeProviderName">Kimi K2</span>
+                        <span id="aiSpeedBadge" class="speed-badge">⚡ Fast</span>
+                    </div>
+                </div>
+                <div class="status-section">
+                    <div class="status-indicator" id="statusIndicator">
+                        <span class="status-dot" id="stateDot"></span>
+                        <span class="status-text" id="stateText">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Login Section -->
+            <div id="loginSection" class="section login-section" style="display: none;">
+                <h3>Login to ATS Tailor</h3>
+                <div class="form-group">
+                    <input type="email" id="email" placeholder="Email" class="form-input">
+                </div>
+                <div class="form-group">
+                    <input type="password" id="password" placeholder="Password" class="form-input">
+                </div>
+                <button id="loginBtn" class="btn btn-primary">Login</button>
+            </div>
+
+            <!-- Job Detection Section -->
+            <div id="jobSection" class="section job-section">
+                <div class="job-info" id="jobInfo">
+                    <div class="job-header">
+                        <h4 id="jobTitle">No job detected</h4>
+                        <button id="refreshJob" class="btn-icon" title="Refresh job detection">🔄</button>
+                    </div>
+                    <p id="jobCompany" class="job-company"></p>
+                    <p id="jobLocation" class="job-location"></p>
+                    <div class="job-stats">
+                        <span id="matchScore" class="match-score">Match: --%</span>
+                        <span id="activeProviderDisplay" class="ai-provider">Kimi K2</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="section action-section">
+                <button id="tailorBtn" class="btn btn-primary btn-full">
+                    <span class="btn-text">Extract & Apply Keywords to CV</span>
+                </button>
+                
+                <!-- REMOVED: AI Provider Toggle - Now uses profile setting -->
+                
+                <div class="action-row">
+                    <button id="downloadCv" class="btn btn-secondary" disabled>📄 CV</button>
+                    <button id="downloadCover" class="btn btn-secondary" disabled>📝 Cover</button>
+                    <button id="attachBoth" class="btn btn-secondary" disabled>🔗 Attach</button>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <div class="section settings-section">
+                <h4>Settings</h4>
+                
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="autoTailorToggle" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Auto tailor on job detection</span>
+                    </label>
+                </div>
+
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="autofillEnabledToggle" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Automatic AI Autofill</span>
+                    </label>
+                </div>
+
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="workdayAutoToggle">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Workday Full Automation</span>
+                    </label>
+                </div>
+
+                <!-- Default Location Setting -->
+                <div class="location-setting">
+                    <label>Default Location (for Remote jobs):</label>
+                    <div class="location-input-group">
+                        <input type="text" id="defaultLocationInput" placeholder="Dublin, IE" class="form-input">
+                        <button id="saveLocationBtn" class="btn btn-small">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workday Controls -->
+            <div class="section workday-section" id="workdayControls" style="display: none;">
+                <h4>Workday Automation</h4>
+                <div class="workday-controls">
+                    <button id="runWorkdayFlow" class="btn btn-secondary">🤖 Run Full Flow</button>
+                    <button id="manualAutofillBtn" class="btn btn-secondary">⚡ Manual Autofill</button>
+                    <button id="clearWorkdayState" class="btn btn-secondary">🗑️ Clear State</button>
+                </div>
+                
+                <!-- Workday Progress -->
+                <div id="multipageProgress" class="workday-progress">
+                    <div class="progress-step">Contact</div>
+                    <div class="progress-step">Disclosures</div>
+                    <div class="progress-step">Questions</div>
+                    <div class="progress-step">Review</div>
+                </div>
+            </div>
+
+            <!-- Keywords Section -->
+            <div class="section keywords-section" id="keywordsSection" style="display: none;">
+                <h4>Extracted Keywords</h4>
+                <div class="keywords-container" id="keywordsContainer">
+                    <!-- Keywords will be populated here -->
+                </div>
+                <div class="keywords-actions">
+                    <button id="viewKeywordsBtn" class="btn btn-small">View Keywords</button>
+                    <button id="aiExtractBtn" class="btn btn-small">AI Extract</button>
+                </div>
+            </div>
+
+            <!-- Skill Gap Analysis -->
+            <div class="section skill-gap-section">
+                <button id="skillGapBtn" class="btn btn-secondary btn-full">📊 Skill Gap Analysis</button>
+            </div>
+
+            <!-- Bulk Apply Dashboard -->
+            <div class="section bulk-section">
+                <button id="openBulkApply" class="btn btn-secondary btn-full">📈 Bulk Apply Dashboard</button>
+            </div>
+
+            <!-- Preview Section -->
+            <div class="section preview-section" id="previewSection" style="display: none;">
+                <div class="preview-tabs">
+                    <button id="previewCvTab" class="tab-btn active">CV</button>
+                    <button id="previewCoverTab" class="tab-btn">Cover Letter</button>
+                    <button id="previewTextTab" class="tab-btn">Plain Text</button>
+                </div>
+                <div class="preview-content">
+                    <div id="cvPreview" class="preview-pane active"></div>
+                    <div id="coverPreview" class="preview-pane"></div>
+                    <div id="textPreview" class="preview-pane"></div>
+                </div>
+                <div class="preview-actions">
+                    <button id="copyContent" class="btn btn-small">📋 Copy</button>
+                    <button id="copyCoverageBtn" class="btn btn-small">📊 Coverage Report</button>
+                </div>
+            </div>
+
+            <!-- Saved Responses -->
+            <div class="section saved-responses-section">
+                <div class="saved-responses-header">
+                    <h4>Saved Responses</h4>
+                    <div class="saved-responses-stats">
+                        <span id="savedResponsesCount">0</span> responses saved
+                    </div>
+                </div>
+                <div class="saved-responses-actions">
+                    <button id="viewSavedResponsesBtn" class="btn btn-small">👁️ View</button>
+                    <button id="clearSavedResponsesBtn" class="btn btn-small">🗑️ Clear All</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-content">
+                <div class="stats">
+                    <span>Today: <span id="todayCount">0</span></span>
+                    <span>Total: <span id="totalCount">0</span></span>
+                </div>
+                <button id="logoutBtn" class="btn-link" style="display: none;">Logout</button>
+            </div>
+        </div>
+
+        <!-- Toast Container -->
+        <div id="toastContainer" class="toast-container"></div>
+
+        <!-- Skill Gap Panel (Modal) -->
+        <div id="skillGapPanel" class="modal-overlay" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Skill Gap Analysis</h3>
+                    <button id="closeSkillGap" class="btn-icon">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div id="skillGapContent">
+                        <!-- Skill gap analysis will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

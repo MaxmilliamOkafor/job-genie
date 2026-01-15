@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Tailor v2.1 - KIMI 1.0</title>
+    <style>
+        /* Popup Styles - Clean and Professional */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #333;
+            background: #f8f9fa;
+            width: 400px;
+            min-height: 600px;
+        }
+
+        .popup-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-section .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .logo-section .subtitle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+
+        .speed-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+        }
+
+        .status-section .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+        }
+
+        .status-dot.active {
+            background: #ffc107;
+            animation: pulse 2s infinite;
+        }
+
+        .status-text {
+            font-size: 12px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .section {
+            margin-bottom: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            overflow: hidden;
+        }
+
+        .section h3, .section h4 {
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .section > div {
+            padding: 16px;
+        }
+
+        /* Job Info */
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .job-header h4 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+            padding: 0;
+            background: none;
+            border: none;
+        }
+
+        .job-company, .job-location {
+            color: #6c757d;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .job-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .match-score {
+            font-weight: 600;
+            color: #28a745;
+        }
+
+        .ai-provider {
+            font-size: 12px;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5a6fd8;
+        }
+
+        .btn-secondary {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #dee2e6;
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-icon {
+            padding: 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            border-radius: 4px;
+        }
+
+        .btn-icon:hover {
+            background: #f8f9fa;
+        }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: underline;
+        }
+
+        .action-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        /* Form Elements */
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        /* Toggle Switch */
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px 0;
+        }
+
+        .toggle-label input[type="checkbox"] {
+            display: none;
+        }
+
+        .toggle-slider {
+            width: 40px;
+            height: 20px;
+            background: #ced4da;
+            border-radius: 10px;
+            position: relative;
+            transition: background 0.2s ease;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+
+        .toggle-label input[type="checkbox"]:checked + .toggle-slider {
+            background: #667eea;
+        }
+
+        .toggle-label input[type="checkbox"]:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        .toggle-text {
+            font-size: 13px;
+            color: #495057;
+        }
+
+        /* Workday Controls */
+        .workday-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .workday-progress {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+        }
+
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            padding: 8px 4px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-size: 10px;
+            margin: 0 2px;
+            transition: all 0.2s ease;
+        }
+
+        .progress-step.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .progress-step.completed {
+            background: #28a745;
+            color: white;
+        }
+
+        /* Location Setting */
+        .location-setting {
+            margin-top: 12px;
+        }
+
+        .location-setting label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #495057;
+        }
+
+        .location-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .location-input-group .form-input {
+            flex: 1;
+        }
+
+        /* Preview Section */
+        .preview-tabs {
+            display: flex;
+            border-bottom: 1px solid #e9ecef;
+            margin-bottom: 12px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            color: #6c757d;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: #f8f9fa;
+        }
+
+        .preview-content {
+            min-height: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .preview-pane {
+            display: none;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #495057;
+        }
+
+        .preview-pane.active {
+            display: block;
+        }
+
+        .preview-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stats {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .stats span {
+            margin-right: 16px;
+        }
+
+        /* Toast Container */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: white;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast-success {
+            background: #28a745;
+        }
+
+        .toast-error {
+            background: #dc3545;
+        }
+
+        .toast-info {
+            background: #17a2b8;
+        }
+
+        .toast-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        /* Loading State */
+        .btn.loading {
+            position: relative;
+            color: transparent;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Error Message */
+        .error-message {
+            padding: 20px;
+            text-align: center;
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            margin: 16px;
+        }
+
+        /* Responsive */
+        @media (max-width: 420px) {
+            body {
+                width: 100vw;
+            }
+            
+            .popup-container {
+                border-radius: 0;
+                height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="popup-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo">
+                        <span class="icon">🎯</span>
+                        <span class="title">ATS Tailor v2.1</span>
+                    </div>
+                    <div class="subtitle">
+                        <span id="aiProviderIcon">🚀</span>
+                        <span id="activeProviderName">Kimi K2</span>
+                        <span id="aiSpeedBadge" class="speed-badge">⚡ Fast</span>
+                    </div>
+                </div>
+                <div class="status-section">
+                    <div class="status-indicator" id="statusIndicator">
+                        <span class="status-dot" id="stateDot"></span>
+                        <span class="status-text" id="stateText">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Login Section -->
+            <div id="loginSection" class="section login-section" style="display: none;">
+                <h3>Login to ATS Tailor</h3>
+                <div class="form-group">
+                    <input type="email" id="email" placeholder="Email" class="form-input">
+                </div>
+                <div class="form-group">
+                    <input type="password" id="password" placeholder="Password" class="form-input">
+                </div>
+                <button id="loginBtn" class="btn btn-primary">Login</button>
+            </div>
+
+            <!-- Job Detection Section -->
+            <div id="jobSection" class="section job-section">
+                <div class="job-info" id="jobInfo">
+                    <div class="job-header">
+                        <h4 id="jobTitle">No job detected</h4>
+                        <button id="refreshJob" class="btn-icon" title="Refresh job detection">🔄</button>
+                    </div>
+                    <p id="jobCompany" class="job-company"></p>
+                    <p id="jobLocation" class="job-location"></p>
+                    <div class="job-stats">
+                        <span id="matchScore" class="match-score">Match: --%</span>
+                        <span id="activeProviderDisplay" class="ai-provider">Kimi K2</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="section action-section">
+                <button id="tailorBtn" class="btn btn-primary btn-full">
+                    <span class="btn-text">Extract & Apply Keywords to CV</span>
+                </button>
+                
+                <div class="action-row">
+                    <button id="downloadCv" class="btn btn-secondary" disabled>📄 CV</button>
+                    <button id="downloadCover" class="btn btn-secondary" disabled>📝 Cover</button>
+                    <button id="attachBoth" class="btn btn-secondary" disabled>🔗 Attach</button>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <div class="section settings-section">
+                <h4>Settings</h4>
+                
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="autoTailorToggle" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Auto tailor on job detection</span>
+                    </label>
+                </div>
+
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="autofillEnabledToggle" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Automatic AI Autofill</span>
+                    </label>
+                </div>
+
+                <div class="setting-item">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="workdayAutoToggle">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Workday Full Automation</span>
+                    </label>
+                </div>
+
+                <!-- Default Location Setting -->
+                <div class="location-setting">
+                    <label>Default Location (for Remote jobs):</label>
+                    <div class="location-input-group">
+                        <input type="text" id="defaultLocationInput" placeholder="Dublin, IE" class="form-input">
+                        <button id="saveLocationBtn" class="btn btn-small">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workday Controls -->
+            <div class="section workday-section" id="workdayControls" style="display: none;">
+                <h4>Workday Automation</h4>
+                <div class="workday-controls">
+                    <button id="runWorkdayFlow" class="btn btn-secondary">🤖 Run Full Flow</button>
+                    <button id="manualAutofillBtn" class="btn btn-secondary">⚡ Manual Autofill</button>
+                    <button id="clearWorkdayState" class="btn btn-secondary">🗑️ Clear State</button>
+                </div>
+                
+                <!-- Workday Progress -->
+                <div id="multipageProgress" class="workday-progress">
+                    <div class="progress-step">Contact</div>
+                    <div class="progress-step">Disclosures</div>
+                    <div class="progress-step">Questions</div>
+                    <div class="progress-step">Review</div>
+                </div>
+            </div>
+
+            <!-- Keywords Section -->
+            <div class="section keywords-section" id="keywordsSection" style="display: none;">
+                <h4>Extracted Keywords</h4>
+                <div class="keywords-container" id="keywordsContainer">
+                    <!-- Keywords will be populated here -->
+                </div>
+                <div class="keywords-actions">
+                    <button id="viewKeywordsBtn" class="btn btn-small">View Keywords</button>
+                    <button id="aiExtractBtn" class="btn btn-small">AI Extract</button>
+                </div>
+            </div>
+
+            <!-- Skill Gap Analysis -->
+            <div class="section skill-gap-section">
+                <button id="skillGapBtn" class="btn btn-secondary btn-full">📊 Skill Gap Analysis</button>
+            </div>
+
+            <!-- Bulk Apply Dashboard -->
+            <div class="section bulk-section">
+                <button id="openBulkApply" class="btn btn-secondary btn-full">📈 Bulk Apply Dashboard</button>
+            </div>
+
+            <!-- Preview Section -->
+            <div class="section preview-section" id="previewSection" style="display: none;">
+                <div class="preview-tabs">
+                    <button id="previewCvTab" class="tab-btn active">CV</button>
+                    <button id="previewCoverTab" class="tab-btn">Cover Letter</button>
+                    <button id="previewTextTab" class="tab-btn">Plain Text</button>
+                </div>
+                <div class="preview-content">
+                    <div id="cvPreview" class="preview-pane active"></div>
+                    <div id="coverPreview" class="preview-pane"></div>
+                    <div id="textPreview" class="preview-pane"></div>
+                </div>
+                <div class="preview-actions">
+                    <button id="copyContent" class="btn btn-small">📋 Copy</button>
+                    <button id="copyCoverageBtn" class="btn btn-small">📊 Coverage Report</button>
+                </div>
+            </div>
+
+            <!-- Saved Responses -->
+            <div class="section saved-responses-section">
+                <div class="saved-responses-header">
+                    <h4>Saved Responses</h4>
+                    <div class="saved-responses-stats">
+                        <span id="savedResponsesCount">0</span> responses saved
+                    </div>
+                </div>
+                <div class="saved-responses-actions">
+                    <button id="viewSavedResponsesBtn" class="btn btn-small">👁️ View</button>
+                    <button id="clearSavedResponsesBtn" class="btn btn-small">🗑️ Clear All</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-content">
+                <div class="stats">
+                    <span>Today: <span id="todayCount">0</span></span>
+                    <span>Total: <span id="totalCount">0</span></span>
+                </div>
+                <button id="logoutBtn" class="btn-link" style="display: none;">Logout</button>
+            </div>
+        </div>
+
+        <!-- Toast Container -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <script src="LATEST_popup.js"></script>
+</body>
+</html>
