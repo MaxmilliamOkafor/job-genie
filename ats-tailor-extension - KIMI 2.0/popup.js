@@ -132,23 +132,105 @@ class ATSTailor {
     }
   }
   
-  // ============ AI PROVIDER SETTINGS (Persistent) ============
+  // ============ AI PROVIDER SETTINGS (Synced from Profile) ============
   
   async loadAIProviderSettings() {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
+      // First try to load from profile if logged in
+      if (this.session?.access_token && this.session?.user?.id) {
+        try {
+          const profileRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=preferred_ai_provider,openai_enabled,kimi_enabled,openai_api_key,kimi_api_key`,
+            {
+              headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${this.session.access_token}`,
+              },
+            }
+          );
+          
+          if (profileRes.ok) {
+            const profiles = await profileRes.json();
+            const profile = profiles?.[0];
+            
+            if (profile) {
+              // Determine active provider based on profile settings
+              const preferredProvider = profile.preferred_ai_provider || 'kimi';
+              const kimiEnabled = profile.kimi_enabled ?? true;
+              const openaiEnabled = profile.openai_enabled ?? true;
+              const hasKimiKey = !!profile.kimi_api_key;
+              const hasOpenAIKey = !!profile.openai_api_key;
+              
+              // Use preferred if available and enabled
+              if (preferredProvider === 'kimi' && kimiEnabled && hasKimiKey) {
+                this.aiProvider = 'kimi';
+              } else if (preferredProvider === 'openai' && openaiEnabled && hasOpenAIKey) {
+                this.aiProvider = 'openai';
+              } else if (kimiEnabled && hasKimiKey) {
+                this.aiProvider = 'kimi';
+              } else if (openaiEnabled && hasOpenAIKey) {
+                this.aiProvider = 'openai';
+              } else {
+                this.aiProvider = 'kimi'; // default
+              }
+              
+              console.log('[ATS Tailor] AI Provider loaded from profile:', this.aiProvider);
+              
+              // Save to local storage for consistency
+              await chrome.storage.local.set({ 
+                ai_provider: this.aiProvider,
+                ai_settings: { provider: this.aiProvider, syncedFromProfile: true, savedAt: Date.now() }
+              });
+              
+              resolve();
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('[ATS Tailor] Could not load AI provider from profile:', e);
+        }
+      }
+      
+      // Fallback to local storage
       chrome.storage.local.get(['ai_provider', 'ai_settings'], (result) => {
         this.aiProvider = result.ai_provider || result.ai_settings?.provider || 'kimi';
-        console.log('[ATS Tailor] AI Provider loaded:', this.aiProvider);
+        console.log('[ATS Tailor] AI Provider loaded from local storage:', this.aiProvider);
         resolve();
       });
     });
   }
   
   async saveAIProviderSettings() {
+    // Save to local storage
     await chrome.storage.local.set({ 
       ai_provider: this.aiProvider,
       ai_settings: { provider: this.aiProvider, savedAt: Date.now() }
     });
+    
+    // Also save to profile in database if logged in
+    if (this.session?.access_token && this.session?.user?.id) {
+      try {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${this.session.access_token}`,
+              Prefer: 'return=minimal'
+            },
+            body: JSON.stringify({
+              preferred_ai_provider: this.aiProvider
+            })
+          }
+        );
+        console.log('[ATS Tailor] AI Provider saved to profile:', this.aiProvider);
+      } catch (e) {
+        console.warn('[ATS Tailor] Could not save AI provider to profile:', e);
+      }
+    }
+    
     console.log('[ATS Tailor] AI Provider saved:', this.aiProvider);
     
     // Show saved indicator

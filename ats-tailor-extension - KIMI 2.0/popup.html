@@ -102,6 +102,21 @@
         </div>
         <p class="setting-help">Runs once per job when upload fields are detected.</p>
         
+        <!-- AI Autofill Toggle - Controls API Usage -->
+        <div class="setting-row autofill-setting">
+          <label class="toggle-row" for="autofillEnabledToggle">
+            <span class="toggle-label">
+              <span class="setting-icon">🤖</span>
+              AI Page Autofill
+            </span>
+            <input type="checkbox" id="autofillEnabledToggle" />
+          </label>
+          <button id="manualAutofillBtn" class="btn btn-small btn-accent" title="Run autofill manually on current page">
+            <span class="btn-text">Run Now</span>
+          </button>
+        </div>
+        <p class="setting-help">Toggle off to save API usage. Use "Run Now" for manual autofill.</p>
+        
         <!-- Default Location Setting -->
         <div class="location-setting">
           <label for="defaultLocationInput" class="setting-label">
