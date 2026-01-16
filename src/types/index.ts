@@ -45,6 +45,7 @@ export interface WorkExperience {
   endDate: string;
   description: string;
   skills: string[];
+  bullets: string[];
 }
 
 export interface Education {

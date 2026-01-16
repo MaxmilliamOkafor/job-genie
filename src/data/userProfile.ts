@@ -69,12 +69,15 @@ Maxmilliam Okafor`,
       location: "London, United Kingdom",
       startDate: "2023-01",
       endDate: "Present",
-      description: `▪ Architected and deployed recommendation models in PyTorch on billions of daily user events, increasing engagement by about 12% and contributing to incremental revenue across key product areas.
-▪ Engineered data and model pipelines on AWS with Spark and Airflow, cutting model refresh time from roughly 48 hours to under 6 hours and enabling faster testing of ranking changes.
-▪ Directed A/B and multivariate experiments for new ranking features, raising safe release frequency by around 18% and reducing the share of launches that required rollback.
-▪ Shaped ML use cases with product, data science, and infrastructure teams, setting success metrics and SLAs and defining checks for bias and model drift.
-▪ Implemented automated monitoring and data quality checks, reducing production incidents and page-outs by 25%.`,
-      skills: ["PyTorch", "AWS", "Spark", "Airflow", "Machine Learning", "A/B Testing", "Kafka", "Snowflake"]
+      description: "",
+      skills: ["PyTorch", "AWS", "Spark", "Airflow", "Machine Learning", "A/B Testing", "Kafka", "Snowflake"],
+      bullets: [
+        "Architected and deployed recommendation models in PyTorch on billions of daily user events, increasing engagement by about 12% and contributing to incremental revenue across key product areas.",
+        "Engineered data and model pipelines on AWS with Spark and Airflow, cutting model refresh time from roughly 48 hours to under 6 hours and enabling faster testing of ranking changes.",
+        "Directed A/B and multivariate experiments for new ranking features, raising safe release frequency by around 18% and reducing the share of launches that required rollback.",
+        "Shaped ML use cases with product, data science, and infrastructure teams, setting success metrics and SLAs and defining checks for bias and model drift.",
+        "Implemented automated monitoring and data quality checks, reducing production incidents and page-outs by 25%."
+      ]
     },
     {
       id: "2",
@@ -83,10 +86,13 @@ Maxmilliam Okafor`,
       location: "Dallas, TX",
       startDate: "2024-01",
       endDate: "2025-09",
-      description: `▪ Delivered SolimHealth's end-to-end dementia-screening system by creating an AWS Transcribe/NLTK auto-transcribe model.
-▪ Integrated FLUX Kontext into a MongoDB clinical backend for lifelike memory recreations.
-▪ Built a React/TypeScript, Django REST, and TensorFlow.js front end that improved accuracy and efficiency in monthly cognitive assessments.`,
-      skills: ["AWS Transcribe", "NLTK", "MongoDB", "React", "TypeScript", "Django", "TensorFlow.js", "NLP"]
+      description: "",
+      skills: ["AWS Transcribe", "NLTK", "MongoDB", "React", "TypeScript", "Django", "TensorFlow.js", "NLP"],
+      bullets: [
+        "Delivered SolimHealth's end-to-end dementia-screening system by creating an AWS Transcribe/NLTK auto-transcribe model.",
+        "Integrated FLUX Kontext into a MongoDB clinical backend for lifelike memory recreations.",
+        "Built a React/TypeScript, Django REST, and TensorFlow.js front end that improved accuracy and efficiency in monthly cognitive assessments."
+      ]
     },
     {
       id: "3",
@@ -95,11 +101,14 @@ Maxmilliam Okafor`,
       location: "Dublin, Ireland",
       startDate: "2021-04",
       endDate: "2022-12",
-      description: `▪ Led delivery of cloud migration and data platform projects worth multiple millions, managing cross-functional teams of 15 engineers.
-▪ Owned sprint planning, backlog grooming, and roadmap prioritisation in Jira and Confluence, pushing on-time milestone delivery from around 72% up to over 93%.
-▪ Translated technical requirements (APIs, integrations, security protocols, data flows) into user stories with clear acceptance criteria.
-▪ Managed stakeholder communication up to C-level, tracking risks and issues in RAID logs.`,
-      skills: ["Azure", "GCP", "Docker", "Kubernetes", "CI/CD", "Azure DevOps", "GitHub Actions", "Jira", "Confluence"]
+      description: "",
+      skills: ["Azure", "GCP", "Docker", "Kubernetes", "CI/CD", "Azure DevOps", "GitHub Actions", "Jira", "Confluence"],
+      bullets: [
+        "Led delivery of cloud migration and data platform projects worth multiple millions, managing cross-functional teams of 15 engineers.",
+        "Owned sprint planning, backlog grooming, and roadmap prioritisation in Jira and Confluence, pushing on-time milestone delivery from around 72% up to over 93%.",
+        "Translated technical requirements (APIs, integrations, security protocols, data flows) into user stories with clear acceptance criteria.",
+        "Managed stakeholder communication up to C-level, tracking risks and issues in RAID logs."
+      ]
     },
     {
       id: "4",
@@ -108,11 +117,14 @@ Maxmilliam Okafor`,
       location: "London, United Kingdom",
       startDate: "2017-08",
       endDate: "2021-03",
-      description: `▪ Built SQL queries, stored procedures, and data models to pull financial and operational metrics from enterprise systems.
-▪ Cleaned and validated datasets from multiple sources, fixing data quality issues and cutting down reconciliation errors.
-▪ Created recurring and ad-hoc reports in Excel, Power BI, and Tableau for senior stakeholders.
-▪ Documented data definitions, transformation logic, and control procedures to support internal audits and regulatory reviews.`,
-      skills: ["SQL", "Power BI", "Tableau", "Excel", "Java", "Data Modeling", "ETL", "Financial Analysis"]
+      description: "",
+      skills: ["SQL", "Power BI", "Tableau", "Excel", "Java", "Data Modeling", "ETL", "Financial Analysis"],
+      bullets: [
+        "Built SQL queries, stored procedures, and data models to pull financial and operational metrics from enterprise systems.",
+        "Cleaned and validated datasets from multiple sources, fixing data quality issues and cutting down reconciliation errors.",
+        "Created recurring and ad-hoc reports in Excel, Power BI, and Tableau for senior stakeholders.",
+        "Documented data definitions, transformation logic, and control procedures to support internal audits and regulatory reviews."
+      ]
     }
   ],
 

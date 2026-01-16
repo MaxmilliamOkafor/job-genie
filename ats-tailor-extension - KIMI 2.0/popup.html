@@ -59,40 +59,33 @@
         <button id="logoutBtn" class="btn-link">Logout</button>
       </div>
 
-      <!-- AI Settings Panel (Replaces toggle) -->
-      <div class="ai-settings-panel" id="aiSettingsPanel">
-        <div class="ai-settings-header">
-          <span class="ai-settings-icon">🤖</span>
-          <span class="ai-settings-title">AI Provider Settings</span>
-        </div>
-        <div class="ai-provider-options">
-          <label class="ai-provider-option" id="optionKimi">
-            <input type="radio" name="aiProvider" value="kimi" id="radioKimi">
-            <div class="provider-card">
-              <span class="provider-logo">🚀</span>
-              <div class="provider-info">
-                <span class="provider-name">Kimi K2</span>
-                <span class="provider-desc">kimi-k2-0711-preview • Fast</span>
-              </div>
-              <span class="provider-check">✓</span>
+      <!-- AI Provider Settings - Compact Toggle -->
+      <div class="ai-provider-panel" id="aiSettingsPanel">
+        <div class="ai-provider-toggle-row">
+          <div class="ai-provider-left">
+            <span class="ai-provider-icon">🤖</span>
+            <span class="ai-provider-title">AI Provider</span>
+          </div>
+          <div class="ai-provider-right">
+            <div class="ai-toggle-group">
+              <button class="ai-toggle-btn selected" id="btnKimi" data-provider="kimi">
+                <span class="toggle-icon">🚀</span>
+                <span class="toggle-name">Kimi K2</span>
+              </button>
+              <button class="ai-toggle-btn" id="btnOpenAI" data-provider="openai">
+                <span class="toggle-icon">🧠</span>
+                <span class="toggle-name">OpenAI</span>
+              </button>
             </div>
-          </label>
-          <label class="ai-provider-option" id="optionOpenAI">
-            <input type="radio" name="aiProvider" value="openai" id="radioOpenAI">
-            <div class="provider-card">
-              <span class="provider-logo">🧠</span>
-              <div class="provider-info">
-                <span class="provider-name">OpenAI</span>
-                <span class="provider-desc">gpt-4o-mini • Reliable</span>
-              </div>
-              <span class="provider-check">✓</span>
-            </div>
-          </label>
+          </div>
         </div>
-        <div class="ai-settings-status">
-          <span class="status-label">Active:</span>
-          <span class="status-value" id="activeAIProvider">Kimi K2</span>
-          <span class="status-saved" id="aiSettingsSaved">✓ Saved</span>
+        <div class="ai-provider-info-bar">
+          <span class="ai-active-badge" id="activeProviderBadge">
+            <span class="badge-dot kimi"></span>
+            <span class="badge-text">Kimi K2</span>
+          </span>
+          <span class="ai-model-label" id="activeModelLabel">kimi-k2-0711-preview</span>
+          <span class="ai-saved-indicator hidden" id="aiSettingsSaved">✓</span>
         </div>
       </div>
 
