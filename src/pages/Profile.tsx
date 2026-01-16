@@ -166,9 +166,17 @@ const Profile = () => {
     );
   }
 
-  const hasApiKey = !!localProfile.openai_api_key || !!localProfile.kimi_api_key;
-  const hasActiveProvider = (localProfile.preferred_ai_provider === 'openai' && localProfile.openai_enabled && !!localProfile.openai_api_key) ||
-                           (localProfile.preferred_ai_provider === 'kimi' && localProfile.kimi_enabled && !!localProfile.kimi_api_key);
+  // Check if there's an active AI provider configured correctly
+  const hasActiveProvider = (
+    // Kimi is preferred and configured
+    (localProfile.preferred_ai_provider === 'kimi' && localProfile.kimi_enabled && !!localProfile.kimi_api_key) ||
+    // OpenAI is preferred and configured
+    (localProfile.preferred_ai_provider === 'openai' && localProfile.openai_enabled && !!localProfile.openai_api_key) ||
+    // Kimi is enabled as fallback
+    (localProfile.kimi_enabled && !!localProfile.kimi_api_key) ||
+    // OpenAI is enabled as fallback
+    (localProfile.openai_enabled && !!localProfile.openai_api_key)
+  );
 
   return (
     <AppLayout>

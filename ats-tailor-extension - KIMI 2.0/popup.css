@@ -512,7 +512,29 @@ body::-webkit-scrollbar-thumb {
   font-size: 10px;
   color: var(--text-muted);
   margin-top: 4px;
+  margin-bottom: 10px;
   line-height: 1.3;
+}
+
+/* Autofill Setting */
+.autofill-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 8px;
+}
+
+.autofill-setting .toggle-row {
+  flex: 1;
+}
+
+.autofill-setting .btn-small {
+  padding: 4px 10px;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 /* Location Setting */
