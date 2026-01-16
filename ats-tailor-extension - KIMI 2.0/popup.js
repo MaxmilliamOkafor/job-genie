@@ -160,20 +160,31 @@ class ATSTailor {
   }
   
   updateAIProviderUI() {
-    const radioKimi = document.getElementById('radioKimi');
-    const radioOpenAI = document.getElementById('radioOpenAI');
-    const activeLabel = document.getElementById('activeAIProvider');
-    const optionKimi = document.getElementById('optionKimi');
-    const optionOpenAI = document.getElementById('optionOpenAI');
+    const btnKimi = document.getElementById('btnKimi');
+    const btnOpenAI = document.getElementById('btnOpenAI');
+    const activeLabel = document.getElementById('activeProviderBadge');
+    const modelLabel = document.getElementById('activeModelLabel');
+    const badgeDot = activeLabel?.querySelector('.badge-dot');
+    const badgeText = activeLabel?.querySelector('.badge-text');
     
-    if (radioKimi) radioKimi.checked = this.aiProvider === 'kimi';
-    if (radioOpenAI) radioOpenAI.checked = this.aiProvider === 'openai';
+    // Update toggle button states
+    if (btnKimi) {
+      btnKimi.classList.toggle('selected', this.aiProvider === 'kimi');
+    }
+    if (btnOpenAI) {
+      btnOpenAI.classList.toggle('selected', this.aiProvider === 'openai');
+    }
     
-    if (optionKimi) optionKimi.classList.toggle('selected', this.aiProvider === 'kimi');
-    if (optionOpenAI) optionOpenAI.classList.toggle('selected', this.aiProvider === 'openai');
-    
-    if (activeLabel) {
-      activeLabel.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    // Update info bar
+    if (badgeDot) {
+      badgeDot.classList.remove('kimi', 'openai');
+      badgeDot.classList.add(this.aiProvider);
+    }
+    if (badgeText) {
+      badgeText.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    }
+    if (modelLabel) {
+      modelLabel.textContent = this.aiProvider === 'kimi' ? 'kimi-k2-0711-preview' : 'gpt-4o-mini';
     }
   }
   
@@ -401,9 +412,9 @@ class ATSTailor {
     document.getElementById('downloadCvText')?.addEventListener('click', () => this.downloadTextVersion('cv'));
     document.getElementById('downloadCoverText')?.addEventListener('click', () => this.downloadTextVersion('cover'));
     
-    // AI Provider Selection (radio buttons - persistent)
-    document.getElementById('radioKimi')?.addEventListener('change', () => this.selectAIProvider('kimi'));
-    document.getElementById('radioOpenAI')?.addEventListener('change', () => this.selectAIProvider('openai'));
+    // AI Provider Selection (toggle buttons - persistent)
+    document.getElementById('btnKimi')?.addEventListener('click', () => this.selectAIProvider('kimi'));
+    document.getElementById('btnOpenAI')?.addEventListener('click', () => this.selectAIProvider('openai'));
 
     // Bulk Apply Dashboard
     document.getElementById('openBulkApply')?.addEventListener('click', () => {

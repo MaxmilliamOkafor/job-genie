@@ -960,18 +960,26 @@ ${includeReferral ? `
         return {
           endpoint: 'https://api.moonshot.ai/v1/chat/completions',
           model: 'kimi-k2-0711-preview',
-          providerName: 'Kimi K2'
+          providerName: 'Kimi K2',
+          // SPEED OPTIMIZATION: Kimi K2 uses lower temperature and max_tokens for faster response
+          temperature: 0.5,
+          maxTokens: 3500,
+          // Kimi K2 specific: enable stream chunking for faster first-byte
+          streamChunks: false
         };
       }
       return {
         endpoint: 'https://api.openai.com/v1/chat/completions',
         model: 'gpt-4o-mini',
-        providerName: 'OpenAI'
+        providerName: 'OpenAI',
+        temperature: 0.7,
+        maxTokens: 4000,
+        streamChunks: false
       };
     };
     
     const apiConfig = getApiConfig();
-    console.log(`Using ${apiConfig.providerName} with model ${apiConfig.model}`);
+    console.log(`Using ${apiConfig.providerName} with model ${apiConfig.model} (temp: ${apiConfig.temperature})`);
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -981,21 +989,32 @@ ${includeReferral ? `
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
+        // Build request body with provider-specific optimizations
+        const requestBody: any = {
+          model: apiConfig.model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          max_tokens: apiConfig.maxTokens,
+          temperature: apiConfig.temperature,
+        };
+        
+        // Kimi K2 speed optimizations
+        if (aiProvider === 'kimi') {
+          // Use presence_penalty to reduce repetition and speed up
+          requestBody.presence_penalty = 0.1;
+          // Kimi responds faster with explicit stop tokens
+          requestBody.stop = ["\n\n\n", "---END---"];
+        }
+        
         response = await fetch(apiConfig.endpoint, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${userApiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            model: apiConfig.model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt }
-            ],
-            max_tokens: 4000,
-            temperature: 0.7,
-          }),
+          body: JSON.stringify(requestBody),
         });
         
         if (response.ok) {

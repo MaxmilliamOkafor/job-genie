@@ -975,8 +975,12 @@ const Profile = () => {
                     location: '',
                     startDate: '2024-01',
                     endDate: 'Present',
+                    description: '',
                     skills: [],
-                    bullets: []
+                    bullets: [
+                      'Add your key achievement or responsibility here',
+                      'Use metrics and numbers where possible (e.g., Improved performance by 30%)'
+                    ]
                   };
                   updateLocalField('work_experience', [...(localProfile.work_experience || []), newExp]);
                 }}
@@ -1060,11 +1064,85 @@ const Profile = () => {
                             className="w-28"
                           />
                         </div>
+                        
+                        {/* Bullet Points / Achievements Section */}
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-sm font-medium">Achievements / Responsibilities</Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const exps = [...(localProfile.work_experience || [])];
+                                const currentBullets = exps[expIndex].bullets || [];
+                                exps[expIndex] = { 
+                                  ...exps[expIndex], 
+                                  bullets: [...currentBullets, 'New achievement or responsibility'] 
+                                };
+                                updateLocalField('work_experience', exps);
+                              }}
+                              className="h-7 px-2 gap-1 text-xs"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Add Bullet
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {(exp.bullets || []).map((bullet: string, bulletIndex: number) => (
+                              <div key={bulletIndex} className="flex gap-2 items-start">
+                                <span className="text-muted-foreground mt-2 text-sm">•</span>
+                                <Textarea
+                                  value={bullet}
+                                  onChange={(e) => {
+                                    const exps = [...(localProfile.work_experience || [])];
+                                    const bullets = [...(exps[expIndex].bullets || [])];
+                                    bullets[bulletIndex] = e.target.value;
+                                    exps[expIndex] = { ...exps[expIndex], bullets };
+                                    updateLocalField('work_experience', exps);
+                                  }}
+                                  placeholder="Describe your achievement with metrics (e.g., Reduced load time by 40%)"
+                                  className="flex-1 min-h-[60px] resize-none text-sm"
+                                  rows={2}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                  onClick={() => {
+                                    const exps = [...(localProfile.work_experience || [])];
+                                    const bullets = [...(exps[expIndex].bullets || [])];
+                                    bullets.splice(bulletIndex, 1);
+                                    exps[expIndex] = { ...exps[expIndex], bullets };
+                                    updateLocalField('work_experience', exps);
+                                  }}
+                                >
+                                  <X className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ))}
+                            {(!exp.bullets || exp.bullets.length === 0) && (
+                              <p className="text-xs text-muted-foreground italic">
+                                No bullet points yet. Add achievements to improve your CV tailoring.
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <>
                         <h3 className="font-semibold">{exp.title}</h3>
                         <p className="text-muted-foreground">{exp.company} • {exp.location}</p>
+                        {/* Display bullets in view mode */}
+                        {exp.bullets && exp.bullets.length > 0 && (
+                          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                            {exp.bullets.map((bullet: string, i: number) => (
+                              <li key={i} className="flex gap-2">
+                                <span>•</span>
+                                <span>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </>
                     )}
                   </div>
