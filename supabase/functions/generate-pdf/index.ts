@@ -255,15 +255,15 @@ serve(async (req) => {
       // ULTRA ATS-COMPATIBLE RESUME FORMAT
       // ============================================
       
-      // NAME - Large (24pt), bold, stands out
-      currentPage.drawText(sanitizedData.personalInfo.name, {
+      // NAME - 20pt, bold, UPPERCASE
+      currentPage.drawText(sanitizedData.personalInfo.name.toUpperCase(), {
         x: MARGIN,
         y: yPosition,
-        size: 24,
+        size: 20,
         font: helveticaBold,
         color: colors.black,
       });
-      yPosition -= 30;
+      yPosition -= 26;
 
       // CONTACT LINE - Simple pipe-separated
       const contactParts: string[] = [];
