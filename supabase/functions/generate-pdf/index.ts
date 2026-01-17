@@ -50,6 +50,24 @@ interface ResumeData {
   candidateName?: string;
 }
 
+// Date patterns to strip from company/title fields
+const DATE_PATTERNS = [
+  /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
+  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
+  /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
+];
+
+// Strip dates from company/title fields to prevent duplication
+const stripDatesFromField = (fieldValue: string): string => {
+  if (!fieldValue) return '';
+  let cleaned = fieldValue;
+  for (const pattern of DATE_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  // Clean up leftover separators and whitespace
+  return cleaned.replace(/\s*\|\s*$/g, '').replace(/^\s*\|\s*/g, '').replace(/\s{2,}/g, ' ').trim();
+};
+
 // ULTRA ATS-SAFE: Sanitize text - only ASCII, no special characters
 const sanitizeText = (text: string | null | undefined): string => {
   if (!text) return '';
@@ -285,8 +303,13 @@ serve(async (req) => {
           const exp = sanitizedData.experience[i];
           ensureSpace(50);
           
-          // Company name - BOLD
-          currentPage.drawText(exp.company, {
+          // CRITICAL: Strip any embedded dates from company/title to prevent duplication
+          const cleanCompany = stripDatesFromField(exp.company);
+          const cleanTitle = stripDatesFromField(exp.title);
+          const dates = exp.dates || '';
+          
+          // Company name - BOLD (dates stripped)
+          currentPage.drawText(cleanCompany, {
             x: MARGIN,
             y: yPosition,
             size: 11,
@@ -294,19 +317,21 @@ serve(async (req) => {
             color: colors.black,
           });
           
-          // Dates on same line, right-aligned
-          const dateWidth = helvetica.widthOfTextAtSize(exp.dates, 10);
-          currentPage.drawText(exp.dates, {
-            x: PAGE_WIDTH - MARGIN - dateWidth,
-            y: yPosition,
-            size: 10,
-            font: helvetica,
-            color: colors.darkGray,
-          });
+          // Dates on same line, right-aligned (only if dates exist)
+          if (dates) {
+            const dateWidth = helvetica.widthOfTextAtSize(dates, 10);
+            currentPage.drawText(dates, {
+              x: PAGE_WIDTH - MARGIN - dateWidth,
+              y: yPosition,
+              size: 10,
+              font: helvetica,
+              color: colors.darkGray,
+            });
+          }
           yPosition -= LINE_HEIGHT + 2;
 
-          // Job title - ITALIC
-          currentPage.drawText(exp.title, {
+          // Job title - ITALIC (dates stripped)
+          currentPage.drawText(cleanTitle, {
             x: MARGIN,
             y: yPosition,
             size: 10,

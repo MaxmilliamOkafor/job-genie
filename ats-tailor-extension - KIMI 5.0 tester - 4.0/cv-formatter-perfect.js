@@ -249,6 +249,26 @@
       }
     },
 
+    // ============ DATE PATTERN FOR CLEANING ============
+    // Matches date patterns like: 2023-01 - Present, Jan 2023 - Dec 2024, 2021-2023, etc.
+    DATE_PATTERNS: [
+      /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
+      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
+      /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
+      /\b(Present|Current)\b/gi
+    ],
+
+    // Strip date patterns from a string
+    stripDatesFromField(fieldValue) {
+      if (!fieldValue) return '';
+      let cleaned = fieldValue;
+      for (const pattern of this.DATE_PATTERNS) {
+        cleaned = cleaned.replace(pattern, '');
+      }
+      // Clean up leftover separators and whitespace
+      return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
+    },
+
     // ============ PARSE EXPERIENCE ============
     parseExperience(text) {
       const jobs = [];
@@ -266,10 +286,37 @@
           }
           
           const parts = trimmed.split('|').map(p => p.trim());
+          
+          // Extract dates from the dedicated dates field (parts[2])
+          // Also check if dates are embedded in company or title and clean them
+          let dates = parts[2] || '';
+          let company = parts[0] || '';
+          let title = parts[1] || '';
+          
+          // If dates field is empty, try to extract from company/title
+          if (!dates) {
+            for (const pattern of this.DATE_PATTERNS) {
+              const companyMatch = company.match(pattern);
+              const titleMatch = title.match(pattern);
+              if (companyMatch) {
+                dates = companyMatch[0];
+                break;
+              }
+              if (titleMatch) {
+                dates = titleMatch[0];
+                break;
+              }
+            }
+          }
+          
+          // Clean company and title to remove any embedded dates
+          company = this.stripDatesFromField(company);
+          title = this.stripDatesFromField(title);
+          
           currentJob = {
-            company: parts[0] || '',
-            title: parts[1] || '',
-            dates: parts[2] || '',
+            company: company,
+            title: title,
+            dates: dates,
             location: parts[3] || '',
             bullets: []
           };
@@ -573,8 +620,8 @@
       ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(job.company)}<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(job.dates)}</span></div>
-          <div class="cv-job-title">${escapeHtml(job.title)}</div>
+          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}${job.dates ? `<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(job.dates)}</span>` : ''}</div>
+          <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}</div>
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
@@ -642,8 +689,11 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          lines.push(job.company);
-          lines.push([job.title, job.dates, job.location].filter(Boolean).join(' | '));
+          // Use clean company/title (dates stripped) with dates on title line
+          const cleanCompany = this.stripDatesFromField(job.company);
+          const cleanTitle = this.stripDatesFromField(job.title);
+          lines.push(cleanCompany);
+          lines.push([cleanTitle, job.dates, job.location].filter(Boolean).join(' | '));
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
