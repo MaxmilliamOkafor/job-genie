@@ -50,13 +50,15 @@ interface ParsedCVData {
   cover_letter?: string | null;
 }
 
+type ImportMode = 'work_experience_only' | 'all_fields';
+
 interface CVUploadProps {
   cvFileName?: string | null;
   cvFilePath?: string | null;
   cvUploadedAt?: string | null;
   onUploadComplete: (path: string, fileName: string) => void;
   onDelete: () => void;
-  onParsedData?: (data: ParsedCVData) => void;
+  onParsedData?: (data: ParsedCVData, mode: ImportMode) => void;
 }
 
 export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplete, onDelete, onParsedData }: CVUploadProps) {
@@ -125,7 +127,7 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
     }
   };
 
-  const handleParseCV = async (filePath: string) => {
+  const handleParseCV = async (filePath: string, mode: ImportMode) => {
     if (!onParsedData) {
       toast.info('CV parsing is not available in this context');
       return;
@@ -142,8 +144,11 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
       if (error) throw error;
 
       if (data.success && data.data) {
-        onParsedData(data.data);
-        toast.success('CV parsed successfully! Your profile has been updated.');
+        onParsedData(data.data, mode);
+        const message = mode === 'work_experience_only' 
+          ? 'Work experience imported successfully!' 
+          : 'All profile fields imported successfully!';
+        toast.success(message);
       } else {
         throw new Error(data.error || 'Failed to parse CV');
       }
@@ -238,7 +243,10 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => handleParseCV(cvFilePath)}
+                    onClick={() => {
+                      setPendingFilePath(cvFilePath);
+                      setShowParseConfirm(true);
+                    }}
                     disabled={isParsing}
                     title="Parse CV to auto-fill profile"
                   >
@@ -307,22 +315,40 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
       </Card>
 
       <AlertDialog open={showParseConfirm} onOpenChange={setShowParseConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              Parse CV to Auto-Fill Profile?
+              Import from CV
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              Would you like to use AI to extract information from your CV and automatically fill in your profile? This will update your personal details, skills, work experience, and education.
+            <AlertDialogDescription className="space-y-3">
+              <p>Choose what to import from your CV:</p>
+              <div className="space-y-2 text-sm">
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="font-medium text-foreground">Work Experience Only (Recommended)</p>
+                  <p className="text-muted-foreground">Only updates work experience. Your other profile fields remain unchanged.</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="font-medium text-foreground">Import All Fields</p>
+                  <p className="text-muted-foreground">Overwrites name, contact, skills, education, and work experience.</p>
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingFilePath(null)}>
-              No, I'll fill manually
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setPendingFilePath(null)} className="mt-0">
+              Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => pendingFilePath && handleParseCV(pendingFilePath)}>
-              Yes, Parse CV
+            <Button
+              variant="outline"
+              onClick={() => pendingFilePath && handleParseCV(pendingFilePath, 'all_fields')}
+            >
+              Import All Fields
+            </Button>
+            <AlertDialogAction 
+              onClick={() => pendingFilePath && handleParseCV(pendingFilePath, 'work_experience_only')}
+            >
+              Work Experience Only
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
