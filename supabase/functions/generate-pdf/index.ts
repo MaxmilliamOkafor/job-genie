@@ -714,20 +714,20 @@ async function handleRawContentRequest(body: {
     
     // ============ RENDER PDF ============
     
-    // NAME - Large (24pt), Bold
+    // NAME - 20pt, Bold, UPPERCASE
     const displayName = firstName && lastName 
-      ? `${firstName} ${lastName}` 
-      : nameExtracted.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      ? `${firstName} ${lastName}`.toUpperCase() 
+      : nameExtracted.toUpperCase();
     
     ensureSpace(30);
     currentPage.drawText(displayName, {
       x: MARGIN,
       y: yPosition,
-      size: 24,
+      size: 20,
       font: helveticaBold,
       color: rgb(0, 0, 0),
     });
-    yPosition -= 30;
+    yPosition -= 26;
     
     // CONTACT LINE
     if (contactLine) {
@@ -783,24 +783,69 @@ async function handleRawContentRequest(body: {
         let currentJob: JobEntry | null = null;
         const jobs: JobEntry[] = [];
         
+        // Date patterns to detect and strip from fields
+        const datePatterns = [
+          /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
+          /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
+          /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
+        ];
+        
+        const stripDates = (text: string): string => {
+          let cleaned = text;
+          for (const pattern of datePatterns) {
+            cleaned = cleaned.replace(pattern, '');
+          }
+          return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
+        };
+        
+        const extractDates = (text: string): string => {
+          for (const pattern of datePatterns) {
+            const match = text.match(pattern);
+            if (match) return match[0];
+          }
+          return '';
+        };
+        
         for (const line of section.content) {
-          // Job header pattern: Company | Dates or just Company line
+          // Job header pattern: Company | Title | Dates OR Company | Dates
           if (line.includes('|') && !line.startsWith('-') && !line.startsWith('•')) {
             if (currentJob) jobs.push(currentJob);
             const parts = line.split('|').map(p => p.trim());
+            
+            // Format: Company | Title | Dates | Location
+            // OR: Company | Dates (title on next line)
+            let company = stripDates(parts[0] || '');
+            let title = '';
+            let dates = '';
+            
+            if (parts.length >= 3) {
+              // Assume: Company | Title | Dates
+              title = stripDates(parts[1] || '');
+              dates = parts[2] || extractDates(line);
+            } else if (parts.length === 2) {
+              // Could be Company | Dates or Company | Title
+              // Check if second part looks like a date
+              if (extractDates(parts[1])) {
+                dates = parts[1];
+              } else {
+                title = stripDates(parts[1]);
+                dates = extractDates(line);
+              }
+            }
+            
             currentJob = { 
-              company: parts[0] || '', 
-              title: parts[1] || '', 
-              dates: parts[2] || parts[1] || '',
+              company, 
+              title, 
+              dates,
               bullets: [] 
             };
           } else if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
             if (currentJob) {
               currentJob.bullets.push(line.replace(/^[-•*]\s*/, ''));
             }
-          } else if (currentJob && !currentJob.title && line.length < 60) {
-            // Might be a job title on separate line
-            currentJob.title = line;
+          } else if (currentJob && !currentJob.title && line.length < 80 && !line.includes('@')) {
+            // Likely a job title on separate line - set it
+            currentJob.title = stripDates(line);
           }
         }
         if (currentJob) jobs.push(currentJob);
