@@ -29,22 +29,38 @@ export function AIProviderStatus() {
     if (!user) return;
     
     try {
-      // Get usage from last 30 days
+      // Get usage from last 30 days with pagination to handle large datasets
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
-      const { data, error } = await supabase
-        .from('api_usage')
-        .select('function_name, tokens_used')
-        .eq('user_id', user.id)
-        .gte('created_at', thirtyDaysAgo.toISOString());
-      
-      if (error) throw error;
+      const allData: { function_name: string; tokens_used: number | null }[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('api_usage')
+          .select('function_name, tokens_used')
+          .eq('user_id', user.id)
+          .gte('created_at', thirtyDaysAgo.toISOString())
+          .range(offset, offset + batchSize - 1);
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData.push(...data);
+          offset += batchSize;
+          hasMore = data.length === batchSize;
+        } else {
+          hasMore = false;
+        }
+      }
       
       let openai = 0;
       let kimi = 0;
       
-      data?.forEach((row) => {
+      allData.forEach((row) => {
         const tokens = row.tokens_used || 0;
         if (row.function_name?.includes('-kimi')) {
           kimi += tokens;
