@@ -269,6 +269,23 @@
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
+    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 - 2023")
+    toYearOnly(dateStr) {
+      if (!dateStr) return '';
+      // Extract all 4-digit years
+      const years = dateStr.match(/\d{4}/g);
+      const hasPresent = /present/i.test(dateStr);
+      
+      if (hasPresent && years && years.length >= 1) {
+        return `${years[0]} - Present`;
+      } else if (years && years.length >= 2) {
+        return `${years[0]} - ${years[1]}`;
+      } else if (years && years.length === 1) {
+        return years[0];
+      }
+      return dateStr; // Return original if no years found
+    },
+
     // ============ PARSE EXPERIENCE ============
     parseExperience(text) {
       const jobs = [];
@@ -620,7 +637,7 @@
       ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}${job.dates ? `<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(job.dates)}</span>` : ''}</div>
+          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}${job.dates ? `<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}</div>
           <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}</div>
         </div>
         ${job.bullets.length > 0 ? `
@@ -689,11 +706,12 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          // Use clean company/title (dates stripped) with dates on title line
+          // Use clean company/title (dates stripped) with year-only dates
           const cleanCompany = this.stripDatesFromField(job.company);
           const cleanTitle = this.stripDatesFromField(job.title);
+          const yearDates = this.toYearOnly(job.dates);
           lines.push(cleanCompany);
-          lines.push([cleanTitle, job.dates, job.location].filter(Boolean).join(' | '));
+          lines.push([cleanTitle, yearDates, job.location].filter(Boolean).join(' | '));
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
