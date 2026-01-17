@@ -706,12 +706,12 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          // Use clean company/title (dates stripped) with year-only dates
+          // Use clean company/title (dates stripped) with year-only dates - NO location (avoid bias)
           const cleanCompany = this.stripDatesFromField(job.company);
           const cleanTitle = this.stripDatesFromField(job.title);
           const yearDates = this.toYearOnly(job.dates);
           lines.push(cleanCompany);
-          lines.push([cleanTitle, yearDates, job.location].filter(Boolean).join(' | '));
+          lines.push([cleanTitle, yearDates].filter(Boolean).join(' | '));
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
