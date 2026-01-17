@@ -14,12 +14,107 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
-import { 
-  User, Briefcase, GraduationCap, Award, Download, Save, Plus, X, 
+import {
+  User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
   Loader2, Activity, Zap, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Heuristics to prevent "company ↔ role" swaps when CV parsing (and some users manual entry)
+const isLikelyJobTitle = (text: string) => {
+  const t = (text || '').trim();
+  if (!t) return false;
+  return /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|designer|administrator|coordinator|officer|executive|vp|president|founder|cto|ceo|cfo|coo)\b/i.test(t)
+    || /\b(senior|junior|principal|staff|associate|assistant|intern|head of|chief)\b/i.test(t);
+};
+
+const isLikelyCompany = (text: string) => {
+  const t = (text || '').trim();
+  if (!t) return false;
+  return /\b(inc|llc|ltd|corp|corporation|company|co\.|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i.test(t)
+    || /\bformerly\b/i.test(t)
+    || /\b(meta|facebook|accenture|citi|citigroup|google|amazon|microsoft|apple)\b/i.test(t);
+};
+
+const splitCompanyAndTitle = (value: string) => {
+  const raw = (value || '').trim();
+  if (!raw) return null;
+
+  // Prefer em/en dash split: "Company – Title" or "Company — Title"
+  let parts = raw.split(/\s*[–—]\s*/).map(s => s.trim()).filter(Boolean);
+
+  // Fall back: "Company - Title" but avoid dates like 2020-2023
+  if (parts.length === 1) {
+    parts = raw.split(/\s+-\s+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Fall back: "Company | Title" (some parsers)
+  if (parts.length === 1) {
+    parts = raw.split('|').map(s => s.trim()).filter(Boolean);
+  }
+
+  if (parts.length >= 2) {
+    return { company: parts[0], title: parts[1] };
+  }
+
+  return null;
+};
+
+const normalizeWorkExperience = (exps: any[]) => {
+  if (!Array.isArray(exps)) return [];
+
+  return exps.map((exp: any) => {
+    const next = { ...exp };
+
+    // Ensure id exists (CV parse often returns no id)
+    if (!next.id) next.id = crypto.randomUUID();
+
+    // If either field contains "Company – Title" style, split it.
+    if ((!next.title || !next.company) && typeof next.company === 'string') {
+      const split = splitCompanyAndTitle(next.company);
+      if (split) {
+        next.company = split.company;
+        next.title = next.title || split.title;
+      }
+    }
+    if ((!next.title || !next.company) && typeof next.title === 'string') {
+      const split = splitCompanyAndTitle(next.title);
+      if (split) {
+        next.company = next.company || split.company;
+        next.title = split.title;
+      }
+    }
+
+    // If swapped, swap back.
+    if (next.company && next.title) {
+      const companyLooksLikeTitle = isLikelyJobTitle(next.company) && !isLikelyCompany(next.company);
+      const titleLooksLikeCompany = isLikelyCompany(next.title) && !isLikelyJobTitle(next.title);
+      if (companyLooksLikeTitle && titleLooksLikeCompany) {
+        const tmp = next.company;
+        next.company = next.title;
+        next.title = tmp;
+      }
+    }
+
+    // Ensure bullets array exists (tailoring expects structured bullets)
+    if (!Array.isArray(next.bullets)) {
+      if (typeof next.description === 'string' && next.description.trim()) {
+        // best-effort: split description into bullet-like lines
+        const lines = next.description
+          .split(/\r?\n/)
+          .map((l: string) => l.replace(/^[-•]\s*/, '').trim())
+          .filter(Boolean);
+        next.bullets = lines.length ? lines : [];
+      } else {
+        next.bullets = [];
+      }
+    }
+
+    return next;
+  });
+};
+
 
 // Default ATS answers that pass knockout questions
 const DEFAULT_ATS_ANSWERS = {
@@ -123,7 +218,12 @@ const Profile = () => {
   };
 
   const handleSave = async () => {
-    await updateProfile(localProfile);
+    const normalized = {
+      ...localProfile,
+      work_experience: normalizeWorkExperience(localProfile.work_experience || []),
+    };
+
+    await updateProfile(normalized);
     setEditMode(false);
   };
 
@@ -248,7 +348,7 @@ const Profile = () => {
           onParsedData={(parsedData) => {
             // Update local profile with parsed data
             const updates: Partial<typeof localProfile> = {};
-            
+
             if (parsedData.first_name) updates.first_name = parsedData.first_name;
             if (parsedData.last_name) updates.last_name = parsedData.last_name;
             if (parsedData.email) updates.email = parsedData.email;
@@ -264,16 +364,20 @@ const Profile = () => {
             if (parsedData.expected_salary) updates.expected_salary = parsedData.expected_salary;
             if (parsedData.skills && parsedData.skills.length > 0) updates.skills = parsedData.skills;
             if (parsedData.certifications && parsedData.certifications.length > 0) updates.certifications = parsedData.certifications;
-            if (parsedData.work_experience && parsedData.work_experience.length > 0) updates.work_experience = parsedData.work_experience;
             if (parsedData.education && parsedData.education.length > 0) updates.education = parsedData.education;
             if (parsedData.languages && parsedData.languages.length > 0) updates.languages = parsedData.languages;
             if (parsedData.cover_letter) updates.cover_letter = parsedData.cover_letter;
-            
+
+            if (parsedData.work_experience && parsedData.work_experience.length > 0) {
+              // Normalise (and ensure id/bullets exist) to prevent company/title swaps.
+              updates.work_experience = normalizeWorkExperience(parsedData.work_experience as any);
+            }
+
             // Update local state
             setLocalProfile(prev => ({ ...prev, ...updates }));
-            
+
             // Save to database
-            updateProfile(updates);
+            updateProfile(updates as any);
           }}
         />
 
