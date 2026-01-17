@@ -838,6 +838,26 @@ async function handleRawContentRequest(body: {
           return locationPatterns.some(p => p.test(trimmed));
         };
         
+        // Job title patterns - detect if a line is likely a job title
+        const isJobTitle = (text: string): boolean => {
+          const titlePatterns = [
+            /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|administrator|coordinator|officer|executive|vp|president|founder|cto|ceo|cfo|coo)\b/i,
+            /\b(senior|junior|principal|staff|associate|assistant|intern|trainee|head of|chief)\b/i,
+            /\b(product|project|program|data|software|cloud|ai|ml|machine learning|devops|sre|qa|test|security|network|system|solutions)\b/i,
+          ];
+          return titlePatterns.some(p => p.test(text));
+        };
+        
+        // Company patterns - detect if a line is likely a company name
+        const isCompanyName = (text: string): boolean => {
+          const companyPatterns = [
+            /\b(inc|llc|ltd|corp|corporation|company|co|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i,
+            /\bformerly\b/i, // "Meta (formerly Facebook Inc)"
+            /\b(google|meta|facebook|amazon|apple|microsoft|netflix|ibm|oracle|salesforce|adobe|intel|nvidia|cisco|dell|hp|accenture|deloitte|pwc|kpmg|ey|mckinsey|bain|bcg|citi|citigroup|jpmorgan|goldman|morgan stanley|barclays|hsbc)\b/i,
+          ];
+          return companyPatterns.some(p => p.test(text));
+        };
+        
         for (const line of section.content) {
           // Skip location lines entirely - NO location to prevent recruiter bias
           if (isLocation(line)) {
@@ -869,6 +889,14 @@ async function handleRawContentRequest(body: {
               }
             }
             
+            // CRITICAL: Detect if company/title are swapped
+            // If "company" looks like a job title and "title" looks like a company, swap them
+            if (isJobTitle(company) && (isCompanyName(title) || !isJobTitle(title))) {
+              const temp = company;
+              company = title;
+              title = temp;
+            }
+            
             currentJob = { 
               company, 
               title, 
@@ -879,9 +907,34 @@ async function handleRawContentRequest(body: {
             if (currentJob) {
               currentJob.bullets.push(line.replace(/^[-•*]\s*/, ''));
             }
-          } else if (currentJob && !currentJob.title && line.length < 80 && !line.includes('@') && !isLocation(line)) {
-            // Likely a job title on separate line - set it (but skip if it's a location)
-            currentJob.title = stripDates(line);
+          } else if (currentJob && line.length < 80 && !line.includes('@') && !isLocation(line)) {
+            // Non-bullet line - could be title or company on separate line
+            const cleanedLine = stripDates(line);
+            
+            // Determine if this is a title or company based on patterns
+            const lineIsTitle = isJobTitle(cleanedLine);
+            const lineIsCompany = isCompanyName(cleanedLine);
+            
+            if (!currentJob.title && lineIsTitle) {
+              currentJob.title = cleanedLine;
+            } else if (!currentJob.company && lineIsCompany) {
+              currentJob.company = cleanedLine;
+            } else if (!currentJob.title) {
+              // Default: treat as title if title is missing
+              currentJob.title = cleanedLine;
+            } else if (!currentJob.company) {
+              // Or company if company is missing
+              currentJob.company = cleanedLine;
+            }
+            
+            // SWAP CHECK: If after assignment, company looks like title and vice versa, swap
+            if (currentJob.company && currentJob.title) {
+              if (isJobTitle(currentJob.company) && isCompanyName(currentJob.title)) {
+                const temp = currentJob.company;
+                currentJob.company = currentJob.title;
+                currentJob.title = temp;
+              }
+            }
           }
         }
         if (currentJob) jobs.push(currentJob);

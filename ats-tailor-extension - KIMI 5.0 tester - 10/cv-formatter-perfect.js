@@ -292,6 +292,26 @@
       const lines = text.split('\n');
       let currentJob = null;
 
+      // Helper: detect if a line is a job title
+      const isJobTitle = (text) => {
+        const titlePatterns = [
+          /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|administrator|coordinator|officer|executive|vp|president|founder|cto|ceo|cfo|coo)\b/i,
+          /\b(senior|junior|principal|staff|associate|assistant|intern|trainee|head of|chief)\b/i,
+          /\b(product|project|program|data|software|cloud|ai|ml|machine learning|devops|sre|qa|test|security|network|system|solutions)\b/i,
+        ];
+        return titlePatterns.some(p => p.test(text));
+      };
+
+      // Helper: detect if a line is a company name
+      const isCompanyName = (text) => {
+        const companyPatterns = [
+          /\b(inc|llc|ltd|corp|corporation|company|co|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i,
+          /\bformerly\b/i, // "Meta (formerly Facebook Inc)"
+          /\b(google|meta|facebook|amazon|apple|microsoft|netflix|ibm|oracle|salesforce|adobe|intel|nvidia|cisco|dell|hp|accenture|deloitte|pwc|kpmg|ey|mckinsey|bain|bcg|citi|citigroup|jpmorgan|goldman|morgan stanley|barclays|hsbc)\b/i,
+        ];
+        return companyPatterns.some(p => p.test(text));
+      };
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -329,6 +349,14 @@
           // Clean company and title to remove any embedded dates
           company = this.stripDatesFromField(company);
           title = this.stripDatesFromField(title);
+          
+          // CRITICAL: Detect if company/title are swapped
+          // If "company" looks like a job title and "title" looks like a company, swap them
+          if (isJobTitle(company) && (isCompanyName(title) || !isJobTitle(title))) {
+            const temp = company;
+            company = title;
+            title = temp;
+          }
           
           // NO location - removed to prevent recruiter bias
           currentJob = {
