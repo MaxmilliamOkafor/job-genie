@@ -17,7 +17,7 @@ import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
-  Loader2, Activity, Zap, AlertTriangle
+  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -53,6 +53,135 @@ const Profile = () => {
   // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [isTestingKimiKey, setIsTestingKimiKey] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  // Export profile to JSON file
+  const handleExportProfile = () => {
+    if (!localProfile) {
+      toast.error('No profile data to export');
+      return;
+    }
+    
+    setIsExporting(true);
+    try {
+      // Create export data (exclude sensitive fields like API keys)
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        profile: {
+          first_name: localProfile.first_name,
+          last_name: localProfile.last_name,
+          email: localProfile.email,
+          phone: localProfile.phone,
+          address: localProfile.address,
+          city: localProfile.city,
+          state: localProfile.state,
+          zip_code: localProfile.zip_code,
+          country: localProfile.country,
+          citizenship: localProfile.citizenship,
+          linkedin: localProfile.linkedin,
+          github: localProfile.github,
+          portfolio: localProfile.portfolio,
+          current_salary: localProfile.current_salary,
+          expected_salary: localProfile.expected_salary,
+          notice_period: localProfile.notice_period,
+          total_experience: localProfile.total_experience,
+          highest_education: localProfile.highest_education,
+          willing_to_relocate: localProfile.willing_to_relocate,
+          driving_license: localProfile.driving_license,
+          visa_required: localProfile.visa_required,
+          veteran_status: localProfile.veteran_status,
+          disability: localProfile.disability,
+          security_clearance: localProfile.security_clearance,
+          hispanic_latino: localProfile.hispanic_latino,
+          race_ethnicity: localProfile.race_ethnicity,
+          gender: localProfile.gender,
+          authorized_countries: localProfile.authorized_countries,
+          skills: localProfile.skills,
+          certifications: localProfile.certifications,
+          work_experience: localProfile.work_experience,
+          education: localProfile.education,
+          languages: localProfile.languages,
+          cover_letter: localProfile.cover_letter,
+          ats_strategy: localProfile.ats_strategy,
+          excluded_companies: localProfile.excluded_companies,
+        }
+      };
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quantumhire-profile-${localProfile.first_name || 'user'}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Profile exported successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export profile');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Import profile from JSON file
+  const handleImportProfile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.name.endsWith('.json')) {
+      toast.error('Please select a JSON file');
+      return;
+    }
+    
+    setIsImporting(true);
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string;
+        const importData = JSON.parse(content);
+        
+        // Validate the import data structure
+        if (!importData.profile) {
+          throw new Error('Invalid profile export file');
+        }
+        
+        const profileData = importData.profile;
+        
+        // Normalize work experience if present
+        if (profileData.work_experience) {
+          profileData.work_experience = normalizeWorkExperience(profileData.work_experience);
+        }
+        
+        // Update local state
+        setLocalProfile(prev => ({ ...prev, ...profileData }));
+        
+        // Save to database
+        await updateProfile(profileData);
+        
+        toast.success(`Profile imported successfully! (exported ${new Date(importData.exportedAt).toLocaleDateString()})`);
+      } catch (error) {
+        console.error('Import error:', error);
+        toast.error('Failed to import profile. Please check the file format.');
+      } finally {
+        setIsImporting(false);
+        // Reset the input
+        event.target.value = '';
+      }
+    };
+    
+    reader.onerror = () => {
+      toast.error('Failed to read file');
+      setIsImporting(false);
+    };
+    
+    reader.readAsText(file);
+  };
 
   // Note: API usage stats are now shown in the ApiUsageChart component
 
@@ -205,23 +334,61 @@ const Profile = () => {
           </Alert>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold">Profile</h1>
             <p className="text-muted-foreground mt-1">Your CV data for auto-applications</p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleLoadCV} variant="outline" className="gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {/* Export/Import buttons */}
+            <Button 
+              onClick={handleExportProfile} 
+              variant="outline" 
+              size="sm"
+              disabled={isExporting}
+              className="gap-2"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FolderDown className="h-4 w-4" />
+              )}
+              Export
+            </Button>
+            <div className="relative">
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportProfile}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                disabled={isImporting}
+              />
+              <Button 
+                variant="outline" 
+                size="sm"
+                disabled={isImporting}
+                className="gap-2 pointer-events-none"
+              >
+                {isImporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Import
+              </Button>
+            </div>
+            
+            <Button onClick={handleLoadCV} variant="outline" size="sm" className="gap-2">
               <Download className="h-4 w-4" />
-              Load Sample CV
+              Sample CV
             </Button>
             {editMode ? (
-              <Button onClick={handleSave} className="gap-2">
+              <Button onClick={handleSave} size="sm" className="gap-2">
                 <Save className="h-4 w-4" />
                 Save Changes
               </Button>
             ) : (
-              <Button onClick={() => setEditMode(true)} variant="secondary">
+              <Button onClick={() => setEditMode(true)} variant="secondary" size="sm">
                 Edit Profile
               </Button>
             )}
