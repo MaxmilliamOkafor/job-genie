@@ -37,28 +37,49 @@ export const ApiUsageChart = () => {
     
     setIsLoading(true);
     try {
-      let query = supabase
-        .from('api_usage')
-        .select('function_name, tokens_used, created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
-
-      // Apply date filter
+      // Build date filter
+      let startDate: Date | null = null;
       if (timeRange !== 'all') {
         const daysAgo = timeRange === '7d' ? 7 : 30;
-        const startDate = new Date();
+        startDate = new Date();
         startDate.setDate(startDate.getDate() - daysAgo);
-        query = query.gte('created_at', startDate.toISOString());
       }
 
-      const { data, error } = await query;
+      // Fetch data in batches to handle large datasets (Supabase 1000 row limit)
+      const allData: { function_name: string; tokens_used: number | null; created_at: string }[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
 
-      if (error) throw error;
+      while (hasMore) {
+        let query = supabase
+          .from('api_usage')
+          .select('function_name, tokens_used, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true })
+          .range(offset, offset + batchSize - 1);
+
+        if (startDate) {
+          query = query.gte('created_at', startDate.toISOString());
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allData.push(...data);
+          offset += batchSize;
+          hasMore = data.length === batchSize;
+        } else {
+          hasMore = false;
+        }
+      }
 
       // Group by date and function
       const grouped: Record<string, UsageDataPoint> = {};
       
-      data?.forEach((row) => {
+      allData?.forEach((row) => {
         const date = new Date(row.created_at).toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric' 
