@@ -1278,11 +1278,14 @@ ${includeReferral ? `
           company: exp?.company || "",
           title: exp?.title || "",
           dates: exp?.dates || `${exp?.startDate || exp?.start_date || ""} – ${exp?.endDate || exp?.end_date || "Present"}`,
-          bullets: Array.isArray(exp?.description)
-            ? exp.description
-            : typeof exp?.description === "string"
-              ? exp.description.split("\n").filter((b: string) => b.trim())
-              : [],
+          // PRIORITY: Use 'bullets' array first (clean structured data), fallback to 'description'
+          bullets: Array.isArray(exp?.bullets) && exp.bullets.length > 0
+            ? exp.bullets
+            : Array.isArray(exp?.description)
+              ? exp.description
+              : typeof exp?.description === "string"
+                ? exp.description.split("\n").map((b: string) => b.replace(/^[▪•\-*]\s*/, '').trim()).filter((b: string) => b)
+                : [],
         })),
         education: (Array.isArray(userProfile.education) ? userProfile.education : []).map((edu: any) => ({
           degree: edu?.degree || "",

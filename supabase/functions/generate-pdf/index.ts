@@ -864,10 +864,27 @@ async function handleRawContentRequest(body: {
             continue;
           }
           
-          // Job header pattern: Company | Title | Dates OR Company | Dates
-          if (line.includes('|') && !line.startsWith('-') && !line.startsWith('•')) {
+          // Check for separator: pipe (|) or dash (– or -)
+          const hasPipe = line.includes('|');
+          const hasDash = /\s*[–—-]\s*/.test(line) && !line.startsWith('-') && !line.startsWith('•');
+          const isJobHeader = (hasPipe || hasDash) && !line.startsWith('-') && !line.startsWith('•');
+          
+          // Job header pattern: Company | Title | Dates OR Company – Title OR Company - Title
+          if (isJobHeader) {
             if (currentJob) jobs.push(currentJob);
-            const parts = line.split('|').map(p => p.trim()).filter(p => !isLocation(p));
+            
+            // Split by pipe first, then by dash
+            let parts: string[];
+            if (hasPipe) {
+              parts = line.split('|').map(p => p.trim()).filter(p => !isLocation(p));
+            } else {
+              // Split by various dash types, but be careful not to split dates
+              parts = line.split(/\s*[–—]\s*/).map(p => p.trim()).filter(p => !isLocation(p));
+              // If that didn't split, try regular dash (but not if it's a date like 2020-2023)
+              if (parts.length === 1) {
+                parts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => !isLocation(p));
+              }
+            }
             
             // Format: Company | Title | Dates (location removed)
             let company = stripDates(parts[0] || '');
@@ -879,22 +896,42 @@ async function handleRawContentRequest(body: {
               title = stripDates(parts[1] || '');
               dates = parts[2] || extractDates(line);
             } else if (parts.length === 2) {
-              // Could be Company | Dates or Company | Title
-              // Check if second part looks like a date
-              if (extractDates(parts[1])) {
-                dates = parts[1];
+              // Could be Company | Title, Company | Dates, or Company – Title
+              const secondPart = parts[1] || '';
+              const extractedDate = extractDates(secondPart);
+              
+              if (extractedDate && secondPart.replace(extractedDate, '').trim().length < 5) {
+                // Second part is primarily a date
+                dates = secondPart;
               } else {
-                title = stripDates(parts[1]);
+                // Second part is title
+                title = stripDates(secondPart);
                 dates = extractDates(line);
               }
             }
             
+            // Extract dates from the original line if not found
+            if (!dates) {
+              dates = extractDates(line);
+            }
+            
             // CRITICAL: Detect if company/title are swapped
             // If "company" looks like a job title and "title" looks like a company, swap them
-            if (isJobTitle(company) && (isCompanyName(title) || !isJobTitle(title))) {
-              const temp = company;
-              company = title;
-              title = temp;
+            if (company && title) {
+              const companyIsTitle = isJobTitle(company) && !isCompanyName(company);
+              const titleIsCompany = isCompanyName(title) || (!isJobTitle(title) && !isCompanyName(company));
+              
+              if (companyIsTitle && titleIsCompany) {
+                const temp = company;
+                company = title;
+                title = temp;
+              }
+            } else if (company && !title) {
+              // Only one part - determine if it's company or title
+              if (isJobTitle(company) && !isCompanyName(company)) {
+                title = company;
+                company = '';
+              }
             }
             
             currentJob = { 
@@ -910,26 +947,30 @@ async function handleRawContentRequest(body: {
           } else if (currentJob && line.length < 80 && !line.includes('@') && !isLocation(line)) {
             // Non-bullet line - could be title or company on separate line
             const cleanedLine = stripDates(line);
+            if (!cleanedLine) continue;
             
             // Determine if this is a title or company based on patterns
             const lineIsTitle = isJobTitle(cleanedLine);
             const lineIsCompany = isCompanyName(cleanedLine);
             
-            if (!currentJob.title && lineIsTitle) {
+            // Prioritize filling missing fields
+            if (!currentJob.company && lineIsCompany) {
+              currentJob.company = cleanedLine;
+            } else if (!currentJob.title && lineIsTitle) {
               currentJob.title = cleanedLine;
-            } else if (!currentJob.company && lineIsCompany) {
+            } else if (!currentJob.company && !lineIsTitle) {
+              // If no company and this doesn't look like a title, assume company
               currentJob.company = cleanedLine;
             } else if (!currentJob.title) {
-              // Default: treat as title if title is missing
               currentJob.title = cleanedLine;
-            } else if (!currentJob.company) {
-              // Or company if company is missing
-              currentJob.company = cleanedLine;
             }
             
             // SWAP CHECK: If after assignment, company looks like title and vice versa, swap
             if (currentJob.company && currentJob.title) {
-              if (isJobTitle(currentJob.company) && isCompanyName(currentJob.title)) {
+              const companyIsTitle = isJobTitle(currentJob.company) && !isCompanyName(currentJob.company);
+              const titleIsCompany = isCompanyName(currentJob.title);
+              
+              if (companyIsTitle && titleIsCompany) {
                 const temp = currentJob.company;
                 currentJob.company = currentJob.title;
                 currentJob.title = temp;
