@@ -4,68 +4,8 @@ import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { maxmilliamProfile } from '@/data/userProfile';
 
-const isLikelyJobTitle = (text: string) => {
-  const t = (text || '').trim();
-  if (!t) return false;
-  return /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|designer|administrator|coordinator|officer|executive|vp|president|founder|cto|ceo|cfo|coo)\b/i.test(t)
-    || /\b(senior|junior|principal|staff|associate|assistant|intern|head of|chief)\b/i.test(t);
-};
+import { normalizeWorkExperience } from '@/lib/workExperienceNormalization';
 
-const isLikelyCompany = (text: string) => {
-  const t = (text || '').trim();
-  if (!t) return false;
-  return /\b(inc|llc|ltd|corp|corporation|company|co\.|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i.test(t)
-    || /\bformerly\b/i.test(t)
-    || /\b(meta|facebook|accenture|citi|citigroup|google|amazon|microsoft|apple)\b/i.test(t);
-};
-
-const splitCompanyAndTitle = (value: string) => {
-  const raw = (value || '').trim();
-  if (!raw) return null;
-
-  let parts = raw.split(/\s*[–—]\s*/).map(s => s.trim()).filter(Boolean);
-  if (parts.length === 1) parts = raw.split(/\s+-\s+/).map(s => s.trim()).filter(Boolean);
-  if (parts.length === 1) parts = raw.split('|').map(s => s.trim()).filter(Boolean);
-
-  if (parts.length >= 2) return { company: parts[0], title: parts[1] };
-  return null;
-};
-
-const normalizeWorkExperience = (exps: any[] | undefined) => {
-  if (!Array.isArray(exps)) return [];
-  return exps.map((exp: any) => {
-    const next = { ...exp };
-    if (!next.id) next.id = crypto.randomUUID();
-
-    if ((!next.title || !next.company) && typeof next.company === 'string') {
-      const split = splitCompanyAndTitle(next.company);
-      if (split) {
-        next.company = split.company;
-        next.title = next.title || split.title;
-      }
-    }
-    if ((!next.title || !next.company) && typeof next.title === 'string') {
-      const split = splitCompanyAndTitle(next.title);
-      if (split) {
-        next.company = next.company || split.company;
-        next.title = split.title;
-      }
-    }
-
-    if (next.company && next.title) {
-      const companyLooksLikeTitle = isLikelyJobTitle(next.company) && !isLikelyCompany(next.company);
-      const titleLooksLikeCompany = isLikelyCompany(next.title) && !isLikelyJobTitle(next.title);
-      if (companyLooksLikeTitle && titleLooksLikeCompany) {
-        const tmp = next.company;
-        next.company = next.title;
-        next.title = tmp;
-      }
-    }
-
-    if (!Array.isArray(next.bullets)) next.bullets = [];
-    return next;
-  });
-};
 
 export interface Profile {
   id: string;

@@ -1,11 +1,13 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import * as pdfjs from "https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -44,15 +46,42 @@ serve(async (req) => {
       throw new Error('Failed to download CV file: ' + downloadError?.message);
     }
 
-    // Convert file to base64 for processing
     const arrayBuffer = await fileData.arrayBuffer();
-    const base64Content = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    
+
     // Determine file type
     const fileExtension = cvFilePath.split('.').pop()?.toLowerCase() || 'pdf';
-    const mimeType = fileExtension === 'pdf' ? 'application/pdf' : 
-                     fileExtension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
-                     'application/msword';
+    const mimeType = fileExtension === 'pdf' ? 'application/pdf'
+      : fileExtension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : 'application/msword';
+
+    // Extract text content (PDF supported). This is critical: sending base64 bytes to an LLM is unreliable
+    // and can cause missing/garbled work experience entries (e.g., "Meta" disappearing).
+    let textContent = '';
+    if (fileExtension === 'pdf') {
+      try {
+        const pdf = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+        const pages: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = (content.items as any[])
+            .map((it) => String(it?.str ?? '').trim())
+            .filter(Boolean)
+            .join(' ');
+          if (pageText) pages.push(pageText);
+        }
+        textContent = pages.join('\n\n');
+      } catch (e) {
+        console.error('PDF text extraction failed:', e);
+        textContent = '';
+      }
+    }
+
+    // Fallback: if we couldn't extract text, we will send a small base64 snippet (lower accuracy)
+    const base64Content = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const inputForModel = textContent && textContent.trim().length > 200
+      ? `CV_TEXT (extracted):\n${textContent.substring(0, 30000)}`
+      : `CV_BASE64_SNIPPET (${mimeType}):\n${base64Content.substring(0, 40000)}`;
 
     // Get user's OpenAI API key
     const { data: profileData } = await supabaseClient
@@ -62,20 +91,13 @@ serve(async (req) => {
       .single();
 
     const openaiApiKey = profileData?.openai_api_key || Deno.env.get('OPENAI_API_KEY');
-    
+
     if (!openaiApiKey) {
       throw new Error('OpenAI API key not configured. Please add your API key in the profile settings.');
     }
 
-    // Use OpenAI to extract structured data from CV text
-    // First, we need to extract text from the file
-    // For PDFs/DOCx, we'll use a text extraction approach
-    
-    let textContent = '';
-    
-    // Try to extract text content
+    // Use OpenAI to extract structured data from extracted CV text
     try {
-      // For text-based extraction, we'll send to OpenAI with the document
       const extractionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -87,18 +109,23 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `You are an expert CV/Resume parser. Extract structured information from the provided CV content and return it as a JSON object. 
+              content: `You are an expert CV/Resume parser. Extract structured information from the provided CV content and return it as a JSON object.
+
+Important rules:
+- Preserve company names and job titles exactly as written in the CV.
+- Do NOT swap company/title.
+- If the CV uses headings (e.g. starting with "#"), treat them as section markers, not part of the values.
 
 Extract the following fields (use null if not found):
 - first_name: string
-- last_name: string  
+- last_name: string
 - email: string
 - phone: string
 - city: string
 - country: string
-- linkedin: string (full URL)
-- github: string (full URL)
-- portfolio: string (full URL)
+- linkedin: string (full URL if possible)
+- github: string (full URL if possible)
+- portfolio: string (full URL if possible)
 - total_experience: string (e.g., "5+ years")
 - highest_education: string (e.g., "Master's in Computer Science")
 - current_salary: string (if mentioned)
@@ -114,10 +141,10 @@ Return ONLY valid JSON, no markdown or explanation.`
             },
             {
               role: 'user',
-              content: `Parse this CV document (base64 encoded ${mimeType}). Extract all the information you can find:\n\n${base64Content.substring(0, 50000)}`
+              content: `Parse this CV content and extract structured data:\n\n${inputForModel}`
             }
           ],
-          temperature: 0.3,
+          temperature: 0.2,
           max_tokens: 4000,
         }),
       });
