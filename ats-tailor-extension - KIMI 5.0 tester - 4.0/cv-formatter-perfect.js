@@ -542,17 +542,28 @@
       margin-bottom: 4px;
     }
     
-    /* Company - Bold */
+    /* Company - Bold, standalone line */
     .cv-company {
       font-weight: bold;
       font-size: 11pt;
+      margin-bottom: 2px;
     }
     
-    /* Job Title - Italic */
-    .cv-job-title {
-      font-style: italic;
+    /* Job Title line - Title (Italic) | Dates (Regular) */
+    .cv-job-title-line {
       font-size: ${ATS_CONFIG.fontSize.body};
       color: ${ATS_CONFIG.colors.text};
+    }
+    
+    .cv-job-title {
+      font-style: italic;
+      font-weight: normal;
+    }
+    
+    .cv-job-dates {
+      font-style: normal;
+      font-weight: normal;
+      color: #333;
     }
     
     .cv-job-meta {
@@ -637,8 +648,8 @@
       ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}${job.dates ? `<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}</div>
-          <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}</div>
+          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}</div>
+          <div class="cv-job-title-line"><span class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}</span>${job.dates ? `<span class="cv-job-dates"> | ${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}</div>
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
