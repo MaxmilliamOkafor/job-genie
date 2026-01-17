@@ -806,6 +806,23 @@ async function handleRawContentRequest(body: {
           return '';
         };
         
+        // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 - 2023")
+        const toYearOnly = (dateStr: string): string => {
+          if (!dateStr) return '';
+          // Extract all 4-digit years
+          const years = dateStr.match(/\d{4}/g);
+          const hasPresent = /present/i.test(dateStr);
+          
+          if (hasPresent && years && years.length >= 1) {
+            return `${years[0]} - Present`;
+          } else if (years && years.length >= 2) {
+            return `${years[0]} - ${years[1]}`;
+          } else if (years && years.length === 1) {
+            return years[0];
+          }
+          return dateStr; // Return original if no years found
+        };
+        
         for (const line of section.content) {
           // Job header pattern: Company | Title | Dates OR Company | Dates
           if (line.includes('|') && !line.startsWith('-') && !line.startsWith('•')) {
@@ -866,10 +883,11 @@ async function handleRawContentRequest(body: {
             color: rgb(0, 0, 0),
           });
           
-          // Dates - Right aligned
-          if (job.dates) {
-            const dateWidth = helvetica.widthOfTextAtSize(job.dates, 10);
-            currentPage.drawText(job.dates, {
+          // Dates - Right aligned (year only)
+          const yearOnlyDates = toYearOnly(job.dates);
+          if (yearOnlyDates) {
+            const dateWidth = helvetica.widthOfTextAtSize(yearOnlyDates, 10);
+            currentPage.drawText(yearOnlyDates, {
               x: PAGE_WIDTH - MARGIN - dateWidth,
               y: yPosition,
               size: 10,
