@@ -10,7 +10,7 @@
     // Typography
     fontFamily: 'Arial, Helvetica, sans-serif',
     fontSize: {
-      name: '24pt',        // Name at top - BOLD and prominent
+      name: '20pt',        // Name at top - BOLD, UPPERCASE
       sectionTitle: '12pt', // Section headers
       body: '10.5pt',      // Body text (optimal for ATS)
       small: '9pt'         // Secondary text
@@ -595,8 +595,8 @@
 </head>
 <body>
   <div class="cv-container">
-    <!-- Name - Bold and Large -->
-    <div class="cv-name">${escapeHtml(contact.name)}</div>
+    <!-- Name - Bold, Uppercase, 20pt -->
+    <div class="cv-name">${escapeHtml(contact.name.toUpperCase())}</div>
     
     <!-- Contact -->
     <div class="cv-contact">
