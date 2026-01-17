@@ -823,18 +823,24 @@ async function handleRawContentRequest(body: {
           return dateStr; // Return original if no years found
         };
         
-        // Location patterns to filter out (cities, states, countries)
+        // Location patterns to filter out (cities, states, countries) - EXHAUSTIVE
         const locationPatterns = [
           /^[A-Z][a-z]+,\s*[A-Z]{2}$/,  // Dallas, TX
           /^[A-Z][a-z]+,\s*[A-Z][a-z]+$/,  // Dublin, Ireland
           /^[A-Z][a-z]+,\s*[A-Za-z\s]+$/,  // London, United Kingdom
           /^[A-Z][a-z]+\s+[A-Z][a-z]+,/,  // New York, NY
-          /\b(United Kingdom|United States|USA|UK|Ireland|Germany|France|Netherlands|Canada|Australia)\b/i,
+          /\b(United Kingdom|United States|USA|UK|Ireland|Germany|France|Netherlands|Canada|Australia|Remote|Hybrid|On-?site)\b/i,
+          /^(London|Dublin|New York|San Francisco|Los Angeles|Chicago|Dallas|Houston|Seattle|Boston|Austin|Denver|Atlanta|Miami|Phoenix|Portland|Toronto|Vancouver|Montreal|Sydney|Melbourne|Berlin|Munich|Paris|Amsterdam|Singapore|Tokyo|Hong Kong)/i,
+          /,\s*(TX|CA|NY|FL|WA|MA|IL|GA|CO|AZ|OR|PA|OH|NC|NJ|VA|MD|MI|MN|MO|WI|TN|IN|CT)\s*$/i,
         ];
         
         const isLocation = (text: string): boolean => {
           const trimmed = text.trim();
-          if (trimmed.length > 50) return false;
+          if (!trimmed || trimmed.length > 60) return false;
+          // Short text with comma likely location
+          if (trimmed.length < 40 && trimmed.includes(',') && !trimmed.includes('|')) {
+            return true;
+          }
           return locationPatterns.some(p => p.test(trimmed));
         };
         
@@ -893,7 +899,7 @@ async function handleRawContentRequest(body: {
           
           ensureSpace(50);
           
-          // Company - BOLD
+          // Line 1: Company Name - BOLD only (no dates on this line)
           currentPage.drawText(job.company, {
             x: MARGIN,
             y: yPosition,
@@ -901,29 +907,53 @@ async function handleRawContentRequest(body: {
             font: helveticaBold,
             color: rgb(0, 0, 0),
           });
-          
-          // Dates - Right aligned (year only)
-          const yearOnlyDates = toYearOnly(job.dates);
-          if (yearOnlyDates) {
-            const dateWidth = helvetica.widthOfTextAtSize(yearOnlyDates, 10);
-            currentPage.drawText(yearOnlyDates, {
-              x: PAGE_WIDTH - MARGIN - dateWidth,
-              y: yPosition,
-              size: 10,
-              font: helvetica,
-              color: rgb(0.2, 0.2, 0.2),
-            });
-          }
           yPosition -= LINE_HEIGHT + 2;
           
-          // Job Title - ITALIC
+          // Line 2: Job Title (Italic) | Dates (Regular)
+          const yearOnlyDates = toYearOnly(job.dates);
           if (job.title) {
-            currentPage.drawText(job.title, {
+            const titleText = job.title;
+            const titleWidth = helveticaOblique.widthOfTextAtSize(titleText, 10);
+            
+            // Draw italic title
+            currentPage.drawText(titleText, {
               x: MARGIN,
               y: yPosition,
               size: 10,
               font: helveticaOblique,
               color: rgb(0, 0, 0),
+            });
+            
+            // Draw dates after title with separator
+            if (yearOnlyDates) {
+              const separator = ' | ';
+              const separatorWidth = helvetica.widthOfTextAtSize(separator, 10);
+              
+              currentPage.drawText(separator, {
+                x: MARGIN + titleWidth,
+                y: yPosition,
+                size: 10,
+                font: helvetica,
+                color: rgb(0.2, 0.2, 0.2),
+              });
+              
+              currentPage.drawText(yearOnlyDates, {
+                x: MARGIN + titleWidth + separatorWidth,
+                y: yPosition,
+                size: 10,
+                font: helvetica,
+                color: rgb(0.2, 0.2, 0.2),
+              });
+            }
+            yPosition -= LINE_HEIGHT + 4;
+          } else if (yearOnlyDates) {
+            // No title, just show dates
+            currentPage.drawText(yearOnlyDates, {
+              x: MARGIN,
+              y: yPosition,
+              size: 10,
+              font: helvetica,
+              color: rgb(0.2, 0.2, 0.2),
             });
             yPosition -= LINE_HEIGHT + 4;
           }
