@@ -540,13 +540,13 @@ serve(async (req) => {
       .split(',')
       .map(k => k.trim())
       .filter(k => k.length > 0)
-      .slice(0, 20);
+      .slice(0, 15);
     
     const locations = locationRaw
       .split(',')
       .map(l => l.trim())
       .filter(l => l.length > 0 && l.toLowerCase() !== 'all')
-      .slice(0, 8);
+      .slice(0, 5);
     
     const searchKeywords = keywords.length > 0 
       ? keywords 
@@ -571,9 +571,9 @@ serve(async (req) => {
     const seenUrls = new Set<string>();
     const dedupeKeys = new Set<string>();
     
-    // OPTIMIZATION: 90 second timeout for entire search (increased for more results)
+    // OPTIMIZATION: 60 second timeout for entire search
     const searchStartTime = Date.now();
-    const SEARCH_TIMEOUT_MS = 90000; // 90 seconds max
+    const SEARCH_TIMEOUT_MS = 60000; // 60 seconds max
     
     // Run searches in parallel batches of 12 (faster)
     const batchSize = 12;
@@ -587,7 +587,7 @@ serve(async (req) => {
       const batch = searchQueries.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (query) => {
-        const results = await searchWithFirecrawl(query, FIRECRAWL_API_KEY, 100, timeFilter);
+        const results = await searchWithFirecrawl(query, FIRECRAWL_API_KEY, 50, timeFilter);
         return { results, keyword: searchKeywords[0] };
       });
       
@@ -610,8 +610,8 @@ serve(async (req) => {
       console.log(`Batch ${Math.floor(i / batchSize) + 1}: ${allJobs.length} unique jobs found`);
       
       // Stop early if we have enough jobs
-      if (allJobs.length >= 600) {
-        console.log('Reached 600 jobs limit, stopping search');
+      if (allJobs.length >= 300) {
+        console.log('Reached 300 jobs limit, stopping search');
         break;
       }
     }

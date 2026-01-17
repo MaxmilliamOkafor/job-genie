@@ -864,9 +864,17 @@
       // This ensures perfect text-based PDF (not image-based)
       let y = margins.top;
 
-      const addText = (text, isBold = false, isCentered = false, size = fontSize) => {
+      const addText = (text, isBold = false, isCentered = false, size = fontSize, isItalic = false) => {
         doc.setFontSize(size);
-        doc.setFont(font, isBold ? 'bold' : 'normal');
+        if (isBold && isItalic) {
+          doc.setFont(font, "bolditalic");
+        } else if (isBold) {
+          doc.setFont(font, "bold");
+        } else if (isItalic) {
+          doc.setFont(font, "italic");
+        } else {
+          doc.setFont(font, "normal");
+        }
         
         const lines = doc.splitTextToSize(text, contentWidth);
         lines.forEach(line => {
@@ -912,7 +920,11 @@
 
         experience.forEach(job => {
           addText(job.company, true, false, 10.5);
-          addText([job.title, job.dates, job.location].filter(Boolean).join(' | '), false, false, 9);
+          addText(job.title, false, false, 9, true); // isItalic = true
+          // Dates on separate line
+          if (job.dates) {
+            addText(job.dates, false, false, 9);
+          }
           y += 2;
 
           job.bullets.forEach(bullet => {
