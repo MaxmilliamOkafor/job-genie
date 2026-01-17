@@ -1027,28 +1027,15 @@ const Profile = () => {
                           placeholder="Job Title"
                           className="font-semibold"
                         />
-                        <div className="flex gap-2">
-                          <Input 
-                            value={exp.company || ''} 
-                            onChange={(e) => {
-                              const exps = [...(localProfile.work_experience || [])];
-                              exps[expIndex] = { ...exps[expIndex], company: e.target.value };
-                              updateLocalField('work_experience', exps);
-                            }}
-                            placeholder="Company"
-                            className="flex-1"
-                          />
-                          <Input 
-                            value={exp.location || ''} 
-                            onChange={(e) => {
-                              const exps = [...(localProfile.work_experience || [])];
-                              exps[expIndex] = { ...exps[expIndex], location: e.target.value };
-                              updateLocalField('work_experience', exps);
-                            }}
-                            placeholder="Location"
-                            className="w-32"
-                          />
-                        </div>
+                        <Input 
+                          value={exp.company || ''} 
+                          onChange={(e) => {
+                            const exps = [...(localProfile.work_experience || [])];
+                            exps[expIndex] = { ...exps[expIndex], company: e.target.value };
+                            updateLocalField('work_experience', exps);
+                          }}
+                          placeholder="Company"
+                        />
                         <div className="flex gap-2">
                           <Input 
                             value={exp.startDate || ''} 
@@ -1138,8 +1125,8 @@ const Profile = () => {
                       </div>
                     ) : (
                       <>
-                        <h3 className="font-semibold">{exp.title}</h3>
-                        <p className="text-muted-foreground">{exp.company} • {exp.location}</p>
+                        <h3 className="font-bold">{exp.company}</h3>
+                        <p className="text-muted-foreground italic">{exp.title}</p>
                         {/* Display bullets in view mode */}
                         {exp.bullets && exp.bullets.length > 0 && (
                           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
