@@ -139,18 +139,19 @@ serve(async (req) => {
     // Use only standard fonts - maximum ATS compatibility
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
     // Standard Letter size
     const PAGE_WIDTH = 612;
     const PAGE_HEIGHT = 792;
     const MARGIN = 54; // 0.75 inch margins - standard
     const LINE_HEIGHT = 14;
-    const SECTION_GAP = 16;
+    const SECTION_SPACING = 21; // 1.5 lines spacing
 
     // ULTRA ATS: Only black and dark gray - no colors
     const colors = {
       black: rgb(0, 0, 0),
-      darkGray: rgb(0.15, 0.15, 0.15),
+      darkGray: rgb(0.2, 0.2, 0.2),
     };
 
     // Page management
@@ -198,7 +199,7 @@ serve(async (req) => {
     };
 
     // Draw wrapped text with automatic page breaks
-    const drawWrappedText = (text: string, x: number, fontSize: number, font: PDFFont, maxWidth?: number): void => {
+    const drawWrappedText = (text: string, x: number, fontSize: number, font: PDFFont, maxWidth?: number, color = colors.black): void => {
       const effectiveMaxWidth = maxWidth || (PAGE_WIDTH - MARGIN - x);
       const lines = wrapText(text, effectiveMaxWidth, font, fontSize);
       
@@ -209,26 +210,26 @@ serve(async (req) => {
           y: yPosition, 
           size: fontSize, 
           font, 
-          color: colors.black 
+          color 
         });
         yPosition -= LINE_HEIGHT;
       }
     };
 
-    // ULTRA ATS SECTION HEADER - Plain text, bold, no decorations
+    // PROFESSIONAL SECTION HEADER - Bold uppercase with proper spacing
     const drawSectionHeader = (title: string): void => {
-      yPosition -= SECTION_GAP;
-      ensureSpace(20);
+      yPosition -= SECTION_SPACING; // 1.5 line spacing before
+      ensureSpace(30);
       
-      // Just bold uppercase text - no lines, no colors
+      // Bold uppercase text
       currentPage.drawText(title.toUpperCase(), {
         x: MARGIN,
         y: yPosition,
-        size: 11,
+        size: 12,
         font: helveticaBold,
         color: colors.black,
       });
-      yPosition -= LINE_HEIGHT + 4;
+      yPosition -= SECTION_SPACING; // 1.5 line spacing after
     };
 
     if (sanitizedData.type === 'resume') {
@@ -236,21 +237,22 @@ serve(async (req) => {
       // ULTRA ATS-COMPATIBLE RESUME FORMAT
       // ============================================
       
-      // NAME - Large, bold, centered would confuse some ATS, so left-aligned
-      currentPage.drawText(sanitizedData.personalInfo.name.toUpperCase(), {
+      // NAME - Large (24pt), bold, stands out
+      currentPage.drawText(sanitizedData.personalInfo.name, {
         x: MARGIN,
         y: yPosition,
-        size: 18,
+        size: 24,
         font: helveticaBold,
         color: colors.black,
       });
-      yPosition -= 22;
+      yPosition -= 30;
 
-      // CONTACT LINE - Simple pipe-separated, all on one or two lines
+      // CONTACT LINE - Simple pipe-separated
       const contactParts: string[] = [];
       if (sanitizedData.personalInfo.phone) contactParts.push(sanitizedData.personalInfo.phone);
       if (sanitizedData.personalInfo.email) contactParts.push(sanitizedData.personalInfo.email);
       if (sanitizedData.personalInfo.location) contactParts.push(sanitizedData.personalInfo.location);
+      contactParts.push('Open to relocation');
       
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(' | ');
@@ -265,12 +267,13 @@ serve(async (req) => {
       
       if (linkParts.length > 0) {
         const linksLine = linkParts.join(' | ');
-        drawWrappedText(linksLine, MARGIN, 9, helvetica);
+        drawWrappedText(linksLine, MARGIN, 9, helvetica, undefined, colors.darkGray);
       }
 
       // === PROFESSIONAL SUMMARY ===
       if (sanitizedData.summary) {
         drawSectionHeader('Professional Summary');
+        // Summary in normal case, not all caps
         drawWrappedText(sanitizedData.summary, MARGIN, 10, helvetica);
       }
 
@@ -278,23 +281,23 @@ serve(async (req) => {
       if (sanitizedData.experience && sanitizedData.experience.length > 0) {
         drawSectionHeader('Work Experience');
         
-        for (const exp of sanitizedData.experience) {
+        for (let i = 0; i < sanitizedData.experience.length; i++) {
+          const exp = sanitizedData.experience[i];
           ensureSpace(50);
           
-          // Company and dates on same line
-          const companyLine = `${exp.company} | ${exp.dates}`;
-          currentPage.drawText(companyLine, {
+          // Company name - BOLD
+          currentPage.drawText(exp.company, {
             x: MARGIN,
             y: yPosition,
             size: 11,
             font: helveticaBold,
             color: colors.black,
           });
-          yPosition -= LINE_HEIGHT;
-
-          // Job title
-          currentPage.drawText(exp.title, {
-            x: MARGIN,
+          
+          // Dates on same line, right-aligned
+          const dateWidth = helvetica.widthOfTextAtSize(exp.dates, 10);
+          currentPage.drawText(exp.dates, {
+            x: PAGE_WIDTH - MARGIN - dateWidth,
             y: yPosition,
             size: 10,
             font: helvetica,
@@ -302,13 +305,27 @@ serve(async (req) => {
           });
           yPosition -= LINE_HEIGHT + 2;
 
-          // Bullet points - simple dash prefix
+          // Job title - ITALIC
+          currentPage.drawText(exp.title, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helveticaOblique,
+            color: colors.black,
+          });
+          yPosition -= LINE_HEIGHT + 4;
+
+          // Bullet points
           for (const bullet of exp.bullets) {
             ensureSpace(LINE_HEIGHT * 2);
             const bulletText = `- ${bullet}`;
             drawWrappedText(bulletText, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
           }
-          yPosition -= 6;
+          
+          // 1.5 line spacing between companies (except after last)
+          if (i < sanitizedData.experience.length - 1) {
+            yPosition -= SECTION_SPACING;
+          }
         }
       }
 
@@ -545,6 +562,7 @@ serve(async (req) => {
 /**
  * Handle raw content request from extension
  * Parses text content, applies tailoredLocation, and returns base64 PDF in JSON
+ * FIXED: Proper formatting with bold name (24pt), italic job titles, 1.5 line spacing
  */
 async function handleRawContentRequest(body: {
   content: string;
@@ -564,11 +582,13 @@ async function handleRawContentRequest(body: {
     const pdfDoc = await PDFDocument.create();
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
     
     const PAGE_WIDTH = 612;
     const PAGE_HEIGHT = 792;
     const MARGIN = 54;
     const LINE_HEIGHT = 14;
+    const SECTION_SPACING = 21; // 1.5 line spacing
     
     let currentPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     let yPosition = PAGE_HEIGHT - MARGIN;
@@ -585,156 +605,269 @@ async function handleRawContentRequest(body: {
       }
     };
     
-    // Process content line by line
-    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let isFirstLine = true;
-    let headerProcessed = false;
-    
-    for (const line of lines) {
-      // Handle header line with dynamic location replacement
-      if (!headerProcessed && line.includes('|') && line.includes('@') && /open to relocation/i.test(line)) {
-        const parts = line.split('|').map(p => p.trim());
-        // Expected format: phone | email | location | open to relocation
-        if (parts.length >= 4 && tailoredLocation) {
-          // Replace the location part (index 2) with tailoredLocation
-          parts[2] = tailoredLocation;
-        }
-        
-        ensureSpace(LINE_HEIGHT);
-        currentPage.drawText(parts.join(' | '), {
-          x: MARGIN,
-          y: yPosition,
-          size: 10,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        });
-        yPosition -= LINE_HEIGHT;
-        headerProcessed = true;
-        continue;
-      }
-      
-      // Handle name line (first line, typically uppercase)
-      if (isFirstLine && line === line.toUpperCase() && line.length < 50) {
-        ensureSpace(22);
-        currentPage.drawText(line, {
-          x: MARGIN,
-          y: yPosition,
-          size: 18,
-          font: helveticaBold,
-          color: rgb(0, 0, 0),
-        });
-        yPosition -= 22;
-        isFirstLine = false;
-        continue;
-      }
-      isFirstLine = false;
-      
-      // Handle section headers (all caps)
-      const sectionHeaders = ['PROFESSIONAL SUMMARY', 'EXPERIENCE', 'EDUCATION', 'SKILLS', 'CERTIFICATIONS', 'ACHIEVEMENTS', 'PROJECTS'];
-      if (sectionHeaders.some(h => line.toUpperCase().startsWith(h))) {
-        yPosition -= 12;
-        ensureSpace(20);
-        currentPage.drawText(line.toUpperCase().replace(':', ''), {
-          x: MARGIN,
-          y: yPosition,
-          size: 11,
-          font: helveticaBold,
-          color: rgb(0, 0, 0),
-        });
-        yPosition -= LINE_HEIGHT + 4;
-        continue;
-      }
-      
-      // Handle bullet points
-      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
-        ensureSpace(LINE_HEIGHT * 2);
-        const bulletText = line.replace(/^[-•*]\s*/, '- ');
-        
-        // Wrap long bullet points
-        const words = bulletText.split(' ');
-        let currentLine = '';
-        const maxWidth = PAGE_WIDTH - MARGIN * 2;
-        
-        for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word;
-          const testWidth = helvetica.widthOfTextAtSize(testLine, 10);
-          
-          if (testWidth > maxWidth && currentLine) {
-            currentPage.drawText(currentLine, {
-              x: MARGIN,
-              y: yPosition,
-              size: 10,
-              font: helvetica,
-              color: rgb(0, 0, 0),
-            });
-            yPosition -= LINE_HEIGHT;
-            ensureSpace(LINE_HEIGHT);
-            currentLine = word;
-          } else {
-            currentLine = testLine;
-          }
-        }
-        if (currentLine) {
-          currentPage.drawText(currentLine, {
-            x: MARGIN,
-            y: yPosition,
-            size: 10,
-            font: helvetica,
-            color: rgb(0, 0, 0),
-          });
-          yPosition -= LINE_HEIGHT;
-        }
-        continue;
-      }
-      
-      // Handle URLs line (contains http)
-      if (line.includes('http')) {
-        ensureSpace(LINE_HEIGHT);
-        currentPage.drawText(line.length > 90 ? line.substring(0, 90) + '...' : line, {
-          x: MARGIN,
-          y: yPosition,
-          size: 9,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        });
-        yPosition -= LINE_HEIGHT;
-        continue;
-      }
-      
-      // Regular text - wrap if needed
-      ensureSpace(LINE_HEIGHT);
-      const words = line.split(' ');
-      let currentLineText = '';
+    // Text wrapping helper
+    const wrapAndDraw = (text: string, font: PDFFont, fontSize: number, x: number, color = rgb(0, 0, 0)) => {
       const maxWidth = PAGE_WIDTH - MARGIN * 2;
+      const words = sanitizeText(text).split(' ');
+      let currentLineText = '';
       
       for (const word of words) {
+        if (!word) continue;
         const testLine = currentLineText ? `${currentLineText} ${word}` : word;
-        const testWidth = helvetica.widthOfTextAtSize(testLine, 10);
+        const testWidth = font.widthOfTextAtSize(testLine, fontSize);
         
         if (testWidth > maxWidth && currentLineText) {
-          currentPage.drawText(currentLineText, {
-            x: MARGIN,
-            y: yPosition,
-            size: 10,
-            font: helvetica,
-            color: rgb(0, 0, 0),
-          });
-          yPosition -= LINE_HEIGHT;
           ensureSpace(LINE_HEIGHT);
+          currentPage.drawText(currentLineText, { x, y: yPosition, size: fontSize, font, color });
+          yPosition -= LINE_HEIGHT;
           currentLineText = word;
         } else {
           currentLineText = testLine;
         }
       }
       if (currentLineText) {
-        currentPage.drawText(currentLineText, {
-          x: MARGIN,
-          y: yPosition,
-          size: 10,
-          font: helvetica,
-          color: rgb(0, 0, 0),
-        });
+        ensureSpace(LINE_HEIGHT);
+        currentPage.drawText(currentLineText, { x, y: yPosition, size: fontSize, font, color });
         yPosition -= LINE_HEIGHT;
+      }
+    };
+    
+    // Parse content into structured sections
+    const lines = content.split('\n');
+    const sections: { type: string; content: string[] }[] = [];
+    let currentSection: { type: string; content: string[] } | null = null;
+    let nameExtracted = '';
+    let contactLine = '';
+    let linksLine = '';
+    
+    const sectionHeaders = ['PROFESSIONAL SUMMARY', 'SUMMARY', 'EXPERIENCE', 'WORK EXPERIENCE', 'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'CERTIFICATIONS', 'ACHIEVEMENTS', 'PROJECTS'];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
+      
+      // Extract name (first significant line, usually uppercase)
+      if (!nameExtracted && !trimmed.includes('|') && !trimmed.includes('@') && 
+          trimmed.length < 50 && trimmed === trimmed.toUpperCase() && 
+          !sectionHeaders.includes(upperTrimmed)) {
+        nameExtracted = trimmed;
+        continue;
+      }
+      
+      // Extract contact line (has @ for email)
+      if (!contactLine && trimmed.includes('|') && trimmed.includes('@')) {
+        contactLine = trimmed;
+        continue;
+      }
+      
+      // Extract links line (has http)
+      if (!linksLine && trimmed.includes('http')) {
+        linksLine = trimmed;
+        continue;
+      }
+      
+      // Check for section header
+      if (sectionHeaders.includes(upperTrimmed)) {
+        if (currentSection) {
+          sections.push(currentSection);
+        }
+        currentSection = { type: upperTrimmed, content: [] };
+        continue;
+      }
+      
+      // Add to current section
+      if (currentSection) {
+        currentSection.content.push(trimmed);
+      }
+    }
+    
+    if (currentSection) {
+      sections.push(currentSection);
+    }
+    
+    // ============ RENDER PDF ============
+    
+    // NAME - Large (24pt), Bold
+    const displayName = firstName && lastName 
+      ? `${firstName} ${lastName}` 
+      : nameExtracted.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    
+    ensureSpace(30);
+    currentPage.drawText(displayName, {
+      x: MARGIN,
+      y: yPosition,
+      size: 24,
+      font: helveticaBold,
+      color: rgb(0, 0, 0),
+    });
+    yPosition -= 30;
+    
+    // CONTACT LINE
+    if (contactLine) {
+      const parts = contactLine.split('|').map(p => p.trim());
+      // Replace location with tailoredLocation if provided
+      if (parts.length >= 3 && tailoredLocation) {
+        // Find and replace location (typically index 2)
+        for (let i = 0; i < parts.length; i++) {
+          if (!parts[i].includes('@') && !parts[i].includes('+') && !/^\d/.test(parts[i]) && !/relocation/i.test(parts[i])) {
+            parts[i] = tailoredLocation;
+            break;
+          }
+        }
+      }
+      wrapAndDraw(parts.join(' | '), helvetica, 10, MARGIN);
+    }
+    
+    // LINKS LINE
+    if (linksLine) {
+      wrapAndDraw(linksLine, helvetica, 9, MARGIN, rgb(0.2, 0.2, 0.2));
+    }
+    
+    // ============ SECTIONS ============
+    for (const section of sections) {
+      // Section header with 1.5 line spacing before
+      yPosition -= SECTION_SPACING;
+      ensureSpace(30);
+      
+      // Normalize section title
+      let sectionTitle = section.type;
+      if (sectionTitle.includes('SUMMARY')) sectionTitle = 'PROFESSIONAL SUMMARY';
+      if (sectionTitle.includes('EXPERIENCE')) sectionTitle = 'WORK EXPERIENCE';
+      
+      currentPage.drawText(sectionTitle, {
+        x: MARGIN,
+        y: yPosition,
+        size: 12,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= SECTION_SPACING; // 1.5 line spacing after header
+      
+      // SUMMARY - Regular text (not all caps)
+      if (section.type.includes('SUMMARY')) {
+        const summaryText = section.content.join(' ');
+        wrapAndDraw(summaryText, helvetica, 10, MARGIN);
+        continue;
+      }
+      
+      // EXPERIENCE - Parse jobs
+      if (section.type.includes('EXPERIENCE')) {
+        interface JobEntry { company: string; title: string; dates: string; bullets: string[] }
+        let currentJob: JobEntry | null = null;
+        const jobs: JobEntry[] = [];
+        
+        for (const line of section.content) {
+          // Job header pattern: Company | Dates or just Company line
+          if (line.includes('|') && !line.startsWith('-') && !line.startsWith('•')) {
+            if (currentJob) jobs.push(currentJob);
+            const parts = line.split('|').map(p => p.trim());
+            currentJob = { 
+              company: parts[0] || '', 
+              title: parts[1] || '', 
+              dates: parts[2] || parts[1] || '',
+              bullets: [] 
+            };
+          } else if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+            if (currentJob) {
+              currentJob.bullets.push(line.replace(/^[-•*]\s*/, ''));
+            }
+          } else if (currentJob && !currentJob.title && line.length < 60) {
+            // Might be a job title on separate line
+            currentJob.title = line;
+          }
+        }
+        if (currentJob) jobs.push(currentJob);
+        
+        // Render jobs
+        for (let i = 0; i < jobs.length; i++) {
+          const job = jobs[i];
+          if (!job) continue;
+          
+          ensureSpace(50);
+          
+          // Company - BOLD
+          currentPage.drawText(job.company, {
+            x: MARGIN,
+            y: yPosition,
+            size: 11,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          });
+          
+          // Dates - Right aligned
+          if (job.dates) {
+            const dateWidth = helvetica.widthOfTextAtSize(job.dates, 10);
+            currentPage.drawText(job.dates, {
+              x: PAGE_WIDTH - MARGIN - dateWidth,
+              y: yPosition,
+              size: 10,
+              font: helvetica,
+              color: rgb(0.2, 0.2, 0.2),
+            });
+          }
+          yPosition -= LINE_HEIGHT + 2;
+          
+          // Job Title - ITALIC
+          if (job.title) {
+            currentPage.drawText(job.title, {
+              x: MARGIN,
+              y: yPosition,
+              size: 10,
+              font: helveticaOblique,
+              color: rgb(0, 0, 0),
+            });
+            yPosition -= LINE_HEIGHT + 4;
+          }
+          
+          // Bullets
+          for (const bullet of job.bullets) {
+            wrapAndDraw(`- ${bullet}`, helvetica, 10, MARGIN);
+          }
+          
+          // 1.5 line spacing between companies
+          if (i < jobs.length - 1) {
+            yPosition -= SECTION_SPACING;
+          }
+        }
+        continue;
+      }
+      
+      // EDUCATION
+      if (section.type.includes('EDUCATION')) {
+        for (const line of section.content) {
+          if (line.includes('|')) {
+            const parts = line.split('|').map(p => p.trim());
+            // Degree/School - Bold
+            ensureSpace(LINE_HEIGHT * 2);
+            currentPage.drawText(parts[0], {
+              x: MARGIN,
+              y: yPosition,
+              size: 11,
+              font: helveticaBold,
+              color: rgb(0, 0, 0),
+            });
+            yPosition -= LINE_HEIGHT;
+            
+            // Rest of info
+            if (parts.length > 1) {
+              wrapAndDraw(parts.slice(1).join(' | '), helvetica, 10, MARGIN);
+            }
+          } else {
+            wrapAndDraw(line, helvetica, 10, MARGIN);
+          }
+        }
+        continue;
+      }
+      
+      // SKILLS, CERTIFICATIONS - Simple text
+      for (const line of section.content) {
+        if (line.startsWith('-') || line.startsWith('•')) {
+          wrapAndDraw(line, helvetica, 10, MARGIN);
+        } else {
+          wrapAndDraw(line, helvetica, 10, MARGIN);
+        }
       }
     }
     
@@ -743,26 +876,19 @@ async function handleRawContentRequest(body: {
     // Convert to base64
     const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
     
-    // Generate filename using [FirstName]_[LastName]_CV.pdf or [FirstName]_[LastName]_Cover_Letter.pdf format
+    // Generate filename
     let finalFileName = fileName;
     if (!finalFileName) {
-      // Use provided firstName/lastName, or extract from content
       let nameForFile = '';
       if (firstName && lastName) {
         nameForFile = `${firstName.trim()}_${lastName.trim()}`;
+      } else if (nameExtracted) {
+        nameForFile = nameExtracted.split(/\s+/).map(w => 
+          w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+        ).join('_');
       } else {
-        // Try to extract name from first line (usually uppercase name)
-        const nameLine = lines.find(l => l === l.toUpperCase() && l.length < 50 && !l.includes('|') && !l.includes('@'));
-        if (nameLine) {
-          // Convert "JOHN DOE" to "John_Doe"
-          nameForFile = nameLine.split(/\s+/).map(w => 
-            w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-          ).join('_');
-        } else {
-          nameForFile = 'Applicant';
-        }
+        nameForFile = 'Applicant';
       }
-      // Sanitize filename - remove special chars
       nameForFile = nameForFile.replace(/[^a-zA-Z0-9_]/g, '');
       finalFileName = type === 'cv' ? `${nameForFile}_CV.pdf` : `${nameForFile}_Cover_Letter.pdf`;
     }

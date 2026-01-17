@@ -10,7 +10,7 @@
     // Typography
     fontFamily: 'Arial, Helvetica, sans-serif',
     fontSize: {
-      name: '18pt',        // Name at top
+      name: '24pt',        // Name at top - BOLD and prominent
       sectionTitle: '12pt', // Section headers
       body: '10.5pt',      // Body text (optimal for ATS)
       small: '9pt'         // Secondary text
@@ -19,7 +19,8 @@
     lineHeight: {
       tight: '1.1',        // Compact
       normal: '1.15',      // Standard
-      relaxed: '1.25'      // More space
+      relaxed: '1.25',     // More space
+      section: '1.5'       // 1.5 line spacing for sections
     },
     // Margins (0.75 inches = 54pt - ATS standard)
     margins: {
@@ -36,7 +37,9 @@
       text: '#000000',
       secondary: '#333333',
       accent: '#000000'
-    }
+    },
+    // Section spacing
+    sectionSpacing: '21pt' // 1.5 line height
   };
 
   // ============ CV FORMATTER PERFECT ============
@@ -424,19 +427,18 @@
       padding: 0;
     }
     
-    /* Name */
+    /* Name - Larger and Bold */
     .cv-name {
       font-size: ${ATS_CONFIG.fontSize.name};
       font-weight: bold;
-      text-align: center;
+      text-align: left;
       margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
     
     /* Contact */
     .cv-contact {
-      text-align: center;
+      text-align: left;
       font-size: ${ATS_CONFIG.fontSize.body};
       color: ${ATS_CONFIG.colors.secondary};
       margin-bottom: 16px;
@@ -447,7 +449,7 @@
       margin-bottom: 2px;
     }
     
-    /* Section Headers */
+    /* Section Headers with 1.5 line spacing */
     .cv-section {
       margin-bottom: 16px;
     }
@@ -457,12 +459,11 @@
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      border-bottom: 1px solid ${ATS_CONFIG.colors.text};
-      padding-bottom: 4px;
-      margin-bottom: 10px;
+      margin-top: ${ATS_CONFIG.sectionSpacing};
+      margin-bottom: ${ATS_CONFIG.sectionSpacing};
     }
     
-    /* Summary */
+    /* Summary - Regular text, not caps */
     .cv-summary {
       text-align: justify;
       line-height: ${ATS_CONFIG.lineHeight.relaxed};
@@ -470,16 +471,24 @@
     
     /* Experience */
     .cv-job {
-      margin-bottom: 14px;
+      margin-bottom: ${ATS_CONFIG.sectionSpacing};
     }
     
     .cv-job-header {
       margin-bottom: 4px;
     }
     
+    /* Company - Bold */
     .cv-company {
       font-weight: bold;
+      font-size: 11pt;
+    }
+    
+    /* Job Title - Italic */
+    .cv-job-title {
+      font-style: italic;
       font-size: ${ATS_CONFIG.fontSize.body};
+      color: ${ATS_CONFIG.colors.text};
     }
     
     .cv-job-meta {
@@ -539,7 +548,7 @@
 </head>
 <body>
   <div class="cv-container">
-    <!-- Name -->
+    <!-- Name - Bold and Large -->
     <div class="cv-name">${escapeHtml(contact.name)}</div>
     
     <!-- Contact -->
@@ -561,11 +570,11 @@
     ${experience.length > 0 ? `
     <div class="cv-section">
       <div class="cv-section-title">Work Experience</div>
-      ${experience.map(job => `
+      ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(job.company)}</div>
-          <div class="cv-job-meta">${[job.title, job.dates, job.location].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+          <div class="cv-company">${escapeHtml(job.company)}<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(job.dates)}</span></div>
+          <div class="cv-job-title">${escapeHtml(job.title)}</div>
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
