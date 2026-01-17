@@ -1,37 +1,35 @@
-// CV Formatter Perfect - 100% ATS-Compatible CV Generator
+// CV Formatter Perfect v2.0 - 100% ATS-Compatible CV Generator
+// ALWAYS uses backend generate-pdf for perfect formatting
 // Guarantees perfect formatting for both preview and download
-// Uses HTML5 + CSS3 for rendering, then converts to PDF via browser API
 
 (function(global) {
   'use strict';
 
+  const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
   // ============ ATS SPECIFICATIONS (Industry Standard) ============
   const ATS_CONFIG = {
-    // Typography
     fontFamily: 'Arial, Helvetica, sans-serif',
     fontSize: {
-      name: '18pt',        // Name at top
-      sectionTitle: '12pt', // Section headers
-      body: '10.5pt',      // Body text (optimal for ATS)
-      small: '9pt'         // Secondary text
+      name: '18pt',
+      sectionTitle: '12pt',
+      body: '10.5pt',
+      small: '9pt'
     },
-    // Spacing
     lineHeight: {
-      tight: '1.1',        // Compact
-      normal: '1.15',      // Standard
-      relaxed: '1.25'      // More space
+      tight: '1.1',
+      normal: '1.15',
+      relaxed: '1.25'
     },
-    // Margins (0.75 inches = 54pt - ATS standard)
     margins: {
       top: '54pt',
       bottom: '54pt',
       left: '54pt',
       right: '54pt'
     },
-    // Page
     pageSize: 'A4',
     maxPages: 2,
-    // Colors (conservative for ATS)
     colors: {
       text: '#000000',
       secondary: '#333333',
@@ -42,25 +40,28 @@
   // ============ CV FORMATTER PERFECT ============
   const CVFormatterPerfect = {
     
-    // ============ MAIN ENTRY POINT ============
-    async generateCV(candidateData, tailoredContent, jobData = null) {
+    // ============ MAIN ENTRY POINT - USES BACKEND ============
+    async generateCV(candidateData, tailoredContent, jobData = null, session = null) {
       const startTime = performance.now();
-      console.log('[CVFormatterPerfect] Generating perfectly formatted CV...');
+      console.log('[CVFormatterPerfect] Generating perfectly formatted CV via backend...');
 
       try {
         // Parse and structure the content
         const cvData = this.parseCVData(candidateData, tailoredContent, jobData);
         
-        // Generate HTML with perfect formatting
+        // Generate HTML preview (for display)
         const htmlContent = this.generateHTML(cvData);
         
         // Generate plain text version
         const textContent = this.generateText(cvData);
         
-        // Generate PDF (if in browser environment)
+        // Generate PDF via BACKEND (guaranteed perfect formatting)
         let pdfResult = null;
-        if (this.isBrowserEnvironment()) {
-          pdfResult = await this.generatePDF(htmlContent, cvData);
+        try {
+          pdfResult = await this.generatePDFViaBackend(cvData, session);
+        } catch (err) {
+          console.warn('[CVFormatterPerfect] Backend PDF generation failed, using fallback:', err.message);
+          pdfResult = await this.generatePDFClientFallback(cvData);
         }
 
         const timing = performance.now() - startTime;
@@ -71,7 +72,7 @@
           text: textContent,
           pdf: pdfResult?.pdf || null,
           blob: pdfResult?.blob || null,
-          filename: pdfResult?.filename || 'CV.html',
+          filename: pdfResult?.filename || this.getFilename(cvData.contact),
           data: cvData,
           timing
         };
@@ -80,6 +81,217 @@
         console.error('[CVFormatterPerfect] Error generating CV:', error);
         throw error;
       }
+    },
+
+    // ============ GENERATE PDF VIA BACKEND (RECOMMENDED) ============
+    async generatePDFViaBackend(cvData, session = null) {
+      const { contact, summary, experience, education, skills, certifications } = cvData;
+      
+      // Build the request payload in the format the backend expects
+      const payload = {
+        type: 'resume',
+        personalInfo: {
+          name: contact.name,
+          email: contact.email,
+          phone: contact.phone,
+          location: contact.location ? `${contact.location} | open to relocation` : '',
+          linkedin: contact.linkedin || '',
+          github: contact.github || ''
+        },
+        summary: summary || '',
+        experience: experience.map(job => ({
+          company: job.company,
+          title: job.title,
+          dates: job.dates,
+          bullets: job.bullets || []
+        })),
+        education: education.map(edu => ({
+          degree: edu.degree,
+          school: edu.institution,
+          dates: edu.date,
+          gpa: edu.gpa ? edu.gpa.replace('GPA: ', '') : ''
+        })),
+        skills: {
+          primary: skills ? skills.split(', ').slice(0, 15) : [],
+          secondary: skills ? skills.split(', ').slice(15, 25) : []
+        },
+        certifications: certifications ? certifications.split(', ') : [],
+        customFileName: this.getFilename(contact).replace('.pdf', ''),
+        candidateName: contact.name
+      };
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY
+      };
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend PDF generation failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.pdf) {
+        throw new Error('No PDF data in response');
+      }
+
+      // Convert base64 to blob
+      const byteCharacters = atob(result.pdf);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+      return {
+        pdf: result.pdf,
+        blob: blob,
+        filename: result.fileName || this.getFilename(contact)
+      };
+    },
+
+    // ============ CLIENT-SIDE FALLBACK (only if backend fails) ============
+    async generatePDFClientFallback(cvData) {
+      console.log('[CVFormatterPerfect] Using client-side PDF fallback...');
+      
+      // Check if jsPDF is available
+      if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF) {
+        console.warn('[CVFormatterPerfect] jsPDF not available for fallback');
+        return null;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({
+        format: 'a4',
+        unit: 'pt',
+        putOnlyUsedFonts: true
+      });
+
+      const font = 'helvetica';
+      const fontSize = 10.5;
+      const margins = { top: 54, bottom: 54, left: 54, right: 54 };
+      const lineHeight = 1.15;
+      const contentWidth = 595.28 - margins.left - margins.right;
+
+      doc.setFont(font, 'normal');
+      doc.setFontSize(fontSize);
+
+      let y = margins.top;
+
+      const addText = (text, isBold = false, isCentered = false, size = fontSize) => {
+        doc.setFontSize(size);
+        doc.setFont(font, isBold ? 'bold' : 'normal');
+        
+        const lines = doc.splitTextToSize(text, contentWidth);
+        lines.forEach(line => {
+          if (y > 841.89 - margins.bottom - 20) {
+            doc.addPage();
+            y = margins.top;
+          }
+          
+          const x = isCentered ? (595.28 - doc.getTextWidth(line)) / 2 : margins.left;
+          doc.text(line, x, y);
+          y += size * lineHeight;
+        });
+      };
+
+      const { contact, summary, experience, education, skills, certifications } = cvData;
+
+      // Name
+      addText(contact.name.toUpperCase(), true, true, 18);
+      y += 4;
+
+      // Contact - FIXED FORMAT: phone | email | location | open to relocation
+      const contactParts = [contact.phone, contact.email, contact.location].filter(Boolean);
+      if (contact.location) contactParts.push('open to relocation');
+      const contactLine = contactParts.join(' | ');
+      addText(contactLine, false, true, 10.5);
+      
+      // Links on separate line
+      if (contact.linkedin || contact.github) {
+        addText([contact.linkedin, contact.github].filter(Boolean).join(' | '), false, true, 9);
+      }
+      y += 12;
+
+      // Summary
+      if (summary) {
+        addText('PROFESSIONAL SUMMARY', true, false, 12);
+        y += 2;
+        addText(summary, false, false, 10.5);
+        y += 8;
+      }
+
+      // Experience
+      if (experience.length > 0) {
+        addText('WORK EXPERIENCE', true, false, 12);
+        y += 4;
+
+        experience.forEach(job => {
+          // Company - Location
+          const companyLine = job.location ? `${job.company} - ${job.location}` : job.company;
+          addText(companyLine, true, false, 10.5);
+          // Title | Dates
+          addText([job.title, job.dates].filter(Boolean).join(' | '), false, false, 9);
+          y += 2;
+
+          job.bullets.forEach(bullet => {
+            addText(`- ${bullet}`, false, false, 10.5);
+          });
+          y += 4;
+        });
+      }
+
+      // Education
+      if (education.length > 0) {
+        addText('EDUCATION', true, false, 12);
+        y += 4;
+
+        education.forEach(edu => {
+          // Institution - Location
+          const instLine = edu.location ? `${edu.institution} - ${edu.location}` : edu.institution;
+          addText(instLine, true, false, 10.5);
+          // Degree | Date | GPA
+          const degreeLineArr = [edu.degree, edu.date, edu.gpa].filter(Boolean);
+          addText(degreeLineArr.join(' | '), false, false, 9);
+        });
+        y += 8;
+      }
+
+      // Skills
+      if (skills) {
+        addText('SKILLS', true, false, 12);
+        y += 4;
+        addText(skills, false, false, 10.5);
+        y += 8;
+      }
+
+      // Certifications
+      if (certifications) {
+        addText('CERTIFICATIONS', true, false, 12);
+        y += 4;
+        addText(certifications, false, false, 10.5);
+      }
+
+      const blob = doc.output('blob');
+      const base64 = doc.output('datauristring').split(',')[1];
+
+      return {
+        pdf: base64,
+        blob,
+        filename: this.getFilename(contact)
+      };
     },
 
     // ============ PARSE AND STRUCTURE CV DATA ============
@@ -93,10 +305,8 @@
         certifications: ''
       };
 
-      // Contact Information
       data.contact = this.buildContactSection(candidateData);
       
-      // Parse tailored content for sections
       const parsed = this.parseSections(tailoredContent);
       data.summary = parsed.summary || '';
       data.experience = parsed.experience || [];
@@ -113,18 +323,17 @@
       const lastName = candidateData?.lastName || candidateData?.last_name || '';
       const name = `${firstName} ${lastName}`.trim();
       
-      const phone = this.formatPhone(candidateData?.phone || '');
-      const email = candidateData?.email || '';
+      const phone = this.formatPhone(candidateData?.phone || '+353 0874261508');
+      const email = candidateData?.email || 'maxokafordev@gmail.com';
       
-      // Clean location - remove "Remote" as it's a recruiter red flag
-      let location = candidateData?.city || candidateData?.location || '';
+      let location = candidateData?.city || candidateData?.location || 'Dublin, IE';
       location = this.cleanLocation(location);
       
-      const linkedin = candidateData?.linkedin || '';
-      const github = candidateData?.github || '';
+      const linkedin = candidateData?.linkedin || 'LinkedIn';
+      const github = candidateData?.github || 'GitHub';
 
       return {
-        name: name || 'Applicant',
+        name: name || 'Maxmilliam Okafor',
         phone,
         email,
         location,
@@ -136,23 +345,19 @@
     // ============ FORMAT PHONE ============
     formatPhone(phone) {
       if (!phone) return '';
-      
       let cleaned = phone.replace(/[^\d+]/g, '');
-      
       if (cleaned.startsWith('+')) {
         const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
         if (match) {
           return `+${match[1]} ${match[2]}`;
         }
       }
-      
       return phone;
     },
 
     // ============ CLEAN LOCATION ============
     cleanLocation(location) {
       if (!location) return '';
-      
       return location
         .replace(/\b(remote|work from home|wfh|virtual|fully remote)\b/gi, '')
         .replace(/\s*[\(\[]?\s*(remote|wfh|virtual)\s*[\)\]]?\s*/gi, '')
@@ -178,7 +383,6 @@
       const lines = content.split('\n');
       let currentSection = '';
       let currentContent = [];
-      let currentJob = null;
 
       const sectionHeaders = {
         'PROFESSIONAL SUMMARY': 'summary',
@@ -203,26 +407,20 @@
 
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
-        // Check for section header
         if (sectionHeaders[upperTrimmed]) {
-          // Save previous section
-          this.saveParsedSection(sections, currentSection, currentContent, currentJob);
-          
+          this.saveParsedSection(sections, currentSection, currentContent);
           currentSection = sectionHeaders[upperTrimmed];
           currentContent = [];
-          currentJob = null;
         } else if (currentSection) {
           currentContent.push(line);
         }
       }
 
-      // Save final section
-      this.saveParsedSection(sections, currentSection, currentContent, currentJob);
-
+      this.saveParsedSection(sections, currentSection, currentContent);
       return sections;
     },
 
-    saveParsedSection(sections, section, content, currentJob) {
+    saveParsedSection(sections, section, content) {
       if (!section || content.length === 0) return;
 
       const text = content.join('\n').trim();
@@ -257,24 +455,43 @@
         if (!trimmed) continue;
 
         // Check if this is a job header (company | title | dates | location)
-        if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
+        // Or format: Company - Location / Title | Dates
+        if ((trimmed.includes('|') || trimmed.includes(' - ')) && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
           if (currentJob) {
             jobs.push(currentJob);
           }
           
-          const parts = trimmed.split('|').map(p => p.trim());
-          currentJob = {
-            company: parts[0] || '',
-            title: parts[1] || '',
-            dates: parts[2] || '',
-            location: parts[3] || '',
-            bullets: []
-          };
+          // Try pipe-separated format first
+          if (trimmed.includes('|')) {
+            const parts = trimmed.split('|').map(p => p.trim());
+            currentJob = {
+              company: parts[0] || '',
+              title: parts[1] || '',
+              dates: parts[2] || '',
+              location: parts[3] || '',
+              bullets: []
+            };
+          } else {
+            // Try dash-separated company - location format
+            const parts = trimmed.split(' - ').map(p => p.trim());
+            currentJob = {
+              company: parts[0] || '',
+              title: '',
+              dates: '',
+              location: parts[1] || '',
+              bullets: []
+            };
+          }
         } else if (currentJob && (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*'))) {
           const bullet = trimmed.replace(/^[•\-*]\s*/, '').trim();
           if (bullet) {
             currentJob.bullets.push(bullet);
           }
+        } else if (currentJob && !currentJob.title && trimmed.includes('|')) {
+          // This might be Title | Dates line
+          const parts = trimmed.split('|').map(p => p.trim());
+          currentJob.title = parts[0] || '';
+          currentJob.dates = parts[1] || '';
         }
       }
 
@@ -290,13 +507,34 @@
       const education = [];
       const lines = text.split('\n');
 
-      for (const line of lines) {
-        const trimmed = line.trim();
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
         if (!trimmed) continue;
 
-        // Simple format: Institution | Degree | Date | GPA
-        const parts = trimmed.split('|').map(p => p.trim());
-        if (parts.length >= 2) {
+        // Institution - Location format
+        if (trimmed.includes(' - ') && !trimmed.includes('|')) {
+          const parts = trimmed.split(' - ').map(p => p.trim());
+          const nextLine = lines[i + 1]?.trim() || '';
+          
+          let degree = '', date = '', gpa = '';
+          if (nextLine.includes('|')) {
+            const degParts = nextLine.split('|').map(p => p.trim());
+            degree = degParts[0] || '';
+            date = degParts[1] || '';
+            gpa = degParts[2] || '';
+            i++; // Skip next line
+          }
+          
+          education.push({
+            institution: parts[0] || '',
+            location: parts[1] || '',
+            degree,
+            date,
+            gpa
+          });
+        } else if (trimmed.includes('|')) {
+          // Pipe-separated format: Institution | Degree | Date | GPA
+          const parts = trimmed.split('|').map(p => p.trim());
           education.push({
             institution: parts[0] || '',
             degree: parts[1] || '',
@@ -317,16 +555,8 @@
         .replace(/[•\-*]/g, ',')
         .split(/[,\n]/)
         .map(s => s.trim())
-        .filter(s => {
-          if (s.length < 2 || s.length > 40) return false;
-          
-          // Filter out soft skills
-          const softSkills = ['collaboration', 'communication', 'teamwork', 'leadership', 'problem-solving', 'initiative', 'ownership', 'passion', 'dedication', 'motivation', 'self-starter', 'interpersonal', 'proactive', 'detail-oriented', 'hard-working', 'team player'];
-          const lower = s.toLowerCase();
-          return !softSkills.some(soft => lower.includes(soft));
-        });
+        .filter(s => s.length >= 2 && s.length <= 40);
 
-      // Deduplicate and format
       const uniqueSkills = [];
       const seen = new Set();
       
@@ -338,7 +568,7 @@
         }
       }
 
-      return uniqueSkills.slice(0, 20).join(', ');
+      return uniqueSkills.slice(0, 25).join(', ');
     },
 
     // ============ FORMAT SKILL NAME ============
@@ -357,7 +587,6 @@
         return upper;
       }
 
-      // Title case
       return skill.split(/\s+/).map(word => {
         if (word.length <= 2) return word.toUpperCase();
         return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
@@ -377,7 +606,7 @@
       return certs.join(', ');
     },
 
-    // ============ GENERATE HTML ============
+    // ============ GENERATE HTML (for preview display) ============
     generateHTML(cvData) {
       const { contact, summary, experience, education, skills, certifications } = cvData;
       
@@ -415,16 +644,15 @@
       line-height: ${ATS_CONFIG.lineHeight.normal};
       color: ${ATS_CONFIG.colors.text};
       background: #fff;
-      padding: 0;
+      padding: 20px;
       margin: 0;
     }
     
     .cv-container {
-      max-width: 100%;
-      padding: 0;
+      max-width: 700px;
+      margin: 0 auto;
     }
     
-    /* Name */
     .cv-name {
       font-size: ${ATS_CONFIG.fontSize.name};
       font-weight: bold;
@@ -434,7 +662,6 @@
       letter-spacing: 1px;
     }
     
-    /* Contact */
     .cv-contact {
       text-align: center;
       font-size: ${ATS_CONFIG.fontSize.body};
@@ -447,7 +674,6 @@
       margin-bottom: 2px;
     }
     
-    /* Section Headers */
     .cv-section {
       margin-bottom: 16px;
     }
@@ -462,13 +688,11 @@
       margin-bottom: 10px;
     }
     
-    /* Summary */
     .cv-summary {
       text-align: justify;
       line-height: ${ATS_CONFIG.lineHeight.relaxed};
     }
     
-    /* Experience */
     .cv-job {
       margin-bottom: 14px;
     }
@@ -497,7 +721,6 @@
       line-height: ${ATS_CONFIG.lineHeight.normal};
     }
     
-    /* Education */
     .cv-education-item {
       margin-bottom: 6px;
     }
@@ -506,32 +729,22 @@
       font-size: ${ATS_CONFIG.fontSize.body};
     }
     
-    /* Skills */
-    .cv-skills {
-      line-height: ${ATS_CONFIG.lineHeight.relaxed};
-    }
-    
-    /* Certifications */
-    .cv-certifications {
+    .cv-skills, .cv-certifications {
       line-height: ${ATS_CONFIG.lineHeight.relaxed};
     }
 
-    /* Print styles */
     @media print {
       body {
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
+        padding: 0;
       }
       
       .cv-container {
-        page-break-inside: avoid;
+        max-width: 100%;
       }
       
-      .cv-section {
-        page-break-inside: avoid;
-      }
-      
-      .cv-job {
+      .cv-section, .cv-job {
         page-break-inside: avoid;
       }
     }
@@ -539,17 +752,13 @@
 </head>
 <body>
   <div class="cv-container">
-    <!-- Name -->
     <div class="cv-name">${escapeHtml(contact.name)}</div>
     
-    <!-- Contact -->
     <div class="cv-contact">
-      ${contact.phone ? `<div class="cv-contact-line">${escapeHtml(contact.phone)}</div>` : ''}
-      <div class="cv-contact-line">${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)}` : ''}${contact.location ? ' | Open to relocation' : ''}</div>
-      ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
+      <div class="cv-contact-line">${[contact.phone, contact.email, contact.location, contact.location ? 'open to relocation' : ''].filter(Boolean).join(' | ')}</div>
+      ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).join(' | ')}</div>` : ''}
     </div>
     
-    <!-- Professional Summary -->
     ${summary ? `
     <div class="cv-section">
       <div class="cv-section-title">Professional Summary</div>
@@ -557,19 +766,18 @@
     </div>
     ` : ''}
     
-    <!-- Work Experience -->
     ${experience.length > 0 ? `
     <div class="cv-section">
       <div class="cv-section-title">Work Experience</div>
       ${experience.map(job => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(job.company)}</div>
-          <div class="cv-job-meta">${[job.title, job.dates, job.location].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+          <div class="cv-company">${escapeHtml(job.company)}${job.location ? ` - ${escapeHtml(job.location)}` : ''}</div>
+          <div class="cv-job-meta">${[job.title, job.dates].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
-          ${job.bullets.map(bullet => `<div class="cv-bullet">• ${escapeHtml(bullet)}</div>`).join('\n          ')}
+          ${job.bullets.map(bullet => `<div class="cv-bullet">- ${escapeHtml(bullet)}</div>`).join('\n          ')}
         </div>
         ` : ''}
       </div>
@@ -577,19 +785,18 @@
     </div>
     ` : ''}
     
-    <!-- Education -->
     ${education.length > 0 ? `
     <div class="cv-section">
       <div class="cv-section-title">Education</div>
       ${education.map(edu => `
       <div class="cv-education-item">
-        <div class="cv-education-line">${[edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+        <div class="cv-education-line"><strong>${escapeHtml(edu.institution)}${edu.location ? ` - ${escapeHtml(edu.location)}` : ''}</strong></div>
+        <div class="cv-education-line">${[edu.degree, edu.date, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
       </div>
       `).join('\n      ')}
     </div>
     ` : ''}
     
-    <!-- Skills -->
     ${skills ? `
     <div class="cv-section">
       <div class="cv-section-title">Skills</div>
@@ -597,7 +804,6 @@
     </div>
     ` : ''}
     
-    <!-- Certifications -->
     ${certifications ? `
     <div class="cv-section">
       <div class="cv-section-title">Certifications</div>
@@ -614,9 +820,10 @@
       const { contact, summary, experience, education, skills, certifications } = cvData;
       const lines = [];
 
-      // Name and contact
+      // Name and contact - EXACT FORMAT REQUIRED
       lines.push(contact.name.toUpperCase());
-      lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : ''));
+      const contactLine = [contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | open to relocation' : '');
+      lines.push(contactLine);
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -633,10 +840,10 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          lines.push(job.company);
-          lines.push([job.title, job.dates, job.location].filter(Boolean).join(' | '));
+          lines.push(`${job.company}${job.location ? ` - ${job.location}` : ''}`);
+          lines.push([job.title, job.dates].filter(Boolean).join(' | '));
           job.bullets.forEach(bullet => {
-            lines.push(`• ${bullet}`);
+            lines.push(`- ${bullet}`);
           });
           lines.push('');
         });
@@ -646,7 +853,8 @@
       if (education.length > 0) {
         lines.push('EDUCATION');
         education.forEach(edu => {
-          lines.push([edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).join(' | '));
+          lines.push(`${edu.institution}${edu.location ? ` - ${edu.location}` : ''}`);
+          lines.push([edu.degree, edu.date, edu.gpa].filter(Boolean).join(' | '));
         });
         lines.push('');
       }
@@ -667,242 +875,16 @@
       return lines.join('\n');
     },
 
-    // ============ GENERATE PDF ============
-    async generatePDF(htmlContent, cvData) {
-      try {
-        // Method 1: Use browser's print API with PDF format
-        if (this.hasBrowserPrintAPI()) {
-          return await this.generatePDFWithPrintAPI(htmlContent, cvData);
-        }
-        
-        // Method 2: Use html2canvas + jsPDF
-        if (this.hasHtml2Canvas() && this.hasJsPDF()) {
-          return await this.generatePDFWithHtml2Canvas(htmlContent, cvData);
-        }
-        
-        // Method 3: Use jsPDF directly with HTML support
-        if (this.hasJsPDF()) {
-          return await this.generatePDFWithJsPDF(htmlContent, cvData);
-        }
-
-        console.warn('[CVFormatterPerfect] No PDF generation method available');
-        return null;
-
-      } catch (error) {
-        console.error('[CVFormatterPerfect] PDF generation error:', error);
-        return null;
-      }
-    },
-
-    // ============ PDF GENERATION METHODS ============
-    async generatePDFWithPrintAPI(htmlContent, cvData) {
-      // Create a new window with the CV
-      const printWindow = window.open('', '_blank', 'width=800,height=1000');
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-
-      // Wait for content to load
-      await new Promise(resolve => {
-        printWindow.onload = resolve;
-        if (printWindow.document.readyState === 'complete') resolve();
-      });
-
-      // Generate PDF
-      const pdfBlob = await new Promise((resolve, reject) => {
-        printWindow.print();
-        // Note: This is limited - browsers don't allow direct PDF capture from print dialog
-        // This is here for future implementation when browsers support it
-        reject(new Error('Print API not fully supported'));
-      });
-
-      printWindow.close();
-      
-      return null; // Fallback to other methods
-    },
-
-    async generatePDFWithHtml2Canvas(htmlContent, cvData) {
-      // Create hidden iframe for rendering
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
-      iframe.style.left = '-9999px';
-      iframe.style.width = '794px'; // A4 width at 96dpi
-      iframe.style.height = '1123px'; // A4 height at 96dpi
-      document.body.appendChild(iframe);
-
-      iframe.srcdoc = htmlContent;
-
-      await new Promise(resolve => {
-        iframe.onload = resolve;
-      });
-
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({
-        format: 'a4',
-        unit: 'mm',
-        orientation: 'portrait'
-      });
-
-      const canvas = await window.html2canvas(iframe.contentDocument.body, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        width: 794,
-        height: 1123
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
-
-      document.body.removeChild(iframe);
-
-      const blob = pdf.output('blob');
-      const base64 = pdf.output('datauristring').split(',')[1];
-
-      return {
-        pdf: base64,
-        blob,
-        filename: this.getFilename(cvData.contact)
-      };
-    },
-
-    async generatePDFWithJsPDF(htmlContent, cvData) {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        format: 'a4',
-        unit: 'pt',
-        putOnlyUsedFonts: true
-      });
-
-      // Configure for ATS
-      const font = 'helvetica';
-      const fontSize = 10.5;
-      const margins = { top: 54, bottom: 54, left: 54, right: 54 };
-      const lineHeight = 1.15;
-      const contentWidth = 595.28 - margins.left - margins.right;
-
-      doc.setFont(font, 'normal');
-      doc.setFontSize(fontSize);
-
-      // Split HTML into sections and render manually
-      // This ensures perfect text-based PDF (not image-based)
-      let y = margins.top;
-
-      const addText = (text, isBold = false, isCentered = false, size = fontSize) => {
-        doc.setFontSize(size);
-        doc.setFont(font, isBold ? 'bold' : 'normal');
-        
-        const lines = doc.splitTextToSize(text, contentWidth);
-        lines.forEach(line => {
-          if (y > 841.89 - margins.bottom - 20) {
-            doc.addPage();
-            y = margins.top;
-          }
-          
-          const x = isCentered ? (595.28 - doc.getTextWidth(line)) / 2 : margins.left;
-          doc.text(line, x, y);
-          y += size * lineHeight;
-        });
-      };
-
-      // Render CV data directly for best ATS compatibility
-      const { contact, summary, experience, education, skills, certifications } = cvData;
-
-      // Name
-      addText(contact.name.toUpperCase(), true, true, 18);
-      y += 4;
-
-      // Contact
-      const contactLine = [contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : '');
-      addText(contactLine, false, true, 10.5);
-      
-      if (contact.linkedin || contact.github) {
-        addText([contact.linkedin, contact.github].filter(Boolean).join(' | '), false, true, 9);
-      }
-      y += 12;
-
-      // Summary
-      if (summary) {
-        addText('PROFESSIONAL SUMMARY', true, false, 12);
-        y += 2;
-        addText(summary, false, false, 10.5);
-        y += 8;
-      }
-
-      // Experience
-      if (experience.length > 0) {
-        addText('WORK EXPERIENCE', true, false, 12);
-        y += 4;
-
-        experience.forEach(job => {
-          addText(job.company, true, false, 10.5);
-          addText([job.title, job.dates, job.location].filter(Boolean).join(' | '), false, false, 9);
-          y += 2;
-
-          job.bullets.forEach(bullet => {
-            addText(`• ${bullet}`, false, false, 10.5);
-          });
-          y += 4;
-        });
-      }
-
-      // Education
-      if (education.length > 0) {
-        addText('EDUCATION', true, false, 12);
-        y += 4;
-
-        education.forEach(edu => {
-          addText([edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).join(' | '), false, false, 10.5);
-        });
-        y += 8;
-      }
-
-      // Skills
-      if (skills) {
-        addText('SKILLS', true, false, 12);
-        y += 4;
-        addText(skills, false, false, 10.5);
-        y += 8;
-      }
-
-      // Certifications
-      if (certifications) {
-        addText('CERTIFICATIONS', true, false, 12);
-        y += 4;
-        addText(certifications, false, false, 10.5);
-      }
-
-      const blob = doc.output('blob');
-      const base64 = doc.output('datauristring').split(',')[1];
-
-      return {
-        pdf: base64,
-        blob,
-        filename: this.getFilename(contact)
-      };
-    },
-
     // ============ HELPER METHODS ============
     getFilename(contact) {
-      const name = contact.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-      return `${name}_CV.pdf`;
+      const firstName = (contact.name || 'CV').split(' ')[0] || 'CV';
+      const lastName = (contact.name || '').split(' ').slice(1).join('_') || '';
+      const name = lastName ? `${firstName}_${lastName}` : firstName;
+      return `${name.replace(/[^a-zA-Z0-9_]/g, '')}_CV.pdf`;
     },
 
     isBrowserEnvironment() {
       return typeof window !== 'undefined' && typeof document !== 'undefined';
-    },
-
-    hasBrowserPrintAPI() {
-      return this.isBrowserEnvironment() && typeof window.print === 'function';
-    },
-
-    hasHtml2Canvas() {
-      return this.isBrowserEnvironment() && typeof window.html2canvas === 'function';
-    },
-
-    hasJsPDF() {
-      return this.isBrowserEnvironment() && 
-             typeof window.jspdf !== 'undefined' && 
-             window.jspdf.jsPDF;
     },
 
     // ============ DOWNLOAD METHODS ============

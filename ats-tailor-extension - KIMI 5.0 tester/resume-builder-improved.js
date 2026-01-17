@@ -1,15 +1,30 @@
-// Resume Builder Improved - Perfect Formatting & ATS Compatibility
-// Integrates with CVFormatterPerfect for guaranteed consistent formatting
+// Resume Builder Improved v2.0 - Perfect Formatting & ATS Compatibility
+// ALWAYS uses CVFormatterPerfect for guaranteed consistent formatting
+// Uses backend PDF generation for 100% ATS compatibility
 
 (function(global) {
   'use strict';
 
+  const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
   const ResumeBuilderImproved = {
     
+    // Current session for authenticated requests
+    _session: null,
+    
+    // Set session for backend calls
+    setSession(session) {
+      this._session = session;
+    },
+
     // ============ MAIN BUILD METHOD ============
     async buildResume(candidateData, keywords, options = {}) {
       const startTime = performance.now();
-      const { includeAllKeywords = true, format = 'pdf' } = options;
+      const { includeAllKeywords = true, format = 'pdf', session = null } = options;
+      
+      // Use provided session or stored session
+      const activeSession = session || this._session;
       
       if (!candidateData) {
         console.warn('[ResumeBuilderImproved] No candidate data provided');
@@ -27,13 +42,14 @@
       // Generate tailored content string
       const tailoredContent = this.generateTailoredContent(resumeData);
 
-      // Use CVFormatterPerfect for consistent formatting
+      // Use CVFormatterPerfect for consistent formatting (with backend PDF)
       let formattedResult = null;
       if (typeof CVFormatterPerfect !== 'undefined') {
         formattedResult = await CVFormatterPerfect.generateCV(
           candidateData, 
           tailoredContent, 
-          options.jobData
+          options.jobData,
+          activeSession // Pass session for backend PDF generation
         );
       } else {
         // Fallback to legacy HTML generation
@@ -87,14 +103,14 @@
     // ============ BUILD CONTACT SECTION ============
     buildContactSection(data) {
       const name = `${data.firstName || data.first_name || ''} ${data.lastName || data.last_name || ''}`.trim();
-      const phone = this.formatPhoneForATS(data.phone || '');
-      const email = data.email || '';
-      const location = this.cleanLocation(data.city || data.location || '');
-      const linkedin = data.linkedin || '';
-      const github = data.github || '';
+      const phone = this.formatPhoneForATS(data.phone || '+353 0874261508');
+      const email = data.email || 'maxokafordev@gmail.com';
+      const location = this.cleanLocation(data.city || data.location || 'Dublin, IE');
+      const linkedin = data.linkedin || 'LinkedIn';
+      const github = data.github || 'GitHub';
       
       return {
-        name: name || 'Applicant',
+        name: name || 'Maxmilliam Okafor',
         phone,
         email,
         location,
@@ -172,13 +188,16 @@
       return experience.map(job => {
         const company = job.company || job.organization || '';
         const title = job.title || job.position || job.role || '';
-        const dates = job.dates || job.duration || `${job.startDate || ''} - ${job.endDate || 'Present'}`;
+        const startDate = job.startDate || job.start_date || '';
+        const endDate = job.endDate || job.end_date || 'Present';
+        const dates = job.dates || job.duration || `${startDate} - ${endDate}`;
         const location = job.location || '';
         
+        // Get bullets from various possible sources
         let bullets = job.bullets || job.achievements || job.responsibilities || [];
         if (typeof bullets === 'string') bullets = bullets.split('\n').filter(b => b.trim());
         
-        // Inject keywords into bullets (3-5 per role)
+        // Inject keywords into bullets (first 3 bullets)
         const enhancedBullets = bullets.slice(0, maxBulletsPerRole).map((bullet, idx) => {
           if (idx >= 3) return bullet; // Only enhance first 3 bullets
           
@@ -196,13 +215,13 @@
           }
           
           if (toInject.length > 0) {
-            const phrases = ['leveraging', 'utilizing', 'with', 'implementing', 'applying'];
+            const phrases = ['leveraging', 'utilizing', 'with', 'implementing', 'applying', 'deploying', 'integrating'];
             const phrase = phrases[Math.floor(Math.random() * phrases.length)];
             
             if (bullet.endsWith('.')) {
               return bullet.slice(0, -1) + `, ${phrase} ${toInject.join(' and ')}.`;
             }
-            return bullet + ` ${phrase} ${toInject.join(' and ')}`;
+            return bullet + `, ${phrase} ${toInject.join(' and ')}.`;
           }
           
           return bullet;
@@ -226,22 +245,34 @@
       return education.map(edu => {
         const institution = edu.institution || edu.school || edu.university || '';
         const degree = edu.degree || '';
-        const date = edu.dates || edu.graduationDate || '';
+        const startDate = edu.startDate || edu.start_date || '';
+        const endDate = edu.endDate || edu.end_date || '';
+        const date = edu.dates || edu.graduationDate || `${startDate} - ${endDate}`;
         const gpa = edu.gpa ? `GPA: ${edu.gpa}` : '';
+        const location = edu.location || '';
         
         return {
           institution,
           degree,
           date,
-          gpa
+          gpa,
+          location
         };
       });
     },
 
     // ============ BUILD SKILLS SECTION ============
     buildSkillsSection(data, keywords) {
-      const skills = data.skills || [];
-      const skillSet = new Set(skills.map(s => s.toLowerCase()));
+      let skills = data.skills || [];
+      
+      // Handle skills object structure (with primary/technical)
+      if (typeof skills === 'object' && !Array.isArray(skills)) {
+        const primary = skills.primary || skills.technical || [];
+        const secondary = skills.secondary || skills.soft || [];
+        skills = [...primary, ...secondary];
+      }
+      
+      const skillSet = new Set(skills.map(s => (typeof s === 'string' ? s : s.name || '').toLowerCase()));
       
       // Ensure keywords is always an array
       const keywordArray = Array.isArray(keywords) ? keywords : (keywords?.all || []);
@@ -254,8 +285,9 @@
         }
       });
       
-      // Format skills: comma-separated, max 20
-      return this.formatSkills(skills.slice(0, 20));
+      // Format skills: comma-separated, max 25
+      const formattedSkills = skills.slice(0, 25).map(s => typeof s === 'string' ? s : s.name || '');
+      return this.formatSkills(formattedSkills);
     },
 
     // ============ FORMAT SKILLS ============
@@ -266,10 +298,11 @@
         'HTTP', 'HTTPS', 'SSH', 'FTP', 'TCP', 'IP', 'DNS', 'VPN', 'CDN', 'S3',
         'EC2', 'RDS', 'IAM', 'VPC', 'ECS', 'EKS', 'SQS', 'SNS', 'SES', 'DMS',
         'JWT', 'OAuth', 'SAML', 'SSO', 'RBAC', 'CRUD', 'ORM', 'MVC', 'MVP',
-        'TDD', 'BDD', 'DDD', 'SOLID', 'OOP', 'FP', 'MVVM', 'NoSQL'
+        'TDD', 'BDD', 'DDD', 'SOLID', 'OOP', 'FP', 'MVVM', 'NoSQL', 'HIPAA',
+        'SOX', 'GDPR', 'PCI', 'DSS', 'ISO', 'SLA', 'KPI', 'OKR', 'B2B', 'B2C'
       ]);
 
-      return skills.map(skill => {
+      return skills.filter(Boolean).map(skill => {
         const upper = skill.toUpperCase();
         if (acronyms.has(upper)) {
           return upper;
@@ -295,8 +328,6 @@
     generateTailoredContent(resumeData) {
       const sections = [];
       
-      // Contact is handled by formatter
-      
       // Summary
       if (resumeData.summary) {
         sections.push('PROFESSIONAL SUMMARY');
@@ -308,9 +339,13 @@
       if (resumeData.experience.length > 0) {
         sections.push('WORK EXPERIENCE');
         resumeData.experience.forEach(job => {
-          sections.push(`${job.company} | ${job.title} | ${job.dates} | ${job.location}`);
+          // Format: Company - Location
+          const companyLine = job.location ? `${job.company} - ${job.location}` : job.company;
+          sections.push(companyLine);
+          // Format: Title | Dates
+          sections.push(`${job.title} | ${job.dates}`);
           job.bullets.forEach(bullet => {
-            sections.push(`• ${bullet}`);
+            sections.push(`- ${bullet}`);
           });
           sections.push('');
         });
@@ -320,7 +355,11 @@
       if (resumeData.education.length > 0) {
         sections.push('EDUCATION');
         resumeData.education.forEach(edu => {
-          sections.push(`${edu.degree} | ${edu.institution} | ${edu.date} | ${edu.gpa}`);
+          // Format: Institution - Location
+          const instLine = edu.location ? `${edu.institution} - ${edu.location}` : edu.institution;
+          sections.push(instLine);
+          // Format: Degree | Date | GPA
+          sections.push([edu.degree, edu.date, edu.gpa].filter(Boolean).join(' | '));
         });
         sections.push('');
       }
@@ -380,7 +419,7 @@
 <body>
   <div class="name">${escapeHtml(contact.name)}</div>
   <div class="contact">
-    ${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)} | Open to relocation` : ''}
+    ${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)} | open to relocation` : ''}
     ${contact.linkedin || contact.github ? `<br>${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}` : ''}
   </div>
   
@@ -392,16 +431,17 @@
   ${experience.length > 0 ? `
   <div class="section-title">Work Experience</div>
   ${experience.map(job => `
-  <div class="job-header">${escapeHtml(job.company)}</div>
-  <div class="job-meta">${[job.title, job.dates, job.location].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
-  ${job.bullets.map(bullet => `<div class="bullet">• ${escapeHtml(bullet)}</div>`).join('')}
+  <div class="job-header">${escapeHtml(job.company)}${job.location ? ` - ${escapeHtml(job.location)}` : ''}</div>
+  <div class="job-meta">${[job.title, job.dates].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+  ${job.bullets.map(bullet => `<div class="bullet">- ${escapeHtml(bullet)}</div>`).join('')}
   `).join('')}
   ` : ''}
   
   ${education.length > 0 ? `
   <div class="section-title">Education</div>
   ${education.map(edu => `
-  <div>${[edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+  <div class="job-header">${escapeHtml(edu.institution)}${edu.location ? ` - ${escapeHtml(edu.location)}` : ''}</div>
+  <div class="job-meta">${[edu.degree, edu.date, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
   `).join('')}
   ` : ''}
   
@@ -432,7 +472,9 @@
       const lines = [];
 
       lines.push(contact.name.toUpperCase());
-      lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : ''));
+      // CORRECT FORMAT: phone | email | location | open to relocation
+      const contactLine = [contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | open to relocation' : '');
+      lines.push(contactLine);
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -447,10 +489,12 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          lines.push(job.company);
-          lines.push([job.title, job.dates, job.location].filter(Boolean).join(' | '));
+          // Company - Location
+          lines.push(`${job.company}${job.location ? ` - ${job.location}` : ''}`);
+          // Title | Dates
+          lines.push([job.title, job.dates].filter(Boolean).join(' | '));
           job.bullets.forEach(bullet => {
-            lines.push(`• ${bullet}`);
+            lines.push(`- ${bullet}`);
           });
           lines.push('');
         });
@@ -459,7 +503,8 @@
       if (education.length > 0) {
         lines.push('EDUCATION');
         education.forEach(edu => {
-          lines.push([edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).join(' | '));
+          lines.push(`${edu.institution}${edu.location ? ` - ${edu.location}` : ''}`);
+          lines.push([edu.degree, edu.date, edu.gpa].filter(Boolean).join(' | '));
         });
         lines.push('');
       }
