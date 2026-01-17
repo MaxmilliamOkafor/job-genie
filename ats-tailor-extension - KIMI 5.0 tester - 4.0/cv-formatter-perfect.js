@@ -330,11 +330,11 @@
           company = this.stripDatesFromField(company);
           title = this.stripDatesFromField(title);
           
+          // NO location - removed to prevent recruiter bias
           currentJob = {
             company: company,
             title: title,
             dates: dates,
-            location: parts[3] || '',
             bullets: []
           };
         } else if (currentJob && (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*'))) {

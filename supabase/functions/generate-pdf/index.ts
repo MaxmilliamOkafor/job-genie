@@ -823,14 +823,33 @@ async function handleRawContentRequest(body: {
           return dateStr; // Return original if no years found
         };
         
+        // Location patterns to filter out (cities, states, countries)
+        const locationPatterns = [
+          /^[A-Z][a-z]+,\s*[A-Z]{2}$/,  // Dallas, TX
+          /^[A-Z][a-z]+,\s*[A-Z][a-z]+$/,  // Dublin, Ireland
+          /^[A-Z][a-z]+,\s*[A-Za-z\s]+$/,  // London, United Kingdom
+          /^[A-Z][a-z]+\s+[A-Z][a-z]+,/,  // New York, NY
+          /\b(United Kingdom|United States|USA|UK|Ireland|Germany|France|Netherlands|Canada|Australia)\b/i,
+        ];
+        
+        const isLocation = (text: string): boolean => {
+          const trimmed = text.trim();
+          if (trimmed.length > 50) return false;
+          return locationPatterns.some(p => p.test(trimmed));
+        };
+        
         for (const line of section.content) {
+          // Skip location lines entirely - NO location to prevent recruiter bias
+          if (isLocation(line)) {
+            continue;
+          }
+          
           // Job header pattern: Company | Title | Dates OR Company | Dates
           if (line.includes('|') && !line.startsWith('-') && !line.startsWith('•')) {
             if (currentJob) jobs.push(currentJob);
-            const parts = line.split('|').map(p => p.trim());
+            const parts = line.split('|').map(p => p.trim()).filter(p => !isLocation(p));
             
-            // Format: Company | Title | Dates | Location
-            // OR: Company | Dates (title on next line)
+            // Format: Company | Title | Dates (location removed)
             let company = stripDates(parts[0] || '');
             let title = '';
             let dates = '';
@@ -860,8 +879,8 @@ async function handleRawContentRequest(body: {
             if (currentJob) {
               currentJob.bullets.push(line.replace(/^[-•*]\s*/, ''));
             }
-          } else if (currentJob && !currentJob.title && line.length < 80 && !line.includes('@')) {
-            // Likely a job title on separate line - set it
+          } else if (currentJob && !currentJob.title && line.length < 80 && !line.includes('@') && !isLocation(line)) {
+            // Likely a job title on separate line - set it (but skip if it's a location)
             currentJob.title = stripDates(line);
           }
         }
