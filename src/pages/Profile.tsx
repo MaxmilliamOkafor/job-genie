@@ -255,38 +255,20 @@ const Profile = () => {
             });
           }}
           onParsedData={(parsedData) => {
-            // Update local profile with parsed data
-            const updates: Partial<typeof localProfile> = {};
-
-            if (parsedData.first_name) updates.first_name = parsedData.first_name;
-            if (parsedData.last_name) updates.last_name = parsedData.last_name;
-            if (parsedData.email) updates.email = parsedData.email;
-            if (parsedData.phone) updates.phone = parsedData.phone;
-            if (parsedData.city) updates.city = parsedData.city;
-            if (parsedData.country) updates.country = parsedData.country;
-            if (parsedData.linkedin) updates.linkedin = parsedData.linkedin;
-            if (parsedData.github) updates.github = parsedData.github;
-            if (parsedData.portfolio) updates.portfolio = parsedData.portfolio;
-            if (parsedData.total_experience) updates.total_experience = parsedData.total_experience;
-            if (parsedData.highest_education) updates.highest_education = parsedData.highest_education;
-            if (parsedData.current_salary) updates.current_salary = parsedData.current_salary;
-            if (parsedData.expected_salary) updates.expected_salary = parsedData.expected_salary;
-            if (parsedData.skills && parsedData.skills.length > 0) updates.skills = parsedData.skills;
-            if (parsedData.certifications && parsedData.certifications.length > 0) updates.certifications = parsedData.certifications;
-            if (parsedData.education && parsedData.education.length > 0) updates.education = parsedData.education;
-            if (parsedData.languages && parsedData.languages.length > 0) updates.languages = parsedData.languages;
-            if (parsedData.cover_letter) updates.cover_letter = parsedData.cover_letter;
-
+            // ONLY update work_experience from parsed CV - preserve other fields user already filled
             if (parsedData.work_experience && parsedData.work_experience.length > 0) {
-              // Normalise (and ensure id/bullets exist) to prevent company/title swaps.
-              updates.work_experience = normalizeWorkExperience(parsedData.work_experience as any);
+              const normalizedExp = normalizeWorkExperience(parsedData.work_experience as any);
+              
+              // Update local state (only work_experience)
+              setLocalProfile(prev => ({ ...prev, work_experience: normalizedExp }));
+
+              // Save to database (only work_experience)
+              updateProfile({ work_experience: normalizedExp } as any);
+              
+              toast.success(`Imported ${normalizedExp.length} work experience entries`);
+            } else {
+              toast.warning('No work experience found in CV');
             }
-
-            // Update local state
-            setLocalProfile(prev => ({ ...prev, ...updates }));
-
-            // Save to database
-            updateProfile(updates as any);
           }}
         />
 
