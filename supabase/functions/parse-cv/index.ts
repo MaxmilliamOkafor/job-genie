@@ -295,15 +295,29 @@ serve(async (req) => {
       console.log('DOC extracted text length:', textContent.length);
     }
 
-    // Fallback: if we couldn't extract enough text, send base64 to the LLM
+    // Check if extracted text is actually readable (not binary garbage)
+    const isTextReadable = (text: string): boolean => {
+      if (!text || text.length < 100) return false;
+      // Check if at least 50% of characters are readable ASCII letters/numbers/spaces
+      const readable = text.replace(/[^a-zA-Z0-9\s.,;:!?@#$%&*()\-]/g, '');
+      const ratio = readable.length / text.length;
+      // Also check for presence of common CV words
+      const hasCommonWords = /\b(experience|education|skills|work|company|university|degree|manager|developer|engineer|analyst)\b/i.test(text);
+      return ratio > 0.4 && hasCommonWords;
+    };
+
+    const textIsReadable = isTextReadable(textContent);
+    console.log('Text readable check:', textIsReadable, 'ratio check passed');
+
+    // Fallback: if we couldn't extract readable text, warn user
     const base64Content = btoa(String.fromCharCode(...uint8Array.slice(0, 50000)));
 
     // Focus the model on the most important part (work experience) to avoid empty results.
-    const focusedWorkExpText = textContent ? getWorkExperienceFocusedText(textContent) : '';
+    const focusedWorkExpText = textContent && textIsReadable ? getWorkExperienceFocusedText(textContent) : '';
 
     const usedInputType = focusedWorkExpText && focusedWorkExpText.trim().length > 200
       ? 'focused_text'
-      : textContent && textContent.trim().length > 200
+      : textContent && textIsReadable && textContent.trim().length > 200
         ? 'extracted_text'
         : 'base64_snippet';
 
@@ -313,14 +327,23 @@ serve(async (req) => {
         ? `CV_TEXT (extracted):\n${textContent.substring(0, 30000)}`
         : `CV_BASE64_SNIPPET (${mimeType}):\n${base64Content.substring(0, 40000)}`;
 
+    // Create a readable snippet for debug (sanitize binary garbage)
+    const createReadableSnippet = (text: string): string => {
+      if (!text) return '[No text extracted - PDF may be image-based]';
+      if (!isTextReadable(text)) {
+        return '[Text extraction failed - PDF appears to be image-based. Please upload a DOCX file or a PDF with selectable text.]';
+      }
+      return text.substring(0, 500);
+    };
+
     const debugPayload = debug ? {
       extractedTextLength: textContent.length,
-      extractedTextSnippet: (textContent || '[No extracted text. If this is a scanned PDF, please upload a text-based PDF or a .docx when supported.]').slice(0, 500),
+      extractedTextSnippet: createReadableSnippet(textContent),
       fileExtension,
       usedInputType,
     } : null;
 
-    console.log('Using extracted text:', textContent.length > 200);
+    console.log('Using extracted text:', textIsReadable && textContent.length > 200);
     console.log('Focused text length:', focusedWorkExpText.length);
     console.log('Used input type:', usedInputType);
     // Get user's API keys - prefer Kimi K2, fallback to OpenAI
@@ -389,7 +412,9 @@ Extract the following fields (use null if not found):
 - expected_salary: string (if mentioned)
 - skills: array of objects with {name: string, years: number, category: "technical" | "soft"}
 - certifications: array of strings
-- work_experience: array of objects with {company: string, title: string, startDate: string, endDate: string, description: string}
+- work_experience: array of objects with {company: string, title: string, startDate: string, endDate: string, description: string, bullets: string[]}
+  - bullets should be an array of individual achievement/responsibility strings
+  - description should be a brief role summary
 - education: array of objects with {institution: string, degree: string, field: string, startDate: string, endDate: string}
 - languages: array of objects with {language: string, proficiency: "native" | "fluent" | "conversational" | "basic"}
 - cover_letter: string (a brief professional summary if available)
@@ -446,8 +471,9 @@ Return ONLY valid JSON, no markdown or explanation.`
 Rules:
 - Output ONLY valid JSON.
 - Return an object with exactly: {"work_experience": [...]}
-- Each item: {"company": string, "title": string, "startDate": string|null, "endDate": string|null, "description": string}
-- description must be the bullet points/achievements as a single string with each bullet on a new line.
+- Each item: {"company": string, "title": string, "startDate": string|null, "endDate": string|null, "description": string, "bullets": string[]}
+- bullets must be an array of individual achievement/responsibility strings (one per bullet point).
+- description should be a brief role summary or empty string.
 - Preserve company names exactly (including "formerly" notes).
 - Do not invent roles. If unsure, include the closest matching text from the CV.`
           },
