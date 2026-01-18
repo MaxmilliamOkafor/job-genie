@@ -1,11 +1,78 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { JSZip } from "https://deno.land/x/jszip@0.11.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Extract text from DOCX by unzipping and parsing word/document.xml
+async function extractTextFromDOCX(data: Uint8Array): Promise<string> {
+  try {
+    const zip = new JSZip();
+    await zip.loadAsync(data);
+    
+    // The main document content is in word/document.xml
+    const documentXml = await zip.file("word/document.xml")?.async("string");
+    
+    if (!documentXml) {
+      console.log('No document.xml found in DOCX');
+      return '';
+    }
+    
+    // Parse XML and extract text content
+    // DOCX stores text in <w:t> tags
+    const textMatches = documentXml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+    const textParts: string[] = [];
+    
+    for (const match of textMatches) {
+      if (match[1]) {
+        textParts.push(match[1]);
+      }
+    }
+    
+    // Also detect paragraph breaks for better structure
+    let result = documentXml;
+    
+    // Replace paragraph endings with newlines for structure
+    result = result.replace(/<\/w:p>/g, '\n');
+    
+    // Extract all text between <w:t> tags
+    const allText: string[] = [];
+    const tagRegex = /<w:t[^>]*>([^<]*)<\/w:t>/g;
+    let match;
+    
+    while ((match = tagRegex.exec(documentXml)) !== null) {
+      allText.push(match[1]);
+    }
+    
+    // Join with awareness of paragraph structure
+    let fullText = '';
+    let lastWasParagraph = false;
+    
+    // Re-process with paragraph awareness
+    const paragraphs = documentXml.split('</w:p>');
+    for (const para of paragraphs) {
+      const paraTexts: string[] = [];
+      const paraTagRegex = /<w:t[^>]*>([^<]*)<\/w:t>/g;
+      let paraMatch;
+      while ((paraMatch = paraTagRegex.exec(para)) !== null) {
+        if (paraMatch[1]) paraTexts.push(paraMatch[1]);
+      }
+      if (paraTexts.length > 0) {
+        fullText += paraTexts.join('') + '\n';
+      }
+    }
+    
+    console.log('DOCX extracted text length:', fullText.length);
+    return fullText.trim();
+  } catch (e) {
+    console.error('DOCX extraction error:', e);
+    return '';
+  }
+}
 
 // Simple PDF text extractor that works in Deno without workers
 // Extracts text from PDF by parsing the raw PDF structure
@@ -213,11 +280,19 @@ serve(async (req) => {
 
     console.log('File type:', fileExtension, 'Size:', uint8Array.length);
 
-    // Extract text content from PDF
+    // Extract text content based on file type
     let textContent = '';
     if (fileExtension === 'pdf') {
       textContent = extractTextFromPDF(uint8Array);
-      console.log('Extracted text length:', textContent.length);
+      console.log('PDF extracted text length:', textContent.length);
+    } else if (fileExtension === 'docx') {
+      textContent = await extractTextFromDOCX(uint8Array);
+      console.log('DOCX extracted text length:', textContent.length);
+    } else if (fileExtension === 'doc') {
+      // Legacy .doc format - try basic text extraction
+      const rawText = new TextDecoder('latin1').decode(uint8Array);
+      textContent = rawText.replace(/[^\x20-\x7E\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+      console.log('DOC extracted text length:', textContent.length);
     }
 
     // Fallback: if we couldn't extract enough text, send base64 to the LLM
