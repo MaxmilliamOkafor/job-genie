@@ -68,6 +68,10 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
   const [isParsing, setIsParsing] = useState(false);
   const [showParseConfirm, setShowParseConfirm] = useState(false);
   const [pendingFilePath, setPendingFilePath] = useState<string | null>(null);
+  const [lastParseDebug, setLastParseDebug] = useState<
+    | { extractedTextLength: number; extractedTextSnippet: string; fileExtension: string; usedInputType: string }
+    | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,19 +141,23 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
     setShowParseConfirm(false);
 
     try {
+      setLastParseDebug(null);
+
       const { data, error } = await supabase.functions.invoke('parse-cv', {
-        body: { cvFilePath: filePath }
+        body: { cvFilePath: filePath, debug: true }
       });
 
       if (error) throw error;
 
       if (data.success && data.data) {
+        if (data.debug) setLastParseDebug(data.debug);
         onParsedData(data.data, mode);
         const message = mode === 'work_experience_only' 
           ? 'Work experience imported successfully!' 
           : 'All profile fields imported successfully!';
         toast.success(message);
       } else {
+        if (data?.debug) setLastParseDebug(data.debug);
         throw new Error(data.error || 'Failed to parse CV');
       }
     } catch (error: any) {
@@ -311,6 +319,19 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
           <p className="text-xs text-muted-foreground text-center">
             Your CV is stored securely and can be parsed to auto-fill your profile
           </p>
+
+          {lastParseDebug && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <p className="text-xs font-medium text-foreground">Parse CV debug</p>
+              <div className="text-xs text-muted-foreground grid gap-1">
+                <p><span className="font-medium text-foreground">File type:</span> {lastParseDebug.fileExtension.toUpperCase()}</p>
+                <p><span className="font-medium text-foreground">Extracted text length:</span> {lastParseDebug.extractedTextLength.toLocaleString()}</p>
+                <p><span className="font-medium text-foreground">Used input:</span> {lastParseDebug.usedInputType}</p>
+              </div>
+              <pre className="text-xs whitespace-pre-wrap break-words rounded-md border bg-background p-2 max-h-40 overflow-auto">{lastParseDebug.extractedTextSnippet}</pre>
+            </div>
+          )}
+
         </CardContent>
       </Card>
 

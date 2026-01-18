@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
-import { maxmilliamProfile } from '@/data/userProfile';
 
 import { normalizeWorkExperience } from '@/lib/workExperienceNormalization';
-
 
 export interface Profile {
   id: string;
@@ -134,68 +132,10 @@ export function useProfile() {
     }
   };
 
-  const loadCVData = async () => {
-    if (!user) return;
-
-    try {
-      const cvData = {
-        first_name: maxmilliamProfile.firstName,
-        last_name: maxmilliamProfile.lastName,
-        email: maxmilliamProfile.email,
-        phone: maxmilliamProfile.phone,
-        address: maxmilliamProfile.address,
-        city: maxmilliamProfile.city,
-        state: maxmilliamProfile.state,
-        zip_code: maxmilliamProfile.zipCode,
-        country: maxmilliamProfile.country,
-        citizenship: maxmilliamProfile.citizenship,
-        linkedin: maxmilliamProfile.linkedin,
-        github: maxmilliamProfile.github,
-        portfolio: maxmilliamProfile.portfolio,
-        current_salary: maxmilliamProfile.currentSalary,
-        expected_salary: maxmilliamProfile.expectedSalary,
-        notice_period: maxmilliamProfile.noticePeriod,
-        total_experience: maxmilliamProfile.totalExperience,
-        highest_education: maxmilliamProfile.highestEducation,
-        willing_to_relocate: maxmilliamProfile.willingToRelocate,
-        driving_license: maxmilliamProfile.drivingLicense,
-        visa_required: maxmilliamProfile.visaRequired,
-        authorized_countries: maxmilliamProfile.authorizedCountries,
-        veteran_status: maxmilliamProfile.veteranStatus,
-        disability: maxmilliamProfile.disability,
-        race_ethnicity: maxmilliamProfile.raceEthnicity,
-        security_clearance: maxmilliamProfile.securityClearance,
-        cover_letter: maxmilliamProfile.coverLetter,
-        work_experience: JSON.parse(JSON.stringify(maxmilliamProfile.workExperience)),
-        education: JSON.parse(JSON.stringify(maxmilliamProfile.education)),
-        skills: JSON.parse(JSON.stringify(maxmilliamProfile.skills)),
-        certifications: maxmilliamProfile.certifications,
-        languages: JSON.parse(JSON.stringify(maxmilliamProfile.languages)),
-        achievements: JSON.parse(JSON.stringify(maxmilliamProfile.achievements)),
-        excluded_companies: maxmilliamProfile.excludedCompanies,
-        ats_strategy: maxmilliamProfile.atsStrategy,
-      };
-
-      const { error } = await supabase
-        .from('profiles')
-        .update(cvData)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setProfile(prev => prev ? { ...prev, ...cvData, work_experience: normalizeWorkExperience(cvData.work_experience as any) } : null);
-      toast.success('CV data loaded successfully!');
-    } catch (error) {
-      console.error('Error loading CV data:', error);
-      toast.error('Failed to load CV data');
-    }
-  };
-
   return {
     profile,
     isLoading,
     updateProfile,
-    loadCVData,
     refetch: fetchProfile,
   };
 }

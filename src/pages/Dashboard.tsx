@@ -26,7 +26,7 @@ import {
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const { jobs } = useJobs();
-  const { profile, loadCVData } = useProfile();
+  const { profile } = useProfile();
   const [stats, setStats] = useState({
     applied: 0,
     interviewing: 0,
@@ -92,8 +92,10 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </div>
-                <Button onClick={loadCVData}>
-                  Load CV Data
+                <Button asChild>
+                  <Link to="/profile">
+                    Complete Profile
+                  </Link>
                 </Button>
               </div>
             </CardContent>

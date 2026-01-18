@@ -48,7 +48,7 @@ const DEFAULT_ATS_ANSWERS = {
 
 const Profile = () => {
   const { user } = useAuth();
-  const { profile, isLoading, updateProfile, loadCVData } = useProfile();
+  const { profile, isLoading, updateProfile } = useProfile();
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
@@ -266,9 +266,6 @@ const Profile = () => {
     }
   }, [profile]);
 
-  const handleLoadCV = async () => {
-    await loadCVData();
-  };
 
   const handleSave = async () => {
     const normalized = {
@@ -393,10 +390,6 @@ const Profile = () => {
               </Button>
             </div>
             
-            <Button onClick={handleLoadCV} variant="outline" size="sm" className="gap-2">
-              <Download className="h-4 w-4" />
-              Sample CV
-            </Button>
             {editMode ? (
               <Button onClick={handleSave} size="sm" className="gap-2">
                 <Save className="h-4 w-4" />
