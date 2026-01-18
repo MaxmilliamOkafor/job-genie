@@ -185,7 +185,7 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { cvFilePath } = await req.json();
+    const { cvFilePath, debug } = await req.json();
 
     if (!cvFilePath) {
       throw new Error('CV file path is required');
@@ -226,15 +226,28 @@ serve(async (req) => {
     // Focus the model on the most important part (work experience) to avoid empty results.
     const focusedWorkExpText = textContent ? getWorkExperienceFocusedText(textContent) : '';
 
-    const inputForModel = focusedWorkExpText && focusedWorkExpText.trim().length > 200
-      ? `CV_TEXT (focused on WORK EXPERIENCE):\n${focusedWorkExpText}`
+    const usedInputType = focusedWorkExpText && focusedWorkExpText.trim().length > 200
+      ? 'focused_text'
       : textContent && textContent.trim().length > 200
+        ? 'extracted_text'
+        : 'base64_snippet';
+
+    const inputForModel = usedInputType === 'focused_text'
+      ? `CV_TEXT (focused on WORK EXPERIENCE):\n${focusedWorkExpText}`
+      : usedInputType === 'extracted_text'
         ? `CV_TEXT (extracted):\n${textContent.substring(0, 30000)}`
         : `CV_BASE64_SNIPPET (${mimeType}):\n${base64Content.substring(0, 40000)}`;
 
+    const debugPayload = debug ? {
+      extractedTextLength: textContent.length,
+      extractedTextSnippet: (textContent || '[No extracted text. If this is a scanned PDF, please upload a text-based PDF or a .docx when supported.]').slice(0, 500),
+      fileExtension,
+      usedInputType,
+    } : null;
+
     console.log('Using extracted text:', textContent.length > 200);
     console.log('Focused text length:', focusedWorkExpText.length);
-
+    console.log('Used input type:', usedInputType);
     // Get user's API keys - prefer Kimi K2, fallback to OpenAI
     const { data: profileData } = await supabaseClient
       .from('profiles')
@@ -408,6 +421,7 @@ Rules:
       JSON.stringify({
         success: true,
         data: parsedData,
+        ...(debugPayload ? { debug: debugPayload } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
