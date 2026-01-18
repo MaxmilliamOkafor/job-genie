@@ -302,13 +302,19 @@ serve(async (req) => {
         for (let i = 0; i < sanitizedData.experience.length; i++) {
           const exp = sanitizedData.experience[i];
           ensureSpace(50);
-          
+
           // CRITICAL: Strip any embedded dates from company/title to prevent duplication
-          const cleanCompany = stripDatesFromField(exp.company);
-          const cleanTitle = stripDatesFromField(exp.title);
+          const rawCompany = (exp.company || '').trim();
+          const rawTitle = (exp.title || '').trim();
+
+          let cleanCompany = stripDatesFromField(rawCompany);
+          const cleanTitle = stripDatesFromField(rawTitle);
           const dates = exp.dates || '';
-          
-          // Company name - BOLD (dates stripped)
+
+          // If stripping removed everything (e.g. company accidentally contains only dates), fall back.
+          if (!cleanCompany && rawCompany) cleanCompany = rawCompany;
+
+          // Line 1: Company name - BOLD
           currentPage.drawText(cleanCompany, {
             x: MARGIN,
             y: yPosition,
@@ -316,8 +322,17 @@ serve(async (req) => {
             font: helveticaBold,
             color: colors.black,
           });
-          
-          // Dates on same line, right-aligned (only if dates exist)
+          yPosition -= LINE_HEIGHT + 2;
+
+          // Line 2: Job title (italic) on the left + dates right-aligned on the same line
+          currentPage.drawText(cleanTitle, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helveticaOblique,
+            color: colors.black,
+          });
+
           if (dates) {
             const dateWidth = helvetica.widthOfTextAtSize(dates, 10);
             currentPage.drawText(dates, {
@@ -328,16 +343,7 @@ serve(async (req) => {
               color: colors.darkGray,
             });
           }
-          yPosition -= LINE_HEIGHT + 2;
 
-          // Job title - ITALIC (dates stripped)
-          currentPage.drawText(cleanTitle, {
-            x: MARGIN,
-            y: yPosition,
-            size: 10,
-            font: helveticaOblique,
-            color: colors.black,
-          });
           yPosition -= LINE_HEIGHT + 4;
 
           // Bullet points
@@ -346,7 +352,7 @@ serve(async (req) => {
             const bulletText = `- ${bullet}`;
             drawWrappedText(bulletText, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
           }
-          
+
           // 1.5 line spacing between companies (except after last)
           if (i < sanitizedData.experience.length - 1) {
             yPosition -= SECTION_SPACING;
@@ -360,9 +366,14 @@ serve(async (req) => {
         
         for (const edu of sanitizedData.education) {
           ensureSpace(30);
-          
+
+          // Remove embedded dates (e.g. "Imperial College London 2020 - 2021") to prevent bias.
+          const cleanDegree = stripDatesFromField(edu.degree);
+          const cleanSchool = stripDatesFromField(edu.school);
+          const cleanGpa = edu.gpa ? stripDatesFromField(edu.gpa) : '';
+
           // Degree only (no dates to prevent age bias)
-          currentPage.drawText(edu.degree, {
+          currentPage.drawText(cleanDegree, {
             x: MARGIN,
             y: yPosition,
             size: 11,
@@ -372,7 +383,7 @@ serve(async (req) => {
           yPosition -= LINE_HEIGHT;
 
           // School and GPA (no dates)
-          const schoolLine = edu.gpa ? `${edu.school} | GPA: ${edu.gpa}` : edu.school;
+          const schoolLine = cleanGpa ? `${cleanSchool} | GPA: ${cleanGpa}` : cleanSchool;
           currentPage.drawText(schoolLine, {
             x: MARGIN,
             y: yPosition,
