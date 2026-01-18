@@ -1,13 +1,119 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import * as pdfjs from "https://esm.sh/pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Simple PDF text extractor that works in Deno without workers
+// Extracts text from PDF by parsing the raw PDF structure
+function extractTextFromPDF(data: Uint8Array): string {
+  try {
+    // Convert to string for parsing
+    const text = new TextDecoder('latin1').decode(data);
+    const extractedText: string[] = [];
+    
+    // Find all text streams in the PDF
+    // PDF text is typically in BT...ET blocks (Begin Text / End Text)
+    const textBlockRegex = /BT\s*([\s\S]*?)\s*ET/g;
+    let match;
+    
+    while ((match = textBlockRegex.exec(text)) !== null) {
+      const block = match[1];
+      
+      // Extract text from Tj and TJ operators
+      // Tj: (text) Tj - show text string
+      // TJ: [(text) num (text)] TJ - show text with positioning
+      
+      // Handle Tj operator
+      const tjRegex = /\(([^)]*)\)\s*Tj/g;
+      let tjMatch;
+      while ((tjMatch = tjRegex.exec(block)) !== null) {
+        const decoded = decodePDFString(tjMatch[1]);
+        if (decoded.trim()) extractedText.push(decoded);
+      }
+      
+      // Handle TJ operator (array of strings with positioning)
+      const tjArrayRegex = /\[([\s\S]*?)\]\s*TJ/gi;
+      let tjArrayMatch;
+      while ((tjArrayMatch = tjArrayRegex.exec(block)) !== null) {
+        const arrayContent = tjArrayMatch[1];
+        const stringRegex = /\(([^)]*)\)/g;
+        let stringMatch;
+        const lineText: string[] = [];
+        while ((stringMatch = stringRegex.exec(arrayContent)) !== null) {
+          const decoded = decodePDFString(stringMatch[1]);
+          if (decoded) lineText.push(decoded);
+        }
+        if (lineText.length > 0) {
+          extractedText.push(lineText.join(''));
+        }
+      }
+    }
+    
+    // Also try to extract text from stream objects (for compressed content)
+    // This is a fallback for PDFs with different structures
+    const streamRegex = /stream\s*([\s\S]*?)\s*endstream/g;
+    while ((match = streamRegex.exec(text)) !== null) {
+      const streamContent = match[1];
+      // Look for readable text patterns in streams
+      const readableText = streamContent.replace(/[^\x20-\x7E\n\r]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (readableText.length > 50) {
+        // Filter out obviously non-text content
+        const words = readableText.split(' ').filter(w => 
+          w.length >= 2 && /[a-zA-Z]/.test(w) && !/^[0-9.]+$/.test(w)
+        );
+        if (words.length > 5) {
+          extractedText.push(words.join(' '));
+        }
+      }
+    }
+    
+    // Join and clean up
+    let result = extractedText.join(' ')
+      .replace(/\s+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // Add space between camelCase
+      .trim();
+    
+    // If we got very little text, try a more aggressive extraction
+    if (result.length < 200) {
+      // Extract any readable ASCII text sequences
+      const asciiText = text.replace(/[^\x20-\x7E\n\r]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Filter to only meaningful word sequences
+      const meaningfulParts = asciiText.split(/\s+/)
+        .filter(word => word.length >= 3 && /[a-zA-Z]{2,}/.test(word))
+        .join(' ');
+      
+      if (meaningfulParts.length > result.length) {
+        result = meaningfulParts;
+      }
+    }
+    
+    return result;
+  } catch (e) {
+    console.error('PDF extraction error:', e);
+    return '';
+  }
+}
+
+// Decode PDF string escapes
+function decodePDFString(str: string): string {
+  return str
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\\(/g, '(')
+    .replace(/\\\)/g, ')')
+    .replace(/\\\\/g, '\\')
+    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)));
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -37,6 +143,8 @@ serve(async (req) => {
       throw new Error('CV file path is required');
     }
 
+    console.log('Parsing CV:', cvFilePath);
+
     // Download the CV file from storage
     const { data: fileData, error: downloadError } = await supabaseClient.storage
       .from('cvs')
@@ -47,6 +155,7 @@ serve(async (req) => {
     }
 
     const arrayBuffer = await fileData.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
 
     // Determine file type
     const fileExtension = cvFilePath.split('.').pop()?.toLowerCase() || 'pdf';
@@ -54,62 +163,67 @@ serve(async (req) => {
       : fileExtension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : 'application/msword';
 
-    // Extract text content (PDF supported). This is critical: sending base64 bytes to an LLM is unreliable
-    // and can cause missing/garbled work experience entries (e.g., "Meta" disappearing).
+    console.log('File type:', fileExtension, 'Size:', uint8Array.length);
+
+    // Extract text content from PDF
     let textContent = '';
     if (fileExtension === 'pdf') {
-      try {
-        const pdf = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-        const pages: string[] = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = (content.items as any[])
-            .map((it) => String(it?.str ?? '').trim())
-            .filter(Boolean)
-            .join(' ');
-          if (pageText) pages.push(pageText);
-        }
-        textContent = pages.join('\n\n');
-      } catch (e) {
-        console.error('PDF text extraction failed:', e);
-        textContent = '';
-      }
+      textContent = extractTextFromPDF(uint8Array);
+      console.log('Extracted text length:', textContent.length);
     }
 
-    // Fallback: if we couldn't extract text, we will send a small base64 snippet (lower accuracy)
-    const base64Content = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    // Fallback: if we couldn't extract enough text, send base64 to the LLM
+    const base64Content = btoa(String.fromCharCode(...uint8Array.slice(0, 50000)));
     const inputForModel = textContent && textContent.trim().length > 200
       ? `CV_TEXT (extracted):\n${textContent.substring(0, 30000)}`
       : `CV_BASE64_SNIPPET (${mimeType}):\n${base64Content.substring(0, 40000)}`;
 
-    // Get user's OpenAI API key
+    console.log('Using extracted text:', textContent.length > 200);
+
+    // Get user's API keys - prefer Kimi K2, fallback to OpenAI
     const { data: profileData } = await supabaseClient
       .from('profiles')
-      .select('openai_api_key')
+      .select('openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled')
       .eq('user_id', user.id)
       .single();
 
-    const openaiApiKey = profileData?.openai_api_key || Deno.env.get('OPENAI_API_KEY');
+    const kimiKey = profileData?.kimi_api_key;
+    const openaiKey = profileData?.openai_api_key || Deno.env.get('OPENAI_API_KEY');
+    const preferKimi = profileData?.preferred_ai_provider === 'kimi' && profileData?.kimi_enabled && kimiKey;
+    const useOpenAI = profileData?.preferred_ai_provider === 'openai' && profileData?.openai_enabled && openaiKey;
 
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured. Please add your API key in the profile settings.');
+    // Determine which API to use
+    let apiKey: string;
+    let apiUrl: string;
+    let model: string;
+
+    if (preferKimi && kimiKey) {
+      apiKey = kimiKey;
+      apiUrl = 'https://api.moonshot.cn/v1/chat/completions';
+      model = 'kimi-k2-0711-preview';
+      console.log('Using Kimi K2 for parsing');
+    } else if (openaiKey) {
+      apiKey = openaiKey;
+      apiUrl = 'https://api.openai.com/v1/chat/completions';
+      model = 'gpt-4o-mini';
+      console.log('Using OpenAI for parsing');
+    } else {
+      throw new Error('No AI API key configured. Please add your API key in the profile settings.');
     }
 
-    // Use OpenAI to extract structured data from extracted CV text
-    try {
-      const extractionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert CV/Resume parser. Extract structured information from the provided CV content and return it as a JSON object.
+    // Use AI to extract structured data from CV text
+    const extractionResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert CV/Resume parser. Extract structured information from the provided CV content and return it as a JSON object.
 
 Important rules:
 - Preserve company names and job titles exactly as written in the CV.
@@ -138,54 +252,50 @@ Extract the following fields (use null if not found):
 - cover_letter: string (a brief professional summary if available)
 
 Return ONLY valid JSON, no markdown or explanation.`
-            },
-            {
-              role: 'user',
-              content: `Parse this CV content and extract structured data:\n\n${inputForModel}`
-            }
-          ],
-          temperature: 0.2,
-          max_tokens: 4000,
-        }),
-      });
+          },
+          {
+            role: 'user',
+            content: `Parse this CV content and extract structured data:\n\n${inputForModel}`
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 4000,
+      }),
+    });
 
-      if (!extractionResponse.ok) {
-        const errorText = await extractionResponse.text();
-        console.error('OpenAI extraction error:', errorText);
-        throw new Error('Failed to parse CV with AI');
-      }
-
-      const extractionData = await extractionResponse.json();
-      const extractedText = extractionData.choices?.[0]?.message?.content || '';
-      
-      // Parse the JSON response
-      let parsedData;
-      try {
-        // Clean up the response - remove markdown code blocks if present
-        let cleanedText = extractedText.trim();
-        if (cleanedText.startsWith('```json')) {
-          cleanedText = cleanedText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-        } else if (cleanedText.startsWith('```')) {
-          cleanedText = cleanedText.replace(/^```\n?/, '').replace(/\n?```$/, '');
-        }
-        parsedData = JSON.parse(cleanedText);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError, 'Raw text:', extractedText);
-        throw new Error('Failed to parse extracted CV data');
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: parsedData,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-
-    } catch (extractError) {
-      console.error('CV extraction error:', extractError);
-      throw new Error('Failed to extract CV content: ' + (extractError as Error).message);
+    if (!extractionResponse.ok) {
+      const errorText = await extractionResponse.text();
+      console.error('AI extraction error:', errorText);
+      throw new Error('Failed to parse CV with AI');
     }
+
+    const extractionData = await extractionResponse.json();
+    const extractedText = extractionData.choices?.[0]?.message?.content || '';
+    
+    // Parse the JSON response
+    let parsedData;
+    try {
+      // Clean up the response - remove markdown code blocks if present
+      let cleanedText = extractedText.trim();
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+      }
+      parsedData = JSON.parse(cleanedText);
+      console.log('Successfully parsed CV data');
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError, 'Raw text:', extractedText.substring(0, 500));
+      throw new Error('Failed to parse extracted CV data');
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: parsedData,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
     console.error('Parse CV error:', error);
