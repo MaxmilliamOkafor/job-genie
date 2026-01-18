@@ -199,7 +199,7 @@ serve(async (req) => {
 
     if (preferKimi && kimiKey) {
       apiKey = kimiKey;
-      apiUrl = 'https://api.moonshot.cn/v1/chat/completions';
+      apiUrl = 'https://api.moonshot.ai/v1/chat/completions';
       model = 'kimi-k2-0711-preview';
       console.log('Using Kimi K2 for parsing');
     } else if (openaiKey) {
