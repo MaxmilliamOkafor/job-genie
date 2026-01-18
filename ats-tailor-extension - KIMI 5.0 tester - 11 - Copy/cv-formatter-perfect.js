@@ -971,8 +971,9 @@
         addText('EDUCATION', true, false, 12);
         y += 4;
 
+        // No dates (bias prevention). Also strip any embedded dates in the strings.
         education.forEach(edu => {
-          addText([edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).join(' | '), false, false, 10.5);
+          addText([edu.degree, edu.institution, edu.gpa].filter(Boolean).join(' | '), false, false, 10.5);
         });
         y += 8;
       }

@@ -16,17 +16,31 @@ interface WorkExperiencePreviewProps {
 }
 
 // Format dates to year-only (e.g., "2024" or "2020 – Present")
+// Also handles messy inputs like "2023 Present | 2023 - Present".
 const formatDateRange = (startDate?: string, endDate?: string): string => {
-  const extractYear = (date?: string) => {
+  const normaliseRaw = (raw?: string) => {
+    if (!raw) return '';
+    // If multiple segments are present (e.g. "foo | 2023 - Present"), take the last.
+    const seg = raw.split('|').map(s => s.trim()).filter(Boolean).pop() ?? '';
+    return seg;
+  };
+
+  const extractYear = (raw?: string) => {
+    const date = normaliseRaw(raw);
     if (!date) return '';
-    if (date.toLowerCase() === 'present') return 'Present';
-    // Handle formats like "2024-01", "January 2024", "2024"
+    if (/present/i.test(date)) return 'Present';
     const yearMatch = date.match(/\b(19|20)\d{2}\b/);
     return yearMatch ? yearMatch[0] : date;
   };
 
-  const start = extractYear(startDate);
-  const end = extractYear(endDate);
+  const startRaw = normaliseRaw(startDate);
+  const endRaw = normaliseRaw(endDate);
+
+  // If start contains "Present" but end is empty, treat it as ongoing.
+  const startHasPresent = /present/i.test(startRaw);
+
+  const start = extractYear(startRaw);
+  const end = endRaw ? extractYear(endRaw) : (startHasPresent ? 'Present' : '');
 
   if (!start && !end) return '';
   if (!end || start === end) return start;
@@ -78,24 +92,23 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
 
             return (
               <div key={exp.id || index} className="space-y-1">
-                {/* Line 1: Company Name (Bold) + Dates (right-aligned) */}
+                {/* Line 1: Company Name (Bold) */}
                 <div className="flex justify-between items-baseline">
                   <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
                     {exp.company || 'Company Name'}
                   </div>
+                </div>
+
+                {/* Line 2: Job Title (Italic) + Dates (right-aligned) */}
+                <div className="flex justify-between items-baseline gap-3">
+                  <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
+                    {exp.title || 'Job Title'}
+                  </div>
                   {formatDateRange(exp.startDate, exp.endDate) && (
-                    <div className="text-gray-600 text-xs" style={{ fontSize: '10pt' }}>
+                    <div className="text-gray-600 text-xs whitespace-nowrap" style={{ fontSize: '10pt' }}>
                       {formatDateRange(exp.startDate, exp.endDate)}
                     </div>
                   )}
-                </div>
-                
-                {/* Line 2: Job Title (Italic) only - dates shown on company line */}
-                <div 
-                  className="text-sm italic"
-                  style={{ fontSize: '10.5pt' }}
-                >
-                  {exp.title || 'Job Title'}
                 </div>
                 
                 {/* Bullets */}
