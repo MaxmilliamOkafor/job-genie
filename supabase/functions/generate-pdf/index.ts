@@ -354,16 +354,15 @@ serve(async (req) => {
         }
       }
 
-      // === EDUCATION ===
+      // === EDUCATION (no dates to prevent bias) ===
       if (sanitizedData.education && sanitizedData.education.length > 0) {
         drawSectionHeader('Education');
         
         for (const edu of sanitizedData.education) {
           ensureSpace(30);
           
-          // Degree and dates
-          const degreeLine = `${edu.degree} | ${edu.dates}`;
-          currentPage.drawText(degreeLine, {
+          // Degree only (no dates to prevent age bias)
+          currentPage.drawText(edu.degree, {
             x: MARGIN,
             y: yPosition,
             size: 11,
@@ -372,7 +371,7 @@ serve(async (req) => {
           });
           yPosition -= LINE_HEIGHT;
 
-          // School and GPA
+          // School and GPA (no dates)
           const schoolLine = edu.gpa ? `${edu.school} | GPA: ${edu.gpa}` : edu.school;
           currentPage.drawText(schoolLine, {
             x: MARGIN,
