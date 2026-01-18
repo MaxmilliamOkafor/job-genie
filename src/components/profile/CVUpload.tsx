@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface ParsedCVData {
+export interface ParsedCVData {
   first_name?: string | null;
   last_name?: string | null;
   email?: string | null;
@@ -38,6 +38,7 @@ interface ParsedCVData {
     startDate: string;
     endDate: string;
     description: string;
+    bullets?: string[];
   }>;
   education?: Array<{
     institution: string;
@@ -68,10 +69,16 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
   const [isParsing, setIsParsing] = useState(false);
   const [showParseConfirm, setShowParseConfirm] = useState(false);
   const [pendingFilePath, setPendingFilePath] = useState<string | null>(null);
-  const [lastParseDebug, setLastParseDebug] = useState<
-    | { extractedTextLength: number; extractedTextSnippet: string; fileExtension: string; usedInputType: string }
-    | null
-  >(null);
+  const [lastParseDebug, setLastParseDebug] = useState<{
+    extractedTextLength: number;
+    extractedTextSnippet: string;
+    fileExtension: string;
+    usedInputType: string;
+    readableText: boolean;
+  } | null>(null);
+  const [pendingParsedData, setPendingParsedData] = useState<ParsedCVData | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [selectedImportMode, setSelectedImportMode] = useState<ImportMode>('work_experience_only');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,6 +146,7 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
 
     setIsParsing(true);
     setShowParseConfirm(false);
+    setSelectedImportMode(mode);
 
     try {
       setLastParseDebug(null);
@@ -150,14 +158,28 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
       if (error) throw error;
 
       if (data.success && data.data) {
-        if (data.debug) setLastParseDebug(data.debug);
-        onParsedData(data.data, mode);
-        const message = mode === 'work_experience_only' 
-          ? 'Work experience imported successfully!' 
-          : 'All profile fields imported successfully!';
-        toast.success(message);
+        // Check if text was readable
+        const isReadable = data.debug?.extractedTextSnippet && 
+          !/^[^\x20-\x7E\s]*$/.test(data.debug.extractedTextSnippet.substring(0, 100)) &&
+          /[a-zA-Z]{3,}/.test(data.debug.extractedTextSnippet);
+        
+        if (data.debug) {
+          setLastParseDebug({
+            ...data.debug,
+            readableText: isReadable
+          });
+        }
+        
+        // Store parsed data and show review modal
+        setPendingParsedData(data.data);
+        setShowReviewModal(true);
       } else {
-        if (data?.debug) setLastParseDebug(data.debug);
+        if (data?.debug) {
+          setLastParseDebug({
+            ...data.debug,
+            readableText: false
+          });
+        }
         throw new Error(data.error || 'Failed to parse CV');
       }
     } catch (error: any) {
@@ -167,6 +189,18 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
       setIsParsing(false);
       setPendingFilePath(null);
     }
+  };
+
+  const handleApplyParsedData = () => {
+    if (pendingParsedData && onParsedData) {
+      onParsedData(pendingParsedData, selectedImportMode);
+      const message = selectedImportMode === 'work_experience_only' 
+        ? 'Work experience imported successfully!' 
+        : 'All profile fields imported successfully!';
+      toast.success(message);
+    }
+    setShowReviewModal(false);
+    setPendingParsedData(null);
   };
 
   const handleDelete = async () => {
@@ -322,13 +356,31 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
 
           {lastParseDebug && (
             <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-              <p className="text-xs font-medium text-foreground">Parse CV debug</p>
-              <div className="text-xs text-muted-foreground grid gap-1">
-                <p><span className="font-medium text-foreground">File type:</span> {lastParseDebug.fileExtension.toUpperCase()}</p>
-                <p><span className="font-medium text-foreground">Extracted text length:</span> {lastParseDebug.extractedTextLength.toLocaleString()}</p>
-                <p><span className="font-medium text-foreground">Used input:</span> {lastParseDebug.usedInputType}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-foreground">Parse Status</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${lastParseDebug.readableText ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                  {lastParseDebug.readableText ? 'Text Readable' : 'Text Quality Issue'}
+                </span>
               </div>
-              <pre className="text-xs whitespace-pre-wrap break-words rounded-md border bg-background p-2 max-h-40 overflow-auto">{lastParseDebug.extractedTextSnippet}</pre>
+              <div className="text-xs text-muted-foreground grid grid-cols-3 gap-2">
+                <div className="p-2 rounded bg-background border">
+                  <p className="text-muted-foreground">Format</p>
+                  <p className="font-medium text-foreground">{lastParseDebug.fileExtension.toUpperCase()}</p>
+                </div>
+                <div className="p-2 rounded bg-background border">
+                  <p className="text-muted-foreground">Characters</p>
+                  <p className="font-medium text-foreground">{lastParseDebug.extractedTextLength.toLocaleString()}</p>
+                </div>
+                <div className="p-2 rounded bg-background border">
+                  <p className="text-muted-foreground">Method</p>
+                  <p className="font-medium text-foreground">{lastParseDebug.usedInputType === 'focused_text' ? 'Focused' : 'Full'}</p>
+                </div>
+              </div>
+              {!lastParseDebug.readableText && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  ⚠️ PDF text layer may be image-based. Try uploading a DOCX or a PDF with selectable text.
+                </p>
+              )}
             </div>
           )}
 
@@ -370,6 +422,108 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
               onClick={() => pendingFilePath && handleParseCV(pendingFilePath, 'work_experience_only')}
             >
               Work Experience Only
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Review Parsed Data Modal */}
+      <AlertDialog open={showReviewModal} onOpenChange={setShowReviewModal}>
+        <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Review Parsed Data
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Review the extracted data before applying to your profile.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="flex-1 overflow-auto space-y-4 py-4">
+            {pendingParsedData?.work_experience && pendingParsedData.work_experience.length > 0 ? (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Work Experience ({pendingParsedData.work_experience.length} roles found)</h4>
+                {pendingParsedData.work_experience.map((exp, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border bg-muted/30 space-y-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-foreground">{exp.company || 'Unknown Company'}</p>
+                        <p className="text-sm italic text-muted-foreground">{exp.title || 'Unknown Title'}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground whitespace-nowrap">
+                        {exp.startDate || '?'} – {exp.endDate || 'Present'}
+                      </p>
+                    </div>
+                    {exp.bullets && exp.bullets.length > 0 ? (
+                      <ul className="text-xs text-muted-foreground mt-2 space-y-1 list-disc list-inside">
+                        {exp.bullets.slice(0, 3).map((bullet, bIdx) => (
+                          <li key={bIdx}>{bullet}</li>
+                        ))}
+                        {exp.bullets.length > 3 && (
+                          <li className="text-primary">+{exp.bullets.length - 3} more bullets...</li>
+                        )}
+                      </ul>
+                    ) : exp.description ? (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{exp.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center border rounded-lg bg-muted/30">
+                <p className="text-muted-foreground">No work experience was extracted.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  The PDF may have an image-based text layer. Try uploading a DOCX file instead.
+                </p>
+              </div>
+            )}
+
+            {selectedImportMode === 'all_fields' && (
+              <>
+                {pendingParsedData?.first_name && (
+                  <div className="p-3 rounded-lg border bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="font-medium">{pendingParsedData.first_name} {pendingParsedData.last_name}</p>
+                  </div>
+                )}
+                {pendingParsedData?.email && (
+                  <div className="p-3 rounded-lg border bg-muted/30">
+                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="font-medium">{pendingParsedData.email}</p>
+                  </div>
+                )}
+                {pendingParsedData?.skills && pendingParsedData.skills.length > 0 && (
+                  <div className="p-3 rounded-lg border bg-muted/30">
+                    <p className="text-xs text-muted-foreground mb-1">Skills ({pendingParsedData.skills.length})</p>
+                    <div className="flex flex-wrap gap-1">
+                      {pendingParsedData.skills.slice(0, 10).map((skill, idx) => (
+                        <span key={idx} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {skill.name}
+                        </span>
+                      ))}
+                      {pendingParsedData.skills.length > 10 && (
+                        <span className="text-xs text-muted-foreground">+{pendingParsedData.skills.length - 10} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <AlertDialogFooter className="border-t pt-4">
+            <AlertDialogCancel onClick={() => {
+              setShowReviewModal(false);
+              setPendingParsedData(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleApplyParsedData}
+              disabled={!pendingParsedData?.work_experience?.length && selectedImportMode === 'work_experience_only'}
+            >
+              Apply to Profile
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
