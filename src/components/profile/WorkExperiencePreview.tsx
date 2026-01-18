@@ -78,24 +78,24 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
 
             return (
               <div key={exp.id || index} className="space-y-1">
-                {/* Line 1: Company Name (Bold) */}
-                <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
-                  {exp.company || 'Company Name'}
+                {/* Line 1: Company Name (Bold) + Dates (right-aligned) */}
+                <div className="flex justify-between items-baseline">
+                  <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
+                    {exp.company || 'Company Name'}
+                  </div>
+                  {formatDateRange(exp.startDate, exp.endDate) && (
+                    <div className="text-gray-600 text-xs" style={{ fontSize: '10pt' }}>
+                      {formatDateRange(exp.startDate, exp.endDate)}
+                    </div>
+                  )}
                 </div>
                 
-                {/* Line 2: Job Title (Italic) + Dates on same line */}
+                {/* Line 2: Job Title (Italic) only - dates shown on company line */}
                 <div 
-                  className="text-sm"
+                  className="text-sm italic"
                   style={{ fontSize: '10.5pt' }}
                 >
-                  <span className="italic">
-                    {exp.title || 'Job Title'}
-                  </span>
-                  {formatDateRange(exp.startDate, exp.endDate) && (
-                    <span className="text-gray-600 ml-2">
-                      | {formatDateRange(exp.startDate, exp.endDate)}
-                    </span>
-                  )}
+                  {exp.title || 'Job Title'}
                 </div>
                 
                 {/* Bullets */}
@@ -124,7 +124,7 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Format: <span className="font-semibold">Company Name</span> (bold) → <span className="italic">Job Title | Year - Year</span> (italic)
+          Format: <span className="font-semibold">Company Name</span> (bold) + dates (right) → <span className="italic">Job Title</span> (italic)
         </p>
       </CardContent>
     </Card>

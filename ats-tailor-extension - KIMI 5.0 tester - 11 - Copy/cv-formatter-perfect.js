@@ -665,8 +665,11 @@
       ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}</div>
-          <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}${job.dates ? ` <span style="font-style: normal; color: #333;">| ${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <span class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}</span>
+            ${job.dates ? `<span style="font-size: 9pt; color: #333;">${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}
+          </div>
+          <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}</div>
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
@@ -734,13 +737,13 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          // Company on its own line (bold in rendered versions)
+          // Company + dates on same line (dates right-aligned in rendered versions)
           const cleanCompany = this.stripDatesFromField(job.company);
           const cleanTitle = this.stripDatesFromField(job.title);
           const yearDates = this.toYearOnly(job.dates);
-          lines.push(cleanCompany);
-          // Job title + dates on same line (matching the user's requirement)
-          lines.push(yearDates ? `${cleanTitle} | ${yearDates}` : cleanTitle);
+          lines.push(yearDates ? `${cleanCompany}    ${yearDates}` : cleanCompany);
+          // Job title on its own line (italic in rendered versions)
+          lines.push(cleanTitle);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
