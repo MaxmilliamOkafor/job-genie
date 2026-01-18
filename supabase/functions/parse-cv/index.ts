@@ -115,6 +115,54 @@ function decodePDFString(str: string): string {
     .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)));
 }
 
+function getWorkExperienceFocusedText(fullText: string) {
+  const text = String(fullText ?? '');
+  const upper = text.toUpperCase();
+
+  // Common section headers
+  const startMarkers = [
+    'WORK EXPERIENCE',
+    'PROFESSIONAL EXPERIENCE',
+    'EXPERIENCE',
+    'EMPLOYMENT HISTORY',
+  ];
+
+  const endMarkers = [
+    'EDUCATION',
+    'CERTIFICATIONS',
+    'SKILLS',
+    'PROJECTS',
+    'LANGUAGES',
+    'ACHIEVEMENTS',
+    'INTERESTS',
+  ];
+
+  let start = -1;
+  for (const m of startMarkers) {
+    const idx = upper.indexOf(m);
+    if (idx !== -1) {
+      start = idx;
+      break;
+    }
+  }
+
+  if (start === -1) {
+    // Fallback: return the first chunk, which usually contains experience on most CVs
+    return text.slice(0, 20000);
+  }
+
+  let end = upper.length;
+  for (const m of endMarkers) {
+    const idx = upper.indexOf(m, start + 20);
+    if (idx !== -1 && idx < end) end = idx;
+  }
+
+  const section = text.slice(start, end);
+
+  // Keep prompts bounded but generous
+  return section.length > 25000 ? section.slice(0, 25000) : section;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -174,11 +222,18 @@ serve(async (req) => {
 
     // Fallback: if we couldn't extract enough text, send base64 to the LLM
     const base64Content = btoa(String.fromCharCode(...uint8Array.slice(0, 50000)));
-    const inputForModel = textContent && textContent.trim().length > 200
-      ? `CV_TEXT (extracted):\n${textContent.substring(0, 30000)}`
-      : `CV_BASE64_SNIPPET (${mimeType}):\n${base64Content.substring(0, 40000)}`;
+
+    // Focus the model on the most important part (work experience) to avoid empty results.
+    const focusedWorkExpText = textContent ? getWorkExperienceFocusedText(textContent) : '';
+
+    const inputForModel = focusedWorkExpText && focusedWorkExpText.trim().length > 200
+      ? `CV_TEXT (focused on WORK EXPERIENCE):\n${focusedWorkExpText}`
+      : textContent && textContent.trim().length > 200
+        ? `CV_TEXT (extracted):\n${textContent.substring(0, 30000)}`
+        : `CV_BASE64_SNIPPET (${mimeType}):\n${base64Content.substring(0, 40000)}`;
 
     console.log('Using extracted text:', textContent.length > 200);
+    console.log('Focused text length:', focusedWorkExpText.length);
 
     // Get user's API keys - prefer Kimi K2, fallback to OpenAI
     const { data: profileData } = await supabaseClient
@@ -273,7 +328,7 @@ Return ONLY valid JSON, no markdown or explanation.`
     const extractedText = extractionData.choices?.[0]?.message?.content || '';
     
     // Parse the JSON response
-    let parsedData;
+    let parsedData: any;
     try {
       // Clean up the response - remove markdown code blocks if present
       let cleanedText = extractedText.trim();
@@ -287,6 +342,66 @@ Return ONLY valid JSON, no markdown or explanation.`
     } catch (parseError) {
       console.error('JSON parse error:', parseError, 'Raw text:', extractedText.substring(0, 500));
       throw new Error('Failed to parse extracted CV data');
+    }
+
+    // If the model returned no work experience, do a second focused pass (most common failure mode)
+    if (!Array.isArray(parsedData?.work_experience) || parsedData.work_experience.length === 0) {
+      console.log('No work_experience extracted in first pass; running focused work-experience pass');
+
+      const focusedPrompt = {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: `You extract ONLY work experience entries from CV text.
+
+Rules:
+- Output ONLY valid JSON.
+- Return an object with exactly: {"work_experience": [...]}
+- Each item: {"company": string, "title": string, "startDate": string|null, "endDate": string|null, "description": string}
+- description must be the bullet points/achievements as a single string with each bullet on a new line.
+- Preserve company names exactly (including "formerly" notes).
+- Do not invent roles. If unsure, include the closest matching text from the CV.`
+          },
+          {
+            role: 'user',
+            content: `Extract work experience from this CV section:\n\n${inputForModel}`
+          }
+        ],
+        temperature: 0,
+        max_tokens: 3000,
+      };
+
+      const focusedRes = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(focusedPrompt),
+      });
+
+      if (focusedRes.ok) {
+        const focusedJson = await focusedRes.json();
+        const focusedText = focusedJson.choices?.[0]?.message?.content || '';
+        try {
+          let cleaned = String(focusedText).trim();
+          if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+          if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\n?/, '').replace(/\n?```$/, '');
+          const focusedParsed = JSON.parse(cleaned);
+          if (Array.isArray(focusedParsed?.work_experience) && focusedParsed.work_experience.length > 0) {
+            parsedData.work_experience = focusedParsed.work_experience;
+            console.log('Focused pass extracted work_experience:', focusedParsed.work_experience.length);
+          } else {
+            console.log('Focused pass still returned empty work_experience');
+          }
+        } catch (e) {
+          console.error('Focused pass JSON parse error:', e, 'Raw text:', String(focusedText).substring(0, 500));
+        }
+      } else {
+        const errorText = await focusedRes.text();
+        console.error('Focused pass AI extraction error:', errorText);
+      }
     }
 
     return new Response(
