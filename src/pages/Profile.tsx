@@ -1170,30 +1170,47 @@ const Profile = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             {editMode && (
-              <Button 
-                variant="outline" 
-                className="w-full mb-4 gap-2"
-                onClick={() => {
-                  const newExp = {
-                    id: crypto.randomUUID(),
-                    title: 'New Position',
-                    company: 'Company Name',
-                    location: '',
-                    startDate: '2024-01',
-                    endDate: 'Present',
-                    description: '',
-                    skills: [],
-                    bullets: [
-                      'Add your key achievement or responsibility here',
-                      'Use metrics and numbers where possible (e.g., Improved performance by 30%)'
-                    ]
-                  };
-                  updateLocalField('work_experience', [...(localProfile.work_experience || []), newExp]);
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Add Work Experience
-              </Button>
+              <div className="flex gap-2 mb-4">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    const newExp = {
+                      id: crypto.randomUUID(),
+                      title: 'New Position',
+                      company: 'Company Name',
+                      location: '',
+                      startDate: '2024-01',
+                      endDate: 'Present',
+                      description: '',
+                      skills: [],
+                      bullets: [
+                        'Add your key achievement or responsibility here',
+                        'Use metrics and numbers where possible (e.g., Improved performance by 30%)'
+                      ]
+                    };
+                    updateLocalField('work_experience', [...(localProfile.work_experience || []), newExp]);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Work Experience
+                </Button>
+                {(localProfile.work_experience || []).length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    className="gap-2"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to clear ALL work experience? This will remove all entries from your profile and cannot be undone.')) {
+                        updateLocalField('work_experience', []);
+                        toast.success('Work experience cleared. Click Save to persist changes.');
+                      }
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                    Clear All
+                  </Button>
+                )}
+              </div>
             )}
             {(localProfile.work_experience || []).map((exp: any, expIndex: number) => (
               <div key={exp.id} className="border rounded-lg p-4 relative">
