@@ -1018,23 +1018,47 @@ const Profile = () => {
                 </Button>
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              {(localProfile.skills || []).map((skill: any, i: number) => (
-                <Badge 
-                  key={i} 
-                  variant="secondary"
-                  className="flex items-center gap-1"
-                >
-                  {skill.name} • {skill.years}y
-                  {editMode && (
-                    <X 
-                      className="h-3 w-3 cursor-pointer hover:text-destructive" 
-                      onClick={() => removeSkill(i)}
-                    />
-                  )}
-                </Badge>
-              ))}
-            </div>
+            {/* Display skills grouped by category with comma separation */}
+            {(() => {
+              const skills = localProfile.skills || [];
+              const grouped: Record<string, any[]> = {};
+              skills.forEach((skill: any) => {
+                const cat = skill.category || 'technical';
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(skill);
+              });
+              
+              const categoryLabels: Record<string, string> = {
+                technical: 'Technical',
+                tools: 'Tools',
+                soft: 'Leadership',
+                languages: 'Languages'
+              };
+              
+              return (
+                <div className="space-y-3">
+                  {Object.entries(grouped).map(([category, categorySkills]) => (
+                    <div key={category}>
+                      <span className="text-sm font-medium text-foreground">{categoryLabels[category] || category}: </span>
+                      <span className="text-sm text-muted-foreground">
+                        {categorySkills.map((skill: any, i: number) => (
+                          <span key={skill.name}>
+                            {skill.name}
+                            {editMode && (
+                              <X 
+                                className="inline-block h-3 w-3 ml-1 cursor-pointer hover:text-destructive" 
+                                onClick={() => removeSkill(skills.indexOf(skill))}
+                              />
+                            )}
+                            {i < categorySkills.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <p className="text-xs text-muted-foreground mt-3">
               Skills not in your profile will default to 7 years for automation
             </p>
@@ -1424,7 +1448,7 @@ const Profile = () => {
                         edus[eduIndex] = { ...edus[eduIndex], degree: e.target.value };
                         updateLocalField('education', edus);
                       }}
-                      placeholder="Degree"
+                      placeholder="Degree (e.g., Master of Science in AI and Machine Learning)"
                       className="font-semibold"
                     />
                     <Input 
@@ -1436,6 +1460,16 @@ const Profile = () => {
                       }}
                       placeholder="Institution"
                     />
+                    <Textarea 
+                      value={edu.description || ''} 
+                      onChange={(e) => {
+                        const edus = [...(localProfile.education || [])];
+                        edus[eduIndex] = { ...edus[eduIndex], description: e.target.value };
+                        updateLocalField('education', edus);
+                      }}
+                      placeholder="Description (optional - relevant coursework, achievements, thesis, etc.)"
+                      className="min-h-[60px] text-sm"
+                    />
                     <div className="flex gap-2">
                       <Input 
                         value={edu.gpa || ''} 
@@ -1444,26 +1478,24 @@ const Profile = () => {
                           edus[eduIndex] = { ...edus[eduIndex], gpa: e.target.value };
                           updateLocalField('education', edus);
                         }}
-                        placeholder="GPA"
-                        className="w-24"
+                        placeholder="GPA (optional)"
+                        className="w-32"
                       />
-                      <Input 
-                        value={edu.graduationDate || ''} 
-                        onChange={(e) => {
-                          const edus = [...(localProfile.education || [])];
-                          edus[eduIndex] = { ...edus[eduIndex], graduationDate: e.target.value };
-                          updateLocalField('education', edus);
-                        }}
-                        placeholder="Graduation Date"
-                        className="flex-1"
-                      />
+                      <p className="text-xs text-muted-foreground self-center">
+                        Dates are hidden from CV to prevent age bias
+                      </p>
                     </div>
                   </div>
                 ) : (
                   <>
                     <h3 className="font-semibold">{edu.degree}</h3>
                     <p className="text-muted-foreground">{edu.institution}</p>
-                    <p className="text-sm text-muted-foreground mt-1">GPA: {edu.gpa}</p>
+                    {edu.description && (
+                      <p className="text-sm text-muted-foreground mt-1">{edu.description}</p>
+                    )}
+                    {edu.gpa && (
+                      <p className="text-sm text-muted-foreground mt-1">GPA: {edu.gpa}</p>
+                    )}
                   </>
                 )}
               </div>

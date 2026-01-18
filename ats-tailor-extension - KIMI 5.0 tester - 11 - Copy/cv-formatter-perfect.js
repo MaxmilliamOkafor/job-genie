@@ -665,8 +665,8 @@
       ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}${job.dates ? `<span style="float: right; font-weight: normal; font-size: 10pt; color: #333;">${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}</div>
-          <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}</div>
+          <div class="cv-company">${escapeHtml(this.stripDatesFromField(job.company))}</div>
+          <div class="cv-job-title">${escapeHtml(this.stripDatesFromField(job.title))}${job.dates ? ` <span style="font-style: normal; color: #333;">| ${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}</div>
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
@@ -684,7 +684,7 @@
       <div class="cv-section-title">Education</div>
       ${education.map(edu => `
       <div class="cv-education-item">
-        <div class="cv-education-line">${[edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+        <div class="cv-education-line">${[edu.degree, edu.institution, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
       </div>
       `).join('\n      ')}
     </div>
@@ -734,12 +734,13 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          // Use clean company/title (dates stripped) with year-only dates - NO location (avoid bias)
+          // Company on its own line (bold in rendered versions)
           const cleanCompany = this.stripDatesFromField(job.company);
           const cleanTitle = this.stripDatesFromField(job.title);
           const yearDates = this.toYearOnly(job.dates);
           lines.push(cleanCompany);
-          lines.push([cleanTitle, yearDates].filter(Boolean).join(' | '));
+          // Job title + dates on same line (matching the user's requirement)
+          lines.push(yearDates ? `${cleanTitle} | ${yearDates}` : cleanTitle);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
@@ -747,11 +748,11 @@
         });
       }
 
-      // Education
+      // Education (without dates to avoid bias)
       if (education.length > 0) {
         lines.push('EDUCATION');
         education.forEach(edu => {
-          lines.push([edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).join(' | '));
+          lines.push([edu.degree, edu.institution, edu.gpa].filter(Boolean).join(' | '));
         });
         lines.push('');
       }

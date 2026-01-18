@@ -83,17 +83,19 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                   {exp.company || 'Company Name'}
                 </div>
                 
-                {/* Line 2: Job Title (Italic) + Dates */}
+                {/* Line 2: Job Title (Italic) + Dates on same line */}
                 <div 
-                  className="flex justify-between items-baseline text-sm"
+                  className="text-sm"
                   style={{ fontSize: '10.5pt' }}
                 >
                   <span className="italic">
                     {exp.title || 'Job Title'}
                   </span>
-                  <span className="text-gray-600 text-xs">
-                    {formatDateRange(exp.startDate, exp.endDate)}
-                  </span>
+                  {formatDateRange(exp.startDate, exp.endDate) && (
+                    <span className="text-gray-600 ml-2">
+                      | {formatDateRange(exp.startDate, exp.endDate)}
+                    </span>
+                  )}
                 </div>
                 
                 {/* Bullets */}
@@ -122,7 +124,7 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Format: <span className="font-semibold">Company Name</span> (bold) → <span className="italic">Job Title</span> (italic) + year-only dates
+          Format: <span className="font-semibold">Company Name</span> (bold) → <span className="italic">Job Title | Year - Year</span> (italic)
         </p>
       </CardContent>
     </Card>

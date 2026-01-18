@@ -995,24 +995,16 @@ async function handleRawContentRequest(body: {
             font: helveticaBold,
             color: rgb(0, 0, 0),
           });
-          
-          // Dates - Right aligned (year only)
-          const yearOnlyDates = toYearOnly(job.dates);
-          if (yearOnlyDates) {
-            const dateWidth = helvetica.widthOfTextAtSize(yearOnlyDates, 10);
-            currentPage.drawText(yearOnlyDates, {
-              x: PAGE_WIDTH - MARGIN - dateWidth,
-              y: yPosition,
-              size: 10,
-              font: helvetica,
-              color: rgb(0.2, 0.2, 0.2),
-            });
-          }
           yPosition -= LINE_HEIGHT + 2;
           
-          // Job Title - ITALIC
-          if (job.title) {
-            currentPage.drawText(job.title, {
+          // Job Title (italic) + Dates on same line
+          const yearOnlyDates = toYearOnly(job.dates);
+          const titleWithDates = yearOnlyDates 
+            ? `${job.title} | ${yearOnlyDates}`
+            : job.title;
+          
+          if (titleWithDates) {
+            currentPage.drawText(titleWithDates, {
               x: MARGIN,
               y: yPosition,
               size: 10,
