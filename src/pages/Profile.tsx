@@ -14,6 +14,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
+import { WorkExperiencePreview } from '@/components/profile/WorkExperiencePreview';
+import { ProfileVersionHistory, createExportWithHistory } from '@/components/profile/ProfileVersionHistory';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
@@ -56,7 +58,7 @@ const Profile = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
-  // Export profile to JSON file
+  // Export profile to JSON file with version history
   const handleExportProfile = () => {
     if (!localProfile) {
       toast.error('No profile data to export');
@@ -65,49 +67,48 @@ const Profile = () => {
     
     setIsExporting(true);
     try {
-      // Create export data (exclude sensitive fields like API keys)
-      const exportData = {
-        version: '1.0',
-        exportedAt: new Date().toISOString(),
-        profile: {
-          first_name: localProfile.first_name,
-          last_name: localProfile.last_name,
-          email: localProfile.email,
-          phone: localProfile.phone,
-          address: localProfile.address,
-          city: localProfile.city,
-          state: localProfile.state,
-          zip_code: localProfile.zip_code,
-          country: localProfile.country,
-          citizenship: localProfile.citizenship,
-          linkedin: localProfile.linkedin,
-          github: localProfile.github,
-          portfolio: localProfile.portfolio,
-          current_salary: localProfile.current_salary,
-          expected_salary: localProfile.expected_salary,
-          notice_period: localProfile.notice_period,
-          total_experience: localProfile.total_experience,
-          highest_education: localProfile.highest_education,
-          willing_to_relocate: localProfile.willing_to_relocate,
-          driving_license: localProfile.driving_license,
-          visa_required: localProfile.visa_required,
-          veteran_status: localProfile.veteran_status,
-          disability: localProfile.disability,
-          security_clearance: localProfile.security_clearance,
-          hispanic_latino: localProfile.hispanic_latino,
-          race_ethnicity: localProfile.race_ethnicity,
-          gender: localProfile.gender,
-          authorized_countries: localProfile.authorized_countries,
-          skills: localProfile.skills,
-          certifications: localProfile.certifications,
-          work_experience: localProfile.work_experience,
-          education: localProfile.education,
-          languages: localProfile.languages,
-          cover_letter: localProfile.cover_letter,
-          ats_strategy: localProfile.ats_strategy,
-          excluded_companies: localProfile.excluded_companies,
-        }
+      // Create profile data (exclude sensitive fields like API keys)
+      const profileData = {
+        first_name: localProfile.first_name,
+        last_name: localProfile.last_name,
+        email: localProfile.email,
+        phone: localProfile.phone,
+        address: localProfile.address,
+        city: localProfile.city,
+        state: localProfile.state,
+        zip_code: localProfile.zip_code,
+        country: localProfile.country,
+        citizenship: localProfile.citizenship,
+        linkedin: localProfile.linkedin,
+        github: localProfile.github,
+        portfolio: localProfile.portfolio,
+        current_salary: localProfile.current_salary,
+        expected_salary: localProfile.expected_salary,
+        notice_period: localProfile.notice_period,
+        total_experience: localProfile.total_experience,
+        highest_education: localProfile.highest_education,
+        willing_to_relocate: localProfile.willing_to_relocate,
+        driving_license: localProfile.driving_license,
+        visa_required: localProfile.visa_required,
+        veteran_status: localProfile.veteran_status,
+        disability: localProfile.disability,
+        security_clearance: localProfile.security_clearance,
+        hispanic_latino: localProfile.hispanic_latino,
+        race_ethnicity: localProfile.race_ethnicity,
+        gender: localProfile.gender,
+        authorized_countries: localProfile.authorized_countries,
+        skills: localProfile.skills,
+        certifications: localProfile.certifications,
+        work_experience: localProfile.work_experience,
+        education: localProfile.education,
+        languages: localProfile.languages,
+        cover_letter: localProfile.cover_letter,
+        ats_strategy: localProfile.ats_strategy,
+        excluded_companies: localProfile.excluded_companies,
       };
+      
+      // Create export with version history tracking
+      const exportData = createExportWithHistory(profileData);
       
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -119,13 +120,27 @@ const Profile = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      toast.success('Profile exported successfully!');
+      toast.success(`Profile exported! Changes: ${exportData.changesSummary?.join(', ') || 'Initial export'}`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Failed to export profile');
     } finally {
       setIsExporting(false);
     }
+  };
+
+  // Restore profile from version history
+  const handleRestoreFromHistory = async (profileData: Record<string, any>) => {
+    // Normalize work experience if present
+    if (profileData.work_experience) {
+      profileData.work_experience = normalizeWorkExperience(profileData.work_experience);
+    }
+    
+    // Update local state
+    setLocalProfile(prev => ({ ...prev, ...profileData }));
+    
+    // Save to database
+    await updateProfile(profileData);
   };
 
   // Import profile from JSON file
@@ -463,6 +478,9 @@ const Profile = () => {
             }
           }}
         />
+
+        {/* Version History */}
+        <ProfileVersionHistory onRestore={handleRestoreFromHistory} />
 
         {/* AI Provider Configuration */}
         <Card id="api-key-section" className="border-primary/30 bg-primary/5">
@@ -1339,6 +1357,9 @@ const Profile = () => {
             ))}
           </CardContent>
         </Card>
+
+        {/* Work Experience ATS Preview */}
+        <WorkExperiencePreview workExperience={localProfile.work_experience || []} />
 
         {/* Education */}
         <Card>
