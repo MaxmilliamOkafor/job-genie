@@ -1163,6 +1163,7 @@
 
   // ============ PROFILE-ONLY CV BUILDER ============
   // Build CV content using ONLY profile page technical experience - NO base-cv-text.txt
+  // Includes: Professional Experience + Technical Projects from relevant_projects
   function buildCVFromProfile(profile, jobInfo) {
     const firstName = profile.firstName || profile.first_name || '';
     const lastName = profile.lastName || profile.last_name || '';
@@ -1173,18 +1174,29 @@
     const github = profile.github || '';
     const portfolio = profile.portfolio || '';
     
-    // Use profile work_experience array
+    // Use profile arrays - NO fallback to external files
     const workExperience = Array.isArray(profile.work_experience) ? profile.work_experience : [];
+    const technicalProjects = Array.isArray(profile.relevant_projects) ? profile.relevant_projects : [];
     const education = Array.isArray(profile.education) ? profile.education : [];
     const skills = Array.isArray(profile.skills) ? profile.skills : [];
     const certifications = Array.isArray(profile.certifications) ? profile.certifications : [];
     
+    // Helper to normalise dates to "YYYY – YYYY" format
+    const normaliseDates = (dateStr) => {
+      if (!dateStr) return '';
+      return String(dateStr)
+        .replace(/--/g, '–')
+        .replace(/-/g, '–')
+        .replace(/\s*–\s*/g, ' – ');
+    };
+    
     // Build CV content
-    let cvContent = `${firstName} ${lastName}\n`;
+    let cvContent = `${firstName} ${lastName}\n`.toUpperCase();
     cvContent += `${city} | ${email}`;
     if (phone) cvContent += ` | ${phone}`;
-    if (linkedin) cvContent += ` | linkedin.com/in/${linkedin}`;
-    if (github) cvContent += ` | github.com/${github}`;
+    cvContent += ' | open to relocation\n';
+    if (linkedin) cvContent += `${linkedin.includes('linkedin.com') ? linkedin : 'https://www.linkedin.com/in/' + linkedin}`;
+    if (github) cvContent += ` | ${github.includes('github.com') ? github : 'https://github.com/' + github}`;
     if (portfolio) cvContent += ` | ${portfolio}`;
     cvContent += '\n\n';
     
@@ -1194,50 +1206,114 @@
       cvContent += `${profile.summary || profile.ats_strategy}\n\n`;
     }
     
-    // Technical Skills
-    if (skills.length > 0) {
-      cvContent += `TECHNICAL SKILLS\n`;
-      cvContent += skills.join(', ') + '\n\n';
-    }
-    
-    // Work Experience
+    // Professional Experience - HEADER FORMAT: Company (Line 1), Title + Dates (Line 2)
     if (workExperience.length > 0) {
       cvContent += `PROFESSIONAL EXPERIENCE\n`;
       workExperience.forEach(job => {
-        const title = job.title || job.jobTitle || '';
-        const company = job.company || job.companyName || '';
-        const startDate = job.startDate || job.start_date || '';
-        const endDate = job.endDate || job.end_date || 'Present';
-        const location = job.location || '';
+        const company = (job.company || job.companyName || '').trim();
+        const title = (job.title || job.jobTitle || '').trim();
         
-        cvContent += `${title} | ${company} | ${startDate} - ${endDate}`;
-        if (location) cvContent += ` | ${location}`;
-        cvContent += '\n';
+        // Build dates
+        let dates = job.dates || '';
+        if (!dates && (job.startDate || job.endDate)) {
+          const start = job.startDate || job.start_date || '';
+          const end = job.endDate || job.end_date || 'Present';
+          dates = start ? `${start} - ${end}` : end;
+        }
+        dates = normaliseDates(dates);
         
-        // Add responsibilities/bullets
-        if (job.responsibilities && Array.isArray(job.responsibilities)) {
-          job.responsibilities.forEach(resp => {
-            cvContent += `• ${resp}\n`;
+        // Line 1: Company (bold in PDF)
+        cvContent += `${company}\n`;
+        // Line 2: Title with dates right-aligned
+        cvContent += `${title}${dates ? '                    ' + dates : ''}\n`;
+        
+        // Bullets from bullets array (primary) or description fallback
+        const bullets = job.bullets || job.achievements || job.responsibilities || [];
+        if (Array.isArray(bullets) && bullets.length > 0) {
+          bullets.forEach(bullet => {
+            const text = (typeof bullet === 'string' ? bullet : '').replace(/^[-•*]\s*/, '').trim();
+            if (text) cvContent += `• ${text}\n`;
           });
         } else if (job.description) {
-          cvContent += `• ${job.description}\n`;
+          const text = job.description.replace(/^[-•*]\s*/, '').trim();
+          if (text) cvContent += `• ${text}\n`;
         }
         cvContent += '\n';
       });
     }
     
-    // Education
+    // Technical Projects - HEADER FORMAT: Company (Line 1), Role + Dates (Line 2)
+    if (technicalProjects.length > 0) {
+      cvContent += `TECHNICAL PROJECTS\n`;
+      technicalProjects.forEach(project => {
+        const company = (project.company || project.name || project.projectName || '').trim();
+        const role = (project.role || project.title || '').trim();
+        
+        // Build dates (optional for projects)
+        let dates = project.dates || '';
+        if (!dates && (project.startDate || project.endDate)) {
+          const start = project.startDate || '';
+          const end = project.endDate || '';
+          dates = start && end ? `${start} - ${end}` : (start || end);
+        }
+        dates = normaliseDates(dates);
+        
+        // Line 1: Company/Project name
+        cvContent += `${company}\n`;
+        // Line 2: Role with optional dates
+        if (role || dates) {
+          cvContent += `${role}${dates ? '                    ' + dates : ''}\n`;
+        }
+        
+        // Bullets
+        const bullets = project.bullets || project.achievements || project.description || [];
+        if (Array.isArray(bullets) && bullets.length > 0) {
+          bullets.forEach(bullet => {
+            const text = (typeof bullet === 'string' ? bullet : '').replace(/^[-•*]\s*/, '').trim();
+            if (text) cvContent += `• ${text}\n`;
+          });
+        } else if (typeof project.description === 'string') {
+          const text = project.description.replace(/^[-•*]\s*/, '').trim();
+          if (text) cvContent += `• ${text}\n`;
+        }
+        cvContent += '\n';
+      });
+    }
+    
+    // Education (no graduation dates to prevent age bias)
     if (education.length > 0) {
       cvContent += `EDUCATION\n`;
       education.forEach(edu => {
         const degree = edu.degree || '';
         const school = edu.school || edu.institution || '';
-        const year = edu.year || edu.graduationYear || '';
+        const gpa = edu.gpa || '';
         
-        cvContent += `${degree} | ${school}`;
-        if (year) cvContent += ` | ${year}`;
+        cvContent += `${degree}`;
+        if (school) cvContent += ` | ${school}`;
+        if (gpa) cvContent += ` (${gpa})`;
         cvContent += '\n';
       });
+      cvContent += '\n';
+    }
+    
+    // Skills - grouped by category if available
+    if (skills.length > 0) {
+      cvContent += `SKILLS\n`;
+      if (typeof skills[0] === 'object' && skills[0].name) {
+        // Grouped skills
+        const grouped = {};
+        skills.forEach(skill => {
+          const cat = skill.category || 'Technical';
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(skill.name);
+        });
+        Object.entries(grouped).forEach(([cat, skillList]) => {
+          cvContent += `${cat}: ${skillList.join(', ')}\n`;
+        });
+      } else {
+        // Simple skill list
+        cvContent += skills.join(', ') + '\n';
+      }
       cvContent += '\n';
     }
     
@@ -1245,7 +1321,8 @@
     if (certifications.length > 0) {
       cvContent += `CERTIFICATIONS\n`;
       certifications.forEach(cert => {
-        cvContent += `• ${cert}\n`;
+        const text = typeof cert === 'string' ? cert : (cert.name || '');
+        if (text) cvContent += `• ${text}\n`;
       });
     }
     
@@ -1924,6 +2001,7 @@
             portfolio: p.portfolio || '',
             coverLetter: p.cover_letter || '',
             workExperience: Array.isArray(p.work_experience) ? p.work_experience : [],
+            relevantProjects: Array.isArray(p.relevant_projects) ? p.relevant_projects : [],
             education: Array.isArray(p.education) ? p.education : [],
             skills: Array.isArray(p.skills) ? p.skills : [],
             certifications: Array.isArray(p.certifications) ? p.certifications : [],
