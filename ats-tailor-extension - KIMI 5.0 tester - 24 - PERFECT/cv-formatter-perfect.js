@@ -715,10 +715,10 @@
     </div>
     ` : ''}
     
-    <!-- Work Experience - Two-line format -->
+    <!-- Professional Experience - Two-line format -->
     ${experience.length > 0 ? `
     <div class="cv-section">
-      <div class="cv-section-title">Work Experience</div>
+      <div class="cv-section-title">Professional Experience</div>
       ${experience.map((job) => {
         const yearDates = this.toYearOnly(job.dates);
         return `
@@ -732,6 +732,31 @@
         <div class="cv-job-details">
           <ul class="cv-bullets">
             ${job.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('\n            ')}
+          </ul>
+        </div>
+        ` : ''}
+      </div>`;
+      }).join('\n      ')}
+    </div>
+    ` : ''}
+    
+    <!-- Technical Projects - Same format as Experience -->
+    ${projects.length > 0 ? `
+    <div class="cv-section">
+      <div class="cv-section-title">Technical Projects</div>
+      ${projects.map((project) => {
+        const yearDates = this.toYearOnly(project.dates);
+        return `
+      <div class="cv-job">
+        <div class="cv-job-company">${escapeHtml(project.company || project.name || '')}</div>
+        <div class="cv-job-title-line">
+          <span class="cv-job-title">${escapeHtml(project.title || project.role || '')}</span>
+          ${yearDates ? `<span class="cv-job-dates">${escapeHtml(yearDates)}</span>` : ''}
+        </div>
+        ${project.bullets && project.bullets.length > 0 ? `
+        <div class="cv-job-details">
+          <ul class="cv-bullets">
+            ${project.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('\n            ')}
           </ul>
         </div>
         ` : ''}
@@ -794,7 +819,7 @@
 
       // Experience - Two-line format with dynamic right-aligned dates
       if (experience.length > 0) {
-        lines.push('WORK EXPERIENCE');
+        lines.push('PROFESSIONAL EXPERIENCE');
         experience.forEach(job => {
           // Line 1: Company (bold in PDF, plain in text)
           lines.push(job.company || '');
@@ -806,6 +831,26 @@
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
+          lines.push('');
+        });
+      }
+
+      // Technical Projects - Two-line format with dynamic right-aligned dates
+      if (projects && projects.length > 0) {
+        lines.push('TECHNICAL PROJECTS');
+        projects.forEach(project => {
+          // Line 1: Project Name (bold in PDF, plain in text)
+          lines.push(project.company || project.name || '');
+          // Line 2: Role with dates right-aligned
+          const role = project.title || project.role || '';
+          const yearDates = this.toYearOnly(project.dates);
+          const roleLine = this.rightAlignTitleDates(role, yearDates);
+          if (roleLine) lines.push(roleLine);
+          if (project.bullets) {
+            project.bullets.forEach(bullet => {
+              lines.push(`• ${bullet}`);
+            });
+          }
           lines.push('');
         });
       }

@@ -88,6 +88,7 @@
         },
         summary: '',
         experience: [],
+        projects: [],
         skills: {
           languages: [],
           aiml: [],
@@ -211,6 +212,7 @@
       const result = {
         summary: '',
         experience: [],
+        projects: [],
         skills: { languages: [], aiml: [], cloud: [], devops: [], databases: [], soft: [] },
         education: [],
         certifications: []
@@ -224,9 +226,13 @@
         'PROFESSIONAL SUMMARY': 'summary',
         'SUMMARY': 'summary',
         'PROFILE': 'summary',
+        'PROFESSIONAL EXPERIENCE': 'experience',
         'WORK EXPERIENCE': 'experience',
         'EXPERIENCE': 'experience',
         'EMPLOYMENT': 'experience',
+        'TECHNICAL PROJECTS': 'projects',
+        'RELEVANT PROJECTS': 'projects',
+        'PROJECTS': 'projects',
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
         'EDUCATION': 'education',
@@ -265,6 +271,9 @@
           break;
         case 'experience':
           result.experience = this.parseExperienceText(text);
+          break;
+        case 'projects':
+          result.projects = this.parseExperienceText(text);
           break;
         case 'education':
           result.education = this.parseEducationText(text);
@@ -578,9 +587,9 @@
         addText(data.summary, false, font.body);
       }
 
-      // === WORK EXPERIENCE ===
+      // === PROFESSIONAL EXPERIENCE ===
       if (data.experience && data.experience.length > 0) {
-        addSectionHeader('WORK EXPERIENCE');
+        addSectionHeader('PROFESSIONAL EXPERIENCE');
         
         data.experience.forEach((job, idx) => {
           // Company Name (Bold)
@@ -614,6 +623,47 @@
 
           // 1 blank line between companies
           if (idx < data.experience.length - 1) y += font.body * lineHeight;
+        });
+      }
+
+      // === TECHNICAL PROJECTS ===
+      if (data.projects && data.projects.length > 0) {
+        addSectionHeader('TECHNICAL PROJECTS');
+        
+        data.projects.forEach((project, idx) => {
+          // Project Name (Bold)
+          doc.setFontSize(font.body);
+          doc.setFont(font.family, 'bold');
+          doc.text(project.company || project.name || '', margins.left, y);
+          y += font.body * lineHeight;
+          
+          // Role | Dates (dates optional for projects)
+          const projectLine = [project.title || project.role, project.dates].filter(Boolean).join(' | ');
+          if (projectLine) addText(projectLine, false, font.body);
+          y += 2;
+
+          // Bullets
+          if (project.bullets) {
+            project.bullets.forEach(bullet => {
+              const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
+              doc.setFont(font.family, 'normal');
+              doc.setFontSize(font.body);
+              
+              const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
+              bulletLines.forEach((line, lineIdx) => {
+                if (y > page.height - margins.bottom - 20) {
+                  doc.addPage();
+                  y = margins.top;
+                }
+                const indent = lineIdx === 0 ? 0 : ATS_SPEC.bullets.indent;
+                doc.text(line, margins.left + indent, y);
+                y += font.body * lineHeight;
+              });
+            });
+          }
+
+          // 1 blank line between projects
+          if (idx < data.projects.length - 1) y += font.body * lineHeight;
         });
       }
 
@@ -674,11 +724,22 @@
       }
 
       if (data.experience?.length > 0) {
-        lines.push('WORK EXPERIENCE');
+        lines.push('PROFESSIONAL EXPERIENCE');
         data.experience.forEach(job => {
           lines.push(job.company);
           lines.push([job.title, job.dates, job.location].filter(Boolean).join(' | '));
           job.bullets.forEach(b => lines.push(`• ${b}`));
+          lines.push('');
+        });
+      }
+
+      if (data.projects?.length > 0) {
+        lines.push('TECHNICAL PROJECTS');
+        data.projects.forEach(project => {
+          lines.push(project.company || project.name || '');
+          const projectLine = [project.title || project.role, project.dates].filter(Boolean).join(' | ');
+          if (projectLine) lines.push(projectLine);
+          if (project.bullets) project.bullets.forEach(b => lines.push(`• ${b}`));
           lines.push('');
         });
       }
