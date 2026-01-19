@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Tailor Enhanced v3.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+        
+        .status-section {
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .status-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .status-label {
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .status-value {
+            font-weight: 700;
+            color: #2c5aa0;
+        }
+        
+        .status-value.success {
+            color: #10b981;
+        }
+        
+        .status-value.error {
+            color: #ef4444;
+        }
+        
+        .status-value.warning {
+            color: #f59e0b;
+        }
+        
+        .match-score-section {
+            padding: 20px;
+            background: #f8fafc;
+            text-align: center;
+        }
+        
+        .match-score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: conic-gradient(
+                #10b981 0deg,
+                #10b981 calc(var(--score-percentage) * 3.6deg),
+                #e5e7eb calc(var(--score-percentage) * 3.6deg),
+                #e5e7eb 360deg
+            );
+        }
+        
+        .match-score-inner {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        
+        .match-score-number {
+            font-size: 28px;
+            font-weight: 800;
+            color: #1f2937;
+            line-height: 1;
+        }
+        
+        .match-score-label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        
+        .match-score-text {
+            font-size: 16px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        
+        .match-score-description {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+        
+        .actions-section {
+            padding: 20px;
+        }
+        
+        .action-button {
+            width: 100%;
+            padding: 14px 20px;
+            margin-bottom: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .action-button:last-child {
+            margin-bottom: 0;
+        }
+        
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .action-button:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        .progress-section {
+            padding: 20px;
+            display: none;
+        }
+        
+        .progress-section.show {
+            display: block;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2c5aa0 0%, #10b981 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .progress-text {
+            font-size: 13px;
+            color: #6b7280;
+            text-align: center;
+        }
+        
+        .keywords-section {
+            padding: 20px;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .keywords-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+        }
+        
+        .keywords-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .keyword-tag {
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .footer {
+            padding: 16px 20px;
+            background: #f9fafb;
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .icon {
+            width: 18px;
+            height: 18px;
+            display: inline-block;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 400px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ATS Tailor</h1>
+            <div class="subtitle">Enhanced v3.0 - Ultra-Fast Perfect CV</div>
+        </div>
+        
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Parser Status:</span>
+                <span class="status-value" id="parser-status">Ready</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">PDF Engine:</span>
+                <span class="status-value" id="pdf-status">Playwright Ready</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Profile Data:</span>
+                <span class="status-value" id="profile-status">Not Loaded</span>
+            </div>
+        </div>
+        
+        <div class="match-score-section">
+            <div class="match-score-circle" style="--score-percentage: 0" id="score-circle">
+                <div class="match-score-inner">
+                    <div class="match-score-number" id="score-number">0%</div>
+                    <div class="match-score-label">Match</div>
+                </div>
+            </div>
+            <div class="match-score-text" id="score-text">No Job Selected</div>
+            <div class="match-score-description" id="score-description">
+                Select a job posting to calculate your match score
+            </div>
+        </div>
+        
+        <div class="actions-section">
+            <button class="action-button btn-primary" id="generate-btn" onclick="generateCV()">
+                <span class="icon">🚀</span>
+                Generate Enhanced CV
+            </button>
+            
+            <button class="action-button btn-secondary" id="preview-btn" onclick="previewCV()" disabled>
+                <span class="icon">👁️</span>
+                Preview CV
+            </button>
+            
+            <button class="action-button btn-success" id="download-btn" onclick="downloadCV()" disabled>
+                <span class="icon">💾</span>
+                Download PDF
+            </button>
+            
+            <button class="action-button btn-warning" id="tailor-btn" onclick="tailorCV()" disabled>
+                <span class="icon">✨</span>
+                Tailor for Job
+            </button>
+        </div>
+        
+        <div class="progress-section" id="progress-section">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-text" id="progress-text">Generating CV...</div>
+        </div>
+        
+        <div class="keywords-section" id="keywords-section" style="display: none;">
+            <div class="keywords-title">Extracted Keywords</div>
+            <div class="keywords-list" id="keywords-list"></div>
+        </div>
+        
+        <div class="footer">
+            ATS Tailor Enhanced v3.0 | Powered by Playwright & Advanced Parsing
+        </div>
+    </div>
+
+    <script>
+        // Popup JavaScript
+        let currentCVData = null;
+        let currentJobKeywords = [];
+        let currentMatchScore = 0;
+
+        // Initialize popup
+        document.addEventListener('DOMContentLoaded', async () => {
+            await updateStatus();
+            await loadCurrentData();
+        });
+
+        async function updateStatus() {
+            // Update parser status
+            document.getElementById('parser-status').textContent = 'Enhanced Parser Ready';
+            document.getElementById('parser-status').className = 'status-value success';
+            
+            // Update PDF status
+            document.getElementById('pdf-status').textContent = 'Playwright + html2pdf Ready';
+            document.getElementById('pdf-status').className = 'status-value success';
+        }
+
+        async function loadCurrentData() {
+            try {
+                const result = await chrome.storage.local.get([
+                    'enhanced_cv_data',
+                    'enhanced_job_keywords',
+                    'enhanced_match_score'
+                ]);
+                
+                if (result.enhanced_cv_data) {
+                    currentCVData = result.enhanced_cv_data;
+                    currentJobKeywords = result.enhanced_job_keywords || [];
+                    currentMatchScore = result.enhanced_match_score || 0;
+                    
+                    updateMatchScore(currentMatchScore);
+                    updateKeywords(currentJobKeywords);
+                    updateButtons(true);
+                    
+                    document.getElementById('profile-status').textContent = 'Loaded';
+                    document.getElementById('profile-status').className = 'status-value success';
+                }
+            } catch (error) {
+                console.error('Failed to load data:', error);
+            }
+        }
+
+        function updateMatchScore(score) {
+            document.getElementById('score-number').textContent = score + '%';
+            document.getElementById('score-circle').style.setProperty('--score-percentage', score);
+            
+            const scoreText = document.getElementById('score-text');
+            const scoreDescription = document.getElementById('score-description');
+            
+            if (score >= 80) {
+                scoreText.textContent = 'Excellent Match!';
+                scoreDescription.textContent = 'Your CV is highly aligned with this job. Great chance of success!';
+                scoreText.style.color = '#10b981';
+            } else if (score >= 60) {
+                scoreText.textContent = 'Good Match';
+                scoreDescription.textContent = 'Your CV has strong alignment. Consider tailoring for better results.';
+                scoreText.style.color = '#059669';
+            } else if (score >= 40) {
+                scoreText.textContent = 'Fair Match';
+                scoreDescription.textContent = 'Some alignment found. Tailoring recommended for better chances.';
+                scoreText.style.color = '#f59e0b';
+            } else {
+                scoreText.textContent = 'Low Match';
+                scoreDescription.textContent = 'Limited alignment. Significant tailoring needed.';
+                scoreText.style.color = '#ef4444';
+            }
+        }
+
+        function updateKeywords(keywords) {
+            const keywordsList = document.getElementById('keywords-list');
+            const keywordsSection = document.getElementById('keywords-section');
+            
+            if (keywords.length > 0) {
+                keywordsList.innerHTML = keywords.slice(0, 10).map(keyword => 
+                    `<div class="keyword-tag">${keyword}</div>`
+                ).join('');
+                keywordsSection.style.display = 'block';
+            } else {
+                keywordsSection.style.display = 'none';
+            }
+        }
+
+        function updateButtons(enabled) {
+            document.getElementById('preview-btn').disabled = !enabled;
+            document.getElementById('download-btn').disabled = !enabled;
+            document.getElementById('tailor-btn').disabled = !enabled;
+        }
+
+        async function generateCV() {
+            showProgress(true);
+            updateProgress(0, 'Loading profile data...');
+            
+            try {
+                // Get current tab
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                
+                // Send message to content script
+                chrome.tabs.sendMessage(tab.id, {
+                    action: 'GENERATE_ENHANCED_CV',
+                    profileData: await getProfileData(),
+                    jobInfo: await getJobInfo()
+                }, (response) => {
+                    if (response && response.success) {
+                        updateProgress(100, 'CV Generated Successfully!');
+                        currentCVData = response.cvData;
+                        currentJobKeywords = response.jobKeywords;
+                        currentMatchScore = response.matchScore;
+                        
+                        updateMatchScore(currentMatchScore);
+                        updateKeywords(currentJobKeywords);
+                        updateButtons(true);
+                        
+                        setTimeout(() => showProgress(false), 1500);
+                    } else {
+                        updateProgress(0, 'Generation Failed: ' + (response?.error || 'Unknown error'));
+                        setTimeout(() => showProgress(false), 3000);
+                    }
+                });
+                
+            } catch (error) {
+                updateProgress(0, 'Error: ' + error.message);
+                setTimeout(() => showProgress(false), 3000);
+            }
+        }
+
+        async function previewCV() {
+            if (!currentCVData) return;
+            
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                chrome.tabs.sendMessage(tab.id, {
+                    action: 'PREVIEW_CV',
+                    cvData: currentCVData,
+                    jobInfo: await getJobInfo()
+                });
+            } catch (error) {
+                console.error('Preview failed:', error);
+            }
+        }
+
+        async function downloadCV() {
+            if (!currentCVData) return;
+            
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                chrome.tabs.sendMessage(tab.id, {
+                    action: 'DOWNLOAD_CV_PDF',
+                    cvData: currentCVData,
+                    filename: `${currentCVData.header.name.replace(/\s+/g, '_')}_CV.pdf`
+                }, (response) => {
+                    if (response && response.success) {
+                        // Show success message
+                        showNotification('CV downloaded successfully!', 'success');
+                    }
+                });
+            } catch (error) {
+                console.error('Download failed:', error);
+            }
+        }
+
+        async function tailorCV() {
+            if (!currentCVData || !currentJobKeywords.length) return;
+            
+            showProgress(true);
+            updateProgress(50, 'Tailoring CV for job...');
+            
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                chrome.tabs.sendMessage(tab.id, {
+                    action: 'TAILOR_CV',
+                    cvData: currentCVData,
+                    jobKeywords: currentJobKeywords,
+                    jobInfo: await getJobInfo()
+                }, (response) => {
+                    if (response && response.success) {
+                        currentCVData = response.tailoredCV;
+                        const newScore = response.tailoredScore;
+                        
+                        updateProgress(100, 'CV Tailored Successfully!');
+                        updateMatchScore(newScore);
+                        
+                        showNotification(`Match score improved to ${newScore}%!`, 'success');
+                        setTimeout(() => showProgress(false), 1500);
+                    } else {
+                        updateProgress(0, 'Tailoring failed: ' + (response?.error || 'Unknown error'));
+                        setTimeout(() => showProgress(false), 3000);
+                    }
+                });
+            } catch (error) {
+                updateProgress(0, 'Error: ' + error.message);
+                setTimeout(() => showProgress(false), 3000);
+            }
+        }
+
+        function showProgress(show) {
+            const progressSection = document.getElementById('progress-section');
+            if (show) {
+                progressSection.classList.add('show');
+            } else {
+                progressSection.classList.remove('show');
+            }
+        }
+
+        function updateProgress(percentage, text) {
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('progress-text').textContent = text;
+        }
+
+        function showNotification(message, type) {
+            // Simple notification implementation
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                background: ${type === 'success' ? '#10b981' : '#ef4444'};
+                color: white;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+
+        async function getProfileData() {
+            // In a real implementation, this would fetch from Supabase
+            return {
+                firstName: 'John',
+                lastName: 'Doe',
+                email: 'john.doe@email.com',
+                phone: '+1234567890',
+                city: 'New York',
+                country: 'USA',
+                summary: 'Experienced software engineer with expertise in full-stack development.',
+                work_experience: [
+                    {
+                        title: 'Senior Software Engineer',
+                        company: 'Tech Corp',
+                        startDate: '2020-01-01',
+                        endDate: '2023-12-31',
+                        responsibilities: ['Led team of 5 developers', 'Built scalable web applications']
+                    }
+                ],
+                education: [
+                    {
+                        degree: 'Bachelor of Science in Computer Science',
+                        school: 'University of Technology',
+                        graduationYear: '2019'
+                    }
+                ],
+                skills: ['JavaScript', 'React', 'Node.js', 'Python', 'AWS'],
+                certifications: ['AWS Certified Solutions Architect']
+            };
+        }
+
+        async function getJobInfo() {
+            // In a real implementation, this would extract from current page
+            return {
+                title: 'Senior Software Engineer',
+                company: 'Awesome Tech',
+                description: 'Looking for experienced software engineer with React, Node.js, and AWS skills.'
+            };
+        }
+    </script>
+</body>
+</html>

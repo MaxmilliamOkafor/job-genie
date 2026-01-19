@@ -1,0 +1,463 @@
+/* Enhanced Content Styles for ATS Tailor v3.0 */
+/* Perfect formatting preservation with print optimization */
+
+/* CV Container Styles */
+.cv-preview-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 999999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.cv-preview-container.show {
+    display: flex;
+}
+
+.cv-preview-content {
+    background: white;
+    border-radius: 12px;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.cv-preview-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cv-preview-close:hover {
+    background: #dc2626;
+}
+
+.cv-preview-actions {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 16px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.cv-preview-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cv-preview-btn.download {
+    background: #10b981;
+    color: white;
+}
+
+.cv-preview-btn.download:hover {
+    background: #059669;
+}
+
+.cv-preview-btn.print {
+    background: #3b82f6;
+    color: white;
+}
+
+.cv-preview-btn.print:hover {
+    background: #2563eb;
+}
+
+/* CV Document Styles - 100% Formatting Preservation */
+.cv-document {
+    font-family: 'Calibri', 'Helvetica', 'Arial', sans-serif;
+    font-size: 11px;
+    line-height: 1.15;
+    color: #1a1a1a;
+    background: white;
+    padding: 40px 50px;
+    max-width: 210mm;
+    margin: 0 auto;
+}
+
+.cv-document .cv-header {
+    text-align: center;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #2c5aa0;
+    margin-bottom: 12px;
+}
+
+.cv-document .cv-name {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.cv-document .cv-contact {
+    font-size: 10px;
+    color: #4a4a4a;
+    line-height: 1.4;
+}
+
+.cv-document .cv-contact span {
+    margin: 0 8px;
+}
+
+.cv-document .cv-section {
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+}
+
+.cv-document .cv-section-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #2c5aa0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #2c5aa0;
+    padding-bottom: 3px;
+    margin-bottom: 8px;
+}
+
+.cv-document .cv-summary {
+    text-align: justify;
+    line-height: 1.4;
+    color: #4a4a4a;
+}
+
+.cv-document .cv-job {
+    margin-bottom: 8px;
+    page-break-inside: avoid;
+}
+
+.cv-document .cv-job-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2px;
+}
+
+.cv-document .cv-job-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #1a1a1a;
+}
+
+.cv-document .cv-job-company {
+    font-weight: bold;
+    color: #4a4a4a;
+}
+
+.cv-document .cv-job-date {
+    font-size: 10px;
+    color: #666666;
+    font-style: italic;
+}
+
+.cv-document .cv-job-location {
+    font-size: 10px;
+    color: #666666;
+}
+
+.cv-document .cv-job-responsibilities {
+    margin-left: 16px;
+    margin-top: 3px;
+}
+
+.cv-document .cv-job-responsibilities li {
+    margin-bottom: 1px;
+    list-style-type: disc;
+}
+
+.cv-document .cv-education-item {
+    margin-bottom: 6px;
+    page-break-inside: avoid;
+}
+
+.cv-document .cv-education-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.cv-document .cv-education-degree {
+    font-weight: bold;
+    color: #1a1a1a;
+}
+
+.cv-document .cv-education-school {
+    color: #4a4a4a;
+}
+
+.cv-document .cv-education-date {
+    font-size: 10px;
+    color: #666666;
+    font-style: italic;
+}
+
+.cv-document .cv-skills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cv-document .cv-skill-category {
+    margin-bottom: 6px;
+    flex: 1;
+    min-width: 150px;
+}
+
+.cv-document .cv-skill-category-title {
+    font-weight: bold;
+    color: #4a4a4a;
+    font-size: 10px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.cv-document .cv-skill-list {
+    font-size: 10px;
+    line-height: 1.3;
+}
+
+.cv-document .cv-cert-item {
+    margin-bottom: 3px;
+    page-break-inside: avoid;
+}
+
+.cv-document .cv-cert-name {
+    font-weight: bold;
+}
+
+.cv-document .cv-cert-issuer {
+    color: #4a4a4a;
+}
+
+.cv-document .cv-cert-date {
+    font-size: 10px;
+    color: #666666;
+    font-style: italic;
+}
+
+/* Print Styles - Perfect Formatting Guaranteed */
+@media print {
+    .cv-document {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .cv-preview-container,
+    .cv-preview-actions {
+        display: none !important;
+    }
+    
+    body {
+        margin: 0;
+        padding: 0;
+    }
+    
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
+/* ATS Banner Styles */
+.ats-enhanced-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 999999;
+    background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%);
+    color: white;
+    padding: 12px 20px;
+    font: bold 14px 'Segoe UI', sans-serif;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: ats-banner-slide 0.5s ease-out;
+}
+
+@keyframes ats-banner-slide {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.ats-enhanced-banner.success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.ats-enhanced-banner.error {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.ats-enhanced-banner.warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+/* Status Badge */
+.ats-status-badge {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #2c5aa0;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    z-index: 999998;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    animation: ats-badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ats-badge-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* Loading Overlay */
+.ats-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.9);
+    z-index: 999997;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.ats-loading-overlay.show {
+    display: flex;
+}
+
+.ats-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #2c5aa0;
+    border-radius: 50%;
+    animation: ats-spinner 1s linear infinite;
+}
+
+@keyframes ats-spinner {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Notification Styles */
+.ats-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px 24px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    z-index: 999999;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    animation: ats-notification-slide 0.3s ease-out;
+    max-width: 400px;
+}
+
+.ats-notification.success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.ats-notification.error {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.ats-notification.info {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+@keyframes ats-notification-slide {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .cv-preview-content {
+        max-width: 95vw;
+        max-height: 95vh;
+    }
+    
+    .cv-document {
+        padding: 20px 25px;
+        font-size: 10px;
+    }
+    
+    .cv-document .cv-name {
+        font-size: 20px;
+    }
+    
+    .cv-document .cv-section-title {
+        font-size: 12px;
+    }
+}
+
+/* High DPI Display Optimization */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .cv-document {
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .cv-preview-content {
+        background: #1f2937;
+    }
+    
+    .cv-preview-actions {
+        background: #1f2937;
+        border-top-color: #374151;
+    }
+}
