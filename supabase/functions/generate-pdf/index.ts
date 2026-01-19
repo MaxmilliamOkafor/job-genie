@@ -24,6 +24,12 @@ interface ResumeData {
     dates: string;
     bullets: string[];
   }>;
+  projects?: Array<{
+    name: string;
+    role: string;
+    dates?: string;
+    bullets: string[];
+  }>;
   education?: Array<{
     degree: string;
     school: string;
@@ -373,6 +379,64 @@ serve(async (req) => {
 
           // 1.5 line spacing between companies (except after last)
           if (i < sanitizedData.experience.length - 1) {
+            yPosition -= SECTION_SPACING;
+          }
+        }
+      }
+
+      // === RELEVANT PROJECTS (dates are optional) ===
+      if (sanitizedData.projects && sanitizedData.projects.length > 0) {
+        drawSectionHeader("Relevant Projects");
+
+        for (let i = 0; i < sanitizedData.projects.length; i++) {
+          const project = sanitizedData.projects[i];
+          ensureSpace(50);
+
+          const cleanName = stripDatesFromField(project.name || "");
+          const cleanRole = stripDatesFromField(project.role || "");
+          const dates = project.dates || "";
+
+          // Line 1: Project name - BOLD
+          currentPage.drawText(cleanName, {
+            x: MARGIN,
+            y: yPosition,
+            size: 11,
+            font: helveticaBold,
+            color: colors.black,
+          });
+          yPosition -= LINE_HEIGHT + 2;
+
+          // Line 2: Role (italic) on the left + optional dates right-aligned on the same line
+          currentPage.drawText(cleanRole, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helveticaOblique,
+            color: colors.black,
+          });
+
+          if (dates) {
+            const dateWidth = helvetica.widthOfTextAtSize(dates, 10);
+            currentPage.drawText(dates, {
+              x: PAGE_WIDTH - MARGIN - dateWidth,
+              y: yPosition,
+              size: 10,
+              font: helvetica,
+              color: colors.darkGray,
+            });
+          }
+
+          yPosition -= LINE_HEIGHT + 4;
+
+          // Bullet points - use standard bullet character for ATS compatibility
+          for (const bullet of project.bullets) {
+            ensureSpace(LINE_HEIGHT * 2);
+            const bulletText = `• ${bullet}`;
+            drawWrappedText(bulletText, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
+          }
+
+          // 1.5 line spacing between projects (except after last)
+          if (i < sanitizedData.projects.length - 1) {
             yPosition -= SECTION_SPACING;
           }
         }

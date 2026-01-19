@@ -50,6 +50,7 @@
         contact: this.buildContactSection(candidateData),
         summary: this.buildSummarySection(candidateData, allKeywords),
         experience: this.buildExperienceSection(candidateData, allKeywords),
+        projects: this.buildProjectsSection(candidateData, allKeywords),
         skills: this.buildSkillsSection(candidateData, allKeywords),
         education: this.buildEducationSection(candidateData),
         certifications: this.buildCertificationsSection(candidateData),
@@ -264,6 +265,97 @@
         .join("\n\n");
     },
 
+    // ============ BUILD PROJECTS SECTION ============
+    // Similar to experience but dates are optional
+    // LAYOUT: 
+    //   Line 1: Project Name (bold, left-aligned)
+    //   Line 2: Role (left) with optional dates right-aligned (same line)
+    // BULLETS: Use proper ATS bullet points (•)
+    buildProjectsSection(data, keywords) {
+      // Get projects from various possible field names
+      const projects = Array.isArray(data.relevantProjects)
+        ? data.relevantProjects
+        : (Array.isArray(data.relevant_projects) 
+            ? data.relevant_projects 
+            : (Array.isArray(data.projects) ? data.projects : []));
+
+      if (!projects.length) return "";
+
+      const keywordArray = Array.isArray(keywords) ? keywords : (keywords?.all || []);
+      const usedKeywords = new Set();
+      const maxBulletsPerProject = 6;
+
+      return projects
+        .map((project) => {
+          const name = (project.name || project.projectName || '').trim();
+          const role = (project.role || project.title || '').trim();
+          
+          // Build dates - optional for projects
+          let dates = project.dates || '';
+          if (!dates && (project.startDate || project.endDate)) {
+            const start = project.startDate || '';
+            const end = project.endDate || '';
+            if (start || end) {
+              dates = start && end ? `${start} - ${end}` : (start || end);
+            }
+          }
+          
+          const normalisedDates = dates ? this.normaliseDates(dates) : '';
+          
+          const nameLine = name || '';
+          const roleLine = this.rightAlignTitleDates(role, normalisedDates);
+
+          let bullets = project.bullets || project.achievements || project.description || [];
+
+          if (typeof bullets === "string") {
+            bullets = bullets.split("\n").map(b => b.trim()).filter(Boolean);
+          }
+
+          if (!Array.isArray(bullets) || !bullets.length) {
+            return [nameLine, roleLine].filter(Boolean).join('\n');
+          }
+
+          const enhancedBullets = bullets.slice(0, maxBulletsPerProject).map((bullet, idx) => {
+            let text = (bullet || "").replace(/^\s*[-•*]\s*/, "").trim();
+            if (!text) return "";
+
+            // Only enhance first 2 bullets per project
+            if (idx >= 2) {
+              if (text && !text.endsWith('.')) text += '.';
+              return `• ${text}`;
+            }
+
+            const textLower = text.toLowerCase();
+            const toInject = keywordArray
+              .filter(kw => !usedKeywords.has(kw) && !textLower.includes(kw.toLowerCase()))
+              .slice(0, 2);
+
+            toInject.forEach(kw => usedKeywords.add(kw));
+
+            if (!toInject.length) {
+              if (text && !text.endsWith('.')) text += '.';
+              return `• ${text}`;
+            }
+
+            const phrases = ["leveraging", "utilising", "through", "with"];
+            const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+            const tail = `${phrase} ${toInject.join(" and ")}`;
+
+            if (text.endsWith(".")) {
+              text = `${text.slice(0, -1)}, ${tail}.`;
+            } else {
+              text = `${text}, ${tail}.`;
+            }
+
+            return `• ${text}`;
+          }).filter(Boolean);
+
+          const headerLines = [nameLine, roleLine].filter(Boolean).join('\n');
+          return `${headerLines}\n${enhancedBullets.join("\n")}`;
+        })
+        .join("\n\n");
+    },
+
     // ============ NORMALISE DATES ============
     // Convert date strings to "YYYY – YYYY" format with en dash and spaces
     normaliseDates(dateStr) {
@@ -376,6 +468,13 @@
       if (resume.experience) {
         sections.push('WORK EXPERIENCE');
         sections.push(resume.experience);
+        sections.push('');
+      }
+      
+      // Projects
+      if (resume.projects) {
+        sections.push('RELEVANT PROJECTS');
+        sections.push(resume.projects);
         sections.push('');
       }
       
@@ -539,6 +638,13 @@
     <div class="section-title">WORK EXPERIENCE</div>
     <div class="section-content">
       ${parseExperienceForHTML(resume.experience)}
+    </div>
+  ` : ''}
+  
+  ${resume.projects ? `
+    <div class="section-title">RELEVANT PROJECTS</div>
+    <div class="section-content">
+      ${parseExperienceForHTML(resume.projects)}
     </div>
   ` : ''}
   
