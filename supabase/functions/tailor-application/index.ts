@@ -755,9 +755,10 @@ HOW TO ADD MISSING KEYWORDS NATURALLY:
 ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES - Only tailor the bullet points
 2. Location in CV header MUST be: "${smartLocation}"
-3. NO typos, grammatical errors, or formatting issues
-4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
-5. EVERY keyword in the JD should appear at least once in the tailored resume
+3. ALWAYS use UK English spelling (e.g., "analysing", "optimisation", "programme", "centre")
+4. NO typos, grammatical errors, or formatting issues
+5. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
+6. EVERY keyword in the JD should appear at least once in the tailored resume
 
 === CRITICAL: PROFESSIONAL SUMMARY MUST NOT DUPLICATE HEADER ===
 The resume header already contains: Name, Phone, Email, Location, LinkedIn, GitHub, Portfolio URLs.
