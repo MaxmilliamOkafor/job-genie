@@ -1,0 +1,56 @@
+MAXMILLIAM OKAFOR
+Fort Worth, Texas, United States | +353 0874261508 | maxokafordev@gmail.com | open to relocation
+https://linke.to/Linkedin-Maxmilliam | https://linke.to/Github-Maxmilliam | https://linke.to/Portfolio-Dev
+
+PROFESSIONAL SUMMARY
+
+Experienced healthcare technology leader with proven expertise in ensuring safe patient outcomes through rigorous compliance frameworks and comprehensive training programs. Skilled at translating complex regulatory requirements into actionable care protocols that protect resident safety while maintaining operational excellence. Adept at implementing evidence-based practices that improve quality of life metrics and reduce incident rates. Strong background in developing training curricula that empower care teams to deliver consistent, compassionate support to elderly populations.
+
+WORK EXPERIENCE
+
+Meta (formerly Facebook Inc) | Senior Software Engineer | 2023 – Present
+• Established designed and deployed ML-based content moderation workflows using Llama models, reducing manual review queue by 40% while maintaining 99.2% accuracy in production environment serving 2M+ daily active users
+• Architected end-to-end automation for Meta AI Studio's model deployment pipeline, cutting release cycles from 2 weeks to 3 days and eliminating 15 hours of manual work per sprint
+• Led refactoring of Meta Business Suite's data ingestion layer, resulting in 60% faster query performance and significant annual savings in compute costs
+• Mentored 4 junior engineers on production best practices and code review standards, improving team PR approval velocity by 35%
+
+SolimHealth (AI Startup) | AI Product Manager | 2024 – 2025
+• Built production GenAI system for early-stage dementia detection, processing patient data from 500+ clinical trials and achieving 94% diagnostic accuracy in validation studies
+• Designed microservices architecture on AWS that scaled from handling 1,000 to 50,000 daily API calls without infrastructure cost increases through intelligent resource allocation
+• Created data governance framework ensuring HIPAA compliance across distributed data sources, reducing audit preparation time from 6 weeks to 10 days
+• Established CI/CD pipelines using GitHub Actions and Terraform, enabling zero-downtime deployments and reducing production incidents by 70%
+
+Accenture | Senior Solutions Architect | 2021 – 2022
+• Led cloud migration for Fortune 500 client, transitioning 50+ legacy applications to Kubernetes on Azure with zero service disruption and 30% improvement in system reliability
+• Architected real-time analytics platform processing 10TB daily, delivering insights to executive leadership within 5 minutes of data generation instead of previous 24-hour delay
+• Built automated monitoring and alerting system using ELK Stack, reducing mean time to resolution (MTTR) from 4 hours to 45 minutes
+• Collaborated with C-suite stakeholders to define technical roadmap, securing significant project funding and aligning engineering efforts with business priorities and reducing production incidents by 70%
+• Built and maintained CI/CD pipelines with Azure DevOps and GitHub Actions, enabling automated deployments across staging
+
+Citi (formerly Citigroup Inc) | Senior Data Analyst | 2017 – 2021
+• Developed fraud detection model analysing £1.6B+ in daily transactions, identifying £12M in potential losses within first quarter of deployment
+• Designed and implemented data pipeline architecture that reduced ETL processing time from 12 hours to 90 minutes, enabling same-day reporting for risk management team
+• Created automated regulatory compliance reporting system, saving 40 hours of manual work monthly and eliminating human error from submissions
+• Conducted root cause analysis on trading system anomalies, presenting findings to VP-level stakeholders that informed infrastructure investment decision
+
+EDUCATION
+
+Master of Science in Artificial Intelligence and Machine Learning - Distinction (3.90/4.00)
+Imperial College London
+Modules: data Engineer | data science | solutions engineer | data scientist | Devops | AI/ML | MLOps engineer
+
+Bachelor of Science in Computer Science (First Class Honours, GPA: 3.80/4.00)
+University of Derby
+
+SKILLS
+
+Technical: Python, SQL, Data Analysis, Machine Learning, AWS, Azure, Compliance, Safe practices, Training development
+Additional: Kubernetes, Docker, Terraform, Apache Spark, Airflow, Kafka, CI/CD, Jenkins, GitHub Actions, Technical Leadership, Team Building, Strategic Planning, Mentoring, Agile/Scrum
+
+CERTIFICATIONS
+
+• Certified Business Analysis Professional (CBAP) - IIBA
+• Microsoft Certified: Data Analyst Associate
+• AWS Certified Data Analytics - Specialty
+• Google Data Analytics Professional Certificate
+• PRINCE2 - AXELOS
