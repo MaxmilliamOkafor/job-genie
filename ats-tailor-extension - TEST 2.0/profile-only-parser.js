@@ -45,6 +45,7 @@
         contact: {},
         summary: '',
         experience: [],
+        projects: [],
         education: [],
         skills: '',
         certifications: ''
@@ -62,6 +63,12 @@
         data.experience = this.parseProfileExperience(workExperience);
       } else {
         console.warn('[ProfileOnlyParser] No work experience found in profile data');
+      }
+
+      // Technical Projects - from relevant_projects
+      const projects = profileData?.relevantProjects || profileData?.relevant_projects || [];
+      if (Array.isArray(projects) && projects.length > 0) {
+        data.projects = this.parseProfileProjects(projects);
       }
 
       // Education - from profile
@@ -196,6 +203,47 @@
       return jobs;
     },
 
+    // ============ PARSE PROFILE PROJECTS ============
+    parseProfileProjects(projects) {
+      const parsedProjects = [];
+      
+      projects.forEach((project) => {
+        const company = (project.company || project.name || project.projectName || '').trim();
+        const role = (project.role || project.title || '').trim();
+        
+        // Dates - optional for projects
+        let dates = project.dates || '';
+        if (!dates && (project.startDate || project.endDate)) {
+          const start = project.startDate || '';
+          const end = project.endDate || '';
+          dates = start && end ? `${start} - ${end}` : (start || end);
+        }
+        dates = this.normalizeDates(dates);
+        
+        // Bullets
+        let bullets = project.bullets || project.achievements || project.description || [];
+        if (typeof bullets === 'string') {
+          bullets = bullets.split('\n').filter(b => b.trim());
+        }
+        
+        const cleanedBullets = Array.isArray(bullets) ? bullets.map(bullet => {
+          return bullet.replace(/^[-•*▪▸►]\s*/, '').trim();
+        }).filter(bullet => bullet.length > 0) : [];
+
+        const roleLine = dates ? `${role}                    ${dates}` : role;
+
+        parsedProjects.push({
+          company,
+          role,
+          roleLine,
+          dates,
+          bullets: cleanedBullets
+        });
+      });
+
+      return parsedProjects;
+    },
+
     // ============ NORMALIZE DATES ============
     normalizeDates(dateStr) {
       if (!dateStr) return '';
@@ -262,7 +310,7 @@
     // ============ GENERATE ATS-SAFE TEXT ============
     generateATSText(profileData) {
       const parsed = this.extractTechnicalExperience(profileData);
-      const { contact, summary, experience, education, skills, certifications } = parsed;
+      const { contact, summary, experience, projects, education, skills, certifications } = parsed;
       
       const lines = [];
       
@@ -293,13 +341,26 @@
         lines.push('');
       }
       
-      // Experience
+      // Professional Experience
       if (experience.length > 0) {
-        lines.push('WORK EXPERIENCE');
+        lines.push('PROFESSIONAL EXPERIENCE');
         experience.forEach(job => {
           lines.push(job.company);
           lines.push(job.titleLine);
           job.bullets.forEach(bullet => {
+            lines.push(`• ${bullet}`);
+          });
+          lines.push('');
+        });
+      }
+      
+      // Technical Projects
+      if (projects && projects.length > 0) {
+        lines.push('TECHNICAL PROJECTS');
+        projects.forEach(project => {
+          lines.push(project.company);
+          if (project.roleLine) lines.push(project.roleLine);
+          project.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
           lines.push('');
