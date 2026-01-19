@@ -79,10 +79,25 @@ export function useProfile() {
       if (error) throw error;
       
       if (data) {
+        const rawWorkExp = Array.isArray(data.work_experience) ? (data.work_experience as any[]) : [];
+        const normalizedWorkExp = normalizeWorkExperience(rawWorkExp as any);
+
+        // One-time auto-repair: if older data has company/title swapped or missing ids/bullets,
+        // normalise it and persist so UI + PDF stay consistent.
+        if (JSON.stringify(rawWorkExp) !== JSON.stringify(normalizedWorkExp)) {
+          supabase
+            .from('profiles')
+            .update({ work_experience: normalizedWorkExp } as any)
+            .eq('user_id', user.id)
+            .then(({ error }) => {
+              if (error) console.warn('Failed to auto-normalise work experience:', error.message);
+            });
+        }
+
         setProfile({
           ...data,
           authorized_countries: (data.authorized_countries as string[]) || [],
-          work_experience: Array.isArray(data.work_experience) ? data.work_experience : [],
+          work_experience: normalizedWorkExp,
           education: Array.isArray(data.education) ? data.education : [],
           skills: Array.isArray(data.skills) ? data.skills : [],
           certifications: (data.certifications as string[]) || [],
