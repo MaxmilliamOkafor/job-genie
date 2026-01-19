@@ -38,6 +38,7 @@ export interface Profile {
   security_clearance: boolean;
   cover_letter: string | null;
   work_experience: any[];
+  relevant_projects: any[];
   education: any[];
   skills: any[];
   certifications: string[];
@@ -98,6 +99,7 @@ export function useProfile() {
           ...data,
           authorized_countries: (data.authorized_countries as string[]) || [],
           work_experience: normalizedWorkExp,
+          relevant_projects: Array.isArray((data as any).relevant_projects) ? (data as any).relevant_projects : [],
           education: Array.isArray(data.education) ? data.education : [],
           skills: Array.isArray(data.skills) ? data.skills : [],
           certifications: (data.certifications as string[]) || [],

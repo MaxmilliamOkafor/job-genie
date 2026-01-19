@@ -78,6 +78,7 @@
         contact: this.buildContactSection(candidateData),
         summary: this.buildSummarySection(candidateData, keywords),
         experience: this.buildExperienceSection(candidateData, keywords),
+        projects: this.buildProjectsSection(candidateData, keywords),
         education: this.buildEducationSection(candidateData),
         skills: this.buildSkillsSection(candidateData, keywords),
         certifications: this.buildCertificationsSection(candidateData)
@@ -253,6 +254,91 @@
       });
     },
 
+    // ============ BUILD PROJECTS SECTION ============
+    // Similar to experience but dates are optional
+    // LAYOUT:
+    //   Line 1: Project Name (bold)
+    //   Line 2: Role (left) with optional dates right-aligned (same line)
+    // BULLETS: Use proper ATS bullet points (•)
+    buildProjectsSection(data, keywords) {
+      const projects = data.relevantProjects || data.relevant_projects || data.projects || [];
+      if (!Array.isArray(projects) || projects.length === 0) return [];
+
+      const keywordArray = Array.isArray(keywords) ? keywords : (keywords?.all || []);
+      const usedKeywords = new Set();
+      const maxBulletsPerProject = 5;
+
+      return projects.map(project => {
+        const name = (project.name || project.projectName || '').trim();
+        const role = (project.role || project.title || '').trim();
+        
+        // Build dates - optional for projects
+        let dates = project.dates || '';
+        if (!dates && (project.startDate || project.endDate)) {
+          const start = project.startDate || '';
+          const end = project.endDate || '';
+          if (start || end) {
+            dates = start && end ? `${start} - ${end}` : (start || end);
+          }
+        }
+        
+        const normalisedDates = dates ? String(dates)
+          .replace(/--/g, '–')
+          .replace(/-/g, '–')
+          .replace(/\s*–\s*/g, ' – ')
+          : '';
+
+        let bullets = project.bullets || project.achievements || project.description || [];
+        if (typeof bullets === 'string') bullets = bullets.split('\n').filter(b => b.trim());
+
+        const enhancedBullets = bullets.slice(0, maxBulletsPerProject).map((bullet, idx) => {
+          let text = (bullet || '').replace(/^\s*[-•*]\s*/, '').trim();
+          if (!text) return '';
+          
+          // Only enhance first 2 bullets
+          if (idx >= 2) {
+            if (!text.endsWith('.')) text += '.';
+            return text;
+          }
+          
+          const bulletLower = text.toLowerCase();
+          const toInject = [];
+          
+          for (let i = 0; i < keywordArray.length && toInject.length < 2; i++) {
+            const kw = keywordArray[i];
+            if (!kw) continue;
+            const kwLower = kw.toLowerCase();
+            if (!bulletLower.includes(kwLower) && !usedKeywords.has(kwLower)) {
+              toInject.push(kw);
+              usedKeywords.add(kwLower);
+            }
+          }
+          
+          if (toInject.length > 0) {
+            const phrases = ['leveraging', 'utilising', 'through', 'with'];
+            const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+            
+            if (text.endsWith('.')) {
+              text = text.slice(0, -1) + `, ${phrase} ${toInject.join(' and ')}.`;
+            } else {
+              text = `${text}, ${phrase} ${toInject.join(' and ')}.`;
+            }
+          } else {
+            if (!text.endsWith('.')) text += '.';
+          }
+          
+          return text;
+        }).filter(Boolean);
+
+        return {
+          name,
+          role,
+          dates: normalisedDates,
+          bullets: enhancedBullets
+        };
+      });
+    },
+
     // ============ BUILD EDUCATION SECTION ============
     // IMPORTANT: Remove explicit year ranges to prevent age bias
     buildEducationSection(data) {
@@ -359,6 +445,27 @@
             : job.title;
           sections.push(titleLine);
           job.bullets.forEach(bullet => {
+            sections.push(`• ${bullet}`);
+          });
+          sections.push('');
+        });
+      }
+
+      // Projects - Two-line header format:
+      //   Line 1: Project Name
+      //   Line 2: Role | YYYY – YYYY (dates optional)
+      // Bullets with proper • character
+      if (resumeData.projects && resumeData.projects.length > 0) {
+        sections.push('RELEVANT PROJECTS');
+        resumeData.projects.forEach(project => {
+          // Line 1: Project Name
+          sections.push(project.name || '');
+          // Line 2: Role | Dates (dates are optional)
+          const roleLine = project.dates 
+            ? `${project.role} | ${project.dates}`
+            : project.role;
+          sections.push(roleLine);
+          project.bullets.forEach(bullet => {
             sections.push(`• ${bullet}`);
           });
           sections.push('');

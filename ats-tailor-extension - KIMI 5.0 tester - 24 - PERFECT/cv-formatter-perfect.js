@@ -91,6 +91,7 @@
         contact: {},
         summary: '',
         experience: [],
+        projects: [],
         education: [],
         skills: '',
         certifications: ''
@@ -103,6 +104,7 @@
       const parsed = this.parseSections(tailoredContent);
       data.summary = parsed.summary || '';
       data.experience = parsed.experience || [];
+      data.projects = parsed.projects || [];
       data.education = parsed.education || [];
       data.skills = this.formatSkillsSection(parsed.skills || '');
       data.certifications = this.formatCertificationsSection(parsed.certifications || '');
@@ -171,6 +173,7 @@
       const sections = {
         summary: '',
         experience: [],
+        projects: [],
         education: [],
         skills: '',
         certifications: ''
@@ -191,6 +194,9 @@
         'EXPERIENCE': 'experience',
         'EMPLOYMENT': 'experience',
         'PROFESSIONAL EXPERIENCE': 'experience',
+        'RELEVANT PROJECTS': 'projects',
+        'PROJECTS': 'projects',
+        'PROJECT EXPERIENCE': 'projects',
         'EDUCATION': 'education',
         'ACADEMIC': 'education',
         'SKILLS': 'skills',
@@ -236,6 +242,9 @@
           break;
         case 'experience':
           sections.experience = this.parseExperience(text);
+          break;
+        case 'projects':
+          sections.projects = this.parseExperience(text); // Same format as experience
           break;
         case 'education':
           sections.education = this.parseEducation(text);
@@ -511,7 +520,7 @@
 
     // ============ GENERATE HTML ============
     generateHTML(cvData) {
-      const { contact, summary, experience, education, skills, certifications } = cvData;
+      const { contact, summary, experience, projects, education, skills, certifications } = cvData;
       
       const escapeHtml = (str) => {
         if (!str) return '';

@@ -418,6 +418,7 @@ export type Database = {
           portfolio: string | null
           preferred_ai_provider: string | null
           race_ethnicity: string | null
+          relevant_projects: Json | null
           security_clearance: boolean | null
           skills: Json | null
           state: string | null
@@ -470,6 +471,7 @@ export type Database = {
           portfolio?: string | null
           preferred_ai_provider?: string | null
           race_ethnicity?: string | null
+          relevant_projects?: Json | null
           security_clearance?: boolean | null
           skills?: Json | null
           state?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           portfolio?: string | null
           preferred_ai_provider?: string | null
           race_ethnicity?: string | null
+          relevant_projects?: Json | null
           security_clearance?: boolean | null
           skills?: Json | null
           state?: string | null

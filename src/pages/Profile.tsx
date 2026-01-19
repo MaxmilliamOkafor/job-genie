@@ -15,11 +15,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
 import { WorkExperiencePreview } from '@/components/profile/WorkExperiencePreview';
+import { RelevantProjectsPreview } from '@/components/profile/RelevantProjectsPreview';
 import { ProfileVersionHistory, createExportWithHistory } from '@/components/profile/ProfileVersionHistory';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
-  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown
+  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown, FolderGit2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -100,6 +101,7 @@ const Profile = () => {
         skills: localProfile.skills,
         certifications: localProfile.certifications,
         work_experience: localProfile.work_experience,
+        relevant_projects: localProfile.relevant_projects,
         education: localProfile.education,
         languages: localProfile.languages,
         cover_letter: localProfile.cover_letter,
@@ -1394,6 +1396,219 @@ const Profile = () => {
 
         {/* Work Experience ATS Preview */}
         <WorkExperiencePreview workExperience={localProfile.work_experience || []} />
+
+        {/* Relevant Projects */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FolderGit2 className="h-5 w-5" />
+              Relevant Projects
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {editMode && (
+              <div className="flex gap-2 mb-4">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    const newProject = {
+                      id: crypto.randomUUID(),
+                      name: 'Project Name',
+                      role: 'Your Role',
+                      startDate: '',
+                      endDate: '',
+                      description: '',
+                      skills: [],
+                      bullets: [
+                        'Describe the project and your contribution',
+                        'Highlight technologies used and outcomes achieved'
+                      ]
+                    };
+                    updateLocalField('relevant_projects', [...(localProfile.relevant_projects || []), newProject]);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Project
+                </Button>
+                {(localProfile.relevant_projects || []).length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    className="gap-2"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to clear ALL projects? This cannot be undone.')) {
+                        updateLocalField('relevant_projects', []);
+                        toast.success('Projects cleared. Click Save to persist changes.');
+                      }
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                    Clear All
+                  </Button>
+                )}
+              </div>
+            )}
+            {(localProfile.relevant_projects || []).map((project: any, projectIndex: number) => (
+              <div key={project.id} className="border rounded-lg p-4 relative">
+                {editMode && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 h-6 w-6"
+                    onClick={() => {
+                      const projects = [...(localProfile.relevant_projects || [])];
+                      projects.splice(projectIndex, 1);
+                      updateLocalField('relevant_projects', projects);
+                    }}
+                  >
+                    <X className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1 mr-8">
+                    {editMode ? (
+                      <div className="space-y-2">
+                        <Input 
+                          value={project.name || ''} 
+                          onChange={(e) => {
+                            const projects = [...(localProfile.relevant_projects || [])];
+                            projects[projectIndex] = { ...projects[projectIndex], name: e.target.value };
+                            updateLocalField('relevant_projects', projects);
+                          }}
+                          placeholder="Project Name"
+                          className="font-semibold"
+                        />
+                        <Input 
+                          value={project.role || ''} 
+                          onChange={(e) => {
+                            const projects = [...(localProfile.relevant_projects || [])];
+                            projects[projectIndex] = { ...projects[projectIndex], role: e.target.value };
+                            updateLocalField('relevant_projects', projects);
+                          }}
+                          placeholder="Your Role (e.g., AI Product Manager)"
+                        />
+                        <div className="flex gap-2 items-center">
+                          <Input 
+                            value={project.startDate || ''} 
+                            onChange={(e) => {
+                              const projects = [...(localProfile.relevant_projects || [])];
+                              projects[projectIndex] = { ...projects[projectIndex], startDate: e.target.value };
+                              updateLocalField('relevant_projects', projects);
+                            }}
+                            placeholder="Start (optional)"
+                            className="w-28"
+                          />
+                          <span className="self-center text-muted-foreground">-</span>
+                          <Input 
+                            value={project.endDate || ''} 
+                            onChange={(e) => {
+                              const projects = [...(localProfile.relevant_projects || [])];
+                              projects[projectIndex] = { ...projects[projectIndex], endDate: e.target.value };
+                              updateLocalField('relevant_projects', projects);
+                            }}
+                            placeholder="End (optional)"
+                            className="w-28"
+                          />
+                          <span className="text-xs text-muted-foreground italic">Dates are optional</span>
+                        </div>
+                        
+                        {/* Bullet Points / Achievements Section */}
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-sm font-medium">Achievements / Contributions</Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const projects = [...(localProfile.relevant_projects || [])];
+                                const currentBullets = projects[projectIndex].bullets || [];
+                                projects[projectIndex] = { 
+                                  ...projects[projectIndex], 
+                                  bullets: [...currentBullets, 'New achievement or contribution'] 
+                                };
+                                updateLocalField('relevant_projects', projects);
+                              }}
+                              className="h-7 px-2 gap-1 text-xs"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Add Bullet
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {(project.bullets || []).map((bullet: string, bulletIndex: number) => (
+                              <div key={bulletIndex} className="flex gap-2 items-start">
+                                <span className="text-muted-foreground mt-2 text-sm">•</span>
+                                <Textarea
+                                  value={bullet}
+                                  onChange={(e) => {
+                                    const projects = [...(localProfile.relevant_projects || [])];
+                                    const bullets = [...(projects[projectIndex].bullets || [])];
+                                    bullets[bulletIndex] = e.target.value;
+                                    projects[projectIndex] = { ...projects[projectIndex], bullets };
+                                    updateLocalField('relevant_projects', projects);
+                                  }}
+                                  placeholder="Describe your contribution with impact (e.g., Built AI pipeline that processed 10k+ records)"
+                                  className="flex-1 min-h-[60px] resize-none text-sm"
+                                  rows={2}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                  onClick={() => {
+                                    const projects = [...(localProfile.relevant_projects || [])];
+                                    const bullets = [...(projects[projectIndex].bullets || [])];
+                                    bullets.splice(bulletIndex, 1);
+                                    projects[projectIndex] = { ...projects[projectIndex], bullets };
+                                    updateLocalField('relevant_projects', projects);
+                                  }}
+                                >
+                                  <X className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ))}
+                            {(!project.bullets || project.bullets.length === 0) && (
+                              <p className="text-xs text-muted-foreground italic">
+                                No bullet points yet. Add achievements to improve your CV tailoring.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="font-bold">{project.name}</h3>
+                        <p className="text-muted-foreground italic">{project.role}</p>
+                        {/* Display bullets in view mode */}
+                        {project.bullets && project.bullets.length > 0 && (
+                          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                            {project.bullets.map((bullet: string, i: number) => (
+                              <li key={i} className="flex gap-2">
+                                <span>•</span>
+                                <span>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {!editMode && (project.startDate || project.endDate) && (
+                    <Badge variant="outline">{project.startDate}{project.startDate && project.endDate ? ' - ' : ''}{project.endDate}</Badge>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {(project.skills || []).slice(0, 6).map((skill: string, i: number) => (
+                    <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Relevant Projects Preview */}
+        <RelevantProjectsPreview projects={localProfile.relevant_projects || []} />
 
         {/* Education */}
         <Card>
