@@ -2406,7 +2406,7 @@ class ATSTailor {
     
     // STEP 1: PRIMARY - Inject into Work Experience (25+ keywords naturally across bullets)
     if (remaining.length > 0) {
-      const experienceMatch = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
+      const experienceMatch = tailoredCV.match(/(PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|TECHNICAL PROJECTS)|\n\n\n|$)/i);
       if (experienceMatch) {
         const expStart = experienceMatch.index;
         const expEnd = expStart + experienceMatch[0].length;
