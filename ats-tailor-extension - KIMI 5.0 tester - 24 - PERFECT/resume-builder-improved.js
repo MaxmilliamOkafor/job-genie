@@ -161,7 +161,8 @@
     // ============ BUILD EXPERIENCE SECTION ============
     // SINGLE SOURCE OF TRUTH: profile.work_experience
     // NEVER modify company, title, dates - only append keywords to bullets
-    // CLEAN LAYOUT: Line 1 = Company, Line 2 = Title – YYYY – YYYY
+    // LAYOUT: Company – Title on left, YYYY – YYYY on far right (same line)
+    // BULLETS: Use proper ATS bullet points (•) not dashes
     buildExperienceSection(data, keywords) {
       const experience = data.workExperience || data.work_experience || [];
       if (!Array.isArray(experience) || experience.length === 0) return [];
@@ -191,15 +192,8 @@
           .replace(/\s*–\s*/g, ' – ')    // ensure spaces around en dash
           : '';
         
-        // Build title line: Title – YYYY – YYYY
-        let titleLine = '';
-        if (title && normalisedDates) {
-          titleLine = `${title} – ${normalisedDates}`;
-        } else if (title) {
-          titleLine = title;
-        } else if (normalisedDates) {
-          titleLine = normalisedDates;
-        }
+        // Build left part: "Company – Title" (NO pipe characters)
+        const leftPart = [company, title].filter(Boolean).join(' – ');
         
         const location = job.location || '';
         
@@ -210,7 +204,7 @@
         // Inject keywords into bullets - ONLY append, never rewrite
         const enhancedBullets = bullets.slice(0, maxBulletsPerRole).map((bullet, idx) => {
           // Clean bullet text
-          let text = (bullet || '').replace(/^\s*[-•]\s*/, '').trim();
+          let text = (bullet || '').replace(/^\s*[-•*]\s*/, '').trim();
           if (!text) return '';
           
           // Only enhance first 3 bullets per role
@@ -253,7 +247,7 @@
         return {
           company,
           title,
-          titleLine, // New: formatted title with dates
+          leftPart, // New: "Company – Title" for header
           dates: normalisedDates,
           location,
           bullets: enhancedBullets
@@ -336,6 +330,7 @@
     },
 
     // ============ GENERATE TAILORED CONTENT STRING ============
+    // LAYOUT: "Company – Title | YYYY – YYYY" single line format with pipe for parsing
     generateTailoredContent(resumeData) {
       const sections = [];
       
@@ -348,14 +343,16 @@
         sections.push('');
       }
 
-      // Experience - Clean 2-line layout: Company on line 1, Title – Dates on line 2
+      // Experience - Single line header: "Company – Title | YYYY – YYYY"
+      // Bullets with proper • character
       if (resumeData.experience.length > 0) {
         sections.push('WORK EXPERIENCE');
         resumeData.experience.forEach(job => {
-          // Line 1: Company
-          sections.push(job.company);
-          // Line 2: Title – YYYY – YYYY (use pre-formatted titleLine if available)
-          sections.push(job.titleLine || job.title);
+          // Single line: "Company – Title | YYYY – YYYY" (pipe for parsing, displayed with flex)
+          const headerLine = job.dates 
+            ? `${job.leftPart || job.company} | ${job.title} | ${job.dates}`
+            : `${job.leftPart || job.company} | ${job.title}`;
+          sections.push(headerLine);
           job.bullets.forEach(bullet => {
             sections.push(`• ${bullet}`);
           });
@@ -363,11 +360,13 @@
         });
       }
 
-      // Education
+      // Education (no dates to prevent age bias)
       if (resumeData.education.length > 0) {
         sections.push('EDUCATION');
         resumeData.education.forEach(edu => {
-          sections.push(`${edu.degree} | ${edu.institution} | ${edu.date} | ${edu.gpa}`);
+          // Remove empty parts from output
+          const parts = [edu.degree, edu.institution, edu.gpa].filter(Boolean);
+          sections.push(parts.join(' | '));
         });
         sections.push('');
       }
@@ -389,6 +388,8 @@
     },
 
     // ============ LEGACY HTML GENERATOR (Fallback) ============
+    // Layout: "Company – Title" on left, dates on far right (same line)
+    // Bullets: Use proper ATS bullet points with <ul><li>
     generateLegacyHTML(resumeData) {
       const { contact, summary, experience, education, skills, certifications } = resumeData;
       
@@ -419,9 +420,33 @@
     .contact { text-align: center; color: #333; margin-bottom: 16px; font-size: 10.5pt; }
     .section-title { font-size: 12pt; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; margin: 16px 0 8px 0; padding-bottom: 4px; }
     .section-content { margin-bottom: 12px; }
-    .job-header { font-weight: bold; margin-top: 12px; }
-    .job-meta { font-size: 9pt; color: #333; margin-bottom: 4px; }
-    .bullet { margin-left: 16px; margin-bottom: 3px; }
+    
+    /* Job header: left part and dates on same line */
+    .job { margin-bottom: 16px; }
+    .job-header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: baseline;
+      font-weight: bold; 
+      margin-bottom: 4px;
+    }
+    .job-left { white-space: nowrap; }
+    .job-right { 
+      white-space: nowrap; 
+      font-weight: normal;
+      color: #333;
+    }
+    
+    /* ATS-friendly bullet list */
+    .job-bullets {
+      margin: 4px 0 0 20px;
+      padding: 0;
+      list-style-type: disc;
+    }
+    .job-bullets li {
+      margin-bottom: 3px;
+      line-height: 1.3;
+    }
   </style>
 </head>
 <body>
@@ -439,16 +464,24 @@
   ${experience.length > 0 ? `
   <div class="section-title">Work Experience</div>
   ${experience.map(job => `
-  <div class="job-header">${escapeHtml(job.company)}</div>
-  <div class="job-meta">${escapeHtml(job.titleLine || job.title)}</div>
-  ${job.bullets.map(bullet => `<div class="bullet">• ${escapeHtml(bullet)}</div>`).join('')}
+  <div class="job">
+    <div class="job-header">
+      <span class="job-left">${escapeHtml(job.leftPart || `${job.company} – ${job.title}`)}</span>
+      ${job.dates ? `<span class="job-right">${escapeHtml(job.dates)}</span>` : ''}
+    </div>
+    ${job.bullets.length > 0 ? `
+    <ul class="job-bullets">
+      ${job.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('\n      ')}
+    </ul>
+    ` : ''}
+  </div>
   `).join('')}
   ` : ''}
   
   ${education.length > 0 ? `
   <div class="section-title">Education</div>
   ${education.map(edu => `
-  <div>${[edu.degree, edu.institution, edu.date, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
+  <div>${[edu.degree, edu.institution, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
   `).join('')}
   ` : ''}
   

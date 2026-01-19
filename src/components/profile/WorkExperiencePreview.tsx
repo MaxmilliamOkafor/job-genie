@@ -90,30 +90,27 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                 ? exp.description.split(/\r?\n/).filter(Boolean)
                 : [];
 
+            // Build left part: Company – Title (NO pipe characters)
+            const leftPart = [exp.company, exp.title].filter(Boolean).join(' – ') || 'Company – Job Title';
+            const dateRange = formatDateRange(exp.startDate, exp.endDate);
+
             return (
               <div key={exp.id || index} className="space-y-1">
-                {/* Line 1: Company Name (Bold) */}
-                <div className="flex justify-between items-baseline">
+                {/* Single line: Company – Title on left, Dates on far right */}
+                <div className="flex justify-between items-baseline gap-4">
                   <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
-                    {exp.company || 'Company Name'}
+                    {leftPart}
                   </div>
-                </div>
-
-                {/* Line 2: Job Title (Italic) + Dates (right-aligned) */}
-                <div className="flex justify-between items-baseline gap-3">
-                  <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
-                    {exp.title || 'Job Title'}
-                  </div>
-                  {formatDateRange(exp.startDate, exp.endDate) && (
+                  {dateRange && (
                     <div className="text-gray-600 text-xs whitespace-nowrap" style={{ fontSize: '10pt' }}>
-                      {formatDateRange(exp.startDate, exp.endDate)}
+                      {dateRange}
                     </div>
                   )}
                 </div>
                 
-                {/* Bullets */}
+                {/* Bullets with proper ATS bullet points */}
                 {bullets.length > 0 && (
-                  <ul className="list-disc list-inside text-xs mt-2 space-y-0.5 text-gray-800" style={{ fontSize: '10pt' }}>
+                  <ul className="list-disc list-inside text-xs mt-2 space-y-0.5 text-gray-800" style={{ fontSize: '10pt', marginLeft: '16px' }}>
                     {bullets.slice(0, 4).map((bullet, bIndex) => (
                       <li key={bIndex} className="leading-snug">
                         {bullet.replace(/^[-•▪*]+\s*/, '')}
@@ -137,7 +134,7 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Format: <span className="font-semibold">Company Name</span> (bold) + dates (right) → <span className="italic">Job Title</span> (italic)
+          Format: <span className="font-semibold">Company – Title</span> (bold, left) + <span className="italic">Dates</span> (right-aligned)
         </p>
       </CardContent>
     </Card>
