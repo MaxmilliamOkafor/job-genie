@@ -364,10 +364,10 @@ serve(async (req) => {
 
           yPosition -= LINE_HEIGHT + 4;
 
-          // Bullet points
+          // Bullet points - use standard bullet character for ATS compatibility
           for (const bullet of exp.bullets) {
             ensureSpace(LINE_HEIGHT * 2);
-            const bulletText = `- ${bullet}`;
+            const bulletText = `• ${bullet}`;
             drawWrappedText(bulletText, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
           }
 
