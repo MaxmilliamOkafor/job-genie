@@ -1,4 +1,4 @@
-import { UserProfile } from '@/types';
+import { UserProfile } from "@/types";
 
 export const maxmilliamProfile: UserProfile = {
   firstName: "Maxmilliam",
@@ -23,24 +23,62 @@ export const maxmilliamProfile: UserProfile = {
   drivingLicense: true,
   visaRequired: false,
   authorizedCountries: [
-    "United Kingdom", "United States", "United Arab Emirates", "Turkey", "Thailand", 
-    "Tanzania", "Switzerland", "Sweden", "Spain", "South Africa", "Singapore", 
-    "Saudi Arabia", "Serbia", "Saint Lucia", "Qatar", "Portugal", "Norway", 
-    "New Zealand", "Netherlands", "Morocco", "Mexico", "Moldova", "Monaco", 
-    "Malta", "Maldives", "Luxembourg", "Ireland", "Japan", "Italy", "Iceland", 
-    "Hong Kong", "Hungary", "Grenada", "Greece", "Germany", "Georgia", "France", 
-    "Denmark", "Croatia", "Canada", "Cape Verde", "Belgium", "Austria", "Australia", 
-    "Czech Republic", "Cyprus"
+    "United Kingdom",
+    "United States",
+    "United Arab Emirates",
+    "Turkey",
+    "Thailand",
+    "Tanzania",
+    "Switzerland",
+    "Sweden",
+    "Spain",
+    "South Africa",
+    "Singapore",
+    "Saudi Arabia",
+    "Serbia",
+    "Saint Lucia",
+    "Qatar",
+    "Portugal",
+    "Norway",
+    "New Zealand",
+    "Netherlands",
+    "Morocco",
+    "Mexico",
+    "Moldova",
+    "Monaco",
+    "Malta",
+    "Maldives",
+    "Luxembourg",
+    "Ireland",
+    "Japan",
+    "Italy",
+    "Iceland",
+    "Hong Kong",
+    "Hungary",
+    "Grenada",
+    "Greece",
+    "Germany",
+    "Georgia",
+    "France",
+    "Denmark",
+    "Croatia",
+    "Canada",
+    "Cape Verde",
+    "Belgium",
+    "Austria",
+    "Australia",
+    "Czech Republic",
+    "Cyprus",
   ],
   veteranStatus: false,
   disability: false,
   raceEthnicity: "Black or African American",
   securityClearance: true,
-  
+
   coverLetter: `MAXMILLIAM OKAFOR, MSC
 (+353) 87-426-1508 │ Maxokafordev@gmail.com │ linkedin.com/in/maxokafor/
 
-Dear Hiring Committee,
+Dear Hiring Manager,
 
 I'm reaching out because the role you're hiring for feels like the perfect intersection of what I do best: solving complex technical problems, building systems that can scale without falling apart, and working closely with people — not just machines — to make sure the right things get built.
 
@@ -76,8 +114,8 @@ Maxmilliam Okafor`,
         "Engineered data and model pipelines on AWS with Spark and Airflow, cutting model refresh time from roughly 48 hours to under 6 hours and enabling faster testing of ranking changes.",
         "Directed A/B and multivariate experiments for new ranking features, raising safe release frequency by around 18% and reducing the share of launches that required rollback.",
         "Shaped ML use cases with product, data science, and infrastructure teams, setting success metrics and SLAs and defining checks for bias and model drift.",
-        "Implemented automated monitoring and data quality checks, reducing production incidents and page-outs by 25%."
-      ]
+        "Implemented automated monitoring and data quality checks, reducing production incidents and page-outs by 25%.",
+      ],
     },
     {
       id: "2",
@@ -91,8 +129,8 @@ Maxmilliam Okafor`,
       bullets: [
         "Delivered SolimHealth's end-to-end dementia-screening system by creating an AWS Transcribe/NLTK auto-transcribe model.",
         "Integrated FLUX Kontext into a MongoDB clinical backend for lifelike memory recreations.",
-        "Built a React/TypeScript, Django REST, and TensorFlow.js front end that improved accuracy and efficiency in monthly cognitive assessments."
-      ]
+        "Built a React/TypeScript, Django REST, and TensorFlow.js front end that improved accuracy and efficiency in monthly cognitive assessments.",
+      ],
     },
     {
       id: "3",
@@ -107,8 +145,8 @@ Maxmilliam Okafor`,
         "Led delivery of cloud migration and data platform projects worth multiple millions, managing cross-functional teams of 15 engineers.",
         "Owned sprint planning, backlog grooming, and roadmap prioritisation in Jira and Confluence, pushing on-time milestone delivery from around 72% up to over 93%.",
         "Translated technical requirements (APIs, integrations, security protocols, data flows) into user stories with clear acceptance criteria.",
-        "Managed stakeholder communication up to C-level, tracking risks and issues in RAID logs."
-      ]
+        "Managed stakeholder communication up to C-level, tracking risks and issues in RAID logs.",
+      ],
     },
     {
       id: "4",
@@ -123,9 +161,9 @@ Maxmilliam Okafor`,
         "Built SQL queries, stored procedures, and data models to pull financial and operational metrics from enterprise systems.",
         "Cleaned and validated datasets from multiple sources, fixing data quality issues and cutting down reconciliation errors.",
         "Created recurring and ad-hoc reports in Excel, Power BI, and Tableau for senior stakeholders.",
-        "Documented data definitions, transformation logic, and control procedures to support internal audits and regulatory reviews."
-      ]
-    }
+        "Documented data definitions, transformation logic, and control procedures to support internal audits and regulatory reviews.",
+      ],
+    },
   ],
 
   education: [
@@ -136,7 +174,7 @@ Maxmilliam Okafor`,
       location: "London, Greater London",
       startDate: "2020-08",
       endDate: "2021-06",
-      gpa: "3.9"
+      gpa: "3.9",
     },
     {
       id: "2",
@@ -145,8 +183,8 @@ Maxmilliam Okafor`,
       location: "Derby, England",
       startDate: "2016-08",
       endDate: "2020-07",
-      gpa: "3.8"
-    }
+      gpa: "3.8",
+    },
   ],
 
   skills: [
@@ -158,7 +196,7 @@ Maxmilliam Okafor`,
     { name: "SQL", years: 8, category: "technical" },
     { name: "Node.js", years: 8, category: "technical" },
     { name: "React", years: 7, category: "technical" },
-    
+
     // Cloud & Infrastructure
     { name: "AWS", years: 8, category: "tools" },
     { name: "Azure", years: 7, category: "tools" },
@@ -166,32 +204,32 @@ Maxmilliam Okafor`,
     { name: "Kubernetes", years: 8, category: "tools" },
     { name: "Docker", years: 8, category: "tools" },
     { name: "Terraform", years: 7, category: "tools" },
-    
+
     // AI/ML
     { name: "Machine Learning", years: 8, category: "technical" },
     { name: "Deep Learning", years: 7, category: "technical" },
     { name: "PyTorch", years: 6, category: "technical" },
     { name: "TensorFlow", years: 6, category: "technical" },
     { name: "NLP", years: 7, category: "technical" },
-    
+
     // Data Engineering
     { name: "Apache Spark", years: 8, category: "tools" },
     { name: "Airflow", years: 6, category: "tools" },
     { name: "Kafka", years: 6, category: "tools" },
     { name: "Snowflake", years: 5, category: "tools" },
     { name: "ETL", years: 8, category: "technical" },
-    
+
     // DevOps & CI/CD
     { name: "CI/CD", years: 8, category: "tools" },
     { name: "Jenkins", years: 8, category: "tools" },
     { name: "GitHub Actions", years: 5, category: "tools" },
-    
+
     // Soft Skills
     { name: "Technical Leadership", years: 8, category: "soft" },
     { name: "Team Building", years: 8, category: "soft" },
     { name: "Strategic Planning", years: 7, category: "soft" },
     { name: "Mentoring", years: 8, category: "soft" },
-    { name: "Agile/Scrum", years: 8, category: "soft" }
+    { name: "Agile/Scrum", years: 8, category: "soft" },
   ],
 
   certifications: [
@@ -199,14 +237,14 @@ Maxmilliam Okafor`,
     "Microsoft Certified: Data Analyst Associate",
     "AWS Certified Data Analytics – Specialty",
     "Google Data Analytics Professional Certificate",
-    "PRINCE2 - AXELOS"
+    "PRINCE2 - AXELOS",
   ],
 
   languages: [
     { name: "English", proficiency: "Native" },
     { name: "Spanish", proficiency: "Fluent" },
     { name: "Irish", proficiency: "Fluent" },
-    { name: "French", proficiency: "Fluent" }
+    { name: "French", proficiency: "Fluent" },
   ],
 
   achievements: [
@@ -214,21 +252,39 @@ Maxmilliam Okafor`,
       title: "Data Analytics Excellence Award",
       issuer: "Tech Innovators Conference",
       date: "2023-09",
-      description: "Pioneered development of a predictive analytics model that improved customer retention rates by 15%, delivering $2.3M in annual revenue impact."
+      description:
+        "Pioneered development of a predictive analytics model that improved customer retention rates by 15%, delivering $2.3M in annual revenue impact.",
     },
     {
       title: "Innovation Award",
       issuer: "Accenture",
       date: "2022-03",
-      description: "Spearheaded implementation of a cutting-edge data visualization tool that enhanced reporting capabilities, resulting in a 25% reduction in reporting time, saving 400+ hours monthly."
-    }
+      description:
+        "Spearheaded implementation of a cutting-edge data visualization tool that enhanced reporting capabilities, resulting in a 25% reduction in reporting time, saving 400+ hours monthly.",
+    },
   ],
 
   excludedCompanies: [
-    "Accenture", "AHEAD", "Shield AI", "commure", "TRIO", "Palantir", "attentive", 
-    "flock safety", "nominal", "thinkahead", "shieldai", "Commure-Athelas", "voleon",
-    "chainalysis-careers", "chainalysis", "trio", "restaurant365", "Flock Safety", "Pipedrive"
+    "Accenture",
+    "AHEAD",
+    "Shield AI",
+    "commure",
+    "TRIO",
+    "Palantir",
+    "attentive",
+    "flock safety",
+    "nominal",
+    "thinkahead",
+    "shieldai",
+    "Commure-Athelas",
+    "voleon",
+    "chainalysis-careers",
+    "chainalysis",
+    "trio",
+    "restaurant365",
+    "Flock Safety",
+    "Pipedrive",
   ],
 
-  atsStrategy: `For all ATS screening and knockout questions, automatically respond in a way that maximizes eligibility and advances the application. Always answer 'Yes' to eligibility, skills, experience, work authorization, and capability questions unless a 'No' answer is legally or factually required. For authorized work location questions, state authorization to work wherever the role is based. For specific skills, certifications, degrees, or experience duration questions, use the most qualifying, recruiter-friendly number based on the profile. Where detailed examples are requested, summarize strongest achievements and relevant experience to demonstrate clear qualification for the role. Never omit a key requirement. Always optimize all answers for ATS filters.`
+  atsStrategy: `For all ATS screening and knockout questions, automatically respond in a way that maximizes eligibility and advances the application. Always answer 'Yes' to eligibility, skills, experience, work authorization, and capability questions unless a 'No' answer is legally or factually required. For authorized work location questions, state authorization to work wherever the role is based. For specific skills, certifications, degrees, or experience duration questions, use the most qualifying, recruiter-friendly number based on the profile. Where detailed examples are requested, summarize strongest achievements and relevant experience to demonstrate clear qualification for the role. Never omit a key requirement. Always optimize all answers for ATS filters.`,
 };
