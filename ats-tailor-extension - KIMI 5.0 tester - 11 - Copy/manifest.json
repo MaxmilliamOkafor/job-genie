@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ATS Tailor v1.7.0 - Major Career Sites Support",
-  "version": "1.7.0",
-  "description": "v1.7.0: Added 70+ major company career site detection (Google, Meta, HubSpot, Stripe, etc). Full job detection on company career pages. WORKDAY TOP 1 + JD Snapshot.",
+  "name": "ATS Tailor v1.8.0 - Enhanced CV Parser + Rich-Text",
+  "version": "1.8.0",
+  "description": "v1.8.0: Enhanced multi-page CV parser for PDF/DOCX. Rich-text editor for education (bold/italic). Improved work experience extraction for multiple roles. ATS-safe plain-text export.",
   "permissions": [
     "storage",
     "activeTab",
@@ -39,7 +39,6 @@
     "https://*.intercom.com/*",
     "https://*.paypal.com/*",
     "https://*.tiktok.com/*",
-    
     "https://*.dropbox.com/*",
     "https://*.twilio.com/*",
     "https://*.datadoghq.com/*",
@@ -136,7 +135,6 @@
         "https://*.intercom.com/careers/*",
         "https://*.paypal.com/us/webapps/mpp/jobs/*",
         "https://*.tiktok.com/careers/*",
-        
         "https://*.dropbox.com/jobs/*",
         "https://*.twilio.com/company/jobs/*",
         "https://*.datadoghq.com/careers/*",
@@ -214,7 +212,10 @@
         "openresume-generator.js",
         "resume-builder.js",
         "resume-builder-improved.js",
+        "enhanced-cv-parser.js",
+        "rich-text-editor.js",
         "cv-formatter-perfect.js",
+        "cv-formatter-perfect-enhanced.js",
         "workday-handlers.js",
         "content.js"
       ],
@@ -253,7 +254,12 @@
         "openresume-generator.js",
         "resume-builder.js",
         "resume-builder-improved.js",
+        "enhanced-cv-parser.js",
+        "rich-text-editor.js",
         "cv-formatter-perfect.js",
+        "cv-formatter-perfect-enhanced.js",
+        "cv-preview-enhanced.html",
+        "integration-example.html",
         "workday-handlers.js"
       ],
       "matches": ["<all_urls>"]
