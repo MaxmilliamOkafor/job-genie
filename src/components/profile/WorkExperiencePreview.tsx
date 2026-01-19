@@ -90,16 +90,21 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                 ? exp.description.split(/\r?\n/).filter(Boolean)
                 : [];
 
-            // Build left part: Company – Title (NO pipe characters)
-            const leftPart = [exp.company, exp.title].filter(Boolean).join(' – ') || 'Company – Job Title';
+            const company = exp.company || 'Company';
+            const title = exp.title || 'Job Title';
             const dateRange = formatDateRange(exp.startDate, exp.endDate);
 
             return (
               <div key={exp.id || index} className="space-y-1">
-                {/* Single line: Company – Title on left, Dates on far right */}
+                {/* Line 1: Company (bold) */}
+                <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
+                  {company}
+                </div>
+                
+                {/* Line 2: Job Title (italic) with Dates right-aligned */}
                 <div className="flex justify-between items-baseline gap-4">
-                  <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
-                    {leftPart}
+                  <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
+                    {title}
                   </div>
                   {dateRange && (
                     <div className="text-gray-600 text-xs whitespace-nowrap" style={{ fontSize: '10pt' }}>
@@ -134,7 +139,7 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Format: <span className="font-semibold">Company – Title</span> (bold, left) + <span className="italic">Dates</span> (right-aligned)
+          Format: <span className="font-semibold">Company</span> (bold, Line 1) + <span className="italic">Title</span> (italic, left) + <span>Dates</span> (right, Line 2)
         </p>
       </CardContent>
     </Card>
