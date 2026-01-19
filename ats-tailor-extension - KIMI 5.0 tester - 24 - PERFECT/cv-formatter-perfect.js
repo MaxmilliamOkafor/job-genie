@@ -588,34 +588,41 @@
       margin-bottom: ${ATS_CONFIG.sectionSpacing};
     }
     
+    /* Job header: Company – Title on left, dates on far right */
     .cv-job-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
       margin-bottom: 4px;
     }
     
-    /* Company - Bold */
-    .cv-company {
+    /* Company – Title on left */
+    .cv-job-left {
       font-weight: bold;
       font-size: 11pt;
+      white-space: nowrap;
     }
     
-    /* Job Title - Italic */
-    .cv-job-title {
-      font-style: italic;
-      font-size: ${ATS_CONFIG.fontSize.body};
-      color: ${ATS_CONFIG.colors.text};
-    }
-    
-    .cv-job-meta {
+    /* Dates on right */
+    .cv-job-right {
       font-size: ${ATS_CONFIG.fontSize.small};
       color: ${ATS_CONFIG.colors.secondary};
+      white-space: nowrap;
+      font-weight: normal;
     }
     
     .cv-job-details {
       margin-top: 4px;
     }
     
-    .cv-bullet {
-      margin-left: 16px;
+    /* ATS-friendly bullet list using <ul><li> */
+    .cv-bullets {
+      margin: 4px 0 0 20px;
+      padding: 0;
+      list-style-type: disc;
+    }
+    
+    .cv-bullets li {
       margin-bottom: 3px;
       line-height: ${ATS_CONFIG.lineHeight.normal};
     }
@@ -684,19 +691,24 @@
     ${experience.length > 0 ? `
     <div class="cv-section">
       <div class="cv-section-title">Work Experience</div>
-      ${experience.map((job, index) => `
+      ${experience.map((job, index) => {
+        // Build left part: Company – Title (NO pipe characters)
+        const leftPart = [job.company, job.title].filter(Boolean).join(' – ');
+        return `
       <div class="cv-job">
         <div class="cv-job-header">
-          <div class="cv-company">${escapeHtml(job.company)}</div>
-          <div class="cv-job-title">${escapeHtml(job.titleLine || job.title)}</div>
+          <span class="cv-job-left">${escapeHtml(leftPart)}</span>
+          ${job.dates ? `<span class="cv-job-right">${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}
         </div>
-        ${job.bullets.length > 0 ? \`
+        ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
-          \${job.bullets.map(bullet => \`<div class="cv-bullet">• \${escapeHtml(bullet)}</div>\`).join('\\n          ')}
+          <ul class="cv-bullets">
+            ${job.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('\n            ')}
+          </ul>
         </div>
-        \` : ''}
-      </div>
-      `).join('\n      ')}
+        ` : ''}
+      </div>`;
+      }).join('\n      ')}
     </div>
     ` : ''}
     

@@ -155,7 +155,8 @@
     
     // BUILD EXPERIENCE SECTION - SINGLE SOURCE OF TRUTH: profile.work_experience
     // NEVER modify company, title, dates - only append keywords to bullets
-    // CLEAN LAYOUT: Line 1 = Company, Line 2 = Title – YYYY – YYYY
+    // LAYOUT: Company – Title on left, YYYY – YYYY on far right (same line)
+    // BULLETS: Use proper ATS bullet points (•) not dashes
     buildExperienceSection(data, keywords) {
       // 1) SINGLE SOURCE OF TRUTH: structured work_experience from profile
       const experience = Array.isArray(data.workExperience)
@@ -173,8 +174,8 @@
 
       return experience
         .map((job) => {
-          // ---- HEADER: READ-ONLY from profile - use clean 2-line format ----
-          const companyLine = job.company || '';
+          // ---- HEADER: READ-ONLY from profile ----
+          const company = job.company || '';
           const title = job.title || '';
           
           // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
@@ -192,20 +193,18 @@
             .replace(/\s*–\s*/g, ' – ')    // ensure spaces around en dash
             : '';
           
-          // Build title line: Title – YYYY – YYYY
-          let titleLine = '';
-          if (title && normalisedDates) {
-            titleLine = `${title} – ${normalisedDates}`;
-          } else if (title) {
-            titleLine = title;
-          } else if (normalisedDates) {
-            titleLine = normalisedDates;
-          }
+          // Build header: "Company – Title" on left (NO pipe characters)
+          const leftPart = [company, title].filter(Boolean).join(' – ');
           
-          // Build clean 2-line header
-          const headerLines = [companyLine, titleLine].filter(Boolean).join('\n');
+          // For plain text: single line with dates right-aligned conceptually
+          // Format: "Company – Title                    YYYY – YYYY"
+          let headerLine = leftPart;
+          if (normalisedDates) {
+            headerLine = `${leftPart}    ${normalisedDates}`;
+          }
 
           // ---- BULLETS: Preserve original content, only APPEND keywords ----
+          // Use proper ATS bullet points (•) instead of dashes
           let bullets = job.bullets || job.achievements || job.responsibilities || [];
 
           if (typeof bullets === "string") {
@@ -216,19 +215,19 @@
           }
 
           if (!Array.isArray(bullets) || !bullets.length) {
-            return headerLines;
+            return headerLine;
           }
 
           const enhancedBullets = bullets.slice(0, maxBulletsPerRole).map((bullet, idx) => {
             // Clean bullet prefix
-            let text = (bullet || "").replace(/^\s*[-•]\s*/, "").trim();
+            let text = (bullet || "").replace(/^\s*[-•*]\s*/, "").trim();
             if (!text) return "";
 
             // Only enhance first 3 bullets per role
             if (idx >= 3 || !keywordArray.length) {
               // Ensure proper sentence ending
               if (text && !text.endsWith('.')) text += '.';
-              return `- ${text}`;
+              return `• ${text}`;
             }
 
             const bulletLower = text.toLowerCase();
@@ -247,7 +246,7 @@
 
             if (!toInject.length) {
               if (text && !text.endsWith('.')) text += '.';
-              return `- ${text}`;
+              return `• ${text}`;
             }
 
             // UK spelling for injection phrases
@@ -261,10 +260,10 @@
               text = `${text}, ${tail}.`;
             }
 
-            return `- ${text}`;
+            return `• ${text}`;
           }).filter(Boolean);
 
-          return `${headerLines}\n${enhancedBullets.join("\n")}`;
+          return `${headerLine}\n${enhancedBullets.join("\n")}`;
         })
         .join("\n\n");
     },
@@ -388,6 +387,8 @@
     },
 
     // ============ GENERATE HTML PREVIEW ============
+    // Layout: Company – Title on left, dates on far right (same line)
+    // Bullets: Use proper ATS bullet points (•) in <ul><li>
     generateHTMLPreview(resume, templateName = 'professional') {
       const template = this.TEMPLATES[templateName] || this.TEMPLATES.professional;
       
@@ -396,8 +397,45 @@
         return str.replace(/&/g, '&amp;')
                   .replace(/</g, '&lt;')
                   .replace(/>/g, '&gt;')
-                  .replace(/"/g, '&quot;')
-                  .replace(/\n/g, '<br>');
+                  .replace(/"/g, '&quot;');
+      };
+      
+      // Parse experience text back to structured format for proper HTML rendering
+      const parseExperienceForHTML = (expText) => {
+        if (!expText) return '';
+        
+        const jobs = expText.split('\n\n').filter(Boolean);
+        return jobs.map(jobBlock => {
+          const lines = jobBlock.split('\n');
+          if (lines.length === 0) return '';
+          
+          // First line contains: "Company – Title    YYYY – YYYY"
+          const headerLine = lines[0] || '';
+          const bullets = lines.slice(1).filter(l => l.startsWith('•'));
+          
+          // Parse header: split by multiple spaces to separate left and right parts
+          const headerMatch = headerLine.match(/^(.+?)\s{2,}(\d{4}\s*–\s*.+)$/);
+          let leftPart = headerLine;
+          let datePart = '';
+          
+          if (headerMatch) {
+            leftPart = headerMatch[1].trim();
+            datePart = headerMatch[2].trim();
+          }
+          
+          return `
+        <div class="job">
+          <div class="job-header">
+            <span class="job-left">${escapeHtml(leftPart)}</span>
+            ${datePart ? `<span class="job-right">${escapeHtml(datePart)}</span>` : ''}
+          </div>
+          ${bullets.length > 0 ? `
+          <ul class="job-bullets">
+            ${bullets.map(b => `<li>${escapeHtml(b.replace(/^•\s*/, ''))}</li>`).join('\n            ')}
+          </ul>
+          ` : ''}
+        </div>`;
+        }).join('\n      ');
       };
       
       return `
@@ -415,12 +453,37 @@
       color: #000;
       background: #fff;
     }
-    .name { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 4px; }
+    .name { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
     .contact { text-align: center; color: #333; margin-bottom: 16px; }
-    .section-title { font-size: 12pt; font-weight: bold; border-bottom: 1px solid #000; margin: 16px 0 8px 0; padding-bottom: 4px; }
+    .section-title { font-size: 12pt; font-weight: bold; border-bottom: 1px solid #000; margin: 16px 0 8px 0; padding-bottom: 4px; text-transform: uppercase; }
     .section-content { margin-bottom: 12px; }
-    .bullet { margin-left: 16px; }
-    .job-header { font-weight: bold; margin-top: 12px; }
+    
+    /* Job header: left part and dates on same line */
+    .job { margin-bottom: 16px; }
+    .job-header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: baseline;
+      font-weight: bold; 
+      margin-bottom: 4px;
+    }
+    .job-left { white-space: nowrap; }
+    .job-right { 
+      white-space: nowrap; 
+      font-weight: normal;
+      color: #333;
+    }
+    
+    /* ATS-friendly bullet list */
+    .job-bullets {
+      margin: 4px 0 0 20px;
+      padding: 0;
+      list-style-type: disc;
+    }
+    .job-bullets li {
+      margin-bottom: 3px;
+      line-height: 1.3;
+    }
   </style>
 </head>
 <body>
@@ -435,7 +498,9 @@
   
   ${resume.experience ? `
     <div class="section-title">WORK EXPERIENCE</div>
-    <div class="section-content">${escapeHtml(resume.experience)}</div>
+    <div class="section-content">
+      ${parseExperienceForHTML(resume.experience)}
+    </div>
   ` : ''}
   
   ${resume.education ? `
