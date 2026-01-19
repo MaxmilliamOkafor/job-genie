@@ -8,7 +8,7 @@ Senior technology professional with 8+ years of experience leading data, enginee
 
 WORK EXPERIENCE
 
-Meta (formerly Facebook Inc) | Senior Software Engineer | 2023-01 - Present
+Meta | Senior Software Engineer | 2023-01 - Present
 • Designed and deployed ML-based content moderation workflows using Llama models, reducing manual review queue by 40% while maintaining 99.2% accuracy in production environment serving 2M+ daily active users
 • Architected end-to-end automation for Meta AI Studio's model deployment pipeline, cutting release cycles from 2 weeks to 3 days and eliminating 15 hours of manual work per sprint
 • Led refactoring of Meta Business Suite's data ingestion layer, resulting in 60% faster query performance and significant annual savings in compute costs
