@@ -5,24 +5,28 @@ A comprehensive CV parsing and formatting system with multi-page document suppor
 ## ✨ New Features
 
 ### 📄 Multi-Page Document Parsing
+
 - **Full document scanning**: Parse entire CVs from multi-page PDF and DOCX files
 - **Enhanced section detection**: Intelligent algorithms identify work experience, education, skills, and other sections
-- **Multiple role extraction**: Reliably extracts all work experiences from companies like Meta, SolimHealth, Accenture, and Citi
+- **Multiple role extraction**: Reliably extracts all work experiences from companies like Meta, SolimHealth, Accenture, and Citigroup
 - **Date pattern recognition**: Supports various date formats (2020-2022, Jan 2020 - Dec 2022, Present, etc.)
 
 ### 📝 Rich-Text Education Editor
+
 - **Bold and italic controls**: Format education descriptions with visual toolbar or keyboard shortcuts
 - **Markdown-style support**: Type `**text**` for bold and `*text*` for italic
 - **ATS-safe export**: Rich-text preserved in HTML/PDF, plain text for ATS systems
 - **Lightweight implementation**: No external dependencies, works in any modern browser
 
 ### 🎯 ATS-Safe Export
+
 - **100% ATS compatibility**: Plain text export removes all formatting for Applicant Tracking Systems
 - **Dual format support**: Keep rich-text for human readers, plain text for ATS
 - **Automatic conversion**: Handles HTML to plain text conversion seamlessly
 - **Industry standard formatting**: Follows ATS best practices (no tables, standard fonts, proper spacing)
 
 ### 🔍 Enhanced Work Experience Extraction
+
 - **Multiple pattern matching**: Uses various regex patterns to detect job titles, companies, and dates
 - **Company/title swap detection**: Intelligently corrects when company and title are reversed
 - **Date extraction**: Isolates dates from company and title fields
@@ -31,11 +35,13 @@ A comprehensive CV parsing and formatting system with multi-page document suppor
 ## 📁 Files Included
 
 ### Core Components
+
 - **`enhanced-cv-parser.js`** - Advanced CV parser with multi-page support
 - **`rich-text-editor.js`** - Lightweight rich-text editor with formatting controls
 - **`cv-formatter-perfect-enhanced.js`** - Enhanced CV formatter with rich-text support
 
 ### Demo & Documentation
+
 - **`cv-preview-enhanced.html`** - Interactive demo with all features
 - **`integration-example.html`** - Comprehensive integration guide and examples
 - **`README.md`** - This documentation file
@@ -176,7 +182,7 @@ CVFormatterPerfectEnhanced.downloadHTML(result.html, 'CV_RichText.html');
 const parserConfig = {
     // Multi-page support
     extractAllPages: true,
-    
+
     // Date detection
     enhancedDateDetection: true,
     datePatterns: [
@@ -184,10 +190,10 @@ const parserConfig = {
         /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
         /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi
     ],
-    
+
     // Rich-text support
     richTextEducation: true,
-    
+
     // Company name patterns for better detection
     companyNamePatterns: [
         /\b(inc|llc|ltd|corp|corporation|company|co|plc|group)\b/i,
@@ -195,7 +201,7 @@ const parserConfig = {
         /\b(accenture|deloitte|pwc|kpmg|ey|mckinsey)\b/i,
         /\b(citi|jpmorgan|goldman|morgan stanley|barclays)\b/i
     ],
-    
+
     // Job title patterns
     jobTitlePatterns: [
         /\b(engineer|developer|architect|analyst|manager|director|scientist)\b/i,
@@ -212,19 +218,19 @@ const parser = new EnhancedCVParser(parserConfig);
 const editorConfig = {
     // Toolbar options
     toolbar: ['bold', 'italic', 'underline'],
-    
+
     // Placeholder text
     placeholder: 'Enter education description...',
-    
+
     // Auto-convert markdown-style formatting
     autoConvertMarkdown: true,
-    
+
     // Character limit
     maxLength: 500,
-    
+
     // ATS-safe export mode
     atsSafeExport: true,
-    
+
     // Custom styles
     styles: {
         editor: {
@@ -255,18 +261,21 @@ Open `cv-preview-enhanced.html` in your browser to see all features in action:
 ## 📋 Best Practices
 
 ### For CV Parsing
+
 1. **Test with real CV files** from your target audience
 2. **Handle parsing errors gracefully** with fallback to manual entry
 3. **Cache parsed results** for better performance
 4. **Validate extracted data** before using in CV generation
 
 ### For Rich-Text Editor
+
 1. **Sanitize HTML content** before saving to database
 2. **Test across browsers** for compatibility
 3. **Provide clear instructions** for keyboard shortcuts (Ctrl+B, Ctrl+I)
 4. **Limit character count** to prevent overly long descriptions
 
 ### For ATS Export
+
 1. **Always test with actual ATS systems** when possible
 2. **Keep formatting simple** in plain text version
 3. **Maintain consistent section ordering** across formats
@@ -277,16 +286,19 @@ Open `cv-preview-enhanced.html` in your browser to see all features in action:
 ### Common Issues
 
 **Parser not finding all experiences:**
+
 - Ensure CV uses standard section headers
 - Check that dates are in recognizable formats
 - Verify company names match known patterns
 
 **Rich-text editor not working:**
+
 - Check browser compatibility (modern browsers only)
 - Ensure container element exists before initialization
 - Verify no CSS conflicts with editor styles
 
 **ATS export formatting issues:**
+
 - Test with multiple ATS systems
 - Verify plain text uses consistent spacing
 - Check for special characters that may cause issues
@@ -324,6 +336,7 @@ const result = CVFormatterPerfectEnhanced.generateCV(candidateData, tailoredCont
 ### Backward Compatibility
 
 The enhanced version maintains full backward compatibility:
+
 - All existing API methods work unchanged
 - Plain text export remains the same
 - HTML generation follows same patterns
@@ -332,6 +345,7 @@ The enhanced version maintains full backward compatibility:
 ## 📞 Support
 
 For issues or questions:
+
 1. Check the troubleshooting section above
 2. Review the integration examples in `integration-example.html`
 3. Test with the interactive demo in `cv-preview-enhanced.html`
