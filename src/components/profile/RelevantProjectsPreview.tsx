@@ -50,7 +50,7 @@ export function RelevantProjectsPreview({ projects }: RelevantProjectsPreviewPro
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Eye className="h-4 w-4" />
-            Relevant Projects Preview
+            Technical Projects Preview
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -67,10 +67,10 @@ export function RelevantProjectsPreview({ projects }: RelevantProjectsPreviewPro
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Eye className="h-4 w-4" />
-          Relevant Projects Preview
+          Technical Projects Preview
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          This shows exactly how your projects will render in the final ATS PDF
+          This shows exactly how your technical projects will render in the final ATS PDF
         </p>
       </CardHeader>
       <CardContent>

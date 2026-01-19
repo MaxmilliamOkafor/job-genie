@@ -1186,12 +1186,12 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        {/* Work Experience */}
+        {/* Professional Experience */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
-              Work Experience
+              Professional Experience
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1219,7 +1219,7 @@ const Profile = () => {
                   }}
                 >
                   <Plus className="h-4 w-4" />
-                  Add Work Experience
+                  Add Professional Experience
                 </Button>
                 {(localProfile.work_experience || []).length > 0 && (
                   <Button 
@@ -1228,7 +1228,7 @@ const Profile = () => {
                     onClick={() => {
                       if (window.confirm('Are you sure you want to clear ALL work experience? This will remove all entries from your profile and cannot be undone.')) {
                         updateLocalField('work_experience', []);
-                        toast.success('Work experience cleared. Click Save to persist changes.');
+                        toast.success('Professional experience cleared. Click Save to persist changes.');
                       }
                     }}
                   >
@@ -1394,15 +1394,15 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        {/* Work Experience ATS Preview */}
+        {/* Professional Experience ATS Preview */}
         <WorkExperiencePreview workExperience={localProfile.work_experience || []} />
 
-        {/* Relevant Projects */}
+        {/* Technical Projects */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FolderGit2 className="h-5 w-5" />
-              Relevant Projects
+              Technical Projects
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
