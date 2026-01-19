@@ -466,14 +466,14 @@
       
       // Experience
       if (resume.experience) {
-        sections.push('WORK EXPERIENCE');
+        sections.push('PROFESSIONAL EXPERIENCE');
         sections.push(resume.experience);
         sections.push('');
       }
       
       // Projects
       if (resume.projects) {
-        sections.push('RELEVANT PROJECTS');
+        sections.push('TECHNICAL PROJECTS');
         sections.push(resume.projects);
         sections.push('');
       }
@@ -635,14 +635,14 @@
   ` : ''}
   
   ${resume.experience ? `
-    <div class="section-title">WORK EXPERIENCE</div>
+    <div class="section-title">PROFESSIONAL EXPERIENCE</div>
     <div class="section-content">
       ${parseExperienceForHTML(resume.experience)}
     </div>
   ` : ''}
   
   ${resume.projects ? `
-    <div class="section-title">RELEVANT PROJECTS</div>
+    <div class="section-title">TECHNICAL PROJECTS</div>
     <div class="section-content">
       ${parseExperienceForHTML(resume.projects)}
     </div>
