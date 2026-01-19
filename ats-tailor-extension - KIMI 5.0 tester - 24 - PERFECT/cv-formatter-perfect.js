@@ -296,7 +296,22 @@
       return this.normaliseDates(dateStr); // Return normalised if no years found
     },
 
-    // ============ PARSE EXPERIENCE ============
+    // ============ RIGHT ALIGN TITLE + DATES ============
+    // Creates a line with title on left and dates on far right using dynamic spacing
+    // For plain text: "Job Title                    2023 – Present"
+    rightAlignTitleDates(title, dates, maxWidth = 70) {
+      if (!title && !dates) return '';
+      if (!dates) return title || '';
+      if (!title) return dates;
+      
+      // Calculate dynamic spacing
+      const titleLen = title.length;
+      const datesLen = dates.length;
+      const minSpaces = 8;
+      const spaces = Math.max(minSpaces, maxWidth - titleLen - datesLen);
+      
+      return `${title}${' '.repeat(spaces)}${dates}`;
+    },
     parseExperience(text) {
       const jobs = [];
       const lines = text.split('\n');
@@ -583,28 +598,32 @@
       line-height: ${ATS_CONFIG.lineHeight.relaxed};
     }
     
-    /* Experience */
+    /* Experience - Two-line layout */
     .cv-job {
       margin-bottom: ${ATS_CONFIG.sectionSpacing};
     }
     
-    /* Job header: Company – Title on left, dates on far right */
-    .cv-job-header {
+    /* Line 1: Company (bold) */
+    .cv-job-company {
+      font-weight: bold;
+      font-size: 10.5pt;
+      margin-bottom: 2px;
+    }
+    
+    /* Line 2: Title (left, italic) with dates right-aligned */
+    .cv-job-title-line {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
       margin-bottom: 4px;
     }
     
-    /* Company – Title on left */
-    .cv-job-left {
-      font-weight: bold;
-      font-size: 11pt;
-      white-space: nowrap;
+    .cv-job-title {
+      font-style: italic;
+      font-size: 10.5pt;
     }
     
-    /* Dates on right */
-    .cv-job-right {
+    .cv-job-dates {
       font-size: ${ATS_CONFIG.fontSize.small};
       color: ${ATS_CONFIG.colors.secondary};
       white-space: nowrap;
@@ -687,18 +706,18 @@
     </div>
     ` : ''}
     
-    <!-- Work Experience -->
+    <!-- Work Experience - Two-line format -->
     ${experience.length > 0 ? `
     <div class="cv-section">
       <div class="cv-section-title">Work Experience</div>
-      ${experience.map((job, index) => {
-        // Build left part: Company – Title (NO pipe characters)
-        const leftPart = [job.company, job.title].filter(Boolean).join(' – ');
+      ${experience.map((job) => {
+        const yearDates = this.toYearOnly(job.dates);
         return `
       <div class="cv-job">
-        <div class="cv-job-header">
-          <span class="cv-job-left">${escapeHtml(leftPart)}</span>
-          ${job.dates ? `<span class="cv-job-right">${escapeHtml(this.toYearOnly(job.dates))}</span>` : ''}
+        <div class="cv-job-company">${escapeHtml(job.company)}</div>
+        <div class="cv-job-title-line">
+          <span class="cv-job-title">${escapeHtml(job.title)}</span>
+          ${yearDates ? `<span class="cv-job-dates">${escapeHtml(yearDates)}</span>` : ''}
         </div>
         ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
@@ -764,14 +783,17 @@
         lines.push('');
       }
 
-      // Experience
+      // Experience - Two-line format with dynamic right-aligned dates
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          // Line 1: Company
-          lines.push(job.company);
-          // Line 2: Title – YYYY – YYYY (use pre-formatted titleLine)
-          lines.push(job.titleLine || job.title);
+          // Line 1: Company (bold in PDF, plain in text)
+          lines.push(job.company || '');
+          // Line 2: Title with dates right-aligned
+          const title = job.title || '';
+          const yearDates = this.toYearOnly(job.dates);
+          const titleLine = this.rightAlignTitleDates(title, yearDates);
+          lines.push(titleLine);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });

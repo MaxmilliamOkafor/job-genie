@@ -155,7 +155,9 @@
     
     // BUILD EXPERIENCE SECTION - SINGLE SOURCE OF TRUTH: profile.work_experience
     // NEVER modify company, title, dates - only append keywords to bullets
-    // LAYOUT: Company – Title on left, YYYY – YYYY on far right (same line)
+    // LAYOUT: 
+    //   Line 1: Company (bold, left-aligned)
+    //   Line 2: Job Title (left) with dates right-aligned (same line)
     // BULLETS: Use proper ATS bullet points (•) not dashes
     buildExperienceSection(data, keywords) {
       // 1) SINGLE SOURCE OF TRUTH: structured work_experience from profile
@@ -175,8 +177,8 @@
       return experience
         .map((job) => {
           // ---- HEADER: READ-ONLY from profile ----
-          const company = job.company || '';
-          const title = job.title || '';
+          const company = (job.company || '').trim();
+          const title = (job.title || '').trim();
           
           // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
           let dates = job.dates || '';
@@ -187,21 +189,13 @@
           }
           
           // Normalise date format: replace hyphens with en dash, ensure spaces around it
-          const normalisedDates = dates ? String(dates)
-            .replace(/--/g, '–')           // double hyphen to en dash
-            .replace(/-/g, '–')            // single hyphen to en dash  
-            .replace(/\s*–\s*/g, ' – ')    // ensure spaces around en dash
-            : '';
+          const normalisedDates = this.normaliseDates(dates);
           
-          // Build header: "Company – Title" on left (NO pipe characters)
-          const leftPart = [company, title].filter(Boolean).join(' – ');
-          
-          // For plain text: single line with dates right-aligned conceptually
-          // Format: "Company – Title                    YYYY – YYYY"
-          let headerLine = leftPart;
-          if (normalisedDates) {
-            headerLine = `${leftPart}    ${normalisedDates}`;
-          }
+          // Build two-line header:
+          // Line 1: Company (bold in HTML, plain in text)
+          // Line 2: Title with dates right-aligned
+          const companyLine = company || '';
+          const titleLine = this.rightAlignTitleDates(title, normalisedDates);
 
           // ---- BULLETS: Preserve original content, only APPEND keywords ----
           // Use proper ATS bullet points (•) instead of dashes
@@ -215,7 +209,7 @@
           }
 
           if (!Array.isArray(bullets) || !bullets.length) {
-            return headerLine;
+            return [companyLine, titleLine].filter(Boolean).join('\n');
           }
 
           const enhancedBullets = bullets.slice(0, maxBulletsPerRole).map((bullet, idx) => {
@@ -263,9 +257,38 @@
             return `• ${text}`;
           }).filter(Boolean);
 
-          return `${headerLine}\n${enhancedBullets.join("\n")}`;
+          // Build final: Company line, Title line (with dates), then bullets
+          const headerLines = [companyLine, titleLine].filter(Boolean).join('\n');
+          return `${headerLines}\n${enhancedBullets.join("\n")}`;
         })
         .join("\n\n");
+    },
+
+    // ============ NORMALISE DATES ============
+    // Convert date strings to "YYYY – YYYY" format with en dash and spaces
+    normaliseDates(dateStr) {
+      if (!dateStr) return '';
+      return String(dateStr)
+        .replace(/--/g, '–')           // double hyphen to en dash
+        .replace(/-/g, '–')            // single hyphen to en dash  
+        .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
+    },
+
+    // ============ RIGHT ALIGN TITLE + DATES ============
+    // Creates a line with title on left and dates on far right using dynamic spacing
+    // For plain text: "Job Title                    2023 – Present"
+    rightAlignTitleDates(title, dates, maxWidth = 70) {
+      if (!title && !dates) return '';
+      if (!dates) return title || '';
+      if (!title) return dates;
+      
+      // Calculate dynamic spacing
+      const titleLen = title.length;
+      const datesLen = dates.length;
+      const minSpaces = 8;
+      const spaces = Math.max(minSpaces, maxWidth - titleLen - datesLen);
+      
+      return `${title}${' '.repeat(spaces)}${dates}`;
     },
 
 
@@ -387,7 +410,9 @@
     },
 
     // ============ GENERATE HTML PREVIEW ============
-    // Layout: Company – Title on left, dates on far right (same line)
+    // Layout: 
+    //   Line 1: Company (bold)
+    //   Line 2: Job Title (left) with dates right-aligned (same line)
     // Bullets: Use proper ATS bullet points (•) in <ul><li>
     generateHTMLPreview(resume, templateName = 'professional') {
       const template = this.TEMPLATES[templateName] || this.TEMPLATES.professional;
@@ -401,6 +426,10 @@
       };
       
       // Parse experience text back to structured format for proper HTML rendering
+      // Expected format per job block:
+      //   Line 1: Company
+      //   Line 2: Title (with spaces) Dates
+      //   Line 3+: • bullets
       const parseExperienceForHTML = (expText) => {
         if (!expText) return '';
         
@@ -409,25 +438,28 @@
           const lines = jobBlock.split('\n');
           if (lines.length === 0) return '';
           
-          // First line contains: "Company – Title    YYYY – YYYY"
-          const headerLine = lines[0] || '';
-          const bullets = lines.slice(1).filter(l => l.startsWith('•'));
+          // Line 1: Company
+          const companyLine = lines[0] || '';
+          // Line 2: Title + Dates (split by multiple spaces)
+          const titleDateLine = lines[1] || '';
+          const bullets = lines.slice(2).filter(l => l.startsWith('•'));
           
-          // Parse header: split by multiple spaces to separate left and right parts
-          const headerMatch = headerLine.match(/^(.+?)\s{2,}(\d{4}\s*–\s*.+)$/);
-          let leftPart = headerLine;
-          let datePart = '';
+          // Parse title and dates from Line 2
+          const titleDateMatch = titleDateLine.match(/^(.+?)\s{4,}(.+)$/);
+          let title = titleDateLine;
+          let dates = '';
           
-          if (headerMatch) {
-            leftPart = headerMatch[1].trim();
-            datePart = headerMatch[2].trim();
+          if (titleDateMatch) {
+            title = titleDateMatch[1].trim();
+            dates = titleDateMatch[2].trim();
           }
           
           return `
         <div class="job">
-          <div class="job-header">
-            <span class="job-left">${escapeHtml(leftPart)}</span>
-            ${datePart ? `<span class="job-right">${escapeHtml(datePart)}</span>` : ''}
+          <div class="job-company">${escapeHtml(companyLine)}</div>
+          <div class="job-title-line">
+            <span class="job-title">${escapeHtml(title)}</span>
+            ${dates ? `<span class="job-dates">${escapeHtml(dates)}</span>` : ''}
           </div>
           ${bullets.length > 0 ? `
           <ul class="job-bullets">
@@ -458,19 +490,26 @@
     .section-title { font-size: 12pt; font-weight: bold; border-bottom: 1px solid #000; margin: 16px 0 8px 0; padding-bottom: 4px; text-transform: uppercase; }
     .section-content { margin-bottom: 12px; }
     
-    /* Job header: left part and dates on same line */
+    /* Job layout: Company on Line 1, Title + Dates on Line 2 */
     .job { margin-bottom: 16px; }
-    .job-header { 
+    .job-company { 
+      font-weight: bold; 
+      font-size: 10.5pt;
+      margin-bottom: 2px;
+    }
+    .job-title-line { 
       display: flex; 
       justify-content: space-between; 
       align-items: baseline;
-      font-weight: bold; 
       margin-bottom: 4px;
     }
-    .job-left { white-space: nowrap; }
-    .job-right { 
+    .job-title { 
+      font-style: italic;
+      font-size: 10.5pt;
+    }
+    .job-dates { 
       white-space: nowrap; 
-      font-weight: normal;
+      font-size: 10pt;
       color: #333;
     }
     
