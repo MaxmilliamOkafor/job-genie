@@ -54,12 +54,12 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Eye className="h-4 w-4" />
-            ATS PDF Preview
+            Professional Experience Preview
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No work experience to preview. Add roles above to see how they'll appear in your ATS-optimized CV.
+            No professional experience to preview. Add roles above to see how they'll appear in your ATS-optimized CV.
           </p>
         </CardContent>
       </Card>
@@ -71,10 +71,10 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Eye className="h-4 w-4" />
-          ATS PDF Preview
+          Professional Experience Preview
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          This shows exactly how your work experience will render in the final ATS PDF
+          This shows exactly how your professional experience will render in the final ATS PDF
         </p>
       </CardHeader>
       <CardContent>

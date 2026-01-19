@@ -319,9 +319,9 @@ serve(async (req) => {
         drawWrappedText(sanitizedData.summary, MARGIN, 10, helvetica);
       }
 
-      // === WORK EXPERIENCE ===
+      // === PROFESSIONAL EXPERIENCE ===
       if (sanitizedData.experience && sanitizedData.experience.length > 0) {
-        drawSectionHeader("Work Experience");
+        drawSectionHeader("Professional Experience");
 
         for (let i = 0; i < sanitizedData.experience.length; i++) {
           const exp = sanitizedData.experience[i];
@@ -384,9 +384,9 @@ serve(async (req) => {
         }
       }
 
-      // === RELEVANT PROJECTS (dates are optional) ===
+      // === TECHNICAL PROJECTS (dates are optional) ===
       if (sanitizedData.projects && sanitizedData.projects.length > 0) {
-        drawSectionHeader("Relevant Projects");
+        drawSectionHeader("Technical Projects");
 
         for (let i = 0; i < sanitizedData.projects.length; i++) {
           const project = sanitizedData.projects[i];
