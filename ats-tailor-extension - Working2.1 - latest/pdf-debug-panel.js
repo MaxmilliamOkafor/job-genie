@@ -22,6 +22,7 @@
     // Initialize debug panel
     init() {
       this.bindEvents();
+      this.loadLastGeneratedData();
       console.log('[PDFDebugPanel] Initialized');
     },
 
@@ -30,12 +31,47 @@
       const copyBtn = document.getElementById('copyDebugData');
       const clearBtn = document.getElementById('clearDebugLog');
       const testBtn = document.getElementById('testPdfDownload');
+      const viewSourceBtn = document.getElementById('viewSourceData');
+      const closeSourceModal = document.getElementById('closeSourceModal');
+      const copySourceBtn = document.getElementById('copySourceData');
       
       if (copyBtn) copyBtn.addEventListener('click', () => this.copyDebugData());
       if (clearBtn) clearBtn.addEventListener('click', () => this.clearDebugLog());
       if (testBtn) testBtn.addEventListener('click', () => this.testPdfDownload());
+      if (viewSourceBtn) viewSourceBtn.addEventListener('click', () => this.viewSourceData());
+      if (closeSourceModal) closeSourceModal.addEventListener('click', () => this.closeSourceModal());
+      if (copySourceBtn) copySourceBtn.addEventListener('click', () => this.copySourceJSON());
       
-      console.log('[PDFDebugPanel] Events bound:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, testBtn: !!testBtn });
+      console.log('[PDFDebugPanel] Events bound:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, testBtn: !!testBtn, viewSourceBtn: !!viewSourceBtn });
+    },
+    
+    // Load last generated data from storage on init
+    async loadLastGeneratedData() {
+      try {
+        const stored = await new Promise(resolve => {
+          chrome.storage.local.get(['ats_lastGeneratedDocuments', 'ats_profile'], resolve);
+        });
+        
+        if (stored.ats_lastGeneratedDocuments) {
+          const docs = stored.ats_lastGeneratedDocuments;
+          this._debugData.status = 'loaded';
+          this._debugData.outputData = {
+            cvPdfLen: docs.cvPdf ? `${Math.round(docs.cvPdf.length * 0.75 / 1024)} KB` : 'None',
+            coverPdfLen: docs.coverPdf ? `${Math.round(docs.coverPdf.length * 0.75 / 1024)} KB` : 'None',
+            cvFileName: docs.cvFileName || 'Not set',
+            coverFileName: docs.coverFileName || 'Not set'
+          };
+          this.updateBadge('Data Loaded', 'success');
+        }
+        
+        if (stored.ats_profile) {
+          this._storedProfile = stored.ats_profile;
+        }
+        
+        this.updateUI();
+      } catch (e) {
+        console.warn('[PDFDebugPanel] Could not load stored data:', e);
+      }
     },
 
     // Reset debug data for new generation
@@ -311,23 +347,142 @@
       this.showToast('Debug log cleared', 'success');
     },
 
-    // Test PDF download flow
+    // View Source Data - shows raw professional_experience JSON
+    async viewSourceData() {
+      try {
+        // Try multiple sources for the data
+        let profileData = null;
+        let source = 'unknown';
+        
+        // Source 1: ATSTailor instance (runtime)
+        const atsTailor = window.atsTailorInstance;
+        if (atsTailor?.generatedDocuments) {
+          // Check if we have raw profile data in the instance
+        }
+        
+        // Source 2: Chrome storage (ats_profile)
+        const stored = await new Promise(resolve => {
+          chrome.storage.local.get(['ats_profile', 'ats_lastGeneratedDocuments'], resolve);
+        });
+        
+        if (stored.ats_profile) {
+          profileData = stored.ats_profile;
+          source = 'chrome.storage.local (ats_profile)';
+        }
+        
+        // Source 3: Fetch directly from Supabase if we have session
+        if (!profileData && atsTailor?.session?.access_token && atsTailor?.session?.user?.id) {
+          try {
+            const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+            
+            const res = await fetch(
+              `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${atsTailor.session.user.id}&select=professional_experience,relevant_projects,education,skills,certifications,first_name,last_name`,
+              {
+                headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${atsTailor.session.access_token}`,
+                }
+              }
+            );
+            if (res.ok) {
+              const profiles = await res.json();
+              profileData = profiles?.[0] || null;
+              source = 'Supabase API (live fetch)';
+            }
+          } catch (e) {
+            console.warn('[PDFDebugPanel] Failed to fetch profile from Supabase:', e);
+          }
+        }
+        
+        if (!profileData) {
+          this.showToast('No profile data found. Generate a CV first.', 'error');
+          return;
+        }
+        
+        // Format the source data display
+        const sourceData = {
+          _source: source,
+          _fetchedAt: new Date().toISOString(),
+          professional_experience: profileData.professional_experience || [],
+          relevant_projects: profileData.relevant_projects || [],
+          education: profileData.education || [],
+          skills: profileData.skills || [],
+          certifications: profileData.certifications || [],
+          first_name: profileData.first_name,
+          last_name: profileData.last_name
+        };
+        
+        // Display in modal
+        const modal = document.getElementById('sourceDataModal');
+        const jsonPre = document.getElementById('sourceDataJSON');
+        if (modal && jsonPre) {
+          jsonPre.textContent = JSON.stringify(sourceData, null, 2);
+          modal.classList.remove('hidden');
+        }
+        
+        this.showToast(`Source data loaded from ${source}`, 'success');
+        
+      } catch (e) {
+        console.error('[PDFDebugPanel] viewSourceData error:', e);
+        this.showToast(`Error: ${e.message}`, 'error');
+      }
+    },
+    
+    closeSourceModal() {
+      const modal = document.getElementById('sourceDataModal');
+      if (modal) modal.classList.add('hidden');
+    },
+    
+    async copySourceJSON() {
+      try {
+        const jsonPre = document.getElementById('sourceDataJSON');
+        if (jsonPre?.textContent) {
+          await navigator.clipboard.writeText(jsonPre.textContent);
+          this.showToast('Source JSON copied!', 'success');
+        }
+      } catch (e) {
+        this.showToast('Failed to copy', 'error');
+      }
+    },
+
+    // Test PDF download flow - uses chrome.storage as fallback
     async testPdfDownload() {
       try {
+        let cvPdf = null;
+        let fileName = 'Test_CV.pdf';
+        
+        // Try 1: ATSTailor instance
         const atsTailor = window.atsTailorInstance;
-        if (!atsTailor?.generatedDocuments?.cvPdf) {
-          this.showToast('No PDF generated yet - run tailoring first', 'error');
+        if (atsTailor?.generatedDocuments?.cvPdf) {
+          cvPdf = atsTailor.generatedDocuments.cvPdf;
+          fileName = atsTailor.generatedDocuments.cvFileName || fileName;
+        }
+        
+        // Try 2: Chrome storage (fallback)
+        if (!cvPdf) {
+          const stored = await new Promise(resolve => {
+            chrome.storage.local.get(['cvPDF', 'cvFileName', 'ats_lastGeneratedDocuments'], resolve);
+          });
+          
+          if (stored.cvPDF) {
+            cvPdf = stored.cvPDF;
+            fileName = stored.cvFileName || fileName;
+          } else if (stored.ats_lastGeneratedDocuments?.cvPdf) {
+            cvPdf = stored.ats_lastGeneratedDocuments.cvPdf;
+            fileName = stored.ats_lastGeneratedDocuments.cvFileName || fileName;
+          }
+        }
+        
+        if (!cvPdf) {
+          this.showToast('No PDF found. Run tailoring first.', 'error');
           return;
         }
         
         this.logStart('Test Download');
         
-        // Get the stored PDF
-        const cvPdf = atsTailor.generatedDocuments.cvPdf;
-        const fileName = atsTailor.generatedDocuments.cvFileName || 'Test_CV.pdf';
-        
         // Validate base64
-        if (!cvPdf || cvPdf.length < 100) {
+        if (cvPdf.length < 100) {
           this.logError(new Error('PDF base64 is empty or too short'), 'Validation');
           this.logComplete(false);
           return;
