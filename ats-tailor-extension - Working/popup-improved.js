@@ -109,8 +109,10 @@ class ATSTailorImproved {
     return new Promise(async (resolve) => {
       if (this.session?.access_token && this.session?.user?.id) {
         try {
+          // SECURITY: API keys are stored in user_api_keys table (no client SELECT access)
+          // We only fetch the enabled flags and preference from profiles
           const profileRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=preferred_ai_provider,openai_enabled,kimi_enabled,openai_api_key,kimi_api_key`,
+            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=preferred_ai_provider,openai_enabled,kimi_enabled`,
             {
               headers: {
                 apikey: SUPABASE_ANON_KEY,
@@ -124,22 +126,22 @@ class ATSTailorImproved {
             const profile = profiles?.[0];
             
             if (profile) {
+              // openai_enabled/kimi_enabled flags indicate if a valid API key has been saved
               const preferredProvider = profile.preferred_ai_provider || 'kimi';
-              const kimiEnabled = profile.kimi_enabled ?? true;
-              const openaiEnabled = profile.openai_enabled ?? true;
-              const hasKimiKey = !!profile.kimi_api_key;
-              const hasOpenAIKey = !!profile.openai_api_key;
+              const kimiEnabled = profile.kimi_enabled ?? false;
+              const openaiEnabled = profile.openai_enabled ?? false;
               
-              if (preferredProvider === 'kimi' && kimiEnabled && hasKimiKey) {
+              // Use preferred if available and enabled (enabled means API key is configured)
+              if (preferredProvider === 'kimi' && kimiEnabled) {
                 this.aiProvider = 'kimi';
-              } else if (preferredProvider === 'openai' && openaiEnabled && hasOpenAIKey) {
+              } else if (preferredProvider === 'openai' && openaiEnabled) {
                 this.aiProvider = 'openai';
-              } else if (kimiEnabled && hasKimiKey) {
+              } else if (kimiEnabled) {
                 this.aiProvider = 'kimi';
-              } else if (openaiEnabled && hasOpenAIKey) {
+              } else if (openaiEnabled) {
                 this.aiProvider = 'openai';
               } else {
-                this.aiProvider = 'kimi';
+                this.aiProvider = 'kimi'; // default (will fail if no key configured)
               }
               
               console.log('[ATS Tailor] AI Provider loaded from profile:', this.aiProvider);
