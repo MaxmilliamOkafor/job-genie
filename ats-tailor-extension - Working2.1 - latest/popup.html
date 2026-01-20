@@ -753,9 +753,24 @@
           
           <!-- Debug Actions -->
           <div class="debug-actions">
-            <button id="copyDebugData" class="btn btn-small btn-secondary">📋 Copy Debug Data</button>
-            <button id="clearDebugLog" class="btn btn-small btn-outline">🗑️ Clear Log</button>
-            <button id="testPdfDownload" class="btn btn-small btn-accent">🧪 Test PDF Download</button>
+            <button id="viewSourceData" class="btn btn-small btn-primary">📊 View Source Data</button>
+            <button id="copyDebugData" class="btn btn-small btn-secondary">Copy Debug</button>
+            <button id="clearDebugLog" class="btn btn-small btn-outline">Clear Log</button>
+            <button id="testPdfDownload" class="btn btn-small btn-accent">Test Download</button>
+          </div>
+          
+          <!-- Source Data Modal (hidden by default) -->
+          <div id="sourceDataModal" class="debug-modal hidden">
+            <div class="debug-modal-header">
+              <span>📊 Source Data (professional_experience)</span>
+              <button id="closeSourceModal" class="btn btn-link">✕</button>
+            </div>
+            <div class="debug-modal-body">
+              <pre id="sourceDataJSON" class="source-data-pre"></pre>
+            </div>
+            <div class="debug-modal-footer">
+              <button id="copySourceData" class="btn btn-small btn-secondary">Copy JSON</button>
+            </div>
           </div>
         </div>
       </details>
