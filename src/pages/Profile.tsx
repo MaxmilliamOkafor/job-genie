@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
 import { WorkExperiencePreview } from '@/components/profile/WorkExperiencePreview';
 import { RelevantProjectsPreview } from '@/components/profile/RelevantProjectsPreview';
+import { CVPreviewModal } from '@/components/profile/CVPreviewModal';
 import { ProfileVersionHistory, createExportWithHistory } from '@/components/profile/ProfileVersionHistory';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
@@ -1609,6 +1610,23 @@ const Profile = () => {
 
         {/* Relevant Projects Preview */}
         <RelevantProjectsPreview projects={localProfile.relevant_projects || []} />
+
+        {/* Complete CV PDF Preview */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Complete CV Preview
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Generate a complete PDF preview to verify that both Professional Experience and Technical Projects 
+              sections display correctly with the ATS-optimized formatting.
+            </p>
+            <CVPreviewModal profile={localProfile} />
+          </CardContent>
+        </Card>
 
         {/* Education */}
         <Card>
