@@ -1,13 +1,14 @@
 // QuantumHire AI - Popup Script (Simplified & Reliable)
 
-// Config
-const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
-const DASHBOARD_URL = 'https://lovable.dev/projects/47ce3fc9-a939-41ad-bf41-c4c34dc10c2b';
+// Config - Loaded from secure storage after web app authentication
+// SECURITY: No hardcoded credentials - fetched from chrome.storage after user logs in via web app
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
+const DASHBOARD_URL = 'https://id-preview--2777be38-8dd2-4b20-ad45-fa61a1988fa3.lovable.app';
 
-// Default ATS credentials
-const DEFAULT_ATS_EMAIL = 'Maxokafordev@gmail.com';
-const DEFAULT_ATS_PASSWORD = 'May19315park@';
+// Default ATS credentials placeholder (user must provide their own)
+const DEFAULT_ATS_EMAIL = '';
+const DEFAULT_ATS_PASSWORD = '';
 
 // State
 let currentJob = null;
@@ -21,6 +22,9 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   console.log('QuantumHire: Initializing...');
+  
+  // SECURITY: Load Supabase credentials from secure storage (set after web app auth)
+  await loadSupabaseCredentials();
   
   // Initialize defaults first
   await initializeDefaults();
@@ -41,13 +45,56 @@ async function init() {
   console.log('QuantumHire: Ready!');
 }
 
+// SECURITY: Load Supabase credentials from chrome.storage (populated after web app authentication)
+async function loadSupabaseCredentials() {
+  try {
+    const data = await chrome.storage.local.get(['supabaseUrl', 'supabaseKey', 'requiresWebAppAuth']);
+    
+    if (data.supabaseUrl && data.supabaseKey) {
+      SUPABASE_URL = data.supabaseUrl;
+      SUPABASE_KEY = data.supabaseKey;
+      console.log('QuantumHire: Credentials loaded from secure storage');
+    } else {
+      console.log('QuantumHire: No credentials found - user must authenticate via web app');
+      // Show auth required message
+      showAuthRequiredMessage();
+    }
+  } catch (e) {
+    console.error('QuantumHire: Failed to load credentials:', e);
+  }
+}
+
+// Show message when user needs to authenticate via web app
+function showAuthRequiredMessage() {
+  const loginSection = document.getElementById('login-section');
+  const mainSection = document.getElementById('main-section');
+  
+  if (loginSection) {
+    loginSection.classList.remove('hidden');
+    const loginPrompt = loginSection.querySelector('.login-prompt');
+    if (loginPrompt) {
+      // Use safe text assignment instead of innerHTML
+      loginPrompt.textContent = 'Please log in via the web app to connect the extension.';
+    }
+  }
+  if (mainSection) {
+    mainSection.classList.add('hidden');
+  }
+}
+
 // Check and refresh token if expired or about to expire
 async function refreshTokenIfNeeded() {
   try {
-    const data = await chrome.storage.local.get(['accessToken', 'refreshToken', 'tokenExpiry']);
+    // SECURITY: Get credentials from secure storage
+    const data = await chrome.storage.local.get(['accessToken', 'refreshToken', 'tokenExpiry', 'supabaseUrl', 'supabaseKey']);
     
     if (!data.refreshToken) {
       console.log('QuantumHire: No refresh token, skipping refresh');
+      return;
+    }
+    
+    if (!data.supabaseUrl || !data.supabaseKey) {
+      console.log('QuantumHire: No credentials available, skipping refresh');
       return;
     }
     
@@ -63,12 +110,12 @@ async function refreshTokenIfNeeded() {
     
     console.log('QuantumHire: Token expired or expiring soon, refreshing...');
     
-    // Refresh the token
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    // Refresh the token using credentials from storage
+    const response = await fetch(`${data.supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
+        'apikey': data.supabaseKey,
       },
       body: JSON.stringify({ refresh_token: data.refreshToken }),
     });
