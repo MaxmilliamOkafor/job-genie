@@ -98,6 +98,9 @@ export function useProfile() {
             });
         }
 
+        // SECURITY: API keys are now stored in user_api_keys table (no client SELECT access)
+        // We DON'T fetch them here - they're only accessible by edge functions
+        // For UI state, we just track whether keys are configured (not the actual values)
         setProfile({
           ...data,
           authorized_countries: (data.authorized_countries as string[]) || [],
@@ -114,8 +117,10 @@ export function useProfile() {
           cv_uploaded_at: data.cv_uploaded_at || null,
           gender: data.gender || null,
           hispanic_latino: data.hispanic_latino ?? false,
-          openai_api_key: (data as any).openai_api_key || null,
-          kimi_api_key: (data as any).kimi_api_key || null,
+          // API keys are no longer readable from client - set to null for UI
+          // The UI will use openai_enabled/kimi_enabled to show status
+          openai_api_key: null, // Not accessible from client for security
+          kimi_api_key: null, // Not accessible from client for security
           preferred_ai_provider: (data as any).preferred_ai_provider || 'openai',
           openai_enabled: (data as any).openai_enabled ?? true,
           kimi_enabled: (data as any).kimi_enabled ?? true,
@@ -132,19 +137,57 @@ export function useProfile() {
     if (!user || !profile) return;
 
     try {
-      const safeUpdates: Partial<Profile> = {
-        ...updates,
-        ...(updates.professional_experience ? { professional_experience: normalizeWorkExperience(updates.professional_experience as any) } : {}),
-      };
+      // SECURITY: Handle API key updates separately - they go to user_api_keys table
+      const apiKeyUpdates: { openai_api_key?: string; kimi_api_key?: string } = {};
+      const profileUpdates: Partial<Profile> = { ...updates };
+      
+      if ('openai_api_key' in updates && updates.openai_api_key !== undefined) {
+        apiKeyUpdates.openai_api_key = updates.openai_api_key as string;
+        delete (profileUpdates as any).openai_api_key;
+      }
+      
+      if ('kimi_api_key' in updates && updates.kimi_api_key !== undefined) {
+        apiKeyUpdates.kimi_api_key = updates.kimi_api_key as string;
+        delete (profileUpdates as any).kimi_api_key;
+      }
+      
+      // Update API keys in secure table (user can INSERT/UPDATE but not SELECT)
+      if (Object.keys(apiKeyUpdates).length > 0) {
+        // Try to update first, if no row exists, insert
+        const { error: updateError } = await supabase
+          .from('user_api_keys')
+          .update(apiKeyUpdates)
+          .eq('user_id', user.id);
+        
+        if (updateError) {
+          // If update failed (no row), try insert
+          const { error: insertError } = await supabase
+            .from('user_api_keys')
+            .insert({ user_id: user.id, ...apiKeyUpdates });
+          
+          if (insertError && !insertError.message.includes('duplicate')) {
+            throw insertError;
+          }
+        }
+      }
+      
+      // Update remaining profile fields
+      if (Object.keys(profileUpdates).length > 0) {
+        const safeUpdates: Partial<Profile> = {
+          ...profileUpdates,
+          ...(profileUpdates.professional_experience ? { professional_experience: normalizeWorkExperience(profileUpdates.professional_experience as any) } : {}),
+        };
 
-      const { error } = await supabase
-        .from('profiles')
-        .update(safeUpdates)
-        .eq('user_id', user.id);
+        const { error } = await supabase
+          .from('profiles')
+          .update(safeUpdates)
+          .eq('user_id', user.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setProfile(prev => prev ? { ...prev, ...safeUpdates } : null);
+        setProfile(prev => prev ? { ...prev, ...safeUpdates } : null);
+      }
+      
       toast.success('Profile updated');
     } catch (error) {
       console.error('Error updating profile:', error);

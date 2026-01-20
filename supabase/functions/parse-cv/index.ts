@@ -346,15 +346,22 @@ serve(async (req) => {
     console.log('Using extracted text:', textIsReadable && textContent.length > 200);
     console.log('Focused text length:', focusedWorkExpText.length);
     console.log('Used input type:', usedInputType);
-    // Get user's API keys - prefer Kimi K2, fallback to OpenAI
+    // Get user's preference settings from profiles
     const { data: profileData } = await supabaseClient
       .from('profiles')
-      .select('openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled')
+      .select('preferred_ai_provider, openai_enabled, kimi_enabled')
       .eq('user_id', user.id)
       .single();
 
-    const kimiKey = profileData?.kimi_api_key;
-    const openaiKey = profileData?.openai_api_key || Deno.env.get('OPENAI_API_KEY');
+    // SECURITY: Get API keys from secure user_api_keys table (no client SELECT access)
+    const { data: apiKeysData } = await supabaseClient
+      .from('user_api_keys')
+      .select('openai_api_key, kimi_api_key')
+      .eq('user_id', user.id)
+      .single();
+
+    const kimiKey = apiKeysData?.kimi_api_key;
+    const openaiKey = apiKeysData?.openai_api_key || Deno.env.get('OPENAI_API_KEY');
     const preferKimi = profileData?.preferred_ai_provider === 'kimi' && profileData?.kimi_enabled && kimiKey;
     const useOpenAI = profileData?.preferred_ai_provider === 'openai' && profileData?.openai_enabled && openaiKey;
 
