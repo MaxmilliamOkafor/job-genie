@@ -201,6 +201,13 @@
   
   // Listen for messages from popup and background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // ============ UPDATE BANNER FROM POPUP ============
+    if (message.action === 'UPDATE_BANNER') {
+      updateBanner(message.text, message.status);
+      sendResponse({ status: 'updated' });
+      return true;
+    }
+    
     if (message.action === 'UPDATE_DEFAULT_LOCATION' && message.defaultLocation) {
       defaultLocation = message.defaultLocation;
       console.log('[ATS Tailor] Updated default location to:', defaultLocation);
@@ -2046,8 +2053,11 @@
       const attachResult = await loadFilesAndStart();
       await logEvent('attach_complete', { attachResult });
 
-      updateBanner(SUCCESS_BANNER_MSG, 'success');
-      hideBanner();
+      updateBanner('✅ Done! Tailored CV & Cover Letter attached!', 'success');
+      // Keep success banner visible for 5 seconds then hide
+      setTimeout(() => {
+        hideBanner();
+      }, 5000);
 
       await logEvent('autotailor_complete', {
         durationMs: Math.round(performance.now() - overallStart),
@@ -2288,12 +2298,14 @@
   
   // Open popup and trigger Extract & Apply Keywords button automatically
   async function triggerPopupExtractApply() {
-    const jobInfo = extractJobInfo();
-    console.log('[ATS Tailor] Triggering popup Extract & Apply for:', jobInfo.title);
+    hasTriggeredTailor = true;
+    tailoringInProgress = true;
     
-    // Show banner immediately
-    createStatusBanner();
-    updateBanner(`Tailoring for: ${jobInfo.title || 'Unknown Role'}...`, 'working');
+    const jobInfo = extractJobInfo();
+    console.log('[ATS Tailor] 🚀 Triggering popup Extract & Apply for:', jobInfo.title);
+    
+    // Update banner with job title (keeps persistent orange banner)
+    updateBanner(`🚀 ATS TAILOR 📝 Tailoring: ${jobInfo.title || 'Role'}...`, 'working');
     
     // Set badge to indicate automation running
     chrome.runtime.sendMessage({ action: 'openPopup' }).catch(() => {});
@@ -2321,19 +2333,37 @@
   
   function initAutoTailor() {
     // AUTO-TRIGGER MODE: Immediately start tailoring on recognized ATS pages
+    // Shows persistent orange banner while on ATS platform
     // Respects the Auto Tailor toggle from storage
+    
+    // Show persistent banner immediately on ATS detection
+    createStatusBanner();
+    updateBanner('🚀 ATS TAILOR 📝 Tailoring CV with all keywords...', 'working');
+    
     chrome.storage.local.get(['ats_autoTailorEnabled'], (result) => {
       const autoEnabled = result.ats_autoTailorEnabled !== false; // default true
 
       if (!autoEnabled) {
-        // User disabled auto-tailor - do nothing (manual use via popup)
+        // User disabled auto-tailor - show disabled banner
+        updateBanner('⏸️ Auto Tailor is OFF (enable in popup)', 'info');
         return;
       }
 
-      // Immediately start tailoring (equivalent to the user clicking the popup button)
-      createStatusBanner();
-      updateBanner('ATS detected! Starting auto-tailor...', 'working');
-      runAutoTailorFlow();
+      // Prevent duplicate triggers per page load
+      if (hasTriggeredTailor || tailoringInProgress) {
+        console.log('[ATS Tailor] Already triggered or in progress, skipping');
+        return;
+      }
+
+      // MAIN TASK: Open popup and trigger Extract & Apply Keywords automatically
+      // This simulates clicking the "Extract & Apply Keywords to CV" button
+      console.log('[ATS Tailor] 🚀 AUTO-TRIGGER: Calling triggerPopupExtractApply()...');
+      setTimeout(() => {
+        triggerPopupExtractApply().catch((e) => {
+          console.error('[ATS Tailor] triggerPopupExtractApply error:', e);
+          updateBanner(`Error: ${e?.message || e}`, 'error');
+        });
+      }, 100);
     });
   }
   
