@@ -289,7 +289,7 @@ class ATSTailorImproved {
         this.baseCVSource = 'uploaded';
         
         const parsedCVRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=professional_experience,work_experience,education,skills,certifications,achievements`,
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=professional_experience,education,skills,certifications,achievements`,
           {
             headers: {
               apikey: SUPABASE_ANON_KEY,
