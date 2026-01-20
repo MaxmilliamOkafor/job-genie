@@ -456,7 +456,7 @@
       //   Line 2: Role | YYYY – YYYY (dates optional)
       // Bullets with proper • character
       if (resumeData.projects && resumeData.projects.length > 0) {
-        sections.push('TECHNICAL PROJECTS');
+        sections.push('RELEVANT PROJECTS');
         resumeData.projects.forEach(project => {
           // Line 1: Project Name
           sections.push(project.name || '');

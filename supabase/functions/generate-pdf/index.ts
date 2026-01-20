@@ -319,9 +319,9 @@ serve(async (req) => {
         drawWrappedText(sanitizedData.summary, MARGIN, 10, helvetica);
       }
 
-      // === PROFESSIONAL EXPERIENCE ===
+      // === WORK EXPERIENCE ===
       if (sanitizedData.experience && sanitizedData.experience.length > 0) {
-        drawSectionHeader("Professional Experience");
+        drawSectionHeader("Work Experience");
 
         for (let i = 0; i < sanitizedData.experience.length; i++) {
           const exp = sanitizedData.experience[i];
@@ -384,9 +384,9 @@ serve(async (req) => {
         }
       }
 
-      // === TECHNICAL PROJECTS (dates are optional) ===
+      // === RELEVANT PROJECTS (dates are optional) ===
       if (sanitizedData.projects && sanitizedData.projects.length > 0) {
-        drawSectionHeader("Technical Projects");
+        drawSectionHeader("Relevant Projects");
 
         for (let i = 0; i < sanitizedData.projects.length; i++) {
           const project = sanitizedData.projects[i];
@@ -762,7 +762,6 @@ async function handleRawContentRequest(body: {
       "PROFESSIONAL SUMMARY",
       "SUMMARY",
       "EXPERIENCE",
-      "PROFESSIONAL EXPERIENCE",
       "WORK EXPERIENCE",
       "EDUCATION",
       "SKILLS",
@@ -872,7 +871,7 @@ async function handleRawContentRequest(body: {
       // Normalize section title
       let sectionTitle = section.type;
       if (sectionTitle.includes("SUMMARY")) sectionTitle = "PROFESSIONAL SUMMARY";
-      if (sectionTitle.includes("EXPERIENCE")) sectionTitle = "PROFESSIONAL EXPERIENCE";
+      if (sectionTitle.includes("EXPERIENCE")) sectionTitle = "WORK EXPERIENCE";
 
       currentPage.drawText(sectionTitle, {
         x: MARGIN,

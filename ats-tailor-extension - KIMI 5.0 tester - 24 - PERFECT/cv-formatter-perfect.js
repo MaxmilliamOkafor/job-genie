@@ -1,6 +1,6 @@
 // CV Formatter Perfect - 100% ATS-Compatible CV Generator
-// Optimized for the specific format requested by user
-// Uses exact content structure from user input
+// Guarantees perfect formatting for both preview and download
+// Uses HTML5 + CSS3 for rendering, then converts to PDF via browser API
 
 (function(global) {
   'use strict';
@@ -48,7 +48,7 @@
     // ============ MAIN ENTRY POINT ============
     async generateCV(candidateData, tailoredContent, jobData = null) {
       const startTime = performance.now();
-      console.log('[CVFormatterPerfect] Generating CV with user-specified format...');
+      console.log('[CVFormatterPerfect] Generating perfectly formatted CV...');
 
       try {
         // Parse and structure the content
@@ -121,13 +121,12 @@
       const phone = this.formatPhone(candidateData?.phone || '');
       const email = candidateData?.email || '';
       
-      // Clean location
+      // Clean location - remove "Remote" as it's a recruiter red flag
       let location = candidateData?.city || candidateData?.location || '';
       location = this.cleanLocation(location);
       
       const linkedin = candidateData?.linkedin || '';
       const github = candidateData?.github || '';
-      const portfolio = candidateData?.portfolio || '';
 
       return {
         name: name || 'Applicant',
@@ -135,11 +134,10 @@
         email,
         location,
         linkedin,
-        github,
-        portfolio
+        github
       };
     },
-    
+
     // ============ FORMAT PHONE ============
     formatPhone(phone) {
       if (!phone) return '';
@@ -147,9 +145,9 @@
       let cleaned = phone.replace(/[^\d+]/g, '');
       
       if (cleaned.startsWith('+')) {
-        const match = cleaned.match(/^(\+\d{1,3})(\d+)$/);
+        const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
         if (match) {
-          return `+${match[1]}: ${match[2]}`;
+          return `+${match[1]} ${match[2]}`;
         }
       }
       
@@ -196,9 +194,9 @@
         'EXPERIENCE': 'experience',
         'EMPLOYMENT': 'experience',
         'PROFESSIONAL EXPERIENCE': 'experience',
-        'TECHNICAL PROJECTS': 'projects',
         'RELEVANT PROJECTS': 'projects',
         'PROJECTS': 'projects',
+        'PROJECT EXPERIENCE': 'projects',
         'EDUCATION': 'education',
         'ACADEMIC': 'education',
         'SKILLS': 'skills',
@@ -246,7 +244,7 @@
           sections.experience = this.parseExperience(text);
           break;
         case 'projects':
-          sections.projects = this.parseProjects(text);
+          sections.projects = this.parseExperience(text); // Same format as experience
           break;
         case 'education':
           sections.education = this.parseEducation(text);
@@ -260,17 +258,99 @@
       }
     },
 
-    // ============ PARSE EXPERIENCE (Company | Title | Dates format) ============
+    // ============ DATE NORMALISATION HELPERS ============
+    // Normalise dates to "YYYY – YYYY" format with en dash and spaces
+    normaliseDates(dateStr) {
+      if (!dateStr) return '';
+      return String(dateStr)
+        .replace(/--/g, '–')           // double hyphen to en dash
+        .replace(/-/g, '–')            // single hyphen to en dash  
+        .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
+    },
+
+    // ============ DATE PATTERN FOR CLEANING ============
+    // Matches date patterns like: 2023-01 - Present, Jan 2023 - Dec 2024, 2021-2023, etc.
+    DATE_PATTERNS: [
+      /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
+      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
+      /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
+      /\b(Present|Current)\b/gi
+    ],
+
+    // Strip date patterns from a string
+    stripDatesFromField(fieldValue) {
+      if (!fieldValue) return '';
+      let cleaned = fieldValue;
+      for (const pattern of this.DATE_PATTERNS) {
+        cleaned = cleaned.replace(pattern, '');
+      }
+      // Clean up leftover separators and whitespace
+      return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
+    },
+
+    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
+    toYearOnly(dateStr) {
+      if (!dateStr) return '';
+      // Extract all 4-digit years
+      const years = dateStr.match(/\d{4}/g);
+      const hasPresent = /present/i.test(dateStr);
+      
+      if (hasPresent && years && years.length >= 1) {
+        return `${years[0]} – Present`;
+      } else if (years && years.length >= 2) {
+        return `${years[0]} – ${years[1]}`;
+      } else if (years && years.length === 1) {
+        return years[0];
+      }
+      return this.normaliseDates(dateStr); // Return normalised if no years found
+    },
+
+    // ============ RIGHT ALIGN TITLE + DATES ============
+    // Creates a line with title on left and dates on far right using dynamic spacing
+    // For plain text: "Job Title                    2023 – Present"
+    rightAlignTitleDates(title, dates, maxWidth = 70) {
+      if (!title && !dates) return '';
+      if (!dates) return title || '';
+      if (!title) return dates;
+      
+      // Calculate dynamic spacing
+      const titleLen = title.length;
+      const datesLen = dates.length;
+      const minSpaces = 8;
+      const spaces = Math.max(minSpaces, maxWidth - titleLen - datesLen);
+      
+      return `${title}${' '.repeat(spaces)}${dates}`;
+    },
     parseExperience(text) {
       const jobs = [];
       const lines = text.split('\n');
       let currentJob = null;
 
+      // Helper: detect if a line is a job title
+      const isJobTitle = (text) => {
+        const titlePatterns = [
+          /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|administrator|coordinator|officer|executive|vp|president|founder|cto|ceo|cfo|coo)\b/i,
+          /\b(senior|junior|principal|staff|associate|assistant|intern|trainee|head of|chief)\b/i,
+          /\b(product|project|program|data|software|cloud|ai|ml|machine learning|devops|sre|qa|test|security|network|system|solutions)\b/i,
+        ];
+        return titlePatterns.some(p => p.test(text));
+      };
+
+      // Helper: detect if a line is a company name
+      const isCompanyName = (text) => {
+        const companyPatterns = [
+          /\b(inc|llc|ltd|corp|corporation|company|co|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i,
+          /\bformerly\b/i, // "Meta (formerly Facebook Inc)"
+          /\b(google|meta|facebook|amazon|apple|microsoft|netflix|ibm|oracle|salesforce|adobe|intel|nvidia|cisco|dell|hp|accenture|deloitte|pwc|kpmg|ey|mckinsey|bain|bcg|citi|citigroup|jpmorgan|goldman|morgan stanley|barclays|hsbc)\b/i,
+        ];
+        return companyPatterns.some(p => p.test(text));
+      };
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
 
-        // Check if this is a job header (company | title | dates)
+        // Check if this is a job header (company | title | dates | location)
         if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
           if (currentJob) {
             jobs.push(currentJob);
@@ -278,16 +358,56 @@
           
           const parts = trimmed.split('|').map(p => p.trim());
           
+          // Extract dates from the dedicated dates field (parts[2])
+          // Also check if dates are embedded in company or title and clean them
+          let dates = parts[2] || '';
           let company = parts[0] || '';
           let title = parts[1] || '';
-          let dates = parts[2] || '';
           
-          // Clean up dates
-          dates = this.normaliseDates(dates);
+          // If dates field is empty, try to extract from company/title
+          if (!dates) {
+            for (const pattern of this.DATE_PATTERNS) {
+              const companyMatch = company.match(pattern);
+              const titleMatch = title.match(pattern);
+              if (companyMatch) {
+                dates = companyMatch[0];
+                break;
+              }
+              if (titleMatch) {
+                dates = titleMatch[0];
+                break;
+              }
+            }
+          }
           
+          // Clean company and title to remove any embedded dates
+          company = this.stripDatesFromField(company);
+          title = this.stripDatesFromField(title);
+          
+          // CRITICAL: Detect if company/title are swapped
+          // If "company" looks like a job title and "title" looks like a company, swap them
+          if (isJobTitle(company) && (isCompanyName(title) || !isJobTitle(title))) {
+            const temp = company;
+            company = title;
+            title = temp;
+          }
+          
+          // Build titleLine: Title – YYYY – YYYY (using en dash with spaces)
+          const yearDates = this.toYearOnly(dates);
+          let titleLine = '';
+          if (title && yearDates) {
+            titleLine = `${title} – ${yearDates}`;
+          } else if (title) {
+            titleLine = title;
+          } else if (yearDates) {
+            titleLine = yearDates;
+          }
+          
+          // NO location - removed to prevent recruiter bias
           currentJob = {
             company: company,
             title: title,
+            titleLine: titleLine, // New: formatted "Title – YYYY – YYYY"
             dates: dates,
             bullets: []
           };
@@ -304,54 +424,6 @@
       }
 
       return jobs;
-    },
-
-    // ============ PARSE PROJECTS (Company + Title format) ============
-    parseProjects(text) {
-      const projects = [];
-      const lines = text.split('\n');
-      let currentProject = null;
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        // Check if this is a project header - can be pipe-delimited or standalone
-        if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
-          // Pipe-delimited format: Company | Role
-          if (currentProject) {
-            projects.push(currentProject);
-          }
-          
-          const parts = trimmed.split('|').map(p => p.trim());
-          currentProject = {
-            company: parts[0] || '',
-            title: parts[1] || '',
-            bullets: []
-          };
-        } else if (!trimmed.startsWith('•') && !trimmed.startsWith('-') && !currentProject) {
-          // Standalone company name
-          currentProject = {
-            company: trimmed,
-            title: '',
-            bullets: []
-          };
-        } else if (currentProject && !trimmed.startsWith('•') && !trimmed.startsWith('-') && currentProject.title === '') {
-          // This is the title line
-          currentProject.title = trimmed;
-        } else if (currentProject && (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*'))) {
-          const bullet = trimmed.replace(/^[•\-*]\s*/, '').trim();
-          if (bullet) {
-            currentProject.bullets.push(bullet);
-          }
-        }
-      }
-
-      if (currentProject) {
-        projects.push(currentProject);
-      }
-
-      return projects;
     },
 
     // ============ PARSE EDUCATION ============
@@ -376,15 +448,6 @@
       }
 
       return education;
-    },
-
-    // ============ NORMALISE DATES ============
-    normaliseDates(dateStr) {
-      if (!dateStr) return '';
-      return String(dateStr)
-        .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
-        .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
     },
 
     // ============ FORMAT SKILLS SECTION ============
@@ -544,7 +607,7 @@
       line-height: ${ATS_CONFIG.lineHeight.relaxed};
     }
     
-    /* Experience - Two-line layout: Company (Line 1), Title + Dates (Line 2) */
+    /* Experience - Two-line layout */
     .cv-job {
       margin-bottom: ${ATS_CONFIG.sectionSpacing};
     }
@@ -641,7 +704,7 @@
     <div class="cv-contact">
       ${contact.phone ? `<div class="cv-contact-line">${escapeHtml(contact.phone)}</div>` : ''}
       <div class="cv-contact-line">${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)}` : ''}${contact.location ? ' | Open to relocation' : ''}</div>
-      ${contact.linkedin || contact.github || contact.portfolio ? `<div class="cv-contact-line">${[contact.linkedin, contact.github, contact.portfolio].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
+      ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
     </div>
     
     <!-- Professional Summary -->
@@ -652,12 +715,12 @@
     </div>
     ` : ''}
     
-    <!-- Professional Experience - Two-line format -->
+    <!-- Work Experience - Two-line format -->
     ${experience.length > 0 ? `
     <div class="cv-section">
-      <div class="cv-section-title">Professional Experience</div>
+      <div class="cv-section-title">Work Experience</div>
       ${experience.map((job) => {
-        const yearDates = this.normaliseDates(job.dates);
+        const yearDates = this.toYearOnly(job.dates);
         return `
       <div class="cv-job">
         <div class="cv-job-company">${escapeHtml(job.company)}</div>
@@ -669,27 +732,6 @@
         <div class="cv-job-details">
           <ul class="cv-bullets">
             ${job.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('\n            ')}
-          </ul>
-        </div>
-        ` : ''}
-      </div>`;
-      }).join('\n      ')}
-    </div>
-    ` : ''}
-    
-    <!-- Technical Projects - Company + Title format -->
-    ${projects.length > 0 ? `
-    <div class="cv-section">
-      <div class="cv-section-title">Technical Projects</div>
-      ${projects.map((project) => {
-        return `
-      <div class="cv-job">
-        <div class="cv-job-company">${escapeHtml(project.company || project.name || '')}</div>
-        <div class="cv-job-title">${escapeHtml(project.title || project.role || '')}</div>
-        ${project.bullets && project.bullets.length > 0 ? `
-        <div class="cv-job-details">
-          <ul class="cv-bullets">
-            ${project.bullets.map(bullet => `<li>${escapeHtml(bullet)}</li>`).join('\n            ')}
           </ul>
         </div>
         ` : ''}
@@ -732,14 +774,14 @@
 
     // ============ GENERATE TEXT VERSION ============
     generateText(cvData) {
-      const { contact, summary, experience, projects, education, skills, certifications } = cvData;
+      const { contact, summary, experience, education, skills, certifications } = cvData;
       const lines = [];
 
       // Name and contact
       lines.push(contact.name.toUpperCase());
       lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : ''));
-      if (contact.linkedin || contact.github || contact.portfolio) {
-        lines.push([contact.linkedin, contact.github, contact.portfolio].filter(Boolean).join(' | '));
+      if (contact.linkedin || contact.github) {
+        lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
       lines.push('');
 
@@ -752,37 +794,18 @@
 
       // Experience - Two-line format with dynamic right-aligned dates
       if (experience.length > 0) {
-        lines.push('PROFESSIONAL EXPERIENCE');
+        lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-          // Line 1: Company
+          // Line 1: Company (bold in PDF, plain in text)
           lines.push(job.company || '');
           // Line 2: Title with dates right-aligned
           const title = job.title || '';
-          const yearDates = this.normaliseDates(job.dates);
+          const yearDates = this.toYearOnly(job.dates);
           const titleLine = this.rightAlignTitleDates(title, yearDates);
           lines.push(titleLine);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
           });
-          lines.push('');
-        });
-      }
-
-      // Technical Projects - Company + Title format
-      if (projects && projects.length > 0) {
-        lines.push('TECHNICAL PROJECTS');
-        projects.forEach(project => {
-          // Line 1: Company
-          lines.push(project.company || project.name || '');
-          // Line 2: Title/Role
-          if (project.title || project.role) {
-            lines.push(project.title || project.role || '');
-          }
-          if (project.bullets) {
-            project.bullets.forEach(bullet => {
-              lines.push(`• ${bullet}`);
-            });
-          }
           lines.push('');
         });
       }
@@ -810,21 +833,6 @@
       }
 
       return lines.join('\n');
-    },
-
-    // ============ RIGHT ALIGN TITLE + DATES ============
-    rightAlignTitleDates(title, dates, maxWidth = 70) {
-      if (!title && !dates) return '';
-      if (!dates) return title || '';
-      if (!title) return dates;
-      
-      // Calculate dynamic spacing
-      const titleLen = title.length;
-      const datesLen = dates.length;
-      const minSpaces = 8;
-      const spaces = Math.max(minSpaces, maxWidth - titleLen - datesLen);
-      
-      return `${title}${' '.repeat(spaces)}${dates}`;
     },
 
     // ============ GENERATE PDF ============
@@ -870,11 +878,14 @@
       // Generate PDF
       const pdfBlob = await new Promise((resolve, reject) => {
         printWindow.print();
+        // Note: This is limited - browsers don't allow direct PDF capture from print dialog
+        // This is here for future implementation when browsers support it
         reject(new Error('Print API not fully supported'));
       });
 
       printWindow.close();
-      return null;
+      
+      return null; // Fallback to other methods
     },
 
     async generatePDFWithHtml2Canvas(htmlContent, cvData) {
@@ -882,8 +893,8 @@
       const iframe = document.createElement('iframe');
       iframe.style.position = 'absolute';
       iframe.style.left = '-9999px';
-      iframe.style.width = '794px';
-      iframe.style.height = '1123px';
+      iframe.style.width = '794px'; // A4 width at 96dpi
+      iframe.style.height = '1123px'; // A4 height at 96dpi
       document.body.appendChild(iframe);
 
       iframe.srcdoc = htmlContent;
@@ -930,6 +941,7 @@
         putOnlyUsedFonts: true
       });
 
+      // Configure for ATS
       const font = 'helvetica';
       const fontSize = 10.5;
       const margins = { top: 54, bottom: 54, left: 54, right: 54 };
@@ -938,6 +950,9 @@
 
       doc.setFont(font, 'normal');
       doc.setFontSize(fontSize);
+
+      // Split HTML into sections and render manually
+      // This ensures perfect text-based PDF (not image-based)
       let y = margins.top;
 
       const addText = (text, isBold = false, isCentered = false, size = fontSize, isItalic = false) => {
@@ -965,7 +980,8 @@
         });
       };
 
-      const { contact, summary, experience, projects, education, skills, certifications } = cvData;
+      // Render CV data directly for best ATS compatibility
+      const { contact, summary, experience, education, skills, certifications } = cvData;
 
       // Name
       addText(contact.name.toUpperCase(), true, true, 18);
@@ -975,8 +991,8 @@
       const contactLine = [contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : '');
       addText(contactLine, false, true, 10.5);
       
-      if (contact.linkedin || contact.github || contact.portfolio) {
-        addText([contact.linkedin, contact.github, contact.portfolio].filter(Boolean).join(' | '), false, true, 9);
+      if (contact.linkedin || contact.github) {
+        addText([contact.linkedin, contact.github].filter(Boolean).join(' | '), false, true, 9);
       }
       y += 12;
 
@@ -990,12 +1006,13 @@
 
       // Experience
       if (experience.length > 0) {
-        addText('PROFESSIONAL EXPERIENCE', true, false, 12);
+        addText('WORK EXPERIENCE', true, false, 12);
         y += 4;
 
         experience.forEach(job => {
           addText(job.company, true, false, 10.5);
-          addText(job.title, false, false, 9, true);
+          addText(job.title, false, false, 9, true); // isItalic = true
+          // Dates on separate line
           if (job.dates) {
             addText(job.dates, false, false, 9);
           }
@@ -1008,32 +1025,12 @@
         });
       }
 
-      // Technical Projects
-      if (projects.length > 0) {
-        addText('TECHNICAL PROJECTS', true, false, 12);
-        y += 4;
-
-        projects.forEach(project => {
-          addText(project.company || project.name || '', true, false, 10.5);
-          if (project.title || project.role) {
-            addText(project.title || project.role || '', false, false, 9, true);
-          }
-          y += 2;
-
-          if (project.bullets) {
-            project.bullets.forEach(bullet => {
-              addText(`• ${bullet}`, false, false, 10.5);
-            });
-          }
-          y += 4;
-        });
-      }
-
       // Education
       if (education.length > 0) {
         addText('EDUCATION', true, false, 12);
         y += 4;
 
+        // No dates (bias prevention). Also strip any embedded dates in the strings.
         education.forEach(edu => {
           addText([edu.degree, edu.institution, edu.gpa].filter(Boolean).join(' | '), false, false, 10.5);
         });

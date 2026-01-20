@@ -187,7 +187,7 @@ async function autoShowControlPanel(data = {}) {
   }, '*');
 }
 
-// Simple notification fallback - SECURITY: Uses safe DOM methods instead of innerHTML
+// Simple notification fallback
 function showSimpleNotification(title, message) {
   const existing = document.getElementById('qh-simple-notification');
   if (existing) existing.remove();
@@ -207,18 +207,10 @@ function showSimpleNotification(title, message) {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     animation: slideIn 0.3s ease;
   `;
-  
-  // SECURITY: Use safe DOM construction instead of innerHTML with dynamic content
-  const titleDiv = document.createElement('div');
-  titleDiv.style.cssText = 'font-weight: 600; font-size: 14px; margin-bottom: 4px;';
-  titleDiv.textContent = title; // Safe text assignment
-  
-  const messageDiv = document.createElement('div');
-  messageDiv.style.cssText = 'font-size: 12px; opacity: 0.9;';
-  messageDiv.textContent = message; // Safe text assignment
-  
-  notification.appendChild(titleDiv);
-  notification.appendChild(messageDiv);
+  notification.innerHTML = `
+    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${title}</div>
+    <div style="font-size: 12px; opacity: 0.9;">${message}</div>
+  `;
   
   // Add animation styles
   const style = document.createElement('style');
@@ -1897,8 +1889,8 @@ async function fillAllQuestions(userProfile, jobData, aiAnswers = null) {
 
 // ============= PDF GENERATION =============
 
-// SECURITY: Credentials loaded from chrome.storage (set after web app authentication)
-// Do NOT hardcode credentials here - they are populated dynamically
+const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 async function generatePDF(type, profileData, jobData, tailoredData) {
   console.log(`QuantumHire AI: Generating ${type} PDF...`);
@@ -1959,22 +1951,17 @@ async function generatePDF(type, profileData, jobData, tailoredData) {
     
     console.log('QuantumHire AI: Sending PDF request for:', type, requestBody.personalInfo.name);
     
-    // SECURITY: Get credentials from secure storage (not hardcoded)
-    const authData = await chrome.storage.local.get(['accessToken', 'supabaseUrl', 'supabaseKey']);
-    
-    if (!authData.supabaseUrl || !authData.supabaseKey) {
-      throw new Error('Not connected. Please authenticate via the web app first.');
-    }
-    
+    // Get access token for authenticated request
+    const authData = await chrome.storage.local.get(['accessToken']);
     const headers = {
       'Content-Type': 'application/json',
-      'apikey': authData.supabaseKey
+      'apikey': SUPABASE_KEY
     };
     if (authData.accessToken) {
       headers['Authorization'] = `Bearer ${authData.accessToken}`;
     }
     
-    const response = await fetch(`${authData.supabaseUrl}/functions/v1/generate-pdf`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(requestBody)
