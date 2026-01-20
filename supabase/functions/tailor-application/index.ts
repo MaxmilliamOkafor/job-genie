@@ -1431,15 +1431,70 @@ function calculateMatchScore(
   };
 }
 
+// Structured logging helper for debug reports
+interface TailorLog {
+  stage: string;
+  timestamp: string;
+  durationMs?: number;
+  details?: Record<string, unknown>;
+}
+
+const logs: TailorLog[] = [];
+const startTime = Date.now();
+
+function addLog(stage: string, details?: Record<string, unknown>) {
+  logs.push({
+    stage,
+    timestamp: new Date().toISOString(),
+    durationMs: Date.now() - startTime,
+    details,
+  });
+  console.log(`[tailor-application] ${stage}`, details ? JSON.stringify(details) : "");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    addLog("request_received");
+    
     const { userId, supabase } = await verifyAuth(req);
+    addLog("auth_verified", { userId });
 
     const rawData = await req.json();
+    
+    // Handle testConnection flag for connection testing
+    if (rawData.testConnection === true) {
+      addLog("connection_test_requested");
+      
+      // Get AI config to verify key exists
+      const aiConfig = await getUserAIConfig(supabase, userId);
+      
+      if (!aiConfig) {
+        addLog("connection_test_failed", { reason: "no_api_key" });
+        return new Response(
+          JSON.stringify({ 
+            connectionValid: false, 
+            error: "No API key configured. Please add your API key in Profile settings.",
+            logs,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      
+      addLog("connection_test_success", { provider: aiConfig.provider });
+      return new Response(
+        JSON.stringify({ 
+          connectionValid: true, 
+          provider: aiConfig.provider,
+          message: `${aiConfig.provider === "kimi" ? "Kimi K2" : "OpenAI"} API key is configured and ready.`,
+          logs,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // Support both 'description' and 'jobDescription' for extension compatibility
     if (rawData.jobDescription && !rawData.description) {
@@ -1497,7 +1552,7 @@ serve(async (req) => {
         zipCode: profileData.zip_code || "",
       };
 
-      console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
+      addLog("profile_loaded", { name: `${rawData.userProfile.firstName} ${rawData.userProfile.lastName}` });
     }
 
     const {
@@ -1511,12 +1566,16 @@ serve(async (req) => {
       userProfile,
       includeReferral,
     } = validateRequest(rawData);
+    
+    addLog("request_validated", { jobTitle, company, descriptionLength: description.length });
 
     // Validate that profile has required info
     if (!userProfile.firstName || !userProfile.lastName) {
+      addLog("validation_failed", { reason: "missing_name" });
       return new Response(
         JSON.stringify({
           error: "Profile incomplete. Please add your first and last name in Profile settings.",
+          logs,
         }),
         {
           status: 400,
@@ -1526,12 +1585,15 @@ serve(async (req) => {
     }
 
     // Get user's AI provider configuration
+    addLog("fetching_ai_config");
     const aiConfig = await getUserAIConfig(supabase, userId);
 
     if (!aiConfig) {
+      addLog("ai_config_failed", { reason: "no_api_key" });
       return new Response(
         JSON.stringify({
           error: "No AI provider configured. Please add an API key (OpenAI or Kimi K2) in Profile settings.",
+          logs,
         }),
         {
           status: 400,
@@ -1541,9 +1603,7 @@ serve(async (req) => {
     }
 
     const { provider: aiProvider, apiKey: userApiKey } = aiConfig;
-    console.log(`[User ${userId}] Using AI provider: ${aiProvider}`);
-
-    console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
+    addLog("ai_config_loaded", { provider: aiProvider });
 
     // Smart location logic - extract job city and format as "[CITY] | open to relocation"
     // Priority: 1) extractedCity from extension, 2) extract from location/description, 3) profile city
@@ -1555,13 +1615,11 @@ serve(async (req) => {
       jobId,
       extractedCity,
     );
-    console.log(
-      `Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ""}`,
-    );
+    addLog("smart_location_determined", { smartLocation, extractedCity });
 
     // Jobscan keyword extraction
     const jdKeywords = extractJobscanKeywords(description, requirements);
-    console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
+    addLog("keywords_extracted", { count: jdKeywords.allKeywords.length });
 
     // Calculate accurate match score with enhanced matching
     const matchResult = calculateMatchScore(
@@ -1835,13 +1893,17 @@ ${
     };
 
     const apiConfig = getApiConfig();
-    console.log(`Using ${apiConfig.providerName} with model ${apiConfig.model} (temp: ${apiConfig.temperature})`);
+    addLog("ai_request_starting", { 
+      provider: apiConfig.providerName, 
+      model: apiConfig.model,
+      temperature: apiConfig.temperature,
+    });
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
           const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-          console.log(`Rate limit hit, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+          addLog("retry_delay", { attempt: attempt + 1, delayMs: Math.round(delay) });
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
 
@@ -1879,13 +1941,22 @@ ${
             signal: aiController.signal,
             body: JSON.stringify(requestBody),
           });
-        } catch (err) {
-          const msg = err?.name === 'AbortError'
-            ? `${apiConfig.providerName} request timed out. Please retry.`
-            : `${apiConfig.providerName} request failed. Please retry.`;
+        } catch (err: unknown) {
+          const errorObj = err as Error;
+          const isTimeout = errorObj?.name === 'AbortError';
+          const msg = isTimeout
+            ? `${apiConfig.providerName} request timed out after ${aiTimeoutMs / 1000}s. Please retry.`
+            : `${apiConfig.providerName} request failed: ${errorObj?.message || 'Unknown error'}. Please retry.`;
 
-          return new Response(JSON.stringify({ error: msg }), {
-            status: 504,
+          addLog("ai_request_error", {
+            provider: apiConfig.providerName,
+            isTimeout,
+            errorName: errorObj?.name,
+            errorMessage: errorObj?.message,
+          });
+
+          return new Response(JSON.stringify({ error: msg, timeout: isTimeout, logs }), {
+            status: isTimeout ? 504 : 502,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         } finally {

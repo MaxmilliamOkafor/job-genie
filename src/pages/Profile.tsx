@@ -583,6 +583,21 @@ const Profile = () => {
                 >
                   Save
                 </Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (confirm('Clear saved OpenAI API key? This will disable OpenAI until you add a new key.')) {
+                      await updateProfile({ openai_api_key: '', openai_enabled: false });
+                      updateLocalField('openai_enabled', false);
+                      toast.success('OpenAI API key cleared');
+                    }
+                  }}
+                  disabled={!localProfile.openai_enabled}
+                  size="sm"
+                  title="Clear saved API key"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
               
               {/* Show saved status based on enabled flag (API keys are stored securely) */}
@@ -662,6 +677,21 @@ const Profile = () => {
                   size="sm"
                 >
                   Save
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (confirm('Clear saved Kimi K2 API key? This will disable Kimi until you add a new key.')) {
+                      await updateProfile({ kimi_api_key: '', kimi_enabled: false });
+                      updateLocalField('kimi_enabled', false);
+                      toast.success('Kimi K2 API key cleared');
+                    }
+                  }}
+                  disabled={!localProfile.kimi_enabled}
+                  size="sm"
+                  title="Clear saved API key"
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
               

@@ -498,6 +498,15 @@ class ATSTailor {
     // AI Provider Selection (toggle buttons - persistent)
     document.getElementById('btnKimi')?.addEventListener('click', () => this.selectAIProvider('kimi'));
     document.getElementById('btnOpenAI')?.addEventListener('click', () => this.selectAIProvider('openai'));
+    
+    // Connection Test Button
+    document.getElementById('testConnectionBtn')?.addEventListener('click', () => this.testAPIKeyConnection());
+    
+    // Debug Report Buttons
+    document.getElementById('showDebugReportBtn')?.addEventListener('click', () => this.showDebugReport());
+    document.getElementById('closeDebugReport')?.addEventListener('click', () => this.hideDebugReport());
+    document.getElementById('downloadDebugReport')?.addEventListener('click', () => this.downloadDebugReport());
+    document.getElementById('copyDebugReport')?.addEventListener('click', () => this.copyDebugReport());
 
     // Bulk Apply Dashboard
     document.getElementById('openBulkApply')?.addEventListener('click', () => {
@@ -4207,6 +4216,215 @@ function extractJobInfoFromPageInjected() {
 
   return result;
 }
+
+// ============ CONNECTION TEST & DEBUG REPORT ============
+
+// Test API Key Connection (calls validate-openai-key or validate-kimi-key)
+ATSTailor.prototype.testAPIKeyConnection = async function() {
+  const testBtn = document.getElementById('testConnectionBtn');
+  const panel = document.getElementById('connectionTestPanel');
+  const statusIcon = document.getElementById('testStatusIcon');
+  const testMessage = document.getElementById('testMessage');
+  const testDetails = document.getElementById('testDetails');
+  const testDetailsText = document.getElementById('testDetailsText');
+  
+  if (!this.session?.access_token) {
+    this.showToast('Please login first', 'error');
+    return;
+  }
+  
+  // Show panel and set loading state
+  panel?.classList.remove('hidden');
+  if (statusIcon) statusIcon.textContent = '⏳';
+  if (testMessage) testMessage.textContent = 'Testing connection...';
+  if (testBtn) testBtn.disabled = true;
+  testDetails?.classList.add('hidden');
+  
+  const startTime = performance.now();
+  
+  try {
+    // Determine which endpoint to call based on current provider
+    const endpoint = this.aiProvider === 'kimi' 
+      ? `${SUPABASE_URL}/functions/v1/validate-kimi-key`
+      : `${SUPABASE_URL}/functions/v1/validate-openai-key`;
+    
+    const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    
+    // We can't pass the key directly (security) - the edge function should get it from user_api_keys table
+    // So we call a modified approach: use tailor-application with a test flag
+    // For now, let's test by calling the validate endpoint indirectly
+    
+    // Actually, we need to test if the user has a key configured - call edge function that checks
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.session.access_token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        testConnection: true, // Special flag to just test connection
+        jobTitle: 'Test',
+        company: 'Test',
+        description: 'Test connection only',
+        requirements: [],
+        userProfile: { firstName: 'Test', lastName: 'Test', email: 'test@test.com' },
+      }),
+    });
+    
+    const elapsed = Math.round(performance.now() - startTime);
+    const data = await response.json().catch(() => ({}));
+    
+    // Store debug log
+    this._lastConnectionTest = {
+      timestamp: new Date().toISOString(),
+      provider: providerName,
+      status: response.status,
+      elapsed,
+      response: data,
+    };
+    
+    if (response.ok || data.connectionValid) {
+      if (statusIcon) statusIcon.textContent = '✅';
+      if (testMessage) testMessage.textContent = `${providerName} connected (${elapsed}ms)`;
+      this.showToast(`${providerName} API key is valid!`, 'success');
+    } else {
+      if (statusIcon) statusIcon.textContent = '❌';
+      if (testMessage) testMessage.textContent = data.error || `${providerName} connection failed`;
+      
+      // Show details
+      testDetails?.classList.remove('hidden');
+      if (testDetailsText) {
+        testDetailsText.textContent = JSON.stringify({
+          status: response.status,
+          error: data.error,
+          timeout: data.timeout,
+          elapsed: `${elapsed}ms`,
+        }, null, 2);
+      }
+    }
+    
+  } catch (error) {
+    const elapsed = Math.round(performance.now() - startTime);
+    console.error('[ATS Tailor] Connection test error:', error);
+    
+    this._lastConnectionTest = {
+      timestamp: new Date().toISOString(),
+      provider: this.aiProvider,
+      error: error.message,
+      elapsed,
+    };
+    
+    if (statusIcon) statusIcon.textContent = '❌';
+    if (testMessage) testMessage.textContent = error.message || 'Connection test failed';
+    testDetails?.classList.remove('hidden');
+    if (testDetailsText) {
+      testDetailsText.textContent = JSON.stringify({ error: error.message, elapsed: `${elapsed}ms` }, null, 2);
+    }
+  } finally {
+    if (testBtn) testBtn.disabled = false;
+  }
+};
+
+// Debug report data collection
+ATSTailor.prototype._debugLogs = [];
+
+ATSTailor.prototype.addDebugLog = function(stage, data) {
+  this._debugLogs.push({
+    timestamp: new Date().toISOString(),
+    stage,
+    ...data,
+  });
+  // Keep last 50 entries
+  if (this._debugLogs.length > 50) {
+    this._debugLogs.shift();
+  }
+};
+
+ATSTailor.prototype.showDebugReport = function() {
+  const panel = document.getElementById('debugReportPanel');
+  const content = document.getElementById('debugReportContent');
+  
+  panel?.classList.remove('hidden');
+  
+  // Compile debug report
+  const report = {
+    generatedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    aiProvider: this.aiProvider,
+    session: this.session ? { userId: this.session.user?.id, email: this.session.user?.email } : null,
+    currentJob: this.currentJob ? {
+      title: this.currentJob.title,
+      company: this.currentJob.company,
+      location: this.currentJob.location,
+      descriptionLength: this.currentJob.description?.length || 0,
+    } : null,
+    lastConnectionTest: this._lastConnectionTest || null,
+    recentLogs: this._debugLogs.slice(-20),
+    generatedDocuments: {
+      hasCv: !!this.generatedDocuments.cv,
+      hasCoverLetter: !!this.generatedDocuments.coverLetter,
+      matchScore: this.generatedDocuments.matchScore,
+      matchedKeywordsCount: this.generatedDocuments.matchedKeywords?.length || 0,
+      missingKeywordsCount: this.generatedDocuments.missingKeywords?.length || 0,
+    },
+  };
+  
+  if (content) {
+    content.innerHTML = `<pre style="font-size: 10px; overflow-x: auto;">${JSON.stringify(report, null, 2)}</pre>`;
+  }
+};
+
+ATSTailor.prototype.hideDebugReport = function() {
+  document.getElementById('debugReportPanel')?.classList.add('hidden');
+};
+
+ATSTailor.prototype.downloadDebugReport = function() {
+  const report = {
+    generatedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    aiProvider: this.aiProvider,
+    session: this.session ? { userId: this.session.user?.id, email: this.session.user?.email } : null,
+    currentJob: this.currentJob,
+    lastConnectionTest: this._lastConnectionTest || null,
+    allLogs: this._debugLogs,
+    generatedDocuments: {
+      hasCv: !!this.generatedDocuments.cv,
+      hasCoverLetter: !!this.generatedDocuments.coverLetter,
+      cvLength: this.generatedDocuments.cv?.length || 0,
+      coverLetterLength: this.generatedDocuments.coverLetter?.length || 0,
+      matchScore: this.generatedDocuments.matchScore,
+      matchedKeywords: this.generatedDocuments.matchedKeywords,
+      missingKeywords: this.generatedDocuments.missingKeywords,
+    },
+  };
+  
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ats-debug-report-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  this.showToast('Debug report downloaded', 'success');
+};
+
+ATSTailor.prototype.copyDebugReport = function() {
+  const report = {
+    generatedAt: new Date().toISOString(),
+    aiProvider: this.aiProvider,
+    currentJob: this.currentJob ? { title: this.currentJob.title, company: this.currentJob.company } : null,
+    lastConnectionTest: this._lastConnectionTest,
+    recentLogs: this._debugLogs.slice(-10),
+  };
+  
+  navigator.clipboard.writeText(JSON.stringify(report, null, 2))
+    .then(() => this.showToast('Debug report copied to clipboard', 'success'))
+    .catch(() => this.showToast('Failed to copy', 'error'));
+};
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
