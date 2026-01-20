@@ -53,6 +53,11 @@ const Profile = () => {
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
+
+  // API keys: never displayed after save; keep separate input state so it doesn't get overwritten by profile refresh
+  const [openaiKeyInput, setOpenaiKeyInput] = useState('');
+  const [kimiKeyInput, setKimiKeyInput] = useState('');
+
   // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [isTestingKimiKey, setIsTestingKimiKey] = useState(false);
@@ -203,19 +208,19 @@ const Profile = () => {
   // Note: API usage stats are now shown in the ApiUsageChart component
 
   const testApiKey = async () => {
-    if (!localProfile.openai_api_key) {
+    if (!openaiKeyInput.trim()) {
       toast.error('Please enter an API key first');
       return;
     }
-    
+
     setIsTestingKey(true);
     try {
       const { data, error } = await supabase.functions.invoke('validate-openai-key', {
-        body: { apiKey: localProfile.openai_api_key }
+        body: { apiKey: openaiKeyInput.trim() },
       });
-      
+
       if (error) throw error;
-      
+
       if (data.valid) {
         toast.success(data.message);
         if (!data.hasGpt4oMini) {
@@ -233,19 +238,19 @@ const Profile = () => {
   };
 
   const testKimiApiKey = async () => {
-    if (!localProfile.kimi_api_key) {
+    if (!kimiKeyInput.trim()) {
       toast.error('Please enter a Kimi API key first');
       return;
     }
-    
+
     setIsTestingKimiKey(true);
     try {
       const { data, error } = await supabase.functions.invoke('validate-kimi-key', {
-        body: { apiKey: localProfile.kimi_api_key }
+        body: { apiKey: kimiKeyInput.trim() },
       });
-      
+
       if (error) throw error;
-      
+
       if (data.valid) {
         toast.success(data.message);
         if (data.availableModels?.length > 0) {
@@ -265,6 +270,9 @@ const Profile = () => {
   useEffect(() => {
     if (profile) {
       setLocalProfile(profile);
+      // Never hydrate key inputs from profile (keys are not readable); keep inputs empty.
+      setOpenaiKeyInput('');
+      setKimiKeyInput('');
     }
   }, [profile]);
 
@@ -546,29 +554,31 @@ const Profile = () => {
               </div>
               
               <div className="flex gap-2">
-                <Input 
+                <Input
                   type="password"
                   placeholder={localProfile.openai_enabled ? "••••••••••••••••" : "sk-..."}
-                  value={localProfile.openai_api_key || ''}
-                  onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
+                  value={openaiKeyInput}
+                  onChange={(e) => setOpenaiKeyInput(e.target.value)}
                   className="flex-1"
                   disabled={!localProfile.openai_enabled}
                 />
-                <Button 
+                <Button
                   variant="outline"
                   onClick={testApiKey}
-                  disabled={!localProfile.openai_api_key || isTestingKey || !localProfile.openai_enabled}
+                  disabled={!openaiKeyInput.trim() || isTestingKey || !localProfile.openai_enabled}
                   size="sm"
                 >
                   {isTestingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 </Button>
-                <Button 
-                  onClick={() => {
-                    if (localProfile.openai_api_key) {
-                      updateProfile({ openai_api_key: localProfile.openai_api_key });
+                <Button
+                  onClick={async () => {
+                    const key = openaiKeyInput.trim();
+                    if (key) {
+                      await updateProfile({ openai_api_key: key });
+                      setOpenaiKeyInput('');
                     }
                   }}
-                  disabled={!localProfile.openai_api_key || !localProfile.openai_enabled}
+                  disabled={!openaiKeyInput.trim() || !localProfile.openai_enabled}
                   size="sm"
                 >
                   Save
@@ -624,29 +634,31 @@ const Profile = () => {
               </div>
               
               <div className="flex gap-2">
-                <Input 
+                <Input
                   type="password"
                   placeholder={localProfile.kimi_enabled ? "••••••••••••••••" : "sk-..."}
-                  value={localProfile.kimi_api_key || ''}
-                  onChange={(e) => updateLocalField('kimi_api_key', e.target.value)}
+                  value={kimiKeyInput}
+                  onChange={(e) => setKimiKeyInput(e.target.value)}
                   className="flex-1"
                   disabled={!localProfile.kimi_enabled}
                 />
-                <Button 
+                <Button
                   variant="outline"
                   onClick={testKimiApiKey}
-                  disabled={!localProfile.kimi_api_key || isTestingKimiKey || !localProfile.kimi_enabled}
+                  disabled={!kimiKeyInput.trim() || isTestingKimiKey || !localProfile.kimi_enabled}
                   size="sm"
                 >
                   {isTestingKimiKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 </Button>
-                <Button 
-                  onClick={() => {
-                    if (localProfile.kimi_api_key) {
-                      updateProfile({ kimi_api_key: localProfile.kimi_api_key });
+                <Button
+                  onClick={async () => {
+                    const key = kimiKeyInput.trim();
+                    if (key) {
+                      await updateProfile({ kimi_api_key: key });
+                      setKimiKeyInput('');
                     }
                   }}
-                  disabled={!localProfile.kimi_api_key || !localProfile.kimi_enabled}
+                  disabled={!kimiKeyInput.trim() || !localProfile.kimi_enabled}
                   size="sm"
                 >
                   Save
