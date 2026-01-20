@@ -122,8 +122,10 @@ export function useProfile() {
           openai_api_key: null, // Not accessible from client for security
           kimi_api_key: null, // Not accessible from client for security
           preferred_ai_provider: (data as any).preferred_ai_provider || 'openai',
-          openai_enabled: (data as any).openai_enabled ?? true,
-          kimi_enabled: (data as any).kimi_enabled ?? true,
+          // IMPORTANT: these flags represent whether a provider is configured + enabled.
+          // Default to false when unset so new users see the correct "add a key" state.
+          openai_enabled: (data as any).openai_enabled ?? false,
+          kimi_enabled: (data as any).kimi_enabled ?? false,
         });
       }
     } catch (error) {

@@ -1864,14 +1864,33 @@ ${
           requestBody.stop = ["\n\n\n", "---END---"];
         }
 
-        response = await fetch(apiConfig.endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${userApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
+        // Hard timeout so the extension never hangs on "Boosting CV".
+        const aiController = new AbortController();
+        const aiTimeoutMs = 65_000;
+        const aiTimeoutId = setTimeout(() => aiController.abort(), aiTimeoutMs);
+
+        try {
+          response = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${userApiKey}`,
+              "Content-Type": "application/json",
+            },
+            signal: aiController.signal,
+            body: JSON.stringify(requestBody),
+          });
+        } catch (err) {
+          const msg = err?.name === 'AbortError'
+            ? `${apiConfig.providerName} request timed out. Please retry.`
+            : `${apiConfig.providerName} request failed. Please retry.`;
+
+          return new Response(JSON.stringify({ error: msg }), {
+            status: 504,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } finally {
+          clearTimeout(aiTimeoutId);
+        }
 
         if (response.ok) {
           break; // Success, exit retry loop
