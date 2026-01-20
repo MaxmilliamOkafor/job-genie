@@ -2565,6 +2565,7 @@ class ATSTailor {
     btn.classList.add('btn-tailoring');
     progressContainer?.classList.remove('hidden');
     pipelineSteps?.classList.remove('hidden');
+    if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
     this.setStatus('⚡ Tailoring...', 'working');
     
     // WIRE UP DEBUG PANELS: Reset and start logging
