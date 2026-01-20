@@ -914,19 +914,31 @@
               }, 250); // SPEED: Reduced from 500ms to 250ms
             } else {
               // Fallback: load any cached files
-              loadFilesAndStart();
-              workdayFlowState.cvAttached = true;
+              try {
+                await loadFilesAndStart({ timeoutMs: 20_000 });
+                workdayFlowState.cvAttached = true;
+              } catch (e) {
+                console.warn('[ATS Workday TOP1] Cached attach failed:', e);
+              }
             }
           } else {
             // No session/baseCV, fallback to cached files
-            loadFilesAndStart();
-            workdayFlowState.cvAttached = true;
+            try {
+              await loadFilesAndStart({ timeoutMs: 20_000 });
+              workdayFlowState.cvAttached = true;
+            } catch (e) {
+              console.warn('[ATS Workday TOP1] Cached attach failed:', e);
+            }
           }
         } else {
           // No snapshot available, use standard flow
           console.log('[ATS Workday TOP1] ⚠️ No snapshot found, using standard flow');
-          loadFilesAndStart();
-          workdayFlowState.cvAttached = true;
+          try {
+            await loadFilesAndStart({ timeoutMs: 20_000 });
+            workdayFlowState.cvAttached = true;
+          } catch (e) {
+            console.warn('[ATS Workday TOP1] Cached attach failed:', e);
+          }
         }
         
         // Disable upload field after attach to prevent re-attachment loop
@@ -1805,7 +1817,24 @@
     if (cached[currentJobUrl]) {
       console.log('[ATS Tailor] Already tailored for this URL, loading cached files');
       await logEvent('cache_hit', { cachedAt: cached[currentJobUrl] });
-      loadFilesAndStart();
+
+      // Treat cached attachment as an in-progress run to avoid re-trigger loops.
+      hasTriggeredTailor = true;
+      tailoringInProgress = true;
+      createStatusBanner();
+      updateBanner('Using cached documents — attaching files…', 'working');
+
+      try {
+        await loadFilesAndStart({ timeoutMs: 20_000, logEvent });
+        updateBanner(SUCCESS_BANNER_MSG, 'success');
+        hideBanner();
+        await logEvent('autotailor_complete', { cached: true, durationMs: 0 });
+      } catch (e) {
+        await logEvent('attach_error', { cached: true, message: String(e?.message || e) });
+        updateBanner('Attachment failed — open popup to retry', 'error');
+      } finally {
+        tailoringInProgress = false;
+      }
       return;
     }
 
@@ -2002,7 +2031,13 @@
       stage = 'attach_loop';
       await logEvent('stage', { stage });
 
-      loadFilesAndStart();
+      updateBanner('📎 Attaching files to the application…', 'working');
+      await logEvent('attach_start');
+
+      // IMPORTANT: wait for attachment to complete (or timeout) before declaring success.
+      await loadFilesAndStart({ timeoutMs: 25_000, logEvent });
+
+      await logEvent('attach_complete');
 
       updateBanner(SUCCESS_BANNER_MSG, 'success');
       hideBanner();
@@ -2156,27 +2191,69 @@
   }
 
   // ============ LOAD FILES AND START ==========
-  function loadFilesAndStart() {
-    chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], (data) => {
-      cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
-      coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
-      coverLetterText = data.coverLetterText || '';
-      filesLoaded = true;
+  async function loadFilesAndStart({ timeoutMs = 20_000, logEvent } = {}) {
+    const waitForAttachment = async (ms) => {
+      const startedAt = Date.now();
+      return new Promise((resolve, reject) => {
+        const tick = () => {
+          try {
+            // Keep trying to force-fill while we wait.
+            forceEverything();
 
-      console.log('[ATS Tailor] Files loaded, starting attach');
+            if (areBothAttached()) return resolve(true);
 
-      // Immediate attach attempt
-      forceEverything();
+            if (Date.now() - startedAt >= ms) {
+              return reject(new Error('Attachment timeout'));
+            }
 
-      // Workday: DO NOT start rapid attach loops (Workday clears input after upload)
-      if (isWorkdayHost()) {
-        console.log('[ATS Tailor Workday] Skipping attach loops (one-time attach mode)');
-        return;
-      }
+            setTimeout(tick, 250);
+          } catch (e) {
+            reject(e);
+          }
+        };
+        tick();
+      });
+    };
 
-      // Start guarded loop (non-Workday)
-      ultraFastReplace();
+    const data = await new Promise((resolve) => {
+      chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], resolve);
     });
+
+    cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
+    coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
+    coverLetterText = data.coverLetterText || '';
+    filesLoaded = true;
+
+    console.log('[ATS Tailor] Files loaded, starting attach');
+    if (typeof logEvent === 'function') {
+      await logEvent('files_loaded', {
+        hasCv: Boolean(cvFile),
+        hasCoverPdf: Boolean(coverFile),
+        hasCoverText: Boolean((coverLetterText || '').trim()),
+        timeoutMs,
+        isWorkday: isWorkdayHost(),
+      });
+    }
+
+    // Immediate attach attempt
+    forceEverything();
+
+    // Workday clears file inputs after upload; use a slow guarded attach loop (no rapid intervals).
+    if (isWorkdayHost()) {
+      await waitForAttachment(timeoutMs);
+      return;
+    }
+
+    // Start guarded loop (non-Workday)
+    ultraFastReplace();
+
+    try {
+      await waitForAttachment(timeoutMs);
+    } catch (e) {
+      // Ensure we stop loops so we don't keep hammering the page.
+      stopAttachLoops();
+      throw e;
+    }
   }
 
   // ============ INIT - AUTO-DETECT AND TAILOR ============
