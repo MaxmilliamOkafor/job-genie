@@ -512,6 +512,11 @@ class ATSTailor {
     document.getElementById('openBulkApply')?.addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('bulk-apply.html') });
     });
+    
+    // Debug Settings Console
+    document.getElementById('openDebugSettings')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('debug-settings.html') });
+    });
     document.getElementById('autoTailorToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
       this.autoTailorEnabled = enabled;
@@ -2556,10 +2561,11 @@ class ATSTailor {
     const pipelineSteps = document.getElementById('pipelineSteps');
     
     btn.disabled = true;
-    btn.querySelector('.btn-text').textContent = 'Tailoring...';
+    btn.querySelector('.btn-text').textContent = '⚡ Tailoring...';
+    btn.classList.add('btn-tailoring');
     progressContainer?.classList.remove('hidden');
     pipelineSteps?.classList.remove('hidden');
-    this.setStatus('Tailoring...', 'working');
+    this.setStatus('⚡ Tailoring...', 'working');
 
     const updateProgress = (percent, text) => {
       if (progressFill) progressFill.style.width = `${percent}%`;
@@ -2636,7 +2642,9 @@ class ATSTailor {
       );
 
       if (!profileRes.ok) {
-        throw new Error('Could not load profile. Open the QuantumHire app and complete your profile.');
+        const profileError = await profileRes.text().catch(() => '');
+        console.error('[ATS Tailor] Profile load failed:', profileRes.status, profileError);
+        throw new Error(`Profile not found. Please visit the QuantumHire dashboard and complete your profile before tailoring. (Error: ${profileRes.status})`);
       }
 
       const profileRows = await profileRes.json();
@@ -2899,6 +2907,7 @@ class ATSTailor {
       this.setStatus('Error', 'error');
     } finally {
       btn.disabled = false;
+      btn.classList.remove('btn-tailoring');
       btn.querySelector('.btn-text').textContent = 'Extract & Apply Keywords to CV';
       setTimeout(() => {
         progressContainer?.classList.add('hidden');

@@ -241,6 +241,8 @@
         "bulk-apply.html",
         "bulk-apply.css",
         "bulk-apply.js",
+        "debug-settings.html",
+        "debug-settings.js",
         "mandatory-keywords.js",
         "universal-jd-parser.js",
         "reliable-extractor.js",
