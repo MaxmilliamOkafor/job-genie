@@ -2671,6 +2671,9 @@ class ATSTailor {
       const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
       updateProgress(35, `Step 2/3: ${providerName} generating tailored documents...`);
 
+      const tailorController = new AbortController();
+      const tailorTimeoutId = setTimeout(() => tailorController.abort(), 75_000);
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
         method: 'POST',
         headers: {
@@ -2678,6 +2681,7 @@ class ATSTailor {
           Authorization: `Bearer ${this.session.access_token}`,
           apikey: SUPABASE_ANON_KEY,
         },
+        signal: tailorController.signal,
         body: JSON.stringify({
           jobTitle: this.currentJob.title || '',
           company: this.currentJob.company || '',
@@ -2710,7 +2714,7 @@ class ATSTailor {
             cvFileName: p.cv_file_name || undefined,
           },
         }),
-      });
+      }).finally(() => clearTimeout(tailorTimeoutId));
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
