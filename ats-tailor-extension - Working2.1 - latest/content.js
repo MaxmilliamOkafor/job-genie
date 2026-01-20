@@ -127,8 +127,8 @@
     return (hasApplyBtn && hasJobDesc) || isApplyUrl;
   }
   
-  // Global success banner message (100% for ALL platforms) - FIXED: removed duplicate prefix
-  const SUCCESS_BANNER_MSG = '✅ Done! Match: 100% - Files attached!';
+  // Global success banner message - Professional text, minimal icons
+  const SUCCESS_BANNER_MSG = 'Tailored CV and Cover Letter attached successfully';
 
   const SUPPORTED_HOSTS = [
     // Standard ATS platforms (EXCLUDES Lever and Ashby per user preference)
@@ -2053,7 +2053,7 @@
       const attachResult = await loadFilesAndStart();
       await logEvent('attach_complete', { attachResult });
 
-      updateBanner('✅ Done! Tailored CV & Cover Letter attached!', 'success');
+      updateBanner('Tailored CV and Cover Letter attached successfully', 'success');
       // Keep success banner visible for 5 seconds then hide
       setTimeout(() => {
         hideBanner();
@@ -2124,47 +2124,32 @@
           left: 0;
           right: 0;
           z-index: 9999999;
-          background: linear-gradient(135deg, #00ff88 0%, #00cc66 50%, #00aa55 100%);
-          padding: 14px 20px;
-          font: bold 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-          color: #000;
+          background: linear-gradient(135deg, #00c853 0%, #00a844 50%, #008c3a 100%);
+          padding: 12px 20px;
+          font: 600 14px system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+          color: #fff;
           text-align: center;
-          box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5), 0 2px 8px rgba(0,0,0,0.2);
-          animation: ats-success-glow 1.5s ease-in-out infinite;
+          box-shadow: 0 2px 12px rgba(0, 200, 83, 0.4);
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 12px;
-        }
-        @keyframes ats-success-glow {
-          0%, 100% { box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5), 0 2px 8px rgba(0,0,0,0.2); }
-          50% { box-shadow: 0 4px 30px rgba(0, 255, 136, 0.8), 0 2px 12px rgba(0,0,0,0.3); }
-        }
-        #ats-success-ribbon .ats-icon {
-          font-size: 20px;
-          animation: ats-bounce 0.6s ease-out;
-        }
-        @keyframes ats-bounce {
-          0% { transform: scale(0); }
-          50% { transform: scale(1.3); }
-          100% { transform: scale(1); }
+          gap: 10px;
         }
         #ats-success-ribbon .ats-text {
-          font-weight: 700;
-          letter-spacing: 0.5px;
+          font-weight: 600;
+          letter-spacing: 0.3px;
         }
         #ats-success-ribbon .ats-badge {
-          background: rgba(0,0,0,0.15);
-          padding: 4px 10px;
-          border-radius: 12px;
-          font-size: 12px;
-          font-weight: 600;
+          background: rgba(255,255,255,0.2);
+          padding: 3px 8px;
+          border-radius: 10px;
+          font-size: 11px;
+          font-weight: 500;
         }
-        body.ats-success-ribbon-active { padding-top: 50px !important; }
+        body.ats-success-ribbon-active { padding-top: 44px !important; }
       </style>
-      <span class="ats-icon">✅</span>
-      <span class="ats-text">CV & COVER LETTER ATTACHED SUCCESSFULLY</span>
-      <span class="ats-badge">ATS-PERFECT</span>
+      <span class="ats-text">Tailored CV and Cover Letter attached successfully</span>
+      <span class="ats-badge">ATS Optimised</span>
     `;
     
     document.body.appendChild(ribbon);
@@ -2174,7 +2159,7 @@
     const orangeBanner = document.getElementById('ats-auto-banner');
     if (orangeBanner) orangeBanner.style.display = 'none';
     
-    console.log('[ATS Tailor] ✅ GREEN SUCCESS RIBBON displayed');
+    console.log('[ATS Tailor] Success ribbon displayed');
   }
 
   function ultraFastReplace() {
@@ -2302,10 +2287,10 @@
     tailoringInProgress = true;
     
     const jobInfo = extractJobInfo();
-    console.log('[ATS Tailor] 🚀 Triggering popup Extract & Apply for:', jobInfo.title);
+    console.log('[ATS Tailor] Triggering popup Extract & Apply for:', jobInfo.title);
     
-    // Update banner with job title (keeps persistent orange banner)
-    updateBanner(`🚀 ATS TAILOR 📝 Tailoring: ${jobInfo.title || 'Role'}...`, 'working');
+    // Update banner with job title (professional text)
+    updateBanner(`ATS Tailor: Tailoring for ${jobInfo.title || 'this role'}...`, 'working');
     
     // Set badge to indicate automation running
     chrome.runtime.sendMessage({ action: 'openPopup' }).catch(() => {});
@@ -2338,14 +2323,14 @@
     
     // Show persistent banner immediately on ATS detection
     createStatusBanner();
-    updateBanner('🚀 ATS TAILOR 📝 Tailoring CV with all keywords...', 'working');
+    updateBanner('ATS Tailor: Tailoring CV with optimised keywords...', 'working');
     
     chrome.storage.local.get(['ats_autoTailorEnabled'], (result) => {
       const autoEnabled = result.ats_autoTailorEnabled !== false; // default true
 
       if (!autoEnabled) {
         // User disabled auto-tailor - show disabled banner
-        updateBanner('⏸️ Auto Tailor is OFF (enable in popup)', 'info');
+        updateBanner('Auto Tailor is OFF (enable in popup)', 'info');
         return;
       }
 

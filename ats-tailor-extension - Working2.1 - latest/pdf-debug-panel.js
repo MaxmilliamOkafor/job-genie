@@ -26,9 +26,16 @@
     },
 
     bindEvents() {
-      document.getElementById('copyDebugData')?.addEventListener('click', () => this.copyDebugData());
-      document.getElementById('clearDebugLog')?.addEventListener('click', () => this.clearDebugLog());
-      document.getElementById('testPdfDownload')?.addEventListener('click', () => this.testPdfDownload());
+      // Use event delegation or ensure elements exist
+      const copyBtn = document.getElementById('copyDebugData');
+      const clearBtn = document.getElementById('clearDebugLog');
+      const testBtn = document.getElementById('testPdfDownload');
+      
+      if (copyBtn) copyBtn.addEventListener('click', () => this.copyDebugData());
+      if (clearBtn) clearBtn.addEventListener('click', () => this.clearDebugLog());
+      if (testBtn) testBtn.addEventListener('click', () => this.testPdfDownload());
+      
+      console.log('[PDFDebugPanel] Events bound:', { copyBtn: !!copyBtn, clearBtn: !!clearBtn, testBtn: !!testBtn });
     },
 
     // Reset debug data for new generation
@@ -56,21 +63,6 @@
       this._debugData.errors = [];
       this._debugData.warnings = [];
       this.updateBadge('Generating...', 'working');
-      this.updateUI();
-    },
-    
-    // Log output data
-    logOutputData(outputData) {
-      this._debugData.outputData = outputData;
-      this.updateUI();
-    },
-    
-    // Log generation complete
-    logComplete() {
-      this._debugData.status = 'complete';
-      this._debugData.endTime = performance.now();
-      const elapsed = this._debugData.endTime - this._debugData.startTime;
-      this.updateBadge(`Done (${Math.round(elapsed)}ms)`, 'success');
       this.updateUI();
     },
 
@@ -120,24 +112,39 @@
       this.updateUI();
     },
 
-    // Log output data
-    logOutputData(cvPdf, coverPdf, cvFileName, coverFileName) {
-      this._debugData.outputData = {
-        cvPdfLen: cvPdf ? `${Math.round(cvPdf.length * 0.75 / 1024)} KB` : 'None',
-        coverPdfLen: coverPdf ? `${Math.round(coverPdf.length * 0.75 / 1024)} KB` : 'None',
-        cvFileName: cvFileName || 'Not set',
-        coverFileName: coverFileName || 'Not set'
-      };
+    // Log output data (SINGLE unified method)
+    logOutputData(outputData) {
+      if (typeof outputData === 'object' && !Array.isArray(outputData)) {
+        // New signature: single object
+        this._debugData.outputData = {
+          cvPdfLen: outputData.cvBase64Length ? `${Math.round(outputData.cvBase64Length * 0.75 / 1024)} KB` : 'None',
+          coverPdfLen: outputData.coverBase64Length ? `${Math.round(outputData.coverBase64Length * 0.75 / 1024)} KB` : 'None',
+          cvFileName: outputData.cvFilename || 'Not set',
+          coverFileName: outputData.coverFilename || 'Not set'
+        };
+      } else {
+        // Legacy signature: individual params (cvPdf, coverPdf, cvFileName, coverFileName)
+        const cvPdf = arguments[0];
+        const coverPdf = arguments[1];
+        const cvFileName = arguments[2];
+        const coverFileName = arguments[3];
+        this._debugData.outputData = {
+          cvPdfLen: cvPdf ? `${Math.round(cvPdf.length * 0.75 / 1024)} KB` : 'None',
+          coverPdfLen: coverPdf ? `${Math.round(coverPdf.length * 0.75 / 1024)} KB` : 'None',
+          cvFileName: cvFileName || 'Not set',
+          coverFileName: coverFileName || 'Not set'
+        };
+      }
       this.updateUI();
     },
 
-    // Log completion
+    // Log completion (SINGLE unified method)
     logComplete(success = true) {
       this._debugData.endTime = performance.now();
       this._debugData.status = success ? 'complete' : 'error';
       const duration = Math.round(this._debugData.endTime - this._debugData.startTime);
       this._debugData.generationTime = `${duration}ms`;
-      this.updateBadge(success ? `✓ ${duration}ms` : 'Error', success ? 'success' : 'error');
+      this.updateBadge(success ? `Done (${duration}ms)` : 'Error', success ? 'success' : 'error');
       this.updateUI();
     },
 
@@ -257,7 +264,7 @@
       const html = [
         ...errors.map(e => `
           <div class="debug-log-entry error">
-            <span class="log-icon">❌</span>
+            <span class="log-icon">X</span>
             <div class="log-content">
               <div class="log-context">${this.escapeHtml(e.context)}</div>
               <div class="log-message">${this.escapeHtml(e.message)}</div>
@@ -266,7 +273,7 @@
         `),
         ...warnings.map(w => `
           <div class="debug-log-entry warning">
-            <span class="log-icon">⚠️</span>
+            <span class="log-icon">!</span>
             <div class="log-content">
               <div class="log-context">${this.escapeHtml(w.context)}</div>
               <div class="log-message">${this.escapeHtml(w.message)}</div>
@@ -292,6 +299,7 @@
         await navigator.clipboard.writeText(data);
         this.showToast('Debug data copied!', 'success');
       } catch (e) {
+        console.error('[PDFDebugPanel] Copy failed:', e);
         this.showToast('Failed to copy', 'error');
       }
     },
@@ -308,7 +316,7 @@
       try {
         const atsTailor = window.atsTailorInstance;
         if (!atsTailor?.generatedDocuments?.cvPdf) {
-          this.showToast('No PDF generated yet', 'error');
+          this.showToast('No PDF generated yet - run tailoring first', 'error');
           return;
         }
         
@@ -385,7 +393,7 @@
       const badge = document.getElementById('parseCVStatus');
       if (badge) {
         badge.textContent = data.status || 'Idle';
-        badge.className = `debug-badge ${data.status === 'Parsed ✓' ? 'success' : ''}`;
+        badge.className = `debug-badge ${data.status === 'Parsed' ? 'success' : ''}`;
       }
     }
   };
