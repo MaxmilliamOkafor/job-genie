@@ -37,8 +37,7 @@ export interface Profile {
   hispanic_latino: boolean;
   security_clearance: boolean;
   cover_letter: string | null;
-  professional_experience: any[];
-  relevant_projects: any[];
+  work_experience: any[];
   education: any[];
   skills: any[];
   certifications: string[];
@@ -80,29 +79,10 @@ export function useProfile() {
       if (error) throw error;
       
       if (data) {
-        // Support professional_experience from the database (column was renamed)
-        const rawProfExp = Array.isArray((data as any).professional_experience) 
-          ? ((data as any).professional_experience as any[]) 
-          : [];
-        const normalizedProfExp = normalizeWorkExperience(rawProfExp as any);
-
-        // One-time auto-repair: if older data has company/title swapped or missing ids/bullets,
-        // normalise it and persist so UI + PDF stay consistent.
-        if (JSON.stringify(rawProfExp) !== JSON.stringify(normalizedProfExp)) {
-          supabase
-            .from('profiles')
-            .update({ professional_experience: normalizedProfExp } as any)
-            .eq('user_id', user.id)
-            .then(({ error }) => {
-              if (error) console.warn('Failed to auto-normalise professional experience:', error.message);
-            });
-        }
-
         setProfile({
           ...data,
           authorized_countries: (data.authorized_countries as string[]) || [],
-          professional_experience: normalizedProfExp,
-          relevant_projects: Array.isArray((data as any).relevant_projects) ? (data as any).relevant_projects : [],
+          work_experience: Array.isArray(data.work_experience) ? data.work_experience : [],
           education: Array.isArray(data.education) ? data.education : [],
           skills: Array.isArray(data.skills) ? data.skills : [],
           certifications: (data.certifications as string[]) || [],
@@ -134,7 +114,7 @@ export function useProfile() {
     try {
       const safeUpdates: Partial<Profile> = {
         ...updates,
-        ...(updates.professional_experience ? { professional_experience: normalizeWorkExperience(updates.professional_experience as any) } : {}),
+        ...(updates.work_experience ? { work_experience: normalizeWorkExperience(updates.work_experience as any) } : {}),
       };
 
       const { error } = await supabase

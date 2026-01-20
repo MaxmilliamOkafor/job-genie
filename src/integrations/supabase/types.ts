@@ -417,9 +417,7 @@ export type Database = {
           phone: string | null
           portfolio: string | null
           preferred_ai_provider: string | null
-          professional_experience: Json | null
           race_ethnicity: string | null
-          relevant_projects: Json | null
           security_clearance: boolean | null
           skills: Json | null
           state: string | null
@@ -429,6 +427,7 @@ export type Database = {
           veteran_status: boolean | null
           visa_required: boolean | null
           willing_to_relocate: boolean | null
+          work_experience: Json | null
           zip_code: string | null
         }
         Insert: {
@@ -470,9 +469,7 @@ export type Database = {
           phone?: string | null
           portfolio?: string | null
           preferred_ai_provider?: string | null
-          professional_experience?: Json | null
           race_ethnicity?: string | null
-          relevant_projects?: Json | null
           security_clearance?: boolean | null
           skills?: Json | null
           state?: string | null
@@ -482,6 +479,7 @@ export type Database = {
           veteran_status?: boolean | null
           visa_required?: boolean | null
           willing_to_relocate?: boolean | null
+          work_experience?: Json | null
           zip_code?: string | null
         }
         Update: {
@@ -523,9 +521,7 @@ export type Database = {
           phone?: string | null
           portfolio?: string | null
           preferred_ai_provider?: string | null
-          professional_experience?: Json | null
           race_ethnicity?: string | null
-          relevant_projects?: Json | null
           security_clearance?: boolean | null
           skills?: Json | null
           state?: string | null
@@ -535,6 +531,7 @@ export type Database = {
           veteran_status?: boolean | null
           visa_required?: boolean | null
           willing_to_relocate?: boolean | null
+          work_experience?: Json | null
           zip_code?: string | null
         }
         Relationships: []
@@ -585,33 +582,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      user_api_keys: {
-        Row: {
-          created_at: string
-          id: string
-          kimi_api_key: string | null
-          openai_api_key: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          kimi_api_key?: string | null
-          openai_api_key?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          kimi_api_key?: string | null
-          openai_api_key?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       user_memories: {
         Row: {

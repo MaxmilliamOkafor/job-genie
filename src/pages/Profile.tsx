@@ -15,12 +15,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiUsageChart } from '@/components/profile/ApiUsageChart';
 import { WorkExperiencePreview } from '@/components/profile/WorkExperiencePreview';
-import { RelevantProjectsPreview } from '@/components/profile/RelevantProjectsPreview';
 import { ProfileVersionHistory, createExportWithHistory } from '@/components/profile/ProfileVersionHistory';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
-  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown, FolderGit2
+  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -100,8 +99,7 @@ const Profile = () => {
         authorized_countries: localProfile.authorized_countries,
         skills: localProfile.skills,
         certifications: localProfile.certifications,
-        professional_experience: localProfile.professional_experience,
-        relevant_projects: localProfile.relevant_projects,
+        work_experience: localProfile.work_experience,
         education: localProfile.education,
         languages: localProfile.languages,
         cover_letter: localProfile.cover_letter,
@@ -133,9 +131,9 @@ const Profile = () => {
 
   // Restore profile from version history
   const handleRestoreFromHistory = async (profileData: Record<string, any>) => {
-    // Normalize professional experience if present
-    if (profileData.professional_experience) {
-      profileData.professional_experience = normalizeWorkExperience(profileData.professional_experience);
+    // Normalize work experience if present
+    if (profileData.work_experience) {
+      profileData.work_experience = normalizeWorkExperience(profileData.work_experience);
     }
     
     // Update local state
@@ -272,7 +270,7 @@ const Profile = () => {
   const handleSave = async () => {
     const normalized = {
       ...localProfile,
-      professional_experience: normalizeWorkExperience(localProfile.professional_experience || []),
+      work_experience: normalizeWorkExperience(localProfile.work_experience || []),
     };
 
     await updateProfile(normalized);
@@ -464,9 +462,8 @@ const Profile = () => {
               if (parsedData.languages && parsedData.languages.length > 0) updates.languages = parsedData.languages;
               if (parsedData.cover_letter) updates.cover_letter = parsedData.cover_letter;
 
-              // Map work_experience from parsed CV data to professional_experience in profile
               if (parsedData.work_experience && parsedData.work_experience.length > 0) {
-                updates.professional_experience = normalizeWorkExperience(parsedData.work_experience as any);
+                updates.work_experience = normalizeWorkExperience(parsedData.work_experience as any);
               }
 
               setLocalProfile(prev => ({ ...prev, ...updates }));
@@ -1187,12 +1184,12 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        {/* Professional Experience */}
+        {/* Work Experience */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
-              Professional Experience
+              Work Experience
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1216,20 +1213,20 @@ const Profile = () => {
                         'Use metrics and numbers where possible (e.g., Improved performance by 30%)'
                       ]
                     };
-                    updateLocalField('professional_experience', [...(localProfile.professional_experience || []), newExp]);
+                    updateLocalField('work_experience', [...(localProfile.work_experience || []), newExp]);
                   }}
                 >
                   <Plus className="h-4 w-4" />
-                  Add Professional Experience
+                  Add Work Experience
                 </Button>
-                {(localProfile.professional_experience || []).length > 0 && (
+                {(localProfile.work_experience || []).length > 0 && (
                   <Button 
                     variant="destructive" 
                     className="gap-2"
                     onClick={() => {
                       if (window.confirm('Are you sure you want to clear ALL work experience? This will remove all entries from your profile and cannot be undone.')) {
-                        updateLocalField('professional_experience', []);
-                        toast.success('Professional experience cleared. Click Save to persist changes.');
+                        updateLocalField('work_experience', []);
+                        toast.success('Work experience cleared. Click Save to persist changes.');
                       }
                     }}
                   >
@@ -1239,7 +1236,7 @@ const Profile = () => {
                 )}
               </div>
             )}
-            {(localProfile.professional_experience || []).map((exp: any, expIndex: number) => (
+            {(localProfile.work_experience || []).map((exp: any, expIndex: number) => (
               <div key={exp.id} className="border rounded-lg p-4 relative">
                 {editMode && (
                   <Button
@@ -1247,9 +1244,9 @@ const Profile = () => {
                     size="icon"
                     className="absolute top-2 right-2 h-6 w-6"
                     onClick={() => {
-                      const exps = [...(localProfile.professional_experience || [])];
+                      const exps = [...(localProfile.work_experience || [])];
                       exps.splice(expIndex, 1);
-                      updateLocalField('professional_experience', exps);
+                      updateLocalField('work_experience', exps);
                     }}
                   >
                     <X className="h-4 w-4 text-destructive" />
@@ -1262,9 +1259,9 @@ const Profile = () => {
                         <Input 
                           value={exp.title || ''} 
                           onChange={(e) => {
-                            const exps = [...(localProfile.professional_experience || [])];
+                            const exps = [...(localProfile.work_experience || [])];
                             exps[expIndex] = { ...exps[expIndex], title: e.target.value };
-                            updateLocalField('professional_experience', exps);
+                            updateLocalField('work_experience', exps);
                           }}
                           placeholder="Job Title"
                           className="font-semibold"
@@ -1272,9 +1269,9 @@ const Profile = () => {
                         <Input 
                           value={exp.company || ''} 
                           onChange={(e) => {
-                            const exps = [...(localProfile.professional_experience || [])];
+                            const exps = [...(localProfile.work_experience || [])];
                             exps[expIndex] = { ...exps[expIndex], company: e.target.value };
-                            updateLocalField('professional_experience', exps);
+                            updateLocalField('work_experience', exps);
                           }}
                           placeholder="Company"
                         />
@@ -1282,9 +1279,9 @@ const Profile = () => {
                           <Input 
                             value={exp.startDate || ''} 
                             onChange={(e) => {
-                              const exps = [...(localProfile.professional_experience || [])];
+                              const exps = [...(localProfile.work_experience || [])];
                               exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
-                              updateLocalField('professional_experience', exps);
+                              updateLocalField('work_experience', exps);
                             }}
                             placeholder="Start Date"
                             className="w-28"
@@ -1293,9 +1290,9 @@ const Profile = () => {
                           <Input 
                             value={exp.endDate || ''} 
                             onChange={(e) => {
-                              const exps = [...(localProfile.professional_experience || [])];
+                              const exps = [...(localProfile.work_experience || [])];
                               exps[expIndex] = { ...exps[expIndex], endDate: e.target.value };
-                              updateLocalField('professional_experience', exps);
+                              updateLocalField('work_experience', exps);
                             }}
                             placeholder="End Date"
                             className="w-28"
@@ -1310,13 +1307,13 @@ const Profile = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                const exps = [...(localProfile.professional_experience || [])];
+                                const exps = [...(localProfile.work_experience || [])];
                                 const currentBullets = exps[expIndex].bullets || [];
                                 exps[expIndex] = { 
                                   ...exps[expIndex], 
                                   bullets: [...currentBullets, 'New achievement or responsibility'] 
                                 };
-                                updateLocalField('professional_experience', exps);
+                                updateLocalField('work_experience', exps);
                               }}
                               className="h-7 px-2 gap-1 text-xs"
                             >
@@ -1331,11 +1328,11 @@ const Profile = () => {
                                 <Textarea
                                   value={bullet}
                                   onChange={(e) => {
-                                    const exps = [...(localProfile.professional_experience || [])];
+                                    const exps = [...(localProfile.work_experience || [])];
                                     const bullets = [...(exps[expIndex].bullets || [])];
                                     bullets[bulletIndex] = e.target.value;
                                     exps[expIndex] = { ...exps[expIndex], bullets };
-                                    updateLocalField('professional_experience', exps);
+                                    updateLocalField('work_experience', exps);
                                   }}
                                   placeholder="Describe your achievement with metrics (e.g., Reduced load time by 40%)"
                                   className="flex-1 min-h-[60px] resize-none text-sm"
@@ -1346,11 +1343,11 @@ const Profile = () => {
                                   size="icon"
                                   className="h-8 w-8 shrink-0"
                                   onClick={() => {
-                                    const exps = [...(localProfile.professional_experience || [])];
+                                    const exps = [...(localProfile.work_experience || [])];
                                     const bullets = [...(exps[expIndex].bullets || [])];
                                     bullets.splice(bulletIndex, 1);
                                     exps[expIndex] = { ...exps[expIndex], bullets };
-                                    updateLocalField('professional_experience', exps);
+                                    updateLocalField('work_experience', exps);
                                   }}
                                 >
                                   <X className="h-4 w-4 text-destructive" />
@@ -1395,221 +1392,8 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        {/* Professional Experience ATS Preview */}
-        <WorkExperiencePreview workExperience={localProfile.professional_experience || []} />
-
-        {/* Technical Projects */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FolderGit2 className="h-5 w-5" />
-              Technical Projects
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {editMode && (
-              <div className="flex gap-2 mb-4">
-                <Button 
-                  variant="outline" 
-                  className="flex-1 gap-2"
-                  onClick={() => {
-                    const newProject = {
-                      id: crypto.randomUUID(),
-                      name: 'Project Name',
-                      role: 'Your Role',
-                      startDate: '',
-                      endDate: '',
-                      description: '',
-                      skills: [],
-                      bullets: [
-                        'Describe the project and your contribution',
-                        'Highlight technologies used and outcomes achieved'
-                      ]
-                    };
-                    updateLocalField('relevant_projects', [...(localProfile.relevant_projects || []), newProject]);
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Project
-                </Button>
-                {(localProfile.relevant_projects || []).length > 0 && (
-                  <Button 
-                    variant="destructive" 
-                    className="gap-2"
-                    onClick={() => {
-                      if (window.confirm('Are you sure you want to clear ALL projects? This cannot be undone.')) {
-                        updateLocalField('relevant_projects', []);
-                        toast.success('Projects cleared. Click Save to persist changes.');
-                      }
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                    Clear All
-                  </Button>
-                )}
-              </div>
-            )}
-            {(localProfile.relevant_projects || []).map((project: any, projectIndex: number) => (
-              <div key={project.id} className="border rounded-lg p-4 relative">
-                {editMode && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-6 w-6"
-                    onClick={() => {
-                      const projects = [...(localProfile.relevant_projects || [])];
-                      projects.splice(projectIndex, 1);
-                      updateLocalField('relevant_projects', projects);
-                    }}
-                  >
-                    <X className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1 mr-8">
-                    {editMode ? (
-                      <div className="space-y-2">
-                        <Input 
-                          value={project.name || ''} 
-                          onChange={(e) => {
-                            const projects = [...(localProfile.relevant_projects || [])];
-                            projects[projectIndex] = { ...projects[projectIndex], name: e.target.value };
-                            updateLocalField('relevant_projects', projects);
-                          }}
-                          placeholder="Project Name"
-                          className="font-semibold"
-                        />
-                        <Input 
-                          value={project.role || ''} 
-                          onChange={(e) => {
-                            const projects = [...(localProfile.relevant_projects || [])];
-                            projects[projectIndex] = { ...projects[projectIndex], role: e.target.value };
-                            updateLocalField('relevant_projects', projects);
-                          }}
-                          placeholder="Your Role (e.g., AI Product Manager)"
-                        />
-                        <div className="flex gap-2 items-center">
-                          <Input 
-                            value={project.startDate || ''} 
-                            onChange={(e) => {
-                              const projects = [...(localProfile.relevant_projects || [])];
-                              projects[projectIndex] = { ...projects[projectIndex], startDate: e.target.value };
-                              updateLocalField('relevant_projects', projects);
-                            }}
-                            placeholder="Start (optional)"
-                            className="w-28"
-                          />
-                          <span className="self-center text-muted-foreground">-</span>
-                          <Input 
-                            value={project.endDate || ''} 
-                            onChange={(e) => {
-                              const projects = [...(localProfile.relevant_projects || [])];
-                              projects[projectIndex] = { ...projects[projectIndex], endDate: e.target.value };
-                              updateLocalField('relevant_projects', projects);
-                            }}
-                            placeholder="End (optional)"
-                            className="w-28"
-                          />
-                          <span className="text-xs text-muted-foreground italic">Dates are optional</span>
-                        </div>
-                        
-                        {/* Bullet Points / Achievements Section */}
-                        <div className="mt-4 pt-4 border-t border-border">
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-medium">Achievements / Contributions</Label>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const projects = [...(localProfile.relevant_projects || [])];
-                                const currentBullets = projects[projectIndex].bullets || [];
-                                projects[projectIndex] = { 
-                                  ...projects[projectIndex], 
-                                  bullets: [...currentBullets, 'New achievement or contribution'] 
-                                };
-                                updateLocalField('relevant_projects', projects);
-                              }}
-                              className="h-7 px-2 gap-1 text-xs"
-                            >
-                              <Plus className="h-3 w-3" />
-                              Add Bullet
-                            </Button>
-                          </div>
-                          <div className="space-y-2">
-                            {(project.bullets || []).map((bullet: string, bulletIndex: number) => (
-                              <div key={bulletIndex} className="flex gap-2 items-start">
-                                <span className="text-muted-foreground mt-2 text-sm">•</span>
-                                <Textarea
-                                  value={bullet}
-                                  onChange={(e) => {
-                                    const projects = [...(localProfile.relevant_projects || [])];
-                                    const bullets = [...(projects[projectIndex].bullets || [])];
-                                    bullets[bulletIndex] = e.target.value;
-                                    projects[projectIndex] = { ...projects[projectIndex], bullets };
-                                    updateLocalField('relevant_projects', projects);
-                                  }}
-                                  placeholder="Describe your contribution with impact (e.g., Built AI pipeline that processed 10k+ records)"
-                                  className="flex-1 min-h-[60px] resize-none text-sm"
-                                  rows={2}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0"
-                                  onClick={() => {
-                                    const projects = [...(localProfile.relevant_projects || [])];
-                                    const bullets = [...(projects[projectIndex].bullets || [])];
-                                    bullets.splice(bulletIndex, 1);
-                                    projects[projectIndex] = { ...projects[projectIndex], bullets };
-                                    updateLocalField('relevant_projects', projects);
-                                  }}
-                                >
-                                  <X className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            ))}
-                            {(!project.bullets || project.bullets.length === 0) && (
-                              <p className="text-xs text-muted-foreground italic">
-                                No bullet points yet. Add achievements to improve your CV tailoring.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <h3 className="font-bold">{project.name}</h3>
-                        <p className="text-muted-foreground italic">{project.role}</p>
-                        {/* Display bullets in view mode */}
-                        {project.bullets && project.bullets.length > 0 && (
-                          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                            {project.bullets.map((bullet: string, i: number) => (
-                              <li key={i} className="flex gap-2">
-                                <span>•</span>
-                                <span>{bullet}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  {!editMode && (project.startDate || project.endDate) && (
-                    <Badge variant="outline">{project.startDate}{project.startDate && project.endDate ? ' - ' : ''}{project.endDate}</Badge>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {(project.skills || []).slice(0, 6).map((skill: string, i: number) => (
-                    <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Relevant Projects Preview */}
-        <RelevantProjectsPreview projects={localProfile.relevant_projects || []} />
+        {/* Work Experience ATS Preview */}
+        <WorkExperiencePreview workExperience={localProfile.work_experience || []} />
 
         {/* Education */}
         <Card>
