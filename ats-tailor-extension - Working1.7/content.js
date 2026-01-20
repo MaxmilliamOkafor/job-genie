@@ -372,8 +372,9 @@
           
           // Build CV from profile data (profile-only approach, no ats_baseCV fallback)
           let baseCV = '';
-          if (profile.professional_experience || profile.work_experience) {
-            const experience = profile.professional_experience || profile.work_experience || [];
+          if (profile.professional_experience || profile.relevant_projects) {
+            const experience = Array.isArray(profile.professional_experience) ? profile.professional_experience : [];
+            const projects = Array.isArray(profile.relevant_projects) ? profile.relevant_projects : [];
             const skills = Array.isArray(profile.skills) ? profile.skills : [];
             const education = Array.isArray(profile.education) ? profile.education : [];
             
@@ -2323,15 +2324,13 @@
     // Respects the Auto Tailor toggle from storage
     chrome.storage.local.get(['ats_autoTailorEnabled'], (result) => {
       const autoEnabled = result.ats_autoTailorEnabled !== false; // default true
-      
+
       if (!autoEnabled) {
-        // User disabled auto-tailor - show manual prompt
-        createStatusBanner();
-        updateBanner('ATS detected - click Extract & Apply Keywords in extension to start.', 'info');
+        // User disabled auto-tailor - do nothing (manual use via popup)
         return;
       }
-      
-      // Immediately show banner and start tailoring
+
+      // Immediately start tailoring (equivalent to the user clicking the popup button)
       createStatusBanner();
       updateBanner('ATS detected! Starting auto-tailor...', 'working');
       runAutoTailorFlow();
@@ -2432,40 +2431,13 @@
       }
     }
     
-    // ============ NON-TIER 1 ATS PATH ============
-    // Run auto-tailor directly (do NOT rely on popup which may not be open)
+    // ============ NON-TIER 1 ATS PATH ==========
+    // Start tailoring immediately (do not wait for upload fields)
+    // Attachment will happen when fields are available.
     setTimeout(() => {
       console.log('[ATS Tailor] ATS platform detected - starting automation...');
-      
-      // Run auto-tailor directly if upload fields exist
-      if (hasUploadFields()) {
-        console.log('[ATS Tailor] Upload fields detected! Starting auto-tailor...');
-        autoTailorDocuments();
-      } else {
-        console.log('[ATS Tailor] No upload fields yet, watching for changes...');
-        
-        // Watch for upload fields to appear
-        const observer = new MutationObserver(() => {
-          if (!hasTriggeredTailor && hasUploadFields()) {
-            console.log('[ATS Tailor] Upload fields appeared! Starting auto-tailor...');
-            observer.disconnect();
-            autoTailorDocuments();
-          }
-        });
-        
-        observer.observe(document.body, { childList: true, subtree: true });
-        
-        // Fallback: wait for page to fully load then try
-        setTimeout(() => {
-          if (!hasTriggeredTailor) {
-            observer.disconnect();
-            // Even if no upload fields, try to tailor (page may have lazy-loaded content)
-            console.log('[ATS Tailor] Fallback timer - attempting tailor...');
-            autoTailorDocuments();
-          }
-        }, 2000); // Wait 2 seconds for page to fully load
-      }
-    }, 100); // Give page 100ms to stabilize
+      autoTailorDocuments();
+    }, 0);
   }
   
   // ============ TIER 1 TURBO PIPELINE ============
