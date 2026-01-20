@@ -4422,6 +4422,12 @@ ATSTailor.prototype.addDebugLog = function(stage, data) {
   }
 };
 
+// logDebug alias for tailorDocuments and other methods
+ATSTailor.prototype.logDebug = function(stage, message, data = {}) {
+  console.log(`[ATS Tailor] [${stage}] ${message}`, data);
+  this.addDebugLog(stage, { message, ...data });
+};
+
 ATSTailor.prototype.showDebugReport = function() {
   const panel = document.getElementById('debugReportPanel');
   const content = document.getElementById('debugReportContent');
