@@ -319,15 +319,16 @@ const Profile = () => {
   }
 
   // Check if there's an active AI provider configured correctly
+  // API keys are stored securely and not accessible from client - we use enabled flags
   const hasActiveProvider = (
     // Kimi is preferred and configured
-    (localProfile.preferred_ai_provider === 'kimi' && localProfile.kimi_enabled && !!localProfile.kimi_api_key) ||
+    (localProfile.preferred_ai_provider === 'kimi' && localProfile.kimi_enabled) ||
     // OpenAI is preferred and configured
-    (localProfile.preferred_ai_provider === 'openai' && localProfile.openai_enabled && !!localProfile.openai_api_key) ||
+    (localProfile.preferred_ai_provider === 'openai' && localProfile.openai_enabled) ||
     // Kimi is enabled as fallback
-    (localProfile.kimi_enabled && !!localProfile.kimi_api_key) ||
+    localProfile.kimi_enabled ||
     // OpenAI is enabled as fallback
-    (localProfile.openai_enabled && !!localProfile.openai_api_key)
+    localProfile.openai_enabled
   );
 
   return (
@@ -547,7 +548,7 @@ const Profile = () => {
               <div className="flex gap-2">
                 <Input 
                   type="password"
-                  placeholder="sk-..."
+                  placeholder={localProfile.openai_enabled ? "••••••••••••••••" : "sk-..."}
                   value={localProfile.openai_api_key || ''}
                   onChange={(e) => updateLocalField('openai_api_key', e.target.value)}
                   className="flex-1"
@@ -565,7 +566,6 @@ const Profile = () => {
                   onClick={() => {
                     if (localProfile.openai_api_key) {
                       updateProfile({ openai_api_key: localProfile.openai_api_key });
-                      toast.success('OpenAI API key saved!');
                     }
                   }}
                   disabled={!localProfile.openai_api_key || !localProfile.openai_enabled}
@@ -575,10 +575,11 @@ const Profile = () => {
                 </Button>
               </div>
               
-              {localProfile.openai_api_key && localProfile.openai_enabled && (
+              {/* Show saved status based on enabled flag (API keys are stored securely) */}
+              {localProfile.openai_enabled && (
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <CheckCircle className="h-4 w-4" />
-                  OpenAI API key configured
+                  OpenAI API key saved &amp; active
                 </div>
               )}
               
@@ -587,7 +588,7 @@ const Profile = () => {
                 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">
                   OpenAI Platform
                 </a>
-                . Uses GPT-4o-mini.
+                . Uses GPT-4o-mini. Enter a new key and click Save to update.
               </p>
             </div>
 
@@ -625,7 +626,7 @@ const Profile = () => {
               <div className="flex gap-2">
                 <Input 
                   type="password"
-                  placeholder="sk-..."
+                  placeholder={localProfile.kimi_enabled ? "••••••••••••••••" : "sk-..."}
                   value={localProfile.kimi_api_key || ''}
                   onChange={(e) => updateLocalField('kimi_api_key', e.target.value)}
                   className="flex-1"
@@ -643,7 +644,6 @@ const Profile = () => {
                   onClick={() => {
                     if (localProfile.kimi_api_key) {
                       updateProfile({ kimi_api_key: localProfile.kimi_api_key });
-                      toast.success('Kimi K2 API key saved!');
                     }
                   }}
                   disabled={!localProfile.kimi_api_key || !localProfile.kimi_enabled}
@@ -653,10 +653,11 @@ const Profile = () => {
                 </Button>
               </div>
               
-              {localProfile.kimi_api_key && localProfile.kimi_enabled && (
+              {/* Show saved status based on enabled flag (API keys are stored securely) */}
+              {localProfile.kimi_enabled && (
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <CheckCircle className="h-4 w-4" />
-                  Kimi K2 API key configured
+                  Kimi K2 API key saved &amp; active
                 </div>
               )}
               
@@ -665,7 +666,7 @@ const Profile = () => {
                 <a href="https://platform.moonshot.cn/console/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">
                   Moonshot AI Platform
                 </a>
-                . Best for agentic coding and complex reasoning.
+                . Best for agentic coding and complex reasoning. Enter a new key and click Save to update.
               </p>
             </div>
           </CardContent>

@@ -141,32 +141,58 @@ export function useProfile() {
       const apiKeyUpdates: { openai_api_key?: string; kimi_api_key?: string } = {};
       const profileUpdates: Partial<Profile> = { ...updates };
       
+      // Track which providers get keys so we can update enabled flags
+      let openaiKeyProvided = false;
+      let kimiKeyProvided = false;
+      
       if ('openai_api_key' in updates && updates.openai_api_key !== undefined) {
         apiKeyUpdates.openai_api_key = updates.openai_api_key as string;
+        openaiKeyProvided = !!updates.openai_api_key && updates.openai_api_key.length > 0;
         delete (profileUpdates as any).openai_api_key;
       }
       
       if ('kimi_api_key' in updates && updates.kimi_api_key !== undefined) {
         apiKeyUpdates.kimi_api_key = updates.kimi_api_key as string;
+        kimiKeyProvided = !!updates.kimi_api_key && updates.kimi_api_key.length > 0;
         delete (profileUpdates as any).kimi_api_key;
       }
       
       // Update API keys in secure table (user can INSERT/UPDATE but not SELECT)
       if (Object.keys(apiKeyUpdates).length > 0) {
-        // Try to update first, if no row exists, insert
-        const { error: updateError } = await supabase
+        // Use upsert to handle both insert and update cases cleanly
+        const { error: upsertError } = await supabase
           .from('user_api_keys')
-          .update(apiKeyUpdates)
-          .eq('user_id', user.id);
+          .upsert(
+            { user_id: user.id, ...apiKeyUpdates, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          );
         
-        if (updateError) {
-          // If update failed (no row), try insert
-          const { error: insertError } = await supabase
-            .from('user_api_keys')
-            .insert({ user_id: user.id, ...apiKeyUpdates });
+        if (upsertError) {
+          console.error('Failed to save API keys:', upsertError);
+          throw new Error('Failed to save API key');
+        }
+        
+        // IMPORTANT: Also update enabled flags in profiles so dashboard can detect active providers
+        // These flags indicate whether a key has been configured (not the key value itself)
+        const enabledUpdates: Partial<Profile> = {};
+        if (openaiKeyProvided) {
+          enabledUpdates.openai_enabled = true;
+        }
+        if (kimiKeyProvided) {
+          enabledUpdates.kimi_enabled = true;
+        }
+        
+        if (Object.keys(enabledUpdates).length > 0) {
+          const { error: enabledError } = await supabase
+            .from('profiles')
+            .update(enabledUpdates)
+            .eq('user_id', user.id);
           
-          if (insertError && !insertError.message.includes('duplicate')) {
-            throw insertError;
+          if (enabledError) {
+            console.warn('Failed to update enabled flags:', enabledError);
+          } else {
+            // Update local state with enabled flags
+            setProfile(prev => prev ? { ...prev, ...enabledUpdates } : null);
           }
         }
       }
