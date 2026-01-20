@@ -1731,37 +1731,118 @@
 
   // ============ AUTO-TAILOR DOCUMENTS ============
   async function autoTailorDocuments() {
+    // Lightweight structured logging to help diagnose stalls.
+    // Logs are stored in chrome.storage.local under `ats_auto_tailor_logs` (capped).
+    const logEvent = async (event, data = {}) => {
+      try {
+        const entry = {
+          ts: new Date().toISOString(),
+          event,
+          url: currentJobUrl,
+          ...data,
+        };
+
+        console.log('[ATS Tailor][AutoTailor]', entry);
+
+        await new Promise((resolve) => {
+          chrome.storage.local.get(['ats_auto_tailor_logs'], (result) => {
+            const prev = Array.isArray(result.ats_auto_tailor_logs) ? result.ats_auto_tailor_logs : [];
+            const next = [entry, ...prev].slice(0, 200);
+            chrome.storage.local.set({ ats_auto_tailor_logs: next }, resolve);
+          });
+        });
+      } catch (e) {
+        // Never let logging break automation.
+        console.warn('[ATS Tailor][AutoTailor] Failed to persist log:', e);
+      }
+    };
+
+    const fetchWithTimeout = async (url, options, timeoutMs, label) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const startedAt = performance.now();
+      await logEvent('fetch_start', { label, timeoutMs, url });
+
+      try {
+        const res = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        });
+        await logEvent('fetch_end', {
+          label,
+          ok: res.ok,
+          status: res.status,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+        return res;
+      } catch (err) {
+        const isAbort = err?.name === 'AbortError';
+        await logEvent('fetch_error', {
+          label,
+          isAbort,
+          durationMs: Math.round(performance.now() - startedAt),
+          message: String(err?.message || err),
+        });
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
     if (hasTriggeredTailor || tailoringInProgress) {
       console.log('[ATS Tailor] Already triggered or in progress, skipping');
       return;
     }
 
     // Check if we've already tailored for this URL
-    const cached = await new Promise(resolve => {
-      chrome.storage.local.get(['ats_tailored_urls'], result => {
+    const cached = await new Promise((resolve) => {
+      chrome.storage.local.get(['ats_tailored_urls'], (result) => {
         resolve(result.ats_tailored_urls || {});
       });
     });
-    
+
     if (cached[currentJobUrl]) {
       console.log('[ATS Tailor] Already tailored for this URL, loading cached files');
+      await logEvent('cache_hit', { cachedAt: cached[currentJobUrl] });
       loadFilesAndStart();
       return;
     }
 
     hasTriggeredTailor = true;
     tailoringInProgress = true;
-    
+
     createStatusBanner();
     updateBanner('Generating tailored CV & Cover Letter...', 'working');
 
+    const overallStart = performance.now();
+    let stage = 'init';
+    await logEvent('autotailor_start');
+
+    // Overall watchdog: ensures we always un-stick `tailoringInProgress`.
+    const OVERALL_TIMEOUT_MS = 90_000;
+    const watchdogId = setTimeout(() => {
+      console.error('[ATS Tailor][AutoTailor] Watchdog timeout hit - forcing reset');
+      try {
+        chrome.storage.local.set({ ats_auto_tailor_last_watchdog_timeout: Date.now() });
+      } catch (_) {}
+      tailoringInProgress = false;
+      // Allow retry after a watchdog hit.
+      hasTriggeredTailor = false;
+      updateBanner('Tailoring timed out — open popup to retry', 'error');
+    }, OVERALL_TIMEOUT_MS);
+
     try {
       // Get session
-      const session = await new Promise(resolve => {
-        chrome.storage.local.get(['ats_session'], result => resolve(result.ats_session));
+      stage = 'get_session';
+      await logEvent('stage', { stage });
+
+      const session = await new Promise((resolve) => {
+        chrome.storage.local.get(['ats_session'], (result) => resolve(result.ats_session));
       });
 
       if (!session?.access_token || !session?.user?.id) {
+        await logEvent('no_session');
         updateBanner('Please login via extension popup first', 'error');
         console.log('[ATS Tailor] No session, user needs to login');
         tailoringInProgress = false;
@@ -1769,27 +1850,40 @@
       }
 
       // Get user profile
+      stage = 'load_profile';
+      await logEvent('stage', { stage, userId: session.user.id });
+
       updateBanner('Loading your profile...', 'working');
-      const profileRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`,
+
+      const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`;
+
+      const profileRes = await fetchWithTimeout(
+        profileUrl,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,
             Authorization: `Bearer ${session.access_token}`,
           },
-        }
+        },
+        15_000,
+        'load_profile'
       );
 
       if (!profileRes.ok) {
-        throw new Error('Could not load profile');
+        const errorText = await profileRes.text().catch(() => '');
+        throw new Error(`Could not load profile (${profileRes.status}): ${errorText}`);
       }
 
       const profileRows = await profileRes.json();
       const p = profileRows?.[0] || {};
 
       // Extract job info from page
+      stage = 'extract_job';
+      await logEvent('stage', { stage });
+
       const jobInfo = extractJobInfo();
       if (!jobInfo.title) {
+        await logEvent('job_detection_failed', { jobInfo });
         updateBanner('Could not detect job info, please use popup', 'error');
         tailoringInProgress = false;
         return;
@@ -1797,96 +1891,146 @@
 
       console.log('[ATS Tailor] Job detected:', jobInfo.title, 'at', jobInfo.company);
       updateBanner(`Tailoring for: ${jobInfo.title}...`, 'working');
-
-      // Call tailor API
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          jobTitle: jobInfo.title,
-          company: jobInfo.company,
-          location: jobInfo.location,
-          description: jobInfo.description,
-          requirements: [],
-          userProfile: {
-            firstName: p.first_name || '',
-            lastName: p.last_name || '',
-            email: p.email || session.user.email || '',
-            phone: p.phone || '',
-            linkedin: p.linkedin || '',
-            github: p.github || '',
-            portfolio: p.portfolio || '',
-            coverLetter: p.cover_letter || '',
-            professionalExperience: Array.isArray(p.professional_experience) ? p.professional_experience : (Array.isArray(p.work_experience) ? p.work_experience : []),
-            education: Array.isArray(p.education) ? p.education : [],
-            skills: Array.isArray(p.skills) ? p.skills : [],
-            certifications: Array.isArray(p.certifications) ? p.certifications : [],
-            achievements: Array.isArray(p.achievements) ? p.achievements : [],
-            atsStrategy: p.ats_strategy || '',
-            city: p.city || undefined,
-            country: p.country || undefined,
-            address: p.address || undefined,
-            state: p.state || undefined,
-            zipCode: p.zip_code || undefined,
-          },
-        }),
+      await logEvent('job_detected', {
+        title: jobInfo.title,
+        company: jobInfo.company,
+        location: jobInfo.location,
+        descLen: (jobInfo.description || '').length,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Tailoring failed');
+      // Call tailor API
+      stage = 'tailor_application';
+      await logEvent('stage', { stage });
+
+      const tailorRes = await fetchWithTimeout(
+        `${SUPABASE_URL}/functions/v1/tailor-application`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            jobTitle: jobInfo.title,
+            company: jobInfo.company,
+            location: jobInfo.location,
+            description: jobInfo.description,
+            requirements: [],
+            userProfile: {
+              firstName: p.first_name || '',
+              lastName: p.last_name || '',
+              email: p.email || session.user.email || '',
+              phone: p.phone || '',
+              linkedin: p.linkedin || '',
+              github: p.github || '',
+              portfolio: p.portfolio || '',
+              coverLetter: p.cover_letter || '',
+              professionalExperience: Array.isArray(p.professional_experience)
+                ? p.professional_experience
+                : (Array.isArray(p.work_experience) ? p.work_experience : []),
+              education: Array.isArray(p.education) ? p.education : [],
+              skills: Array.isArray(p.skills) ? p.skills : [],
+              certifications: Array.isArray(p.certifications) ? p.certifications : [],
+              achievements: Array.isArray(p.achievements) ? p.achievements : [],
+              atsStrategy: p.ats_strategy || '',
+              city: p.city || undefined,
+              country: p.country || undefined,
+              address: p.address || undefined,
+              state: p.state || undefined,
+              zipCode: p.zip_code || undefined,
+            },
+          }),
+        },
+        60_000,
+        'tailor_application'
+      );
+
+      if (!tailorRes.ok) {
+        const errorText = await tailorRes.text().catch(() => '');
+        throw new Error(errorText || `Tailoring failed (${tailorRes.status})`);
       }
 
-      const result = await response.json();
+      const result = await tailorRes.json();
       if (result.error) throw new Error(result.error);
+
+      await logEvent('tailor_success', {
+        matchScore: result.matchScore,
+        resumePdfBytesApprox: (result.resumePdf || '').length,
+        coverPdfBytesApprox: (result.coverLetterPdf || '').length,
+      });
 
       console.log('[ATS Tailor] Tailoring complete! Match score:', result.matchScore);
       updateBanner('✅ Generated! Match: 100% - Attaching files...', 'working');
 
       // Store PDFs in chrome.storage for the attach loop
-      const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
-      
-      await new Promise(resolve => {
-        chrome.storage.local.set({
-          cvPDF: result.resumePdf,
-          coverPDF: result.coverLetterPdf,
-          coverLetterText: result.tailoredCoverLetter || result.coverLetter || '',
-          cvFileName: result.cvFileName || `${fallbackName}_CV.pdf`,
-          coverFileName: result.coverLetterFileName || `${fallbackName}_Cover_Letter.pdf`,
-          ats_lastGeneratedDocuments: {
-            cv: result.tailoredResume,
-            coverLetter: result.tailoredCoverLetter || result.coverLetter,
-            cvPdf: result.resumePdf,
-            coverPdf: result.coverLetterPdf,
+      stage = 'store_documents';
+      await logEvent('stage', { stage });
+
+      const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`
+        .replace(/\s+/g, '_') || 'Applicant';
+
+      await new Promise((resolve) => {
+        chrome.storage.local.set(
+          {
+            cvPDF: result.resumePdf,
+            coverPDF: result.coverLetterPdf,
+            coverLetterText: result.tailoredCoverLetter || result.coverLetter || '',
             cvFileName: result.cvFileName || `${fallbackName}_CV.pdf`,
             coverFileName: result.coverLetterFileName || `${fallbackName}_Cover_Letter.pdf`,
-            matchScore: result.matchScore || 0,
-          }
-        }, resolve);
+            ats_lastGeneratedDocuments: {
+              cv: result.tailoredResume,
+              coverLetter: result.tailoredCoverLetter || result.coverLetter,
+              cvPdf: result.resumePdf,
+              coverPdf: result.coverLetterPdf,
+              cvFileName: result.cvFileName || `${fallbackName}_CV.pdf`,
+              coverFileName: result.coverLetterFileName || `${fallbackName}_Cover_Letter.pdf`,
+              matchScore: result.matchScore || 0,
+            },
+          },
+          resolve
+        );
       });
 
       // Mark this URL as tailored
       cached[currentJobUrl] = Date.now();
-      await new Promise(resolve => {
+      await new Promise((resolve) => {
         chrome.storage.local.set({ ats_tailored_urls: cached }, resolve);
       });
 
       // Now load files and start attaching
+      stage = 'attach_loop';
+      await logEvent('stage', { stage });
+
       loadFilesAndStart();
-      
+
       updateBanner(SUCCESS_BANNER_MSG, 'success');
       hideBanner();
 
+      await logEvent('autotailor_complete', {
+        durationMs: Math.round(performance.now() - overallStart),
+      });
+
     } catch (error) {
+      await logEvent('autotailor_error', {
+        stage,
+        message: String(error?.message || error),
+        stack: String(error?.stack || ''),
+        durationMs: Math.round(performance.now() - overallStart),
+      });
+
       console.error('[ATS Tailor] Auto-tailor error:', error);
-      // Don't show error in banner - just log and continue silently
-      console.log('[ATS Tailor] Continuing despite error...');
+
+      // Previously we silently continued; now we surface a lightweight banner message
+      // to avoid “stuck” perception, while still keeping the automation resilient.
+      updateBanner('Tailoring failed — open popup to retry', 'error');
+
     } finally {
+      clearTimeout(watchdogId);
       tailoringInProgress = false;
+      await logEvent('autotailor_finally', {
+        durationMs: Math.round(performance.now() - overallStart),
+      });
     }
   }
 
