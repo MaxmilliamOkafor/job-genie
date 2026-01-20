@@ -58,15 +58,31 @@
       this.updateBadge('Generating...', 'working');
       this.updateUI();
     },
+    
+    // Log output data
+    logOutputData(outputData) {
+      this._debugData.outputData = outputData;
+      this.updateUI();
+    },
+    
+    // Log generation complete
+    logComplete() {
+      this._debugData.status = 'complete';
+      this._debugData.endTime = performance.now();
+      const elapsed = this._debugData.endTime - this._debugData.startTime;
+      this.updateBadge(`Done (${Math.round(elapsed)}ms)`, 'success');
+      this.updateUI();
+    },
 
     // Log input data
     logInputData(candidateData, cvText) {
-      const exp = candidateData?.professionalExperience || candidateData?.professional_experience || 
-                  candidateData?.workExperience || candidateData?.work_experience || [];
+      const exp = candidateData?.professionalExperience || candidateData?.professional_experience || [];
+      const projects = candidateData?.relevantProjects || candidateData?.relevant_projects || [];
       
       this._debugData.inputData = {
         candidateName: `${candidateData?.firstName || candidateData?.first_name || ''} ${candidateData?.lastName || candidateData?.last_name || ''}`.trim() || 'Unknown',
         expCount: Array.isArray(exp) ? exp.length : 0,
+        projectsCount: Array.isArray(projects) ? projects.length : 0,
         eduCount: Array.isArray(candidateData?.education) ? candidateData.education.length : 0,
         skillsCount: Array.isArray(candidateData?.skills) ? candidateData.skills.length : 0,
         cvTextLength: cvText?.length || 0

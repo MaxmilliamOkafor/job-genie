@@ -1968,7 +1968,7 @@
               coverLetter: p.cover_letter || '',
               professionalExperience: Array.isArray(p.professional_experience)
                 ? p.professional_experience
-                : (Array.isArray(p.work_experience) ? p.work_experience : []),
+                : [],
               education: Array.isArray(p.education) ? p.education : [],
               skills: Array.isArray(p.skills) ? p.skills : [],
               certifications: Array.isArray(p.certifications) ? p.certifications : [],
@@ -2319,15 +2319,26 @@
   }
   
   function initAutoTailor() {
-    // Manual-only mode (dev): do NOT auto-trigger tailoring on page load.
-    // User must click the extension button in the popup to start immediately.
-    createStatusBanner();
-    updateBanner('ATS detected — open the extension and click “⚡ Extract & Apply Keywords to CV” to start.', 'info');
-    return;
-
-    // Immediately show banner on ATS detection
-    createStatusBanner();
-    updateBanner('ATS detected! Preparing...', 'working');
+    // AUTO-TRIGGER MODE: Immediately start tailoring on recognized ATS pages
+    // Respects the Auto Tailor toggle from storage
+    chrome.storage.local.get(['ats_autoTailorEnabled'], (result) => {
+      const autoEnabled = result.ats_autoTailorEnabled !== false; // default true
+      
+      if (!autoEnabled) {
+        // User disabled auto-tailor - show manual prompt
+        createStatusBanner();
+        updateBanner('ATS detected - click Extract & Apply Keywords in extension to start.', 'info');
+        return;
+      }
+      
+      // Immediately show banner and start tailoring
+      createStatusBanner();
+      updateBanner('ATS detected! Starting auto-tailor...', 'working');
+      runAutoTailorFlow();
+    });
+  }
+  
+  function runAutoTailorFlow() {
     // ============ WORKDAY TOP 1 PRIORITY PATH ============
     // For Workday, run the special TOP 1 pipeline that:
     // 1. On listing page: Snapshot JD before clicking Apply
@@ -2472,8 +2483,8 @@
       const session = data.ats_session;
       const profile = data.ats_profile || {};
       
-      // Build baseCV from profile data
-      const experience = profile.professional_experience || profile.work_experience || [];
+      // Build baseCV from profile data (professional_experience only)
+      const experience = profile.professional_experience || [];
       const skills = Array.isArray(profile.skills) ? profile.skills : [];
       let baseCV = `${profile.first_name || ''} ${profile.last_name || ''}\n\nPROFESSIONAL EXPERIENCE\n`;
       if (Array.isArray(experience)) {

@@ -368,7 +368,7 @@ class ATSTailor {
         
         // Try to fetch the parsed CV content (cached from parse-cv function)
         const parsedCVRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=work_experience,education,skills,certifications,achievements`,
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=professional_experience,relevant_projects,education,skills,certifications,achievements`,
           {
             headers: {
               apikey: SUPABASE_ANON_KEY,
@@ -2566,6 +2566,13 @@ class ATSTailor {
     progressContainer?.classList.remove('hidden');
     pipelineSteps?.classList.remove('hidden');
     this.setStatus('⚡ Tailoring...', 'working');
+    
+    // WIRE UP DEBUG PANELS: Reset and start logging
+    if (window.PDFDebugPanel) {
+      window.PDFDebugPanel.reset();
+      window.PDFDebugPanel.logStart('popup.tailorDocuments');
+    }
+    this.logDebug('tailorDocuments', 'Pipeline started', { job: this.currentJob?.title });
 
     const updateProgress = (percent, text) => {
       if (progressFill) progressFill.style.width = `${percent}%`;
@@ -2767,6 +2774,25 @@ class ATSTailor {
         missingKeywords: result.keywordsMissing || result.missingKeywords || [],
         keywords: keywords
       };
+      
+      // WIRE UP DEBUG PANELS: Log input data after profile load
+      if (window.PDFDebugPanel) {
+        window.PDFDebugPanel.logInputData({
+          firstName: p.first_name,
+          lastName: p.last_name,
+          email: p.email,
+          professionalExperience: p.professional_experience,
+          relevantProjects: p.relevant_projects,
+          education: p.education,
+          skills: p.skills,
+          certifications: p.certifications,
+        }, result.tailoredResume);
+      }
+      this.logDebug('tailorDocuments', 'Profile loaded', { 
+        expCount: Array.isArray(p.professional_experience) ? p.professional_experience.length : 0,
+        projectsCount: Array.isArray(p.relevant_projects) ? p.relevant_projects.length : 0,
+        cvLength: (result.tailoredResume || '').length
+      });
 
       // Calculate initial match score against extracted keywords
       if (keywords.all?.length > 0 && this.generatedDocuments.cv) {
@@ -2857,10 +2883,28 @@ class ATSTailor {
       this.buildKeywordCoverageReport(keywords);
 
       updateProgress(80, 'Step 3/3: Regenerating PDF with boosted CV...');
+      
+      // WIRE UP DEBUG PANELS: Log before PDF generation
+      this.logDebug('tailorDocuments', 'Pre-PDF boost complete', { 
+        finalScore: this.generatedDocuments.matchScore,
+        matchedCount: this.generatedDocuments.matchedKeywords?.length,
+        missingCount: this.generatedDocuments.missingKeywords?.length
+      });
 
       // Regenerate PDF with boosted CV and dynamic location
       if (this.generatedDocuments.cv) {
         await this.regeneratePDFAfterBoost();
+        
+        // WIRE UP DEBUG PANELS: Log output after PDF generation
+        if (window.PDFDebugPanel) {
+          window.PDFDebugPanel.logOutputData({
+            cvBase64Length: (this.generatedDocuments.cvPdf || '').length,
+            coverBase64Length: (this.generatedDocuments.coverPdf || '').length,
+            cvFilename: this.generatedDocuments.cvFileName,
+            coverFilename: this.generatedDocuments.coverFileName,
+          });
+          window.PDFDebugPanel.logComplete();
+        }
       }
 
       updateStep(3, 'complete');
@@ -2944,7 +2988,7 @@ class ATSTailor {
       try {
         if (this.session?.access_token && this.session?.user?.id) {
           const profileRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,professional_experience,work_experience,education,skills,certifications,ats_strategy`,
+            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,professional_experience,relevant_projects,education,skills,certifications,ats_strategy`,
             {
               headers: {
                 apikey: SUPABASE_ANON_KEY,
@@ -2981,7 +3025,8 @@ class ATSTailor {
             linkedin: candidateData.linkedin,
             github: candidateData.github,
             portfolio: candidateData.portfolio,
-            professionalExperience: candidateData.professional_experience || candidateData.work_experience,
+            professionalExperience: candidateData.professional_experience || [],
+            relevantProjects: candidateData.relevant_projects || [],
             education: candidateData.education,
             skills: candidateData.skills,
             certifications: candidateData.certifications,
