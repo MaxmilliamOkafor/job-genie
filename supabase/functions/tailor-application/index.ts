@@ -99,30 +99,15 @@ interface AIProviderConfig {
 }
 
 async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
-  // Get preference settings from profiles (public fields)
-  const { data: profileData, error: profileError } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
-    .select("preferred_ai_provider, openai_enabled, kimi_enabled")
+    .select("openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled")
     .eq("user_id", userId)
     .single();
 
-  // SECURITY: Get API keys from secure user_api_keys table (no client SELECT access)
-  const { data: apiKeysData, error: keysError } = await supabase
-    .from("user_api_keys")
-    .select("openai_api_key, kimi_api_key")
-    .eq("user_id", userId)
-    .single();
-
-  if (profileError || !profileData) {
+  if (error || !data) {
     return null;
   }
-
-  // Merge data from both tables
-  const data = {
-    ...profileData,
-    openai_api_key: apiKeysData?.openai_api_key || null,
-    kimi_api_key: apiKeysData?.kimi_api_key || null,
-  };
 
   const preferredProvider = data.preferred_ai_provider || "openai";
   const openaiEnabled = data.openai_enabled ?? true;
@@ -1431,70 +1416,15 @@ function calculateMatchScore(
   };
 }
 
-// Structured logging helper for debug reports
-interface TailorLog {
-  stage: string;
-  timestamp: string;
-  durationMs?: number;
-  details?: Record<string, unknown>;
-}
-
-const logs: TailorLog[] = [];
-const startTime = Date.now();
-
-function addLog(stage: string, details?: Record<string, unknown>) {
-  logs.push({
-    stage,
-    timestamp: new Date().toISOString(),
-    durationMs: Date.now() - startTime,
-    details,
-  });
-  console.log(`[tailor-application] ${stage}`, details ? JSON.stringify(details) : "");
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    addLog("request_received");
-    
     const { userId, supabase } = await verifyAuth(req);
-    addLog("auth_verified", { userId });
 
     const rawData = await req.json();
-    
-    // Handle testConnection flag for connection testing
-    if (rawData.testConnection === true) {
-      addLog("connection_test_requested");
-      
-      // Get AI config to verify key exists
-      const aiConfig = await getUserAIConfig(supabase, userId);
-      
-      if (!aiConfig) {
-        addLog("connection_test_failed", { reason: "no_api_key" });
-        return new Response(
-          JSON.stringify({ 
-            connectionValid: false, 
-            error: "No API key configured. Please add your API key in Profile settings.",
-            logs,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      
-      addLog("connection_test_success", { provider: aiConfig.provider });
-      return new Response(
-        JSON.stringify({ 
-          connectionValid: true, 
-          provider: aiConfig.provider,
-          message: `${aiConfig.provider === "kimi" ? "Kimi K2" : "OpenAI"} API key is configured and ready.`,
-          logs,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
 
     // Support both 'description' and 'jobDescription' for extension compatibility
     if (rawData.jobDescription && !rawData.description) {
@@ -1552,7 +1482,7 @@ serve(async (req) => {
         zipCode: profileData.zip_code || "",
       };
 
-      addLog("profile_loaded", { name: `${rawData.userProfile.firstName} ${rawData.userProfile.lastName}` });
+      console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
     }
 
     const {
@@ -1566,16 +1496,12 @@ serve(async (req) => {
       userProfile,
       includeReferral,
     } = validateRequest(rawData);
-    
-    addLog("request_validated", { jobTitle, company, descriptionLength: description.length });
 
     // Validate that profile has required info
     if (!userProfile.firstName || !userProfile.lastName) {
-      addLog("validation_failed", { reason: "missing_name" });
       return new Response(
         JSON.stringify({
           error: "Profile incomplete. Please add your first and last name in Profile settings.",
-          logs,
         }),
         {
           status: 400,
@@ -1585,15 +1511,12 @@ serve(async (req) => {
     }
 
     // Get user's AI provider configuration
-    addLog("fetching_ai_config");
     const aiConfig = await getUserAIConfig(supabase, userId);
 
     if (!aiConfig) {
-      addLog("ai_config_failed", { reason: "no_api_key" });
       return new Response(
         JSON.stringify({
           error: "No AI provider configured. Please add an API key (OpenAI or Kimi K2) in Profile settings.",
-          logs,
         }),
         {
           status: 400,
@@ -1603,7 +1526,9 @@ serve(async (req) => {
     }
 
     const { provider: aiProvider, apiKey: userApiKey } = aiConfig;
-    addLog("ai_config_loaded", { provider: aiProvider });
+    console.log(`[User ${userId}] Using AI provider: ${aiProvider}`);
+
+    console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
     // Smart location logic - extract job city and format as "[CITY] | open to relocation"
     // Priority: 1) extractedCity from extension, 2) extract from location/description, 3) profile city
@@ -1615,11 +1540,13 @@ serve(async (req) => {
       jobId,
       extractedCity,
     );
-    addLog("smart_location_determined", { smartLocation, extractedCity });
+    console.log(
+      `Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ""}`,
+    );
 
     // Jobscan keyword extraction
     const jdKeywords = extractJobscanKeywords(description, requirements);
-    addLog("keywords_extracted", { count: jdKeywords.allKeywords.length });
+    console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
 
     // Calculate accurate match score with enhanced matching
     const matchResult = calculateMatchScore(
@@ -1893,17 +1820,13 @@ ${
     };
 
     const apiConfig = getApiConfig();
-    addLog("ai_request_starting", { 
-      provider: apiConfig.providerName, 
-      model: apiConfig.model,
-      temperature: apiConfig.temperature,
-    });
+    console.log(`Using ${apiConfig.providerName} with model ${apiConfig.model} (temp: ${apiConfig.temperature})`);
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
           const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-          addLog("retry_delay", { attempt: attempt + 1, delayMs: Math.round(delay) });
+          console.log(`Rate limit hit, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
 
@@ -1926,42 +1849,14 @@ ${
           requestBody.stop = ["\n\n\n", "---END---"];
         }
 
-        // Hard timeout so the extension never hangs on "Boosting CV".
-        const aiController = new AbortController();
-        const aiTimeoutMs = 65_000;
-        const aiTimeoutId = setTimeout(() => aiController.abort(), aiTimeoutMs);
-
-        try {
-          response = await fetch(apiConfig.endpoint, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${userApiKey}`,
-              "Content-Type": "application/json",
-            },
-            signal: aiController.signal,
-            body: JSON.stringify(requestBody),
-          });
-        } catch (err: unknown) {
-          const errorObj = err as Error;
-          const isTimeout = errorObj?.name === 'AbortError';
-          const msg = isTimeout
-            ? `${apiConfig.providerName} request timed out after ${aiTimeoutMs / 1000}s. Please retry.`
-            : `${apiConfig.providerName} request failed: ${errorObj?.message || 'Unknown error'}. Please retry.`;
-
-          addLog("ai_request_error", {
-            provider: apiConfig.providerName,
-            isTimeout,
-            errorName: errorObj?.name,
-            errorMessage: errorObj?.message,
-          });
-
-          return new Response(JSON.stringify({ error: msg, timeout: isTimeout, logs }), {
-            status: isTimeout ? 504 : 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        } finally {
-          clearTimeout(aiTimeoutId);
-        }
+        response = await fetch(apiConfig.endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${userApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
 
         if (response.ok) {
           break; // Success, exit retry loop

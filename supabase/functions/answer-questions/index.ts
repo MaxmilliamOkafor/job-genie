@@ -257,30 +257,15 @@ interface AIProviderConfig {
 }
 
 async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
-  // Get preference settings from profiles (public fields)
-  const { data: profileData, error: profileError } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
-    .select('preferred_ai_provider, openai_enabled, kimi_enabled')
+    .select('openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled')
     .eq('user_id', userId)
     .single();
   
-  // SECURITY: Get API keys from secure user_api_keys table (no client SELECT access)
-  const { data: apiKeysData, error: keysError } = await supabase
-    .from('user_api_keys')
-    .select('openai_api_key, kimi_api_key')
-    .eq('user_id', userId)
-    .single();
-  
-  if (profileError || !profileData) {
+  if (error || !data) {
     return null;
   }
-  
-  // Merge data from both tables
-  const data = {
-    ...profileData,
-    openai_api_key: apiKeysData?.openai_api_key || null,
-    kimi_api_key: apiKeysData?.kimi_api_key || null,
-  };
   
   const preferredProvider = data.preferred_ai_provider || 'openai';
   const openaiEnabled = data.openai_enabled ?? true;

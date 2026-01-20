@@ -63,9 +63,8 @@ async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any
 }
 
 async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
-  // SECURITY: Get API keys from secure user_api_keys table (no client SELECT access)
   const { data, error } = await supabase
-    .from('user_api_keys')
+    .from('profiles')
     .select('openai_api_key')
     .eq('user_id', userId)
     .single();

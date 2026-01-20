@@ -86,33 +86,6 @@
           </span>
           <span class="ai-model-label" id="activeModelLabel">kimi-k2-0711-preview</span>
           <span class="ai-saved-indicator hidden" id="aiSettingsSaved">✓</span>
-          <button class="ai-test-btn" id="testConnectionBtn" title="Test API Key Connection">🔗 Test</button>
-        </div>
-        <!-- Connection Test Panel (hidden by default) -->
-        <div class="connection-test-panel hidden" id="connectionTestPanel">
-          <div class="test-result" id="connectionTestResult">
-            <span class="test-status" id="testStatusIcon">⏳</span>
-            <span class="test-message" id="testMessage">Click "Test" to validate API key</span>
-          </div>
-          <div class="test-details hidden" id="testDetails">
-            <pre id="testDetailsText"></pre>
-          </div>
-        </div>
-      </div>
-
-      <!-- Debug Report Panel -->
-      <div class="debug-report-panel hidden" id="debugReportPanel">
-        <div class="debug-report-header">
-          <span class="debug-icon">🐛</span>
-          <span class="debug-title">Debug Report</span>
-          <button class="btn-close" id="closeDebugReport">×</button>
-        </div>
-        <div class="debug-report-content" id="debugReportContent">
-          <p>No debug data collected yet. Run tailoring to collect logs.</p>
-        </div>
-        <div class="debug-actions">
-          <button class="btn btn-small btn-secondary" id="downloadDebugReport">⬇️ Download Report</button>
-          <button class="btn btn-small btn-outline" id="copyDebugReport">📋 Copy to Clipboard</button>
         </div>
       </div>
 
@@ -861,7 +834,6 @@
           <span>Open Dashboard</span>
           <span class="link-arrow">→</span>
         </a>
-        <button id="showDebugReportBtn" class="btn btn-link">🐛 Debug Report</button>
         <button id="openBulkApply" class="btn btn-link">Bulk Apply Dashboard</button>
       </div>
     </section>
