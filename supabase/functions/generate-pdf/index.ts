@@ -137,8 +137,94 @@ serve(async (req) => {
       return handleRawContentRequest(requestBody);
     }
 
-    // Otherwise, handle structured data request
-    const data: ResumeData = requestBody;
+    // Handle profileData format (from website) - convert to ResumeData format
+    let data: ResumeData;
+    if (requestBody.profileData) {
+      const profile = requestBody.profileData;
+      
+      // Format dates helper
+      const formatDateRange = (startDate?: string, endDate?: string): string => {
+        const normalise = (raw?: string) => {
+          if (!raw) return '';
+          const seg = raw.split('|').map(s => s.trim()).filter(Boolean).pop() ?? '';
+          return seg;
+        };
+        const extractYear = (raw?: string) => {
+          const date = normalise(raw);
+          if (!date) return '';
+          if (/present/i.test(date)) return 'Present';
+          const yearMatch = date.match(/\b(19|20)\d{2}\b/);
+          return yearMatch ? yearMatch[0] : date;
+        };
+        const startRaw = normalise(startDate);
+        const endRaw = normalise(endDate);
+        const startHasPresent = /present/i.test(startRaw);
+        const start = extractYear(startRaw);
+        const end = endRaw ? extractYear(endRaw) : (startHasPresent ? 'Present' : '');
+        if (!start && !end) return '';
+        if (!end || start === end) return start;
+        return `${start} - ${end}`;
+      };
+
+      // Convert professional_experience to experience format
+      const experience = Array.isArray(profile.professional_experience) 
+        ? profile.professional_experience.map((exp: { company?: string; title?: string; startDate?: string; endDate?: string; bullets?: string[]; description?: string }) => ({
+            company: exp.company || '',
+            title: exp.title || '',
+            dates: formatDateRange(exp.startDate, exp.endDate),
+            bullets: Array.isArray(exp.bullets) ? exp.bullets : 
+              (exp.description ? exp.description.split(/\r?\n/).filter(Boolean) : [])
+          }))
+        : [];
+
+      // Convert relevant_projects to projects format
+      const projects = Array.isArray(profile.relevant_projects)
+        ? profile.relevant_projects.map((proj: { name?: string; role?: string; startDate?: string; endDate?: string; bullets?: string[]; description?: string }) => ({
+            name: proj.name || '',
+            role: proj.role || '',
+            dates: formatDateRange(proj.startDate, proj.endDate),
+            bullets: Array.isArray(proj.bullets) ? proj.bullets :
+              (proj.description ? proj.description.split(/\r?\n/).filter(Boolean) : [])
+          }))
+        : [];
+
+      // Convert education
+      const education = Array.isArray(profile.education)
+        ? profile.education.map((edu: { degree?: string; institution?: string; school?: string; gpa?: string }) => ({
+            degree: edu.degree || '',
+            school: edu.institution || edu.school || '',
+            dates: '',
+            gpa: edu.gpa || ''
+          }))
+        : [];
+
+      // Convert skills
+      const skills = profile.skills ? {
+        primary: Array.isArray(profile.skills.technical) ? profile.skills.technical : [],
+        secondary: Array.isArray(profile.skills.soft) ? profile.skills.soft : []
+      } : undefined;
+
+      data = {
+        type: 'resume',
+        personalInfo: {
+          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          email: profile.email || '',
+          phone: profile.phone || '',
+          location: [profile.city, profile.country].filter(Boolean).join(', '),
+          linkedin: profile.linkedin || '',
+          github: profile.github || '',
+          portfolio: profile.portfolio || ''
+        },
+        experience,
+        projects,
+        education,
+        skills,
+        certifications: Array.isArray(profile.certifications) ? profile.certifications : []
+      };
+    } else {
+      // Otherwise, handle structured ResumeData request
+      data = requestBody as ResumeData;
+    }
     console.log("Generating ULTRA ATS-COMPATIBLE PDF for:", data.type, data.personalInfo?.name);
 
     // Deep sanitize all string fields
