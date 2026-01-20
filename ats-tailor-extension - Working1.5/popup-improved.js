@@ -1,8 +1,8 @@
 // ATS Tailored CV & Cover Letter - Popup Script (Improved)
 // Uses CVFormatterPerfect for guaranteed consistent formatting
 
-const SUPABASE_URL = 'https://siwxacsqjrakbohzdtkx.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpd3hhY3NxanJha2JvaHpkdGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1ODg1NzcsImV4cCI6MjA4NDE2NDU3N30.hlqtIQ50WtyIIhj8IQ4YCGbSa-yryV1CD1NQlaN7XO0';
+const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 // ============ TIER 1-2 TECH COMPANY DETECTION (70+ companies) ============
 const TIER1_TECH_COMPANIES = {
