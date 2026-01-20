@@ -217,6 +217,7 @@
         "cv-formatter-perfect.js",
         "cv-formatter-perfect-enhanced.js",
         "pdf-debug-panel.js",
+        "pdf-diff-panel.js",
         "workday-handlers.js",
         "content.js"
       ],
@@ -260,6 +261,7 @@
         "cv-formatter-perfect.js",
         "cv-formatter-perfect-enhanced.js",
         "pdf-debug-panel.js",
+        "pdf-diff-panel.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
         "workday-handlers.js"

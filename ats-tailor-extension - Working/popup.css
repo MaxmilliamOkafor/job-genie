@@ -2321,3 +2321,195 @@ body::-webkit-scrollbar-thumb {
   word-break: break-word;
   margin: 0;
 }
+
+/* ============================================
+   PREVIEW VS DOWNLOAD DIFF PANEL
+   ============================================ */
+
+.diff-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.1), rgba(0, 212, 255, 0.05));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.diff-header:hover {
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.15), rgba(0, 212, 255, 0.1));
+}
+
+.diff-content {
+  padding: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.smoke-test-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.smoke-test-badge.idle { background: rgba(255, 255, 255, 0.1); }
+.smoke-test-badge.running { background: rgba(59, 130, 246, 0.3); color: var(--info); }
+.smoke-test-badge.success { background: rgba(34, 197, 94, 0.3); color: var(--success); }
+.smoke-test-badge.warning { background: rgba(245, 158, 11, 0.3); color: var(--warning); }
+.smoke-test-badge.error { background: rgba(239, 68, 68, 0.3); color: var(--error); }
+
+.debug-help {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+.diff-list {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.diff-exp-item {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.diff-exp-item:last-child { margin-bottom: 0; }
+
+.diff-exp-num {
+  background: var(--accent-primary);
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.diff-exp-company {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-exp-title {
+  color: var(--text-secondary);
+  font-size: 9px;
+  grid-column: 2;
+}
+
+.diff-exp-bullets {
+  color: var(--text-muted);
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.diff-preview {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.diff-preview-pre {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 8px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.diff-empty {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: italic;
+  text-align: center;
+  padding: 12px;
+}
+
+.diff-success {
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  padding: 12px;
+}
+
+.diff-mismatches {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.diff-mismatch-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  font-size: 9px;
+}
+
+.diff-mismatch-item:last-child { margin-bottom: 0; }
+
+.mismatch-type {
+  background: rgba(239, 68, 68, 0.3);
+  color: var(--error);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.mismatch-expected {
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mismatch-location {
+  color: var(--text-muted);
+  font-style: italic;
+}

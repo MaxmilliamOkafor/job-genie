@@ -100,7 +100,7 @@ const Profile = () => {
         authorized_countries: localProfile.authorized_countries,
         skills: localProfile.skills,
         certifications: localProfile.certifications,
-        work_experience: localProfile.work_experience,
+        professional_experience: localProfile.professional_experience,
         relevant_projects: localProfile.relevant_projects,
         education: localProfile.education,
         languages: localProfile.languages,
@@ -133,9 +133,9 @@ const Profile = () => {
 
   // Restore profile from version history
   const handleRestoreFromHistory = async (profileData: Record<string, any>) => {
-    // Normalize work experience if present
-    if (profileData.work_experience) {
-      profileData.work_experience = normalizeWorkExperience(profileData.work_experience);
+    // Normalize professional experience if present
+    if (profileData.professional_experience) {
+      profileData.professional_experience = normalizeWorkExperience(profileData.professional_experience);
     }
     
     // Update local state
@@ -272,7 +272,7 @@ const Profile = () => {
   const handleSave = async () => {
     const normalized = {
       ...localProfile,
-      work_experience: normalizeWorkExperience(localProfile.work_experience || []),
+      professional_experience: normalizeWorkExperience(localProfile.professional_experience || []),
     };
 
     await updateProfile(normalized);
@@ -464,8 +464,9 @@ const Profile = () => {
               if (parsedData.languages && parsedData.languages.length > 0) updates.languages = parsedData.languages;
               if (parsedData.cover_letter) updates.cover_letter = parsedData.cover_letter;
 
+              // Map work_experience from parsed CV data to professional_experience in profile
               if (parsedData.work_experience && parsedData.work_experience.length > 0) {
-                updates.work_experience = normalizeWorkExperience(parsedData.work_experience as any);
+                updates.professional_experience = normalizeWorkExperience(parsedData.work_experience as any);
               }
 
               setLocalProfile(prev => ({ ...prev, ...updates }));
@@ -1215,19 +1216,19 @@ const Profile = () => {
                         'Use metrics and numbers where possible (e.g., Improved performance by 30%)'
                       ]
                     };
-                    updateLocalField('work_experience', [...(localProfile.work_experience || []), newExp]);
+                    updateLocalField('professional_experience', [...(localProfile.professional_experience || []), newExp]);
                   }}
                 >
                   <Plus className="h-4 w-4" />
                   Add Professional Experience
                 </Button>
-                {(localProfile.work_experience || []).length > 0 && (
+                {(localProfile.professional_experience || []).length > 0 && (
                   <Button 
                     variant="destructive" 
                     className="gap-2"
                     onClick={() => {
                       if (window.confirm('Are you sure you want to clear ALL work experience? This will remove all entries from your profile and cannot be undone.')) {
-                        updateLocalField('work_experience', []);
+                        updateLocalField('professional_experience', []);
                         toast.success('Professional experience cleared. Click Save to persist changes.');
                       }
                     }}
@@ -1238,7 +1239,7 @@ const Profile = () => {
                 )}
               </div>
             )}
-            {(localProfile.work_experience || []).map((exp: any, expIndex: number) => (
+            {(localProfile.professional_experience || []).map((exp: any, expIndex: number) => (
               <div key={exp.id} className="border rounded-lg p-4 relative">
                 {editMode && (
                   <Button
@@ -1246,9 +1247,9 @@ const Profile = () => {
                     size="icon"
                     className="absolute top-2 right-2 h-6 w-6"
                     onClick={() => {
-                      const exps = [...(localProfile.work_experience || [])];
+                      const exps = [...(localProfile.professional_experience || [])];
                       exps.splice(expIndex, 1);
-                      updateLocalField('work_experience', exps);
+                      updateLocalField('professional_experience', exps);
                     }}
                   >
                     <X className="h-4 w-4 text-destructive" />
@@ -1261,9 +1262,9 @@ const Profile = () => {
                         <Input 
                           value={exp.title || ''} 
                           onChange={(e) => {
-                            const exps = [...(localProfile.work_experience || [])];
+                            const exps = [...(localProfile.professional_experience || [])];
                             exps[expIndex] = { ...exps[expIndex], title: e.target.value };
-                            updateLocalField('work_experience', exps);
+                            updateLocalField('professional_experience', exps);
                           }}
                           placeholder="Job Title"
                           className="font-semibold"
@@ -1271,9 +1272,9 @@ const Profile = () => {
                         <Input 
                           value={exp.company || ''} 
                           onChange={(e) => {
-                            const exps = [...(localProfile.work_experience || [])];
+                            const exps = [...(localProfile.professional_experience || [])];
                             exps[expIndex] = { ...exps[expIndex], company: e.target.value };
-                            updateLocalField('work_experience', exps);
+                            updateLocalField('professional_experience', exps);
                           }}
                           placeholder="Company"
                         />
@@ -1281,9 +1282,9 @@ const Profile = () => {
                           <Input 
                             value={exp.startDate || ''} 
                             onChange={(e) => {
-                              const exps = [...(localProfile.work_experience || [])];
+                              const exps = [...(localProfile.professional_experience || [])];
                               exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
-                              updateLocalField('work_experience', exps);
+                              updateLocalField('professional_experience', exps);
                             }}
                             placeholder="Start Date"
                             className="w-28"
@@ -1292,9 +1293,9 @@ const Profile = () => {
                           <Input 
                             value={exp.endDate || ''} 
                             onChange={(e) => {
-                              const exps = [...(localProfile.work_experience || [])];
+                              const exps = [...(localProfile.professional_experience || [])];
                               exps[expIndex] = { ...exps[expIndex], endDate: e.target.value };
-                              updateLocalField('work_experience', exps);
+                              updateLocalField('professional_experience', exps);
                             }}
                             placeholder="End Date"
                             className="w-28"
@@ -1309,13 +1310,13 @@ const Profile = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                const exps = [...(localProfile.work_experience || [])];
+                                const exps = [...(localProfile.professional_experience || [])];
                                 const currentBullets = exps[expIndex].bullets || [];
                                 exps[expIndex] = { 
                                   ...exps[expIndex], 
                                   bullets: [...currentBullets, 'New achievement or responsibility'] 
                                 };
-                                updateLocalField('work_experience', exps);
+                                updateLocalField('professional_experience', exps);
                               }}
                               className="h-7 px-2 gap-1 text-xs"
                             >
@@ -1330,11 +1331,11 @@ const Profile = () => {
                                 <Textarea
                                   value={bullet}
                                   onChange={(e) => {
-                                    const exps = [...(localProfile.work_experience || [])];
+                                    const exps = [...(localProfile.professional_experience || [])];
                                     const bullets = [...(exps[expIndex].bullets || [])];
                                     bullets[bulletIndex] = e.target.value;
                                     exps[expIndex] = { ...exps[expIndex], bullets };
-                                    updateLocalField('work_experience', exps);
+                                    updateLocalField('professional_experience', exps);
                                   }}
                                   placeholder="Describe your achievement with metrics (e.g., Reduced load time by 40%)"
                                   className="flex-1 min-h-[60px] resize-none text-sm"
@@ -1345,11 +1346,11 @@ const Profile = () => {
                                   size="icon"
                                   className="h-8 w-8 shrink-0"
                                   onClick={() => {
-                                    const exps = [...(localProfile.work_experience || [])];
+                                    const exps = [...(localProfile.professional_experience || [])];
                                     const bullets = [...(exps[expIndex].bullets || [])];
                                     bullets.splice(bulletIndex, 1);
                                     exps[expIndex] = { ...exps[expIndex], bullets };
-                                    updateLocalField('work_experience', exps);
+                                    updateLocalField('professional_experience', exps);
                                   }}
                                 >
                                   <X className="h-4 w-4 text-destructive" />
@@ -1395,7 +1396,7 @@ const Profile = () => {
         </Card>
 
         {/* Professional Experience ATS Preview */}
-        <WorkExperiencePreview workExperience={localProfile.work_experience || []} />
+        <WorkExperiencePreview workExperience={localProfile.professional_experience || []} />
 
         {/* Technical Projects */}
         <Card>

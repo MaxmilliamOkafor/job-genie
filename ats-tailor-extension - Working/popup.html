@@ -770,6 +770,63 @@
         </div>
       </details>
 
+      <!-- Preview vs Download Diff Panel -->
+      <details class="diff-panel" id="diffPanel">
+        <summary class="diff-header">
+          <span class="debug-icon">🔍</span>
+          <span>Preview vs Download Diff</span>
+          <span class="smoke-test-badge idle" id="smokeTestBadge">Ready</span>
+        </summary>
+        <div class="diff-content">
+          <!-- Smoke Test Section -->
+          <div class="debug-section">
+            <div class="debug-section-title">🧪 PDF Smoke Test (3-Role Fixture)</div>
+            <div class="debug-row">
+              <span class="debug-label">Status:</span>
+              <span class="debug-value" id="smokeTestStatus">Not run</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Time:</span>
+              <span class="debug-value" id="smokeTestTime">—</span>
+            </div>
+            <p class="debug-help">Generates CV using built-in 3-role fixture (Meta, Google, AWS) and validates in under 3 seconds.</p>
+            <button id="runSmokeTest" class="btn btn-accent btn-full">
+              <span class="btn-icon">🚀</span>
+              <span class="btn-text">Run Smoke Test</span>
+            </button>
+          </div>
+          
+          <!-- Structured JSON Section -->
+          <div class="debug-section">
+            <div class="debug-section-title">📊 (1) Structured professional_experience JSON</div>
+            <div class="diff-list" id="diffStructuredJSON">
+              <p class="diff-empty">Run diff analysis or smoke test to see data</p>
+            </div>
+          </div>
+          
+          <!-- Preview Text Section -->
+          <div class="debug-section">
+            <div class="debug-section-title">📝 (2) Rendered Preview Text</div>
+            <div class="diff-preview" id="diffPreviewText">
+              <p class="diff-empty">No preview captured yet</p>
+            </div>
+          </div>
+          
+          <!-- Mismatches Section -->
+          <div class="debug-section">
+            <div class="debug-section-title">⚠️ (3) Mismatches Detected</div>
+            <div class="diff-mismatches" id="diffMismatches">
+              <p class="diff-empty">Run analysis to detect mismatches</p>
+            </div>
+          </div>
+          
+          <!-- Diff Actions -->
+          <div class="debug-actions">
+            <button id="runDiffAnalysis" class="btn btn-small btn-secondary">🔍 Analyse Current CV</button>
+            <button id="copyDiffReport" class="btn btn-small btn-outline">📋 Copy Report</button>
+          </div>
+        </div>
+      </details>
       <!-- Footer with Dashboard Link -->
       <div class="popup-footer">
         <a href="https://id-preview--2777be38-8dd2-4b20-ad45-fa61a1988fa3.lovable.app" target="_blank" class="dashboard-link">
