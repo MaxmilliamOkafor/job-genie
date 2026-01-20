@@ -1895,7 +1895,7 @@
 
       updateBanner('⚡ Step 2/3: Loading profile & generating tailored CV...', 'working');
 
-      const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`;
+      const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`;
 
       const profileRes = await fetchWithTimeout(
         profileUrl,
@@ -2319,10 +2319,15 @@
   }
   
   function initAutoTailor() {
+    // Manual-only mode (dev): do NOT auto-trigger tailoring on page load.
+    // User must click the extension button in the popup to start immediately.
+    createStatusBanner();
+    updateBanner('ATS detected — open the extension and click “⚡ Extract & Apply Keywords to CV” to start.', 'info');
+    return;
+
     // Immediately show banner on ATS detection
     createStatusBanner();
     updateBanner('ATS detected! Preparing...', 'working');
-    
     // ============ WORKDAY TOP 1 PRIORITY PATH ============
     // For Workday, run the special TOP 1 pipeline that:
     // 1. On listing page: Snapshot JD before clicking Apply
