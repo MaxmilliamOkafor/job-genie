@@ -354,9 +354,9 @@
         sections.push('');
       }
       
-      // Experience
+      // Experience - Use "PROFESSIONAL EXPERIENCE" for consistency
       if (resume.experience) {
-        sections.push('WORK EXPERIENCE');
+        sections.push('PROFESSIONAL EXPERIENCE');
         sections.push(resume.experience);
         sections.push('');
       }
@@ -437,12 +437,12 @@
     <div class="section-content">${escapeHtml(resume.summary)}</div>
   ` : ''}
   
-  ${resume.experience ? `
-    <div class="section-title">WORK EXPERIENCE</div>
-    <div class="section-content">${escapeHtml(resume.experience)}</div>
-  ` : ''}
-  
-  ${resume.education ? `
+      ${resume.experience ? `
+        <div class="section-title">PROFESSIONAL EXPERIENCE</div>
+        <div class="section-content">${escapeHtml(resume.experience)}</div>
+      ` : ''}
+      
+      ${resume.education ? `
     <div class="section-title">EDUCATION</div>
     <div class="section-content">${escapeHtml(resume.education)}</div>
   ` : ''}
