@@ -105,13 +105,15 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('QuantumHire AI: Extension installed');
     
+    // SECURITY: Do NOT store Supabase credentials on install
+    // Credentials will be populated after user authenticates via the web app
     chrome.storage.local.set({
       autoDetect: true,
-      supabaseUrl: 'https://wntpldomgjutwufphnpg.supabase.co',
-      supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM',
+      // supabaseUrl and supabaseKey are NOT set here - they come from web app auth
       automationSpeed: 1,
       batchQueue: [],
-      sessionStats: { applied: 0, failed: 0, skipped: 0 }
+      sessionStats: { applied: 0, failed: 0, skipped: 0 },
+      requiresWebAppAuth: true // Flag to indicate user must authenticate via web app
     });
   }
 });
