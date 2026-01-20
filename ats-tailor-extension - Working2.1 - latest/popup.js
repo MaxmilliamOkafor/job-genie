@@ -696,6 +696,9 @@ class ATSTailor {
    */
   async triggerExtractApplyWithUI(jobInfo, showAnimation = true) {
     const btn = document.getElementById('tailorBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const pipelineSteps = document.getElementById('pipelineSteps');
+    
     if (!btn) {
       console.warn('[ATS Tailor Popup] tailorBtn not found');
       return;
@@ -703,9 +706,20 @@ class ATSTailor {
     
     const startTime = performance.now();
     
+    // Show progress container and pipeline steps immediately
+    progressContainer?.classList.remove('hidden');
+    pipelineSteps?.classList.remove('hidden');
+    
+    // Update progress text
+    const progressText = document.getElementById('progressText');
+    if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
+    
+    // Highlight step 1 as working
+    this.updateStepUI(1, 'working');
+    
     // Show pressed/loading state with VISIBLE animation
     if (showAnimation) {
-      btn.classList.add('pressed', 'loading', 'btn-animating');
+      btn.classList.add('pressed', 'loading', 'btn-animating', 'btn-tailoring');
       btn.disabled = true;
       
       // Animate the button press visually
@@ -722,16 +736,15 @@ class ATSTailor {
     }
     
     const btnText = btn.querySelector('.btn-text');
-    const btnIcon = btn.querySelector('.btn-icon');
+    const btnIcon = btn.querySelector('.btn-icon-left');
     const originalText = btnText?.textContent || 'Extract & Apply Keywords to CV';
-    const originalIcon = btnIcon?.textContent || '🚀';
+    const originalIcon = btnIcon?.textContent || '⚡';
     
     if (btnText) {
-      btnText.textContent = '⚡ 50ms Processing...';
+      btnText.textContent = '⚡ Tailoring...';
     }
     if (btnIcon) {
       btnIcon.textContent = '⏳';
-      btnIcon.style.animation = 'spin 1s linear infinite';
     }
     
     // If jobInfo provided, update current job
@@ -757,18 +770,39 @@ class ATSTailor {
         if (response?.status === 'attached') {
           console.log(`[ATS Tailor Popup] ⚡ INSTANT attach complete in ${response.timing}ms (cached: ${response.cached})`);
           
+          // Mark all steps as complete
+          this.updateStepUI(1, 'complete');
+          this.updateStepUI(2, 'complete');
+          this.updateStepUI(3, 'complete');
+          if (progressText) progressText.textContent = 'Complete! Tailored CV & Cover Letter attached.';
+          
           // Success animation
           if (showAnimation) {
             btn.style.background = 'linear-gradient(135deg, #00c853, #69f0ae)';
             btn.style.transform = 'scale(1.02)';
             btn.style.boxShadow = '0 4px 20px rgba(0, 200, 83, 0.4)';
             if (btnIcon) btnIcon.textContent = '✅';
-            if (btnText) btnText.textContent = `✅ ${response.timing}ms${response.cached ? ' (cached)' : ''}`;
+            if (btnText) btnText.textContent = `✅ Done! ${response.timing}ms`;
           }
           
           this.showToast(`✅ Attached in ${response.timing}ms! Match: 100%`, 'success');
+          
+          // Notify content script to show green success banner
+          chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+            if (tab?.id) {
+              chrome.tabs.sendMessage(tab.id, { 
+                action: 'UPDATE_BANNER',
+                text: '✅ Done! Tailored CV & Cover Letter attached!',
+                status: 'success'
+              }).catch(() => {});
+            }
+          });
+          
         } else if (response?.status === 'pending') {
-          // Full tailor running in background
+          // Full tailor running in background - update step 2
+          this.updateStepUI(1, 'complete');
+          this.updateStepUI(2, 'working');
+          if (progressText) progressText.textContent = 'Step 2/3: Boosting CV to 95-100% match...';
           if (btnText) btnText.textContent = '⚡ Generating...';
           // Fall through to legacy tailorDocuments
           await this.tailorDocuments({ force: true });
@@ -802,7 +836,7 @@ class ATSTailor {
     } finally {
       // Remove pressed/loading state after completion
       setTimeout(() => {
-        btn.classList.remove('pressed', 'loading', 'btn-animating');
+        btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
         btn.disabled = false;
         btn.style.transform = '';
         btn.style.boxShadow = '';
@@ -811,9 +845,30 @@ class ATSTailor {
         if (btnText) btnText.textContent = originalText;
         if (btnIcon) {
           btnIcon.textContent = originalIcon;
-          btnIcon.style.animation = '';
         }
+        // Hide progress after delay
+        setTimeout(() => {
+          progressContainer?.classList.add('hidden');
+        }, 1500);
       }, showAnimation ? 2500 : 0);
+    }
+  }
+  
+  /**
+   * Helper: Update step UI state (working/complete)
+   */
+  updateStepUI(stepNum, status) {
+    const step = document.getElementById(`step${stepNum}`);
+    if (!step) return;
+    const icon = step.querySelector('.step-icon');
+    if (status === 'working') {
+      icon.textContent = '⏳';
+      step.classList.add('active');
+      step.classList.remove('complete');
+    } else if (status === 'complete') {
+      icon.textContent = '✓';
+      step.classList.remove('active');
+      step.classList.add('complete');
     }
   }
   
