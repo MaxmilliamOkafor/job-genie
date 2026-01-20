@@ -359,16 +359,39 @@
       createStatusBanner();
       updateBanner('Extracting JD keywords...', 'working');
       
-      chrome.storage.local.get(['ats_session', 'ats_profile', 'ats_baseCV'], async (data) => {
+      chrome.storage.local.get(['ats_session', 'ats_profile'], async (data) => {
         try {
           const session = data.ats_session;
-          const baseCV = data.ats_baseCV || '';
           const profile = data.ats_profile || {};
           
           if (!session?.access_token) {
             updateBanner('Please login first', 'error');
             sendResponse({ status: 'error', error: 'No session' });
             return;
+          }
+          
+          // Build CV from profile data (profile-only approach, no ats_baseCV fallback)
+          let baseCV = '';
+          if (profile.professional_experience || profile.work_experience) {
+            const experience = profile.professional_experience || profile.work_experience || [];
+            const skills = Array.isArray(profile.skills) ? profile.skills : [];
+            const education = Array.isArray(profile.education) ? profile.education : [];
+            
+            // Build minimal CV text from profile
+            baseCV = `${profile.first_name || ''} ${profile.last_name || ''}\n\n`;
+            baseCV += 'PROFESSIONAL EXPERIENCE\n';
+            if (Array.isArray(experience)) {
+              experience.forEach(exp => {
+                baseCV += `${exp.company || ''}\n${exp.title || ''}\n`;
+                if (Array.isArray(exp.bullets)) {
+                  exp.bullets.forEach(b => { baseCV += `• ${b}\n`; });
+                }
+                baseCV += '\n';
+              });
+            }
+            if (skills.length) {
+              baseCV += 'SKILLS\n' + skills.join(', ') + '\n\n';
+            }
           }
           
           // ALWAYS extract fresh job info from THIS page's JD
@@ -870,14 +893,30 @@
         if (snapshot?.keywords?.all?.length) {
           console.log(`[ATS Workday TOP1] 📦 Recovered snapshot: ${snapshot.keywords.total} keywords from "${snapshot.title}"`);
           
-          // Load user profile and base CV
+          // Load user profile (profile-only approach, no ats_baseCV)
           const data = await new Promise(resolve => {
-            chrome.storage.local.get(['ats_session', 'ats_profile', 'ats_baseCV'], resolve);
+            chrome.storage.local.get(['ats_session', 'ats_profile'], resolve);
           });
           
-          if (data.ats_session && data.ats_baseCV) {
+          if (data.ats_session && data.ats_profile) {
             const profile = data.ats_profile || {};
-            const baseCV = data.ats_baseCV;
+            
+            // Build baseCV from profile data
+            const experience = profile.professional_experience || profile.work_experience || [];
+            const skills = Array.isArray(profile.skills) ? profile.skills : [];
+            let baseCV = `${profile.first_name || ''} ${profile.last_name || ''}\n\nPROFESSIONAL EXPERIENCE\n`;
+            if (Array.isArray(experience)) {
+              experience.forEach(exp => {
+                baseCV += `${exp.company || ''}\n${exp.title || ''}\n`;
+                if (Array.isArray(exp.bullets)) {
+                  exp.bullets.forEach(b => { baseCV += `• ${b}\n`; });
+                }
+                baseCV += '\n';
+              });
+            }
+            if (skills.length) {
+              baseCV += 'SKILLS\n' + skills.join(', ') + '\n\n';
+            }
             
             // Prepare candidateData
             const candidateData = {
@@ -1805,7 +1844,8 @@
     if (cached[currentJobUrl]) {
       console.log('[ATS Tailor] Already tailored for this URL, loading cached files');
       await logEvent('cache_hit', { cachedAt: cached[currentJobUrl] });
-      loadFilesAndStart();
+      const attachResult = await loadFilesAndStart();
+      await logEvent('cache_attach_complete', { attachResult });
       return;
     }
 
@@ -1998,11 +2038,12 @@
         chrome.storage.local.set({ ats_tailored_urls: cached }, resolve);
       });
 
-      // Now load files and start attaching
+      // Now load files and start attaching - AWAIT completion
       stage = 'attach_loop';
       await logEvent('stage', { stage });
 
-      loadFilesAndStart();
+      const attachResult = await loadFilesAndStart();
+      await logEvent('attach_complete', { attachResult });
 
       updateBanner(SUCCESS_BANNER_MSG, 'success');
       hideBanner();
@@ -2131,9 +2172,21 @@
 
     killXButtons();
 
+    // Timeout protection: stop loops after 30 seconds to prevent infinite hangs
+    const loopStartTime = Date.now();
+    const LOOP_TIMEOUT_MS = 30_000;
+
     // HYPER BLAZING: 2ms interval (500fps) - 50% faster than ULTRA BLAZING
     attachLoop4ms = setInterval(() => {
       if (!filesLoaded) return;
+      
+      // Timeout protection
+      if (Date.now() - loopStartTime > LOOP_TIMEOUT_MS) {
+        console.warn('[ATS Tailor] ⚠️ Attach loop timeout (30s) - stopping loops');
+        stopAttachLoops();
+        return;
+      }
+      
       forceCVReplace();
       forceCoverReplace();
       if (areBothAttached()) {
@@ -2146,6 +2199,14 @@
     // HYPER BLAZING: 4ms interval for full force - 50% faster
     attachLoop8ms = setInterval(() => {
       if (!filesLoaded) return;
+      
+      // Timeout protection
+      if (Date.now() - loopStartTime > LOOP_TIMEOUT_MS) {
+        console.warn('[ATS Tailor] ⚠️ Attach loop timeout (30s) - stopping loops');
+        stopAttachLoops();
+        return;
+      }
+      
       forceEverything();
       if (areBothAttached()) {
         console.log('[ATS Tailor] ⚡⚡⚡ HYPER BLAZING attach complete');
@@ -2156,26 +2217,69 @@
   }
 
   // ============ LOAD FILES AND START ==========
-  function loadFilesAndStart() {
-    chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], (data) => {
-      cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
-      coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
-      coverLetterText = data.coverLetterText || '';
-      filesLoaded = true;
+  // Returns a Promise that resolves when files are loaded and attachment is complete (or times out)
+  async function loadFilesAndStart() {
+    return new Promise((resolve) => {
+      const ATTACHMENT_TIMEOUT_MS = 20_000;
+      let resolved = false;
+      
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.warn('[ATS Tailor] loadFilesAndStart timeout after 20s');
+          resolve({ success: false, reason: 'timeout' });
+        }
+      }, ATTACHMENT_TIMEOUT_MS);
+      
+      chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], (data) => {
+        cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
+        coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
+        coverLetterText = data.coverLetterText || '';
+        filesLoaded = true;
 
-      console.log('[ATS Tailor] Files loaded, starting attach');
+        console.log('[ATS Tailor] Files loaded, starting attach');
 
-      // Immediate attach attempt
-      forceEverything();
+        // Immediate attach attempt
+        forceEverything();
 
-      // Workday: DO NOT start rapid attach loops (Workday clears input after upload)
-      if (isWorkdayHost()) {
-        console.log('[ATS Tailor Workday] Skipping attach loops (one-time attach mode)');
-        return;
-      }
+        // Workday: DO NOT start rapid attach loops (Workday clears input after upload)
+        if (isWorkdayHost()) {
+          console.log('[ATS Tailor Workday] Skipping attach loops (one-time attach mode)');
+          clearTimeout(timeoutId);
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: true, reason: 'workday_single_attach' });
+          }
+          return;
+        }
 
-      // Start guarded loop (non-Workday)
-      ultraFastReplace();
+        // Start guarded loop (non-Workday)
+        ultraFastReplace();
+        
+        // Check for completion periodically
+        const checkInterval = setInterval(() => {
+          if (areBothAttached()) {
+            clearInterval(checkInterval);
+            clearTimeout(timeoutId);
+            if (!resolved) {
+              resolved = true;
+              console.log('[ATS Tailor] loadFilesAndStart complete - both attached');
+              resolve({ success: true, reason: 'both_attached' });
+            }
+          }
+        }, 100);
+        
+        // Also resolve after a reasonable time even if not fully attached
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          clearTimeout(timeoutId);
+          if (!resolved) {
+            resolved = true;
+            console.log('[ATS Tailor] loadFilesAndStart complete - time limit');
+            resolve({ success: true, reason: 'time_limit' });
+          }
+        }, 15_000);
+      });
     });
   }
 
@@ -2354,14 +2458,30 @@
     tailoringInProgress = true;
     
     try {
-      // Get session and profile
+      // Get session and profile (profile-only approach)
       const data = await new Promise(resolve => {
-        chrome.storage.local.get(['ats_session', 'ats_profile', 'ats_baseCV'], resolve);
+        chrome.storage.local.get(['ats_session', 'ats_profile'], resolve);
       });
       
       const session = data.ats_session;
       const profile = data.ats_profile || {};
-      const baseCV = data.ats_baseCV || '';
+      
+      // Build baseCV from profile data
+      const experience = profile.professional_experience || profile.work_experience || [];
+      const skills = Array.isArray(profile.skills) ? profile.skills : [];
+      let baseCV = `${profile.first_name || ''} ${profile.last_name || ''}\n\nPROFESSIONAL EXPERIENCE\n`;
+      if (Array.isArray(experience)) {
+        experience.forEach(exp => {
+          baseCV += `${exp.company || ''}\n${exp.title || ''}\n`;
+          if (Array.isArray(exp.bullets)) {
+            exp.bullets.forEach(b => { baseCV += `• ${b}\n`; });
+          }
+          baseCV += '\n';
+        });
+      }
+      if (skills.length) {
+        baseCV += 'SKILLS\n' + skills.join(', ') + '\n\n';
+      }
       
       if (!session?.access_token) {
         updateBanner('⚠️ Please login first', 'error');
