@@ -712,7 +712,7 @@ class ATSTailor {
     
     // Update progress text
     const progressText = document.getElementById('progressText');
-    if (progressText) progressText.textContent = '⏳ Step 1/3: Extracting keywords from job description...';
+    if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
     
     // Highlight step 1 as working
     this.updateStepUI(1, 'working');
@@ -750,7 +750,7 @@ class ATSTailor {
       // Step 1 complete, Step 2 working
       this.updateStepUI(1, 'complete');
       this.updateStepUI(2, 'working');
-      if (progressText) progressText.textContent = '⏳ Step 2/3: Boosting CV to 95-100% match...';
+      if (progressText) progressText.textContent = 'Step 2/3: Boosting CV to 95-100% match...';
       
       // Call tailorDocuments directly - this is the reliable path
       await this.tailorDocuments({ force: true });
@@ -758,7 +758,7 @@ class ATSTailor {
       // Step 2 complete, Step 3 working
       this.updateStepUI(2, 'complete');
       this.updateStepUI(3, 'working');
-      if (progressText) progressText.textContent = '⏳ Step 3/3: Generating ATS CV & Cover Letter...';
+      if (progressText) progressText.textContent = 'Step 3/3: Generating ATS CV and Cover Letter...';
       
       // Small delay to show step 3, then mark complete
       await new Promise(r => setTimeout(r, 500));
@@ -767,25 +767,25 @@ class ATSTailor {
       
       // Mark all steps as complete
       this.updateStepUI(3, 'complete');
-      if (progressText) progressText.textContent = '✅ Complete! Tailored CV & Cover Letter ready.';
+      if (progressText) progressText.textContent = 'Complete! Tailored CV and Cover Letter ready.';
       
       // Success animation
       if (showAnimation) {
         btn.style.background = 'linear-gradient(135deg, #00c853, #69f0ae)';
         btn.style.transform = 'scale(1.02)';
         btn.style.boxShadow = '0 4px 20px rgba(0, 200, 83, 0.4)';
-        if (btnIcon) btnIcon.textContent = '✅';
-        if (btnText) btnText.textContent = `✅ Done! ${Math.round(elapsed / 1000)}s`;
+        if (btnIcon) btnIcon.textContent = '✓';
+        if (btnText) btnText.textContent = `Done in ${Math.round(elapsed / 1000)}s`;
       }
       
-      this.showToast(`✅ Tailored in ${Math.round(elapsed / 1000)}s! Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
+      this.showToast(`Tailored in ${Math.round(elapsed / 1000)}s - Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
       
-      // Notify content script to show green success banner
+      // Notify content script to show green success banner (professional text)
       chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
         if (tab?.id) {
           chrome.tabs.sendMessage(tab.id, { 
             action: 'UPDATE_BANNER',
-            text: '✅ Done! Tailored CV & Cover Letter attached!',
+            text: 'Tailored CV and Cover Letter attached successfully',
             status: 'success'
           }).catch(() => {});
         }
@@ -2939,9 +2939,19 @@ class ATSTailor {
       // ============ FINAL: Attach CV & Update UI ============
       updateProgress(90, 'Attaching tailored CV to application...');
 
-      // Auto-attach CV to the page
+      // CRITICAL: Store files in chrome.storage for content.js attach loop
+      await chrome.storage.local.set({
+        cvPDF: this.generatedDocuments.cvPdf,
+        coverPDF: this.generatedDocuments.coverPdf,
+        coverLetterText: this.generatedDocuments.coverLetter || '',
+        cvFileName: this.generatedDocuments.cvFileName,
+        coverFileName: this.generatedDocuments.coverFileName,
+      });
+      console.log('[ATS Tailor] Stored cvPDF/coverPDF in chrome.storage for content.js');
+      
+      // Auto-attach BOTH CV and Cover Letter to the page
       try {
-        await this.attachDocument('cv');
+        await this.attachBothDocuments();
       } catch (attachError) {
         console.warn('[ATS Tailor] Auto-attach failed:', attachError);
         // Don't throw - document generation was successful
