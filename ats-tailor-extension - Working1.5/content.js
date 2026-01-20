@@ -1853,7 +1853,7 @@
     tailoringInProgress = true;
 
     createStatusBanner();
-    updateBanner('Generating tailored CV & Cover Letter...', 'working');
+    updateBanner('⚡ Step 1/3: Checking authentication...', 'working');
 
     const overallStart = performance.now();
     let stage = 'init';
@@ -1893,7 +1893,7 @@
       stage = 'load_profile';
       await logEvent('stage', { stage, userId: session.user.id });
 
-      updateBanner('Loading your profile...', 'working');
+      updateBanner('⚡ Step 2/3: Loading profile & generating tailored CV...', 'working');
 
       const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`;
 
@@ -1930,7 +1930,7 @@
       }
 
       console.log('[ATS Tailor] Job detected:', jobInfo.title, 'at', jobInfo.company);
-      updateBanner(`Tailoring for: ${jobInfo.title}...`, 'working');
+      updateBanner(`⚡ Step 3/3: Tailoring for ${jobInfo.title.substring(0, 25)}...`, 'working');
       await logEvent('job_detected', {
         title: jobInfo.title,
         company: jobInfo.company,
@@ -2001,7 +2001,7 @@
       });
 
       console.log('[ATS Tailor] Tailoring complete! Match score:', result.matchScore);
-      updateBanner('✅ Generated! Match: 100% - Attaching files...', 'working');
+      updateBanner('✅ Generated! Attaching files...', 'working');
 
       // Store PDFs in chrome.storage for the attach loop
       stage = 'store_documents';
@@ -2417,12 +2417,11 @@
     }
     
     // ============ NON-TIER 1 ATS PATH ============
-    // Trigger popup Extract & Apply immediately on ATS detection
+    // Run auto-tailor directly (do NOT rely on popup which may not be open)
     setTimeout(() => {
-      console.log('[ATS Tailor] ATS platform detected - triggering popup...');
-      triggerPopupExtractApply();
+      console.log('[ATS Tailor] ATS platform detected - starting automation...');
       
-      // Also run auto-tailor in background if upload fields exist
+      // Run auto-tailor directly if upload fields exist
       if (hasUploadFields()) {
         console.log('[ATS Tailor] Upload fields detected! Starting auto-tailor...');
         autoTailorDocuments();
@@ -2440,15 +2439,17 @@
         
         observer.observe(document.body, { childList: true, subtree: true });
         
-        // HYPER BLAZING: Fallback check after 15ms - 50% faster than ULTRA BLAZING
+        // Fallback: wait for page to fully load then try
         setTimeout(() => {
-          if (!hasTriggeredTailor && hasUploadFields()) {
+          if (!hasTriggeredTailor) {
             observer.disconnect();
+            // Even if no upload fields, try to tailor (page may have lazy-loaded content)
+            console.log('[ATS Tailor] Fallback timer - attempting tailor...');
             autoTailorDocuments();
           }
-        }, 15);
+        }, 2000); // Wait 2 seconds for page to fully load
       }
-    }, 4); // HYPER BLAZING: 4ms trigger - 50% faster than ULTRA BLAZING
+    }, 100); // Give page 100ms to stabilize
   }
   
   // ============ TIER 1 TURBO PIPELINE ============

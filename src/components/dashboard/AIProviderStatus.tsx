@@ -82,9 +82,10 @@ export function AIProviderStatus() {
   };
 
   const activeProvider = profile?.preferred_ai_provider || 'openai';
+  // Check enabled flags only - API keys are securely stored and may not be exposed in profile
   const hasActiveProvider = 
-    (activeProvider === 'openai' && profile?.openai_enabled && !!profile?.openai_api_key) ||
-    (activeProvider === 'kimi' && profile?.kimi_enabled && !!profile?.kimi_api_key);
+    (activeProvider === 'openai' && profile?.openai_enabled) ||
+    (activeProvider === 'kimi' && profile?.kimi_enabled);
 
   const providerConfig = {
     openai: {
