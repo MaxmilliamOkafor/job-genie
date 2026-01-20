@@ -53,7 +53,7 @@ interface TailorRequest {
     github: string;
     portfolio: string;
     coverLetter: string;
-    workExperience: any[];
+    professionalExperience: any[];
     education: any[];
     skills: any[];
     certifications: string[];
@@ -184,7 +184,7 @@ function validateRequest(data: any): TailorRequest {
     github: validateString(profile.github || "", MAX_STRING_MEDIUM, "github"),
     portfolio: validateString(profile.portfolio || "", MAX_STRING_MEDIUM, "portfolio"),
     coverLetter: validateString(profile.coverLetter || "", MAX_STRING_LONG, "coverLetter"),
-    workExperience: Array.isArray(profile.workExperience) ? profile.workExperience.slice(0, 20) : [],
+    professionalExperience: Array.isArray(profile.professionalExperience) ? profile.professionalExperience.slice(0, 20) : (Array.isArray(profile.workExperience) ? profile.workExperience.slice(0, 20) : []),
     education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
     skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
     certifications: validateStringArray(
@@ -1469,7 +1469,7 @@ serve(async (req) => {
         github: profileData.github || "",
         portfolio: profileData.portfolio || "",
         coverLetter: profileData.cover_letter || "",
-        workExperience: profileData.work_experience || [],
+        professionalExperience: profileData.professional_experience || profileData.work_experience || [],
         education: profileData.education || [],
         skills: profileData.skills || [],
         certifications: profileData.certifications || [],
@@ -1552,7 +1552,7 @@ serve(async (req) => {
     const matchResult = calculateMatchScore(
       jdKeywords.allKeywords,
       userProfile.skills,
-      userProfile.workExperience,
+      userProfile.professionalExperience,
       userProfile.education,
       userProfile.certifications,
     );
@@ -1648,8 +1648,8 @@ GitHub: ${userProfile.github}
 Portfolio: ${userProfile.portfolio}
 Current Location: ${userProfile.city || ""}, ${userProfile.state || ""} ${userProfile.country || ""}
 
-WORK EXPERIENCE (PRESERVE COMPANY NAMES AND DATES EXACTLY - ONLY REWRITE BULLETS):
-${JSON.stringify(userProfile.workExperience, null, 2)}
+PROFESSIONAL EXPERIENCE (PRESERVE COMPANY NAMES AND DATES EXACTLY - ONLY REWRITE BULLETS):
+${JSON.stringify(userProfile.professionalExperience, null, 2)}
 
 EDUCATION:
 ${JSON.stringify(userProfile.education, null, 2)}
@@ -2144,7 +2144,7 @@ ${
           portfolio: userProfile.portfolio,
         },
         summary: extractProfessionalSummary(result.tailoredResume || ""),
-        experience: (Array.isArray(userProfile.workExperience) ? userProfile.workExperience : []).map((exp: any) => ({
+        experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
           title: exp?.title || "",
           dates:

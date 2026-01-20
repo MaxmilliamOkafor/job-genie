@@ -762,6 +762,7 @@ async function handleRawContentRequest(body: {
       "PROFESSIONAL SUMMARY",
       "SUMMARY",
       "EXPERIENCE",
+      "PROFESSIONAL EXPERIENCE",
       "WORK EXPERIENCE",
       "EDUCATION",
       "SKILLS",
@@ -871,7 +872,7 @@ async function handleRawContentRequest(body: {
       // Normalize section title
       let sectionTitle = section.type;
       if (sectionTitle.includes("SUMMARY")) sectionTitle = "PROFESSIONAL SUMMARY";
-      if (sectionTitle.includes("EXPERIENCE")) sectionTitle = "WORK EXPERIENCE";
+      if (sectionTitle.includes("EXPERIENCE")) sectionTitle = "PROFESSIONAL EXPERIENCE";
 
       currentPage.drawText(sectionTitle, {
         x: MARGIN,
