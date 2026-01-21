@@ -53,7 +53,8 @@ interface TailorRequest {
     github: string;
     portfolio: string;
     coverLetter: string;
-    workExperience: any[];
+    // Canonical field: professional_experience (with fallback to workExperience for backward compatibility)
+    professionalExperience: any[];
     education: any[];
     skills: any[];
     certifications: string[];
@@ -175,6 +176,13 @@ function validateRequest(data: any): TailorRequest {
   const jobId = data.jobId ? validateString(data.jobId, MAX_STRING_SHORT, "jobId") : undefined;
 
   const profile = data.userProfile || {};
+  
+  // Canonical mapping: prefer professionalExperience/professional_experience, fallback to workExperience/work_experience
+  const experienceArray = Array.isArray(profile.professionalExperience) ? profile.professionalExperience :
+                          Array.isArray(profile.professional_experience) ? profile.professional_experience :
+                          Array.isArray(profile.workExperience) ? profile.workExperience :
+                          Array.isArray(profile.work_experience) ? profile.work_experience : [];
+  
   const userProfile = {
     firstName: validateString(profile.firstName || "", MAX_STRING_SHORT, "firstName"),
     lastName: validateString(profile.lastName || "", MAX_STRING_SHORT, "lastName"),
@@ -184,7 +192,8 @@ function validateRequest(data: any): TailorRequest {
     github: validateString(profile.github || "", MAX_STRING_MEDIUM, "github"),
     portfolio: validateString(profile.portfolio || "", MAX_STRING_MEDIUM, "portfolio"),
     coverLetter: validateString(profile.coverLetter || "", MAX_STRING_LONG, "coverLetter"),
-    workExperience: Array.isArray(profile.workExperience) ? profile.workExperience.slice(0, 20) : [],
+    // Use canonical experience array (professionalExperience preferred)
+    professionalExperience: experienceArray.slice(0, 20),
     education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
     skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
     certifications: validateStringArray(
@@ -1460,6 +1469,10 @@ serve(async (req) => {
       }
 
       // Map database profile to expected userProfile format
+      // Canonical: use professional_experience (DB column), fallback to work_experience for legacy
+      const dbExperience = Array.isArray(profileData.professional_experience) ? profileData.professional_experience :
+                           Array.isArray(profileData.work_experience) ? profileData.work_experience : [];
+      
       rawData.userProfile = {
         firstName: profileData.first_name || "",
         lastName: profileData.last_name || "",
@@ -1469,7 +1482,7 @@ serve(async (req) => {
         github: profileData.github || "",
         portfolio: profileData.portfolio || "",
         coverLetter: profileData.cover_letter || "",
-        workExperience: profileData.work_experience || [],
+        professionalExperience: dbExperience,
         education: profileData.education || [],
         skills: profileData.skills || [],
         certifications: profileData.certifications || [],
@@ -1552,7 +1565,7 @@ serve(async (req) => {
     const matchResult = calculateMatchScore(
       jdKeywords.allKeywords,
       userProfile.skills,
-      userProfile.workExperience,
+      userProfile.professionalExperience,
       userProfile.education,
       userProfile.certifications,
     );
@@ -1649,7 +1662,7 @@ Portfolio: ${userProfile.portfolio}
 Current Location: ${userProfile.city || ""}, ${userProfile.state || ""} ${userProfile.country || ""}
 
 WORK EXPERIENCE (PRESERVE COMPANY NAMES AND DATES EXACTLY - ONLY REWRITE BULLETS):
-${JSON.stringify(userProfile.workExperience, null, 2)}
+${JSON.stringify(userProfile.professionalExperience, null, 2)}
 
 EDUCATION:
 ${JSON.stringify(userProfile.education, null, 2)}
@@ -2144,7 +2157,7 @@ ${
           portfolio: userProfile.portfolio,
         },
         summary: extractProfessionalSummary(result.tailoredResume || ""),
-        experience: (Array.isArray(userProfile.workExperience) ? userProfile.workExperience : []).map((exp: any) => ({
+        experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
           title: exp?.title || "",
           dates:

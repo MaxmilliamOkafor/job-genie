@@ -760,16 +760,18 @@
           </div>
           
           <!-- Source Data Modal (hidden by default) -->
-          <div id="sourceDataModal" class="debug-modal hidden">
-            <div class="debug-modal-header">
-              <span>📊 Source Data (professional_experience)</span>
-              <button id="closeSourceModal" class="btn btn-link">✕</button>
-            </div>
-            <div class="debug-modal-body">
-              <pre id="sourceDataJSON" class="source-data-pre"></pre>
-            </div>
-            <div class="debug-modal-footer">
-              <button id="copySourceData" class="btn btn-small btn-secondary">Copy JSON</button>
+          <div id="sourceDataModal" class="debug-modal hidden" style="display: none;">
+            <div class="debug-modal-content">
+              <div class="debug-modal-header">
+                <span>Source Data (professional_experience)</span>
+                <button id="closeSourceModal" class="btn btn-link">✕</button>
+              </div>
+              <div class="debug-modal-body">
+                <pre id="sourceDataJSON" class="source-data-pre"></pre>
+              </div>
+              <div class="debug-modal-footer">
+                <button id="copySourceData" class="btn btn-small btn-secondary">Copy JSON</button>
+              </div>
             </div>
           </div>
         </div>
