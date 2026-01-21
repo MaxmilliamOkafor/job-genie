@@ -349,18 +349,12 @@
 
     // View Source Data - shows raw professional_experience JSON
     async viewSourceData() {
+      console.log('[PDFDebugPanel] viewSourceData called');
       try {
-        // Try multiple sources for the data
         let profileData = null;
         let source = 'unknown';
         
-        // Source 1: ATSTailor instance (runtime)
-        const atsTailor = window.atsTailorInstance;
-        if (atsTailor?.generatedDocuments) {
-          // Check if we have raw profile data in the instance
-        }
-        
-        // Source 2: Chrome storage (ats_profile)
+        // Source 1: Chrome storage (ats_profile) - PRIORITY
         const stored = await new Promise(resolve => {
           chrome.storage.local.get(['ats_profile', 'ats_lastGeneratedDocuments'], resolve);
         });
@@ -368,35 +362,40 @@
         if (stored.ats_profile) {
           profileData = stored.ats_profile;
           source = 'chrome.storage.local (ats_profile)';
+          console.log('[PDFDebugPanel] Found profile in chrome.storage');
         }
         
-        // Source 3: Fetch directly from Supabase if we have session
-        if (!profileData && atsTailor?.session?.access_token && atsTailor?.session?.user?.id) {
-          try {
-            const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
-            
-            const res = await fetch(
-              `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${atsTailor.session.user.id}&select=professional_experience,relevant_projects,education,skills,certifications,first_name,last_name`,
-              {
-                headers: {
-                  apikey: SUPABASE_ANON_KEY,
-                  Authorization: `Bearer ${atsTailor.session.access_token}`,
+        // Source 2: Fetch directly from Supabase if we have session and no local data
+        if (!profileData) {
+          const atsTailor = window.atsTailorInstance;
+          if (atsTailor?.session?.access_token && atsTailor?.session?.user?.id) {
+            try {
+              const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+              const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+              
+              const res = await fetch(
+                `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${atsTailor.session.user.id}&select=professional_experience,relevant_projects,education,skills,certifications,first_name,last_name`,
+                {
+                  headers: {
+                    apikey: SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${atsTailor.session.access_token}`,
+                  }
                 }
+              );
+              if (res.ok) {
+                const profiles = await res.json();
+                profileData = profiles?.[0] || null;
+                source = 'Supabase API (live fetch)';
+                console.log('[PDFDebugPanel] Fetched profile from Supabase');
               }
-            );
-            if (res.ok) {
-              const profiles = await res.json();
-              profileData = profiles?.[0] || null;
-              source = 'Supabase API (live fetch)';
+            } catch (e) {
+              console.warn('[PDFDebugPanel] Failed to fetch profile from Supabase:', e);
             }
-          } catch (e) {
-            console.warn('[PDFDebugPanel] Failed to fetch profile from Supabase:', e);
           }
         }
         
         if (!profileData) {
-          this.showToast('No profile data found. Generate a CV first.', 'error');
+          this.showToast('No profile data found. Load your profile first.', 'error');
           return;
         }
         
@@ -416,9 +415,17 @@
         // Display in modal
         const modal = document.getElementById('sourceDataModal');
         const jsonPre = document.getElementById('sourceDataJSON');
+        console.log('[PDFDebugPanel] Modal element:', modal, 'JSON element:', jsonPre);
+        
         if (modal && jsonPre) {
           jsonPre.textContent = JSON.stringify(sourceData, null, 2);
           modal.classList.remove('hidden');
+          modal.style.display = 'flex';
+          console.log('[PDFDebugPanel] Modal opened');
+        } else {
+          console.error('[PDFDebugPanel] Modal elements not found');
+          // Fallback: show in alert
+          alert('Source Data:\n' + JSON.stringify(sourceData, null, 2).substring(0, 2000));
         }
         
         this.showToast(`Source data loaded from ${source}`, 'success');

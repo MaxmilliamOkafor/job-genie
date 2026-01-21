@@ -2228,12 +2228,31 @@
       }, ATTACHMENT_TIMEOUT_MS);
       
       chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], (data) => {
+        // Validate we have data
+        if (!data.cvPDF) {
+          console.warn('[ATS Tailor] No cvPDF in storage, cannot attach');
+          clearTimeout(timeoutId);
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, reason: 'no_cv_pdf' });
+          }
+          return;
+        }
+        
         cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
         coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
         coverLetterText = data.coverLetterText || '';
         filesLoaded = true;
 
-        console.log('[ATS Tailor] Files loaded, starting attach');
+        console.log('[ATS Tailor] Files loaded from storage:', { 
+          hasCv: !!cvFile, 
+          hasCover: !!coverFile,
+          cvFileName: data.cvFileName,
+          coverFileName: data.coverFileName
+        });
+
+        // Kill existing attachments first
+        killXButtons();
 
         // Immediate attach attempt
         forceEverything();
@@ -2540,8 +2559,12 @@
         coverFile = pdfResult.cover ? createPDFFile(pdfResult.cover.base64 || pdfResult.cover, pdfResult.cover.filename || 'Cover_Letter.pdf') : null;
         filesLoaded = true;
         
-        // Cache for future use
+        // CRITICAL: Also store in standard keys for popup.js compatibility
         chrome.storage.local.set({
+          cvPDF: pdfResult.cv.base64 || pdfResult.cv,
+          coverPDF: pdfResult.cover?.base64 || pdfResult.cover || '',
+          cvFileName: pdfResult.cv.filename || 'Resume.pdf',
+          coverFileName: pdfResult.cover?.filename || 'Cover_Letter.pdf',
           [`tailored_${currentJobUrl}`]: {
             keywords,
             matchScore: 100,
@@ -2554,7 +2577,10 @@
           }
         });
         
-        // Attach files
+        // Remove any existing files before attaching new ones
+        killXButtons();
+        
+        // Attach files with force replace
         forceEverything();
         ultraFastReplace();
         

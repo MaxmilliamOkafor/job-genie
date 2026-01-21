@@ -383,6 +383,25 @@ class ATSTailor {
             // Store parsed CV data for use in tailoring
             this.baseCVContent = parsedData[0];
             console.log('[ATS Tailor] Loaded parsed CV content from profile');
+            
+            // Store in chrome.storage for debug panel access
+            await chrome.storage.local.set({ ats_profile: parsedData[0] });
+            
+            // WIRE UP Parse CV Debug panel
+            if (window.PDFDebugPanel) {
+              const expCount = Array.isArray(parsedData[0].professional_experience) ? parsedData[0].professional_experience.length : 0;
+              const skillsCount = Array.isArray(parsedData[0].skills) ? parsedData[0].skills.length : 0;
+              window.PDFDebugPanel.updateParseCVDebug({
+                status: 'Loaded',
+                fileType: profile.cv_file_name?.split('.').pop()?.toUpperCase() || 'PDF',
+                fileSize: 'From profile',
+                textLength: expCount > 0 ? `${expCount} roles, ${skillsCount} skills` : '0',
+                parseTime: 'Cached',
+                textSnippet: parsedData[0].professional_experience?.[0] ? 
+                  `Latest role: ${parsedData[0].professional_experience[0].title || 'Unknown'} at ${parsedData[0].professional_experience[0].company || 'Unknown'}` : 
+                  'No experience data found'
+              });
+            }
           }
         }
       }
