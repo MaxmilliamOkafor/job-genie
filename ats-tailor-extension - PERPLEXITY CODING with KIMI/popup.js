@@ -536,11 +536,30 @@ class ATSTailor {
     document.getElementById('openDebugSettings')?.addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('debug-settings.html') });
     });
+    // Auto Tailor Toggle
     document.getElementById('autoTailorToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
       this.autoTailorEnabled = enabled;
       chrome.storage.local.set({ ats_autoTailorEnabled: enabled });
       this.showToast(enabled ? 'Auto tailor enabled' : 'Auto tailor disabled', 'success');
+    });
+    
+    // Auto-Trigger Toggle (NEW)
+    document.getElementById('autoTriggerToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.runtime.sendMessage({ action: 'SET_AUTO_TRIGGER', enabled }, (response) => {
+        if (response?.success) {
+          this.showToast(enabled ? '⚡ Auto-trigger enabled' : 'Auto-trigger disabled', 'success');
+        }
+      });
+    });
+    
+    // Load auto-trigger setting and set checkbox
+    chrome.storage.local.get(['autoTriggerEnabled'], (result) => {
+      const toggle = document.getElementById('autoTriggerToggle');
+      if (toggle) {
+        toggle.checked = result.autoTriggerEnabled !== false; // Default enabled
+      }
     });
     
     // Bulk CSV Automation

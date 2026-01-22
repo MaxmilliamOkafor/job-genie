@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "ATS Tailor v1.8.0 - Enhanced CV Parser + Rich-Text",
-  "version": "1.8.0",
-  "description": "v1.8.0: Enhanced multi-page CV parser for PDF/DOCX. Rich-text editor for education (bold/italic). Improved work experience extraction for multiple roles. ATS-safe plain-text export.",
+  "name": "ATS Tailor v1.9.0 - Auto-Trigger ATS Detection",
+  "version": "1.9.0",
+  "description": "v1.9.0: Auto-trigger on ATS platform detection (Workday, Greenhouse, iCIMS, SmartRecruiters, etc). Enhanced CV parser + Rich-text. Excludes: Lever, Ashby, LinkedIn, Indeed.",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
   "host_permissions": [
     "https://*.greenhouse.io/*",

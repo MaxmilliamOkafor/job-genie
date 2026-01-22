@@ -201,6 +201,29 @@
   
   // Listen for messages from popup and background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // ============ AUTO-TRIGGER FROM BACKGROUND (ATS Detection) ============
+    if (message.action === 'AUTO_TRIGGER_EXTRACT_APPLY') {
+      console.log(`[ATS Tailor] ⚡ AUTO-TRIGGER received for ${message.platform}`);
+      
+      // Show notification banner
+      createStatusBanner();
+      updateBanner(`✅ Auto-triggered: Extracting & applying keywords for ${message.platform}...`, 'working');
+      
+      // Trigger the Extract & Apply flow via popup messaging
+      triggerExtractApplyWithRetry(message.platform, 5, 500)
+        .then((result) => {
+          console.log('[ATS Tailor] Auto-trigger completed:', result);
+          sendResponse({ success: true, result });
+        })
+        .catch((error) => {
+          console.error('[ATS Tailor] Auto-trigger failed:', error);
+          updateBanner('❌ Auto-trigger failed. Please try manually.', 'error');
+          sendResponse({ success: false, error: error.message });
+        });
+      
+      return true; // Keep channel open for async response
+    }
+    
     // ============ UPDATE BANNER FROM POPUP ============
     if (message.action === 'UPDATE_BANNER') {
       updateBanner(message.text, message.status);
@@ -2610,6 +2633,96 @@
     }
   }
   
+  // ============ AUTO-TRIGGER EXTRACT & APPLY WITH RETRY ============
+  // Called from background.js when ATS platform is detected
+  // Retries up to maxRetries times with retryDelay between attempts
+  async function triggerExtractApplyWithRetry(platform, maxRetries = 5, retryDelay = 500) {
+    console.log(`[ATS Tailor] triggerExtractApplyWithRetry: ${platform}, maxRetries: ${maxRetries}`);
+    
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      attempt++;
+      console.log(`[ATS Tailor] Auto-trigger attempt ${attempt}/${maxRetries}`);
+      
+      try {
+        // Check if session exists
+        const data = await new Promise((resolve) => {
+          chrome.storage.local.get(['ats_session', 'ats_profile'], resolve);
+        });
+        
+        if (!data.ats_session?.access_token) {
+          updateBanner('⚠️ Please login first to enable auto-tailor', 'error');
+          return { success: false, error: 'No session - please login' };
+        }
+        
+        // Check if already tailored for this job URL
+        const jobCacheKey = `tailored_${currentJobUrl}`;
+        const cacheData = await new Promise((resolve) => {
+          chrome.storage.local.get([jobCacheKey], resolve);
+        });
+        
+        if (cacheData[jobCacheKey] && Date.now() - cacheData[jobCacheKey].timestamp < 30 * 60 * 1000) {
+          console.log('[ATS Tailor] Job already tailored recently, using cached version');
+          updateBanner('✅ Using cached tailored documents', 'success');
+          
+          // Load cached files and attach
+          if (cacheData[jobCacheKey].cvBase64) {
+            cvFile = createPDFFile(cacheData[jobCacheKey].cvBase64, cacheData[jobCacheKey].cvFileName || 'Resume.pdf');
+            filesLoaded = true;
+            forceEverything();
+            ultraFastReplace();
+          }
+          
+          return { success: true, cached: true };
+        }
+        
+        // Trigger tailoring - prefer Tier 1 detection first
+        if (hasTriggeredTailor || tailoringInProgress) {
+          console.log('[ATS Tailor] Tailoring already in progress');
+          return { success: true, inProgress: true };
+        }
+        
+        // Detect if this is a Tier 1 company
+        const tier1Detection = detectTier1Company();
+        if (tier1Detection && tier1Detection.isJobListing) {
+          console.log(`[ATS Tailor] Auto-triggering Tier 1 pipeline for ${tier1Detection.company}`);
+          updateBanner(`⚡ Auto-tailoring for ${tier1Detection.company}...`, 'working');
+          await runTier1TurboPipeline(tier1Detection);
+          return { success: true, tier1: true, company: tier1Detection.company };
+        }
+        
+        // Standard ATS - run autoTailorDocuments
+        console.log('[ATS Tailor] Auto-triggering standard ATS pipeline');
+        updateBanner(`⚡ Auto-tailoring for ${platform}...`, 'working');
+        await autoTailorDocuments();
+        return { success: true, platform };
+        
+      } catch (error) {
+        console.error(`[ATS Tailor] Auto-trigger attempt ${attempt} failed:`, error);
+        
+        if (attempt < maxRetries) {
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          updateBanner(`Retrying... (${attempt + 1}/${maxRetries})`, 'working');
+        } else {
+          updateBanner('❌ Auto-trigger failed after all retries', 'error');
+          throw error;
+        }
+      }
+    }
+    
+    return { success: false, error: 'Max retries exceeded' };
+  }
+  
+  // Expose function globally for external access
+  window.ATSTailorAutoTrigger = {
+    triggerExtractApplyWithRetry,
+    detectTier1Company,
+    runTier1TurboPipeline,
+    autoTailorDocuments
+  };
+
   // ============ ATTACH DOCUMENT (Called from popup.js) ==========
   // Handle document attachment requests from popup
   if (message.action === 'attachDocument') {
