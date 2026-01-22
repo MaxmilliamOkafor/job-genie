@@ -1,7 +1,159 @@
 // ATS Tailored CV & Cover Letter - Background Service Worker
-// Handles extension lifecycle, Workday full flow coordination, and Bulk CSV automation
+// Handles extension lifecycle, Workday full flow coordination, Bulk CSV automation, and Auto-Trigger for ATS
 
 console.log('[ATS Tailor] Background service worker started');
+
+// ============ AUTO-TRIGGER ATS DETECTION ============
+// ATS Platform Detection Map - EXCLUDED: Lever, Ashby, Rippling, LinkedIn, Indeed
+const ATS_PLATFORMS = {
+  'workday.com': 'Workday',
+  'myworkdayjobs.com': 'Workday',
+  'greenhouse.io': 'Greenhouse',
+  'job-boards.greenhouse.io': 'Greenhouse',
+  'boards.greenhouse.io': 'Greenhouse',
+  'icims.com': 'iCIMS',
+  'smartrecruiters.com': 'SmartRecruiters',
+  'jobvite.com': 'Jobvite',
+  'bamboohr.com': 'BambooHR',
+  'recruitee.com': 'Recruitee',
+  'breezy.hr': 'Breezy',
+  'taleo.net': 'Oracle Taleo',
+  'apply.workable.com': 'Workable',
+  'workable.com': 'Workable',
+  'recruiting.ultipro.com': 'UltiPro',
+  'teamtailor.com': 'Teamtailor',
+  'bullhorn.com': 'Bullhorn',
+  'bullhornstaffing.com': 'Bullhorn'
+};
+
+// Track processed tabs to avoid duplicate triggers
+const processedTabs = new Set();
+
+// Detect if URL matches an ATS platform (EXCLUDED platforms ignored)
+function detectATSPlatform(url) {
+  if (!url) return null;
+  const urlLower = url.toLowerCase();
+  
+  // Excluded platforms - never auto-trigger
+  if (urlLower.includes('lever.co') || urlLower.includes('ashbyhq.com') || 
+      urlLower.includes('rippling.com') || urlLower.includes('linkedin.com') || 
+      urlLower.includes('indeed.com')) {
+    return null;
+  }
+
+  for (const [domain, platform] of Object.entries(ATS_PLATFORMS)) {
+    if (urlLower.includes(domain)) {
+      return platform;
+    }
+  }
+  return null;
+}
+
+// Check if auto-trigger is enabled
+async function isAutoTriggerEnabled() {
+  try {
+    const data = await chrome.storage.local.get(['autoTriggerEnabled']);
+    return data.autoTriggerEnabled !== false; // Default enabled
+  } catch (error) {
+    console.error('[ATS Tailor] Error checking auto-trigger setting:', error);
+    return true; // Default enabled
+  }
+}
+
+// Main auto-trigger handler
+async function handleAutoTrigger(tabId, url) {
+  try {
+    // Check if already processed this tab
+    if (processedTabs.has(tabId)) {
+      console.log('[ATS Tailor] Tab already processed, skipping:', tabId);
+      return;
+    }
+
+    // Check if auto-trigger is enabled
+    const enabled = await isAutoTriggerEnabled();
+    if (!enabled) {
+      console.log('[ATS Tailor] Auto-trigger disabled in settings');
+      return;
+    }
+
+    // Detect ATS platform (EXCLUDED: Lever, Ashby, Rippling, LinkedIn, Indeed)
+    const platform = detectATSPlatform(url);
+    if (!platform) {
+      console.log('[ATS Tailor] No supported ATS platform detected:', url);
+      return;
+    }
+
+    console.log(`[ATS Tailor] ⚡ ATS Platform detected: ${platform} on tab ${tabId}`);
+    
+    // Mark as processed immediately to prevent duplicate triggers
+    processedTabs.add(tabId);
+
+    // Wait for content script to be ready (2 seconds delay)
+    await delay(2000);
+
+    // Send auto-trigger message to content script
+    chrome.tabs.sendMessage(
+      tabId,
+      {
+        action: 'AUTO_TRIGGER_EXTRACT_APPLY',
+        platform: platform,
+        url: url
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[ATS Tailor] Content script not ready:', chrome.runtime.lastError.message);
+          // Remove from processed tabs so it can retry on next load
+          processedTabs.delete(tabId);
+        } else if (response && response.success) {
+          console.log(`[ATS Tailor] ✅ Auto-trigger successful on ${platform}`);
+          
+          // Set badge to indicate auto-trigger is running
+          chrome.action.setBadgeText({ text: '⚡', tabId });
+          chrome.action.setBadgeBackgroundColor({ color: '#f59e0b', tabId });
+          
+          // Remove from processed tabs after 5 minutes (allow re-trigger on page refresh)
+          setTimeout(() => processedTabs.delete(tabId), 300000);
+        } else {
+          // Remove from processed so it can retry
+          processedTabs.delete(tabId);
+        }
+      }
+    );
+  } catch (error) {
+    console.error('[ATS Tailor] Auto-trigger error:', error);
+    processedTabs.delete(tabId);
+  }
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Listen for tab updates - Auto-trigger when ATS page loads
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url) {
+    handleAutoTrigger(tabId, tab.url);
+  }
+});
+
+// Listen for tab activation - Auto-trigger when switching to ATS tab
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab.url && tab.status === 'complete') {
+      handleAutoTrigger(activeInfo.tabId, tab.url);
+    }
+  } catch (error) {
+    console.error('[ATS Tailor] Tab activation error:', error);
+  }
+});
+
+// Clean up processed tabs when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  processedTabs.delete(tabId);
+});
+
+console.log('[ATS Tailor] Background script ready - Auto-trigger ACTIVE (Workday, Greenhouse, iCIMS, SmartRecruiters, etc.)');
 
 // Bulk CSV queue state
 let bulkQueue = [];
@@ -16,13 +168,17 @@ chrome.runtime.onInstalled.addListener((details) => {
       workday_email: 'Maxokafordev@gmail.com',
       workday_password: 'May19315park@',
       workday_verify_password: 'May19315park@',
-      workday_auto_enabled: true
+      workday_auto_enabled: true,
+      autoTriggerEnabled: true // Auto-trigger enabled by default
     });
   } else if (details.reason === 'update') {
     console.log('[ATS Tailor] Extension updated to version', chrome.runtime.getManifest().version);
-    chrome.storage.local.get(['workday_auto_enabled'], (result) => {
+    chrome.storage.local.get(['workday_auto_enabled', 'autoTriggerEnabled'], (result) => {
       if (result.workday_auto_enabled === undefined) {
         chrome.storage.local.set({ workday_auto_enabled: true });
+      }
+      if (result.autoTriggerEnabled === undefined) {
+        chrome.storage.local.set({ autoTriggerEnabled: true });
       }
     });
   }
@@ -103,6 +259,21 @@ async function processNextBulkJob() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'keepAlive') {
     sendResponse({ status: 'alive' });
+    return true;
+  }
+  
+  // Reset processed tab for re-triggering
+  if (message.action === 'resetProcessedTab' && message.tabId) {
+    processedTabs.delete(message.tabId);
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  // Toggle auto-trigger setting
+  if (message.action === 'SET_AUTO_TRIGGER') {
+    chrome.storage.local.set({ autoTriggerEnabled: message.enabled });
+    console.log('[ATS Tailor] Auto-trigger setting changed to:', message.enabled);
+    sendResponse({ success: true });
     return true;
   }
   
