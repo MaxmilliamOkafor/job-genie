@@ -137,6 +137,11 @@ serve(async (req) => {
       return handleRawContentRequest(requestBody);
     }
 
+    // PART 1C: Handle new structuredCv format from extension (no re-parsing)
+    if (requestBody.structuredCv && requestBody.type) {
+      return handleStructuredCvRequest(requestBody);
+    }
+
     // Handle profileData format (from website) - convert to ResumeData format
     let data: ResumeData;
     if (requestBody.profileData) {
@@ -755,6 +760,528 @@ serve(async (req) => {
     });
   }
 });
+
+/**
+ * PART 1C: Handle structuredCv request from extension
+ * Uses the structured CV object directly from tailoring - NO re-parsing
+ * This ensures PDF matches exactly what was tailored
+ */
+interface StructuredCvPersonalInfo {
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  location?: string;
+  linkedin?: string;
+  github?: string;
+  portfolio?: string;
+  locations?: Array<{ city: string; country: string; isPrimary: boolean; type: string }>;
+  workAuthorizationStatus?: Array<{ country: string; status: string }>;
+  workArrangement?: string;
+}
+
+interface StructuredCvExperience {
+  company: string;
+  title: string;
+  dates?: string;
+  bullets: string[];
+}
+
+interface StructuredCvProject {
+  name: string;
+  role?: string;
+  technologies?: string[];
+  description?: string;
+  impact?: string;
+  bullets?: string[];
+}
+
+interface StructuredCvEducation {
+  degree: string;
+  school: string;
+  dates?: string;
+  gpa?: string;
+}
+
+interface StructuredCv {
+  personalInfo: StructuredCvPersonalInfo;
+  summary?: string;
+  experience?: StructuredCvExperience[];
+  projects?: StructuredCvProject[];
+  relevantProjects?: StructuredCvProject[];
+  education?: StructuredCvEducation[];
+  skills?: { primary?: string[]; secondary?: string[] };
+  certifications?: string[];
+}
+
+interface StructuredCvRequest {
+  type: "resume" | "coverletter";
+  fileName: string;
+  structuredCv: StructuredCv;
+  personalInfo?: StructuredCvPersonalInfo;
+  plainText?: string;
+}
+
+function buildLocationHeaderFromStructuredCv(personalInfo: StructuredCvPersonalInfo): string {
+  let locationHeader = "";
+
+  if (personalInfo.locations && personalInfo.locations.length) {
+    const primary = personalInfo.locations.find((l) => l.isPrimary);
+    const secondary = personalInfo.locations.filter((l) => !l.isPrimary);
+
+    if (primary) {
+      locationHeader = `${primary.city}, ${primary.country}`;
+    }
+
+    if (secondary.some((l) => l.type === "remote_based")) {
+      locationHeader += " | Remote Available";
+    }
+
+    if (personalInfo.workAuthorizationStatus?.length) {
+      const authCountries = personalInfo.workAuthorizationStatus
+        .filter((w) => w.status === "authorized")
+        .map((w) => w.country)
+        .join(", ");
+      if (authCountries && authCountries !== personalInfo.location) {
+        locationHeader += ` | Authorized: ${authCountries}`;
+      }
+    }
+  } else if (personalInfo.location) {
+    locationHeader = personalInfo.location;
+  }
+
+  return locationHeader;
+}
+
+async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Response> {
+  const { type, fileName, structuredCv, personalInfo, plainText } = body;
+
+  console.log("[generate-pdf] StructuredCv request:", { type, fileName, hasStructuredCv: !!structuredCv });
+
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+    const PAGE_WIDTH = 612;
+    const PAGE_HEIGHT = 792;
+    const MARGIN = 54;
+    const LINE_HEIGHT = 14;
+    const SECTION_SPACING = 21;
+
+    const pages: PDFPage[] = [];
+    let currentPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    pages.push(currentPage);
+    let yPosition = PAGE_HEIGHT - MARGIN;
+
+    const addNewPage = () => {
+      currentPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      pages.push(currentPage);
+      yPosition = PAGE_HEIGHT - MARGIN;
+      return currentPage;
+    };
+
+    const ensureSpace = (neededSpace: number) => {
+      if (yPosition < MARGIN + neededSpace) {
+        addNewPage();
+      }
+    };
+
+    const wrapText = (text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] => {
+      const cleanText = sanitizeText(text);
+      const words = cleanText.split(" ");
+      const lines: string[] = [];
+      let currentLine = "";
+
+      for (const word of words) {
+        if (!word) continue;
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+        if (testWidth > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+      return lines;
+    };
+
+    const drawWrappedText = (
+      text: string,
+      x: number,
+      fontSize: number,
+      font: PDFFont,
+      maxWidth?: number
+    ) => {
+      const effectiveMaxWidth = maxWidth || PAGE_WIDTH - MARGIN - x;
+      const lines = wrapText(text, effectiveMaxWidth, font, fontSize);
+
+      for (const line of lines) {
+        ensureSpace(fontSize + 4);
+        currentPage.drawText(line, {
+          x,
+          y: yPosition,
+          size: fontSize,
+          font,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT;
+      }
+    };
+
+    const drawSectionHeader = (title: string) => {
+      yPosition -= SECTION_SPACING;
+      ensureSpace(30);
+
+      currentPage.drawText(title.toUpperCase(), {
+        x: MARGIN,
+        y: yPosition,
+        size: 12,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= SECTION_SPACING;
+    };
+
+    if (type === "resume" && structuredCv) {
+      const pInfo = structuredCv.personalInfo;
+      const candidateName = pInfo.name || `${pInfo.firstName || ""} ${pInfo.lastName || ""}`.trim();
+
+      // HEADER: Name
+      currentPage.drawText(candidateName.toUpperCase(), {
+        x: MARGIN,
+        y: yPosition,
+        size: 20,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= 26;
+
+      // Contact line
+      const contactParts: string[] = [];
+      if (pInfo.phone) contactParts.push(pInfo.phone);
+      if (pInfo.email) contactParts.push(pInfo.email);
+      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
+      if (locationHeader) contactParts.push(locationHeader);
+      contactParts.push("Open to relocation");
+
+      if (contactParts.length > 0) {
+        drawWrappedText(contactParts.join(" | "), MARGIN, 10, helvetica);
+      }
+
+      // Links
+      const linkParts: string[] = [];
+      if (pInfo.linkedin) linkParts.push(pInfo.linkedin);
+      if (pInfo.github) linkParts.push(pInfo.github);
+      if (pInfo.portfolio) linkParts.push(pInfo.portfolio);
+
+      if (linkParts.length > 0) {
+        drawWrappedText(linkParts.join(" | "), MARGIN, 9, helvetica);
+      }
+
+      // PROFESSIONAL SUMMARY
+      if (structuredCv.summary) {
+        drawSectionHeader("Professional Summary");
+        drawWrappedText(structuredCv.summary, MARGIN, 10, helvetica);
+      }
+
+      // WORK EXPERIENCE
+      if (structuredCv.experience && structuredCv.experience.length > 0) {
+        drawSectionHeader("Work Experience");
+
+        for (let i = 0; i < structuredCv.experience.length; i++) {
+          const exp = structuredCv.experience[i];
+          ensureSpace(50);
+
+          // Company - BOLD
+          currentPage.drawText(stripDatesFromField(exp.company), {
+            x: MARGIN,
+            y: yPosition,
+            size: 11,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT + 2;
+
+          // Job title (italic) + dates
+          currentPage.drawText(stripDatesFromField(exp.title), {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helveticaOblique,
+            color: rgb(0, 0, 0),
+          });
+
+          if (exp.dates) {
+            const dateWidth = helvetica.widthOfTextAtSize(exp.dates, 10);
+            currentPage.drawText(exp.dates, {
+              x: PAGE_WIDTH - MARGIN - dateWidth,
+              y: yPosition,
+              size: 10,
+              font: helvetica,
+              color: rgb(0.2, 0.2, 0.2),
+            });
+          }
+
+          yPosition -= LINE_HEIGHT + 4;
+
+          // Bullets
+          for (const bullet of (exp.bullets || []).slice(0, 6)) {
+            ensureSpace(LINE_HEIGHT * 2);
+            drawWrappedText(`• ${bullet}`, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
+          }
+
+          if (i < structuredCv.experience.length - 1) {
+            yPosition -= SECTION_SPACING;
+          }
+        }
+      }
+
+      // RELEVANT PROJECTS
+      const projects = structuredCv.projects || structuredCv.relevantProjects;
+      if (projects && projects.length > 0) {
+        drawSectionHeader("Relevant Projects");
+
+        for (let i = 0; i < projects.slice(0, 4).length; i++) {
+          const project = projects[i];
+          ensureSpace(50);
+
+          // Project name - BOLD
+          currentPage.drawText(project.name, {
+            x: MARGIN,
+            y: yPosition,
+            size: 11,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT + 2;
+
+          // Role (italic)
+          if (project.role) {
+            currentPage.drawText(project.role, {
+              x: MARGIN,
+              y: yPosition,
+              size: 10,
+              font: helveticaOblique,
+              color: rgb(0, 0, 0),
+            });
+            yPosition -= LINE_HEIGHT + 2;
+          }
+
+          // Technologies
+          if (project.technologies?.length) {
+            drawWrappedText(`Tech: ${project.technologies.join(", ")}`, MARGIN, 10, helvetica);
+          }
+
+          // Description/bullets
+          if (project.bullets?.length) {
+            for (const bullet of project.bullets.slice(0, 3)) {
+              drawWrappedText(`• ${bullet}`, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
+            }
+          } else if (project.description) {
+            const bullets = project.description.split("\n").filter(Boolean);
+            for (const bullet of bullets.slice(0, 3)) {
+              drawWrappedText(`• ${bullet}`, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
+            }
+          }
+
+          if (project.impact) {
+            drawWrappedText(`Impact: ${project.impact}`, MARGIN, 10, helvetica);
+          }
+
+          if (i < projects.slice(0, 4).length - 1) {
+            yPosition -= SECTION_SPACING * 0.5;
+          }
+        }
+      }
+
+      // SKILLS
+      if (structuredCv.skills) {
+        drawSectionHeader("Skills");
+
+        if (structuredCv.skills.primary?.length) {
+          drawWrappedText(`Technical: ${structuredCv.skills.primary.join(", ")}`, MARGIN, 10, helvetica);
+        }
+        if (structuredCv.skills.secondary?.length) {
+          drawWrappedText(`Additional: ${structuredCv.skills.secondary.join(", ")}`, MARGIN, 10, helvetica);
+        }
+      }
+
+      // EDUCATION
+      if (structuredCv.education && structuredCv.education.length > 0) {
+        drawSectionHeader("Education");
+
+        for (const edu of structuredCv.education) {
+          ensureSpace(30);
+
+          currentPage.drawText(stripDatesFromField(edu.degree), {
+            x: MARGIN,
+            y: yPosition,
+            size: 11,
+            font: helveticaBold,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT;
+
+          const schoolLine = edu.gpa ? `${stripDatesFromField(edu.school)} | GPA: ${edu.gpa}` : stripDatesFromField(edu.school);
+          currentPage.drawText(schoolLine, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helvetica,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT + 6;
+        }
+      }
+
+      // CERTIFICATIONS
+      if (structuredCv.certifications && structuredCv.certifications.length > 0) {
+        drawSectionHeader("Certifications");
+
+        for (const cert of structuredCv.certifications) {
+          ensureSpace(LINE_HEIGHT);
+          currentPage.drawText(`- ${cert}`, {
+            x: MARGIN,
+            y: yPosition,
+            size: 10,
+            font: helvetica,
+            color: rgb(0, 0, 0),
+          });
+          yPosition -= LINE_HEIGHT;
+        }
+      }
+
+    } else if (type === "coverletter") {
+      // Cover letter generation
+      const pInfo = personalInfo || structuredCv?.personalInfo;
+      if (!pInfo || !plainText) {
+        return new Response(
+          JSON.stringify({ error: "Missing personalInfo or plainText for cover letter generation" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const candidateName = pInfo.name || `${pInfo.firstName || ""} ${pInfo.lastName || ""}`.trim();
+
+      // Header
+      currentPage.drawText(candidateName.toUpperCase(), {
+        x: MARGIN,
+        y: yPosition,
+        size: 16,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= 20;
+
+      // Contact
+      if (pInfo.email) {
+        currentPage.drawText(pInfo.email, {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT;
+      }
+
+      if (pInfo.phone) {
+        currentPage.drawText(pInfo.phone, {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= LINE_HEIGHT;
+      }
+
+      yPosition -= LINE_HEIGHT;
+
+      // Date
+      const today = new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      currentPage.drawText(today, {
+        x: MARGIN,
+        y: yPosition,
+        size: 10,
+        font: helvetica,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= LINE_HEIGHT * 2;
+
+      // Salutation
+      currentPage.drawText("Dear Hiring Manager,", {
+        x: MARGIN,
+        y: yPosition,
+        size: 11,
+        font: helvetica,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= LINE_HEIGHT * 1.5;
+
+      // Body paragraphs
+      const paragraphs = plainText.split("\n\n").filter(Boolean);
+      for (const paragraph of paragraphs) {
+        drawWrappedText(paragraph, MARGIN, 11, helvetica);
+        yPosition -= LINE_HEIGHT * 0.5;
+      }
+
+      yPosition -= LINE_HEIGHT;
+
+      // Closing
+      currentPage.drawText("Sincerely,", {
+        x: MARGIN,
+        y: yPosition,
+        size: 11,
+        font: helvetica,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= LINE_HEIGHT * 2;
+
+      currentPage.drawText(candidateName, {
+        x: MARGIN,
+        y: yPosition,
+        size: 11,
+        font: helveticaBold,
+        color: rgb(0, 0, 0),
+      });
+    }
+
+    // Save and return
+    const pdfBytes = await pdfDoc.save();
+    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+
+    console.log(`[generate-pdf] StructuredCv PDF generated: ${fileName}, size: ${pdfBytes.length} bytes, pages: ${pages.length}`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        pdf: base64Pdf,
+        fileName,
+        pages: pages.length,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("[generate-pdf] StructuredCv processing error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+}
 
 /**
  * Handle raw content request from extension

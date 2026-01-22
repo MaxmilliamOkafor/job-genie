@@ -421,6 +421,233 @@ function getSmartLocation(
   return "Remote | open to relocation";
 }
 
+// PART 3A: Comprehensive location extraction from job data
+interface ExtractedJobLocation {
+  explicit: {
+    cities: string[];
+    countries: string[];
+    regions: string[];
+  };
+  remote: {
+    isRemote: boolean;
+    remoteType: "fully_remote" | "hybrid" | "on_site" | "flexible" | "unknown";
+    requiredTimezone?: string[];
+  };
+  relocation: {
+    relocationRequired: boolean;
+    relocationCoverage: boolean;
+  };
+  visa: {
+    sponsorshipAvailable: boolean;
+    citizenshipRequired?: string[];
+    workAuthAccepted?: string[];
+  };
+}
+
+function extractLocationFromJobData(
+  jobTitle: string,
+  jobDescription: string,
+  jobMetadata?: { location?: string }
+): ExtractedJobLocation {
+  const fullText = `${jobTitle} ${jobDescription}`.toLowerCase();
+  const jdLocation = jobMetadata?.location || "";
+
+  // Country mapping
+  const countryMap: { [key: string]: string } = {
+    uk: "United Kingdom", london: "United Kingdom", manchester: "United Kingdom",
+    us: "United States", usa: "United States", "new york": "United States",
+    "san francisco": "United States", california: "United States",
+    ireland: "Ireland", dublin: "Ireland",
+    eu: "European Union", europe: "European Union",
+    germany: "Germany", france: "France", netherlands: "Netherlands",
+    canada: "Canada", australia: "Australia", singapore: "Singapore",
+  };
+
+  // Extract cities and countries
+  const extractedCountries = new Set<string>();
+  const extractedCities = new Set<string>();
+  const allLocationsText = `${jdLocation} ${fullText}`;
+
+  Object.entries(countryMap).forEach(([key, country]) => {
+    if (allLocationsText.includes(key)) {
+      if (key.length > 3) {
+        extractedCities.add(key.charAt(0).toUpperCase() + key.slice(1));
+      }
+      extractedCountries.add(country);
+    }
+  });
+
+  // Detect remote work type
+  const remotePatterns = {
+    fully_remote: /fully remote|100% remote|completely remote|work from anywhere/i,
+    hybrid: /hybrid|flexible|mix of|days (?:in|at) office/i,
+    on_site: /on-?site|in office|office based|must be in|required to be in/i,
+  };
+
+  let remoteType: "fully_remote" | "hybrid" | "on_site" | "flexible" | "unknown" = "unknown";
+  if (remotePatterns.fully_remote.test(fullText)) remoteType = "fully_remote";
+  else if (remotePatterns.hybrid.test(fullText)) remoteType = "hybrid";
+  else if (remotePatterns.on_site.test(fullText)) remoteType = "on_site";
+  else if (/flexible|arrangement/i.test(fullText)) remoteType = "flexible";
+
+  const isRemote = remoteType === "fully_remote" || remoteType === "hybrid" || remoteType === "flexible";
+
+  // Detect timezone requirements
+  const timezoneMatch = fullText.match(
+    /(?:timezone|gmt|utc|est|pst|cet|ist)[:\s]*([A-Z]{2,3}(?:\s*[-to]\s*[A-Z]{2,3})?)/gi
+  );
+  const requiredTimezone = timezoneMatch ? timezoneMatch.map((tz) => tz.toUpperCase()) : undefined;
+
+  // Detect relocation/visa
+  const relocationRequired = /must relocate|requires relocation|willing to relocate/i.test(fullText);
+  const relocationCoverage = /relocation (?:assistance|package|covered|support)/i.test(fullText);
+  const sponsorshipAvailable = /visa sponsorship|sponsorship available|sponsor work visa/i.test(fullText);
+
+  // Extract regions
+  const regionPatterns = /(?:across|in|within)\s+(europe|asia|north america|apac|latam)/gi;
+  const regions: string[] = [];
+  let regionMatch;
+  while ((regionMatch = regionPatterns.exec(fullText)) !== null) {
+    regions.push(regionMatch[1]);
+  }
+
+  return {
+    explicit: {
+      cities: Array.from(extractedCities),
+      countries: Array.from(extractedCountries),
+      regions,
+    },
+    remote: {
+      isRemote,
+      remoteType,
+      requiredTimezone,
+    },
+    relocation: {
+      relocationRequired,
+      relocationCoverage,
+    },
+    visa: {
+      sponsorshipAvailable,
+      citizenshipRequired: undefined,
+      workAuthAccepted: undefined,
+    },
+  };
+}
+
+// PART 3B: Match user locations to job requirements
+interface LocationMatch {
+  matchScore: number;
+  isViableLocation: boolean;
+  reason: string;
+  userLocationsMatched: string[];
+  jobRequirementsMatched: string[];
+  flags: {
+    sponsorshipNeeded: boolean;
+    relocationRequired: boolean;
+    timezoneCompatible: boolean;
+  };
+}
+
+function matchUserLocationsToJob(
+  userProfile: { city?: string; country?: string; authorizedCountries?: string[] },
+  extractedJobLocation: ExtractedJobLocation
+): LocationMatch {
+  let matchScore = 0;
+  let reason = "";
+  const userLocationsMatched: string[] = [];
+  const jobRequirementsMatched: string[] = [];
+
+  const flags = {
+    sponsorshipNeeded: false,
+    relocationRequired: false,
+    timezoneCompatible: true,
+  };
+
+  // User's available locations
+  const userCountries = [
+    userProfile.country,
+    ...(userProfile.authorizedCountries || []),
+  ].filter(Boolean) as string[];
+
+  // Check 1: REMOTE MATCH
+  if (extractedJobLocation.remote.isRemote) {
+    matchScore += 40;
+    userLocationsMatched.push("Remote capable");
+    jobRequirementsMatched.push(extractedJobLocation.remote.remoteType);
+    reason = "Job is remote and user can work remotely";
+  }
+
+  // Check 2: EXPLICIT LOCATION MATCH
+  if (extractedJobLocation.explicit.countries.length > 0) {
+    const matchedCountries = extractedJobLocation.explicit.countries.filter((c) =>
+      userCountries.some(
+        (uc) =>
+          uc.toLowerCase().includes(c.toLowerCase()) ||
+          c.toLowerCase().includes(uc.toLowerCase())
+      )
+    );
+
+    if (matchedCountries.length > 0) {
+      matchScore += 35;
+      userLocationsMatched.push(...matchedCountries);
+      jobRequirementsMatched.push(...matchedCountries);
+      reason = `User authorized in ${matchedCountries.join(", ")}`;
+    }
+  }
+
+  // Check 3: RELOCATION
+  if (extractedJobLocation.relocation.relocationRequired) {
+    flags.relocationRequired = true;
+    matchScore -= 5;
+    reason += " [Relocation required]";
+  }
+
+  // Check 4: VISA SPONSORSHIP
+  if (extractedJobLocation.visa.sponsorshipAvailable) {
+    flags.sponsorshipNeeded = true;
+    // This is positive - sponsorship is available
+    matchScore += 5;
+  }
+
+  const isViableLocation = matchScore >= 35;
+
+  return {
+    matchScore,
+    isViableLocation,
+    reason: reason || "Location match evaluation completed",
+    userLocationsMatched,
+    jobRequirementsMatched,
+    flags,
+  };
+}
+
+// PART 2B: Extract job keywords for project matching
+function extractTechKeywords(jobDescription: string, jobTitle: string): string[] {
+  const keywords: Set<string> = new Set();
+
+  const techPatterns = [
+    /(?:python|javascript|typescript|java|c\+\+|rust|go|kotlin)/gi,
+    /(?:react|vue|angular|svelte|next\.?js)/gi,
+    /(?:node\.?js|express|django|flask|fastapi)/gi,
+    /(?:aws|azure|gcp|kubernetes|docker)/gi,
+    /(?:postgresql|mongodb|redis|elasticsearch)/gi,
+    /(?:machine learning|deep learning|nlp|computer vision|llm|ai)/gi,
+    /(?:api|rest|graphql|grpc)/gi,
+    /(?:agile|scrum|kanban)/gi,
+  ];
+
+  const fullText = `${jobTitle} ${jobDescription}`.toLowerCase();
+
+  for (const pattern of techPatterns) {
+    const matches = fullText.match(pattern);
+    if (matches) {
+      matches.forEach((m) => keywords.add(m.toLowerCase()));
+    }
+  }
+
+  return Array.from(keywords);
+}
+
 // Jobscan-style keyword extraction - enhanced for ATS ranking
 function extractJobscanKeywords(
   description: string,

@@ -2817,6 +2817,29 @@ class ATSTailor {
       const result = await response.json();
       if (result.error) throw new Error(result.error);
 
+      // PART 1A: Store structuredCv from tailoring for PDF generation (no re-parsing)
+      if (result.resumeStructured || result.structuredCv) {
+        window.quantumhireStructuredCv = result.resumeStructured || result.structuredCv;
+        console.log('[ATS Tailor] structuredCv stored for PDF generation:', window.quantumhireStructuredCv);
+      }
+      
+      // Store location match warnings for UI
+      if (result.locationMatch) {
+        this.locationMatch = result.locationMatch;
+        console.log('[ATS Tailor] Location Match Score:', result.locationMatch.matchScore);
+        
+        // Show location warnings
+        if (result.locationMatch.flags?.sponsorshipNeeded) {
+          this.showToast('⚠️ This role may require visa sponsorship', 'warning');
+        }
+        if (result.locationMatch.flags?.relocationRequired) {
+          this.showToast('⚠️ This role requires relocation', 'warning');
+        }
+        if (result.locationMatch.flags?.timezoneCompatible === false) {
+          this.showToast('⚠️ Timezone may be challenging', 'warning');
+        }
+      }
+
       // Save original CV (before local boosting) for coverage report diffing
       this._coverageOriginalCV = result.tailoredResume || '';
 
@@ -2837,7 +2860,8 @@ class ATSTailor {
         matchScore: result.matchScore || 0,
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || [],
-        keywords: keywords
+        keywords: keywords,
+        structuredCv: window.quantumhireStructuredCv // Store reference for later PDF generation
       };
       
       // WIRE UP DEBUG PANELS: Log input data after profile load
@@ -3218,13 +3242,18 @@ class ATSTailor {
     }
   }
 
-  downloadDocument(type) {
+  /**
+   * PART 1B: Completely rewritten downloadDocument function
+   * Uses structuredCv from tailoring step - NO re-parsing
+   */
+  async downloadDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
     const filename = type === 'cv' 
       ? (this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_'))
       : (this.generatedDocuments.coverFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter.pdf`.replace(/_+/g, '_'));
     
+    // If we already have a PDF, download it directly
     if (doc) {
       const blob = this.base64ToBlob(doc, 'application/pdf');
       const url = URL.createObjectURL(blob);
@@ -3234,7 +3263,127 @@ class ATSTailor {
       a.click();
       URL.revokeObjectURL(url);
       this.showToast('Downloaded!', 'success');
-    } else if (textDoc) {
+      return;
+    }
+    
+    // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
+    const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+    
+    if (type === 'cv' && structuredCv) {
+      try {
+        this.showToast('⏳ Generating PDF...', 'info');
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.session?.access_token || ''}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            type: 'resume',
+            fileName: filename,
+            structuredCv: structuredCv,
+            plainText: textDoc
+          }),
+        });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/pdf')) {
+            const arrayBuffer = await response.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('✅ Downloaded!', 'success');
+            return;
+          } else {
+            const result = await response.json();
+            if (result.pdf) {
+              const blob = this.base64ToBlob(result.pdf, 'application/pdf');
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = result.fileName || filename;
+              a.click();
+              URL.revokeObjectURL(url);
+              this.showToast('✅ Downloaded!', 'success');
+              return;
+            }
+          }
+        }
+        console.error('[ATS Tailor] PDF generation via structuredCv failed:', response.status);
+      } catch (error) {
+        console.error('[ATS Tailor] PDF download error:', error);
+      }
+    }
+    
+    // If no PDF but we have text, try cover letter generation
+    if (type === 'cover' && textDoc) {
+      const personalInfo = structuredCv?.personalInfo || {
+        firstName: this.profileInfo?.firstName,
+        lastName: this.profileInfo?.lastName,
+        email: this.session?.user?.email,
+        phone: '',
+      };
+      
+      try {
+        this.showToast('⏳ Generating PDF...', 'info');
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.session?.access_token || ''}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            type: 'coverletter',
+            fileName: filename,
+            personalInfo: personalInfo,
+            plainText: textDoc
+          }),
+        });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/pdf')) {
+            const arrayBuffer = await response.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('✅ Downloaded!', 'success');
+            return;
+          } else {
+            const result = await response.json();
+            if (result.pdf) {
+              const blob = this.base64ToBlob(result.pdf, 'application/pdf');
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = result.fileName || filename;
+              a.click();
+              URL.revokeObjectURL(url);
+              this.showToast('✅ Downloaded!', 'success');
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[ATS Tailor] Cover letter PDF generation error:', error);
+      }
+    }
+    
+    // Final fallback: download as text
+    if (textDoc) {
       const blob = new Blob([textDoc], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -3242,7 +3391,7 @@ class ATSTailor {
       a.download = filename.replace('.pdf', '.txt');
       a.click();
       URL.revokeObjectURL(url);
-      this.showToast('Downloaded!', 'success');
+      this.showToast('Downloaded as text', 'success');
     } else {
       this.showToast('No document available', 'error');
     }
