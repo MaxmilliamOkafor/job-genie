@@ -1,70 +1,10 @@
-// PDF Diff Panel - Compares Preview vs Download with Built-in Smoke Test
-// Deterministic comparison of structured JSON, rendered preview, and backend parsed sections
+// PDF Diff Panel - Compares Preview vs Download with Dynamic Profile-Based Testing
+// NO HARDCODED DATA - Uses actual user profile from database
 
 (function() {
   'use strict';
 
   const PDFDiffPanel = {
-    // Fixture data for smoke test - 3 complete work experiences
-    SMOKE_TEST_FIXTURE: {
-      firstName: 'Test',
-      lastName: 'Candidate',
-      email: 'test@example.com',
-      phone: '+353 87 123 4567',
-      city: 'Dublin',
-      country: 'Ireland',
-      linkedin: 'linkedin.com/in/testcandidate',
-      github: 'github.com/testcandidate',
-      portfolio: 'testcandidate.dev',
-      professionalExperience: [
-        {
-          id: 'exp-1',
-          company: 'Meta Platforms Inc.',
-          title: 'Senior Software Engineer',
-          startDate: '2022',
-          endDate: 'Present',
-          bullets: [
-            'Led development of React-based dashboard serving 50M+ users daily',
-            'Implemented GraphQL API layer reducing latency by 40%',
-            'Mentored 5 junior engineers and conducted 100+ code reviews'
-          ]
-        },
-        {
-          id: 'exp-2',
-          company: 'Google LLC',
-          title: 'Software Engineer II',
-          startDate: '2019',
-          endDate: '2022',
-          bullets: [
-            'Built distributed systems processing 1B+ events daily using Go and Kubernetes',
-            'Designed machine learning pipeline improving prediction accuracy by 25%',
-            'Collaborated with cross-functional teams across 3 time zones'
-          ]
-        },
-        {
-          id: 'exp-3',
-          company: 'Amazon Web Services',
-          title: 'Software Development Engineer',
-          startDate: '2017',
-          endDate: '2019',
-          bullets: [
-            'Developed microservices architecture using Java and AWS Lambda',
-            'Reduced cloud infrastructure costs by 30% through optimization',
-            'Implemented CI/CD pipelines for 15+ production services'
-          ]
-        }
-      ],
-      education: [
-        {
-          institution: 'Trinity College Dublin',
-          degree: 'Master of Science',
-          field: 'Computer Science'
-        }
-      ],
-      skills: ['React', 'TypeScript', 'Python', 'AWS', 'Kubernetes', 'GraphQL', 'Go', 'Java'],
-      certifications: ['AWS Solutions Architect', 'Google Cloud Professional']
-    },
-
     // State for diff comparison
     _diffData: {
       structuredJSON: null,
@@ -77,7 +17,7 @@
 
     init() {
       this.bindEvents();
-      console.log('[PDFDiffPanel] Initialized with smoke test fixture');
+      console.log('[PDFDiffPanel] Initialized - Dynamic Profile Mode');
     },
 
     bindEvents() {
@@ -86,32 +26,45 @@
       document.getElementById('copyDiffReport')?.addEventListener('click', () => this.copyDiffReport());
     },
 
-    // Run full smoke test with fixture profile
+    // Run full smoke test using ACTUAL profile data (no hardcoded fixtures)
     async runSmokeTest() {
       const startTime = performance.now();
-      this.updateSmokeTestUI('running', 'Running smoke test...');
+      this.updateSmokeTestUI('running', 'Running smoke test with your profile...');
       
       try {
-        // Store fixture in structured JSON
-        this._diffData.structuredJSON = this.SMOKE_TEST_FIXTURE.professionalExperience;
+        // Get actual profile from storage (populated by loadBaseCVFromProfile)
+        const profile = await this.getStoredProfile();
         
-        // Generate preview text from fixture
-        const previewText = this.generatePreviewText(this.SMOKE_TEST_FIXTURE);
+        if (!profile) {
+          this.updateSmokeTestUI('error', '❌ No profile data - please log in and upload your CV');
+          return;
+        }
+        
+        // Validate profile has required fields
+        const experience = profile.professional_experience || profile.professionalExperience || [];
+        if (experience.length === 0) {
+          this.updateSmokeTestUI('warning', '⚠️ No work experience in profile - add experience first');
+          return;
+        }
+        
+        // Store in structured JSON
+        this._diffData.structuredJSON = experience;
+        
+        // Generate preview text from profile
+        const previewText = this.generatePreviewText(profile);
         this._diffData.previewText = previewText;
         
-        // Simulate backend call (or call actual backend if available)
+        // Call actual backend if session available
         const atsTailor = window.atsTailorInstance;
         if (atsTailor?.session?.access_token) {
-          // Call actual backend
-          const backendResult = await this.callGeneratePDF(this.SMOKE_TEST_FIXTURE, atsTailor.session);
+          const backendResult = await this.callGeneratePDF(profile, atsTailor.session);
           this._diffData.backendParsed = backendResult.parsedSections;
-          
-          // Compare and find mismatches
-          this.compareOutputs();
         } else {
-          // No session - just validate local generation
           this._diffData.backendParsed = { skipped: true, reason: 'No session - local test only' };
         }
+        
+        // Compare and find mismatches
+        this.compareOutputs();
         
         const elapsed = performance.now() - startTime;
         this._diffData.smokeTestTime = elapsed;
@@ -120,7 +73,7 @@
         const isValid = this.validateSmokeTest();
         
         if (isValid && elapsed < 3000) {
-          this.updateSmokeTestUI('success', `✅ Passed in ${Math.round(elapsed)}ms`);
+          this.updateSmokeTestUI('success', `✅ Passed in ${Math.round(elapsed)}ms (${experience.length} roles)`);
         } else if (elapsed >= 3000) {
           this.updateSmokeTestUI('warning', `⚠️ Too slow: ${Math.round(elapsed)}ms (target: <3000ms)`);
         } else {
@@ -135,49 +88,85 @@
       }
     },
 
-    // Generate preview text from profile data (same logic as resume-builder.js)
+    // Generate preview text from profile data
     generatePreviewText(profile) {
       const lines = [];
       
+      const firstName = profile.first_name || profile.firstName || '';
+      const lastName = profile.last_name || profile.lastName || '';
+      const phone = profile.phone || '';
+      const email = profile.email || '';
+      const city = profile.city || '';
+      const country = profile.country || '';
+      const linkedin = profile.linkedin || '';
+      const github = profile.github || '';
+      const portfolio = profile.portfolio || '';
+      
       // Header
-      lines.push(`${profile.firstName} ${profile.lastName}`.toUpperCase());
-      lines.push(`${profile.phone} | ${profile.email} | ${profile.city}, ${profile.country} | open to relocation`);
-      lines.push(`${profile.linkedin} | ${profile.github} | ${profile.portfolio}`);
+      lines.push(`${firstName} ${lastName}`.toUpperCase().trim() || 'APPLICANT');
+      lines.push([phone, email, [city, country].filter(Boolean).join(', '), 'open to relocation'].filter(Boolean).join(' | '));
+      lines.push([linkedin, github, portfolio].filter(Boolean).join(' | '));
       lines.push('');
       
       // Professional Experience
-      lines.push('PROFESSIONAL EXPERIENCE');
-      lines.push('');
+      const experience = profile.professional_experience || profile.professionalExperience || [];
+      if (experience.length > 0) {
+        lines.push('PROFESSIONAL EXPERIENCE');
+        lines.push('');
+        
+        for (const exp of experience) {
+          const company = exp.company || exp.companyName || '';
+          const title = exp.title || exp.jobTitle || '';
+          const startDate = exp.startDate || exp.start_date || '';
+          const endDate = exp.endDate || exp.end_date || 'Present';
+          const bullets = exp.bullets || [];
+          
+          lines.push(company);
+          lines.push(`${title} – ${startDate} – ${endDate}`);
+          for (const bullet of bullets) {
+            lines.push(`• ${bullet}`);
+          }
+          lines.push('');
+        }
+      }
       
-      for (const exp of profile.professionalExperience || []) {
-        lines.push(exp.company);
-        lines.push(`${exp.title} – ${exp.startDate} – ${exp.endDate}`);
-        for (const bullet of exp.bullets || []) {
-          lines.push(`• ${bullet}`);
+      // Projects
+      const projects = profile.relevant_projects || profile.relevantProjects || [];
+      if (projects.length > 0) {
+        lines.push('TECHNICAL PROJECTS');
+        for (const proj of projects) {
+          lines.push(`${proj.name || ''} | ${proj.role || ''}`);
+          for (const bullet of (proj.bullets || [])) {
+            lines.push(`• ${bullet}`);
+          }
         }
         lines.push('');
       }
       
       // Education
-      if (profile.education?.length) {
+      const education = profile.education || [];
+      if (education.length > 0) {
         lines.push('EDUCATION');
-        for (const edu of profile.education) {
-          lines.push(`${edu.degree} in ${edu.field} | ${edu.institution}`);
+        for (const edu of education) {
+          lines.push(`${edu.degree || ''} | ${edu.institution || edu.school || ''}`);
         }
         lines.push('');
       }
       
       // Skills
-      if (profile.skills?.length) {
+      const skills = profile.skills || [];
+      if (skills.length > 0) {
         lines.push('SKILLS');
-        lines.push(profile.skills.join(', '));
+        const skillNames = skills.map(s => typeof s === 'string' ? s : s.name).filter(Boolean);
+        lines.push(skillNames.join(', '));
         lines.push('');
       }
       
       // Certifications
-      if (profile.certifications?.length) {
+      const certs = profile.certifications || [];
+      if (certs.length > 0) {
         lines.push('CERTIFICATIONS');
-        lines.push(profile.certifications.join(', '));
+        lines.push(certs.join(', '));
       }
       
       return lines.join('\n');
@@ -187,26 +176,28 @@
     async callGeneratePDF(profile, session) {
       const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
       
+      const experience = profile.professional_experience || profile.professionalExperience || [];
+      
       const requestBody = {
         candidateData: {
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          email: profile.email,
-          phone: profile.phone,
-          city: profile.city,
-          country: profile.country,
-          linkedin: profile.linkedin,
-          github: profile.github,
-          portfolio: profile.portfolio,
-          professionalExperience: profile.professionalExperience,
-          education: profile.education,
-          skills: profile.skills,
-          certifications: profile.certifications
+          firstName: profile.first_name || profile.firstName || '',
+          lastName: profile.last_name || profile.lastName || '',
+          email: profile.email || '',
+          phone: profile.phone || '',
+          city: profile.city || '',
+          country: profile.country || '',
+          linkedin: profile.linkedin || '',
+          github: profile.github || '',
+          portfolio: profile.portfolio || '',
+          professionalExperience: experience,
+          education: profile.education || [],
+          skills: profile.skills || [],
+          certifications: profile.certifications || []
         },
         cvText: this.generatePreviewText(profile),
-        jobInfo: { title: 'Smoke Test Role', company: 'Test Company', location: 'Dublin' },
-        keywords: { highPriority: ['React', 'TypeScript'], mediumPriority: ['AWS'], lowPriority: [] },
-        coverLetter: 'Smoke test cover letter.'
+        jobInfo: { title: 'Test Role', company: 'Test Company', location: profile.city || 'Dublin' },
+        keywords: { highPriority: [], mediumPriority: [], lowPriority: [] },
+        coverLetter: ''
       };
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
@@ -245,31 +236,33 @@
       
       // Check each experience entry
       for (const exp of struct) {
+        const company = exp.company || exp.companyName || '';
+        const title = exp.title || exp.jobTitle || '';
+        
         // Check company name appears in preview
-        if (!preview.includes(exp.company)) {
+        if (company && !preview.includes(company)) {
           mismatches.push({
             type: 'missing_company',
             field: 'company',
-            expected: exp.company,
+            expected: company,
             location: 'preview'
           });
         }
         
         // Check title appears in preview
-        if (!preview.includes(exp.title)) {
+        if (title && !preview.includes(title)) {
           mismatches.push({
             type: 'missing_title',
             field: 'title',
-            expected: exp.title,
+            expected: title,
             location: 'preview'
           });
         }
         
-        // Check bullets
-        for (const bullet of exp.bullets || []) {
-          // Check first 50 chars of each bullet
+        // Check bullets (first 50 chars of each)
+        for (const bullet of (exp.bullets || [])) {
           const bulletSnippet = bullet.substring(0, 50);
-          if (!preview.includes(bulletSnippet)) {
+          if (bulletSnippet && !preview.includes(bulletSnippet)) {
             mismatches.push({
               type: 'missing_bullet',
               field: 'bullet',
@@ -288,19 +281,15 @@
       const struct = this._diffData.structuredJSON || [];
       const preview = this._diffData.previewText || '';
       
-      // Must have all 3 experiences
-      if (struct.length !== 3) return false;
-      
-      // Preview must contain all company names
-      const companies = ['Meta Platforms Inc.', 'Google LLC', 'Amazon Web Services'];
-      for (const company of companies) {
-        if (!preview.includes(company)) return false;
-      }
+      // Must have at least 1 experience
+      if (struct.length === 0) return false;
       
       // Preview must contain section header
-      if (!preview.includes('PROFESSIONAL EXPERIENCE')) return false;
+      if (!preview.includes('PROFESSIONAL EXPERIENCE') && !preview.includes('WORK EXPERIENCE')) {
+        return false;
+      }
       
-      // No critical mismatches
+      // No critical mismatches for companies/titles
       const criticalMismatches = this._diffData.mismatches.filter(m => 
         m.type === 'missing_company' || m.type === 'missing_title'
       );
@@ -317,19 +306,16 @@
       }
       
       try {
-        // Get structured data from profile
         const profile = await this.getStoredProfile();
         if (profile) {
           this._diffData.structuredJSON = profile.professional_experience || profile.professionalExperience || [];
         }
         
-        // Get preview text
         const previewEl = document.getElementById('previewContent');
         if (previewEl) {
           this._diffData.previewText = previewEl.textContent || previewEl.innerText || '';
         }
         
-        // Compare
         this.compareOutputs();
         this.updateDiffUI();
         
@@ -375,7 +361,7 @@
             <span class="diff-exp-title">${this.escapeHtml(exp.title || exp.jobTitle || '')}</span>
             <span class="diff-exp-bullets">${(exp.bullets || []).length} bullets</span>
           </div>
-        `).join('') || '<p class="diff-empty">No structured data</p>';
+        `).join('') || '<p class="diff-empty">No structured data - log in to load your profile</p>';
       }
       
       // Update preview text snippet
