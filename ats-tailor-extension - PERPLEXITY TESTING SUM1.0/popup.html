@@ -789,6 +789,73 @@
         </div>
       </details>
       
+      <!-- EnterpriseCVParser Validation Debug Panel -->
+      <details class="parser-validation-panel" id="parserValidationPanel">
+        <summary class="parser-validation-header">
+          <span class="debug-icon">🔒</span>
+          <span>EnterpriseCVParser Validation</span>
+          <span class="validation-badge" id="validationStatus">Not Run</span>
+        </summary>
+        <div class="parser-validation-content">
+          <div class="debug-section">
+            <div class="debug-section-title">🔐 Immutable Fields Status</div>
+            <p class="debug-help">These fields are LOCKED and should never change during PDF generation.</p>
+            <div class="immutable-fields-list" id="immutableFieldsList">
+              <p class="debug-empty">Run validation to see immutable field status</p>
+            </div>
+          </div>
+          
+          <div class="debug-section">
+            <div class="debug-section-title">📊 Data Mapping Check</div>
+            <div class="debug-row">
+              <span class="debug-label">Source:</span>
+              <span class="debug-value" id="dataMappingSource">—</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Experience Count:</span>
+              <span class="debug-value" id="dataMappingExpCount">—</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Projects Count:</span>
+              <span class="debug-value" id="dataMappingProjCount">—</span>
+            </div>
+            <div class="debug-row">
+              <span class="debug-label">Validation Passed:</span>
+              <span class="debug-value" id="dataMappingValid">—</span>
+            </div>
+          </div>
+          
+          <div class="debug-section">
+            <div class="debug-section-title">⚠️ Mapping Errors Detected</div>
+            <div class="mapping-errors-list" id="mappingErrorsList">
+              <p class="debug-empty">No errors detected</p>
+            </div>
+          </div>
+          
+          <div class="debug-actions">
+            <button id="runParserValidation" class="btn btn-small btn-primary">🔍 Run Validation</button>
+            <button id="showRawProfileData" class="btn btn-small btn-secondary">📋 Show Raw Profile</button>
+            <button id="fixMappingIssues" class="btn btn-small btn-accent">🔧 Fix Mapping</button>
+          </div>
+          
+          <!-- Raw Profile Data Modal -->
+          <div id="rawProfileModal" class="debug-modal hidden" style="display: none;">
+            <div class="debug-modal-content">
+              <div class="debug-modal-header">
+                <span>Raw Profile Data (professional_experience)</span>
+                <button id="closeRawProfileModal" class="btn btn-link">✕</button>
+              </div>
+              <div class="debug-modal-body">
+                <pre id="rawProfileJSON" class="source-data-pre" style="max-height: 400px; overflow: auto;"></pre>
+              </div>
+              <div class="debug-modal-footer">
+                <button id="copyRawProfile" class="btn btn-small btn-secondary">Copy JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+      
       <!-- Parse CV Debug Panel -->
       <details class="parse-cv-debug-panel" id="parseCVDebugPanel">
         <summary class="parse-cv-debug-header">

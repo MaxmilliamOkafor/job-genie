@@ -552,13 +552,192 @@
     
     // ============ VALIDATE EXTRACTION ============
     validateExtraction(experiences) {
+      if (!Array.isArray(experiences)) return false;
       if (experiences.length === 0) return false;
       
       // At least one valid experience with company and title
-      return experiences.some(exp => 
-        exp.immutable_fields.company_name.value && 
-        exp.immutable_fields.job_title.value
-      );
+      return experiences.some(exp => {
+        // Handle both raw profile format and parsed format
+        const company = exp.immutable_fields?.company_name?.value || exp.company || '';
+        const title = exp.immutable_fields?.job_title?.value || exp.title || '';
+        return company && title;
+      });
+    },
+    
+    // ============ VALIDATE AND INSPECT PROFILE DATA ============
+    // Returns detailed validation results for debugging
+    validateProfileData(profileData) {
+      const result = {
+        isValid: false,
+        source: 'unknown',
+        experienceCount: 0,
+        projectsCount: 0,
+        immutableFields: [],
+        mappingErrors: [],
+        warnings: [],
+        rawData: null
+      };
+      
+      if (!profileData) {
+        result.mappingErrors.push('No profile data provided');
+        return result;
+      }
+      
+      // Detect data source format
+      const experiences = profileData.professional_experience || 
+                          profileData.professionalExperience || 
+                          profileData.work_experience ||
+                          profileData.workExperience || [];
+      
+      const projects = profileData.relevant_projects ||
+                       profileData.relevantProjects || [];
+      
+      result.source = profileData.professional_experience ? 'database (snake_case)' :
+                      profileData.professionalExperience ? 'normalized (camelCase)' :
+                      profileData.work_experience ? 'legacy (work_experience)' : 'unknown';
+      
+      result.experienceCount = Array.isArray(experiences) ? experiences.length : 0;
+      result.projectsCount = Array.isArray(projects) ? projects.length : 0;
+      
+      if (result.experienceCount === 0) {
+        result.mappingErrors.push('No professional experience entries found');
+        return result;
+      }
+      
+      // Validate each experience entry for immutable field integrity
+      for (let i = 0; i < experiences.length; i++) {
+        const exp = experiences[i];
+        const entry = {
+          index: i,
+          company: '',
+          title: '',
+          startDate: '',
+          endDate: '',
+          bulletCount: 0,
+          issues: []
+        };
+        
+        // Extract company name (handle multiple formats)
+        entry.company = exp.company || exp.companyName || exp.company_name || 
+                        exp.immutable_fields?.company_name?.value || '';
+        
+        // Extract job title
+        entry.title = exp.title || exp.jobTitle || exp.job_title ||
+                      exp.immutable_fields?.job_title?.value || '';
+        
+        // Extract dates
+        entry.startDate = exp.startDate || exp.start_date || 
+                          exp.immutable_fields?.employment_dates?.start_date?.value || '';
+        entry.endDate = exp.endDate || exp.end_date || 'Present' ||
+                        exp.immutable_fields?.employment_dates?.end_date?.value || '';
+        
+        // Extract bullets
+        const bullets = exp.bullets || exp.achievements || [];
+        entry.bulletCount = Array.isArray(bullets) ? bullets.length : 0;
+        
+        // Check for issues
+        if (!entry.company) {
+          entry.issues.push('Missing company name');
+          result.mappingErrors.push(`Experience ${i + 1}: Missing company name`);
+        }
+        if (!entry.title) {
+          entry.issues.push('Missing job title');
+          result.mappingErrors.push(`Experience ${i + 1}: Missing job title`);
+        }
+        if (!entry.startDate) {
+          entry.issues.push('Missing start date');
+          result.warnings.push(`Experience ${i + 1}: Missing start date`);
+        }
+        if (entry.bulletCount === 0) {
+          entry.issues.push('No bullet points');
+          result.warnings.push(`Experience ${i + 1} (${entry.company}): No bullet points`);
+        }
+        
+        // Check for potential company/title swap (heuristic check)
+        const titleIndicators = /\b(engineer|developer|architect|analyst|manager|director|lead|consultant|senior|junior|vp|head|chief)\b/i;
+        const companyIndicators = /\b(inc|llc|ltd|corp|plc|group|ai|tech|health|solutions|meta|google|amazon|microsoft|apple|accenture|citigroup|citi)\b/i;
+        
+        if (titleIndicators.test(entry.company) && !companyIndicators.test(entry.company)) {
+          result.warnings.push(`Experience ${i + 1}: Company "${entry.company}" looks like a job title - possible swap`);
+        }
+        if (companyIndicators.test(entry.title) && !titleIndicators.test(entry.title)) {
+          result.warnings.push(`Experience ${i + 1}: Title "${entry.title}" looks like a company name - possible swap`);
+        }
+        
+        result.immutableFields.push(entry);
+      }
+      
+      result.isValid = result.mappingErrors.length === 0;
+      result.rawData = { experiences, projects };
+      
+      return result;
+    },
+    
+    // ============ FIX COMMON MAPPING ISSUES ============
+    fixMappingIssues(profileData) {
+      if (!profileData) return null;
+      
+      const fixed = JSON.parse(JSON.stringify(profileData));
+      
+      // Get experiences from various field names
+      let experiences = fixed.professional_experience || 
+                        fixed.professionalExperience || 
+                        fixed.work_experience ||
+                        fixed.workExperience || [];
+      
+      if (!Array.isArray(experiences)) {
+        experiences = [];
+      }
+      
+      // Fix each experience entry
+      const fixedExperiences = experiences.map((exp, i) => {
+        const fixedExp = { ...exp };
+        
+        // Ensure company field exists
+        if (!fixedExp.company) {
+          fixedExp.company = exp.companyName || exp.company_name || 
+                             exp.immutable_fields?.company_name?.value || '';
+        }
+        
+        // Ensure title field exists
+        if (!fixedExp.title) {
+          fixedExp.title = exp.jobTitle || exp.job_title ||
+                           exp.immutable_fields?.job_title?.value || '';
+        }
+        
+        // Ensure startDate field exists
+        if (!fixedExp.startDate) {
+          fixedExp.startDate = exp.start_date || 
+                               exp.immutable_fields?.employment_dates?.start_date?.value || '';
+        }
+        
+        // Ensure endDate field exists
+        if (!fixedExp.endDate) {
+          fixedExp.endDate = exp.end_date || 
+                             exp.immutable_fields?.employment_dates?.end_date?.value || 'Present';
+        }
+        
+        // Ensure bullets array exists
+        if (!Array.isArray(fixedExp.bullets)) {
+          if (Array.isArray(exp.achievements)) {
+            fixedExp.bullets = exp.achievements.map(a => typeof a === 'string' ? a : a.text || '');
+          } else if (exp.description && typeof exp.description === 'string') {
+            fixedExp.bullets = exp.description.split('\n').filter(Boolean);
+          } else {
+            fixedExp.bullets = [];
+          }
+        }
+        
+        return fixedExp;
+      });
+      
+      // Store in canonical field name
+      fixed.professional_experience = fixedExperiences;
+      
+      // Also add as camelCase for generator compatibility
+      fixed.professionalExperience = fixedExperiences;
+      
+      return fixed;
     },
     
     // ============ PROTECT IMMUTABLE FIELDS (FOR TAILORING) ============
@@ -622,6 +801,6 @@
   // Export globally
   global.EnterpriseCVParser = EnterpriseCVParser;
   
-  console.log('[EnterpriseCVParser] Loaded v1.0 - Immutable field protection enabled');
+  console.log('[EnterpriseCVParser] Loaded v1.1 - Immutable field protection + validation enabled');
 
 })(typeof window !== 'undefined' ? window : this);

@@ -131,19 +131,51 @@
       };
     },
     
-    // ============ NORMALIZE EXPERIENCE ============
+    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX) ============
+    // Ensures company/title/dates are correctly mapped and never swapped
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
-      return experience.map((exp, index) => ({
-        id: exp.id || `exp-${index}`,
-        company: exp.company || exp.companyName || exp.company_name || '',
-        title: exp.title || exp.jobTitle || exp.job_title || '',
-        startDate: exp.startDate || exp.start_date || '',
-        endDate: exp.endDate || exp.end_date || 'Present',
-        location: exp.location || '',
-        bullets: this.extractBullets(exp)
-      }));
+      return experience.map((exp, index) => {
+        // Extract company - check multiple field names in priority order
+        let company = exp.company || exp.companyName || exp.company_name || '';
+        
+        // Extract title - check multiple field names in priority order  
+        let title = exp.title || exp.jobTitle || exp.job_title || '';
+        
+        // Extract dates
+        const startDate = exp.startDate || exp.start_date || '';
+        const endDate = exp.endDate || exp.end_date || 'Present';
+        
+        // CRITICAL: Validate company/title are not swapped
+        // If company looks like a title and title looks like a company, swap them back
+        const titleIndicators = /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|senior|junior|vp|president|head of|chief)\b/i;
+        const companyIndicators = /\b(inc|llc|ltd|corp|plc|group|ai|tech|health|solutions|meta|google|amazon|microsoft|apple|accenture|citigroup|citi|ibm|oracle|salesforce)\b/i;
+        
+        const companyLooksLikeTitle = titleIndicators.test(company) && !companyIndicators.test(company);
+        const titleLooksLikeCompany = companyIndicators.test(title) || 
+                                       /^[A-Z][a-zA-Z]+$/.test(title) && !titleIndicators.test(title);
+        
+        if (companyLooksLikeTitle && titleLooksLikeCompany) {
+          console.warn(`[EnterprisePDFGenerator] Detected swap: company="${company}" ↔ title="${title}". Correcting...`);
+          [company, title] = [title, company];
+        }
+        
+        // Ensure we have valid values
+        if (!company && !title) {
+          console.warn(`[EnterprisePDFGenerator] Experience ${index} missing both company and title`);
+        }
+        
+        return {
+          id: exp.id || `exp-${index}`,
+          company: company,
+          title: title,
+          startDate: startDate,
+          endDate: endDate,
+          location: exp.location || '',
+          bullets: this.extractBullets(exp)
+        };
+      });
     },
     
     // ============ EXTRACT BULLETS ============
