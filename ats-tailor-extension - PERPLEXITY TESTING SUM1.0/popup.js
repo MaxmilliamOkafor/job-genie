@@ -384,6 +384,20 @@ class ATSTailor {
             this.baseCVContent = parsedData[0];
             console.log('[ATS Tailor] Loaded parsed CV content from profile');
             
+            // ============ ENTERPRISE CV PARSER INTEGRATION ============
+            // Use EnterpriseCVParser for immutable field extraction (v2.0.0+)
+            if (window.EnterpriseCVParser && this.baseCVContent) {
+              try {
+                // Validate data with enterprise parser
+                const validated = window.EnterpriseCVParser.validateExtraction(
+                  this.baseCVContent.professional_experience || []
+                );
+                console.log('[ATS Tailor] EnterpriseCVParser validation:', validated ? 'passed' : 'needs review');
+              } catch (ecpError) {
+                console.warn('[ATS Tailor] EnterpriseCVParser validation error:', ecpError);
+              }
+            }
+            
             // Store in chrome.storage for debug panel access
             await chrome.storage.local.set({ ats_profile: parsedData[0] });
             
@@ -3068,10 +3082,11 @@ class ATSTailor {
 
   /**
    * Regenerate PDF after CV boost with dynamic location tailoring
+   * Uses EnterprisePDFGenerator instead of deprecated openresume-generator
    */
   async regeneratePDFAfterBoost() {
     try {
-      console.log('[ATS Tailor] Regenerating PDF after boost (OpenResume style)...');
+      console.log('[ATS Tailor] Regenerating PDF after boost (Enterprise PDF Generator)...');
       
       // Get tailored location from job data
       let tailoredLocation = 'Open to relocation';
@@ -3098,6 +3113,46 @@ class ATSTailor {
           if (profileRes.ok) {
             const profiles = await profileRes.json();
             candidateData = profiles?.[0] || {};
+            
+            // ============ ENTERPRISE PDF GENERATOR INTEGRATION ============
+            // Use EnterprisePDFGenerator if available (v2.0.0+)
+            if (window.EnterprisePDFGenerator && candidateData) {
+              console.log('[ATS Tailor] Using EnterprisePDFGenerator for CV generation');
+              try {
+                const pdfResult = await window.EnterprisePDFGenerator.generateCV(
+                  {
+                    firstName: candidateData.first_name,
+                    lastName: candidateData.last_name,
+                    email: candidateData.email,
+                    phone: candidateData.phone,
+                    linkedin: candidateData.linkedin,
+                    github: candidateData.github,
+                    portfolio: candidateData.portfolio,
+                    city: tailoredLocation,
+                    country: '',
+                    professionalExperience: candidateData.professional_experience || [],
+                    relevantProjects: candidateData.relevant_projects || [],
+                    education: candidateData.education || [],
+                    skills: candidateData.skills || [],
+                    certifications: candidateData.certifications || []
+                  },
+                  {
+                    useBackend: true,
+                    session: this.session,
+                    jobData: this.currentJob
+                  }
+                );
+                
+                if (pdfResult?.success && pdfResult?.pdf) {
+                  this.generatedDocuments.cvPdf = pdfResult.pdf;
+                  this.generatedDocuments.cvFileName = pdfResult.filename || this.generatedDocuments.cvFileName;
+                  console.log('[ATS Tailor] EnterprisePDFGenerator generated CV:', pdfResult.filename);
+                  return; // Success - exit early
+                }
+              } catch (epgError) {
+                console.warn('[ATS Tailor] EnterprisePDFGenerator failed, falling back:', epgError);
+              }
+            }
           }
         }
       } catch (e) {
@@ -3269,61 +3324,125 @@ class ATSTailor {
     // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
     const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
     
-    if (type === 'cv' && structuredCv) {
-      try {
-        this.showToast('⏳ Generating PDF...', 'info');
-        
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.session?.access_token || ''}`,
-            apikey: SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            type: 'resume',
-            fileName: filename,
-            structuredCv: structuredCv,
-            plainText: textDoc
-          }),
-        });
-
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/pdf')) {
-            const arrayBuffer = await response.arrayBuffer();
-            const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    if (type === 'cv') {
+      // ============ ENTERPRISE PDF GENERATOR - PRIMARY METHOD ============
+      if (window.EnterprisePDFGenerator && this.baseCVContent) {
+        try {
+          this.showToast('⏳ Generating PDF...', 'info');
+          const pdfResult = await window.EnterprisePDFGenerator.generateCV(
+            this.baseCVContent,
+            {
+              useBackend: true,
+              session: this.session,
+              jobData: this.currentJob
+            }
+          );
+          
+          if (pdfResult?.success && pdfResult?.pdf) {
+            const blob = this.base64ToBlob(pdfResult.pdf, 'application/pdf');
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = filename;
+            a.download = pdfResult.filename || filename;
             a.click();
             URL.revokeObjectURL(url);
             this.showToast('✅ Downloaded!', 'success');
             return;
-          } else {
-            const result = await response.json();
-            if (result.pdf) {
-              const blob = this.base64ToBlob(result.pdf, 'application/pdf');
+          }
+        } catch (epgError) {
+          console.warn('[ATS Tailor] EnterprisePDFGenerator download failed, trying fallback:', epgError);
+        }
+      }
+      
+      // Fallback: use structuredCv with backend
+      if (structuredCv) {
+        try {
+          this.showToast('⏳ Generating PDF...', 'info');
+          
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.session?.access_token || ''}`,
+              apikey: SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({
+              type: 'resume',
+              fileName: filename,
+              structuredCv: structuredCv,
+              plainText: textDoc
+            }),
+          });
+
+          if (response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/pdf')) {
+              const arrayBuffer = await response.arrayBuffer();
+              const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = result.fileName || filename;
+              a.download = filename;
               a.click();
               URL.revokeObjectURL(url);
               this.showToast('✅ Downloaded!', 'success');
               return;
+            } else {
+              const result = await response.json();
+              if (result.pdf) {
+                const blob = this.base64ToBlob(result.pdf, 'application/pdf');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = result.fileName || filename;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.showToast('✅ Downloaded!', 'success');
+                return;
+              }
             }
           }
+          console.error('[ATS Tailor] PDF generation via structuredCv failed:', response.status);
+        } catch (error) {
+          console.error('[ATS Tailor] PDF download error:', error);
         }
-        console.error('[ATS Tailor] PDF generation via structuredCv failed:', response.status);
-      } catch (error) {
-        console.error('[ATS Tailor] PDF download error:', error);
       }
     }
     
     // If no PDF but we have text, try cover letter generation
     if (type === 'cover' && textDoc) {
+      // ============ ENTERPRISE PDF GENERATOR - COVER LETTER ============
+      if (window.EnterprisePDFGenerator && this.baseCVContent) {
+        try {
+          this.showToast('⏳ Generating Cover Letter PDF...', 'info');
+          const pdfResult = await window.EnterprisePDFGenerator.generateCoverLetter(
+            this.baseCVContent,
+            this.currentJob,
+            textDoc,
+            {
+              useBackend: true,
+              session: this.session,
+              jobData: this.currentJob
+            }
+          );
+          
+          if (pdfResult?.success && pdfResult?.pdf) {
+            const blob = this.base64ToBlob(pdfResult.pdf, 'application/pdf');
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = pdfResult.filename || filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('✅ Downloaded!', 'success');
+            return;
+          }
+        } catch (epgError) {
+          console.warn('[ATS Tailor] EnterprisePDFGenerator cover letter failed, trying fallback:', epgError);
+        }
+      }
+      
+      // Fallback: use backend directly
       const personalInfo = structuredCv?.personalInfo || {
         firstName: this.profileInfo?.firstName,
         lastName: this.profileInfo?.lastName,
