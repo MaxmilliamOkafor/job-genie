@@ -3329,8 +3329,44 @@ class ATSTailor {
       if (window.EnterprisePDFGenerator && this.baseCVContent) {
         try {
           this.showToast('⏳ Generating PDF...', 'info');
+          
+          // CRITICAL FIX: Normalize the data BEFORE passing to generator
+          // Use EnterpriseCVParser to fix any mapping issues first
+          let normalizedData = this.baseCVContent;
+          if (window.EnterpriseCVParser?.fixMappingIssues) {
+            normalizedData = window.EnterpriseCVParser.fixMappingIssues(this.baseCVContent);
+            console.log('[ATS Tailor] Data normalized via EnterpriseCVParser');
+          }
+          
+          // Pass properly formatted data with correct field names
+          const pdfInputData = {
+            firstName: normalizedData.first_name || normalizedData.firstName || '',
+            lastName: normalizedData.last_name || normalizedData.lastName || '',
+            email: normalizedData.email || '',
+            phone: normalizedData.phone || '',
+            linkedin: normalizedData.linkedin || '',
+            github: normalizedData.github || '',
+            portfolio: normalizedData.portfolio || '',
+            city: normalizedData.city || '',
+            country: normalizedData.country || '',
+            // Use the fixed professional_experience (already normalized)
+            professionalExperience: normalizedData.professional_experience || normalizedData.professionalExperience || [],
+            relevantProjects: normalizedData.relevant_projects || normalizedData.relevantProjects || [],
+            education: normalizedData.education || [],
+            skills: normalizedData.skills || [],
+            certifications: normalizedData.certifications || []
+          };
+          
+          console.log('[ATS Tailor] PDF Input Data:', {
+            expCount: pdfInputData.professionalExperience.length,
+            firstExp: pdfInputData.professionalExperience[0] ? {
+              company: pdfInputData.professionalExperience[0].company,
+              title: pdfInputData.professionalExperience[0].title
+            } : null
+          });
+          
           const pdfResult = await window.EnterprisePDFGenerator.generateCV(
-            this.baseCVContent,
+            pdfInputData,
             {
               useBackend: true,
               session: this.session,
@@ -4827,6 +4863,190 @@ ATSTailor.prototype.copyDebugReport = function() {
   navigator.clipboard.writeText(JSON.stringify(report, null, 2))
     .then(() => this.showToast('Debug report copied to clipboard', 'success'))
     .catch(() => this.showToast('Failed to copy', 'error'));
+};
+
+// ============ ENTERPRISE CV PARSER VALIDATION DEBUG PANEL ============
+
+ATSTailor.prototype.bindParserValidationEvents = function() {
+  // Run Validation button
+  document.getElementById('runParserValidation')?.addEventListener('click', () => {
+    this.runParserValidation();
+  });
+  
+  // Show Raw Profile button
+  document.getElementById('showRawProfileData')?.addEventListener('click', () => {
+    this.showRawProfileData();
+  });
+  
+  // Fix Mapping Issues button
+  document.getElementById('fixMappingIssues')?.addEventListener('click', () => {
+    this.fixAndRegenerate();
+  });
+  
+  // Close Raw Profile Modal
+  document.getElementById('closeRawProfileModal')?.addEventListener('click', () => {
+    document.getElementById('rawProfileModal')?.classList.add('hidden');
+    document.getElementById('rawProfileModal').style.display = 'none';
+  });
+  
+  // Copy Raw Profile
+  document.getElementById('copyRawProfile')?.addEventListener('click', () => {
+    const jsonEl = document.getElementById('rawProfileJSON');
+    if (jsonEl?.textContent) {
+      navigator.clipboard.writeText(jsonEl.textContent)
+        .then(() => this.showToast('Profile data copied', 'success'))
+        .catch(() => this.showToast('Failed to copy', 'error'));
+    }
+  });
+};
+
+ATSTailor.prototype.runParserValidation = function() {
+  const statusBadge = document.getElementById('validationStatus');
+  const immutableList = document.getElementById('immutableFieldsList');
+  const errorsList = document.getElementById('mappingErrorsList');
+  const sourceEl = document.getElementById('dataMappingSource');
+  const expCountEl = document.getElementById('dataMappingExpCount');
+  const projCountEl = document.getElementById('dataMappingProjCount');
+  const validEl = document.getElementById('dataMappingValid');
+  
+  if (statusBadge) statusBadge.textContent = 'Running...';
+  
+  // Get profile data from baseCVContent
+  const profileData = this.baseCVContent;
+  
+  if (!profileData) {
+    if (statusBadge) statusBadge.textContent = 'No Data';
+    if (errorsList) errorsList.innerHTML = '<p class="debug-error">No profile data loaded. Make sure you are logged in and have uploaded a CV.</p>';
+    return;
+  }
+  
+  // Use EnterpriseCVParser for validation
+  if (!window.EnterpriseCVParser?.validateProfileData) {
+    if (statusBadge) statusBadge.textContent = 'Error';
+    if (errorsList) errorsList.innerHTML = '<p class="debug-error">EnterpriseCVParser not loaded</p>';
+    return;
+  }
+  
+  const result = window.EnterpriseCVParser.validateProfileData(profileData);
+  
+  // Update status badge
+  if (statusBadge) {
+    statusBadge.textContent = result.isValid ? 'PASSED ✓' : 'ISSUES ⚠️';
+    statusBadge.className = 'validation-badge ' + (result.isValid ? 'passed' : 'failed');
+  }
+  
+  // Update data mapping info
+  if (sourceEl) sourceEl.textContent = result.source;
+  if (expCountEl) expCountEl.textContent = result.experienceCount.toString();
+  if (projCountEl) projCountEl.textContent = result.projectsCount.toString();
+  if (validEl) {
+    validEl.textContent = result.isValid ? 'Yes ✓' : 'No ✗';
+    validEl.className = 'debug-value ' + (result.isValid ? 'valid' : 'invalid');
+  }
+  
+  // Build immutable fields list
+  if (immutableList && result.immutableFields.length > 0) {
+    let html = '';
+    for (const field of result.immutableFields) {
+      const hasIssues = field.issues.length > 0;
+      html += `
+        <div class="immutable-field-entry ${hasIssues ? 'has-issues' : 'ok'}">
+          <div class="field-header">
+            <span class="field-index">#${field.index + 1}</span>
+            <span class="field-status">${hasIssues ? '⚠️' : '✓'}</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Company:</span>
+            <span class="field-value company">${this.escapeHtml(field.company) || '<missing>'}</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Title:</span>
+            <span class="field-value title">${this.escapeHtml(field.title) || '<missing>'}</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Dates:</span>
+            <span class="field-value dates">${field.startDate || '?'} – ${field.endDate || '?'}</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Bullets:</span>
+            <span class="field-value bullets">${field.bulletCount} bullets</span>
+          </div>
+          ${field.issues.length > 0 ? `<div class="field-issues">${field.issues.join(', ')}</div>` : ''}
+        </div>
+      `;
+    }
+    immutableList.innerHTML = html;
+  }
+  
+  // Build errors list
+  if (errorsList) {
+    const allIssues = [...result.mappingErrors, ...result.warnings];
+    if (allIssues.length === 0) {
+      errorsList.innerHTML = '<p class="debug-success">No errors or warnings detected ✓</p>';
+    } else {
+      const errorsHtml = result.mappingErrors.map(e => `<div class="error-item error">${this.escapeHtml(e)}</div>`).join('');
+      const warningsHtml = result.warnings.map(w => `<div class="error-item warning">${this.escapeHtml(w)}</div>`).join('');
+      errorsList.innerHTML = errorsHtml + warningsHtml;
+    }
+  }
+  
+  console.log('[ATS Tailor] Parser validation complete:', result);
+};
+
+ATSTailor.prototype.showRawProfileData = function() {
+  const modal = document.getElementById('rawProfileModal');
+  const jsonEl = document.getElementById('rawProfileJSON');
+  
+  if (!modal || !jsonEl) return;
+  
+  const profileData = this.baseCVContent;
+  
+  if (!profileData) {
+    jsonEl.textContent = '// No profile data loaded';
+  } else {
+    // Show professional_experience specifically
+    const expData = {
+      professional_experience: profileData.professional_experience || profileData.professionalExperience || [],
+      relevant_projects: profileData.relevant_projects || profileData.relevantProjects || [],
+      _source: 'baseCVContent'
+    };
+    jsonEl.textContent = JSON.stringify(expData, null, 2);
+  }
+  
+  modal.classList.remove('hidden');
+  modal.style.display = 'block';
+};
+
+ATSTailor.prototype.fixAndRegenerate = function() {
+  if (!this.baseCVContent) {
+    this.showToast('No profile data to fix', 'error');
+    return;
+  }
+  
+  if (!window.EnterpriseCVParser?.fixMappingIssues) {
+    this.showToast('EnterpriseCVParser not available', 'error');
+    return;
+  }
+  
+  // Fix the mapping issues
+  const fixed = window.EnterpriseCVParser.fixMappingIssues(this.baseCVContent);
+  
+  if (fixed) {
+    this.baseCVContent = fixed;
+    this.showToast('Mapping issues fixed. Re-run validation to verify.', 'success');
+    
+    // Re-run validation
+    this.runParserValidation();
+  } else {
+    this.showToast('Could not fix mapping issues', 'error');
+  }
+};
+
+// Extend bindEvents to include parser validation
+const originalBindEvents = ATSTailor.prototype.bindEvents;
+ATSTailor.prototype.bindEvents = function() {
+  originalBindEvents?.call(this);
+  this.bindParserValidationEvents();
 };
 
 // Initialize when DOM is ready
