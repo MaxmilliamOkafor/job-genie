@@ -1,6 +1,7 @@
-// Enterprise PDF Generator v1.0 - Production-Grade ATS PDF Generation
-// Uses pdf-lib for clean, ATS-compatible PDFs with perfect formatting
+// Enterprise PDF Generator v2.0 - Production-Grade ATS PDF Generation
+// Uses pdf-lib for clean, ATS-compatible PDFs with PERFECT formatting
 // NO openresume dependency - standalone implementation
+// FIXES: Duplicate dates, missing dates, company/title swaps
 
 (function(global) {
   'use strict';
@@ -46,7 +47,7 @@
     // ============ GENERATE CV PDF ============
     async generateCV(profileData, options = {}) {
       const startTime = performance.now();
-      console.log('[EnterprisePDFGenerator] Generating CV PDF...');
+      console.log('[EnterprisePDFGenerator v2.0] Generating CV PDF...');
       
       try {
         // Validate input - NO hardcoded fallbacks
@@ -54,7 +55,7 @@
           throw new Error('Profile data is required - no hardcoded defaults');
         }
         
-        // Normalize profile data
+        // Normalize profile data with STRICT date formatting
         const data = this.normalizeProfileData(profileData);
         
         // Call backend PDF generation or generate client-side
@@ -131,8 +132,8 @@
       };
     },
     
-    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX) ============
-    // Ensures company/title/dates are correctly mapped and never swapped
+    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX v2.0) ============
+    // FIXES: Duplicate dates, missing dates, company/title swaps
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
@@ -141,51 +142,142 @@
         let company = exp.company || exp.companyName || exp.company_name || '';
         
         // Extract title - check multiple field names in priority order  
-        let title = exp.title || exp.jobTitle || exp.job_title || '';
+        let title = exp.title || exp.jobTitle || exp.job_title || exp.role || '';
         
-        // Extract dates
-        const startDate = exp.startDate || exp.start_date || '';
-        const endDate = exp.endDate || exp.end_date || 'Present';
+        // ============ STRICT DATE EXTRACTION (NO DUPLICATES) ============
+        // Extract dates from dedicated fields ONLY - never from title/company
+        let startDate = '';
+        let endDate = '';
         
-        // CRITICAL: Validate company/title are not swapped
-        // If company looks like a title and title looks like a company, swap them back
-        const titleIndicators = /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|senior|junior|vp|president|head of|chief)\b/i;
-        const companyIndicators = /\b(inc|llc|ltd|corp|plc|group|ai|tech|health|solutions|meta|google|amazon|microsoft|apple|accenture|citigroup|citi|ibm|oracle|salesforce)\b/i;
+        // Priority 1: Dedicated date fields
+        if (exp.startDate || exp.start_date) {
+          startDate = this.cleanDateValue(exp.startDate || exp.start_date);
+        }
+        if (exp.endDate || exp.end_date) {
+          endDate = this.cleanDateValue(exp.endDate || exp.end_date);
+        }
+        
+        // Priority 2: Combined dates field
+        if (exp.dates && !startDate) {
+          const parsedDates = this.parseCombinedDates(exp.dates);
+          startDate = parsedDates.start;
+          endDate = parsedDates.end;
+        }
+        
+        // Priority 3: Duration field (some profiles use this)
+        if (exp.duration && !startDate) {
+          const parsedDates = this.parseCombinedDates(exp.duration);
+          startDate = parsedDates.start;
+          endDate = parsedDates.end;
+        }
+        
+        // Default end date to Present if role appears current
+        if (!endDate && (exp.isCurrent === true || exp.is_current === true)) {
+          endDate = 'Present';
+        }
+        
+        // ============ STRIP DATES FROM TITLE/COMPANY ============
+        // Remove any dates accidentally included in title or company
+        company = this.stripDatesFromText(company);
+        title = this.stripDatesFromText(title);
+        
+        // ============ VALIDATE COMPANY/TITLE NOT SWAPPED ============
+        const titleIndicators = /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|senior|junior|vp|president|head of|chief|product|data|software|ai|ml)\b/i;
+        const companyIndicators = /\b(inc|llc|ltd|corp|plc|group|ai|tech|health|solutions|meta|google|amazon|microsoft|apple|accenture|citigroup|citi|ibm|oracle|salesforce|solim|fidelity)\b/i;
         
         const companyLooksLikeTitle = titleIndicators.test(company) && !companyIndicators.test(company);
-        const titleLooksLikeCompany = companyIndicators.test(title) || 
-                                       /^[A-Z][a-zA-Z]+$/.test(title) && !titleIndicators.test(title);
+        const titleLooksLikeCompany = companyIndicators.test(title) && !titleIndicators.test(title);
         
         if (companyLooksLikeTitle && titleLooksLikeCompany) {
-          console.warn(`[EnterprisePDFGenerator] Detected swap: company="${company}" ↔ title="${title}". Correcting...`);
+          console.warn(`[EnterprisePDFGenerator v2.0] Detected swap: company="${company}" ↔ title="${title}". Correcting...`);
           [company, title] = [title, company];
         }
         
         // Ensure we have valid values
         if (!company && !title) {
-          console.warn(`[EnterprisePDFGenerator] Experience ${index} missing both company and title`);
+          console.warn(`[EnterprisePDFGenerator v2.0] Experience ${index} missing both company and title`);
         }
         
         return {
           id: exp.id || `exp-${index}`,
-          company: company,
-          title: title,
+          company: company.trim(),
+          title: title.trim(),
           startDate: startDate,
-          endDate: endDate,
+          endDate: endDate || 'Present',
           location: exp.location || '',
           bullets: this.extractBullets(exp)
         };
       });
     },
     
+    // ============ CLEAN DATE VALUE ============
+    cleanDateValue(dateStr) {
+      if (!dateStr) return '';
+      const str = String(dateStr).trim();
+      
+      // Handle "Present" variations
+      if (/^present$/i.test(str) || /^current$/i.test(str) || /^ongoing$/i.test(str)) {
+        return 'Present';
+      }
+      
+      // Extract year (4 digits)
+      const yearMatch = str.match(/\b(19|20)\d{2}\b/);
+      if (yearMatch) {
+        return yearMatch[0];
+      }
+      
+      return str;
+    },
+    
+    // ============ PARSE COMBINED DATES ============
+    // Handles: "2021 - 2022", "Jan 2021 - Present", "2021 – 2023"
+    parseCombinedDates(dateStr) {
+      if (!dateStr) return { start: '', end: '' };
+      const str = String(dateStr).trim();
+      
+      // Split by common separators
+      const parts = str.split(/\s*[-–—to]\s*/i);
+      
+      if (parts.length >= 2) {
+        return {
+          start: this.cleanDateValue(parts[0]),
+          end: this.cleanDateValue(parts[parts.length - 1])
+        };
+      }
+      
+      // Single date - treat as start
+      return {
+        start: this.cleanDateValue(str),
+        end: ''
+      };
+    },
+    
+    // ============ STRIP DATES FROM TEXT ============
+    // Removes accidentally embedded dates from titles/companies
+    stripDatesFromText(text) {
+      if (!text) return '';
+      return text
+        // Remove "2017 2021" patterns
+        .replace(/\b(19|20)\d{2}\s+(19|20)\d{2}\b/g, '')
+        // Remove "| 2017 - 2021" patterns
+        .replace(/\s*\|\s*(19|20)\d{2}\s*[-–—]\s*(19|20)\d{2}|\bPresent\b/gi, '')
+        // Remove standalone "| 2021"
+        .replace(/\s*\|\s*(19|20)\d{2}\b/g, '')
+        // Remove trailing dates like "2021 - Present"
+        .replace(/\s+(19|20)\d{2}\s*[-–—]\s*(Present|(19|20)\d{2})\s*$/gi, '')
+        // Clean up multiple spaces
+        .replace(/\s+/g, ' ')
+        .trim();
+    },
+    
     // ============ EXTRACT BULLETS ============
     extractBullets(exp) {
       // Handle multiple bullet formats
       if (Array.isArray(exp.bullets)) {
-        return exp.bullets.map(b => typeof b === 'string' ? b : (b.text || ''));
+        return exp.bullets.map(b => typeof b === 'string' ? b : (b.text || '')).filter(Boolean);
       }
       if (Array.isArray(exp.achievements)) {
-        return exp.achievements.map(a => typeof a === 'string' ? a : (a.text || ''));
+        return exp.achievements.map(a => typeof a === 'string' ? a : (a.text || '')).filter(Boolean);
       }
       if (exp.description && typeof exp.description === 'string') {
         return exp.description.split('\n').filter(Boolean).map(l => l.replace(/^[•\-*]\s*/, '').trim());
@@ -249,6 +341,7 @@
         experience: data.professionalExperience.map(exp => ({
           company: exp.company,
           title: exp.title,
+          // CRITICAL: Use formatDateRange which handles all edge cases
           dates: this.formatDateRange(exp.startDate, exp.endDate),
           bullets: exp.bullets
         })),
@@ -380,10 +473,10 @@
             y = config.margins.top;
           }
           
-          // Company name (bold)
+          // ============ PERFECT FORMATTING: Company on Line 1 ============
           addText(exp.company, config.margins.left, config.fonts.sizes.companyName, { bold: true });
           
-          // Job title and dates on same line
+          // ============ PERFECT FORMATTING: Title + Dates on Line 2 ============
           const titleLine = exp.title;
           const dateStr = this.formatDateRange(exp.startDate, exp.endDate);
           
@@ -391,6 +484,7 @@
           doc.setFontSize(config.fonts.sizes.jobTitle);
           doc.text(titleLine, config.margins.left, y);
           
+          // Right-align dates
           if (dateStr) {
             doc.setFont('helvetica', 'normal');
             const dateWidth = doc.getTextWidth(dateStr);
@@ -551,20 +645,33 @@
       return y;
     },
     
-    // ============ FORMAT DATE RANGE ============
+    // ============ FORMAT DATE RANGE (CRITICAL FIX v2.0) ============
+    // NEVER outputs duplicate dates like "2017 2021 | 2017 - 2021"
     formatDateRange(startDate, endDate) {
       const extractYear = (date) => {
         if (!date) return '';
-        if (/present|current/i.test(date)) return 'Present';
-        const match = String(date).match(/\d{4}/);
-        return match ? match[0] : date;
+        const str = String(date).trim();
+        if (/present|current|ongoing/i.test(str)) return 'Present';
+        const match = str.match(/\b(19|20)\d{2}\b/);
+        return match ? match[0] : '';
       };
       
       const start = extractYear(startDate);
       const end = extractYear(endDate);
       
+      // No dates at all
       if (!start && !end) return '';
-      if (!end || start === end) return start;
+      
+      // Same year (short tenure)
+      if (start === end) return start;
+      
+      // Only start date
+      if (!end) return start;
+      
+      // Only end date (unlikely but handle it)
+      if (!start) return end;
+      
+      // Standard format: YYYY – YYYY or YYYY – Present
       return `${start} – ${end}`;
     },
     
@@ -589,12 +696,108 @@
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
+    },
+    
+    // ============ GENERATE PREVIEW HTML ============
+    // Returns HTML that matches the PDF output for preview purposes
+    generatePreviewHTML(profileData, options = {}) {
+      const data = this.normalizeProfileData(profileData);
+      
+      let html = `<div class="cv-preview" style="font-family: Arial, Helvetica, sans-serif; max-width: 700px; padding: 20px; background: white; color: #000;">`;
+      
+      // Header
+      const fullName = `${data.firstName} ${data.lastName}`.toUpperCase().trim() || 'APPLICANT';
+      html += `<h1 style="font-size: 18pt; margin-bottom: 8px; font-weight: bold; border-bottom: none;">${fullName}</h1>`;
+      
+      // Contact
+      const contactParts = [data.phone, data.email, [data.city, data.country].filter(Boolean).join(', '), 'Open to relocation'].filter(Boolean);
+      html += `<p style="font-size: 10pt; margin: 4px 0; color: #333;">${contactParts.join(' | ')}</p>`;
+      
+      // Links
+      const linkParts = [data.linkedin, data.github, data.portfolio].filter(Boolean);
+      if (linkParts.length > 0) {
+        html += `<p style="font-size: 9pt; margin: 4px 0; color: #555;">${linkParts.join(' | ')}</p>`;
+      }
+      
+      html += `<hr style="border: none; border-top: 1px solid #000; margin: 12px 0;">`;
+      
+      // Professional Experience
+      if (data.professionalExperience.length > 0) {
+        html += `<h2 style="font-size: 12pt; font-weight: bold; margin: 16px 0 8px 0; border-bottom: 1px solid #000; padding-bottom: 2px;">PROFESSIONAL EXPERIENCE</h2>`;
+        
+        for (const exp of data.professionalExperience) {
+          html += `<div style="margin-bottom: 12px;">`;
+          html += `<p style="font-size: 11pt; font-weight: bold; margin: 0;">${exp.company}</p>`;
+          
+          const dateStr = this.formatDateRange(exp.startDate, exp.endDate);
+          html += `<p style="font-size: 10.5pt; font-style: italic; margin: 2px 0;">
+            <span>${exp.title}</span>
+            ${dateStr ? `<span style="float: right; font-style: normal;">${dateStr}</span>` : ''}
+          </p>`;
+          
+          if (exp.bullets && exp.bullets.length > 0) {
+            html += `<ul style="margin: 4px 0 0 16px; padding: 0; list-style-type: disc;">`;
+            for (const bullet of exp.bullets) {
+              html += `<li style="font-size: 10.5pt; margin-bottom: 2px;">${bullet}</li>`;
+            }
+            html += `</ul>`;
+          }
+          html += `</div>`;
+        }
+      }
+      
+      // Technical Projects
+      if (data.relevantProjects.length > 0) {
+        html += `<h2 style="font-size: 12pt; font-weight: bold; margin: 16px 0 8px 0; border-bottom: 1px solid #000; padding-bottom: 2px;">TECHNICAL PROJECTS</h2>`;
+        
+        for (const proj of data.relevantProjects) {
+          html += `<div style="margin-bottom: 12px;">`;
+          html += `<p style="font-size: 11pt; font-weight: bold; margin: 0;">${proj.name}${proj.role ? ` | ${proj.role}` : ''}</p>`;
+          
+          if (proj.bullets && proj.bullets.length > 0) {
+            html += `<ul style="margin: 4px 0 0 16px; padding: 0; list-style-type: disc;">`;
+            for (const bullet of proj.bullets) {
+              html += `<li style="font-size: 10.5pt; margin-bottom: 2px;">${bullet}</li>`;
+            }
+            html += `</ul>`;
+          }
+          html += `</div>`;
+        }
+      }
+      
+      // Skills
+      if (data.skills.length > 0) {
+        html += `<h2 style="font-size: 12pt; font-weight: bold; margin: 16px 0 8px 0; border-bottom: 1px solid #000; padding-bottom: 2px;">TECHNICAL SKILLS</h2>`;
+        html += `<p style="font-size: 10.5pt; margin: 4px 0;">${data.skills.join(', ')}</p>`;
+      }
+      
+      // Education
+      if (data.education.length > 0) {
+        html += `<h2 style="font-size: 12pt; font-weight: bold; margin: 16px 0 8px 0; border-bottom: 1px solid #000; padding-bottom: 2px;">EDUCATION</h2>`;
+        for (const edu of data.education) {
+          const eduLine = [edu.degree, edu.field, edu.institution].filter(Boolean).join(' | ');
+          html += `<p style="font-size: 10.5pt; font-weight: bold; margin: 4px 0;">${eduLine}</p>`;
+          if (edu.gpa) {
+            html += `<p style="font-size: 9pt; margin: 2px 0;">GPA: ${edu.gpa}</p>`;
+          }
+        }
+      }
+      
+      // Certifications
+      if (data.certifications.length > 0) {
+        html += `<h2 style="font-size: 12pt; font-weight: bold; margin: 16px 0 8px 0; border-bottom: 1px solid #000; padding-bottom: 2px;">CERTIFICATIONS</h2>`;
+        html += `<p style="font-size: 10.5pt; margin: 4px 0;">${data.certifications.join(', ')}</p>`;
+      }
+      
+      html += `</div>`;
+      
+      return html;
     }
   };
 
   // Export globally
   global.EnterprisePDFGenerator = EnterprisePDFGenerator;
   
-  console.log('[EnterprisePDFGenerator] Loaded v1.0 - No hardcoded data, profile-only generation');
+  console.log('[EnterprisePDFGenerator v2.0] Loaded - FIXES: duplicate dates, missing dates, company/title swaps');
 
 })(typeof window !== 'undefined' ? window : this);
