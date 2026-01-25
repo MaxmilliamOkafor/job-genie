@@ -528,6 +528,15 @@ class ATSTailor {
     document.getElementById('downloadCvText')?.addEventListener('click', () => this.downloadTextVersion('cv'));
     document.getElementById('downloadCoverText')?.addEventListener('click', () => this.downloadTextVersion('cover'));
     
+    // NEW: Preview PDF Before Download button
+    document.getElementById('previewPdfBtn')?.addEventListener('click', () => this.showPdfPreviewModal());
+    document.getElementById('closePdfPreviewModal')?.addEventListener('click', () => this.hidePdfPreviewModal());
+    document.getElementById('pdfPreviewDownloadBtn')?.addEventListener('click', () => {
+      this.hidePdfPreviewModal();
+      this.downloadDocument('cv');
+    });
+    document.getElementById('pdfPreviewCopyBtn')?.addEventListener('click', () => this.copyPdfPreviewContent());
+    
     // AI Provider Selection (toggle buttons - persistent)
     document.getElementById('btnKimi')?.addEventListener('click', () => this.selectAIProvider('kimi'));
     document.getElementById('btnOpenAI')?.addEventListener('click', () => this.selectAIProvider('openai'));
@@ -3559,6 +3568,74 @@ class ATSTailor {
       byteArray[i] = byteCharacters.charCodeAt(i);
     }
     return new Blob([byteArray], { type });
+  }
+
+  // ============ PDF PREVIEW MODAL (NEW) ============
+  
+  /**
+   * Show PDF preview modal with rendered CV content
+   * Uses EnterprisePDFGenerator.generatePreviewHTML for consistent formatting
+   */
+  showPdfPreviewModal() {
+    const modal = document.getElementById('pdfPreviewModal');
+    const contentEl = document.getElementById('pdfPreviewContent');
+    
+    if (!modal || !contentEl) {
+      this.showToast('Preview modal not found', 'error');
+      return;
+    }
+    
+    // Check if we have profile data to preview
+    if (!this.baseCVContent) {
+      this.showToast('No CV data available. Run tailoring first.', 'error');
+      return;
+    }
+    
+    // Generate preview HTML using EnterprisePDFGenerator
+    if (window.EnterprisePDFGenerator?.generatePreviewHTML) {
+      try {
+        const previewHTML = window.EnterprisePDFGenerator.generatePreviewHTML(this.baseCVContent);
+        contentEl.innerHTML = previewHTML;
+        console.log('[ATS Tailor] Generated PDF preview using EnterprisePDFGenerator');
+      } catch (error) {
+        console.error('[ATS Tailor] Preview generation error:', error);
+        contentEl.innerHTML = `<p style="color: red;">Error generating preview: ${error.message}</p>`;
+      }
+    } else {
+      // Fallback: show raw text preview
+      const cvText = this.generatedDocuments.cv || 'No CV content available';
+      contentEl.innerHTML = `<pre style="white-space: pre-wrap; font-family: Arial; font-size: 10pt;">${this.escapeHtml(cvText)}</pre>`;
+    }
+    
+    // Show modal
+    modal.classList.remove('hidden');
+  }
+  
+  /**
+   * Hide PDF preview modal
+   */
+  hidePdfPreviewModal() {
+    const modal = document.getElementById('pdfPreviewModal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+  }
+  
+  /**
+   * Copy PDF preview content to clipboard
+   */
+  async copyPdfPreviewContent() {
+    const contentEl = document.getElementById('pdfPreviewContent');
+    if (!contentEl) return;
+    
+    try {
+      const text = contentEl.innerText;
+      await navigator.clipboard.writeText(text);
+      this.showToast('Copied to clipboard!', 'success');
+    } catch (error) {
+      console.error('[ATS Tailor] Copy failed:', error);
+      this.showToast('Failed to copy', 'error');
+    }
   }
 
   async attachDocument(type) {

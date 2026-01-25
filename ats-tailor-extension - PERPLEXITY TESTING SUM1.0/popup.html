@@ -116,10 +116,10 @@
         </div>
       </div>
 
-      <!-- Settings Panel -->
+      <!-- Settings Panel - REORDERED per spec -->
       <div class="settings-panel">
-        <!-- Auto-Trigger Toggle (NEW) -->
-        <div class="setting-row auto-trigger-setting">
+        <!-- Auto-Trigger Toggle - PRIMARY SETTING -->
+        <div class="setting-row auto-trigger-setting highlight">
           <label class="toggle-row" for="autoTriggerToggle">
             <span class="toggle-label">
               <span class="setting-icon">⚡</span>
@@ -130,6 +130,7 @@
         </div>
         <p class="setting-help">Automatically runs "Extract & Apply" when Workday, Greenhouse, etc. are detected.</p>
         
+        <!-- Automatic ATS Tailoring -->
         <div class="setting-row">
           <label class="toggle-row" for="autoTailorToggle">
             <span class="toggle-label">
@@ -141,7 +142,7 @@
         </div>
         <p class="setting-help">Runs once per job when upload fields are detected.</p>
         
-        <!-- AI Autofill Toggle - Controls API Usage -->
+        <!-- AI Autofill Toggle with Run Now button -->
         <div class="setting-row autofill-setting">
           <label class="toggle-row" for="autofillEnabledToggle">
             <span class="toggle-label">
@@ -433,6 +434,33 @@
         <!-- Preview Content -->
         <div class="preview-content-wrapper">
           <div id="previewContent" class="preview-content placeholder">Generated content will appear here...</div>
+        </div>
+        
+        <!-- Preview PDF Before Download Button (NEW) -->
+        <button id="previewPdfBtn" class="btn btn-secondary btn-preview-pdf" title="Preview PDF with correct formatting before download">
+          <span class="btn-icon-left">👁️</span>
+          <span class="btn-text">Preview PDF Before Download</span>
+        </button>
+        
+        <!-- PDF Preview Modal -->
+        <div id="pdfPreviewModal" class="pdf-preview-modal hidden">
+          <div class="pdf-preview-modal-content">
+            <div class="pdf-preview-modal-header">
+              <span class="modal-title">📄 CV Preview (ATS Format)</span>
+              <button id="closePdfPreviewModal" class="btn-close" title="Close">×</button>
+            </div>
+            <div class="pdf-preview-modal-body" id="pdfPreviewContent">
+              <!-- Rendered CV preview will appear here -->
+            </div>
+            <div class="pdf-preview-modal-footer">
+              <button id="pdfPreviewDownloadBtn" class="btn btn-primary">
+                <span class="btn-icon-left">⬇️</span> Download PDF
+              </button>
+              <button id="pdfPreviewCopyBtn" class="btn btn-secondary">
+                <span class="btn-icon-left">📋</span> Copy Text
+              </button>
+            </div>
+          </div>
         </div>
         
         <!-- Action Buttons -->
