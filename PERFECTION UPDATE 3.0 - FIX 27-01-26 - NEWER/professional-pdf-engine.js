@@ -191,6 +191,7 @@
     },
 
     // ============ STRUCTURE CV DATA ============
+    // FIX 27-01-26: Added robust data extraction with multiple fallbacks for OpenAI speed
     structureCVData(candidateData, tailoredContent) {
       const data = {
         contact: this.extractContact(candidateData),
@@ -201,6 +202,16 @@
         certifications: []
       };
 
+      // FIX: Try to get professional experience from candidateData first (most reliable)
+      // This ensures we always have experience data even if tailoredContent is incomplete
+      let experienceFromCandidate = [];
+      if (candidateData) {
+        experienceFromCandidate = candidateData.professional_experience || 
+                                   candidateData.professionalExperience ||
+                                   candidateData.workExperience ||
+                                   candidateData.work_experience || [];
+      }
+
       // Parse tailored content sections
       if (typeof tailoredContent === 'string') {
         const parsed = this.parseSections(tailoredContent);
@@ -209,14 +220,40 @@
         data.education = parsed.education || [];
         data.skills = this.parseSkills(parsed.skills || '');
         data.certifications = this.parseCertifications(parsed.certifications || '');
-      } else if (typeof tailoredContent === 'object') {
-        // Structured data from profile
-        data.summary = tailoredContent.summary || tailoredContent.professionalSummary || '';
-        data.experience = this.normalizeExperience(tailoredContent.experience || tailoredContent.professionalExperience || tailoredContent.professional_experience || []);
-        data.education = tailoredContent.education || [];
-        data.skills = this.parseSkills(tailoredContent.skills);
-        data.certifications = this.parseCertifications(tailoredContent.certifications);
+      } else if (typeof tailoredContent === 'object' && tailoredContent !== null) {
+        // Structured data from profile - check ALL possible field names
+        data.summary = tailoredContent.summary || tailoredContent.professionalSummary || tailoredContent.professional_summary || '';
+        
+        // FIX 27-01-26: Comprehensive experience field checking with candidateData fallback
+        const tailoredExperience = tailoredContent.experience || 
+                                   tailoredContent.professionalExperience || 
+                                   tailoredContent.professional_experience ||
+                                   tailoredContent.workExperience ||
+                                   tailoredContent.work_experience || [];
+        
+        // Use tailored experience if available, otherwise fall back to candidate data
+        const rawExperience = (Array.isArray(tailoredExperience) && tailoredExperience.length > 0) 
+          ? tailoredExperience 
+          : experienceFromCandidate;
+        
+        data.experience = this.normalizeExperience(rawExperience);
+        
+        // Education with fallback
+        const tailoredEducation = tailoredContent.education || candidateData?.education || [];
+        data.education = Array.isArray(tailoredEducation) ? tailoredEducation : [];
+        
+        data.skills = this.parseSkills(tailoredContent.skills || candidateData?.skills);
+        data.certifications = this.parseCertifications(tailoredContent.certifications || candidateData?.certifications);
       }
+
+      // FINAL FALLBACK: If still no experience, use candidateData directly
+      if (data.experience.length === 0 && experienceFromCandidate.length > 0) {
+        console.log('[ProfessionalPDFEngine] Using candidateData fallback for experience');
+        data.experience = this.normalizeExperience(experienceFromCandidate);
+      }
+
+      // Log for debugging
+      console.log(`[ProfessionalPDFEngine] Structured CV: ${data.experience.length} jobs, ${data.education.length} edu, ${data.skills.length} skills`);
 
       return data;
     },

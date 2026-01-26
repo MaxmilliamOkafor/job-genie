@@ -417,16 +417,33 @@
           // Generate PDF (~15ms) - PERFECTION v3.0: Prioritize ProfessionalPDFEngine
           let pdfResult = null;
           
+          // FIX 27-01-26: Ensure profile has professional_experience for PDF generation
+          // This fixes the issue where OpenAI API returns faster than expected
+          const enrichedProfile = {
+            ...profile,
+            // Ensure experience data is available from all possible sources
+            professional_experience: profile.professional_experience || 
+                                     profile.professionalExperience || 
+                                     profile.workExperience || 
+                                     profile.work_experience || [],
+            education: profile.education || [],
+            skills: profile.skills || [],
+            certifications: profile.certifications || []
+          };
+          
+          // Log for debugging
+          console.log(`[ATS PERFECTION] Profile experience count: ${enrichedProfile.professional_experience?.length || 0}`);
+          
           // ===== PERFECTION v3.0: Use ProfessionalPDFEngine first =====
           if (typeof ProfessionalPDFEngine !== 'undefined' && ProfessionalPDFEngine.generateCV) {
             console.log('[ATS PERFECTION] Using ProfessionalPDFEngine for ATS-perfect PDF');
-            const cvResult = await ProfessionalPDFEngine.generateCV(profile, tailoredCV);
+            const cvResult = await ProfessionalPDFEngine.generateCV(enrichedProfile, tailoredCV);
             if (cvResult.success) {
               // Generate cover letter if available
               let coverResult = null;
               if (typeof CoverLetterGenerator !== 'undefined' && CoverLetterGenerator.generate) {
-                const coverContent = CoverLetterGenerator.generate(profile, jobInfo, keywords);
-                coverResult = await ProfessionalPDFEngine.generateCoverLetter(profile, coverContent.text, jobInfo);
+                const coverContent = CoverLetterGenerator.generate(enrichedProfile, jobInfo, keywords);
+                coverResult = await ProfessionalPDFEngine.generateCoverLetter(enrichedProfile, coverContent.text, jobInfo);
               }
               pdfResult = {
                 cv: { base64: cvResult.pdf, filename: cvResult.filename },
@@ -434,9 +451,9 @@
               };
             }
           } else if (typeof OpenResumeGenerator !== 'undefined' && OpenResumeGenerator.generateATSPackage) {
-            pdfResult = await OpenResumeGenerator.generateATSPackage(tailoredCV, keywords, jobInfo);
+            pdfResult = await OpenResumeGenerator.generateATSPackage(tailoredCV, keywords, jobInfo, enrichedProfile);
           } else if (typeof TurboPipeline !== 'undefined' && TurboPipeline.executeTurboPipeline) {
-            const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 15 });
+            const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, enrichedProfile, baseCV, { maxKeywords: 15 });
             if (pipelineResult.success) {
               pdfResult = { cv: pipelineResult.cvPDF, cover: pipelineResult.coverPDF };
             }

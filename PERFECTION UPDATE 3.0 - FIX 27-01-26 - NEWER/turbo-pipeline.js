@@ -691,6 +691,22 @@
     let matchScore = 0;
     const pdfStart = performance.now();
 
+    // FIX 27-01-26: Ensure candidateData has experience fields properly mapped
+    // This prevents missing professional experience when OpenAI returns faster
+    const enrichedCandidate = {
+      ...candidateData,
+      professional_experience: candidateData?.professional_experience || 
+                               candidateData?.professionalExperience ||
+                               candidateData?.workExperience ||
+                               candidateData?.work_experience || [],
+      education: candidateData?.education || [],
+      skills: candidateData?.skills || [],
+      certifications: candidateData?.certifications || []
+    };
+
+    // Log for debugging
+    console.log(`[TurboPipeline] Enriched candidate has ${enrichedCandidate.professional_experience?.length || 0} experience entries`);
+
     if (global.OpenResumeGenerator) {
       try {
         const atsPackage = await global.OpenResumeGenerator.generateATSPackage(
@@ -701,7 +717,7 @@
             company: jobInfo?.company || '',
             location: jobInfo?.location || ''
           },
-          candidateData
+          enrichedCandidate
         );
         
         cvPDF = {
