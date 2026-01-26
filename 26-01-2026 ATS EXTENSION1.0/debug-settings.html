@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATS Tailor - Debug Settings</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      width: 100%;
+      max-width: 900px;
+      min-height: 100vh;
+      max-height: none;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .debug-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .debug-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+    }
+    
+    .debug-header h1 {
+      font-size: 20px;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .debug-controls {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .debug-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    
+    .debug-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: rgba(124, 58, 237, 0.1);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    
+    .debug-section-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .debug-section-body {
+      padding: 16px;
+    }
+    
+    /* Log Viewer */
+    .log-viewer {
+      background: #0d0d1a;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 11px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .log-entry {
+      display: flex;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      gap: 12px;
+    }
+    
+    .log-entry:hover {
+      background: rgba(124, 58, 237, 0.1);
+    }
+    
+    .log-timestamp {
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-size: 10px;
+    }
+    
+    .log-level {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      min-width: 50px;
+      text-align: center;
+    }
+    
+    .log-level.info { background: var(--info); color: white; }
+    .log-level.success { background: var(--success); color: white; }
+    .log-level.warning { background: var(--warning); color: black; }
+    .log-level.error { background: var(--error); color: white; }
+    .log-level.debug { background: #6366f1; color: white; }
+    
+    .log-event {
+      color: var(--accent-secondary);
+      font-weight: 600;
+      min-width: 150px;
+    }
+    
+    .log-message {
+      color: var(--text-primary);
+      flex: 1;
+      word-break: break-word;
+    }
+    
+    .log-details {
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-top: 4px;
+      padding-left: 20px;
+    }
+    
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+    
+    .stat-card {
+      background: rgba(124, 58, 237, 0.1);
+      border: 1px solid var(--border-accent);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent-secondary);
+    }
+    
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    
+    /* Filters */
+    .filters-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    
+    .filter-chip {
+      padding: 6px 12px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    
+    .filter-chip:hover, .filter-chip.active {
+      background: var(--accent-primary);
+      color: white;
+      border-color: var(--accent-primary);
+    }
+    
+    /* Timeline */
+    .timeline {
+      position: relative;
+      padding-left: 30px;
+    }
+    
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--border-subtle);
+    }
+    
+    .timeline-item {
+      position: relative;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -24px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+      border: 2px solid var(--bg-primary);
+    }
+    
+    .timeline-item.success::before { background: var(--success); }
+    .timeline-item.error::before { background: var(--error); }
+    .timeline-item.warning::before { background: var(--warning); }
+    
+    .timeline-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .timeline-event {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .timeline-time {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    
+    .timeline-details {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    
+    /* Settings Form */
+    .settings-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .setting-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    
+    .setting-info h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .setting-info p {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      transition: var(--transition-fast);
+      border-radius: var(--radius-full);
+    }
+    
+    .toggle-slider::before {
+      position: absolute;
+      content: '';
+      height: 18px;
+      width: 18px;
+      left: 2px;
+      bottom: 2px;
+      background: white;
+      transition: var(--transition-fast);
+      border-radius: 50%;
+    }
+    
+    input:checked + .toggle-slider {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    
+    input:checked + .toggle-slider::before {
+      transform: translateX(20px);
+    }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+    
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    
+    .empty-state h3 {
+      font-size: 16px;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+    
+    .empty-state p {
+      font-size: 12px;
+    }
+    
+    /* Real-time indicator */
+    .realtime-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid var(--success);
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      color: var(--success);
+    }
+    
+    .realtime-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    /* Auto-refresh badge */
+    .auto-refresh-badge {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="debug-container">
+    <!-- Header -->
+    <div class="debug-header">
+      <div>
+        <h1>🔧 ATS Tailor Debug Console</h1>
+        <span class="tagline">Real-time logging and diagnostics</span>
+      </div>
+      <div class="debug-controls">
+        <div class="realtime-indicator">
+          <span class="realtime-dot"></span>
+          <span>Live</span>
+        </div>
+        <button id="refreshLogs" class="btn btn-small btn-secondary">🔄 Refresh</button>
+        <button id="exportLogs" class="btn btn-small btn-accent">📥 Export</button>
+        <button id="clearLogs" class="btn btn-small btn-outline">🗑️ Clear All</button>
+      </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="debug-section">
+      <div class="debug-section-header">
+        <h2>📊 Session Statistics</h2>
+        <span class="auto-refresh-badge">Auto-refresh: 5s</span>
+      </div>
+      <div class="debug-section-body">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="statTotalEvents">0</div>
+            <div class="stat-label">Total Events</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statSuccessRate">0%</div>
+            <div class="stat-label">Success Rate</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statAvgTime">0ms</div>
+            <div class="stat-label">Avg Tailor Time</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statErrors">0</div>
+            <div class="stat-label">Errors</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statJobsTailored">0</div>
+            <div class="stat-label">Jobs Tailored</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statFilesAttached">0</div>
+            <div class="stat-label">Files Attached</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debug Settings -->
+    <div class="debug-section">
+      <div class="debug-section-header">
+        <h2>⚙️ Debug Settings</h2>
+      </div>
+      <div class="debug-section-body">
+        <div class="settings-form">
+          <div class="setting-group">
+            <div class="setting-info">
+              <h4>Enable Verbose Logging</h4>
+              <p>Log all events including network requests, DOM mutations, and state changes</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="verboseLogging" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-group">
+            <div class="setting-info">
+              <h4>Log API Responses</h4>
+              <p>Include full API response bodies in logs (may contain sensitive data)</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="logApiResponses">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-group">
+            <div class="setting-info">
+              <h4>Log DOM Interactions</h4>
+              <p>Track file input detection, form filling, and element clicks</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="logDomInteractions" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-group">
+            <div class="setting-info">
+              <h4>Performance Metrics</h4>
+              <p>Measure and log timing for each pipeline stage</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="perfMetrics" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-group">
+            <div class="setting-info">
+              <h4>Auto-Export on Error</h4>
+              <p>Automatically download debug report when errors occur</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="autoExportErrors">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Event Log -->
+    <div class="debug-section">
+      <div class="debug-section-header">
+        <h2>📋 Event Log</h2>
+        <div class="filters-row" style="margin: 0;">
+          <button class="filter-chip active" data-filter="all">All</button>
+          <button class="filter-chip" data-filter="info">Info</button>
+          <button class="filter-chip" data-filter="success">Success</button>
+          <button class="filter-chip" data-filter="warning">Warning</button>
+          <button class="filter-chip" data-filter="error">Error</button>
+        </div>
+      </div>
+      <div class="debug-section-body" style="padding: 0;">
+        <div class="log-viewer" id="logViewer">
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <h3>No events yet</h3>
+            <p>Events will appear here as you use the extension</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tailoring Timeline -->
+    <div class="debug-section">
+      <div class="debug-section-header">
+        <h2>⏱️ Recent Tailoring Sessions</h2>
+      </div>
+      <div class="debug-section-body">
+        <div class="timeline" id="tailoringTimeline">
+          <div class="empty-state">
+            <div class="empty-state-icon">🎯</div>
+            <h3>No tailoring sessions</h3>
+            <p>Complete a tailoring session to see the timeline</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current State -->
+    <div class="debug-section">
+      <div class="debug-section-header">
+        <h2>🔍 Current Extension State</h2>
+        <button id="refreshState" class="btn btn-small btn-outline">🔄 Refresh</button>
+      </div>
+      <div class="debug-section-body">
+        <div class="log-viewer" id="stateViewer" style="max-height: 300px;">
+          <pre id="currentState" style="padding: 16px; margin: 0; color: var(--text-secondary); font-size: 11px;">Loading...</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="debug-settings.js"></script>
+</body>
+</html>
