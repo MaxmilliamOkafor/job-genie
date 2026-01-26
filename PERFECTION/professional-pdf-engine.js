@@ -576,8 +576,8 @@
         doc.text(job.company, PDF_CONFIG.margins.left, y);
         y += PDF_CONFIG.fonts.sizes.companyName * PDF_CONFIG.lineHeight.tight;
 
-        // Job title and dates (italic title, regular dates aligned right)
-        doc.setFont(PDF_CONFIG.fonts.body, 'italic');
+        // Job title and dates (normal title, regular dates aligned right)
+        doc.setFont(PDF_CONFIG.fonts.body, 'normal');
         doc.setFontSize(PDF_CONFIG.fonts.sizes.jobTitle);
         doc.text(job.title, PDF_CONFIG.margins.left, y);
 
