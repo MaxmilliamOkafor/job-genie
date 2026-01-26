@@ -31,13 +31,45 @@ const isLikelyJobTitle = (text: string) => {
   );
 };
 
+// Known company names for detection (normalised lowercase)
+const KNOWN_COMPANIES = new Set([
+  'google', 'meta', 'facebook', 'amazon', 'apple', 'microsoft', 'netflix',
+  'ibm', 'oracle', 'salesforce', 'adobe', 'intel', 'nvidia', 'cisco', 'dell', 'hp',
+  'accenture', 'deloitte', 'pwc', 'kpmg', 'ey', 'mckinsey', 'bain', 'bcg',
+  'citi', 'citigroup', 'citibank', 'jpmorgan', 'jp morgan', 'goldman', 'goldman sachs',
+  'morgan stanley', 'barclays', 'hsbc', 'solimhealth', 'stripe', 'uber', 'airbnb',
+  'linkedin', 'twitter', 'x', 'snap', 'snapchat', 'pinterest', 'spotify', 'discord',
+  'shopify', 'twilio', 'datadog', 'snowflake', 'databricks', 'mongodb', 'elastic',
+  'palantir', 'crowdstrike', 'okta', 'splunk', 'atlassian', 'gitlab', 'hubspot',
+  'zendesk', 'docusign', 'workday', 'servicenow', 'vmware', 'sap', 'twosigma',
+  'two sigma', 'citadel', 'jane street', 'janestreet', 'de shaw', 'deshaw',
+  'renaissance', 'millennium', 'blackrock', 'fidelity', 'capital one', 'capitalone',
+  'revolut', 'robinhood', 'coinbase', 'plaid', 'block', 'square', 'paypal', 'visa', 'mastercard'
+]);
+
+// Clean company name: remove parentheticals like "(formerly Facebook Inc)"
+const cleanCompanyName = (name: string): string => {
+  if (!name) return '';
+  return name
+    .replace(/\s*\([^)]*\)\s*/g, ' ')  // Remove parenthetical expressions
+    .replace(/\s+/g, ' ')               // Collapse whitespace
+    .trim();
+};
+
 const isLikelyCompany = (text: string) => {
   const t = cleanText(text);
   if (!t) return false;
+  
+  // Normalise for matching
+  const normalised = t.toLowerCase().replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  
+  // Check known companies first (handles variations like "Citi" vs "Citigroup")
+  const containsKnownCompany = Array.from(KNOWN_COMPANIES).some(c => normalised.includes(c));
+  if (containsKnownCompany) return true;
+  
   return (
     /\b(inc|llc|ltd|corp|corporation|company|co\.|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i.test(t) ||
-    /\bformerly\b/i.test(t) ||
-    /\b(meta|facebook|accenture|citi|citigroup|google|amazon|microsoft|apple)\b/i.test(t)
+    /\bformerly\b/i.test(t)
   );
 };
 
@@ -163,7 +195,7 @@ export const normalizeWorkExperience = (exps: WorkExperienceLike[] | undefined) 
     // Ensure id exists (CV parse often returns no id)
     if (!next.id) next.id = crypto.randomUUID();
 
-    next.company = cleanText(next.company);
+    next.company = cleanCompanyName(cleanText(next.company));
     next.title = cleanText(next.title);
 
     // Extract dates from merged title field (e.g., "Senior Engineer - 2023 - Present")
