@@ -582,8 +582,8 @@
       console.log('[FileAttacher] ✅ GREEN SUCCESS RIBBON displayed');
     },
     
-    // ============ ATTACH BOTH FILES TOGETHER (SYNC - LAZYAPPLY OPTIMIZED) ============
-    attachBothFiles(cvFile, coverFile, coverText = null) {
+    // ============ ATTACH BOTH FILES TOGETHER (ASYNC - LAZYAPPLY OPTIMIZED) ============
+    async attachBothFiles(cvFile, coverFile, coverText = null) {
       console.log('[FileAttacher] 📎 SYNC Attaching BOTH CV + Cover Letter');
       const startTime = performance.now();
       
