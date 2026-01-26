@@ -595,9 +595,13 @@ class ATSTailor {
     document.getElementById('editJobTitle')?.addEventListener('click', () => this.toggleJobTitleEdit());
     document.getElementById('jobTitleInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.saveJobTitleEdit(); });
     document.getElementById('jobTitleInput')?.addEventListener('blur', () => this.saveJobTitleEdit());
-    document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocument('cv'));
-    document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocument('cover'));
-    document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
+    
+    // NEW SIMPLIFIED UI - Button bindings
+    document.getElementById('previewCvBtn')?.addEventListener('click', () => this.previewCV());
+    document.getElementById('downloadCvBtn')?.addEventListener('click', () => this.downloadCV());
+    document.getElementById('downloadCoverBtn')?.addEventListener('click', () => this.downloadCoverLetter());
+    document.getElementById('attachBothBtn')?.addEventListener('click', () => this.attachBothDocuments());
+    
     document.getElementById('copyContent')?.addEventListener('click', () => this.copyCurrentContent());
     document.getElementById('copyCoverageBtn')?.addEventListener('click', () => this.copyCoverageReport());
     

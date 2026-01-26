@@ -1266,7 +1266,7 @@ const Profile = () => {
                             exps[expIndex] = { ...exps[expIndex], title: e.target.value };
                             updateLocalField('professional_experience', exps);
                           }}
-                          placeholder="Job Title"
+                          placeholder="Job Title (e.g., Senior Software Engineer - 2023 - Present)"
                           className="font-semibold"
                         />
                         <Input 
@@ -1278,29 +1278,9 @@ const Profile = () => {
                           }}
                           placeholder="Company"
                         />
-                        <div className="flex gap-2">
-                          <Input 
-                            value={exp.startDate || ''} 
-                            onChange={(e) => {
-                              const exps = [...(localProfile.professional_experience || [])];
-                              exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
-                              updateLocalField('professional_experience', exps);
-                            }}
-                            placeholder="Start Date"
-                            className="w-28"
-                          />
-                          <span className="self-center">-</span>
-                          <Input 
-                            value={exp.endDate || ''} 
-                            onChange={(e) => {
-                              const exps = [...(localProfile.professional_experience || [])];
-                              exps[expIndex] = { ...exps[expIndex], endDate: e.target.value };
-                              updateLocalField('professional_experience', exps);
-                            }}
-                            placeholder="End Date"
-                            className="w-28"
-                          />
-                        </div>
+                        <p className="text-sm text-muted-foreground italic">
+                          💡 Include dates in the job title above (e.g., "Senior Engineer - 2023 - Present")
+                        </p>
                         
                         {/* Bullet Points / Achievements Section */}
                         <div className="mt-4 pt-4 border-t border-border">
@@ -1486,32 +1466,11 @@ const Profile = () => {
                             projects[projectIndex] = { ...projects[projectIndex], role: e.target.value };
                             updateLocalField('relevant_projects', projects);
                           }}
-                          placeholder="Your Role (e.g., AI Product Manager)"
+                          placeholder="Your Role with dates (e.g., AI Product Manager - 2022 - 2023)"
                         />
-                        <div className="flex gap-2 items-center">
-                          <Input 
-                            value={project.startDate || ''} 
-                            onChange={(e) => {
-                              const projects = [...(localProfile.relevant_projects || [])];
-                              projects[projectIndex] = { ...projects[projectIndex], startDate: e.target.value };
-                              updateLocalField('relevant_projects', projects);
-                            }}
-                            placeholder="Start (optional)"
-                            className="w-28"
-                          />
-                          <span className="self-center text-muted-foreground">-</span>
-                          <Input 
-                            value={project.endDate || ''} 
-                            onChange={(e) => {
-                              const projects = [...(localProfile.relevant_projects || [])];
-                              projects[projectIndex] = { ...projects[projectIndex], endDate: e.target.value };
-                              updateLocalField('relevant_projects', projects);
-                            }}
-                            placeholder="End (optional)"
-                            className="w-28"
-                          />
-                          <span className="text-xs text-muted-foreground italic">Dates are optional</span>
-                        </div>
+                        <p className="text-sm text-muted-foreground italic">
+                          💡 Include dates in your role above for better CV generation
+                        </p>
                         
                         {/* Bullet Points / Achievements Section */}
                         <div className="mt-4 pt-4 border-t border-border">
