@@ -549,7 +549,7 @@
       margin-bottom: 4px;
     }
     .job-title { 
-      font-style: italic;
+      font-style: normal;
       font-size: 10.5pt;
     }
     .job-dates { 
