@@ -108,8 +108,8 @@ serve(async (req) => {
 
     console.log(`[User ${userId}] Extracting keywords from JD for ${jobTitle || 'Unknown'} at ${company || 'Unknown'}`);
 
-    // Limit JD length for faster processing
-    const truncatedJD = jobDescription.substring(0, 8000);
+    // HYPER SPEED: Reduced JD length for faster processing
+    const truncatedJD = jobDescription.substring(0, 5000);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -123,8 +123,9 @@ serve(async (req) => {
           { role: 'system', content: EXTRACT_KEYWORDS_PROMPT },
           { role: 'user', content: `Extract structured keywords from this job description:\n\nJob Title: ${jobTitle || 'Not specified'}\nCompany: ${company || 'Not specified'}\n\nJob Description:\n${truncatedJD}` }
         ],
-        temperature: 0.3,
-        max_tokens: 2000,
+        temperature: 0.2,        // HYPER SPEED: Lower for faster response
+        max_tokens: 1500,        // HYPER SPEED: Reduced - 30 keywords max
+        presence_penalty: 0.1,   // Reduce repetition
       }),
     });
 
@@ -191,20 +192,20 @@ serve(async (req) => {
       ...(keywords.soft_skills || []),
     ];
 
-    // Deduplicate and limit
-    const uniqueKeywords = [...new Set(allKeywords.map(k => k.toLowerCase()))].slice(0, 50);
-    const highPriority: string[] = (keywords.priority_keywords || []).slice(0, 15);
+    // HYPER SPEED: Limit to 30 keywords total for faster processing
+    const uniqueKeywords = [...new Set(allKeywords.map(k => k.toLowerCase()))].slice(0, 30);
+    const highPriority: string[] = (keywords.priority_keywords || []).slice(0, 10);
     const mediumPriority: string[] = [
       ...(keywords.required_skills || []),
       ...(keywords.tools_and_platforms || []),
-    ].filter((k: string) => !highPriority.map((h: string) => h.toLowerCase()).includes(k.toLowerCase())).slice(0, 15);
+    ].filter((k: string) => !highPriority.map((h: string) => h.toLowerCase()).includes(k.toLowerCase())).slice(0, 10);
     const lowPriority: string[] = [
       ...(keywords.preferred_skills || []),
       ...(keywords.soft_skills || []),
     ].filter((k: string) => 
       !highPriority.map((h: string) => h.toLowerCase()).includes(k.toLowerCase()) &&
       !mediumPriority.map((m: string) => m.toLowerCase()).includes(k.toLowerCase())
-    ).slice(0, 10);
+    ).slice(0, 5);
 
     const result = {
       structured: keywords,

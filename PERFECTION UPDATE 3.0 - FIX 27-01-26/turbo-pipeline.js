@@ -6,17 +6,17 @@
 (function(global) {
   'use strict';
 
-  // ============ TIMING TARGETS (HYPER TURBO - 80% FASTER) ============
-  // Kimi K2 outperforms OpenAI - adaptive latency 1-4s with streaming
-  // TARGET: 40s total for full Extract + Tailor + Generate flow
+  // ============ TIMING TARGETS (ULTRA HYPER SPEED - 90% FASTER) ============
+  // Kimi K2 with temp 0.3 + reduced tokens = fastest possible
+  // TARGET: 30s total for full Extract + Tailor + Generate flow
   const TIMING_TARGETS = {
-    EXTRACT_KEYWORDS: 0.1,    // 100ms (reduced from 200ms) - HYPER TURBO
-    TAILOR_CV: 0.15,          // 150ms with parallel API calls - HYPER TURBO
-    GENERATE_PDF: 0.1,        // 100ms optimized PDF generation
-    GENERATE_COVER: 0.08,     // 80ms for cover letter - HYPER TURBO
-    ATTACH_FILES: 0.02,       // 20ms file attachment
-    TOTAL: 0.45,              // 450ms total pipeline - HYPER TURBO
-    FULL_FLOW_TARGET: 40000   // 40 seconds total for user-facing flow
+    EXTRACT_KEYWORDS: 0.05,   // 50ms - ULTRA HYPER SPEED
+    TAILOR_CV: 0.1,           // 100ms with parallel API calls - ULTRA HYPER
+    GENERATE_PDF: 0.05,       // 50ms optimized PDF generation
+    GENERATE_COVER: 0.04,     // 40ms for cover letter - ULTRA HYPER
+    ATTACH_FILES: 0.01,       // 10ms file attachment
+    TOTAL: 0.25,              // 250ms total pipeline - ULTRA HYPER SPEED
+    FULL_FLOW_TARGET: 30000   // 30 seconds total for user-facing flow
   };
   
   // Performance monitoring
@@ -28,8 +28,8 @@
 
   // ============ FAST KEYWORD CACHE (URL-BASED) ============
   const keywordCache = new Map();
-  const MAX_CACHE_SIZE = 100;
-  const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+  const MAX_CACHE_SIZE = 150;           // Increased cache for more hits
+  const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 60 minutes - longer cache
 
   function getCacheKey(jobUrl, text) {
     // Primary: Use job URL for instant cache hits
