@@ -385,7 +385,7 @@
           // Extract keywords from JD (local, ~10ms)
           let keywords = [];
           if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
-            keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { jobUrl, maxKeywords: 15 });
+            keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { jobUrl, maxKeywords: 30 });
           } else if (jobInfo.description) {
             keywords = extractBasicKeywords(jobInfo.description);
           }
@@ -667,7 +667,7 @@
     if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
       const keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', {
         jobUrl,
-        maxKeywords: 20, // SPEED: Reduced from 35 to 20 for faster processing
+        maxKeywords: 30, // SPEED: Optimized to 30 for balance of coverage and speed
       });
       console.log(`[ATS Workday TOP1] ⚡ Keywords extracted in ${Math.round(performance.now() - start)}ms: ${keywords.total} keywords`);
       return keywords;
@@ -705,7 +705,7 @@
           candidateData,
           baseCV,
           {
-            maxKeywords: 20, // SPEED: Reduced from 35 to 20
+            maxKeywords: 30, // SPEED: Optimized to 30 for balance of coverage and speed
             targetScore: 95,
             pdf: true,
           }
@@ -1163,10 +1163,10 @@
     // Run standard tailor and attach
     autoTailorDocuments();
 
-    // Unified success banner (all ATS)
+    // Unified success banner (all ATS) - faster check
     setTimeout(() => {
       updateBanner(SUCCESS_BANNER_MSG, 'success');
-    }, 2500); // SPEED: Reduced from 5000ms to 2500ms
+    }, 1500); // SPEED: Reduced from 2500ms to 1500ms
   }
   
   // ============ GENERIC ATS FLOW ============
@@ -2155,7 +2155,7 @@
         
         // Unknown Workday page - trigger popup
         triggerPopupExtractApply();
-      }, 100); // SPEED: Reduced from 200ms to 100ms
+      }, 50); // SPEED: Reduced from 100ms to 50ms for faster startup
       
       return;
     }
@@ -2179,7 +2179,7 @@
             // Fallback to standard flow
             autoTailorDocuments();
           }
-        }, 50); // SPEED: Reduced from 100ms to 50ms
+        }, 25); // SPEED: Reduced from 50ms to 25ms for faster startup
         return;
       } else {
         // MANUAL: Career page - just show banner, user clicks to tailor
@@ -2258,7 +2258,7 @@
       if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
         keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { 
           jobUrl: currentJobUrl, 
-          maxKeywords: 20 // SPEED: Reduced from 35 to 20 for faster processing
+          maxKeywords: 30 // SPEED: Optimized to 30 for balance of coverage and speed
         });
       } else {
         keywords = extractBasicKeywords(jobInfo.description || '');
@@ -2283,7 +2283,7 @@
       if (typeof OpenResumeGenerator !== 'undefined' && OpenResumeGenerator.generateATSPackage) {
         pdfResult = await OpenResumeGenerator.generateATSPackage(tailoredCV, keywords, jobInfo);
       } else if (typeof TurboPipeline !== 'undefined' && TurboPipeline.executeTurboPipeline) {
-        const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 20 }); // SPEED: Reduced from 35
+        const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 30 }); // SPEED: Optimized to 30
         if (pipelineResult.success) {
           pdfResult = { cv: pipelineResult.cvPDF, cover: pipelineResult.coverPDF };
         }
