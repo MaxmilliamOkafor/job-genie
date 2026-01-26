@@ -1,5 +1,5 @@
-// turbo-pipeline.js - LAZYAPPLY BLAZING Pipeline (≤6ms total)
-// 70% FASTER THAN ALL: Ultimate speed for LazyApply instant compatibility
+// turbo-pipeline.js - LAZYAPPLY SYNC v3.1.0 Pipeline
+// TARGET: 80 seconds average completion time for LazyApply compatibility
 // FEATURES: URL-based caching, parallel processing, High Priority keyword distribution, Unique CV per job
 // INTEGRATED: OpenResume-style ATS PDF + Cover Letter generation
 // FIX 27-01-26: Restored maxTokens to 3500 to prevent JSON truncation errors
@@ -7,17 +7,19 @@
 (function(global) {
   'use strict';
 
-  // ============ TIMING TARGETS (OPTIMIZED SPEED - STABLE) ============
-  // Kimi K2 with temp 0.4 + restored tokens for reliable output
-  // TARGET: 45s total for full Extract + Tailor + Generate flow
+  // ============ LAZYAPPLY SYNC TIMING TARGETS (~80s AVG) ============
+  // Kimi K2 with temp 0.4 + 3500 tokens for reliable output
+  // TARGET: 80s average for full Extract + Tailor + Generate + Attach flow
   const TIMING_TARGETS = {
-    EXTRACT_KEYWORDS: 0.1,    // 100ms - stable extraction
-    TAILOR_CV: 0.15,          // 150ms with parallel API calls
-    GENERATE_PDF: 0.08,       // 80ms optimized PDF generation
-    GENERATE_COVER: 0.06,     // 60ms for cover letter
-    ATTACH_FILES: 0.02,       // 20ms file attachment
-    TOTAL: 0.4,               // 400ms total pipeline - stable
-    FULL_FLOW_TARGET: 45000   // 45 seconds total for user-facing flow
+    EXTRACT_KEYWORDS: 8000,     // 5-8s - keyword extraction with API
+    TAILOR_CV: 45000,           // 35-45s - AI tailoring with 3500 tokens
+    GENERATE_PDF: 15000,        // 10-15s - PDF generation
+    GENERATE_COVER: 10000,      // 8-12s - cover letter generation
+    ATTACH_FILES: 5000,         // 2-5s - file attachment with retries
+    TOTAL: 80000,               // 80s target pipeline
+    FULL_FLOW_TARGET: 80000,    // 80s target (70-90s acceptable range)
+    MIN_FLOW_TIME: 60000,       // 60s minimum for stability
+    OPENAI_STABILIZATION: 150   // 150ms delay for OpenAI data sync
   };
   
   // Performance monitoring
