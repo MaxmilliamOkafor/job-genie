@@ -1204,11 +1204,9 @@ const Profile = () => {
                   onClick={() => {
                     const newExp = {
                       id: crypto.randomUUID(),
-                      title: 'New Position',
+                      title: 'New Position - 2024 - Present',
                       company: 'Company Name',
                       location: '',
-                      startDate: '2024-01',
-                      endDate: 'Present',
                       description: '',
                       skills: [],
                       bullets: [
@@ -1363,7 +1361,7 @@ const Profile = () => {
                       </>
                     )}
                   </div>
-                  {!editMode && <Badge variant="outline">{exp.startDate} - {exp.endDate}</Badge>}
+                  
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {(exp.skills || []).slice(0, 6).map((skill: string, i: number) => (
@@ -1396,9 +1394,7 @@ const Profile = () => {
                     const newProject = {
                       id: crypto.randomUUID(),
                       name: 'Project Name',
-                      role: 'Your Role',
-                      startDate: '',
-                      endDate: '',
+                      role: 'Your Role - 2024 - Present',
                       description: '',
                       skills: [],
                       bullets: [
