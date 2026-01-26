@@ -6,17 +6,17 @@
 (function(global) {
   'use strict';
 
-  // ============ TIMING TARGETS (KIMI K2 ULTRA OPTIMIZED - 70% FASTER) ============
+  // ============ TIMING TARGETS (HYPER TURBO - 80% FASTER) ============
   // Kimi K2 outperforms OpenAI - adaptive latency 1-4s with streaming
-  // TARGET: 50s total for full Extract + Tailor + Generate flow
+  // TARGET: 40s total for full Extract + Tailor + Generate flow
   const TIMING_TARGETS = {
-    EXTRACT_KEYWORDS: 0.2,    // 200ms (reduced from 400ms) - KIMI K2 BLAZING
-    TAILOR_CV: 0.3,           // 300ms with parallel API calls - KIMI K2 ULTRA
-    GENERATE_PDF: 0.2,        // 200ms optimized PDF generation
-    GENERATE_COVER: 0.15,     // 150ms for cover letter - KIMI K2 TURBO
-    ATTACH_FILES: 0.05,       // 50ms file attachment
-    TOTAL: 0.9,               // 900ms total pipeline - KIMI K2 BLAZING
-    FULL_FLOW_TARGET: 50000   // 50 seconds total for user-facing flow
+    EXTRACT_KEYWORDS: 0.1,    // 100ms (reduced from 200ms) - HYPER TURBO
+    TAILOR_CV: 0.15,          // 150ms with parallel API calls - HYPER TURBO
+    GENERATE_PDF: 0.1,        // 100ms optimized PDF generation
+    GENERATE_COVER: 0.08,     // 80ms for cover letter - HYPER TURBO
+    ATTACH_FILES: 0.02,       // 20ms file attachment
+    TOTAL: 0.45,              // 450ms total pipeline - HYPER TURBO
+    FULL_FLOW_TARGET: 40000   // 40 seconds total for user-facing flow
   };
   
   // Performance monitoring
