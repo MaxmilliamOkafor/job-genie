@@ -124,6 +124,21 @@
     console.log('[PERFECTION Debug] Settings saved:', debugSettings);
   }
 
+  // Normalize log level - ensure consistent level names
+  function normalizeLevel(level, event) {
+    // Already valid level
+    if (['debug', 'info', 'success', 'warn', 'error'].includes(level)) {
+      return level;
+    }
+    // Infer from event name
+    if (event) {
+      if (event.includes('error') || event.includes('fail')) return 'error';
+      if (event.includes('success') || event.includes('complete')) return 'success';
+      if (event.includes('warn')) return 'warn';
+    }
+    return level || 'info';
+  }
+
   // Load logs from storage
   async function loadLogs() {
     return new Promise(resolve => {
@@ -138,16 +153,16 @@
         const debugLogs = result.ats_debug_logs || [];
         const errorLogs = result.ats_error_logs || [];
         
-        // Normalize and combine
+        // Normalize and combine - preserve original levels
         allLogs = [
           ...autoTailorLogs.map(log => ({
             ...log,
-            level: log.level || (log.event?.includes('error') ? 'error' : 'info'),
+            level: normalizeLevel(log.level, log.event),
             source: 'auto_tailor'
           })),
           ...debugLogs.map(log => ({
             ...log,
-            level: log.level || 'debug',
+            level: normalizeLevel(log.level, log.event),
             source: 'debug'
           })),
           ...errorLogs.map(log => ({
