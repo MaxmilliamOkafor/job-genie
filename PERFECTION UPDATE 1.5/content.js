@@ -1868,7 +1868,7 @@
       if (result.error) throw new Error(result.error);
 
       console.log('[ATS Tailor] Tailoring complete! Match score:', result.matchScore);
-      updateBanner('✅ Generated! Match: 100% - Attaching files...', 'working');
+      updateBanner('⏳ Step 3/3: Attaching CV & Cover Letter...', 'working');
 
       // Store PDFs in chrome.storage for the attach loop
       const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
@@ -1898,11 +1898,8 @@
         chrome.storage.local.set({ ats_tailored_urls: cached }, resolve);
       });
 
-      // Now load files and start attaching
+      // Now load files and start attaching - success banner shown inside after attach completes
       loadFilesAndStart();
-      
-      updateBanner(SUCCESS_BANNER_MSG, 'success');
-      hideBanner();
 
     } catch (error) {
       console.error('[ATS Tailor] Auto-tailor error:', error);
@@ -2018,6 +2015,8 @@
       if (areBothAttached()) {
         console.log('[ATS Tailor] ⚡⚡⚡ HYPER BLAZING attach complete');
         showSuccessRibbon();
+        updateBanner(SUCCESS_BANNER_MSG, 'success');
+        hideBanner();
         stopAttachLoops();
       }
     }, 2);
@@ -2029,6 +2028,8 @@
       if (areBothAttached()) {
         console.log('[ATS Tailor] ⚡⚡⚡ HYPER BLAZING attach complete');
         showSuccessRibbon();
+        updateBanner(SUCCESS_BANNER_MSG, 'success');
+        hideBanner();
         stopAttachLoops();
       }
     }, 4);
@@ -2050,10 +2051,14 @@
       // Workday: DO NOT start rapid attach loops (Workday clears input after upload)
       if (isWorkdayHost()) {
         console.log('[ATS Tailor Workday] Skipping attach loops (one-time attach mode)');
+        // Show success immediately for Workday after single attach
+        showSuccessRibbon();
+        updateBanner(SUCCESS_BANNER_MSG, 'success');
+        hideBanner();
         return;
       }
 
-      // Start guarded loop (non-Workday)
+      // Start guarded loop (non-Workday) - success shown inside after attach completes
       ultraFastReplace();
     });
   }
