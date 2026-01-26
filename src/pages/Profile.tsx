@@ -1346,7 +1346,7 @@ const Profile = () => {
                     ) : (
                       <>
                         <h3 className="font-bold">{exp.company}</h3>
-                        <p className="text-muted-foreground italic">{exp.title}</p>
+                        <p className="text-muted-foreground">{exp.title}</p>
                         {/* Display bullets in view mode */}
                         {exp.bullets && exp.bullets.length > 0 && (
                           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
@@ -1534,7 +1534,7 @@ const Profile = () => {
                     ) : (
                       <>
                         <h3 className="font-bold">{project.name}</h3>
-                        <p className="text-muted-foreground italic">{project.role}</p>
+                        <p className="text-muted-foreground">{project.role}</p>
                         {/* Display bullets in view mode */}
                         {project.bullets && project.bullets.length > 0 && (
                           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
