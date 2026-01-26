@@ -6,8 +6,8 @@
   'use strict';
 
   const FileAttacher = {
-    // ============ TIMING TARGET (ULTRA BLAZING - 50% FASTER THAN PREVIOUS) ============
-    TIMING_TARGET: 0.5, // Target 0.5ms - synchronous execution for LazyApply
+    // ============ TIMING TARGET (HYPER TURBO - 75% FASTER THAN PREVIOUS) ============
+    TIMING_TARGET: 0.25, // Target 0.25ms - maximum synchronous speed for LazyApply
 
     // ============ PIPELINE STATE ============
     pipelineState: {
