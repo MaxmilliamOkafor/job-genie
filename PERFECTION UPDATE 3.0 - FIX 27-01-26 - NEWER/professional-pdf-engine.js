@@ -857,13 +857,58 @@
       return y;
     },
 
+    // FIX 27-01-26: Added robust company name extraction matching openresume-generator
+    extractCompanyName(jobData) {
+      if (!jobData) return '';
+      
+      let company = jobData.company || '';
+      
+      const isInvalid = (val) => {
+        if (!val || typeof val !== 'string') return true;
+        const lower = val.toLowerCase().trim();
+        return lower === 'company' || lower === 'the company' || lower === 'your company' || 
+               lower === 'unknown' || lower === 'hiring company' || lower.length < 2;
+      };
+      
+      // Try to extract from job title (e.g., "Software Engineer at Google")
+      if (isInvalid(company)) {
+        const titleMatch = (jobData.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.-]+?)(?:\s*[-|]|\s*$)/i);
+        if (titleMatch) company = titleMatch[1].trim();
+      }
+      
+      // Try to extract from URL
+      if (isInvalid(company)) {
+        const url = jobData.url || '';
+        const hostMatch = url.match(/https?:\/\/([^.\/]+)\./i);
+        if (hostMatch && hostMatch[1]) {
+          const subdomain = hostMatch[1].toLowerCase();
+          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims'];
+          if (!blacklist.includes(subdomain) && subdomain.length > 2) {
+            company = subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
+          }
+        }
+      }
+      
+      // Clean up company name
+      if (company && typeof company === 'string') {
+        company = company
+          .replace(/\s*(careers|jobs|hiring|apply|work|join)\s*$/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      
+      return isInvalid(company) ? '' : company;
+    },
+
     renderRecipientInfo(doc, jobData, y) {
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
       doc.setTextColor(...PDF_CONFIG.colors.black);
 
       const hiringManager = 'Hiring Manager';
-      const company = jobData?.company || 'Company';
+      // FIX: Use robust extraction, fallback to 'Hiring Team' not 'Company'
+      const extractedCompany = this.extractCompanyName(jobData);
+      const company = extractedCompany || 'Hiring Team';
       
       doc.text(hiringManager, PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal;
