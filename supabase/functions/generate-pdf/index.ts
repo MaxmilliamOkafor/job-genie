@@ -439,12 +439,12 @@ serve(async (req) => {
           });
           yPosition -= LINE_HEIGHT + 2;
 
-          // Line 2: Job title (italic) on the left + dates right-aligned on the same line
+          // Line 2: Job title (normal) on the left + dates right-aligned on the same line
           currentPage.drawText(cleanTitle, {
             x: MARGIN,
             y: yPosition,
             size: 10,
-            font: helveticaOblique,
+            font: helvetica,
             color: colors.black,
           });
 
@@ -497,12 +497,12 @@ serve(async (req) => {
           });
           yPosition -= LINE_HEIGHT + 2;
 
-          // Line 2: Role (italic) on the left + optional dates right-aligned on the same line
+          // Line 2: Role (normal) on the left + optional dates right-aligned on the same line
           currentPage.drawText(cleanRole, {
             x: MARGIN,
             y: yPosition,
             size: 10,
-            font: helveticaOblique,
+            font: helvetica,
             color: colors.black,
           });
 
