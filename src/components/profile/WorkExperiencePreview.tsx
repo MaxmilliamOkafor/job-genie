@@ -102,15 +102,8 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                 </div>
                 
                 {/* Line 2: Job Title (italic) with Dates right-aligned */}
-                <div className="flex justify-between items-baseline gap-4">
-                  <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
-                    {title}
-                  </div>
-                  {dateRange && (
-                    <div className="text-gray-600 text-xs whitespace-nowrap" style={{ fontSize: '10pt' }}>
-                      {dateRange}
-                    </div>
-                  )}
+                <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
+                  {title}
                 </div>
                 
                 {/* Bullets with proper ATS bullet points */}
@@ -139,7 +132,7 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Format: <span className="font-semibold">Company</span> (bold, Line 1) + <span className="italic">Title</span> (italic, left) + <span>Dates</span> (right, Line 2)
+          Format: <span className="font-semibold">Company</span> (bold, Line 1) + <span className="italic">Title with dates</span> (italic, Line 2)
         </p>
       </CardContent>
     </Card>
