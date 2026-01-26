@@ -513,6 +513,81 @@
       sendResponse({ status: 'scheduled', delay: 28000 });
       return true;
     }
+    
+    // ============ ATTACH DOCUMENT (CV/COVER) FROM POPUP ============
+    if (message.action === 'attachDocument') {
+      console.log('[ATS Tailor] attachDocument triggered for:', message.type);
+      
+      (async () => {
+        try {
+          const { type, pdf, text, filename } = message;
+          
+          if (!pdf && !text) {
+            sendResponse({ success: false, message: 'No document data provided' });
+            return;
+          }
+          
+          // Create file from base64 PDF data
+          let file = null;
+          if (pdf) {
+            file = createPDFFile(pdf, filename || `${type}.pdf`);
+            if (!file) {
+              sendResponse({ success: false, message: 'Failed to create PDF file' });
+              return;
+            }
+          }
+          
+          // Store in global variables for attachment functions
+          if (type === 'cv') {
+            cvFile = file;
+            filesLoaded = true;
+            // Attach CV
+            forceCVReplace();
+          } else if (type === 'cover') {
+            coverFile = file;
+            coverLetterText = text || '';
+            filesLoaded = true;
+            // Attach Cover Letter
+            forceCoverReplace();
+          }
+          
+          // Force everything to ensure attachment
+          forceEverything();
+          
+          // Check if attachment was successful
+          const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+          let attached = false;
+          
+          if (type === 'cv') {
+            attached = fileInputs.some(input => isCVField(input) && input.files && input.files.length > 0);
+          } else if (type === 'cover') {
+            attached = fileInputs.some(input => isCoverField(input) && input.files && input.files.length > 0);
+            // Also check textareas for cover letter text
+            if (!attached && text) {
+              const textareas = document.querySelectorAll('textarea');
+              attached = Array.from(textareas).some(ta => {
+                const label = (ta.labels?.[0]?.textContent || ta.name || ta.id || '').toLowerCase();
+                return /cover/i.test(label) && (ta.value || '').trim().length > 0;
+              });
+            }
+          }
+          
+          if (attached) {
+            console.log(`[ATS Tailor] ${type} attached successfully`);
+            sendResponse({ success: true, message: `${type} attached successfully` });
+          } else {
+            console.log(`[ATS Tailor] ${type} attachment failed - no upload field found`);
+            sendResponse({ success: false, skipped: true, message: 'No upload field found for ' + type });
+          }
+          
+        } catch (error) {
+          console.error('[ATS Tailor] attachDocument error:', error);
+          sendResponse({ success: false, message: error.message || 'Attachment failed' });
+        }
+      })();
+      
+      return true; // Keep channel open for async response
+    }
   });
   
 // ============ WORKDAY AUTOMATION STATE ============
