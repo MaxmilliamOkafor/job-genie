@@ -721,11 +721,11 @@
           <div class="cv-company">${escapeHtml(job.company)}</div>
           <div class="cv-job-title">${escapeHtml(job.titleLine || job.title)}</div>
         </div>
-        ${job.bullets.length > 0 ? \`
+        ${job.bullets.length > 0 ? `
         <div class="cv-job-details">
-          \${job.bullets.map(bullet => \`<div class="cv-bullet">• \${escapeHtml(bullet)}</div>\`).join('\\n          ')}
+          ${job.bullets.map(bullet => `<div class="cv-bullet">• ${escapeHtml(bullet)}</div>`).join('\n          ')}
         </div>
-        \` : ''}
+        ` : ''}
       </div>
       `).join('\n      ')}
     </div>
