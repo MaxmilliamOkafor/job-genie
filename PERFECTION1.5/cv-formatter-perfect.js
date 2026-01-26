@@ -313,13 +313,36 @@
       };
 
       // Helper: detect if a line is a company name
+      // Handles variations like "Meta (formerly Facebook Inc)", "Citi" vs "Citigroup"
       const isCompanyName = (text) => {
+        // Normalise for matching: lowercase, strip parentheticals
+        const normalised = text.toLowerCase().replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+        
         const companyPatterns = [
           /\b(inc|llc|ltd|corp|corporation|company|co|plc|group|holdings|partners|ventures|labs|technologies|solutions|consulting|services|startup)\b/i,
           /\bformerly\b/i, // "Meta (formerly Facebook Inc)"
-          /\b(google|meta|facebook|amazon|apple|microsoft|netflix|ibm|oracle|salesforce|adobe|intel|nvidia|cisco|dell|hp|accenture|deloitte|pwc|kpmg|ey|mckinsey|bain|bcg|citi|citigroup|jpmorgan|goldman|morgan stanley|barclays|hsbc)\b/i,
         ];
-        return companyPatterns.some(p => p.test(text));
+        
+        // Known company names (normalised) - handles variations
+        const knownCompanies = [
+          'google', 'meta', 'facebook', 'amazon', 'apple', 'microsoft', 'netflix',
+          'ibm', 'oracle', 'salesforce', 'adobe', 'intel', 'nvidia', 'cisco', 'dell', 'hp',
+          'accenture', 'deloitte', 'pwc', 'kpmg', 'ey', 'mckinsey', 'bain', 'bcg',
+          'citi', 'citigroup', 'citibank', 'jpmorgan', 'jp morgan', 'goldman', 'goldman sachs',
+          'morgan stanley', 'barclays', 'hsbc', 'solimhealth', 'stripe', 'uber', 'airbnb',
+          'linkedin', 'twitter', 'x', 'snap', 'snapchat', 'pinterest', 'spotify', 'discord',
+          'shopify', 'twilio', 'datadog', 'snowflake', 'databricks', 'mongodb', 'elastic',
+          'palantir', 'crowdstrike', 'okta', 'splunk', 'atlassian', 'gitlab', 'hubspot',
+          'zendesk', 'docusign', 'workday', 'servicenow', 'vmware', 'sap', 'twosigma',
+          'two sigma', 'citadel', 'jane street', 'janestreet', 'de shaw', 'deshaw',
+          'renaissance', 'millennium', 'blackrock', 'fidelity', 'capital one', 'capitalone',
+          'revolut', 'robinhood', 'coinbase', 'plaid', 'block', 'square', 'paypal', 'visa', 'mastercard'
+        ];
+        
+        // Check if any known company is contained in the normalised text
+        const containsKnownCompany = knownCompanies.some(c => normalised.includes(c));
+        
+        return companyPatterns.some(p => p.test(text)) || containsKnownCompany;
       };
 
       for (const line of lines) {
