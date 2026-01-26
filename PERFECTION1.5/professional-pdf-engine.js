@@ -392,16 +392,83 @@
       return jobs;
     },
 
+    // ============ EXTRACT DATES FROM MERGED TITLE FIELD ============
+    // Handles formats like "Senior Engineer - 2023 - Present"
+    extractDatesFromTitle(title) {
+      if (!title) return { cleanTitle: '', startDate: '', endDate: '' };
+
+      // Pattern: "Title - YYYY - YYYY/Present" or "Title - YYYY-YYYY"
+      const datePatterns = [
+        // "Senior Engineer - 2023 - Present" or "Senior Engineer - 2023 - 2024"
+        /^(.+?)\s*[-–—]\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+        // "Senior Engineer (2023 - Present)"
+        /^(.+?)\s*\(\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})\s*\)$/i,
+        // "Senior Engineer, 2023 - Present"
+        /^(.+?)\s*,\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+        // "Senior Engineer | 2023 - Present"
+        /^(.+?)\s*\|\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+      ];
+
+      for (const pattern of datePatterns) {
+        const match = title.match(pattern);
+        if (match) {
+          return {
+            cleanTitle: match[1].trim(),
+            startDate: match[2],
+            endDate: match[3],
+          };
+        }
+      }
+
+      // Fallback: Extract any year range from end of title
+      const fallbackMatch = title.match(/^(.+?)\s*[-–—,|]\s*((?:19|20)\d{2})(?:\s*[-–—]\s*(Present|(?:19|20)\d{2}))?$/i);
+      if (fallbackMatch) {
+        return {
+          cleanTitle: fallbackMatch[1].trim(),
+          startDate: fallbackMatch[2],
+          endDate: fallbackMatch[3] || 'Present',
+        };
+      }
+
+      return { cleanTitle: title, startDate: '', endDate: '' };
+    },
+
     // ============ NORMALIZE EXPERIENCE (from structured data) ============
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
-      return experience.map(job => ({
-        company: job.company || job.companyName || '',
-        title: job.title || job.jobTitle || job.position || '',
-        dates: this.normalizeDates(job.dates || `${job.startDate || ''} – ${job.endDate || 'Present'}`),
-        bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
-      }));
+      return experience.map(job => {
+        let company = job.company || job.companyName || '';
+        let title = job.title || job.jobTitle || job.position || '';
+        let startDate = job.startDate || job.start_date || '';
+        let endDate = job.endDate || job.end_date || '';
+
+        // Extract dates from merged title field if not explicitly provided
+        if (title && (!startDate || !endDate)) {
+          const extracted = this.extractDatesFromTitle(title);
+          if (extracted.startDate) {
+            startDate = startDate || extracted.startDate;
+            endDate = endDate || extracted.endDate;
+            // Use clean title without dates for display
+            title = extracted.cleanTitle || title;
+          }
+        }
+
+        // Build dates string
+        let dates = job.dates || '';
+        if (!dates && (startDate || endDate)) {
+          const start = startDate || '';
+          const end = endDate || 'Present';
+          dates = start ? `${start} – ${end}` : end;
+        }
+
+        return {
+          company,
+          title,
+          dates: this.normalizeDates(dates),
+          bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
+        };
+      });
     },
 
     // ============ NORMALIZE BULLETS ============
