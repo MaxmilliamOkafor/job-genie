@@ -516,7 +516,7 @@
       const { font, margins, lineHeight, page, paragraphSpacing } = ATS_SPEC;
       const contentWidth = page.width - margins.left - margins.right;
 
-      const doc = new jsPDF({ format: 'a4', unit: 'pt', putOnlyUsedFonts: true });
+      const doc = new jsPDF({ format: 'a4', unit: 'pt', compress: true, putOnlyUsedFonts: true });
       doc.setFont(font.family, 'normal');
       let y = margins.top;
 
