@@ -74,6 +74,7 @@
     },
 
     // ============ PARSE AND STRUCTURE CV ============
+    // FIX 27-01-26: Added robust data extraction with multiple fallbacks for OpenAI speed
     parseAndStructureCV(cvText, candidateData) {
       const data = {
         contact: {
@@ -101,7 +102,7 @@
         certifications: []
       };
 
-      // Extract from candidate data first
+      // Extract from candidate data first (primary source)
       if (candidateData) {
         data.contact.name = `${candidateData.firstName || candidateData.first_name || ''} ${candidateData.lastName || candidateData.last_name || ''}`.trim();
         data.contact.phone = candidateData.phone || '';
@@ -112,25 +113,35 @@
         data.contact.github = candidateData.github || '';
         data.contact.portfolio = candidateData.portfolio || '';
         
-        // Extract structured data if available
-        if (candidateData.workExperience || candidateData.work_experience) {
-          data.experience = (candidateData.workExperience || candidateData.work_experience).map(exp => ({
-            company: exp.company || exp.organization || '',
-            title: exp.title || exp.position || exp.role || '',
+        // FIX 27-01-26: Check ALL possible experience field names
+        const experienceData = candidateData.professional_experience || 
+                               candidateData.professionalExperience ||
+                               candidateData.workExperience || 
+                               candidateData.work_experience || [];
+        
+        if (Array.isArray(experienceData) && experienceData.length > 0) {
+          data.experience = experienceData.map(exp => ({
+            company: exp.company || exp.organization || exp.companyName || '',
+            title: exp.title || exp.position || exp.role || exp.jobTitle || '',
             dates: exp.dates || exp.duration || `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
             location: exp.location || '',
-            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || [])
+            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || exp.description || [])
           }));
+          console.log(`[OpenResume] Loaded ${data.experience.length} experience entries from candidateData`);
         }
         
         if (candidateData.skills) {
           const skillsArr = Array.isArray(candidateData.skills) 
             ? candidateData.skills 
-            : candidateData.skills.split(',').map(s => s.trim());
-          data.skills = this.categorizeSkills(skillsArr);
+            : typeof candidateData.skills === 'string' 
+              ? candidateData.skills.split(',').map(s => s.trim())
+              : [];
+          if (skillsArr.length > 0) {
+            data.skills = this.categorizeSkills(skillsArr);
+          }
         }
         
-        if (candidateData.education) {
+        if (candidateData.education && Array.isArray(candidateData.education)) {
           data.education = candidateData.education.map(edu => ({
             institution: edu.institution || edu.school || edu.university || '',
             degree: edu.degree || '',
@@ -148,9 +159,13 @@
 
       // Parse from CV text if structured data is missing
       if (cvText && data.experience.length === 0) {
+        console.log('[OpenResume] Parsing experience from CV text (fallback)');
         const parsed = this.parseCVText(cvText);
         Object.assign(data, parsed);
       }
+
+      // Log final data state for debugging
+      console.log(`[OpenResume] Structured CV: ${data.experience.length} jobs, ${data.education.length} edu`);
 
       return data;
     },
