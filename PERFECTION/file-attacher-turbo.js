@@ -583,7 +583,7 @@
     },
     
     // ============ ATTACH BOTH FILES TOGETHER (SYNC - LAZYAPPLY OPTIMIZED) ============
-    attachBothFiles(cvFile, coverFile, coverText = null) {
+   async attachBothFiles(cvFile, coverFile, coverText = null) {
       console.log('[FileAttacher] 📎 SYNC Attaching BOTH CV + Cover Letter');
       const startTime = performance.now();
       
