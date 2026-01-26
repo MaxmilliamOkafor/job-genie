@@ -594,9 +594,8 @@
       font-size: 11pt;
     }
     
-    /* Job Title - Italic */
+    /* Job Title - Normal */
     .cv-job-title {
-      font-style: italic;
       font-size: ${ATS_CONFIG.fontSize.body};
       color: ${ATS_CONFIG.colors.text};
     }

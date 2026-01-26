@@ -603,7 +603,6 @@
       margin-bottom: 4px;
     }
     .job-title { 
-      font-style: italic;
       font-size: 10.5pt;
     }
     .job-dates { 
