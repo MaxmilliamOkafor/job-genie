@@ -207,6 +207,7 @@
         "https://explore.jobs.netflix.net/*"
       ],
       "js": [
+        "debug-logger.js",
         "mandatory-keywords.js",
         "universal-jd-parser.js",
         "reliable-extractor.js",
@@ -254,6 +255,7 @@
         "bulk-apply.js",
         "debug-settings.html",
         "debug-settings.js",
+        "debug-logger.js",
         "mandatory-keywords.js",
         "universal-jd-parser.js",
         "reliable-extractor.js",

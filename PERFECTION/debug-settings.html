@@ -84,13 +84,24 @@
     
     .log-entry {
       display: flex;
-      padding: 8px 12px;
+      flex-direction: column;
+      padding: 10px 12px;
       border-bottom: 1px solid rgba(255,255,255,0.05);
-      gap: 12px;
+      gap: 4px;
     }
     
     .log-entry:hover {
       background: rgba(124, 58, 237, 0.1);
+    }
+    
+    .log-entry.error { border-left: 3px solid var(--error); }
+    .log-entry.success { border-left: 3px solid var(--success); }
+    .log-entry.warn { border-left: 3px solid var(--warning); }
+    
+    .log-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
     
     .log-timestamp {
@@ -109,29 +120,46 @@
       text-align: center;
     }
     
-    .log-level.info { background: var(--info); color: white; }
-    .log-level.success { background: var(--success); color: white; }
-    .log-level.warning { background: var(--warning); color: black; }
-    .log-level.error { background: var(--error); color: white; }
-    .log-level.debug { background: #6366f1; color: white; }
+    .log-level.INFO { background: var(--info); color: white; }
+    .log-level.SUCCESS { background: var(--success); color: white; }
+    .log-level.WARN { background: var(--warning); color: black; }
+    .log-level.ERROR { background: var(--error); color: white; }
+    .log-level.DEBUG { background: #6366f1; color: white; }
     
     .log-event {
       color: var(--accent-secondary);
       font-weight: 600;
-      min-width: 150px;
     }
     
     .log-message {
       color: var(--text-primary);
-      flex: 1;
       word-break: break-word;
+      padding-left: 60px;
+    }
+    
+    .log-duration {
+      color: var(--success);
+      font-size: 10px;
+      margin-left: 8px;
+    }
+    
+    .log-url {
+      font-size: 9px;
+      color: var(--text-muted);
+      padding-left: 60px;
     }
     
     .log-details {
       color: var(--text-muted);
       font-size: 10px;
       margin-top: 4px;
-      padding-left: 20px;
+      padding-left: 60px;
+      white-space: pre-wrap;
+      background: rgba(0,0,0,0.2);
+      padding: 8px;
+      border-radius: 4px;
+      max-height: 150px;
+      overflow: auto;
     }
     
     /* Stats Grid */
@@ -394,6 +422,7 @@
           <span>Live</span>
         </div>
         <button id="refreshLogs" class="btn btn-small btn-secondary">🔄 Refresh</button>
+        <button id="addTestLog" class="btn btn-small btn-secondary">🧪 Test Log</button>
         <button id="exportLogs" class="btn btn-small btn-accent">📥 Export</button>
         <button id="clearLogs" class="btn btn-small btn-outline">🗑️ Clear All</button>
       </div>
