@@ -108,6 +108,13 @@ serve(async (req) => {
 
     console.log(`[User ${userId}] Extracting keywords from JD for ${jobTitle || 'Unknown'} at ${company || 'Unknown'}`);
 
+    // PERFORMANCE BENCHMARKS
+    const benchmarks: Record<string, number> = {
+      jdLength: jobDescription.length,
+      truncatedLength: Math.min(jobDescription.length, 10000),
+      startTime: Date.now()
+    };
+
     // STABILIZED: Extended JD length for better keyword extraction
     const truncatedJD = jobDescription.substring(0, 10000);
 
@@ -128,6 +135,9 @@ serve(async (req) => {
         presence_penalty: 0.1,   // Reduce repetition
       }),
     });
+
+    // BENCHMARK: API call time
+    benchmarks.apiCallTime = Date.now() - benchmarks.startTime;
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -216,9 +226,18 @@ serve(async (req) => {
       total: uniqueKeywords.length,
     };
 
-    console.log(`[User ${userId}] Extracted ${result.total} keywords (${highPriority.length} high, ${mediumPriority.length} med, ${lowPriority.length} low priority)`);
+    // BENCHMARK: Total processing time
+    benchmarks.totalTime = Date.now() - benchmarks.startTime;
+    benchmarks.parseTime = benchmarks.totalTime - benchmarks.apiCallTime;
+    benchmarks.keywordCount = result.total;
 
-    return new Response(JSON.stringify(result), {
+    console.log(`[User ${userId}] Extracted ${result.total} keywords (${highPriority.length} high, ${mediumPriority.length} med, ${lowPriority.length} low priority)`);
+    console.log(`[BENCHMARK] JD: ${benchmarks.jdLength} chars (truncated: ${benchmarks.truncatedLength}), API: ${benchmarks.apiCallTime}ms, Parse: ${benchmarks.parseTime}ms, Total: ${benchmarks.totalTime}ms, Keywords: ${benchmarks.keywordCount}`);
+
+    return new Response(JSON.stringify({
+      ...result,
+      benchmarks
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

@@ -707,6 +707,23 @@
     // Log for debugging
     console.log(`[TurboPipeline] Enriched candidate has ${enrichedCandidate.professional_experience?.length || 0} experience entries`);
 
+    // FIX 27-01-26: Add stabilization delay for OpenAI (faster API) to ensure async data is ready
+    // Check if using OpenAI by looking at storage or default to adding delay
+    const aiProvider = await new Promise(resolve => {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.local.get(['preferred_ai_provider'], (result) => {
+          resolve(result.preferred_ai_provider || 'openai');
+        });
+      } else {
+        resolve('openai');
+      }
+    });
+    
+    if (aiProvider === 'openai') {
+      console.log('[TurboPipeline] OpenAI detected - adding 150ms stabilization delay before PDF generation');
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+
     if (global.OpenResumeGenerator) {
       try {
         const atsPackage = await global.OpenResumeGenerator.generateATSPackage(
