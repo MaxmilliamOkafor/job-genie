@@ -392,16 +392,55 @@
       return jobs;
     },
 
+    // ============ EXTRACT DATES FROM TITLE ============
+    // Handles titles like "Software Engineer | 2023 - Present" or "Data Analyst – 2017 – 2021"
+    extractDatesFromTitle(title) {
+      if (!title) return { cleanTitle: '', dates: '' };
+      
+      // Patterns to match dates in title
+      const datePatterns = [
+        /\s*[\|–—-]\s*(\d{4}\s*[-–—]\s*(?:Present|\d{4}))\s*$/i,
+        /\s*[\|–—-]\s*(\d{4})\s*$/i,
+        /\s*\((\d{4}\s*[-–—]\s*(?:Present|\d{4}))\)\s*$/i,
+      ];
+      
+      for (const pattern of datePatterns) {
+        const match = title.match(pattern);
+        if (match) {
+          const cleanTitle = title.replace(pattern, '').trim();
+          const dates = this.normalizeDates(match[1]);
+          return { cleanTitle, dates };
+        }
+      }
+      
+      return { cleanTitle: title, dates: '' };
+    },
+
     // ============ NORMALIZE EXPERIENCE (from structured data) ============
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
-      return experience.map(job => ({
-        company: job.company || job.companyName || '',
-        title: job.title || job.jobTitle || job.position || '',
-        dates: this.normalizeDates(job.dates || `${job.startDate || ''} – ${job.endDate || 'Present'}`),
-        bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
-      }));
+      return experience.map(job => {
+        const rawTitle = job.title || job.jobTitle || job.position || '';
+        const { cleanTitle, dates: extractedDates } = this.extractDatesFromTitle(rawTitle);
+        
+        // Use explicit dates if available, otherwise use extracted dates
+        let dates = '';
+        if (job.dates) {
+          dates = this.normalizeDates(job.dates);
+        } else if (job.startDate || job.endDate) {
+          dates = this.normalizeDates(`${job.startDate || ''} – ${job.endDate || 'Present'}`);
+        } else if (extractedDates) {
+          dates = extractedDates;
+        }
+        
+        return {
+          company: job.company || job.companyName || '',
+          title: cleanTitle,
+          dates: dates,
+          bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
+        };
+      });
     },
 
     // ============ NORMALIZE BULLETS ============
