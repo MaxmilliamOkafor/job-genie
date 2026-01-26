@@ -857,7 +857,7 @@
       return y;
     },
 
-    // FIX 27-01-26: Added robust company name extraction matching openresume-generator
+    // FIX 27-01-26 v2: Enhanced robust company name extraction with more sources
     extractCompanyName(jobData) {
       if (!jobData) return '';
       
@@ -866,25 +866,48 @@
       const isInvalid = (val) => {
         if (!val || typeof val !== 'string') return true;
         const lower = val.toLowerCase().trim();
+        // Extended blacklist of generic/placeholder values
         return lower === 'company' || lower === 'the company' || lower === 'your company' || 
-               lower === 'unknown' || lower === 'hiring company' || lower.length < 2;
+               lower === 'unknown' || lower === 'hiring company' || lower === 'n/a' ||
+               lower === 'hiring team' || lower.length < 2;
       };
       
-      // Try to extract from job title (e.g., "Software Engineer at Google")
+      // Try jobData.companyName as alternate field
+      if (isInvalid(company)) {
+        company = jobData.companyName || jobData.employer || '';
+      }
+      
+      // Try to extract from job title (e.g., "Software Engineer at Finyard")
       if (isInvalid(company)) {
         const titleMatch = (jobData.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.-]+?)(?:\s*[-|]|\s*$)/i);
         if (titleMatch) company = titleMatch[1].trim();
       }
       
-      // Try to extract from URL
+      // Try to extract from URL subdomain
       if (isInvalid(company)) {
         const url = jobData.url || '';
         const hostMatch = url.match(/https?:\/\/([^.\/]+)\./i);
         if (hostMatch && hostMatch[1]) {
           const subdomain = hostMatch[1].toLowerCase();
-          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims'];
+          // Extended blacklist for common job board subdomains
+          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire', 
+                            'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims', 'taleo',
+                            'myworkdayjobs', 'recruiting', 'career', 'employment'];
           if (!blacklist.includes(subdomain) && subdomain.length > 2) {
             company = subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
+          }
+        }
+      }
+      
+      // Try to extract from URL path (e.g., /finyard/jobs/...)
+      if (isInvalid(company)) {
+        const url = jobData.url || '';
+        const pathMatch = url.match(/\/([a-zA-Z][a-zA-Z0-9-]{2,})\/(?:jobs?|careers?|apply)/i);
+        if (pathMatch && pathMatch[1]) {
+          const pathSegment = pathMatch[1].toLowerCase();
+          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards'];
+          if (!blacklist.includes(pathSegment)) {
+            company = pathSegment.charAt(0).toUpperCase() + pathSegment.slice(1).replace(/-/g, ' ');
           }
         }
       }
@@ -892,12 +915,18 @@
       // Clean up company name
       if (company && typeof company === 'string') {
         company = company
-          .replace(/\s*(careers|jobs|hiring|apply|work|join)\s*$/i, '')
+          .replace(/\s*(careers|jobs|hiring|apply|work|join|inc\.?|ltd\.?|llc\.?)\s*$/i, '')
+          .replace(/\(formerly[^)]*\)/gi, '') // Remove "(formerly X)" suffixes
           .replace(/\s+/g, ' ')
           .trim();
       }
       
-      return isInvalid(company) ? '' : company;
+      // Final validation - return empty string if still invalid
+      if (isInvalid(company)) company = '';
+      
+      console.log(`[ProfessionalPDFEngine] extractCompanyName: input=${JSON.stringify(jobData?.company)}, output="${company}"`);
+      
+      return company;
     },
 
     renderRecipientInfo(doc, jobData, y) {
