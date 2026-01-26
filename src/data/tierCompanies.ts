@@ -133,16 +133,22 @@ export const COMPANY_DOMAINS: Record<string, string> = {
 
 /**
  * Get the tier level of a company
+ * Handles variations like "Meta (formerly Facebook Inc)", "Citi" vs "Citigroup"
  * @returns 1 for Tier 1, 2 for Tier 2, 0 for non-tier
  */
 export function getCompanyTier(companyName: string): 0 | 1 | 2 {
-  const normalised = companyName.toLowerCase().trim();
+  // Normalise: lowercase, strip parentheticals like "(formerly X)"
+  const normalised = companyName
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, ' ')  // Remove parenthetical expressions
+    .replace(/\s+/g, ' ')               // Collapse whitespace
+    .trim();
   
   // Check exact match first
   if (TIER_1_COMPANIES.has(normalised)) return 1;
   if (TIER_2_COMPANIES.has(normalised)) return 2;
   
-  // Check if any tier company name is contained in the company name
+  // Check if any tier company name is contained in the normalised company name
   for (const tier1 of TIER_1_COMPANIES) {
     if (normalised.includes(tier1) || tier1.includes(normalised)) return 1;
   }
