@@ -186,6 +186,22 @@
 
   console.log('[ATS Tailor] Supported ATS detected - AUTO-TAILOR MODE ACTIVE!');
 
+  // ============ CACHE MANAGER INTEGRATION ============
+  // Debounced JD extraction to prevent duplicate processing on rapid page changes
+  let debouncedExtractJobInfo = null;
+  if (typeof CacheManager !== 'undefined') {
+    debouncedExtractJobInfo = CacheManager.createDebouncedJDExtractor(async (url) => {
+      console.log('[ATS Tailor] Debounced JD extraction triggered');
+      const jobInfo = extractJobInfo();
+      if (jobInfo.description) {
+        // Cache the result with JD hash
+        CacheManager.setCachedJDResult(jobInfo.description, jobInfo);
+      }
+      return jobInfo;
+    });
+    console.log('[ATS Tailor] CacheManager integrated - 300ms debounce active');
+  }
+
   // ============ STATE ============
   let filesLoaded = false;
   let cvFile = null;
@@ -1883,27 +1899,61 @@
         return;
       }
 
-      // Get user profile
-      updateBanner('Loading your profile...', 'working');
-      const profileRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${session.access_token}`,
-          },
+      // CACHE INTEGRATION: Check for cached profile (5-min TTL)
+      let p = null;
+      if (typeof CacheManager !== 'undefined') {
+        p = CacheManager.getCachedProfile(session.user.id);
+        if (p) {
+          console.log('[ATS Tailor] ⚡ Using cached profile data');
         }
-      );
-
-      if (!profileRes.ok) {
-        throw new Error('Could not load profile');
       }
 
-      const profileRows = await profileRes.json();
-      const p = profileRows?.[0] || {};
+      // Get user profile (if not cached)
+      if (!p) {
+        updateBanner('Loading your profile...', 'working');
+        const profileRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code,professional_experience`,
+          {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        );
 
-      // Extract job info from page
-      const jobInfo = extractJobInfo();
+        if (!profileRes.ok) {
+          throw new Error('Could not load profile');
+        }
+
+        const profileRows = await profileRes.json();
+        p = profileRows?.[0] || {};
+        
+        // Cache the profile for 5 minutes
+        if (typeof CacheManager !== 'undefined') {
+          CacheManager.setCachedProfile(session.user.id, p);
+        }
+      }
+
+      // CACHE INTEGRATION: Check for cached JD result
+      let jobInfo = null;
+      if (typeof CacheManager !== 'undefined') {
+        // Try smart lookup (checks both URL and JD hash caches)
+        const pageText = document.body?.textContent || '';
+        jobInfo = CacheManager.smartKeywordLookup(currentJobUrl, pageText.substring(0, 1000));
+        if (jobInfo?.fromCache) {
+          console.log('[ATS Tailor] ⚡ Using cached job info');
+        }
+      }
+
+      // Extract job info from page (if not cached)
+      if (!jobInfo) {
+        jobInfo = extractJobInfo();
+        // Cache for future use
+        if (typeof CacheManager !== 'undefined' && jobInfo.description) {
+          CacheManager.setCachedJDResult(jobInfo.description, jobInfo);
+        }
+      }
+      
       if (!jobInfo.title) {
         updateBanner('Could not detect job info, please use popup', 'error');
         tailoringInProgress = false;

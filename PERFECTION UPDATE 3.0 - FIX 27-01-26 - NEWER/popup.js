@@ -436,6 +436,34 @@ class ATSTailor {
     }
     
     try {
+      // CACHE INTEGRATION: Check for cached profile (5-min TTL)
+      if (typeof CacheManager !== 'undefined') {
+        const cached = CacheManager.getCachedProfile(this.session.user.id);
+        if (cached) {
+          console.log('[ATS Tailor] ⚡ Using cached profile for base CV');
+          this.baseCVContent = cached;
+          this.baseCVSource = 'uploaded';
+          await chrome.storage.local.set({ ats_profile: cached });
+          
+          // Update debug panel if available
+          if (window.PDFDebugPanel && cached.professional_experience) {
+            const expCount = Array.isArray(cached.professional_experience) ? cached.professional_experience.length : 0;
+            const skillsCount = Array.isArray(cached.skills) ? cached.skills.length : 0;
+            window.PDFDebugPanel.updateParseCVDebug({
+              status: 'Cached',
+              fileType: 'PROFILE',
+              fileSize: 'From cache',
+              textLength: expCount > 0 ? `${expCount} roles, ${skillsCount} skills` : '0',
+              parseTime: 'Instant (cached)',
+              textSnippet: cached.professional_experience?.[0] ? 
+                `Latest role: ${cached.professional_experience[0].title || 'Unknown'} at ${cached.professional_experience[0].company || 'Unknown'}` : 
+                'No experience data found'
+            });
+          }
+          return;
+        }
+      }
+      
       // Fetch profile with CV file info
       const profileRes = await fetch(
         `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=cv_file_path,cv_file_name,cv_uploaded_at`,
@@ -474,6 +502,11 @@ class ATSTailor {
             // Store parsed CV data for use in tailoring
             this.baseCVContent = parsedData[0];
             console.log('[ATS Tailor] Loaded parsed CV content from profile');
+            
+            // CACHE INTEGRATION: Cache the profile for 5 minutes
+            if (typeof CacheManager !== 'undefined') {
+              CacheManager.setCachedProfile(this.session.user.id, parsedData[0]);
+            }
             
             // Store in chrome.storage for debug panel access
             await chrome.storage.local.set({ ats_profile: parsedData[0] });
