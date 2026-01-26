@@ -78,8 +78,8 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                   {company}
                 </div>
                 
-                {/* Line 2: Job Title (italic) with Dates right-aligned */}
-                <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
+                {/* Line 2: Job Title with Dates right-aligned */}
+                <div className="text-sm" style={{ fontSize: '10.5pt' }}>
                   {title}
                 </div>
                 
