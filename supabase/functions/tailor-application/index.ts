@@ -2042,9 +2042,9 @@ ${
           endpoint: "https://api.moonshot.ai/v1/chat/completions",
           model: "kimi-k2-0711-preview",
           providerName: "Kimi K2",
-          // HYPER SPEED: Aggressive settings for fastest response
-          temperature: 0.3,    // Lower = faster, more focused
-          maxTokens: 2500,     // Reduced from 3500 - sufficient for CV
+          // SPEED: Optimized settings - restored maxTokens to prevent JSON truncation
+          temperature: 0.4,    // Slightly higher for better output quality
+          maxTokens: 3500,     // Restored - 2500 caused JSON truncation errors
           streamChunks: false,
         };
       }
