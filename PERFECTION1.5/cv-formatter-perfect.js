@@ -259,6 +259,16 @@
         .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
     },
 
+    // ============ CLEAN COMPANY NAME ============
+    // Remove parentheticals like "(formerly Facebook Inc)" - user prefers clean names
+    cleanCompanyName(name) {
+      if (!name) return '';
+      return name
+        .replace(/\s*\([^)]*\)\s*/g, ' ')  // Remove parenthetical expressions
+        .replace(/\s+/g, ' ')               // Collapse whitespace
+        .trim();
+    },
+
     // ============ DATE PATTERN FOR CLEANING ============
     // Matches date patterns like: 2023-01 - Present, Jan 2023 - Dec 2024, 2021-2023, etc.
     DATE_PATTERNS: [
@@ -382,6 +392,9 @@
           // Clean company and title to remove any embedded dates
           company = this.stripDatesFromField(company);
           title = this.stripDatesFromField(title);
+          
+          // Clean company name: remove parentheticals like "(formerly Facebook Inc)"
+          company = this.cleanCompanyName(company);
           
           // NOTE: Removed auto-swap logic - company/title should come from profile exactly as-is
           // The AI is instructed to preserve these fields exactly, so swapping would be incorrect
