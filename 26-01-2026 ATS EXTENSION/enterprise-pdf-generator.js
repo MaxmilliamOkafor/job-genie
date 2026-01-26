@@ -132,20 +132,15 @@
       };
     },
     
-    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX v2.0) ============
+    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX v2.1) ============
     // FIXES: Duplicate dates, missing dates, company/title swaps
+    // ENHANCED: Better date extraction from various database formats
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
       return experience.map((exp, index) => {
-        // Extract company - check multiple field names in priority order
         let company = exp.company || exp.companyName || exp.company_name || '';
-        
-        // Extract title - check multiple field names in priority order  
         let title = exp.title || exp.jobTitle || exp.job_title || exp.role || '';
-        
-        // ============ STRICT DATE EXTRACTION (NO DUPLICATES) ============
-        // Extract dates from dedicated fields ONLY - never from title/company
         let startDate = '';
         let endDate = '';
         
@@ -164,38 +159,31 @@
           endDate = parsedDates.end;
         }
         
-        // Priority 3: Duration field (some profiles use this)
-        if (exp.duration && !startDate) {
-          const parsedDates = this.parseCombinedDates(exp.duration);
-          startDate = parsedDates.start;
-          endDate = parsedDates.end;
+        // Priority 3: Try to extract from any text field
+        if (!startDate && !endDate) {
+          const allText = `${exp.company || ''} ${exp.title || ''} ${exp.dates || ''}`;
+          const yearMatches = allText.match(/\b(19|20)\d{2}\b/g);
+          if (yearMatches && yearMatches.length >= 1) {
+            startDate = yearMatches[0];
+            if (yearMatches.length >= 2) endDate = yearMatches[yearMatches.length - 1];
+          }
         }
         
-        // Default end date to Present if role appears current
-        if (!endDate && (exp.isCurrent === true || exp.is_current === true)) {
-          endDate = 'Present';
-        }
+        // Default current role if first entry
+        if (index === 0 && startDate && !endDate) endDate = 'Present';
+        if (exp.isCurrent === true || exp.is_current === true) endDate = 'Present';
         
-        // ============ STRIP DATES FROM TITLE/COMPANY ============
-        // Remove any dates accidentally included in title or company
+        // Strip dates from title/company
         company = this.stripDatesFromText(company);
         title = this.stripDatesFromText(title);
         
-        // ============ VALIDATE COMPANY/TITLE NOT SWAPPED ============
+        // Validate company/title not swapped
         const titleIndicators = /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|senior|junior|vp|president|head of|chief|product|data|software|ai|ml)\b/i;
         const companyIndicators = /\b(inc|llc|ltd|corp|plc|group|ai|tech|health|solutions|meta|google|amazon|microsoft|apple|accenture|citigroup|citi|ibm|oracle|salesforce|solim|fidelity)\b/i;
         
-        const companyLooksLikeTitle = titleIndicators.test(company) && !companyIndicators.test(company);
-        const titleLooksLikeCompany = companyIndicators.test(title) && !titleIndicators.test(title);
-        
-        if (companyLooksLikeTitle && titleLooksLikeCompany) {
-          console.warn(`[EnterprisePDFGenerator v2.0] Detected swap: company="${company}" ↔ title="${title}". Correcting...`);
+        if (titleIndicators.test(company) && !companyIndicators.test(company) &&
+            companyIndicators.test(title) && !titleIndicators.test(title)) {
           [company, title] = [title, company];
-        }
-        
-        // Ensure we have valid values
-        if (!company && !title) {
-          console.warn(`[EnterprisePDFGenerator v2.0] Experience ${index} missing both company and title`);
         }
         
         return {

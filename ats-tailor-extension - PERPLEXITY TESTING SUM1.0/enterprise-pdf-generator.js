@@ -132,8 +132,9 @@
       };
     },
     
-    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX v2.0) ============
+    // ============ NORMALIZE EXPERIENCE (CRITICAL FIX v2.1) ============
     // FIXES: Duplicate dates, missing dates, company/title swaps
+    // ENHANCED: Better date extraction from various database formats
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
@@ -144,12 +145,12 @@
         // Extract title - check multiple field names in priority order  
         let title = exp.title || exp.jobTitle || exp.job_title || exp.role || '';
         
-        // ============ STRICT DATE EXTRACTION (NO DUPLICATES) ============
-        // Extract dates from dedicated fields ONLY - never from title/company
+        // ============ ENHANCED DATE EXTRACTION (v2.1) ============
+        // Extract dates from ALL possible sources
         let startDate = '';
         let endDate = '';
         
-        // Priority 1: Dedicated date fields
+        // Priority 1: Dedicated date fields (most reliable)
         if (exp.startDate || exp.start_date) {
           startDate = this.cleanDateValue(exp.startDate || exp.start_date);
         }
@@ -171,8 +172,26 @@
           endDate = parsedDates.end;
         }
         
-        // Default end date to Present if role appears current
-        if (!endDate && (exp.isCurrent === true || exp.is_current === true)) {
+        // Priority 4: Try to extract from title/company if they contain dates (edge case)
+        if (!startDate && !endDate) {
+          // Look for year patterns in any text field
+          const allText = `${exp.company || ''} ${exp.title || ''} ${exp.dates || ''} ${exp.period || ''}`;
+          const yearMatches = allText.match(/\b(19|20)\d{2}\b/g);
+          if (yearMatches && yearMatches.length >= 1) {
+            startDate = yearMatches[0];
+            if (yearMatches.length >= 2) {
+              endDate = yearMatches[yearMatches.length - 1];
+            }
+          }
+        }
+        
+        // Priority 5: Check if role appears current based on flags
+        if (exp.isCurrent === true || exp.is_current === true) {
+          if (!endDate) endDate = 'Present';
+        }
+        
+        // Priority 6: Infer current role if it's the first entry (most recent) and no end date
+        if (index === 0 && startDate && !endDate) {
           endDate = 'Present';
         }
         
@@ -189,13 +208,13 @@
         const titleLooksLikeCompany = companyIndicators.test(title) && !titleIndicators.test(title);
         
         if (companyLooksLikeTitle && titleLooksLikeCompany) {
-          console.warn(`[EnterprisePDFGenerator v2.0] Detected swap: company="${company}" ↔ title="${title}". Correcting...`);
+          console.warn(`[EnterprisePDFGenerator v2.1] Detected swap: company="${company}" ↔ title="${title}". Correcting...`);
           [company, title] = [title, company];
         }
         
-        // Ensure we have valid values
-        if (!company && !title) {
-          console.warn(`[EnterprisePDFGenerator v2.0] Experience ${index} missing both company and title`);
+        // Log warning if dates are still missing
+        if (!startDate && !endDate) {
+          console.warn(`[EnterprisePDFGenerator v2.1] Experience ${index} "${company}" missing dates`);
         }
         
         return {

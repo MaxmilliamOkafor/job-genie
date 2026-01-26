@@ -59,6 +59,38 @@
         <button id="logoutBtn" class="btn-link">Logout</button>
       </div>
 
+      <!-- PRIMARY ACTION - Extract & Apply Button (MOVED TO TOP) -->
+      <div class="primary-action-container">
+        <button id="tailorBtn" class="btn btn-primary btn-large btn-gradient">
+          <span class="btn-icon-left">⚡</span>
+          <span class="btn-text">Extract & Apply Keywords to CV</span>
+          <span class="btn-time">~5s</span>
+        </button>
+        
+        <div class="progress-container hidden" id="progressContainer">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <p class="progress-text" id="progressText">Starting...</p>
+          
+          <!-- Step-by-step progress -->
+          <div class="pipeline-steps" id="pipelineSteps">
+            <div class="pipeline-step" id="step1">
+              <span class="step-icon">⏳</span>
+              <span class="step-text">Step 1/3: Extracting keywords from job description...</span>
+            </div>
+            <div class="pipeline-step" id="step2">
+              <span class="step-icon">⏳</span>
+              <span class="step-text">Step 2/3: Boosting CV to 95-100% match...</span>
+            </div>
+            <div class="pipeline-step" id="step3">
+              <span class="step-icon">⏳</span>
+              <span class="step-text">Step 3/3: Generating ATS CV & Cover Letter...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- AI Provider Settings - Compact Toggle -->
       <div class="ai-provider-panel" id="aiSettingsPanel">
         <div class="ai-provider-toggle-row">
@@ -203,38 +235,8 @@
         </div>
       </details>
 
-      <!-- Main Actions Card -->
+      <!-- Main Actions Card (Keyword Extraction Section) -->
       <div class="actions-card">
-        <!-- Primary Action Button -->
-        <button id="tailorBtn" class="btn btn-primary btn-large btn-gradient">
-          <span class="btn-icon-left">⚡</span>
-          <span class="btn-text">Extract & Apply Keywords to CV</span>
-          <span class="btn-time">~5s</span>
-        </button>
-        
-          <div class="progress-container hidden" id="progressContainer">
-            <div class="progress-bar">
-              <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <p class="progress-text" id="progressText">Starting...</p>
-          
-          <!-- Step-by-step progress -->
-          <div class="pipeline-steps" id="pipelineSteps">
-            <div class="pipeline-step" id="step1">
-              <span class="step-icon">⏳</span>
-              <span class="step-text">Step 1/3: Extracting keywords from job description...</span>
-            </div>
-            <div class="pipeline-step" id="step2">
-              <span class="step-icon">⏳</span>
-              <span class="step-text">Step 2/3: Boosting CV to 95-100% match...</span>
-            </div>
-            <div class="pipeline-step" id="step3">
-              <span class="step-icon">⏳</span>
-              <span class="step-text">Step 3/3: Generating ATS CV & Cover Letter...</span>
-            </div>
-          </div>
-        </div>
-        
         <!-- Keyword Extraction Section -->
         <div class="boost-section" id="boostSection">
           <div class="keyword-buttons">

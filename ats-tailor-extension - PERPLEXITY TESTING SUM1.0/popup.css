@@ -520,6 +520,21 @@ body::-webkit-scrollbar-thumb {
   opacity: 1;
 }
 
+/* ============ PRIMARY ACTION CONTAINER ============ */
+.primary-action-container {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(0, 212, 255, 0.1) 100%);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.primary-action-container .btn-gradient {
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* ============ SETTINGS PANEL ============ */
 .settings-panel {
   padding: 12px;
