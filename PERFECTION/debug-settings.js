@@ -1,5 +1,5 @@
 // PERFECTION - Debug Settings Page
-// Full debugging and logging console
+// Full debugging and logging console with REAL-TIME updates
 
 (function() {
   'use strict';
@@ -9,9 +9,11 @@
   // State
   let allLogs = [];
   let currentFilter = 'all';
+  let isAutoRefresh = true;
+  let refreshInterval = null;
   let debugSettings = {
     verboseLogging: true,
-    logApiResponses: false,
+    logApiResponses: true,
     logDomInteractions: true,
     perfMetrics: true,
     autoExportErrors: false
@@ -40,6 +42,46 @@
     startAutoRefresh();
     updateStats();
     loadCurrentState();
+    setupStorageListener();
+    console.log('[PERFECTION Debug] ✅ Debug console initialized with real-time updates');
+  }
+
+  // Setup real-time storage listener
+  function setupStorageListener() {
+    // Listen for storage changes
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') return;
+      
+      const relevantKeys = [
+        'ats_auto_tailor_logs',
+        'ats_debug_logs', 
+        'ats_error_logs',
+        'ats_tailoring_sessions'
+      ];
+      
+      const hasRelevantChange = relevantKeys.some(key => key in changes);
+      
+      if (hasRelevantChange) {
+        console.log('[PERFECTION Debug] Storage changed, refreshing logs...');
+        loadLogs();
+        loadCurrentState();
+      }
+    });
+
+    // Listen for direct log notifications
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === 'DEBUG_LOG_ADDED') {
+        console.log('[PERFECTION Debug] New log received:', message.log?.event);
+        // Immediately add to display
+        if (message.log) {
+          allLogs.unshift(message.log);
+          renderLogs();
+          updateStats();
+        }
+        sendResponse({ received: true });
+      }
+      return true;
+    });
   }
 
   // Load debug settings from storage
@@ -51,11 +93,17 @@
         }
         
         // Update toggles
-        document.getElementById('verboseLogging').checked = debugSettings.verboseLogging;
-        document.getElementById('logApiResponses').checked = debugSettings.logApiResponses;
-        document.getElementById('logDomInteractions').checked = debugSettings.logDomInteractions;
-        document.getElementById('perfMetrics').checked = debugSettings.perfMetrics;
-        document.getElementById('autoExportErrors').checked = debugSettings.autoExportErrors;
+        const verboseEl = document.getElementById('verboseLogging');
+        const apiEl = document.getElementById('logApiResponses');
+        const domEl = document.getElementById('logDomInteractions');
+        const perfEl = document.getElementById('perfMetrics');
+        const autoEl = document.getElementById('autoExportErrors');
+        
+        if (verboseEl) verboseEl.checked = debugSettings.verboseLogging;
+        if (apiEl) apiEl.checked = debugSettings.logApiResponses;
+        if (domEl) domEl.checked = debugSettings.logDomInteractions;
+        if (perfEl) perfEl.checked = debugSettings.perfMetrics;
+        if (autoEl) autoEl.checked = debugSettings.autoExportErrors;
         
         resolve();
       });
@@ -65,11 +113,11 @@
   // Save debug settings
   async function saveDebugSettings() {
     debugSettings = {
-      verboseLogging: document.getElementById('verboseLogging').checked,
-      logApiResponses: document.getElementById('logApiResponses').checked,
-      logDomInteractions: document.getElementById('logDomInteractions').checked,
-      perfMetrics: document.getElementById('perfMetrics').checked,
-      autoExportErrors: document.getElementById('autoExportErrors').checked
+      verboseLogging: document.getElementById('verboseLogging')?.checked ?? true,
+      logApiResponses: document.getElementById('logApiResponses')?.checked ?? true,
+      logDomInteractions: document.getElementById('logDomInteractions')?.checked ?? true,
+      perfMetrics: document.getElementById('perfMetrics')?.checked ?? true,
+      autoExportErrors: document.getElementById('autoExportErrors')?.checked ?? false
     };
     
     await chrome.storage.local.set({ ats_debug_settings: debugSettings });
@@ -107,10 +155,27 @@
             level: 'error',
             source: 'error'
           }))
-        ].sort((a, b) => new Date(b.timestamp || b.ts || 0) - new Date(a.timestamp || a.ts || 0));
+        ];
+        
+        // Dedupe by id
+        const seen = new Set();
+        allLogs = allLogs.filter(log => {
+          const id = log.id || `${log.timestamp}-${log.event}`;
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        
+        // Sort by timestamp
+        allLogs.sort((a, b) => {
+          const tsA = new Date(b.timestamp || b.ts || 0).getTime();
+          const tsB = new Date(a.timestamp || a.ts || 0).getTime();
+          return tsA - tsB;
+        });
 
         renderLogs();
         renderTimeline(result.ats_tailoring_sessions || []);
+        updateStats();
         resolve();
       });
     });
@@ -118,6 +183,8 @@
 
   // Render logs
   function renderLogs() {
+    if (!logViewer) return;
+    
     const filteredLogs = currentFilter === 'all' 
       ? allLogs 
       : allLogs.filter(log => log.level === currentFilter);
@@ -128,30 +195,48 @@
           <div class="empty-state-icon">📭</div>
           <h3>No ${currentFilter === 'all' ? '' : currentFilter + ' '}events</h3>
           <p>Events will appear here as you use the extension</p>
+          <p style="color: #666; font-size: 12px; margin-top: 10px;">Logs update in real-time</p>
         </div>
       `;
       return;
     }
 
-    logViewer.innerHTML = filteredLogs.slice(0, 200).map(log => {
+    logViewer.innerHTML = filteredLogs.slice(0, 300).map(log => {
       const timestamp = formatTimestamp(log.timestamp || log.ts);
       const level = log.level || 'info';
       const event = log.event || log.action || 'unknown';
       const message = formatLogMessage(log);
       const details = log.data || log.details || log.payload;
+      const url = log.url ? `<div class="log-url">${truncateUrl(log.url)}</div>` : '';
 
       return `
-        <div class="log-entry">
-          <span class="log-timestamp">${timestamp}</span>
-          <span class="log-level ${level}">${level}</span>
-          <span class="log-event">${event}</span>
+        <div class="log-entry ${level}">
+          <div class="log-header">
+            <span class="log-timestamp">${timestamp}</span>
+            <span class="log-level ${level}">${level.toUpperCase()}</span>
+            <span class="log-event">${event}</span>
+          </div>
           <div class="log-message">
             ${message}
-            ${details ? `<div class="log-details">${JSON.stringify(details, null, 2).substring(0, 200)}...</div>` : ''}
+            ${log.durationMs ? `<span class="log-duration">${log.durationMs}ms</span>` : ''}
           </div>
+          ${url}
+          ${details ? `<pre class="log-details">${JSON.stringify(details, null, 2).substring(0, 500)}${JSON.stringify(details).length > 500 ? '...' : ''}</pre>` : ''}
         </div>
       `;
     }).join('');
+  }
+
+  // Truncate URL for display
+  function truncateUrl(url) {
+    if (!url) return '';
+    try {
+      const u = new URL(url);
+      const path = u.pathname.length > 40 ? u.pathname.substring(0, 40) + '...' : u.pathname;
+      return `${u.hostname}${path}`;
+    } catch {
+      return url.substring(0, 60);
+    }
   }
 
   // Format timestamp
@@ -171,17 +256,23 @@
     if (log.message) return log.message;
     if (log.event) {
       switch (log.event) {
+        case 'extension_loaded': return 'Extension initialized';
         case 'autotailor_start': return 'Auto-tailoring started';
-        case 'autotailor_complete': return `Completed in ${log.durationMs}ms`;
+        case 'autotailor_complete': return `Completed in ${log.durationMs || 0}ms`;
         case 'autotailor_error': return `Error: ${log.message || 'Unknown error'}`;
-        case 'stage': return `Stage: ${log.stage}`;
-        case 'fetch_start': return `Fetching: ${log.label}`;
-        case 'fetch_end': return `Fetched: ${log.label} (${log.status}, ${log.durationMs}ms)`;
-        case 'fetch_error': return `Fetch failed: ${log.label}`;
-        case 'job_detected': return `Job: ${log.title} at ${log.company}`;
-        case 'tailor_success': return `Match: ${log.matchScore}%`;
-        case 'attach_complete': return 'Files attached';
-        case 'cache_hit': return 'Using cached tailored documents';
+        case 'stage': return `Stage: ${log.stage || log.data?.stage || ''}`;
+        case 'fetch_start': return `Fetching: ${log.data?.label || log.label || ''}`;
+        case 'fetch_end': return `Fetched: ${log.data?.label || ''} (${log.data?.status || log.status || 'ok'}, ${log.durationMs || 0}ms)`;
+        case 'fetch_error': return `Fetch failed: ${log.data?.label || log.label || ''}`;
+        case 'job_detected': return `Job: ${log.title || log.data?.title || ''} at ${log.company || log.data?.company || ''}`;
+        case 'tailor_success': return `Match: ${log.matchScore || log.data?.matchScore || 0}%`;
+        case 'tailor_error': return `Tailoring failed: ${log.message || ''}`;
+        case 'attach_complete': return `${log.data?.filesAttached || 'Files'} attached`;
+        case 'attach_error': return `Attach failed: ${log.message || ''}`;
+        case 'cache_hit': return `Using cached: ${log.data?.key || 'documents'}`;
+        case 'cache_miss': return `Not in cache: ${log.data?.key || ''}`;
+        case 'pdf_generated': return `PDF generated: ${log.data?.type || ''} (${log.durationMs || 0}ms)`;
+        case 'keywords_extracted': return `${log.data?.count || 0} keywords extracted`;
         default: return log.event;
       }
     }
@@ -190,6 +281,8 @@
 
   // Render timeline
   function renderTimeline(sessions) {
+    if (!tailoringTimeline) return;
+    
     if (!sessions || sessions.length === 0) {
       tailoringTimeline.innerHTML = `
         <div class="empty-state">
@@ -201,7 +294,7 @@
       return;
     }
 
-    tailoringTimeline.innerHTML = sessions.slice(0, 10).map(session => {
+    tailoringTimeline.innerHTML = sessions.slice(0, 15).map(session => {
       const status = session.error ? 'error' : (session.success ? 'success' : 'warning');
       const time = formatTimestamp(session.timestamp);
       
@@ -224,34 +317,37 @@
 
   // Update stats
   function updateStats() {
-    const successLogs = allLogs.filter(l => l.level === 'success' || l.event?.includes('complete'));
+    const successLogs = allLogs.filter(l => l.level === 'success' || l.event?.includes('complete') || l.event?.includes('success'));
     const errorLogs = allLogs.filter(l => l.level === 'error');
     const tailorLogs = allLogs.filter(l => l.event === 'tailor_success');
     const attachLogs = allLogs.filter(l => l.event === 'attach_complete');
     
     // Calculate avg time
-    const timeLogs = allLogs.filter(l => l.durationMs);
+    const timeLogs = allLogs.filter(l => l.durationMs && l.durationMs > 0);
     const avgTime = timeLogs.length > 0 
       ? Math.round(timeLogs.reduce((sum, l) => sum + l.durationMs, 0) / timeLogs.length)
       : 0;
 
-    const successRate = allLogs.length > 0 
-      ? Math.round((successLogs.length / allLogs.length) * 100)
-      : 0;
+    const totalOps = successLogs.length + errorLogs.length;
+    const successRate = totalOps > 0 
+      ? Math.round((successLogs.length / totalOps) * 100)
+      : 100;
 
-    statElements.totalEvents.textContent = allLogs.length;
-    statElements.successRate.textContent = successRate + '%';
-    statElements.avgTime.textContent = avgTime + 'ms';
-    statElements.errors.textContent = errorLogs.length;
-    statElements.jobsTailored.textContent = tailorLogs.length;
-    statElements.filesAttached.textContent = attachLogs.length;
+    if (statElements.totalEvents) statElements.totalEvents.textContent = allLogs.length;
+    if (statElements.successRate) statElements.successRate.textContent = successRate + '%';
+    if (statElements.avgTime) statElements.avgTime.textContent = avgTime + 'ms';
+    if (statElements.errors) statElements.errors.textContent = errorLogs.length;
+    if (statElements.jobsTailored) statElements.jobsTailored.textContent = tailorLogs.length;
+    if (statElements.filesAttached) statElements.filesAttached.textContent = attachLogs.length;
   }
 
   // Load current state
   async function loadCurrentState() {
+    if (!currentState) return;
+    
     return new Promise(resolve => {
       chrome.storage.local.get(null, result => {
-        // Filter out sensitive data
+        // Filter out sensitive data and format
         const safeState = {};
         const sensitiveKeys = ['ats_session', 'workday_password', 'workday_verify_password'];
         
@@ -260,6 +356,9 @@
             safeState[key] = '[REDACTED]';
           } else if (key.includes('pdf') || key.includes('PDF')) {
             safeState[key] = value ? `[BASE64 ${String(value).length} chars]` : null;
+          } else if (typeof value === 'object' && value !== null) {
+            const str = JSON.stringify(value);
+            safeState[key] = str.length > 200 ? `[Object ${str.length} chars]` : value;
           } else {
             safeState[key] = value;
           }
@@ -275,11 +374,13 @@
   function exportLogs() {
     const exportData = {
       exportedAt: new Date().toISOString(),
+      extensionVersion: chrome.runtime.getManifest().version,
       settings: debugSettings,
       logs: allLogs,
       stats: {
         total: allLogs.length,
-        errors: allLogs.filter(l => l.level === 'error').length
+        errors: allLogs.filter(l => l.level === 'error').length,
+        successes: allLogs.filter(l => l.level === 'success').length
       }
     };
     
@@ -313,6 +414,28 @@
     console.log('[PERFECTION Debug] Logs cleared');
   }
 
+  // Add test log (for debugging the debug console)
+  function addTestLog() {
+    const testLog = {
+      id: `test-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      ts: Date.now(),
+      level: 'info',
+      event: 'test_log',
+      message: 'Test log entry from debug console',
+      data: { test: true, timestamp: Date.now() },
+      source: 'debug_console'
+    };
+    
+    chrome.storage.local.get(['ats_debug_logs'], (result) => {
+      const logs = result.ats_debug_logs || [];
+      logs.unshift(testLog);
+      chrome.storage.local.set({ ats_debug_logs: logs }, () => {
+        console.log('[PERFECTION Debug] Test log added');
+      });
+    });
+  }
+
   // Bind events
   function bindEvents() {
     // Filter chips
@@ -327,22 +450,34 @@
 
     // Settings toggles
     ['verboseLogging', 'logApiResponses', 'logDomInteractions', 'perfMetrics', 'autoExportErrors'].forEach(id => {
-      document.getElementById(id).addEventListener('change', saveDebugSettings);
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', saveDebugSettings);
     });
 
     // Action buttons
-    document.getElementById('refreshLogs').addEventListener('click', loadLogs);
-    document.getElementById('exportLogs').addEventListener('click', exportLogs);
-    document.getElementById('clearLogs').addEventListener('click', clearLogs);
-    document.getElementById('refreshState').addEventListener('click', loadCurrentState);
+    const refreshBtn = document.getElementById('refreshLogs');
+    const exportBtn = document.getElementById('exportLogs');
+    const clearBtn = document.getElementById('clearLogs');
+    const refreshStateBtn = document.getElementById('refreshState');
+    const testLogBtn = document.getElementById('addTestLog');
+    
+    if (refreshBtn) refreshBtn.addEventListener('click', loadLogs);
+    if (exportBtn) exportBtn.addEventListener('click', exportLogs);
+    if (clearBtn) clearBtn.addEventListener('click', clearLogs);
+    if (refreshStateBtn) refreshStateBtn.addEventListener('click', loadCurrentState);
+    if (testLogBtn) testLogBtn.addEventListener('click', addTestLog);
   }
 
-  // Auto-refresh every 5 seconds
+  // Auto-refresh every 2 seconds (faster refresh)
   function startAutoRefresh() {
-    setInterval(() => {
-      loadLogs();
-      loadCurrentState();
-    }, 5000);
+    if (refreshInterval) clearInterval(refreshInterval);
+    
+    refreshInterval = setInterval(() => {
+      if (isAutoRefresh) {
+        loadLogs();
+        loadCurrentState();
+      }
+    }, 2000);
   }
 
   // Initialize on load
