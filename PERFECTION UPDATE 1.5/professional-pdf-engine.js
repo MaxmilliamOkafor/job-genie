@@ -80,14 +80,13 @@
         // Parse and structure CV data ONCE
         const cvData = this.structureCVData(candidateData, tailoredContent);
         
-        // Create PDF document with maximum compression for speed
+        // Create PDF document with ATS-optimized settings
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
           format: 'a4',
           compress: true,
-          putOnlyUsedFonts: true, // SPEED: Only embed used fonts
-          floatPrecision: 2 // SPEED: Reduce float precision for smaller file
+          putOnlyUsedFonts: true // Only embed used fonts for smaller file size
         });
 
         // Build PDF content
@@ -145,8 +144,7 @@
           unit: 'pt',
           format: 'a4',
           compress: true,
-          putOnlyUsedFonts: true, // SPEED: Only embed used fonts
-          floatPrecision: 2 // SPEED: Reduce float precision
+          putOnlyUsedFonts: true // Only embed used fonts for smaller file size
         });
 
         let currentY = PDF_CONFIG.margins.top;
