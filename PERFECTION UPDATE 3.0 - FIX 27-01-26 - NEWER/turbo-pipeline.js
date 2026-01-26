@@ -25,21 +25,23 @@
 
   // ============ STRATEGIC DELAYS FOR STABILITY ============
   // These delays ensure complete file generation and data integrity
-  // INCREASED: Target 80-85s average completion time
-  // OPENAI THROTTLED: Extra delays to reduce API usage and costs
+  // INCREASED FURTHER: Target 95-110s average completion time for full content rendering
+  // CRITICAL: Extra delays for CV bullet points and Professional Summary rendering
   const STABILITY_DELAYS = {
-    POST_EXTRACTION: 1500,        // 1.5s after keyword extraction
-    POST_TAILORING: 2500,         // 2.5s after CV tailoring to sync data
-    PRE_PDF_GENERATION: 3000,     // 3s before PDF generation (data stabilization)
-    POST_PDF_GENERATION: 4000,    // 4s after PDF generation (file write completion)
-    POST_COVER_GENERATION: 3000,  // 3s after cover letter (file write completion)
-    PRE_ATTACHMENT: 2000,         // 2s before file attachment
-    POST_ATTACHMENT: 2500,        // 2.5s after attachment (verification)
-    OPENAI_STABILIZATION: 3500,   // 3.5s for OpenAI - THROTTLED to save API usage
-    OPENAI_PRE_CALL: 2000,        // 2s delay BEFORE each OpenAI API call
-    OPENAI_POST_CALL: 2500,       // 2.5s delay AFTER each OpenAI API call
-    KIMI_STABILIZATION: 800,      // 800ms for Kimi async data sync
-    FILE_WRITE_BUFFER: 1500       // 1.5s buffer for file I/O completion
+    POST_EXTRACTION: 2000,        // 2s after keyword extraction
+    POST_TAILORING: 4000,         // 4s after CV tailoring to sync ALL data including bullets
+    PRE_PDF_GENERATION: 5000,     // 5s before PDF generation (CRITICAL: data stabilization)
+    POST_PDF_GENERATION: 6000,    // 6s after PDF generation (file write + render completion)
+    POST_COVER_GENERATION: 4000,  // 4s after cover letter (file write completion)
+    PRE_ATTACHMENT: 2500,         // 2.5s before file attachment
+    POST_ATTACHMENT: 3000,        // 3s after attachment (verification)
+    OPENAI_STABILIZATION: 5000,   // 5s for OpenAI - ensure ALL async callbacks complete
+    OPENAI_PRE_CALL: 2500,        // 2.5s delay BEFORE each OpenAI API call
+    OPENAI_POST_CALL: 3000,       // 3s delay AFTER each OpenAI API call
+    KIMI_STABILIZATION: 1500,     // 1.5s for Kimi async data sync
+    FILE_WRITE_BUFFER: 2500,      // 2.5s buffer for file I/O completion
+    BULLET_RENDER_WAIT: 3000,     // 3s NEW: Wait for experience bullets to fully render
+    SUMMARY_RENDER_WAIT: 2000     // 2s NEW: Wait for Professional Summary to render
   };
 
   // Helper function for controlled delays
@@ -840,6 +842,7 @@
     
     // PRE-PDF STABILIZATION: Ensure ALL async data is 100% ready
     // This is the CRITICAL gate - all processing must be complete
+    // EXTENDED: Extra delays for experience bullets and Professional Summary
     const preDelay = aiProvider === 'openai' 
       ? STABILITY_DELAYS.OPENAI_STABILIZATION 
       : STABILITY_DELAYS.KIMI_STABILIZATION;
@@ -847,7 +850,9 @@
     console.log('[TurboPipeline] ⏳ CRITICAL PRE-GENERATION WAIT: Ensuring all data is fully processed...');
     await stableDelay(STABILITY_DELAYS.PRE_PDF_GENERATION, 'Pre-PDF data verification');
     await stableDelay(preDelay, `AI provider stabilization (${aiProvider})`);
-    await stableDelay(2000, 'Final data integrity check');
+    await stableDelay(STABILITY_DELAYS.BULLET_RENDER_WAIT, 'Experience bullets data sync');
+    await stableDelay(STABILITY_DELAYS.SUMMARY_RENDER_WAIT, 'Professional Summary data sync');
+    await stableDelay(3000, 'Final data integrity check - ALL content must be ready');
     
     // FINAL CHECK: Verify all data is ready before generation
     const allReady = (
