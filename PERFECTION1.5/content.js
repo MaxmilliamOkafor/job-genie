@@ -21,10 +21,10 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
   
   // ============ SPEED OPTIMIZATION CONSTANTS ============
-  const FAST_DELAY = 100; // Reduced from 300ms
-  const MEDIUM_DELAY = 200; // Reduced from 500ms
-  const KEYWORD_LIMIT = 25; // Reduced from 35 for faster processing
-  const MAX_JD_LENGTH = 8000; // Reduced from 10000 for faster parsing
+  const FAST_DELAY = 50; // Reduced from 100ms for faster init
+  const MEDIUM_DELAY = 100; // Reduced from 200ms for faster flow
+  const KEYWORD_LIMIT = 20; // Reduced from 25 for faster processing
+  const MAX_JD_LENGTH = 5000; // Reduced from 8000 for faster parsing
   
   // ============ TIER 1-2 TECH COMPANY DOMAINS ============
   const TIER1_COMPANY_DOMAINS = new Map([
@@ -278,10 +278,10 @@
     createPersistentBanner();
     updatePersistentBanner('PERFECTION Active - Auto-extracting keywords...', 'working');
     
-    // Delay to allow page to fully load
+    // Minimal delay - page is ready
     setTimeout(async () => {
       try {
-        // Check if we have a session
+        // Check session quickly
         const data = await new Promise(resolve => chrome.storage.local.get(['ats_session', 'ats_profile'], resolve));
         
         if (!data.ats_session?.access_token) {
@@ -289,14 +289,14 @@
           return;
         }
         
-        // Trigger the Extract & Apply flow
+        // Trigger immediately
         await triggerExtractApply();
         
       } catch (err) {
         console.error('[ATS PERFECTION] Auto-trigger error:', err);
         updatePersistentBanner('Auto-trigger failed: ' + err.message, 'error');
       }
-    }, MEDIUM_DELAY);
+    }, FAST_DELAY);
   }
   
   // ============ OPTIMIZED EXTRACT & APPLY PIPELINE (45-60s target) ============
