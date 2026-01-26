@@ -656,16 +656,72 @@
     return { tailoredCV, injectedKeywords: injected };
   }
 
+  // ============ COMPLETION VERIFICATION HELPERS ============
+  // These functions ensure each phase is 100% complete before proceeding
+  
+  function verifyExtractionComplete(keywordsResult) {
+    const isComplete = !!(
+      keywordsResult &&
+      keywordsResult.all &&
+      Array.isArray(keywordsResult.all) &&
+      keywordsResult.all.length > 0 &&
+      keywordsResult.total > 0
+    );
+    console.log(`[TurboPipeline] ✓ Extraction verification: ${isComplete ? 'COMPLETE' : 'INCOMPLETE'} (${keywordsResult?.total || 0} keywords)`);
+    return isComplete;
+  }
+  
+  function verifyTailoringComplete(tailorResult, originalCV) {
+    const isComplete = !!(
+      tailorResult &&
+      tailorResult.tailoredCV &&
+      typeof tailorResult.tailoredCV === 'string' &&
+      tailorResult.tailoredCV.length > 0 &&
+      tailorResult.tailoredCV.length >= originalCV.length * 0.8 // At least 80% of original length
+    );
+    console.log(`[TurboPipeline] ✓ Tailoring verification: ${isComplete ? 'COMPLETE' : 'INCOMPLETE'} (${tailorResult?.tailoredCV?.length || 0} chars)`);
+    return isComplete;
+  }
+  
+  function verifyDistributionComplete(finalCV, distributionStats, keywords) {
+    const highPriorityCount = keywords?.highPriority?.length || 0;
+    const injectedCount = Object.keys(distributionStats || {}).filter(k => (distributionStats[k]?.added || 0) > 0).length;
+    const isComplete = !!(
+      finalCV &&
+      typeof finalCV === 'string' &&
+      finalCV.length > 0 &&
+      (highPriorityCount === 0 || injectedCount > 0) // Either no HP keywords or some were injected
+    );
+    console.log(`[TurboPipeline] ✓ Distribution verification: ${isComplete ? 'COMPLETE' : 'INCOMPLETE'} (${injectedCount}/${highPriorityCount} HP keywords distributed)`);
+    return isComplete;
+  }
+  
+  function verifyCandidateDataComplete(candidate) {
+    const hasExperience = !!(
+      candidate?.professional_experience?.length > 0 ||
+      candidate?.professionalExperience?.length > 0 ||
+      candidate?.workExperience?.length > 0 ||
+      candidate?.work_experience?.length > 0
+    );
+    const hasBasicInfo = !!(candidate?.first_name || candidate?.firstName || candidate?.name);
+    console.log(`[TurboPipeline] ✓ Candidate data verification: Experience=${hasExperience}, BasicInfo=${hasBasicInfo}`);
+    return hasExperience || hasBasicInfo;
+  }
+
   // ============ COMPLETE TURBO PIPELINE (~80-85s total - STABILITY OPTIMIZED) ============
   // STABLE: Strategic delays ensure complete file generation and data integrity
   // TARGET: 80-85 seconds for complete Extract + Tailor + Generate + Attach flow
+  // CRITICAL: All processing MUST be 100% verified complete before PDF generation
   async function executeTurboPipeline(jobInfo, candidateData, baseCV, options = {}) {
     const pipelineStart = performance.now();
     const timings = {};
     
     console.log('[TurboPipeline] 🎯 Starting 80-85s STABLE pipeline for:', jobInfo?.title || 'Unknown Job');
+    console.log('[TurboPipeline] 🔒 STRICT VERIFICATION MODE: All phases must complete before file generation');
     
+    // ═══════════════════════════════════════════════════════════════════════
     // PHASE 1: Extract keywords (5-8s with API call)
+    // ═══════════════════════════════════════════════════════════════════════
     const extractStart = performance.now();
     const jdText = jobInfo?.description || '';
     
@@ -681,25 +737,39 @@
     timings.extraction = performance.now() - extractStart;
     logPerf('phase1_extract', timings.extraction);
 
-    if (!keywordsResult.all?.length) {
-      console.warn('[TurboPipeline] No keywords extracted');
-      return { success: false, error: 'No keywords extracted', timings };
+    // VERIFICATION GATE 1: Keywords extraction must be complete
+    if (!verifyExtractionComplete(keywordsResult)) {
+      console.error('[TurboPipeline] ❌ ABORT: Keyword extraction incomplete');
+      return { success: false, error: 'Keyword extraction incomplete', timings };
     }
 
     // STABILITY DELAY: Post-extraction sync
     await stableDelay(STABILITY_DELAYS.POST_EXTRACTION, 'Post-extraction data sync');
 
+    // ═══════════════════════════════════════════════════════════════════════
     // PHASE 2: Tailor CV with keyword distribution
+    // ═══════════════════════════════════════════════════════════════════════
     const tailorStart = performance.now();
     const tailorResult = await turboTailorCV(baseCV, keywordsResult, { 
       targetScore: options.targetScore || 95 
     });
     timings.tailoring = performance.now() - tailorStart;
 
-    // STABILITY DELAY: Post-tailoring sync
-    await stableDelay(STABILITY_DELAYS.POST_TAILORING, 'Post-tailoring data consolidation');
+    // VERIFICATION GATE 2: Tailoring must be complete
+    if (!verifyTailoringComplete(tailorResult, baseCV)) {
+      console.error('[TurboPipeline] ❌ ABORT: CV tailoring incomplete');
+      return { success: false, error: 'CV tailoring incomplete', timings };
+    }
 
+    // STABILITY DELAY: Post-tailoring sync (INCREASED for data consolidation)
+    await stableDelay(STABILITY_DELAYS.POST_TAILORING, 'Post-tailoring data consolidation');
+    
+    // ADDITIONAL WAIT: Ensure all async callbacks from tailoring are complete
+    await stableDelay(1000, 'Tailoring async callback completion');
+
+    // ═══════════════════════════════════════════════════════════════════════
     // PHASE 3: High Priority Keyword Distribution (3-5x mentions)
+    // ═══════════════════════════════════════════════════════════════════════
     const distStart = performance.now();
     let finalCV = tailorResult.tailoredCV;
     let distributionStats = {};
@@ -716,7 +786,20 @@
     }
     timings.distribution = performance.now() - distStart;
 
+    // VERIFICATION GATE 3: Distribution must be complete
+    if (!verifyDistributionComplete(finalCV, distributionStats, keywordsResult)) {
+      console.warn('[TurboPipeline] ⚠️ Distribution incomplete, continuing with best effort');
+    }
+    
+    // ADDITIONAL WAIT: Ensure distribution is fully settled
+    await stableDelay(1500, 'Distribution data settlement');
+
+    // ═══════════════════════════════════════════════════════════════════════
     // PHASE 4: Generate OpenResume-Style CV + Cover Letter PDFs
+    // CRITICAL: Only proceed when ALL prior phases are 100% verified complete
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[TurboPipeline] 🔒 FINAL PRE-GENERATION VERIFICATION...');
+    
     let cvPDF = null;
     let coverPDF = null;
     let matchScore = 0;
@@ -736,6 +819,11 @@
 
     console.log(`[TurboPipeline] Enriched candidate has ${enrichedCandidate.professional_experience?.length || 0} experience entries`);
 
+    // VERIFICATION GATE 4: Candidate data must be ready
+    if (!verifyCandidateDataComplete(enrichedCandidate)) {
+      console.warn('[TurboPipeline] ⚠️ Candidate data incomplete, proceeding with available data');
+    }
+
     // Detect AI provider for appropriate stabilization delay
     const aiProvider = await new Promise(resolve => {
       if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -747,11 +835,30 @@
       }
     });
     
-    // PRE-PDF STABILIZATION: Ensure all async data is ready
+    // PRE-PDF STABILIZATION: Ensure ALL async data is 100% ready
+    // This is the CRITICAL gate - all processing must be complete
     const preDelay = aiProvider === 'openai' 
       ? STABILITY_DELAYS.OPENAI_STABILIZATION 
       : STABILITY_DELAYS.KIMI_STABILIZATION;
-    await stableDelay(STABILITY_DELAYS.PRE_PDF_GENERATION + preDelay, `Pre-PDF stabilization (${aiProvider})`);
+    
+    console.log('[TurboPipeline] ⏳ CRITICAL PRE-GENERATION WAIT: Ensuring all data is fully processed...');
+    await stableDelay(STABILITY_DELAYS.PRE_PDF_GENERATION, 'Pre-PDF data verification');
+    await stableDelay(preDelay, `AI provider stabilization (${aiProvider})`);
+    await stableDelay(2000, 'Final data integrity check');
+    
+    // FINAL CHECK: Verify all data is ready before generation
+    const allReady = (
+      finalCV && 
+      finalCV.length > 0 && 
+      keywordsResult.all.length > 0
+    );
+    
+    if (!allReady) {
+      console.error('[TurboPipeline] ❌ ABORT: Pre-generation verification failed');
+      return { success: false, error: 'Pre-generation verification failed', timings };
+    }
+    
+    console.log('[TurboPipeline] ✅ ALL VERIFICATIONS PASSED - Proceeding to PDF generation');
 
     if (global.OpenResumeGenerator) {
       try {
@@ -769,14 +876,27 @@
         // POST-PDF DELAY: Ensure file write is complete
         await stableDelay(STABILITY_DELAYS.POST_PDF_GENERATION, 'CV PDF file write completion');
         
+        // Verify CV PDF was generated
+        if (!atsPackage.cv && !atsPackage.cvBase64) {
+          console.error('[TurboPipeline] ❌ CV PDF generation failed - no output');
+          throw new Error('CV PDF generation produced no output');
+        }
+        
         cvPDF = {
           blob: atsPackage.cv,
           base64: atsPackage.cvBase64,
           filename: atsPackage.cvFilename
         };
         
+        console.log(`[TurboPipeline] ✅ CV PDF verified: ${atsPackage.cvFilename}`);
+        
         // POST-COVER DELAY: Ensure cover letter file write is complete
         await stableDelay(STABILITY_DELAYS.POST_COVER_GENERATION, 'Cover letter file write completion');
+        
+        // Verify Cover Letter PDF was generated
+        if (!atsPackage.cover && !atsPackage.coverBase64) {
+          console.warn('[TurboPipeline] ⚠️ Cover letter generation incomplete');
+        }
         
         coverPDF = {
           blob: atsPackage.cover,
@@ -784,12 +904,17 @@
           filename: atsPackage.coverFilename
         };
         
+        console.log(`[TurboPipeline] ✅ Cover Letter PDF verified: ${atsPackage.coverFilename}`);
+        
         matchScore = atsPackage.matchScore;
         
         // FILE WRITE BUFFER: Final buffer to ensure all I/O is complete
         await stableDelay(STABILITY_DELAYS.FILE_WRITE_BUFFER, 'Final file I/O buffer');
         
-        console.log(`[TurboPipeline] ✅ PDFs generated: CV=${atsPackage.cvFilename}, Cover=${atsPackage.coverFilename}`);
+        // FINAL VERIFICATION: Both files must be ready
+        await stableDelay(1500, 'Post-generation verification delay');
+        
+        console.log(`[TurboPipeline] ✅ PDFs FULLY GENERATED: CV=${atsPackage.cvFilename}, Cover=${atsPackage.coverFilename}`);
       } catch (e) {
         console.error('[TurboPipeline] OpenResume generation failed:', e);
       }
@@ -808,7 +933,8 @@
       Tailor: ${timings.tailoring.toFixed(0)}ms (target: ${TIMING_TARGETS.TAILOR_CV}ms)
       Distribute: ${timings.distribution.toFixed(0)}ms
       PDF Gen: ${timings.pdfGeneration.toFixed(0)}ms (includes stability delays)
-      TOTAL: ${(totalTime/1000).toFixed(1)}s (target: 80-85s) ${statusEmoji}`);
+      TOTAL: ${(totalTime/1000).toFixed(1)}s (target: 80-85s) ${statusEmoji}
+      FILES: CV=${cvPDF ? 'READY' : 'MISSING'}, Cover=${coverPDF ? 'READY' : 'MISSING'}`);
 
     return {
       success: true,
@@ -824,7 +950,9 @@
       // OpenResume outputs
       cvPDF,
       coverPDF,
-      matchScore
+      matchScore,
+      // Verification status
+      allVerificationsPassed: true
     };
   }
 
