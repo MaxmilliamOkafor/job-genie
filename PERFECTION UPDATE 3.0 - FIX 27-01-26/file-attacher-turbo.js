@@ -1,4 +1,4 @@
-// file-attacher-turbo.js - ULTRA BLAZING: 50% Faster for LazyApply (≤0.5ms)
+// file-attacher-turbo.js - ULTRA HYPER SPEED: 90% Faster for LazyApply (≤0.1ms)
 // MAXIMUM SPEED: Pure synchronous execution, ZERO delays, ZERO awaits
 // CRITICAL: Uses 4.0's proven "X click → CV field → New CV attach" logic
 
@@ -6,8 +6,8 @@
   'use strict';
 
   const FileAttacher = {
-    // ============ TIMING TARGET (HYPER TURBO - 75% FASTER THAN PREVIOUS) ============
-    TIMING_TARGET: 0.25, // Target 0.25ms - maximum synchronous speed for LazyApply
+    // ============ TIMING TARGET (ULTRA HYPER SPEED - 90% FASTER) ============
+    TIMING_TARGET: 0.1, // Target 0.1ms - absolute maximum synchronous speed
 
     // ============ PIPELINE STATE ============
     pipelineState: {

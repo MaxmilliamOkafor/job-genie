@@ -908,7 +908,7 @@
         }
         
         console.log('[ATS Workday TOP1] ⚠️ Apply button not found');
-      }, 40); // HYPER TURBO: Reduced from 75ms to 40ms
+      }, 25); // ULTRA HYPER: Reduced from 40ms to 25ms
       
       return;
     }
@@ -933,7 +933,7 @@
           createBtn.click();
           workdayFlowState.step = 'account_created';
         }
-      }, 50); // HYPER TURBO: Reduced from 100ms to 50ms
+      }, 25); // ULTRA HYPER: Reduced from 50ms to 25ms
       return;
     }
     
@@ -1052,7 +1052,7 @@
           saveBtn.click();
           workdayFlowState.step = 'experience_saved';
         }
-      }, 200); // HYPER TURBO: Reduced from 400ms to 200ms
+      }, 100); // ULTRA HYPER: Reduced from 200ms to 100ms
       return;
     }
     
@@ -1070,7 +1070,7 @@
           saveBtn.click();
           workdayFlowState.step = 'questions_saved';
         }
-      }, 50); // HYPER TURBO: Reduced from 100ms to 50ms
+      }, 25); // ULTRA HYPER: Reduced from 50ms to 25ms
       return;
     }
     
@@ -1145,7 +1145,7 @@
           resolve(false);
           return;
         }
-        setTimeout(check, 50); // HYPER TURBO: Reduced from 100ms to 50ms
+        setTimeout(check, 25); // ULTRA HYPER: Reduced from 50ms to 25ms
       };
       check();
     });

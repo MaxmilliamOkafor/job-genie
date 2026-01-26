@@ -2042,10 +2042,9 @@ ${
           endpoint: "https://api.moonshot.ai/v1/chat/completions",
           model: "kimi-k2-0711-preview",
           providerName: "Kimi K2",
-          // SPEED OPTIMIZATION: Kimi K2 uses lower temperature and max_tokens for faster response
-          temperature: 0.5,
-          maxTokens: 3500,
-          // Kimi K2 specific: enable stream chunking for faster first-byte
+          // HYPER SPEED: Aggressive settings for fastest response
+          temperature: 0.3,    // Lower = faster, more focused
+          maxTokens: 2500,     // Reduced from 3500 - sufficient for CV
           streamChunks: false,
         };
       }
@@ -2053,8 +2052,8 @@ ${
         endpoint: "https://api.openai.com/v1/chat/completions",
         model: "gpt-4o-mini",
         providerName: "OpenAI",
-        temperature: 0.7,
-        maxTokens: 4000,
+        temperature: 0.5,
+        maxTokens: 3000,
         streamChunks: false,
       };
     };
@@ -2081,12 +2080,13 @@ ${
           temperature: apiConfig.temperature,
         };
 
-        // Kimi K2 speed optimizations
+        // Kimi K2 HYPER SPEED optimizations
         if (aiProvider === "kimi") {
-          // Use presence_penalty to reduce repetition and speed up
-          requestBody.presence_penalty = 0.1;
-          // Kimi responds faster with explicit stop tokens
-          requestBody.stop = ["\n\n\n", "---END---"];
+          // Aggressive penalties for faster completion
+          requestBody.presence_penalty = 0.2;
+          requestBody.frequency_penalty = 0.1;
+          // Multiple stop tokens for faster termination
+          requestBody.stop = ["\n\n\n", "---END---", "```\n\n", "}\n\n\n"];
         }
 
         response = await fetch(apiConfig.endpoint, {
