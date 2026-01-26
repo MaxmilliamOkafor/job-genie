@@ -2,21 +2,22 @@
 // 70% FASTER THAN ALL: Ultimate speed for LazyApply instant compatibility
 // FEATURES: URL-based caching, parallel processing, High Priority keyword distribution, Unique CV per job
 // INTEGRATED: OpenResume-style ATS PDF + Cover Letter generation
+// FIX 27-01-26: Restored maxTokens to 3500 to prevent JSON truncation errors
 
 (function(global) {
   'use strict';
 
-  // ============ TIMING TARGETS (ULTRA HYPER SPEED - 90% FASTER) ============
-  // Kimi K2 with temp 0.3 + reduced tokens = fastest possible
-  // TARGET: 30s total for full Extract + Tailor + Generate flow
+  // ============ TIMING TARGETS (OPTIMIZED SPEED - STABLE) ============
+  // Kimi K2 with temp 0.4 + restored tokens for reliable output
+  // TARGET: 45s total for full Extract + Tailor + Generate flow
   const TIMING_TARGETS = {
-    EXTRACT_KEYWORDS: 0.05,   // 50ms - ULTRA HYPER SPEED
-    TAILOR_CV: 0.1,           // 100ms with parallel API calls - ULTRA HYPER
-    GENERATE_PDF: 0.05,       // 50ms optimized PDF generation
-    GENERATE_COVER: 0.04,     // 40ms for cover letter - ULTRA HYPER
-    ATTACH_FILES: 0.01,       // 10ms file attachment
-    TOTAL: 0.25,              // 250ms total pipeline - ULTRA HYPER SPEED
-    FULL_FLOW_TARGET: 30000   // 30 seconds total for user-facing flow
+    EXTRACT_KEYWORDS: 0.1,    // 100ms - stable extraction
+    TAILOR_CV: 0.15,          // 150ms with parallel API calls
+    GENERATE_PDF: 0.08,       // 80ms optimized PDF generation
+    GENERATE_COVER: 0.06,     // 60ms for cover letter
+    ATTACH_FILES: 0.02,       // 20ms file attachment
+    TOTAL: 0.4,               // 400ms total pipeline - stable
+    FULL_FLOW_TARGET: 45000   // 45 seconds total for user-facing flow
   };
   
   // Performance monitoring

@@ -1,6 +1,11 @@
-# ATS PERFECTION v3.0 - Ultimate CV Tailor Extension
+# ATS PERFECTION v3.0.1 - Ultimate CV Tailor Extension
 
-The **PERFECTION** extension is the ultimate ATS (Applicant Tracking System) CV tailoring tool, combining the best features from all previous versions:
+The **PERFECTION** extension is the ultimate ATS (Applicant Tracking System) CV tailoring tool, combining the best features from all previous versions.
+
+## 🔧 v3.0.1 Fixes (27-01-26)
+- **Fixed JSON truncation error** - Restored `maxTokens` from 2500 to 3500 to prevent incomplete AI responses
+- **Stabilized API parameters** - Temperature set to 0.4 for reliable output quality
+- **Extended pipeline timing** - 45s target for stable generation without errors
 
 ## 🚀 Key Features
 
