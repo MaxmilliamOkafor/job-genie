@@ -25,17 +25,18 @@
 
   // ============ STRATEGIC DELAYS FOR STABILITY ============
   // These delays ensure complete file generation and data integrity
+  // INCREASED: Target 80-85s average completion time
   const STABILITY_DELAYS = {
-    POST_EXTRACTION: 500,         // 500ms after keyword extraction
-    POST_TAILORING: 800,          // 800ms after CV tailoring to sync data
-    PRE_PDF_GENERATION: 1000,     // 1s before PDF generation (data stabilization)
-    POST_PDF_GENERATION: 1500,    // 1.5s after PDF generation (file write completion)
-    POST_COVER_GENERATION: 1000,  // 1s after cover letter (file write completion)
-    PRE_ATTACHMENT: 500,          // 500ms before file attachment
-    POST_ATTACHMENT: 1000,        // 1s after attachment (verification)
-    OPENAI_STABILIZATION: 300,    // 300ms for OpenAI async data sync
-    KIMI_STABILIZATION: 200,      // 200ms for Kimi async data sync
-    FILE_WRITE_BUFFER: 500        // 500ms buffer for file I/O completion
+    POST_EXTRACTION: 1500,        // 1.5s after keyword extraction
+    POST_TAILORING: 2500,         // 2.5s after CV tailoring to sync data
+    PRE_PDF_GENERATION: 3000,     // 3s before PDF generation (data stabilization)
+    POST_PDF_GENERATION: 4000,    // 4s after PDF generation (file write completion)
+    POST_COVER_GENERATION: 3000,  // 3s after cover letter (file write completion)
+    PRE_ATTACHMENT: 2000,         // 2s before file attachment
+    POST_ATTACHMENT: 2500,        // 2.5s after attachment (verification)
+    OPENAI_STABILIZATION: 1000,   // 1s for OpenAI async data sync
+    KIMI_STABILIZATION: 800,      // 800ms for Kimi async data sync
+    FILE_WRITE_BUFFER: 1500       // 1.5s buffer for file I/O completion
   };
 
   // Helper function for controlled delays
