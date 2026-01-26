@@ -647,7 +647,7 @@
     const [keywordsResult, candidatePrepped] = await Promise.all([
       turboExtractKeywords(jdText, {
         jobUrl: jobInfo?.url || '',
-        maxKeywords: options.maxKeywords || 50
+        maxKeywords: options.maxKeywords || 30 // SPEED: Default to 30 for optimal balance
       }),
       Promise.resolve(candidateData) // Pre-validate candidate data
     ]);

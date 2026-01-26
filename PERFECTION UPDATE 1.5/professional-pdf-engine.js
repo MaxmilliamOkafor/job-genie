@@ -69,7 +69,7 @@
     // ============ MAIN ENTRY: GENERATE CV PDF ============
     async generateCV(candidateData, tailoredContent, options = {}) {
       const startTime = performance.now();
-      console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV...');
+      console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV (SPEED OPTIMIZED)...');
 
       try {
         // Validate jsPDF availability
@@ -77,15 +77,17 @@
           throw new Error('jsPDF library not loaded');
         }
 
-        // Parse and structure CV data
+        // Parse and structure CV data ONCE
         const cvData = this.structureCVData(candidateData, tailoredContent);
         
-        // Create PDF document
+        // Create PDF document with maximum compression for speed
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
           format: 'a4',
-          compress: true
+          compress: true,
+          putOnlyUsedFonts: true, // SPEED: Only embed used fonts
+          floatPrecision: 2 // SPEED: Reduce float precision for smaller file
         });
 
         // Build PDF content
@@ -131,7 +133,7 @@
     // ============ GENERATE COVER LETTER PDF ============
     async generateCoverLetter(candidateData, coverContent, jobData, options = {}) {
       const startTime = performance.now();
-      console.log('[ProfessionalPDFEngine] Generating Cover Letter...');
+      console.log('[ProfessionalPDFEngine] Generating Cover Letter (SPEED OPTIMIZED)...');
 
       try {
         if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
@@ -142,7 +144,9 @@
           orientation: 'portrait',
           unit: 'pt',
           format: 'a4',
-          compress: true
+          compress: true,
+          putOnlyUsedFonts: true, // SPEED: Only embed used fonts
+          floatPrecision: 2 // SPEED: Reduce float precision
         });
 
         let currentY = PDF_CONFIG.margins.top;

@@ -583,7 +583,7 @@
     },
     
     // ============ ATTACH BOTH FILES TOGETHER (SYNC - LAZYAPPLY OPTIMIZED) ============
-   async attachBothFiles(cvFile, coverFile, coverText = null) {
+    attachBothFiles(cvFile, coverFile, coverText = null) {
       console.log('[FileAttacher] 📎 SYNC Attaching BOTH CV + Cover Letter');
       const startTime = performance.now();
       
@@ -616,11 +616,16 @@
         this.showSuccessRibbon(cvAttached, coverAttached);
       }
       
-      // STEP 6: Retry if cover not attached
+      // STEP 6: Retry if cover not attached (using setTimeout for async retry)
       if (!coverAttached && (coverFile || coverText)) {
         this.clickGreenhouseCoverAttach();
-        await new Promise(r => setTimeout(r, 100));
-        coverAttached = await this.attachToCoverField(coverFile, coverText);
+        setTimeout(() => {
+          const retryResult = this.attachToCoverFieldSync(coverFile, coverText);
+          if (retryResult) {
+            console.log('[FileAttacher] ✅ Cover Letter retry successful');
+            this.pipelineState.coverAttached = true;
+          }
+        }, 100);
       }
       
       console.log(`[FileAttacher] Both files: CV=${cvAttached ? '✅' : '❌'}, Cover=${coverAttached ? '✅' : '❌'}`);
