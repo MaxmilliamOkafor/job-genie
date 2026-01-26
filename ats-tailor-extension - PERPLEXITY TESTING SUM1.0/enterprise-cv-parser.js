@@ -673,7 +673,8 @@
       return result;
     },
     
-    // ============ FIX COMMON MAPPING ISSUES ============
+    // ============ FIX COMMON MAPPING ISSUES (v1.2) ============
+    // ENHANCED: Better date extraction and company/title swap detection
     fixMappingIssues(profileData) {
       if (!profileData) return null;
       
@@ -688,6 +689,10 @@
       if (!Array.isArray(experiences)) {
         experiences = [];
       }
+      
+      // Title and company detection patterns
+      const titleIndicators = /\b(engineer|developer|architect|analyst|manager|director|scientist|specialist|lead|consultant|senior|junior|vp|president|head of|chief|product|data|software|ai|ml)\b/i;
+      const companyIndicators = /\b(inc|llc|ltd|corp|plc|group|ai|tech|health|solutions|meta|google|amazon|microsoft|apple|accenture|citigroup|citi|ibm|oracle|salesforce|solim|fidelity)\b/i;
       
       // Fix each experience entry
       const fixedExperiences = experiences.map((exp, i) => {
@@ -705,16 +710,58 @@
                            exp.immutable_fields?.job_title?.value || '';
         }
         
-        // Ensure startDate field exists
+        // Detect and fix company/title swap
+        const companyLooksLikeTitle = titleIndicators.test(fixedExp.company) && !companyIndicators.test(fixedExp.company);
+        const titleLooksLikeCompany = companyIndicators.test(fixedExp.title) && !titleIndicators.test(fixedExp.title);
+        
+        if (companyLooksLikeTitle && titleLooksLikeCompany) {
+          console.warn(`[EnterpriseCVParser] Fixing swap at index ${i}: "${fixedExp.company}" ↔ "${fixedExp.title}"`);
+          const temp = fixedExp.company;
+          fixedExp.company = fixedExp.title;
+          fixedExp.title = temp;
+        }
+        
+        // Enhanced date extraction - check multiple sources
         if (!fixedExp.startDate) {
           fixedExp.startDate = exp.start_date || 
                                exp.immutable_fields?.employment_dates?.start_date?.value || '';
+          
+          // Try to extract from dates/duration fields
+          if (!fixedExp.startDate && exp.dates) {
+            const years = String(exp.dates).match(/\b(19|20)\d{2}\b/g);
+            if (years && years.length >= 1) {
+              fixedExp.startDate = years[0];
+            }
+          }
         }
         
-        // Ensure endDate field exists
+        // Enhanced endDate extraction
         if (!fixedExp.endDate) {
           fixedExp.endDate = exp.end_date || 
-                             exp.immutable_fields?.employment_dates?.end_date?.value || 'Present';
+                             exp.immutable_fields?.employment_dates?.end_date?.value || '';
+          
+          // Try to extract from dates/duration fields
+          if (!fixedExp.endDate && exp.dates) {
+            const dateStr = String(exp.dates);
+            if (/present|current|ongoing/i.test(dateStr)) {
+              fixedExp.endDate = 'Present';
+            } else {
+              const years = dateStr.match(/\b(19|20)\d{2}\b/g);
+              if (years && years.length >= 2) {
+                fixedExp.endDate = years[years.length - 1];
+              }
+            }
+          }
+          
+          // If first entry and no end date, assume current role
+          if (!fixedExp.endDate && i === 0) {
+            fixedExp.endDate = 'Present';
+          }
+          
+          // Default to Present if still missing
+          if (!fixedExp.endDate) {
+            fixedExp.endDate = 'Present';
+          }
         }
         
         // Ensure bullets array exists
