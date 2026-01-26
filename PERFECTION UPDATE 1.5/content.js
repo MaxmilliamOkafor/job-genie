@@ -551,7 +551,7 @@
     for (const sel of jdSelectors) {
       const el = document.querySelector(sel);
       if (el?.textContent?.trim().length > 200) {
-        description = el.textContent.trim().substring(0, 10000); // MAX_JD_LENGTH
+        description = el.textContent.trim().substring(0, 5000); // SPEED: Reduced from 10000 to 5000
         break;
       }
     }
@@ -564,7 +564,7 @@
         if (text.length > 500 && text.length < 15000 && 
             (text.includes('responsibilities') || text.includes('requirements') || 
              text.includes('qualifications') || text.includes('experience'))) {
-          description = text.substring(0, 10000);
+          description = text.substring(0, 5000); // SPEED: Reduced from 10000 to 5000
           break;
         }
       }
@@ -667,7 +667,7 @@
     if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
       const keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', {
         jobUrl,
-        maxKeywords: 35, // TOP 1% gets 35 keywords
+        maxKeywords: 20, // SPEED: Reduced from 35 to 20 for faster processing
       });
       console.log(`[ATS Workday TOP1] ⚡ Keywords extracted in ${Math.round(performance.now() - start)}ms: ${keywords.total} keywords`);
       return keywords;
@@ -705,7 +705,7 @@
           candidateData,
           baseCV,
           {
-            maxKeywords: 35,
+            maxKeywords: 20, // SPEED: Reduced from 35 to 20
             targetScore: 95,
             pdf: true,
           }
@@ -833,7 +833,7 @@
         }
         
         console.log('[ATS Workday TOP1] ⚠️ Apply button not found');
-      }, 150); // SPEED: Reduced from 300ms to 150ms - snapshot saves instantly
+      }, 75); // SPEED: Reduced from 150ms to 75ms
       
       return;
     }
@@ -858,7 +858,7 @@
           createBtn.click();
           workdayFlowState.step = 'account_created';
         }
-      }, 250); // SPEED: Reduced from 500ms to 250ms
+      }, 100); // SPEED: Reduced from 250ms to 100ms
       return;
     }
     
@@ -934,7 +934,7 @@
                     field.setAttribute('data-ats-tailor-disabled', '1');
                   }
                 });
-              }, 250); // SPEED: Reduced from 500ms to 250ms
+              }, 100); // SPEED: Reduced from 250ms to 100ms
             } else {
               // Fallback: load any cached files
               loadFilesAndStart();
@@ -961,7 +961,7 @@
               console.log('[ATS Tailor Workday] CV upload field disabled to prevent loop');
             }
           });
-        }, 500); // SPEED: Reduced from 1000ms to 500ms
+        }, 200); // SPEED: Reduced from 500ms to 200ms
       }
       
       // Clean up SpeedApply bug: Delete 3rd empty education entry
@@ -977,7 +977,7 @@
           saveBtn.click();
           workdayFlowState.step = 'experience_saved';
         }
-      }, 1000); // SPEED: Reduced from 2000ms to 1000ms
+      }, 400); // SPEED: Reduced from 1000ms to 400ms
       return;
     }
     
@@ -995,7 +995,7 @@
           saveBtn.click();
           workdayFlowState.step = 'questions_saved';
         }
-      }, 250); // SPEED: Reduced from 500ms to 250ms
+      }, 100); // SPEED: Reduced from 250ms to 100ms
       return;
     }
     
@@ -2258,7 +2258,7 @@
       if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
         keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { 
           jobUrl: currentJobUrl, 
-          maxKeywords: 35 // Tier 1 gets more keywords
+          maxKeywords: 20 // SPEED: Reduced from 35 to 20 for faster processing
         });
       } else {
         keywords = extractBasicKeywords(jobInfo.description || '');
@@ -2283,7 +2283,7 @@
       if (typeof OpenResumeGenerator !== 'undefined' && OpenResumeGenerator.generateATSPackage) {
         pdfResult = await OpenResumeGenerator.generateATSPackage(tailoredCV, keywords, jobInfo);
       } else if (typeof TurboPipeline !== 'undefined' && TurboPipeline.executeTurboPipeline) {
-        const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 35 });
+        const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 20 }); // SPEED: Reduced from 35
         if (pipelineResult.success) {
           pdfResult = { cv: pipelineResult.cvPDF, cover: pipelineResult.coverPDF };
         }
