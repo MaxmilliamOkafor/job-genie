@@ -72,6 +72,88 @@ const splitCompanyAndTitle = (value: string) => {
   return null;
 };
 
+/**
+ * Extract dates from a merged title field like "Senior Engineer - 2023 - Present"
+ * Returns { title: string, startDate: string, endDate: string }
+ */
+export const extractDatesFromTitle = (title: string): { cleanTitle: string; startDate: string; endDate: string } => {
+  if (!title) return { cleanTitle: '', startDate: '', endDate: '' };
+
+  // Pattern: "Title - YYYY - YYYY/Present" or "Title - YYYY-YYYY"
+  const datePatterns = [
+    // "Senior Engineer - 2023 - Present" or "Senior Engineer - 2023 - 2024"
+    /^(.+?)\s*[-–—]\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+    // "Senior Engineer (2023 - Present)"
+    /^(.+?)\s*\(\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})\s*\)$/i,
+    // "Senior Engineer, 2023 - Present"
+    /^(.+?)\s*,\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+    // "Senior Engineer | 2023 - Present"
+    /^(.+?)\s*\|\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+  ];
+
+  for (const pattern of datePatterns) {
+    const match = title.match(pattern);
+    if (match) {
+      return {
+        cleanTitle: cleanText(match[1]),
+        startDate: match[2],
+        endDate: match[3],
+      };
+    }
+  }
+
+  // Fallback: Extract any year range from end of title
+  const fallbackMatch = title.match(/^(.+?)\s*[-–—,|]\s*((?:19|20)\d{2})(?:\s*[-–—]\s*(Present|(?:19|20)\d{2}))?$/i);
+  if (fallbackMatch) {
+    return {
+      cleanTitle: cleanText(fallbackMatch[1]),
+      startDate: fallbackMatch[2],
+      endDate: fallbackMatch[3] || 'Present',
+    };
+  }
+
+  return { cleanTitle: title, startDate: '', endDate: '' };
+};
+
+/**
+ * Format extracted dates into a clean "YYYY – YYYY" or "YYYY – Present" string
+ */
+export const formatDateRange = (startDate?: string, endDate?: string, title?: string): string => {
+  // First try to extract from title if no explicit dates
+  if ((!startDate || !endDate) && title) {
+    const extracted = extractDatesFromTitle(title);
+    if (extracted.startDate) {
+      startDate = startDate || extracted.startDate;
+      endDate = endDate || extracted.endDate;
+    }
+  }
+
+  const normalise = (raw?: string) => {
+    if (!raw) return '';
+    const seg = raw.split('|').map(s => s.trim()).filter(Boolean).pop() ?? '';
+    return seg;
+  };
+
+  const extractYear = (raw?: string) => {
+    const date = normalise(raw);
+    if (!date) return '';
+    if (/present/i.test(date)) return 'Present';
+    const yearMatch = date.match(/\b(19|20)\d{2}\b/);
+    return yearMatch ? yearMatch[0] : date;
+  };
+
+  const startRaw = normalise(startDate);
+  const endRaw = normalise(endDate);
+  const startHasPresent = /present/i.test(startRaw);
+
+  const start = extractYear(startRaw);
+  const end = endRaw ? extractYear(endRaw) : (startHasPresent ? 'Present' : '');
+
+  if (!start && !end) return '';
+  if (!end || start === end) return start;
+  return `${start} – ${end}`;
+};
+
 export const normalizeWorkExperience = (exps: WorkExperienceLike[] | undefined) => {
   if (!Array.isArray(exps)) return [];
 
@@ -83,6 +165,16 @@ export const normalizeWorkExperience = (exps: WorkExperienceLike[] | undefined) 
 
     next.company = cleanText(next.company);
     next.title = cleanText(next.title);
+
+    // Extract dates from merged title field (e.g., "Senior Engineer - 2023 - Present")
+    if (next.title && (!next.startDate || !next.endDate)) {
+      const extracted = extractDatesFromTitle(next.title);
+      if (extracted.startDate) {
+        next.startDate = next.startDate || extracted.startDate;
+        next.endDate = next.endDate || extracted.endDate;
+        // Keep the full title with dates for display consistency
+      }
+    }
 
     // If either field contains "Company – Title" style, split it.
     if ((!next.title || !next.company) && typeof next.company === 'string') {

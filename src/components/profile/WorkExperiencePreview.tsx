@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye } from 'lucide-react';
+import { extractDatesFromTitle, formatDateRange } from '@/lib/workExperienceNormalization';
 
 interface WorkExperience {
   id?: string;
@@ -14,38 +15,6 @@ interface WorkExperience {
 interface WorkExperiencePreviewProps {
   workExperience: WorkExperience[];
 }
-
-// Format dates to year-only (e.g., "2024" or "2020 – Present")
-// Also handles messy inputs like "2023 Present | 2023 - Present".
-const formatDateRange = (startDate?: string, endDate?: string): string => {
-  const normaliseRaw = (raw?: string) => {
-    if (!raw) return '';
-    // If multiple segments are present (e.g. "foo | 2023 - Present"), take the last.
-    const seg = raw.split('|').map(s => s.trim()).filter(Boolean).pop() ?? '';
-    return seg;
-  };
-
-  const extractYear = (raw?: string) => {
-    const date = normaliseRaw(raw);
-    if (!date) return '';
-    if (/present/i.test(date)) return 'Present';
-    const yearMatch = date.match(/\b(19|20)\d{2}\b/);
-    return yearMatch ? yearMatch[0] : date;
-  };
-
-  const startRaw = normaliseRaw(startDate);
-  const endRaw = normaliseRaw(endDate);
-
-  // If start contains "Present" but end is empty, treat it as ongoing.
-  const startHasPresent = /present/i.test(startRaw);
-
-  const start = extractYear(startRaw);
-  const end = endRaw ? extractYear(endRaw) : (startHasPresent ? 'Present' : '');
-
-  if (!start && !end) return '';
-  if (!end || start === end) return start;
-  return `${start} – ${end}`;
-};
 
 export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewProps) {
   if (!workExperience || workExperience.length === 0) {
@@ -91,8 +60,16 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                 : [];
 
             const company = exp.company || 'Company';
-            const title = exp.title || 'Job Title';
-            const dateRange = formatDateRange(exp.startDate, exp.endDate);
+            const rawTitle = exp.title || 'Job Title';
+            
+            // Extract dates from merged title field (e.g., "Senior Engineer - 2023 - Present")
+            const extracted = extractDatesFromTitle(rawTitle);
+            const title = extracted.cleanTitle || rawTitle;
+            const dateRange = formatDateRange(
+              exp.startDate || extracted.startDate, 
+              exp.endDate || extracted.endDate,
+              rawTitle
+            );
 
             return (
               <div key={exp.id || index} className="space-y-1">
