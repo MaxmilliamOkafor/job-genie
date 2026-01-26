@@ -26,6 +26,7 @@
   // ============ STRATEGIC DELAYS FOR STABILITY ============
   // These delays ensure complete file generation and data integrity
   // INCREASED: Target 80-85s average completion time
+  // OPENAI THROTTLED: Extra delays to reduce API usage and costs
   const STABILITY_DELAYS = {
     POST_EXTRACTION: 1500,        // 1.5s after keyword extraction
     POST_TAILORING: 2500,         // 2.5s after CV tailoring to sync data
@@ -34,7 +35,9 @@
     POST_COVER_GENERATION: 3000,  // 3s after cover letter (file write completion)
     PRE_ATTACHMENT: 2000,         // 2s before file attachment
     POST_ATTACHMENT: 2500,        // 2.5s after attachment (verification)
-    OPENAI_STABILIZATION: 1000,   // 1s for OpenAI async data sync
+    OPENAI_STABILIZATION: 3500,   // 3.5s for OpenAI - THROTTLED to save API usage
+    OPENAI_PRE_CALL: 2000,        // 2s delay BEFORE each OpenAI API call
+    OPENAI_POST_CALL: 2500,       // 2.5s delay AFTER each OpenAI API call
     KIMI_STABILIZATION: 800,      // 800ms for Kimi async data sync
     FILE_WRITE_BUFFER: 1500       // 1.5s buffer for file I/O completion
   };

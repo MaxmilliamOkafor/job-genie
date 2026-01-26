@@ -2288,6 +2288,10 @@ class ATSTailor {
         return;
       }
       
+      // OPENAI THROTTLE: Pre-call delay to reduce API usage
+      console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s pre-call delay...');
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
       // Call the AI extraction endpoint
       const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-keywords-ai`, {
         method: 'POST',
@@ -2302,6 +2306,10 @@ class ATSTailor {
           company: this.currentJob.company,
         }),
       });
+      
+      // OPENAI THROTTLE: Post-call delay to reduce API usage
+      console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2s post-call delay...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -2386,9 +2394,20 @@ class ATSTailor {
     
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // OPENAI THROTTLE: Pre-call delay to reduce API usage (only on first attempt)
+        if (attempt === 0) {
+          console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s pre-call delay...');
+          await new Promise(resolve => setTimeout(resolve, 2500));
+        } else {
+          // Exponential backoff for retries
+          const backoffDelay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+          console.log(`[ATS Tailor] ⏱️ Retry ${attempt}: ${backoffDelay}ms backoff delay...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+        }
+        
         // Create abort controller for timeout
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
+        const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout (increased)
         
         const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-keywords-ai`, {
           method: 'POST',
@@ -2407,6 +2426,10 @@ class ATSTailor {
         });
         
         clearTimeout(timeout);
+        
+        // OPENAI THROTTLE: Post-call delay to reduce API usage
+        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2s post-call delay...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -2884,6 +2907,13 @@ class ATSTailor {
       const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
       updateProgress(35, `Step 2/3: ${providerName} generating tailored documents...`);
 
+      // OPENAI THROTTLE: Pre-call delay to reduce API usage
+      if (this.aiProvider !== 'kimi') {
+        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 3s pre-tailoring delay...');
+        updateProgress(36, 'OpenAI rate limiting (saving API usage)...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
       const tailorController = new AbortController();
       const tailorTimeoutId = setTimeout(() => tailorController.abort(), 120_000); // Increased from 75s to 120s for AI tailoring
 
@@ -2928,6 +2958,13 @@ class ATSTailor {
           },
         }),
       }).finally(() => clearTimeout(tailorTimeoutId));
+
+      // OPENAI THROTTLE: Post-call delay to reduce API usage
+      if (this.aiProvider !== 'kimi') {
+        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
+        updateProgress(70, 'Processing tailored documents...');
+        await new Promise(resolve => setTimeout(resolve, 2500));
+      }
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
