@@ -619,7 +619,7 @@
       margin-bottom: 2px;
     }
     
-    /* Line 2: Title (left, italic) with dates right-aligned */
+    /* Line 2: Title (left, normal) with dates right-aligned */
     .cv-job-title-line {
       display: flex;
       justify-content: space-between;
@@ -628,7 +628,7 @@
     }
     
     .cv-job-title {
-      font-style: italic;
+      font-style: normal;
       font-size: 10.5pt;
     }
     
