@@ -1960,7 +1960,24 @@ class ATSTailor {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error_description || data.error || 'Login failed');
+        // Provide specific error messages for common issues
+        let errorMessage = 'Login failed';
+        const errorCode = data.error_code || data.error;
+        
+        if (errorCode === 'invalid_credentials' || data.error_description?.includes('Invalid')) {
+          errorMessage = 'Invalid email or password. Please check your credentials.';
+        } else if (errorCode === 'email_not_confirmed') {
+          errorMessage = 'Please confirm your email before logging in.';
+        } else if (errorCode === 'user_not_found') {
+          errorMessage = 'No account found with this email. Please sign up first.';
+        } else if (data.error_description) {
+          errorMessage = data.error_description;
+        } else if (data.message) {
+          errorMessage = data.message;
+        }
+        
+        console.warn('[PERFECTION] Auth error:', { status: response.status, errorCode, data });
+        throw new Error(errorMessage);
       }
       
       this.session = {
