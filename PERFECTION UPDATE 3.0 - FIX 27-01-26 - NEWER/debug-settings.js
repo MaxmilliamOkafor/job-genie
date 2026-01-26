@@ -491,10 +491,61 @@
       if (isAutoRefresh) {
         loadLogs();
         loadCurrentState();
+        updateCacheStats();
       }
     }, 2000);
   }
 
+  // Update cache stats display
+  function updateCacheStats() {
+    if (typeof CacheManager === 'undefined') {
+      console.log('[PERFECTION Debug] CacheManager not available');
+      return;
+    }
+    
+    const stats = CacheManager.getCacheStats();
+    
+    const jdCacheEl = document.getElementById('statJDCacheSize');
+    const keywordCacheEl = document.getElementById('statKeywordCacheSize');
+    const profileCacheEl = document.getElementById('statProfileCacheStatus');
+    const debounceEl = document.getElementById('statPendingDebounces');
+    
+    if (jdCacheEl) jdCacheEl.textContent = `${stats.jdHashCache.size}/${stats.jdHashCache.maxSize}`;
+    if (keywordCacheEl) keywordCacheEl.textContent = `${stats.keywordUrlCache.size}/${stats.keywordUrlCache.maxSize}`;
+    if (profileCacheEl) profileCacheEl.textContent = stats.profileCache.hasData ? `Yes (${stats.profileCache.ageSeconds}s)` : 'No';
+    if (debounceEl) debounceEl.textContent = stats.pendingDebounces;
+  }
+
+  // Clear all caches
+  function clearAllCaches() {
+    if (typeof CacheManager === 'undefined') {
+      console.log('[PERFECTION Debug] CacheManager not available');
+      return;
+    }
+    
+    CacheManager.clearAllCaches();
+    updateCacheStats();
+    console.log('[PERFECTION Debug] All caches cleared');
+    
+    // Show visual feedback
+    const btn = document.getElementById('clearAllCaches');
+    if (btn) {
+      const originalText = btn.textContent;
+      btn.textContent = '✅ Cleared!';
+      setTimeout(() => btn.textContent = originalText, 2000);
+    }
+  }
+
+  // Bind cache button
+  function bindCacheEvents() {
+    const clearCachesBtn = document.getElementById('clearAllCaches');
+    if (clearCachesBtn) {
+      clearCachesBtn.addEventListener('click', clearAllCaches);
+    }
+  }
+
   // Initialize on load
   init();
+  bindCacheEvents();
+  updateCacheStats();
 })();
