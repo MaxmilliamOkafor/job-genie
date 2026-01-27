@@ -39,6 +39,7 @@ import {
   SkipForward,
   Wifi,
   Play,
+  Download,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -218,6 +219,41 @@ const Jobs = () => {
       return !prev;
     });
   }, []);
+
+  // Export selected job URLs to CSV
+  const exportSelectedUrlsToCsv = useCallback(() => {
+    if (selectedJobs.size === 0) {
+      toast.error('No jobs selected');
+      return;
+    }
+
+    // Get URLs from selected jobs
+    const selectedJobsList = jobs.filter(job => selectedJobs.has(job.id));
+    const urls = selectedJobsList
+      .map(job => job.url)
+      .filter((url): url is string => !!url);
+
+    if (urls.length === 0) {
+      toast.error('No URLs found in selected jobs');
+      return;
+    }
+
+    // Create CSV content with just URLs
+    const csvContent = 'job_url\n' + urls.join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `job-urls-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success(`Exported ${urls.length} job URLs to CSV`);
+  }, [selectedJobs, jobs]);
 
   // Get current job in apply mode
   const currentApplyJob = useMemo(() => {
@@ -731,6 +767,16 @@ const Jobs = () => {
                     <Badge variant="secondary" className="text-sm">
                       {selectedJobs.size} selected
                     </Badge>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={exportSelectedUrlsToCsv}
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export URLs
+                    </Button>
                     
                     <Button
                       size="sm"

@@ -896,8 +896,8 @@ class ATSTailor {
     const originalText = btnText?.textContent || 'Extract & Apply Keywords to CV';
     const originalIcon = btnIcon?.textContent || '⚡';
     
-    if (btnText) btnText.textContent = '⚡ Tailoring...';
-    if (btnIcon) btnIcon.textContent = '⏳';
+    // Keep original button text during processing (no confusing indicators)
+    // Button stays as "Extract & Apply" - ready state
     
     // If jobInfo provided, update current job
     if (jobInfo) {
@@ -931,23 +931,23 @@ class ATSTailor {
       this.updateStepUI(3, 'complete');
       if (progressText) progressText.textContent = 'Complete! Tailored CV and Cover Letter ready.';
       
-      // Success - keep button ready for next job (no "Done in Xs" text)
+      // Success - immediately reset button to ready state (no delay)
       if (showAnimation) {
+        // Brief green flash then immediately reset
         btn.style.background = 'linear-gradient(135deg, #00c853, #69f0ae)';
         btn.style.transform = 'scale(1.02)';
         btn.style.boxShadow = '0 4px 20px rgba(0, 200, 83, 0.4)';
-        if (btnIcon) btnIcon.textContent = '✓';
-        // Keep ready for next URL - don't show completion time
-        if (btnText) btnText.textContent = 'Ready';
         
-        // Reset button to default state after 2 seconds (ready for next job)
+        // Immediately reset to ready state (no "Ready" text, no delay)
         setTimeout(() => {
           btn.style.background = '';
           btn.style.transform = '';
           btn.style.boxShadow = '';
+          btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+          btn.disabled = false;
           if (btnIcon) btnIcon.textContent = '⚡';
           if (btnText) btnText.textContent = 'Extract & Apply';
-        }, 2000);
+        }, 300); // 300ms green flash then ready
       }
       
       this.showToast(`Attached! Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
