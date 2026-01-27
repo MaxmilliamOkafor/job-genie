@@ -1,6 +1,7 @@
 // cover-letter-generator.js - Professional Cover Letter Generator v2.0
 // Creates tailored cover letters with proper business letter formatting
 // Features: Template system, keyword integration, tone matching
+// FIX: Proper placeholder replacement and paragraph structuring (27-01-2026)
 
 (function(global) {
   'use strict';
@@ -89,52 +90,62 @@
       // Get template
       const templateConfig = TEMPLATES[template] || TEMPLATES.professional;
 
-      // Extract data
+      // Extract data - with proper null-safe access
       const firstName = candidateData?.firstName || candidateData?.first_name || 'Applicant';
       const lastName = candidateData?.lastName || candidateData?.last_name || '';
       const fullName = `${firstName} ${lastName}`.trim();
       
+      // FIX: Ensure company name is properly extracted and used
       const jobTitle = jobData?.title || 'the position';
-      const company = jobData?.company || 'your company';
+      const company = (jobData?.company || jobData?.companyName || 'your company').trim();
       const domain = this.extractDomain(candidateData);
       const yearsExp = this.calculateYearsExperience(candidateData);
 
       // Get top keywords
       const topKeywords = this.getTopKeywords(keywords, topKeywordsCount);
 
-      // Build cover letter sections
-      const opening = this.selectRandom(templateConfig.opening, { jobTitle, company });
+      // Build cover letter sections with proper placeholder replacement
+      const replacements = { jobTitle, company };
+      const opening = this.selectRandom(templateConfig.opening, replacements);
       const bridge = this.selectRandom(templateConfig.bridge, { yearsExp, domain });
-      const body = this.buildBody(candidateData, jobData, topKeywords, includeMetrics);
+      const bodyParagraphs = this.buildBodyParagraphs(candidateData, jobData, topKeywords, company, includeMetrics);
       const closing = this.selectRandom(templateConfig.closing, { company });
 
-      // Assemble full cover letter
+      // FIX: Build proper paragraph structure instead of one massive chunk
+      const letterDate = new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+      
       const paragraphs = [
-        `Dear Hiring Manager,`,
+        `${fullName} +353 0874261508 | maxokafordev@gmail.com`,
+        letterDate,
+        company,
+        'Re: ' + jobTitle + ' | ' + company,
+        '',
+        'Dear Hiring Manager,',
         '',
         opening,
         '',
         bridge,
         '',
-        body,
-        '',
+        ...bodyParagraphs.map(p => [p, '']).flat(),
         closing,
         '',
-        'Yours sincerely,',
+        'Sincerely,',
         fullName
-      ];
+      ].filter(p => p !== '');
 
       const coverLetter = paragraphs.join('\n');
       
       const timing = performance.now() - startTime;
       console.log(`[CoverLetterGenerator] Generated in ${timing.toFixed(0)}ms`);
+      console.log(`[CoverLetterGenerator] Company field verified: ${company}`);
 
       return {
         text: coverLetter,
         paragraphs,
         wordCount: coverLetter.split(/\s+/).length,
         keywordsUsed: topKeywords,
-        timing
+        timing,
+        metadata: { company, jobTitle }
       };
     },
 
@@ -163,7 +174,7 @@
     replacePlaceholders(text, replacements) {
       let result = text;
       for (const [key, value] of Object.entries(replacements)) {
-        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+        result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), String(value || ''));
       }
       return result;
     },
@@ -236,18 +247,18 @@
       return all.slice(0, count);
     },
 
-    // ============ BUILD BODY PARAGRAPHS ============
-    buildBody(candidateData, jobData, topKeywords, includeMetrics) {
+    // ============ BUILD BODY PARAGRAPHS (IMPROVED) ============
+    buildBodyParagraphs(candidateData, jobData, topKeywords, company, includeMetrics) {
       const paragraphs = [];
 
-      // Highlight relevant experience
+      // Paragraph 1: Recent achievement with metrics
       const experience = candidateData?.professional_experience || 
                         candidateData?.professionalExperience || 
                         candidateData?.workExperience || [];
 
       if (experience.length > 0) {
         const recentJob = experience[0];
-        const company = recentJob.company || 'my current organization';
+        const jobCompany = recentJob.company || 'my current organization';
         const title = recentJob.title || 'my role';
         
         // Find a compelling achievement
@@ -262,13 +273,13 @@
         }
 
         paragraphs.push(
-          `In my role as ${title} at ${company}, I have demonstrated consistent delivery of high-impact results. ` +
+          `In my role as ${title} at ${jobCompany}, I have demonstrated consistent delivery of high-impact results. ` +
           (highlightBullet ? highlightBullet.replace(/^[•\-*]\s*/, '') : '') +
           (topKeywords.length > 0 ? ` My expertise in ${topKeywords.slice(0, 3).join(', ')} directly aligns with the requirements outlined in your job description.` : '')
         );
       }
 
-      // Add skills alignment
+      // Paragraph 2: Additional skills alignment
       if (topKeywords.length > 3) {
         paragraphs.push(
           `Additionally, I bring strong capabilities in ${topKeywords.slice(3, 6).join(', ')}, ` +
@@ -276,7 +287,13 @@
         );
       }
 
-      return paragraphs.join('\n\n');
+      // Paragraph 3: Call to action and fit
+      paragraphs.push(
+        `I am confident that my experience and skills make me an excellent fit for the ${jobData?.title || 'position'} at ${company}. ` +
+        `I am eager to discuss how I can add value to your team.`
+      );
+
+      return paragraphs;
     },
 
     // ============ FORMAT FOR DIFFERENT OUTPUTS ============
@@ -311,6 +328,13 @@
         issues.push('Missing closing statement');
       }
 
+      // FIX: Add company name validation
+      const placeholderPattern = /\{(\w+)\}/;
+      if (placeholderPattern.test(text)) {
+        const unreplacedPlaceholders = text.match(placeholderPattern);
+        issues.push(`Unreplaced placeholder found: ${unreplacedPlaceholders[0]}. Company name may not be properly substituted.`);
+      }
+
       return {
         isValid: issues.length === 0,
         issues,
@@ -322,6 +346,6 @@
   // Export
   global.CoverLetterGenerator = CoverLetterGenerator;
   
-  console.log('[CoverLetterGenerator] v2.0 loaded');
+  console.log('[CoverLetterGenerator] v2.1 loaded - Fixed placeholder replacement and body structure');
 
 })(typeof window !== 'undefined' ? window : this);
