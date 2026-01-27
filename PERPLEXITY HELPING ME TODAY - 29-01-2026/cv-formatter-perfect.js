@@ -236,6 +236,10 @@
           break;
         case 'experience':
           sections.experience = this.parseExperience(text);
+          // If we found experience but no summary yet, generate fallback summary from experience
+          if (sections.experience.length > 0 && !sections.summary) {
+            sections.summary = this.generateFallbackSummary(sections.experience);
+          }
           break;
         case 'education':
           sections.education = this.parseEducation(text);
@@ -247,6 +251,65 @@
           sections.certifications = text;
           break;
       }
+    },
+
+    // ============ GENERATE FALLBACK PROFESSIONAL SUMMARY ============
+    generateFallbackSummary(experience) {
+      if (!experience || experience.length === 0) return '';
+
+      // Extract key information from experience
+      const companies = [];
+      const titles = [];
+      
+      experience.forEach(job => {
+        if (job.company && !companies.includes(job.company)) {
+          companies.push(job.company);
+        }
+        if (job.title && !titles.includes(job.title)) {
+          titles.push(job.title);
+        }
+      });
+
+      // Extract technologies from job bullets
+      const technologies = new Set();
+      experience.forEach(job => {
+        if (job.bullets && Array.isArray(job.bullets)) {
+          job.bullets.forEach(bullet => {
+            // Extract capitalized tech terms (e.g., Python, React, AWS, etc.)
+            const techMatches = bullet.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g);
+            if (techMatches) {
+              techMatches.forEach(tech => {
+                if (tech.length > 2) technologies.add(tech);
+              });
+            }
+          });
+        }
+      });
+
+      const techList = Array.from(technologies).slice(0, 5).join(', ');
+
+      // Build fallback summary
+      const primaryTitle = titles[0] || 'Software Professional';
+      const primaryCompany = companies[0];
+      
+      let summary = `Results-driven ${primaryTitle}`;
+      if (primaryCompany) {
+        summary += ` with proven expertise at ${primaryCompany}`;
+      }
+      
+      summary += '. Demonstrated ability to deliver high-impact solutions across multiple domains. ';
+      
+      if (companies.length > 1) {
+        summary += `Experienced at leading companies including ${companies.slice(0, 3).join(', ')}. `;
+      }
+      
+      if (techList) {
+        summary += `Proficient in ${techList} and related technologies. `;
+      }
+      
+      summary += 'Seeking roles that leverage technical expertise and drive meaningful business impact.';
+
+      return summary;
     },
 
     // ============ DATE NORMALISATION HELPERS ============
