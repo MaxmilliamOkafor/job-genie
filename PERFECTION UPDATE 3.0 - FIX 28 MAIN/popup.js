@@ -879,12 +879,13 @@ class ATSTailor {
     // Highlight step 1 as working
     this.updateStepUI(1, 'working');
     
-    // Show pressed/loading state with VISIBLE animation
+    // Show pressed/loading state - ORANGE PROCESSING (no green states)
     if (showAnimation) {
       btn.classList.add('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.remove('btn-gradient');
       btn.disabled = true;
       
-      // Animate the button press visually
+      // Animate the button press visually - ORANGE only
       btn.style.transform = 'scale(0.95)';
       btn.style.boxShadow = 'inset 0 4px 12px rgba(0,0,0,0.4)';
       btn.style.background = 'linear-gradient(135deg, #ff6b35, #f7931e)';
@@ -893,11 +894,12 @@ class ATSTailor {
     
     const btnText = btn.querySelector('.btn-text');
     const btnIcon = btn.querySelector('.btn-icon-left');
-    const originalText = btnText?.textContent || 'Extract & Apply Keywords to CV';
-    const originalIcon = btnIcon?.textContent || '⚡';
+    const btnTime = btn.querySelector('.btn-time');
     
-    // Keep original button text during processing (no confusing indicators)
-    // Button stays as "Extract & Apply" - ready state
+    // Set ORANGE PROCESSING state immediately
+    if (btnIcon) btnIcon.textContent = '⏳';
+    if (btnText) btnText.textContent = 'Tailoring...';
+    if (btnTime) btnTime.textContent = '~5s';
     
     // If jobInfo provided, update current job
     if (jobInfo) {
@@ -931,28 +933,26 @@ class ATSTailor {
       this.updateStepUI(3, 'complete');
       if (progressText) progressText.textContent = 'Complete! Tailored CV and Cover Letter ready.';
       
-      // Success - immediately reset button to ready state (no delay)
-      if (showAnimation) {
-        // Brief green flash then immediately reset
-        btn.style.background = 'linear-gradient(135deg, #00c853, #69f0ae)';
-        btn.style.transform = 'scale(1.02)';
-        btn.style.boxShadow = '0 4px 20px rgba(0, 200, 83, 0.4)';
-        
-        // Immediately reset to ready state (no "Ready" text, no delay)
-        setTimeout(() => {
-          btn.style.background = '';
-          btn.style.transform = '';
-          btn.style.boxShadow = '';
-          btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
-          btn.disabled = false;
-          if (btnIcon) btnIcon.textContent = '⚡';
-          if (btnText) btnText.textContent = 'Extract & Apply';
-        }, 300); // 300ms green flash then ready
-      }
+      // Success - INSTANT RESET to BLUE READY state (NO green flash, NO delays)
+      btn.style.background = '';
+      btn.style.transform = '';
+      btn.style.boxShadow = '';
+      btn.style.transition = '';
+      btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.add('btn-gradient');
+      btn.disabled = false;
+      
+      // Set BLUE READY state
+      if (btnIcon) btnIcon.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
+      
+      // Hide progress immediately
+      progressContainer?.classList.add('hidden');
       
       this.showToast(`Attached! Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
       
-      // Notify content script to show green success banner (professional text)
+      // Notify content script to show green success banner (on PAGE, not extension)
       chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
         if (tab?.id) {
           chrome.tabs.sendMessage(tab.id, { 
@@ -969,31 +969,37 @@ class ATSTailor {
     } catch (error) {
       console.error('[ATS Tailor Popup] Error:', error);
       
-      // Error animation
-      if (showAnimation) {
-        btn.style.background = 'linear-gradient(135deg, #ff1744, #ff5252)';
-        if (btnIcon) btnIcon.textContent = '❌';
-        if (btnText) btnText.textContent = 'Error!';
-      }
+      // Error - INSTANT RESET to BLUE READY state (show toast for error)
+      btn.style.background = '';
+      btn.style.transform = '';
+      btn.style.boxShadow = '';
+      btn.style.transition = '';
+      btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.add('btn-gradient');
+      btn.disabled = false;
+      
+      // Set BLUE READY state even on error
+      if (btnIcon) btnIcon.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
+      
       if (progressText) progressText.textContent = `❌ Error: ${error.message}`;
+      progressContainer?.classList.add('hidden');
       
       this.showToast(`Error: ${error.message}`, 'error');
     } finally {
-      // Remove pressed/loading state after completion
-      setTimeout(() => {
-        btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
-        btn.disabled = false;
-        btn.style.transform = '';
-        btn.style.boxShadow = '';
-        btn.style.background = '';
-        btn.style.transition = '';
-        if (btnText) btnText.textContent = originalText;
-        if (btnIcon) btnIcon.textContent = originalIcon;
-        // Hide progress after delay
-        setTimeout(() => {
-          progressContainer?.classList.add('hidden');
-        }, 3000);
-      }, showAnimation ? 2500 : 0);
+      // Ensure button is always reset to BLUE READY state (failsafe)
+      btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.add('btn-gradient');
+      btn.disabled = false;
+      btn.style.transform = '';
+      btn.style.boxShadow = '';
+      btn.style.background = '';
+      btn.style.transition = '';
+      
+      if (btnIcon) btnIcon.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
     }
   }
   
@@ -2807,10 +2813,20 @@ class ATSTailor {
     const pipelineSteps = document.getElementById('pipelineSteps');
     
     btn.disabled = true;
-    // Only two button states: Orange "⏳⚡ Tailoring...~5s" during processing, Blue "⚡Extract & Apply Keywords to CV~5s" when ready
-    btn.querySelector('.btn-text').textContent = '⏳⚡ Tailoring...';
-    btn.querySelector('.btn-time').textContent = '~5s';
+    // ONLY TWO BUTTON STATES:
+    // 1. ORANGE PROCESSING: icon=⏳, text="Tailoring...", time="~5s", class=btn-tailoring
+    // 2. BLUE READY: icon=⚡, text="Extract & Apply Keywords to CV", time="~5s", class=btn-gradient (default)
+    const btnIconLeft = btn.querySelector('.btn-icon-left');
+    const btnText = btn.querySelector('.btn-text');
+    const btnTime = btn.querySelector('.btn-time');
+    
+    // Set ORANGE PROCESSING state
+    if (btnIconLeft) btnIconLeft.textContent = '⏳';
+    if (btnText) btnText.textContent = 'Tailoring...';
+    if (btnTime) btnTime.textContent = '~5s';
     btn.classList.add('btn-tailoring');
+    btn.classList.remove('btn-gradient');
+    
     progressContainer?.classList.remove('hidden');
     pipelineSteps?.classList.remove('hidden');
     if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
@@ -3318,11 +3334,19 @@ class ATSTailor {
         jobUrl: this.currentJob?.url || window.location?.href
       });
     } finally {
-      // INSTANT RESET: No delays, always ready for next URL
+      // INSTANT RESET TO BLUE READY STATE: No delays, always ready for next URL
+      const btnIconLeft = btn.querySelector('.btn-icon-left');
+      const btnText = btn.querySelector('.btn-text');
+      const btnTime = btn.querySelector('.btn-time');
+      
       btn.disabled = false;
       btn.classList.remove('btn-tailoring');
-      btn.querySelector('.btn-text').textContent = 'Extract & Apply Keywords to CV';
-      btn.querySelector('.btn-time').textContent = '~5s';
+      btn.classList.add('btn-gradient');
+      
+      // Set BLUE READY state
+      if (btnIconLeft) btnIconLeft.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
       
       // Immediately reset progress UI
       progressContainer?.classList.add('hidden');
