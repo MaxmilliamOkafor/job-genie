@@ -448,4 +448,121 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ progress: bulkProgress });
     return true;
   }
+  
+  // ============ LAZYAPPLY INTEGRATION HANDLERS ============
+  
+  // External automation tools (LazyApply) can check if extension is ready
+  if (message.action === 'CHECK_EXTENSION_READY') {
+    sendResponse({ 
+      ready: true, 
+      version: chrome.runtime.getManifest().version,
+      name: 'ATS PERFECTION',
+      capabilities: ['tailor', 'attach', 'autofill', 'workday', 'greenhouse']
+    });
+    return true;
+  }
+  
+  // LazyApply can trigger automation on active tab
+  if (message.action === 'LAZYAPPLY_START_AUTOMATION') {
+    console.log('[ATS Tailor] 🚀 LazyApply automation trigger received');
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          // Clear badge
+          chrome.action.setBadgeText({ text: '⚡', tabId: tab.id });
+          chrome.action.setBadgeBackgroundColor({ color: '#f59e0b', tabId: tab.id });
+          
+          // Trigger automation on content script
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'LAZYAPPLY_TRIGGER',
+            source: 'background',
+            timestamp: Date.now()
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn('[ATS Tailor] LazyApply trigger failed:', chrome.runtime.lastError.message);
+              sendResponse({ status: 'error', error: chrome.runtime.lastError.message });
+            } else {
+              sendResponse({ status: response?.status || 'triggered' });
+            }
+          });
+        } else {
+          sendResponse({ status: 'error', error: 'No active tab' });
+        }
+      } catch (e) {
+        sendResponse({ status: 'error', error: e.message });
+      }
+    })();
+    return true;
+  }
+  
+  // Get automation status for current tab
+  if (message.action === 'GET_AUTOMATION_STATUS') {
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          chrome.tabs.sendMessage(tab.id, { action: 'CHECK_READY_STATUS' }, (response) => {
+            if (chrome.runtime.lastError) {
+              sendResponse({ status: 'unknown', error: chrome.runtime.lastError.message });
+            } else {
+              sendResponse(response || { status: 'unknown' });
+            }
+          });
+        } else {
+          sendResponse({ status: 'unknown', error: 'No active tab' });
+        }
+      } catch (e) {
+        sendResponse({ status: 'error', error: e.message });
+      }
+    })();
+    return true;
+  }
+  
+  // Signal that automation completed (from popup)
+  if (message.action === 'AUTOMATION_COMPLETE_SIGNAL') {
+    console.log('[ATS Tailor] 📡 Automation complete signal from popup');
+    
+    // Update badge to success
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          chrome.action.setBadgeText({ text: '✓', tabId: tab.id });
+          chrome.action.setBadgeBackgroundColor({ color: '#22c55e', tabId: tab.id });
+          
+          // Clear badge after 5 seconds
+          setTimeout(() => {
+            chrome.action.setBadgeText({ text: '', tabId: tab.id }).catch(() => {});
+          }, 5000);
+          
+          // Mark as processed
+          processedTabs.add(tab.id);
+        }
+      } catch (e) {}
+    })();
+    
+    sendResponse({ status: 'acknowledged' });
+    return true;
+  }
+  
+  // Listen for new job page detection from content script
+  if (message.action === 'NEW_JOB_PAGE_DETECTED') {
+    console.log('[ATS Tailor] 🔄 New job page detected:', message.url);
+    
+    // Clear processed status for new URL
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.url === message.url) {
+            processedTabs.delete(tab.id);
+          }
+        }
+      } catch (e) {}
+    })();
+    
+    sendResponse({ status: 'acknowledged' });
+    return true;
+  }
 });

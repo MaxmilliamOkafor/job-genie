@@ -3268,14 +3268,34 @@ class ATSTailor {
       );
       this.setStatus('Complete', 'ready');
 
+      // ============ AUTOMATION COMPLETE: PREPARE FOR NEXT ATS ============
+      // Signal to LazyApply/external automation that this job is complete
+      await this.signalAutomationComplete({
+        success: true,
+        elapsed,
+        matchScore: finalScore,
+        jobUrl: this.currentJob?.url || window.location?.href,
+        company: this.currentJob?.company,
+        title: this.currentJob?.title
+      });
+
     } catch (error) {
       console.error('Tailoring error:', error);
       this.showToast(error.message || 'Failed', 'error');
       this.setStatus('Error', 'error');
+      
+      // Signal failure to external automation
+      await this.signalAutomationComplete({
+        success: false,
+        error: error.message,
+        jobUrl: this.currentJob?.url || window.location?.href
+      });
     } finally {
       btn.disabled = false;
       btn.classList.remove('btn-tailoring');
       btn.querySelector('.btn-text').textContent = 'Extract & Apply Keywords to CV';
+      
+      // Reset UI after short delay, but keep extension ready for next job
       setTimeout(() => {
         progressContainer?.classList.add('hidden');
         [1, 2, 3].forEach(n => {
@@ -3286,6 +3306,9 @@ class ATSTailor {
             if (icon) icon.textContent = '⏳';
           }
         });
+        
+        // Prepare for next application after 2 seconds
+        setTimeout(() => this.resetForNextApplication(), 2000);
       }, 3000);
     }
   }
@@ -3649,6 +3672,124 @@ class ATSTailor {
     }
     return new Blob([byteArray], { type });
   }
+
+  // ============ LAZYAPPLY INTEGRATION: RESET FOR NEXT APPLICATION ============
+  /**
+   * Resets extension state after successful automation, preparing for next ATS platform.
+   * Called automatically after CV & Cover Letter are attached.
+   * Keeps session/profile cached but clears job-specific data.
+   */
+  async resetForNextApplication() {
+    console.log('[ATS Tailor] 🔄 Resetting for next application...');
+    
+    // Clear current job data (will be re-detected on new page)
+    this.currentJob = null;
+    
+    // Clear generated documents (will regenerate for next job)
+    this.generatedDocuments = {
+      cv: null,
+      coverLetter: null,
+      cvPdf: null,
+      coverPdf: null,
+      cvFileName: null,
+      coverFileName: null,
+      matchScore: 0,
+      matchedKeywords: [],
+      missingKeywords: [],
+      keywords: null
+    };
+    
+    // Clear caches for this job URL (keep profile cache)
+    const currentUrl = window.location?.href;
+    if (currentUrl) {
+      this.jdCache.delete(currentUrl);
+      this.keywordCache.delete(currentUrl);
+    }
+    
+    // Clear chrome storage for attached files (new job needs new files)
+    await chrome.storage.local.remove([
+      'cvPDF',
+      'coverPDF',
+      'coverLetterText',
+      'cvFileName',
+      'coverFileName',
+      'ats_lastGeneratedDocuments'
+    ]);
+    
+    // Reset UI elements
+    const documentsCard = document.getElementById('documentsCard');
+    if (documentsCard) documentsCard.classList.add('hidden');
+    
+    // Update status to show readiness
+    this.setStatus('Ready for next job', 'ready');
+    
+    console.log('[ATS Tailor] ✅ Reset complete - ready for next ATS platform');
+    
+    // Broadcast to content script that we're ready
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        chrome.tabs.sendMessage(tab.id, { 
+          action: 'AUTOMATION_RESET_COMPLETE',
+          ready: true,
+          timestamp: Date.now()
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // Ignore - tab may have changed
+    }
+  }
+
+  /**
+   * Signals to external automation tools (LazyApply, etc.) that this job is complete.
+   * Stores completion status in chrome.storage for cross-script access.
+   */
+  async signalAutomationComplete(result) {
+    console.log('[ATS Tailor] 📡 Signaling automation complete:', result.success ? '✅ SUCCESS' : '❌ FAILED');
+    
+    // Store completion status for external tools
+    const completionData = {
+      ...result,
+      timestamp: Date.now(),
+      readyForNext: true
+    };
+    
+    await chrome.storage.local.set({
+      'ats_automation_complete': completionData,
+      'ats_last_job_completed': {
+        url: result.jobUrl,
+        company: result.company,
+        title: result.title,
+        success: result.success,
+        matchScore: result.matchScore,
+        elapsed: result.elapsed,
+        completedAt: new Date().toISOString()
+      }
+    });
+    
+    // Broadcast completion to any listening content scripts
+    try {
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'AUTOMATION_COMPLETE',
+            ...completionData
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      // Ignore broadcast errors
+    }
+    
+    // Also dispatch a custom event for same-page listeners
+    window.dispatchEvent(new CustomEvent('ats-tailor-complete', { 
+      detail: completionData 
+    }));
+    
+    console.log('[ATS Tailor] 📡 Completion signal sent - extension ready for next job');
+  }
+
 
   async attachDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;

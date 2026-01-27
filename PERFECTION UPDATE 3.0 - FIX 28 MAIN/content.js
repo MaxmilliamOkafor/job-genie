@@ -221,12 +221,124 @@
     }
   });
   
+  // ============ LAZYAPPLY INTEGRATION: URL CHANGE DETECTION ============
+  // Auto-detect when navigating to a new job page and reset state
+  let lastProcessedUrl = window.location.href;
+  let automationCompleteForUrl = new Set();
+  
+  // Monitor URL changes (for SPAs like Workday)
+  const urlChangeObserver = new MutationObserver(() => {
+    const currentUrl = window.location.href;
+    if (currentUrl !== lastProcessedUrl) {
+      console.log('[ATS Tailor] 🔄 URL changed, preparing for new job...');
+      lastProcessedUrl = currentUrl;
+      
+      // Reset state for new job
+      filesLoaded = false;
+      cvFile = null;
+      coverFile = null;
+      coverLetterText = '';
+      hasTriggeredTailor = false;
+      tailoringInProgress = false;
+      
+      // Check if this is a new ATS page that needs processing
+      if (isSupportedHost(window.location.hostname) && !automationCompleteForUrl.has(currentUrl)) {
+        console.log('[ATS Tailor] ✅ New ATS page detected - ready for automation');
+        
+        // Notify popup that we're on a new job page
+        chrome.runtime.sendMessage({
+          action: 'NEW_JOB_PAGE_DETECTED',
+          url: currentUrl,
+          timestamp: Date.now()
+        }).catch(() => {});
+      }
+    }
+  });
+  
+  // Start observing URL changes
+  urlChangeObserver.observe(document.body, { childList: true, subtree: true });
+  
+  // Also listen for popstate events (browser back/forward)
+  window.addEventListener('popstate', () => {
+    const currentUrl = window.location.href;
+    if (currentUrl !== lastProcessedUrl) {
+      lastProcessedUrl = currentUrl;
+      filesLoaded = false;
+      hasTriggeredTailor = false;
+      tailoringInProgress = false;
+      console.log('[ATS Tailor] 🔄 Navigation detected - ready for new job');
+    }
+  });
+
   // Listen for messages from popup and background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'UPDATE_DEFAULT_LOCATION' && message.defaultLocation) {
       defaultLocation = message.defaultLocation;
       console.log('[ATS Tailor] Updated default location to:', defaultLocation);
       sendResponse({ status: 'updated' });
+      return true;
+    }
+    
+    // ============ LAZYAPPLY INTEGRATION: EXTERNAL TRIGGER ============
+    // LazyApply and other automation tools can trigger tailoring via this message
+    if (message.action === 'LAZYAPPLY_TRIGGER' || message.action === 'EXTERNAL_AUTOMATION_TRIGGER') {
+      console.log('[ATS Tailor] 🚀 External automation trigger received (LazyApply/etc.)');
+      const url = window.location.href;
+      
+      if (automationCompleteForUrl.has(url)) {
+        console.log('[ATS Tailor] Already completed for this URL, skipping');
+        sendResponse({ status: 'already_complete', url });
+        return true;
+      }
+      
+      // Run automation for current page
+      (async () => {
+        try {
+          if (url.includes('workday') || url.includes('myworkdayjobs')) {
+            await runWorkdayAutomationFlow();
+          } else if (url.includes('greenhouse')) {
+            await runGreenhouseFlow();
+          } else {
+            await runGenericATSFlow();
+          }
+          automationCompleteForUrl.add(url);
+          sendResponse({ status: 'complete', url });
+        } catch (e) {
+          console.error('[ATS Tailor] External trigger error:', e);
+          sendResponse({ status: 'error', error: e.message });
+        }
+      })();
+      return true;
+    }
+    
+    // ============ AUTOMATION COMPLETE SIGNAL FROM POPUP ============
+    if (message.action === 'AUTOMATION_COMPLETE') {
+      console.log('[ATS Tailor] 📡 Automation complete signal received');
+      automationCompleteForUrl.add(message.jobUrl || window.location.href);
+      sendResponse({ status: 'acknowledged' });
+      return true;
+    }
+    
+    // ============ AUTOMATION RESET SIGNAL ============
+    if (message.action === 'AUTOMATION_RESET_COMPLETE') {
+      console.log('[ATS Tailor] 🔄 Reset signal received - ready for next job');
+      filesLoaded = false;
+      hasTriggeredTailor = false;
+      tailoringInProgress = false;
+      sendResponse({ status: 'reset_acknowledged' });
+      return true;
+    }
+    
+    // ============ CHECK READY STATUS (for external tools) ============
+    if (message.action === 'CHECK_READY_STATUS') {
+      const currentUrl = window.location.href;
+      sendResponse({
+        ready: !tailoringInProgress && !automationCompleteForUrl.has(currentUrl),
+        inProgress: tailoringInProgress,
+        completed: automationCompleteForUrl.has(currentUrl),
+        url: currentUrl,
+        supportedHost: isSupportedHost(window.location.hostname)
+      });
       return true;
     }
     
