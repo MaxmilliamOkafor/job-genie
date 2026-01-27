@@ -3450,9 +3450,8 @@ class ATSTailor {
           firstName: this.profileInfo?.firstName,
           lastName: this.profileInfo?.lastName,
           fileName: this.generatedDocuments.cvFileName,
-          // CRITICAL: Pass summary and structuredCv to ensure Professional Summary is included
-          summary: professionalSummary,
-          structuredCv: structuredCv
+          // Pass only the summary string to avoid payload bloat
+          summary: professionalSummary
         }),
       });
 
