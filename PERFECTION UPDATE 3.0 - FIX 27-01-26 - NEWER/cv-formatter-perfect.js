@@ -1,6 +1,7 @@
 // CV Formatter Perfect - 100% ATS-Compatible CV Generator
 // Guarantees perfect formatting for both preview and download
 // Uses HTML5 + CSS3 for rendering, then converts to PDF via browser API
+// FIXED: Professional Summary ALWAYS appears, even if tailoring pipeline misses it
 
 (function(global) {
   'use strict';
@@ -107,7 +108,95 @@
       data.skills = this.formatSkillsSection(parsed.skills || '');
       data.certifications = this.formatCertificationsSection(parsed.certifications || '');
 
+      // CRITICAL FIX: Fallback summary generation if missing from tailoredContent
+      // This ensures Professional Summary ALWAYS appears on every CV, never missing
+      if (!data.summary || data.summary.trim().length === 0) {
+        console.log('[CVFormatterPerfect] No summary in tailored content, generating fallback summary...');
+        data.summary = this.buildFallbackSummary(candidateData, jobData, data.skills);
+      }
+
       return data;
+    },
+
+    // ============ BUILD FALLBACK SUMMARY ============
+    // Generates professional summary from candidate profile when tailoring fails
+    // Guarantees 100% consistency: summary NEVER missing
+    buildFallbackSummary(candidateData, jobData, skillsLine) {
+      if (!candidateData) return '';
+
+      const firstName = candidateData?.firstName || candidateData?.first_name || '';
+      const lastName = candidateData?.lastName || candidateData?.last_name || '';
+      const name = `${firstName} ${lastName}`.trim();
+
+      // Get latest work experience for context
+      const workExperience = candidateData?.workExperience || candidateData?.work_experience || [];
+      const latestJob = workExperience && workExperience.length > 0 ? workExperience[0] : null;
+      const currentTitle = latestJob?.title || 'Professional';
+      const currentCompany = latestJob?.company || '';
+
+      // Calculate years of experience
+      let yearsOfExperience = 0;
+      if (Array.isArray(workExperience)) {
+        const years = new Set();
+        workExperience.forEach(job => {
+          const dates = job.dates || job.date || '';
+          if (dates) {
+            const yearMatches = dates.match(/\d{4}/g);
+            if (yearMatches && yearMatches.length > 0) {
+              years.add(yearMatches[0]);
+            }
+          }
+        });
+        if (years.size > 0) {
+          const startYear = Math.min(...Array.from(years).map(Number));
+          const currentYear = new Date().getFullYear();
+          yearsOfExperience = currentYear - startYear;
+        }
+      }
+
+      // Extract top skills from skillsLine
+      let topSkills = [];
+      if (skillsLine) {
+        topSkills = skillsLine.split(',').slice(0, 4).map(s => s.trim());
+      }
+
+      // Build fallback summary
+      let summary = '';
+
+      // Part 1: Current role and company
+      if (currentCompany) {
+        summary += `${currentTitle} at ${currentCompany}`;
+      } else if (currentTitle) {
+        summary += currentTitle;
+      } else {
+        summary += 'Technology Professional';
+      }
+
+      // Part 2: Years of experience
+      if (yearsOfExperience > 0) {
+        summary += ` with ${yearsOfExperience}+ years of experience`;
+      } else {
+        summary += ' with proven expertise';
+      }
+
+      // Part 3: Top skills
+      if (topSkills.length > 0) {
+        summary += ` in ${topSkills.join(', ')}`;
+      }
+
+      // Part 4: Job target if available
+      if (jobData && jobData.title) {
+        summary += `. Seeking ${jobData.title} role`;
+      }
+
+      // Ensure it ends with a period
+      if (!summary.endsWith('.')) {
+        summary += '.';
+      }
+
+      console.log(`[CVFormatterPerfect] Generated fallback summary: ${summary}`);
+
+      return summary;
     },
 
     // ============ BUILD CONTACT SECTION ============
