@@ -410,18 +410,39 @@
       const jobs = [];
       const lines = text.split('\n');
       let currentJob = null;
+      
+      // Section headers that should be skipped when parsing
+      const sectionHeaders = [
+        'professional experience', 'work experience', 'experience', 
+        'employment history', 'career history', 'current role',
+        'previous role', 'positions held', 'work history'
+      ];
 
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        
+        // Skip lines that are just section headers
+        const lowerTrimmed = trimmed.toLowerCase().replace(/[#:\s]+/g, ' ').trim();
+        if (sectionHeaders.includes(lowerTrimmed)) {
+          continue;
+        }
 
         // Detect job header (Company | Title | Dates format)
         if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
-          if (currentJob) jobs.push(currentJob);
+          if (currentJob && currentJob.company) jobs.push(currentJob);
           
           const parts = trimmed.split('|').map(p => p.trim());
+          const company = this.stripDates(parts[0] || '');
+          
+          // Skip if company name looks like a section header
+          if (sectionHeaders.includes(company.toLowerCase())) {
+            currentJob = null;
+            continue;
+          }
+          
           currentJob = {
-            company: this.stripDates(parts[0] || ''),
+            company: company,
             title: this.stripDates(parts[1] || ''),
             dates: this.normalizeDates(parts[2] || ''),
             bullets: []
@@ -434,7 +455,7 @@
         }
       }
 
-      if (currentJob) jobs.push(currentJob);
+      if (currentJob && currentJob.company) jobs.push(currentJob);
       return jobs;
     },
 
@@ -466,27 +487,60 @@
     normalizeExperience(experience) {
       if (!Array.isArray(experience)) return [];
       
-      return experience.map(job => {
-        const rawTitle = job.title || job.jobTitle || job.position || '';
-        const { cleanTitle, dates: extractedDates } = this.extractDatesFromTitle(rawTitle);
-        
-        // Use explicit dates if available, otherwise use extracted dates
-        let dates = '';
-        if (job.dates) {
-          dates = this.normalizeDates(job.dates);
-        } else if (job.startDate || job.endDate) {
-          dates = this.normalizeDates(`${job.startDate || ''} – ${job.endDate || 'Present'}`);
-        } else if (extractedDates) {
-          dates = extractedDates;
-        }
-        
-        return {
-          company: job.company || job.companyName || '',
-          title: cleanTitle,
-          dates: dates,
-          bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
-        };
-      });
+      // Section headers and generic terms that should NOT be treated as job entries
+      const invalidEntryNames = [
+        'professional experience', 'work experience', 'experience', 
+        'employment history', 'career history', 'current role',
+        'previous role', 'positions held', 'work history',
+        'employment', 'career', 'roles'
+      ];
+      
+      return experience
+        .filter(job => {
+          // Filter out entries where company name is a section header
+          const company = (job.company || job.companyName || '').toLowerCase().trim();
+          const title = (job.title || job.jobTitle || job.position || '').toLowerCase().trim();
+          
+          // Skip if company name looks like a section header
+          if (invalidEntryNames.includes(company)) {
+            console.log(`[ProfessionalPDFEngine] Skipping invalid company entry: "${company}"`);
+            return false;
+          }
+          
+          // Skip if title looks like a section header (without a real company)
+          if (invalidEntryNames.includes(title) && !company) {
+            console.log(`[ProfessionalPDFEngine] Skipping invalid title entry: "${title}"`);
+            return false;
+          }
+          
+          // Skip if company is empty or too short
+          if (!company || company.length < 2) {
+            return false;
+          }
+          
+          return true;
+        })
+        .map(job => {
+          const rawTitle = job.title || job.jobTitle || job.position || '';
+          const { cleanTitle, dates: extractedDates } = this.extractDatesFromTitle(rawTitle);
+          
+          // Use explicit dates if available, otherwise use extracted dates
+          let dates = '';
+          if (job.dates) {
+            dates = this.normalizeDates(job.dates);
+          } else if (job.startDate || job.endDate) {
+            dates = this.normalizeDates(`${job.startDate || ''} – ${job.endDate || 'Present'}`);
+          } else if (extractedDates) {
+            dates = extractedDates;
+          }
+          
+          return {
+            company: job.company || job.companyName || '',
+            title: cleanTitle,
+            dates: dates,
+            bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
+          };
+        });
     },
 
     // ============ NORMALIZE BULLETS ============
