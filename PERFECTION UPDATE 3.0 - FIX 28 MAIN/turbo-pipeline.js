@@ -393,27 +393,22 @@
         let section = 'OTHER';
         for (const [secName, secRegex] of Object.entries(sections)) {
           const secMatch = tailoredCV.search(secRegex);
-          if (secMatch !== -1 && match.index > secMatch) {
+          if (secMatch > -1 && match.index > secMatch) {
             section = secName;
           }
         }
-        
-        // Get surrounding context (50 chars before/after)
-        const contextStart = Math.max(0, match.index - 50);
-        const contextEnd = Math.min(tailoredCV.length, match.index + kw.length + 50);
-        const context = tailoredCV.substring(contextStart, contextEnd).replace(/\n/g, ' ').trim();
-        
-        locations.push({ index: match.index, section, context });
+        const context = tailoredCV.substring(Math.max(0, match.index - 30), Math.min(tailoredCV.length, match.index + kw.length + 30)).replace(/\n/g, ' ');
+        locations.push({ position: match.index, section, context: `...${context}...` });
       }
       
       report.keywords[kw] = {
         priority,
         originalCount: originalMatches,
         finalCount: tailoredMatches,
-        addedCount,
+        added: addedCount,
         targetMin,
         targetMax,
-        meetsTarget: tailoredMatches >= targetMin,
+        meetsTarget: tailoredMatches >= targetMin && tailoredMatches <= targetMax,
         overDensity: tailoredMatches > targetMax,
         locations
       };
@@ -425,215 +420,327 @@
       else report.summary.low++;
       
       if (tailoredMatches < targetMin) {
-        report.summary.missing.push(kw);
+        report.summary.missing.push({ keyword: kw, priority, have: tailoredMatches, need: targetMin });
       }
       
       if (tailoredMatches > targetMax) {
-        report.warnings.push(`"${kw}" appears ${tailoredMatches}x (target max: ${targetMax})`);
+        report.warnings.push(`⚠️ "${kw}" appears ${tailoredMatches}x (max ${targetMax}) - risk of over-stuffing`);
       }
     });
     
-    // Calculate density metrics
+    // Calculate density
     const wordCount = tailoredCV.split(/\s+/).length;
-    const totalKeywordMentions = Object.values(report.keywords).reduce((sum, k) => sum + k.finalCount, 0);
-    report.density.total = ((totalKeywordMentions / wordCount) * 100).toFixed(2) + '%';
+    const totalKeywordOccurrences = Object.values(report.keywords).reduce((sum, k) => sum + k.finalCount, 0);
+    report.density.total = ((totalKeywordOccurrences / wordCount) * 100).toFixed(2);
     
-    const timing = performance.now() - startTime;
-    console.log(`[TurboPipeline] Coverage report generated in ${timing.toFixed(0)}ms`);
+    // Density warning (>5% is risky)
+    if (parseFloat(report.density.total) > 5) {
+      report.warnings.push(`⚠️ Keyword density ${report.density.total}% exceeds 5% threshold - may trigger ATS spam filters`);
+    }
+    
+    // Section breakdown
+    for (const [secName] of Object.entries(sections)) {
+      const sectionKeywords = Object.entries(report.keywords)
+        .filter(([_, v]) => v.locations.some(l => l.section === secName))
+        .map(([k, v]) => ({ keyword: k, count: v.locations.filter(l => l.section === secName).length }));
+      report.sections[secName] = sectionKeywords;
+    }
+    
+    report.timing = performance.now() - startTime;
+    
+    // Console output for debugging
+    console.log('\n═══════════════════════════════════════════════════════════════');
+    console.log('📊 KEYWORD COVERAGE REPORT');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log(`Total Keywords: ${report.summary.total} (H:${report.summary.high} M:${report.summary.medium} L:${report.summary.low})`);
+    console.log(`Keyword Density: ${report.density.total}%`);
+    
+    console.log('\n✅ KEYWORDS MEETING TARGET (3-5x high/med, 1-2x low):');
+    Object.entries(report.keywords)
+      .filter(([_, v]) => v.meetsTarget)
+      .forEach(([k, v]) => console.log(`  ✓ ${k} (${v.priority}): ${v.finalCount}x [${v.locations.map(l => l.section).join(', ')}]`));
+    
+    console.log('\n❌ KEYWORDS BELOW TARGET:');
+    report.summary.missing.forEach(m => console.log(`  ✗ ${m.keyword} (${m.priority}): ${m.have}x (need ${m.need})`));
+    
+    if (report.warnings.length > 0) {
+      console.log('\n⚠️ WARNINGS:');
+      report.warnings.forEach(w => console.log(`  ${w}`));
+    }
+    
+    console.log('\n📍 SECTION BREAKDOWN:');
+    for (const [sec, kws] of Object.entries(report.sections)) {
+      if (kws.length > 0) {
+        console.log(`  ${sec}: ${kws.map(k => `${k.keyword}(${k.count}x)`).join(', ')}`);
+      }
+    }
+    console.log('═══════════════════════════════════════════════════════════════\n');
     
     return report;
   }
 
-  // ============ FAST KEYWORD INJECTION FOR 100% MATCH ============
-  // This is the catch-all function to ensure every keyword appears at least once
-  function fastKeywordInjection(cvText, keywords, missingKeywords = []) {
+  // ============ TURBO CV TAILORING (≤50ms - LAZYAPPLY 3X) ============
+  async function turboTailorCV(cvText, keywords, options = {}) {
     const startTime = performance.now();
-    const injectedKeywords = [];
-    let tailoredCV = cvText;
     
-    // Get missing keywords from provided list or calculate
-    const allKeywords = keywords.all || [];
+    if (!cvText || !keywords?.all?.length) {
+      return { tailoredCV: cvText, injectedKeywords: [], timing: 0, stats: {}, uniqueHash: '' };
+    }
+
+    // USE UNIQUE CV ENGINE if available (preserves companies/roles/dates, modifies bullets only)
+    if (global.UniqueCVEngine?.generateUniqueCVForJob) {
+      const uniqueResult = global.UniqueCVEngine.generateUniqueCVForJob(cvText, keywords.highPriority || keywords.all.slice(0, 15));
+      const timing = performance.now() - startTime;
+      console.log(`[TurboPipeline] Unique CV generated in ${timing.toFixed(0)}ms (target: ${TIMING_TARGETS.TAILOR_CV}ms)`);
+      return {
+        tailoredCV: uniqueResult.uniqueCV,
+        originalCV: cvText,
+        injectedKeywords: [],
+        stats: uniqueResult.stats,
+        timing,
+        uniqueHash: uniqueResult.fileHash
+      };
+    }
+
+    // FALLBACK: Basic keyword injection (Work Experience focus)
     const cvLower = cvText.toLowerCase();
+    const missing = (keywords.workExperience || keywords.all.slice(0, 15))
+      .filter(kw => !cvLower.includes(kw.toLowerCase()));
     
-    const missing = missingKeywords.length > 0 
-      ? missingKeywords 
-      : allKeywords.filter(kw => !cvLower.includes(kw.toLowerCase()));
-    
-    if (missing.length === 0) {
-      return { tailoredCV, injectedKeywords, timing: 0 };
+    let tailoredCV = cvText;
+    let injected = [];
+
+    if (missing.length > 0) {
+      const result = fastTailorWorkExperience(cvText, missing);
+      tailoredCV = result.tailoredCV;
+      injected = result.injectedKeywords;
     }
-    
-    // Group keywords for batch injection
-    let remaining = [...missing];
-    
-    // Natural injection phrases
-    const phrases = [
-      'leveraging', 'utilizing', 'through', 'via', 'employing',
-      'incorporating', 'with expertise in', 'applying'
-    ];
-    const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
-    
-    // STEP 1: Inject 60% into Work Experience bullets
-    const expMatch = tailoredCV.match(/(EXPERIENCE|WORK\s*EXPERIENCE|PROFESSIONAL\s*EXPERIENCE|EMPLOYMENT)[\s:]*\n([\s\S]*?)(?=\n(?:SKILLS|EDUCATION|CERTIFICATIONS|PROJECTS|$))/i);
-    
-    if (expMatch && remaining.length > 0) {
-      const expStart = expMatch.index;
-      const expEnd = expStart + expMatch[0].length;
-      let experienceText = expMatch[0];
-      
-      // Find all bullets
-      const bullets = experienceText.match(/^[•\-\*▪]\s*.+$/gm) || [];
-      const keywordsPerBullet = Math.ceil((remaining.length * 0.6) / Math.max(bullets.length, 1));
-      
-      let keywordIdx = 0;
-      bullets.forEach((bullet, bulletIdx) => {
-        if (keywordIdx >= remaining.length * 0.6) return;
-        
-        const numToAdd = Math.min(keywordsPerBullet, 3);
-        const kwToAdd = remaining.slice(keywordIdx, keywordIdx + numToAdd);
-        keywordIdx += numToAdd;
-        
-        if (kwToAdd.length === 0) return;
-        
-        let enhanced = bullet;
-        const phrase = getPhrase();
-        
-        if (kwToAdd.length === 1) {
-          enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]}.`);
-        } else if (kwToAdd.length === 2) {
-          enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]} and ${kwToAdd[1]}.`);
-        } else {
-          const last = kwToAdd.pop();
-          enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd.join(', ')}, and ${last}.`);
-          kwToAdd.push(last);
-        }
-        
-        experienceText = experienceText.replace(bullet, enhanced);
-        injectedKeywords.push(...kwToAdd);
+
+    // ALL KEYWORDS DISTRIBUTION (3-5x mentions for high/medium, 1-2x for low)
+    if (keywords.all?.length > 0 || keywords.highPriority?.length > 0) {
+      const distResult = distributeAllKeywords(tailoredCV, keywords, {
+        maxBulletsPerRole: 6,
+        highMinMentions: 3,
+        highMaxMentions: 5,
+        medMinMentions: 3,
+        medMaxMentions: 5,
+        lowMinMentions: 1,
+        lowMaxMentions: 2
       });
-      
-      tailoredCV = tailoredCV.substring(0, expStart) + experienceText + tailoredCV.substring(expEnd);
-      remaining = remaining.filter(kw => !injectedKeywords.includes(kw));
+      tailoredCV = distResult.tailoredCV;
     }
-    
-    // STEP 2: Inject into Summary
-    if (remaining.length > 0) {
-      const summaryMatch = tailoredCV.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
-      if (summaryMatch) {
-        const summaryStart = summaryMatch.index;
-        const summaryEnd = summaryStart + summaryMatch[0].length;
-        const summaryText = summaryMatch[2];
-        
-        const toInject = remaining.slice(0, Math.min(8, remaining.length));
-        remaining = remaining.slice(toInject.length);
-        
-        let injectionPhrase = '';
-        if (toInject.length <= 3) {
-          injectionPhrase = ` Expertise includes ${toInject.join(', ')}.`;
-        } else if (toInject.length <= 5) {
-          injectionPhrase = ` Strong background in ${toInject.slice(0, 3).join(', ')}, with additional skills in ${toInject.slice(3).join(' and ')}.`;
-        } else {
-          injectionPhrase = ` Core competencies include ${toInject.slice(0, 4).join(', ')}. Proven proficiency in ${toInject.slice(4).join(', ')}.`;
-        }
-        
-        const newSummary = summaryText.trim() + injectionPhrase;
-        tailoredCV = tailoredCV.substring(0, summaryStart) + 
-                     summaryMatch[1] + '\n' + newSummary + 
-                     tailoredCV.substring(summaryEnd);
-        injectedKeywords.push(...toInject);
-      }
-    }
-    
-    // STEP 3: Inject into Skills section
-    if (remaining.length > 0) {
-      const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
-      if (skillsMatch) {
-        const skillsStart = skillsMatch.index;
-        const skillsEnd = skillsStart + skillsMatch[0].length;
-        const skillsText = skillsMatch[2];
-        
-        const toInject = remaining.slice(0, 15);
-        remaining = remaining.slice(15);
-        
-        const newSkills = skillsText.trim() + '\n• Additional: ' + toInject.join(', ');
-        tailoredCV = tailoredCV.substring(0, skillsStart) + 
-                     skillsMatch[1] + '\n' + newSkills + 
-                     tailoredCV.substring(skillsEnd);
-        injectedKeywords.push(...toInject);
-      }
-    }
-    
-    // STEP 4: Any remaining as Technical Proficiencies section
-    if (remaining.length > 0) {
-      const additionalSection = `\n\nTECHNICAL PROFICIENCIES\n• ${remaining.join(' • ')}`;
-      
-      const insertPoint = tailoredCV.search(/\n(CERTIFICATIONS|ACHIEVEMENTS|EDUCATION|PROJECTS)\n/i);
-      if (insertPoint > 0) {
-        tailoredCV = tailoredCV.substring(0, insertPoint) + additionalSection + tailoredCV.substring(insertPoint);
-      } else {
-        tailoredCV = tailoredCV + additionalSection;
-      }
-      injectedKeywords.push(...remaining);
-    }
-    
+
     const timing = performance.now() - startTime;
-    console.log(`[TurboPipeline] Fast injection completed in ${timing.toFixed(0)}ms: ${injectedKeywords.length} keywords injected`);
+    console.log(`[TurboPipeline] CV tailored in ${timing.toFixed(0)}ms (target: ${TIMING_TARGETS.TAILOR_CV}ms)`);
     
-    return { tailoredCV, injectedKeywords, timing };
+    return { 
+      tailoredCV, 
+      originalCV: cvText,
+      injectedKeywords: injected,
+      stats: { total: injected.length, workExperience: injected.length, skills: 0 },
+      timing,
+      uniqueHash: ''
+    };
   }
 
-  // ============ GENERATE UNIQUE CV FOR JOB ============
-  function generateUniqueCVForJob(cvText, jobKeywords, candidateData = {}) {
-    const startTime = performance.now();
+  // ============ FAST WORK EXPERIENCE TAILORING ============
+  function fastTailorWorkExperience(cvText, missingKeywords) {
+    let tailoredCV = cvText;
+    const injected = [];
+
+    const expMatch = /^(EXPERIENCE|WORK\s*EXPERIENCE|EMPLOYMENT|PROFESSIONAL\s*EXPERIENCE)[\s:]*$/im.exec(tailoredCV);
+    if (!expMatch) return { tailoredCV, injectedKeywords: [] };
+
+    const expStart = expMatch.index + expMatch[0].length;
+    const nextSectionMatch = /^(SKILLS|EDUCATION|CERTIFICATIONS|PROJECTS)[\s:]*$/im.exec(tailoredCV.substring(expStart));
+    const expEnd = nextSectionMatch ? expStart + nextSectionMatch.index : tailoredCV.length;
     
-    let allKeywords = [];
-    let priorityMap = {};
+    let experienceSection = tailoredCV.substring(expStart, expEnd);
+    const lines = experienceSection.split('\n');
+    let keywordIndex = 0;
     
-    if (Array.isArray(jobKeywords)) {
-      allKeywords = jobKeywords;
-    } else if (jobKeywords?.all) {
-      allKeywords = jobKeywords.all;
-      (jobKeywords.highPriority || []).forEach(kw => priorityMap[kw.toLowerCase()] = 'high');
-      (jobKeywords.mediumPriority || []).forEach(kw => priorityMap[kw.toLowerCase()] = 'medium');
-      (jobKeywords.lowPriority || []).forEach(kw => priorityMap[kw.toLowerCase()] = 'low');
-    }
+    const patterns = [
+      ', incorporating {} principles',
+      ' with focus on {}',
+      ', leveraging {}',
+      ' utilizing {} methodologies',
+      ' through {} implementation'
+    ];
+
+    const modifiedLines = lines.map(line => {
+      const trimmed = line.trim();
+      if (!(trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*'))) {
+        return line;
+      }
+      if (keywordIndex >= missingKeywords.length) return line;
+
+      // Inject 2-3 keywords per bullet
+      const toInject = [];
+      while (toInject.length < 3 && keywordIndex < missingKeywords.length) {
+        const kw = missingKeywords[keywordIndex];
+        if (!line.toLowerCase().includes(kw.toLowerCase())) {
+          toInject.push(kw);
+        }
+        keywordIndex++;
+      }
+      
+      if (toInject.length === 0) return line;
+
+      const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+      let bulletContent = trimmed.replace(/^[-•*]\s*/, '');
+      
+      const injection = toInject.length === 1 
+        ? pattern.replace('{}', toInject[0])
+        : pattern.replace('{}', toInject.slice(0, -1).join(', ') + ' and ' + toInject.slice(-1));
+      
+      if (bulletContent.endsWith('.')) {
+        bulletContent = bulletContent.slice(0, -1) + injection + '.';
+      } else {
+        bulletContent = bulletContent + injection;
+      }
+      
+      injected.push(...toInject);
+      return `- ${bulletContent}`;
+    });
+
+    const modifiedExperience = modifiedLines.join('\n');
+    tailoredCV = tailoredCV.substring(0, expStart) + modifiedExperience + tailoredCV.substring(expEnd);
+
+    return { tailoredCV, injectedKeywords: injected };
+  }
+
+  // ============ COMPLETE TURBO PIPELINE (≤175ms total - LAZYAPPLY 3X) ============
+  // NOW WITH OPENRESUME-STYLE CV + COVER LETTER GENERATION
+  // 50% FASTER: Optimized parallel processing and reduced waits
+  async function executeTurboPipeline(jobInfo, candidateData, baseCV, options = {}) {
+    const pipelineStart = performance.now();
+    const timings = {};
     
-    if (!cvText || allKeywords.length === 0) {
-      return { uniqueCV: cvText, stats: {}, timing: 0 };
-    }
+    console.log('[TurboPipeline] ⚡ Starting 175ms ULTRA-FAST pipeline for:', jobInfo?.title || 'Unknown Job');
     
-    // Use distributeAllKeywords for keyword injection
-    const result = distributeAllKeywords(cvText, {
-      all: allKeywords,
-      highPriority: jobKeywords?.highPriority || allKeywords.slice(0, 15),
-      mediumPriority: jobKeywords?.mediumPriority || [],
-      lowPriority: jobKeywords?.lowPriority || []
+    // PHASE 1: Extract keywords (≤15ms, INSTANT if cached) - 50% faster
+    const extractStart = performance.now();
+    const jdText = jobInfo?.description || '';
+    
+    // PARALLEL: Start keyword extraction and prepare candidate data simultaneously
+    const keywordsPromise = turboExtractKeywords(jdText, {
+      jobUrl: jobInfo?.url || '',
+      maxKeywords: options.maxKeywords || 35
     });
     
-    const timing = performance.now() - startTime;
+    const keywordsResult = await keywordsPromise;
+    timings.extraction = performance.now() - extractStart;
+
+    if (!keywordsResult.all?.length) {
+      console.warn('[TurboPipeline] No keywords extracted');
+      return { success: false, error: 'No keywords extracted', timings };
+    }
+
+    // PHASE 2: Tailor CV with keyword distribution (≤30ms) - 50% faster
+    const tailorStart = performance.now();
+    const tailorResult = await turboTailorCV(baseCV, keywordsResult, { 
+      targetScore: options.targetScore || 95 
+    });
+    timings.tailoring = performance.now() - tailorStart;
+
+    // PHASE 3: High Priority Keyword Distribution (3-5x mentions)
+    const distStart = performance.now();
+    let finalCV = tailorResult.tailoredCV;
+    let distributionStats = {};
     
+    if (keywordsResult.highPriority?.length > 0) {
+      const distResult = distributeHighPriorityKeywords(finalCV, keywordsResult.highPriority, {
+        maxBulletsPerRole: 8,
+        targetMentions: 4,
+        minMentions: 3,
+        maxMentions: 5
+      });
+      finalCV = distResult.tailoredCV;
+      distributionStats = distResult.distributionStats;
+    }
+    timings.distribution = performance.now() - distStart;
+
+    // PHASE 4: Generate OpenResume-Style CV + Cover Letter PDFs (≤45ms)
+    let cvPDF = null;
+    let coverPDF = null;
+    let matchScore = 0;
+    const pdfStart = performance.now();
+
+    if (global.OpenResumeGenerator) {
+      try {
+        const atsPackage = await global.OpenResumeGenerator.generateATSPackage(
+          finalCV,
+          keywordsResult,
+          {
+            title: jobInfo?.title || '',
+            company: jobInfo?.company || '',
+            location: jobInfo?.location || ''
+          },
+          candidateData
+        );
+        
+        cvPDF = {
+          blob: atsPackage.cv,
+          base64: atsPackage.cvBase64,
+          filename: atsPackage.cvFilename
+        };
+        
+        coverPDF = {
+          blob: atsPackage.cover,
+          base64: atsPackage.coverBase64,
+          filename: atsPackage.coverFilename
+        };
+        
+        matchScore = atsPackage.matchScore;
+        
+        console.log(`[TurboPipeline] ✅ PDFs generated: CV=${atsPackage.cvFilename}, Cover=${atsPackage.coverFilename}`);
+      } catch (e) {
+        console.error('[TurboPipeline] OpenResume generation failed:', e);
+      }
+    }
+    timings.pdfGeneration = performance.now() - pdfStart;
+
+    const totalTime = performance.now() - pipelineStart;
+    timings.total = totalTime;
+    
+    const meetsTarget = totalTime <= TIMING_TARGETS.TOTAL;
+
+    console.log(`[TurboPipeline] ⚡ ULTRA-FAST Complete:
+      Extract: ${timings.extraction.toFixed(0)}ms ${keywordsResult.fromCache ? '(CACHED)' : ''} (target: ${TIMING_TARGETS.EXTRACT_KEYWORDS}ms)
+      Tailor: ${timings.tailoring.toFixed(0)}ms (target: ${TIMING_TARGETS.TAILOR_CV}ms)
+      Distribute: ${timings.distribution.toFixed(0)}ms
+      PDF: ${timings.pdfGeneration.toFixed(0)}ms (target: ${TIMING_TARGETS.GENERATE_PDF}ms)
+      TOTAL: ${totalTime.toFixed(0)}ms (target: ${TIMING_TARGETS.TOTAL}ms) ${meetsTarget ? '✅' : '⚠️'}`);
+
     return {
-      uniqueCV: result.tailoredCV,
-      originalCV: cvText,
-      stats: result.distributionStats,
-      timing
+      success: true,
+      keywords: keywordsResult,
+      workExperienceKeywords: keywordsResult.workExperience,
+      tailoredCV: finalCV,
+      injectedKeywords: tailorResult.injectedKeywords,
+      distributionStats,
+      stats: tailorResult.stats,
+      timings,
+      fromCache: keywordsResult.fromCache,
+      meetsTarget: totalTime <= TIMING_TARGETS.TOTAL,
+      // OpenResume outputs
+      cvPDF,
+      coverPDF,
+      matchScore
     };
   }
 
   // ============ EXPORTS ============
   global.TurboPipeline = {
+    executeTurboPipeline,
     turboExtractKeywords,
-    ultraFastExtraction,
-    distributeAllKeywords,
+    turboTailorCV,
     distributeHighPriorityKeywords,
+    distributeAllKeywords,
     generateKeywordCoverageReport,
-    fastKeywordInjection,
-    generateUniqueCVForJob,
-    getCachedKeywords,
-    setCachedKeywords,
-    TIMING_TARGETS
+    TIMING_TARGETS,
+    clearCache: () => keywordCache.clear(),
+    getCacheSize: () => keywordCache.size
   };
-  
-  console.log('[TurboPipeline] ⚡ Turbo Pipeline v3.0 loaded - Targeting 6ms total');
 
-})(typeof window !== 'undefined' ? window : this);
+})(typeof window !== 'undefined' ? window : global);

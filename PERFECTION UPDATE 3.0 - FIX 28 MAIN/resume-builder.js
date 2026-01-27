@@ -50,7 +50,6 @@
         contact: this.buildContactSection(candidateData),
         summary: this.buildSummarySection(candidateData, allKeywords),
         experience: this.buildExperienceSection(candidateData, allKeywords),
-        projects: this.buildProjectsSection(candidateData, allKeywords),
         skills: this.buildSkillsSection(candidateData, allKeywords),
         education: this.buildEducationSection(candidateData),
         certifications: this.buildCertificationsSection(candidateData),
@@ -153,236 +152,62 @@
       return summary;
     },
 
-    
-    // BUILD EXPERIENCE SECTION - SINGLE SOURCE OF TRUTH: profile.work_experience
-    // NEVER modify company, title, dates - only append keywords to bullets
-    // LAYOUT: 
-    //   Line 1: Company (bold, left-aligned)
-    //   Line 2: Job Title (left) with dates right-aligned (same line)
-    // BULLETS: Use proper ATS bullet points (•) not dashes
+    // ============ BUILD EXPERIENCE SECTION ============
     buildExperienceSection(data, keywords) {
-      // 1) SINGLE SOURCE OF TRUTH: structured work_experience from profile
-      const experience = Array.isArray(data.workExperience)
-        ? data.workExperience
-        : (Array.isArray(data.work_experience) 
-            ? data.work_experience 
-            : (Array.isArray(data.workexperience) ? data.workexperience : []));
+      const experience = data.workExperience || data.work_experience || [];
+      if (!Array.isArray(experience) || experience.length === 0) return '';
 
-      if (!experience.length) return "";
-
-      // 2) Normalise keywords for injection, but NEVER touch company/title/dates
+      // Ensure keywords is always an array
       const keywordArray = Array.isArray(keywords) ? keywords : (keywords?.all || []);
-      const usedKeywords = new Set();
+      const keywordSet = new Set(keywordArray.map(k => k.toLowerCase()));
+      let keywordIndex = 0;
       const maxBulletsPerRole = 8;
 
-      return experience
-        .map((job) => {
-          // ---- HEADER: READ-ONLY from profile ----
-          const company = (job.company || '').trim();
-          const title = (job.title || '').trim();
+      return experience.map(job => {
+        const company = job.company || job.organization || '';
+        const title = job.title || job.position || job.role || '';
+        const dates = job.dates || job.duration || `${job.startDate || ''} - ${job.endDate || 'Present'}`;
+        const location = job.location || '';
+        
+        let bullets = job.bullets || job.achievements || job.responsibilities || [];
+        if (typeof bullets === 'string') bullets = bullets.split('\n').filter(b => b.trim());
+        
+        // Inject keywords into bullets (3-5 per role)
+        const enhancedBullets = bullets.slice(0, maxBulletsPerRole).map((bullet, idx) => {
+          if (idx >= 3) return bullet; // Only enhance first 3 bullets
           
-          // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
-          let dates = job.dates || '';
-          if (!dates && (job.startDate || job.endDate)) {
-            const start = job.startDate || '';
-            const end = job.endDate || 'Present';
-            dates = start ? `${start} - ${end}` : end;
+          const bulletLower = bullet.toLowerCase();
+          const toInject = [];
+          
+          // Find 1-2 keywords not in bullet
+          while (toInject.length < 2 && keywordIndex < keywordArray.length) {
+            const kw = keywordArray[keywordIndex];
+            if (!bulletLower.includes(kw.toLowerCase()) && !keywordSet.has(kw.toLowerCase())) {
+              toInject.push(kw);
+              keywordSet.add(kw.toLowerCase());
+            }
+            keywordIndex++;
           }
           
-          // Normalise date format: replace hyphens with en dash, ensure spaces around it
-          const normalisedDates = this.normaliseDates(dates);
-          
-          // Build two-line header:
-          // Line 1: Company (bold in HTML, plain in text)
-          // Line 2: Title with dates right-aligned
-          const companyLine = company || '';
-          const titleLine = this.rightAlignTitleDates(title, normalisedDates);
-
-          // ---- BULLETS: Preserve original content, only APPEND keywords ----
-          // Use proper ATS bullet points (•) instead of dashes
-          let bullets = job.bullets || job.achievements || job.responsibilities || [];
-
-          if (typeof bullets === "string") {
-            bullets = bullets
-              .split("\n")
-              .map(b => b.trim())
-              .filter(Boolean);
-          }
-
-          if (!Array.isArray(bullets) || !bullets.length) {
-            return [companyLine, titleLine].filter(Boolean).join('\n');
-          }
-
-          const enhancedBullets = bullets.slice(0, maxBulletsPerRole).map((bullet, idx) => {
-            // Clean bullet prefix
-            let text = (bullet || "").replace(/^\s*[-•*]\s*/, "").trim();
-            if (!text) return "";
-
-            // Only enhance first 3 bullets per role
-            if (idx >= 3 || !keywordArray.length) {
-              // Ensure proper sentence ending
-              if (text && !text.endsWith('.')) text += '.';
-              return `• ${text}`;
-            }
-
-            const bulletLower = text.toLowerCase();
-            const toInject = [];
-
-            // Inject at most 2 keywords not already in the bullet and not already used
-            for (let i = 0; i < keywordArray.length && toInject.length < 2; i++) {
-              const kw = keywordArray[i];
-              if (!kw) continue;
-              const kwLower = kw.toLowerCase();
-              if (!bulletLower.includes(kwLower) && !usedKeywords.has(kwLower)) {
-                toInject.push(kw);
-                usedKeywords.add(kwLower);
-              }
-            }
-
-            if (!toInject.length) {
-              if (text && !text.endsWith('.')) text += '.';
-              return `• ${text}`;
-            }
-
-            // UK spelling for injection phrases
-            const phrases = ["leveraging", "utilising", "through", "with", "via"];
+          if (toInject.length > 0) {
+            const phrases = ['leveraging', 'utilizing', 'with', 'implementing', 'applying'];
             const phrase = phrases[Math.floor(Math.random() * phrases.length)];
-            const tail = `${phrase} ${toInject.join(" and ")}`;
-
-            if (text.endsWith(".")) {
-              text = `${text.slice(0, -1)}, ${tail}.`;
-            } else {
-              text = `${text}, ${tail}.`;
+            
+            if (bullet.endsWith('.')) {
+              return bullet.slice(0, -1) + `, ${phrase} ${toInject.join(' and ')}.`;
             }
-
-            return `• ${text}`;
-          }).filter(Boolean);
-
-          // Build final: Company line, Title line (with dates), then bullets
-          const headerLines = [companyLine, titleLine].filter(Boolean).join('\n');
-          return `${headerLines}\n${enhancedBullets.join("\n")}`;
-        })
-        .join("\n\n");
-    },
-
-    // ============ BUILD PROJECTS SECTION ============
-    // Similar to experience but dates are optional
-    // LAYOUT: 
-    //   Line 1: Project Name (bold, left-aligned)
-    //   Line 2: Role (left) with optional dates right-aligned (same line)
-    // BULLETS: Use proper ATS bullet points (•)
-    buildProjectsSection(data, keywords) {
-      // Get projects from various possible field names
-      const projects = Array.isArray(data.relevantProjects)
-        ? data.relevantProjects
-        : (Array.isArray(data.relevant_projects) 
-            ? data.relevant_projects 
-            : (Array.isArray(data.projects) ? data.projects : []));
-
-      if (!projects.length) return "";
-
-      const keywordArray = Array.isArray(keywords) ? keywords : (keywords?.all || []);
-      const usedKeywords = new Set();
-      const maxBulletsPerProject = 6;
-
-      return projects
-        .map((project) => {
-          const name = (project.name || project.projectName || '').trim();
-          const role = (project.role || project.title || '').trim();
-          
-          // Build dates - optional for projects
-          let dates = project.dates || '';
-          if (!dates && (project.startDate || project.endDate)) {
-            const start = project.startDate || '';
-            const end = project.endDate || '';
-            if (start || end) {
-              dates = start && end ? `${start} - ${end}` : (start || end);
-            }
+            return bullet + ` ${phrase} ${toInject.join(' and ')}`;
           }
           
-          const normalisedDates = dates ? this.normaliseDates(dates) : '';
-          
-          const nameLine = name || '';
-          const roleLine = this.rightAlignTitleDates(role, normalisedDates);
+          return bullet;
+        });
 
-          let bullets = project.bullets || project.achievements || project.description || [];
-
-          if (typeof bullets === "string") {
-            bullets = bullets.split("\n").map(b => b.trim()).filter(Boolean);
-          }
-
-          if (!Array.isArray(bullets) || !bullets.length) {
-            return [nameLine, roleLine].filter(Boolean).join('\n');
-          }
-
-          const enhancedBullets = bullets.slice(0, maxBulletsPerProject).map((bullet, idx) => {
-            let text = (bullet || "").replace(/^\s*[-•*]\s*/, "").trim();
-            if (!text) return "";
-
-            // Only enhance first 2 bullets per project
-            if (idx >= 2) {
-              if (text && !text.endsWith('.')) text += '.';
-              return `• ${text}`;
-            }
-
-            const textLower = text.toLowerCase();
-            const toInject = keywordArray
-              .filter(kw => !usedKeywords.has(kw) && !textLower.includes(kw.toLowerCase()))
-              .slice(0, 2);
-
-            toInject.forEach(kw => usedKeywords.add(kw));
-
-            if (!toInject.length) {
-              if (text && !text.endsWith('.')) text += '.';
-              return `• ${text}`;
-            }
-
-            const phrases = ["leveraging", "utilising", "through", "with"];
-            const phrase = phrases[Math.floor(Math.random() * phrases.length)];
-            const tail = `${phrase} ${toInject.join(" and ")}`;
-
-            if (text.endsWith(".")) {
-              text = `${text.slice(0, -1)}, ${tail}.`;
-            } else {
-              text = `${text}, ${tail}.`;
-            }
-
-            return `• ${text}`;
-          }).filter(Boolean);
-
-          const headerLines = [nameLine, roleLine].filter(Boolean).join('\n');
-          return `${headerLines}\n${enhancedBullets.join("\n")}`;
-        })
-        .join("\n\n");
+        const header = [company, title, dates, location].filter(Boolean).join(' | ');
+        const bulletText = enhancedBullets.map(b => `▪ ${b.replace(/^[-•*▪]\s*/, '')}`).join('\n');
+        
+        return `${header}\n\n${bulletText}`;
+      }).join('\n\n');
     },
-
-    // ============ NORMALISE DATES ============
-    // Convert date strings to "YYYY – YYYY" format with en dash and spaces
-    normaliseDates(dateStr) {
-      if (!dateStr) return '';
-      return String(dateStr)
-        .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
-        .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
-    },
-
-    // ============ RIGHT ALIGN TITLE + DATES ============
-    // Creates a line with title on left and dates on far right using dynamic spacing
-    // For plain text: "Job Title                    2023 – Present"
-    rightAlignTitleDates(title, dates, maxWidth = 70) {
-      if (!title && !dates) return '';
-      if (!dates) return title || '';
-      if (!title) return dates;
-      
-      // Calculate dynamic spacing
-      const titleLen = title.length;
-      const datesLen = dates.length;
-      const minSpaces = 8;
-      const spaces = Math.max(minSpaces, maxWidth - titleLen - datesLen);
-      
-      return `${title}${' '.repeat(spaces)}${dates}`;
-    },
-
 
     // ============ BUILD SKILLS SECTION ============
     buildSkillsSection(data, keywords) {
@@ -405,7 +230,6 @@
     },
 
     // ============ BUILD EDUCATION SECTION ============
-    // IMPORTANT: Remove explicit year ranges to prevent age bias
     buildEducationSection(data) {
       const education = data.education || [];
       if (!Array.isArray(education) || education.length === 0) return '';
@@ -413,10 +237,10 @@
       return education.map(edu => {
         const institution = edu.institution || edu.school || edu.university || '';
         const degree = edu.degree || '';
-        // REMOVED: dates to prevent age bias
+        const dates = edu.dates || edu.graduationDate || '';
         const gpa = edu.gpa ? `GPA: ${edu.gpa}` : '';
         
-        return [degree, institution, gpa].filter(Boolean).join(' | ');
+        return [institution, degree, dates, gpa].filter(Boolean).join(' | ');
       }).join('\n');
     },
 
@@ -466,15 +290,8 @@
       
       // Experience
       if (resume.experience) {
-        sections.push('PROFESSIONAL EXPERIENCE');
+        sections.push('WORK EXPERIENCE');
         sections.push(resume.experience);
-        sections.push('');
-      }
-      
-      // Projects
-      if (resume.projects) {
-        sections.push('TECHNICAL PROJECTS');
-        sections.push(resume.projects);
         sections.push('');
       }
       
@@ -509,10 +326,6 @@
     },
 
     // ============ GENERATE HTML PREVIEW ============
-    // Layout: 
-    //   Line 1: Company (bold)
-    //   Line 2: Job Title (left) with dates right-aligned (same line)
-    // Bullets: Use proper ATS bullet points (•) in <ul><li>
     generateHTMLPreview(resume, templateName = 'professional') {
       const template = this.TEMPLATES[templateName] || this.TEMPLATES.professional;
       
@@ -521,52 +334,8 @@
         return str.replace(/&/g, '&amp;')
                   .replace(/</g, '&lt;')
                   .replace(/>/g, '&gt;')
-                  .replace(/"/g, '&quot;');
-      };
-      
-      // Parse experience text back to structured format for proper HTML rendering
-      // Expected format per job block:
-      //   Line 1: Company
-      //   Line 2: Title (with spaces) Dates
-      //   Line 3+: • bullets
-      const parseExperienceForHTML = (expText) => {
-        if (!expText) return '';
-        
-        const jobs = expText.split('\n\n').filter(Boolean);
-        return jobs.map(jobBlock => {
-          const lines = jobBlock.split('\n');
-          if (lines.length === 0) return '';
-          
-          // Line 1: Company
-          const companyLine = lines[0] || '';
-          // Line 2: Title + Dates (split by multiple spaces)
-          const titleDateLine = lines[1] || '';
-          const bullets = lines.slice(2).filter(l => l.startsWith('•'));
-          
-          // Parse title and dates from Line 2
-          const titleDateMatch = titleDateLine.match(/^(.+?)\s{4,}(.+)$/);
-          let title = titleDateLine;
-          let dates = '';
-          
-          if (titleDateMatch) {
-            title = titleDateMatch[1].trim();
-            dates = titleDateMatch[2].trim();
-          }
-          
-          return `
-        <div class="job">
-          <div class="job-company">${escapeHtml(companyLine)}</div>
-          <div class="job-title-line">
-            <span class="job-title">${escapeHtml(title)}</span>
-            ${dates ? `<span class="job-dates">${escapeHtml(dates)}</span>` : ''}
-          </div>
-          ${bullets.length > 0 ? `
-          <ul class="job-bullets">
-            ${bullets.map(b => `<li>${escapeHtml(b.replace(/^•\s*/, ''))}</li>`).join('\n            ')}
-          </ul>
-          ` : ''}
-        </div>`;
-        }).join('\n      ');
+                  .replace(/"/g, '&quot;')
+                  .replace(/\n/g, '<br>');
       };
       
       return `
@@ -584,43 +353,12 @@
       color: #000;
       background: #fff;
     }
-    .name { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 4px; text-transform: uppercase; }
+    .name { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 4px; }
     .contact { text-align: center; color: #333; margin-bottom: 16px; }
-    .section-title { font-size: 12pt; font-weight: bold; border-bottom: 1px solid #000; margin: 16px 0 8px 0; padding-bottom: 4px; text-transform: uppercase; }
+    .section-title { font-size: 12pt; font-weight: bold; border-bottom: 1px solid #000; margin: 16px 0 8px 0; padding-bottom: 4px; }
     .section-content { margin-bottom: 12px; }
-    
-    /* Job layout: Company on Line 1, Title + Dates on Line 2 */
-    .job { margin-bottom: 16px; }
-    .job-company { 
-      font-weight: bold; 
-      font-size: 10.5pt;
-      margin-bottom: 2px;
-    }
-    .job-title-line { 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: baseline;
-      margin-bottom: 4px;
-    }
-    .job-title { 
-      font-size: 10.5pt;
-    }
-    .job-dates { 
-      white-space: nowrap; 
-      font-size: 10pt;
-      color: #333;
-    }
-    
-    /* ATS-friendly bullet list */
-    .job-bullets {
-      margin: 4px 0 0 20px;
-      padding: 0;
-      list-style-type: disc;
-    }
-    .job-bullets li {
-      margin-bottom: 3px;
-      line-height: 1.3;
-    }
+    .bullet { margin-left: 16px; }
+    .job-header { font-weight: bold; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -634,17 +372,8 @@
   ` : ''}
   
   ${resume.experience ? `
-    <div class="section-title">PROFESSIONAL EXPERIENCE</div>
-    <div class="section-content">
-      ${parseExperienceForHTML(resume.experience)}
-    </div>
-  ` : ''}
-  
-  ${resume.projects ? `
-    <div class="section-title">TECHNICAL PROJECTS</div>
-    <div class="section-content">
-      ${parseExperienceForHTML(resume.projects)}
-    </div>
+    <div class="section-title">WORK EXPERIENCE</div>
+    <div class="section-content">${escapeHtml(resume.experience)}</div>
   ` : ''}
   
   ${resume.education ? `
