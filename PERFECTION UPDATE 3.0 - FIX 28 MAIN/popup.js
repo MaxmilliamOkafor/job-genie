@@ -931,16 +931,26 @@ class ATSTailor {
       this.updateStepUI(3, 'complete');
       if (progressText) progressText.textContent = 'Complete! Tailored CV and Cover Letter ready.';
       
-      // Success animation
+      // Success - keep button ready for next job (no "Done in Xs" text)
       if (showAnimation) {
         btn.style.background = 'linear-gradient(135deg, #00c853, #69f0ae)';
         btn.style.transform = 'scale(1.02)';
         btn.style.boxShadow = '0 4px 20px rgba(0, 200, 83, 0.4)';
         if (btnIcon) btnIcon.textContent = '✓';
-        if (btnText) btnText.textContent = `Done in ${Math.round(elapsed / 1000)}s`;
+        // Keep ready for next URL - don't show completion time
+        if (btnText) btnText.textContent = 'Ready';
+        
+        // Reset button to default state after 2 seconds (ready for next job)
+        setTimeout(() => {
+          btn.style.background = '';
+          btn.style.transform = '';
+          btn.style.boxShadow = '';
+          if (btnIcon) btnIcon.textContent = '⚡';
+          if (btnText) btnText.textContent = 'Extract & Apply';
+        }, 2000);
       }
       
-      this.showToast(`Tailored in ${Math.round(elapsed / 1000)}s - Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
+      this.showToast(`Attached! Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
       
       // Notify content script to show green success banner (professional text)
       chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
