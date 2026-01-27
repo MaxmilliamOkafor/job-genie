@@ -2711,38 +2711,48 @@ class ATSTailor {
       }
     }
     
-    // STEP 3: Inject remaining into Skills section
+    // STEP 3: Inject ALL remaining into Skills section (no separate "Additional" section)
+    // FIX v3.3.2: Merge all keywords into single SKILLS section, comma-separated
     if (remaining.length > 0) {
-      const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+      const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
       if (skillsMatch) {
         const skillsStart = skillsMatch.index;
         const skillsEnd = skillsStart + skillsMatch[0].length;
-        const skillsText = skillsMatch[2];
+        const skillsText = skillsMatch[2].trim();
         
-        const toInject = remaining.slice(0, 15);
-        remaining = remaining.slice(15);
+        // Clean up existing skills (remove bullets, normalize)
+        const existingSkills = skillsText
+          .replace(/^[•\-\*]\s*/gm, '')
+          .split(/[,\n]+/)
+          .map(s => s.trim())
+          .filter(Boolean);
         
-        const newSkills = skillsText.trim() + '\n• Additional: ' + toInject.join(', ');
+        // Merge with remaining keywords (deduplicated)
+        const allSkills = [...new Set([...existingSkills, ...remaining])];
+        
+        // Format as clean comma-separated list (no bullets, no "Additional:" prefix)
+        const newSkills = allSkills.join(', ');
         tailoredCV = tailoredCV.substring(0, skillsStart) + 
-                     skillsMatch[1] + '\n' + newSkills + 
+                     'SKILLS\n' + newSkills + 
                      tailoredCV.substring(skillsEnd);
-        injectedKeywords.push(...toInject);
+        injectedKeywords.push(...remaining);
+        remaining = []; // All injected
+      } else {
+        // No skills section found - create one before Certifications
+        const insertPoint = tailoredCV.search(/\n(CERTIFICATIONS|EDUCATION)\n/i);
+        const newSection = `\nSKILLS\n${remaining.join(', ')}\n`;
+        if (insertPoint > 0) {
+          tailoredCV = tailoredCV.substring(0, insertPoint) + newSection + tailoredCV.substring(insertPoint);
+        } else {
+          tailoredCV = tailoredCV + newSection;
+        }
+        injectedKeywords.push(...remaining);
+        remaining = [];
       }
     }
     
-    // STEP 4: CATCH-ALL - Any remaining keywords as Technical Proficiencies
-    if (remaining.length > 0) {
-      const additionalSection = `\n\nTECHNICAL PROFICIENCIES\n• ${remaining.join(' • ')}`;
-      
-      // Insert before certifications/achievements or append to end
-      const insertPoint = tailoredCV.search(/\n(CERTIFICATIONS|ACHIEVEMENTS|EDUCATION|PROJECTS)\n/i);
-      if (insertPoint > 0) {
-        tailoredCV = tailoredCV.substring(0, insertPoint) + additionalSection + tailoredCV.substring(insertPoint);
-      } else {
-        tailoredCV = tailoredCV + additionalSection;
-      }
-      injectedKeywords.push(...remaining);
-    }
+    // STEP 4: REMOVED - No separate "TECHNICAL PROFICIENCIES" section
+    // All keywords are now merged into the single SKILLS section above
     
     return { tailoredCV, injectedKeywords };
   }
