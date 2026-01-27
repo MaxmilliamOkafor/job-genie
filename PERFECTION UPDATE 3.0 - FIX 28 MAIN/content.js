@@ -221,37 +221,128 @@
     }
   });
   
+  // ============ THANK YOU PAGE DETECTION ============
+  // Patterns that indicate a "thank you for applying" or completion page
+  const THANK_YOU_URL_PATTERNS = [
+    '/thank-you', '/thankyou', '/thanks', 
+    '/application-submitted', '/application-complete', '/application-success',
+    '/submitted', '/success', '/confirmation', '/confirmed',
+    '/complete', '/applied', '/finished'
+  ];
+  
+  const THANK_YOU_TEXT_PATTERNS = [
+    'thank you for applying',
+    'thanks for applying', 
+    'application submitted',
+    'application received',
+    'successfully submitted',
+    'application complete',
+    'we have received your application',
+    'your application has been submitted',
+    'you have successfully applied',
+    'thank you for your interest',
+    'thanks for your interest',
+    'we will review your application',
+    'our team will review',
+    'we appreciate your interest'
+  ];
+  
+  function isThankYouPage(url, checkContent = true) {
+    const urlLower = url.toLowerCase();
+    
+    // Check URL patterns
+    for (const pattern of THANK_YOU_URL_PATTERNS) {
+      if (urlLower.includes(pattern)) {
+        console.log('[ATS Tailor] 🛑 Thank You page detected via URL:', pattern);
+        return true;
+      }
+    }
+    
+    // Check page content if requested
+    if (checkContent) {
+      const bodyText = document.body?.textContent?.toLowerCase() || '';
+      for (const pattern of THANK_YOU_TEXT_PATTERNS) {
+        if (bodyText.includes(pattern)) {
+          // Additional check: make sure it's not just in a sidebar or small text
+          const h1Text = Array.from(document.querySelectorAll('h1, h2, [role="heading"]'))
+            .map(el => el.textContent?.toLowerCase() || '').join(' ');
+          if (h1Text.includes(pattern) || bodyText.indexOf(pattern) < 500) {
+            console.log('[ATS Tailor] 🛑 Thank You page detected via content:', pattern);
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
   // ============ LAZYAPPLY INTEGRATION: URL CHANGE DETECTION ============
-  // Auto-detect when navigating to a new job page and reset state
+  // ALWAYS start fresh automation on new recognized ATS URLs
   let lastProcessedUrl = window.location.href;
   let automationCompleteForUrl = new Set();
+  
+  // Force reset all state for new job
+  function forceResetForNewJob() {
+    console.log('[ATS Tailor] 🔄 FORCE RESET - clearing all state for new job');
+    filesLoaded = false;
+    cvFile = null;
+    coverFile = null;
+    coverLetterText = '';
+    hasTriggeredTailor = false;
+    tailoringInProgress = false;
+    
+    // Clear any cached data for this session
+    if (typeof CacheManager !== 'undefined') {
+      CacheManager.clearJDCache && CacheManager.clearJDCache();
+    }
+  }
+  
+  // Handle URL change - ALWAYS start fresh on recognized ATS URLs
+  function handleUrlChange(newUrl) {
+    const previousUrl = lastProcessedUrl;
+    lastProcessedUrl = newUrl;
+    
+    // Skip if it's not a supported host
+    if (!isSupportedHost(window.location.hostname)) {
+      console.log('[ATS Tailor] Not a supported host, skipping');
+      return;
+    }
+    
+    // Skip thank you pages - DO NOT start automation
+    if (isThankYouPage(newUrl, true)) {
+      console.log('[ATS Tailor] 🛑 SKIPPING Thank You page - no automation');
+      automationCompleteForUrl.add(newUrl); // Mark as "complete" to prevent processing
+      chrome.runtime.sendMessage({
+        action: 'THANK_YOU_PAGE_DETECTED',
+        url: newUrl,
+        timestamp: Date.now()
+      }).catch(() => {});
+      return;
+    }
+    
+    // ALWAYS force reset for new recognized ATS URL (even if previous automation was running)
+    console.log('[ATS Tailor] ✅ New ATS page detected - FORCING fresh automation');
+    forceResetForNewJob();
+    
+    // Clear this URL from completed set (we want fresh automation)
+    automationCompleteForUrl.delete(newUrl);
+    
+    // Notify popup/background that we're ready for new automation
+    chrome.runtime.sendMessage({
+      action: 'NEW_JOB_PAGE_DETECTED',
+      url: newUrl,
+      previousUrl: previousUrl,
+      timestamp: Date.now(),
+      forceNew: true
+    }).catch(() => {});
+  }
   
   // Monitor URL changes (for SPAs like Workday)
   const urlChangeObserver = new MutationObserver(() => {
     const currentUrl = window.location.href;
     if (currentUrl !== lastProcessedUrl) {
-      console.log('[ATS Tailor] 🔄 URL changed, preparing for new job...');
-      lastProcessedUrl = currentUrl;
-      
-      // Reset state for new job
-      filesLoaded = false;
-      cvFile = null;
-      coverFile = null;
-      coverLetterText = '';
-      hasTriggeredTailor = false;
-      tailoringInProgress = false;
-      
-      // Check if this is a new ATS page that needs processing
-      if (isSupportedHost(window.location.hostname) && !automationCompleteForUrl.has(currentUrl)) {
-        console.log('[ATS Tailor] ✅ New ATS page detected - ready for automation');
-        
-        // Notify popup that we're on a new job page
-        chrome.runtime.sendMessage({
-          action: 'NEW_JOB_PAGE_DETECTED',
-          url: currentUrl,
-          timestamp: Date.now()
-        }).catch(() => {});
-      }
+      handleUrlChange(currentUrl);
     }
   });
   
@@ -262,11 +353,7 @@
   window.addEventListener('popstate', () => {
     const currentUrl = window.location.href;
     if (currentUrl !== lastProcessedUrl) {
-      lastProcessedUrl = currentUrl;
-      filesLoaded = false;
-      hasTriggeredTailor = false;
-      tailoringInProgress = false;
-      console.log('[ATS Tailor] 🔄 Navigation detected - ready for new job');
+      handleUrlChange(currentUrl);
     }
   });
 
