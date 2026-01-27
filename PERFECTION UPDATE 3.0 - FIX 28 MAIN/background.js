@@ -26,13 +26,43 @@ const ATS_PLATFORMS = {
   'bullhornstaffing.com': 'Bullhorn'
 };
 
+// Thank you page URL patterns to SKIP
+const THANK_YOU_URL_PATTERNS = [
+  '/thank-you', '/thankyou', '/thanks', 
+  '/application-submitted', '/application-complete', '/application-success',
+  '/submitted', '/success', '/confirmation', '/confirmed',
+  '/complete', '/applied', '/finished'
+];
+
 // Track processed tabs to avoid duplicate triggers
 const processedTabs = new Set();
+
+// Track thank you pages to skip
+const thankYouPages = new Set();
+
+// Check if URL is a thank you page
+function isThankYouPageUrl(url) {
+  if (!url) return false;
+  const urlLower = url.toLowerCase();
+  
+  for (const pattern of THANK_YOU_URL_PATTERNS) {
+    if (urlLower.includes(pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Detect if URL matches an ATS platform (EXCLUDED platforms ignored)
 function detectATSPlatform(url) {
   if (!url) return null;
   const urlLower = url.toLowerCase();
+  
+  // Skip thank you pages
+  if (isThankYouPageUrl(urlLower)) {
+    console.log('[ATS Tailor] 🛑 Skipping Thank You page:', url);
+    return null;
+  }
   
   // Excluded platforms - never auto-trigger
   if (urlLower.includes('lever.co') || urlLower.includes('ashbyhq.com') || 
@@ -546,23 +576,87 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   
-  // Listen for new job page detection from content script
+  // Listen for new job page detection from content script - FORCE NEW AUTOMATION
   if (message.action === 'NEW_JOB_PAGE_DETECTED') {
-    console.log('[ATS Tailor] 🔄 New job page detected:', message.url);
+    console.log('[ATS Tailor] 🔄 New job page detected:', message.url, message.forceNew ? '(FORCED)' : '');
     
-    // Clear processed status for new URL
+    // Clear processed status for ALL tabs with this URL
     (async () => {
       try {
         const tabs = await chrome.tabs.query({});
         for (const tab of tabs) {
-          if (tab.url === message.url) {
+          if (tab.url === message.url || message.forceNew) {
             processedTabs.delete(tab.id);
+            
+            // Update badge to indicate ready for new automation
+            chrome.action.setBadgeText({ text: '🔄', tabId: tab.id }).catch(() => {});
+            chrome.action.setBadgeBackgroundColor({ color: '#3b82f6', tabId: tab.id }).catch(() => {});
+            
+            // Clear badge after 2 seconds
+            setTimeout(() => {
+              chrome.action.setBadgeText({ text: '', tabId: tab.id }).catch(() => {});
+            }, 2000);
           }
+        }
+        
+        // Also clear from thank you pages set
+        thankYouPages.delete(message.url);
+        
+      } catch (e) {
+        console.error('[ATS Tailor] Error clearing processed tabs:', e);
+      }
+    })();
+    
+    sendResponse({ status: 'acknowledged', forceNew: message.forceNew });
+    return true;
+  }
+  
+  // Handle thank you page detection - SKIP AUTOMATION
+  if (message.action === 'THANK_YOU_PAGE_DETECTED') {
+    console.log('[ATS Tailor] 🛑 Thank You page detected, marking as processed:', message.url);
+    
+    // Add to thank you pages set to prevent re-processing
+    thankYouPages.add(message.url);
+    
+    // Mark sender tab as processed
+    if (sender.tab?.id) {
+      processedTabs.add(sender.tab.id);
+      
+      // Update badge to indicate skipped
+      chrome.action.setBadgeText({ text: '⏭️', tabId: sender.tab.id }).catch(() => {});
+      chrome.action.setBadgeBackgroundColor({ color: '#6b7280', tabId: sender.tab.id }).catch(() => {});
+      
+      // Clear badge after 3 seconds
+      setTimeout(() => {
+        chrome.action.setBadgeText({ text: '', tabId: sender.tab.id }).catch(() => {});
+      }, 3000);
+    }
+    
+    sendResponse({ status: 'skipped', reason: 'thank_you_page' });
+    return true;
+  }
+  
+  // Force reset for external automation tools
+  if (message.action === 'FORCE_RESET_FOR_NEW_JOB') {
+    console.log('[ATS Tailor] 🔄 Force reset requested from external tool');
+    
+    (async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          processedTabs.delete(tab.id);
+          
+          // Notify content script to reset
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'AUTOMATION_RESET_COMPLETE',
+            source: 'background',
+            timestamp: Date.now()
+          }).catch(() => {});
         }
       } catch (e) {}
     })();
     
-    sendResponse({ status: 'acknowledged' });
+    sendResponse({ status: 'reset_triggered' });
     return true;
   }
 });
