@@ -2306,17 +2306,43 @@ ${
       const resumeFileName = `${candidateNameForFile}_CV.pdf`;
       const coverFileName = `${candidateNameForFile}_Cover_Letter.pdf`;
 
-      const extractProfessionalSummary = (raw: string): string => {
+      const extractProfessionalSummary = (raw: string, structuredSummary?: string): string => {
+        // PRIORITY 1: Use structured summary from AI response if available (most reliable)
+        if (structuredSummary && structuredSummary.trim().length > 30) {
+          console.log(`[extractProfessionalSummary] Using structured summary (${structuredSummary.length} chars)`);
+          return structuredSummary.substring(0, 700).trim();
+        }
+        
         const text = String(raw || "");
+        if (!text || text.length < 50) {
+          console.log("[extractProfessionalSummary] No raw text available, no summary extracted");
+          return "";
+        }
 
-        // Prefer the explicit Professional Summary section if present
-        const summaryMatch = text.match(
-          /\bPROFESSIONAL\s+SUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(WORK\s+EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b|$)/i,
-        );
-        let summary = (summaryMatch?.[1] ?? text).trim();
+        // PRIORITY 2: Try to extract from raw resume text
+        // Try multiple patterns to find the Professional Summary section
+        const summaryPatterns = [
+          /\bPROFESSIONAL\s+SUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|TECHNICAL\s+SKILLS)\b)/i,
+          /\bSUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
+          /\bPROFILE\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
+          /\bABOUT\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
+        ];
 
-        // If we fell back to the whole resume, keep it short and avoid grabbing headers
-        summary = summary.replace(/\r/g, "");
+        let summary = "";
+        for (const pattern of summaryPatterns) {
+          const match = text.match(pattern);
+          if (match?.[1] && match[1].trim().length > 30) {
+            summary = match[1].trim();
+            console.log(`[extractProfessionalSummary] Found via pattern, length: ${summary.length}`);
+            break;
+          }
+        }
+
+        // If no section found, summary remains empty (don't use full resume text)
+        if (!summary || summary.length < 30) {
+          console.log("[extractProfessionalSummary] No summary section found in raw text");
+          return "";
+        }
 
         // Remove common header duplication lines (pipes, contact info, urls)
         const removeParts = [
@@ -2352,10 +2378,14 @@ ${
           .join(" ")
           .replace(/\s+/g, " ")
           .replace(/^PROFESSIONAL\s+SUMMARY\s*:?\s*/i, "")
+          .replace(/^SUMMARY\s*:?\s*/i, "")
+          .replace(/^PROFILE\s*:?\s*/i, "")
           .trim();
 
         // Hard cap for PDF wrapping
-        return summary.substring(0, 700).trim();
+        const finalSummary = summary.substring(0, 700).trim();
+        console.log(`[extractProfessionalSummary] Final summary length: ${finalSummary.length}`);
+        return finalSummary;
       };
 
       const skills = Array.isArray(userProfile.skills) ? userProfile.skills : [];
@@ -2383,7 +2413,7 @@ ${
           github: userProfile.github,
           portfolio: userProfile.portfolio,
         },
-        summary: extractProfessionalSummary(result.tailoredResume || ""),
+        summary: extractProfessionalSummary(result.tailoredResume || "", result.resumeStructured?.summary),
         experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
           title: exp?.title || "",
