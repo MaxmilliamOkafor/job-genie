@@ -2569,9 +2569,14 @@ ${
       result.coverLetterPdf = coverPdfResult.pdf;
       result.resumePdfFileName = resumePdfResult.fileName;
       result.coverLetterPdfFileName = coverPdfResult.fileName;
+      
+      // CRITICAL: Include the extracted summary in the result for extension fallback
+      // This ensures the extension can pass it to generate-pdf if downloading separately
+      result.professionalSummary = resumePayload.summary;
+      result.extractedSummary = resumePayload.summary; // Alias for backward compatibility
 
       console.log(
-        `PDFs generated - Resume: ${result.resumePdf ? "success" : "failed"}, Cover: ${result.coverLetterPdf ? "success" : "failed"}`,
+        `PDFs generated - Resume: ${result.resumePdf ? "success" : "failed"}, Cover: ${result.coverLetterPdf ? "success" : "failed"}, Summary: ${resumePayload.summary ? resumePayload.summary.length + " chars" : "missing"}`,
       );
     } catch (pdfErr) {
       console.error("PDF generation (inline) failed:", pdfErr);
