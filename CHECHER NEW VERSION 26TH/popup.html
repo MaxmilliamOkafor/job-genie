@@ -34,7 +34,7 @@
         <!-- Main Content -->
         <div class="main-content">
             <!-- Login Section -->
-            <div id="loginSection" class="section login-section" style="display: none;">
+            <div id="loginSection" class="section login-section">
                 <h3>Sign In to QuantumHire</h3>
                 <div class="form-group">
                     <input type="email" id="email" placeholder="Email" class="form-input" autocomplete="email">
@@ -44,9 +44,12 @@
                 </div>
                 <button id="loginBtn" class="btn btn-primary btn-full">Sign In</button>
             </div>
+            
+            <!-- Main Section (shown when logged in) -->
+            <div id="mainSection" class="hidden">
 
             <!-- User Bar -->
-            <div id="userBar" class="user-bar" style="display: none;">
+            <div id="userBar" class="user-bar hidden">
                 <div class="user-info">
                     <span class="user-avatar" id="userAvatar">U</span>
                     <span id="userEmail" class="user-email"></span>
@@ -55,7 +58,7 @@
             </div>
 
             <!-- AI Provider Settings - Compact Toggle -->
-            <div class="ai-provider-panel" id="aiSettingsPanel" style="display: none;">
+            <div class="ai-provider-panel hidden" id="aiSettingsPanel">
                 <div class="ai-provider-toggle-row">
                     <div class="ai-provider-left">
                         <span class="ai-provider-icon">🤖</span>
@@ -260,6 +263,7 @@
             <div class="section">
                 <button id="openBulkApply" class="btn btn-secondary btn-full">📈 Bulk Apply Dashboard</button>
             </div>
+            </div><!-- End mainSection -->
         </div>
 
         <!-- Footer -->

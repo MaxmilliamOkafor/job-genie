@@ -1261,16 +1261,21 @@ class ATSTailor {
   updateUI() {
     const loginSection = document.getElementById('loginSection');
     const mainSection = document.getElementById('mainSection');
+    const userBar = document.getElementById('userBar');
     const userEmail = document.getElementById('userEmail');
+    const aiSettingsPanel = document.getElementById('aiSettingsPanel');
     
     if (!this.session) {
       loginSection?.classList.remove('hidden');
       mainSection?.classList.add('hidden');
+      userBar?.classList.add('hidden');
+      aiSettingsPanel?.classList.add('hidden');
       this.setStatus('Login Required', 'error');
     } else {
       loginSection?.classList.add('hidden');
       mainSection?.classList.remove('hidden');
-      document.getElementById('aiSettingsPanel')?.classList.remove('hidden');
+      userBar?.classList.remove('hidden');
+      aiSettingsPanel?.classList.remove('hidden');
       if (userEmail) userEmail.textContent = this.session.user?.email || 'Logged in';
       this.setStatus('Ready', 'ready');
     }
