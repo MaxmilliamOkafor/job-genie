@@ -934,14 +934,10 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
       doc.setTextColor(...PDF_CONFIG.colors.black);
 
-      const hiringManager = 'Hiring Manager';
-      // FIX: Use robust extraction, fallback to 'Hiring Team' not 'Company'
-      const extractedCompany = this.extractCompanyName(jobData);
-      const company = extractedCompany || 'Hiring Team';
+      // FIX 27-01-26: Removed "Company" line per user preference - keep blank spacing
+      // Only add "Re: Job Title" line, skip company name entirely
       
-      doc.text(hiringManager, PDF_CONFIG.margins.left, y);
-      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal;
-      doc.text(company, PDF_CONFIG.margins.left, y);
+      // Add spacing where company line would have been (maintains layout)
       y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 20;
 
       return y;
