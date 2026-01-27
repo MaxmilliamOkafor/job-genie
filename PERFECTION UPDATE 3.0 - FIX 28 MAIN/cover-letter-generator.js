@@ -1,6 +1,7 @@
-// cover-letter-generator.js - Professional Cover Letter Generator v2.0
+// cover-letter-generator.js - Professional Cover Letter Generator v3.0
 // Creates tailored cover letters with proper business letter formatting
-// Features: Template system, keyword integration, tone matching
+// Features: Template system, NATURAL keyword integration (lighter than CV - not for ATS), tone matching
+// Based on PERFECT WORKS cover letter logic
 
 (function(global) {
   'use strict';
@@ -71,19 +72,32 @@
     'Transformed', 'Streamlined', 'Built', 'Launched', 'Pioneered'
   ];
 
+  // ============ NATURAL KEYWORD PHRASES (for cover letters - softer than CV) ============
+  const KEYWORD_PHRASES = [
+    'with expertise in',
+    'leveraging',
+    'utilising',
+    'applying',
+    'through',
+    'incorporating',
+    'employing',
+    'using',
+    'via'
+  ];
+
   // ============ COVER LETTER GENERATOR ============
   const CoverLetterGenerator = {
 
     // ============ MAIN GENERATE FUNCTION ============
     generate(candidateData, jobData, keywords, options = {}) {
       const startTime = performance.now();
-      console.log('[CoverLetterGenerator] Generating cover letter...');
+      console.log('[CoverLetterGenerator] v3.0 Generating cover letter with natural keyword injection...');
 
       const {
         template = 'professional',
         maxWords = 400,
         includeMetrics = true,
-        topKeywordsCount = 8
+        topKeywordsCount = 10 // Increased for cover letter natural flow
       } = options;
 
       // Get template
@@ -95,18 +109,19 @@
       const fullName = `${firstName} ${lastName}`.trim();
       
       const jobTitle = jobData?.title || 'the position';
-      const company = jobData?.company || 'your company';
+      const company = this.extractCompanyName(jobData) || 'your organisation';
       const domain = this.extractDomain(candidateData);
       const yearsExp = this.calculateYearsExperience(candidateData);
 
-      // Get top keywords
+      // Get top keywords - ROBUST handling
       const topKeywords = this.getTopKeywords(keywords, topKeywordsCount);
+      console.log(`[CoverLetterGenerator] Using ${topKeywords.length} keywords for natural injection`);
 
-      // Build cover letter sections
+      // Build cover letter sections WITH keyword injection
       const opening = this.selectRandom(templateConfig.opening, { jobTitle, company });
-      const bridge = this.selectRandom(templateConfig.bridge, { yearsExp, domain });
-      const body = this.buildBody(candidateData, jobData, topKeywords, includeMetrics);
-      const closing = this.selectRandom(templateConfig.closing, { company });
+      const bridge = this.buildBridgeWithKeywords(templateConfig.bridge, { yearsExp, domain }, topKeywords);
+      const body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);
+      const closing = this.buildClosingWithKeywords(templateConfig.closing, { company }, topKeywords);
 
       // Assemble full cover letter
       const paragraphs = [
@@ -127,7 +142,7 @@
       const coverLetter = paragraphs.join('\n');
       
       const timing = performance.now() - startTime;
-      console.log(`[CoverLetterGenerator] Generated in ${timing.toFixed(0)}ms`);
+      console.log(`[CoverLetterGenerator] Generated in ${timing.toFixed(0)}ms with ${topKeywords.length} keywords naturally woven in`);
 
       return {
         text: coverLetter,
@@ -149,7 +164,6 @@
       }
 
       // AI enhancement would go here - for now return base
-      // This can be enhanced with API calls to OpenAI/Kimi
       return base;
     },
 
@@ -168,9 +182,46 @@
       return result;
     },
 
+    // ============ BUILD BRIDGE WITH KEYWORDS (1-2 keywords) ============
+    buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
+      let bridge = this.selectRandom(bridgeTemplates, replacements);
+      
+      // Add 1-2 keywords naturally if available
+      if (keywords.length >= 2) {
+        const kw1 = keywords[0];
+        const kw2 = keywords[1];
+        const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
+        
+        // Append naturally: "...expertise, utilising Python and data analytics."
+        if (bridge.endsWith('.')) {
+          bridge = bridge.slice(0, -1) + `, ${phrase} ${kw1} and ${kw2}.`;
+        } else {
+          bridge += `, ${phrase} ${kw1} and ${kw2}.`;
+        }
+      }
+      
+      return bridge;
+    },
+
+    // ============ BUILD CLOSING WITH KEYWORDS (1 keyword) ============
+    buildClosingWithKeywords(closingTemplates, replacements, keywords) {
+      let closing = this.selectRandom(closingTemplates, replacements);
+      
+      // Add 1 keyword naturally at the end if available (softer for cover letter)
+      if (keywords.length >= 5) {
+        const kw = keywords[4] || keywords[0];
+        
+        // Example: "...I look forward to bringing my expertise in project management to your team."
+        if (closing.includes('Thank you')) {
+          closing = closing.replace('Thank you', `I am confident my ${kw} expertise would be valuable to your team. Thank you`);
+        }
+      }
+      
+      return closing;
+    },
+
     // ============ EXTRACT DOMAIN ============
     extractDomain(candidateData) {
-      // Try to determine domain from job titles
       const experience = candidateData?.professional_experience || 
                         candidateData?.professionalExperience || 
                         candidateData?.workExperience || [];
@@ -192,6 +243,12 @@
         }
         if (/manager|director|lead/i.test(recentTitle)) {
           return 'technical leadership';
+        }
+        if (/account|client|relationship|partner/i.test(recentTitle)) {
+          return 'account management and client relations';
+        }
+        if (/market|growth|digital/i.test(recentTitle)) {
+          return 'digital marketing and growth';
         }
       }
       
@@ -228,16 +285,29 @@
       return `${totalYears}+`;
     },
 
-    // ============ GET TOP KEYWORDS ============
+    // ============ GET TOP KEYWORDS (ROBUST) ============
     getTopKeywords(keywords, count) {
       if (!keywords) return [];
       
-      const all = keywords.highPriority || keywords.all || [];
-      return all.slice(0, count);
+      // ROBUST: Handle array or object with priority buckets
+      if (Array.isArray(keywords)) {
+        return keywords.slice(0, count);
+      }
+      
+      // Priority: highPriority > all > mediumPriority
+      const highPriority = keywords.highPriority || [];
+      const all = keywords.all || [];
+      const medium = keywords.mediumPriority || [];
+      
+      // Combine and dedupe, prioritising high priority
+      const combined = [...highPriority, ...all, ...medium];
+      const unique = [...new Set(combined.map(k => k.toLowerCase()))];
+      
+      return unique.slice(0, count);
     },
 
-    // ============ BUILD BODY PARAGRAPHS ============
-    buildBody(candidateData, jobData, topKeywords, includeMetrics) {
+    // ============ BUILD BODY PARAGRAPHS WITH KEYWORD INJECTION ============
+    buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics) {
       const paragraphs = [];
 
       // Highlight relevant experience
@@ -247,7 +317,7 @@
 
       if (experience.length > 0) {
         const recentJob = experience[0];
-        const company = recentJob.company || 'my current organization';
+        const company = recentJob.company || 'my current organisation';
         const title = recentJob.title || 'my role';
         
         // Find a compelling achievement
@@ -261,22 +331,112 @@
           highlightBullet = withMetrics || bullets[0];
         }
 
-        paragraphs.push(
-          `In my role as ${title} at ${company}, I have demonstrated consistent delivery of high-impact results. ` +
-          (highlightBullet ? highlightBullet.replace(/^[•\-*]\s*/, '') : '') +
-          (topKeywords.length > 0 ? ` My expertise in ${topKeywords.slice(0, 3).join(', ')} directly aligns with the requirements outlined in your job description.` : '')
-        );
+        // PARAGRAPH 1: Role + Achievement + Keywords 1-3
+        const kw1 = topKeywords[0] || '';
+        const kw2 = topKeywords[1] || '';
+        const kw3 = topKeywords[2] || '';
+        
+        let para1 = `In my role as ${title} at ${company}, I have demonstrated consistent delivery of high-impact results.`;
+        if (highlightBullet) {
+          para1 += ` ${highlightBullet.replace(/^[•\-*]\s*/, '')}`;
+        }
+        if (kw1 && kw2 && kw3) {
+          para1 += ` My expertise in ${kw1}, ${kw2}, and ${kw3} directly aligns with the requirements outlined in your job description.`;
+        } else if (kw1 && kw2) {
+          para1 += ` My expertise in ${kw1} and ${kw2} directly aligns with your requirements.`;
+        }
+        
+        paragraphs.push(para1);
       }
 
-      // Add skills alignment
+      // PARAGRAPH 2: Additional skills alignment with Keywords 4-7
       if (topKeywords.length > 3) {
-        paragraphs.push(
-          `Additionally, I bring strong capabilities in ${topKeywords.slice(3, 6).join(', ')}, ` +
-          `which I believe will enable me to contribute effectively from day one.`
-        );
+        const kw4 = topKeywords[3] || '';
+        const kw5 = topKeywords[4] || '';
+        const kw6 = topKeywords[5] || '';
+        const kw7 = topKeywords[6] || '';
+        
+        let para2 = 'Additionally, I bring strong capabilities in ';
+        const skills = [kw4, kw5, kw6, kw7].filter(Boolean);
+        
+        if (skills.length >= 3) {
+          para2 += `${skills.slice(0, -1).join(', ')}, and ${skills[skills.length - 1]}`;
+        } else if (skills.length === 2) {
+          para2 += `${skills[0]} and ${skills[1]}`;
+        } else if (skills.length === 1) {
+          para2 += skills[0];
+        }
+        
+        para2 += ', which I believe will enable me to contribute effectively from day one.';
+        paragraphs.push(para2);
+      }
+
+      // PARAGRAPH 3 (OPTIONAL): Extra context with Keywords 8-10 if available
+      if (topKeywords.length > 7) {
+        const kw8 = topKeywords[7] || '';
+        const kw9 = topKeywords[8] || '';
+        const kw10 = topKeywords[9] || '';
+        
+        const extraSkills = [kw8, kw9, kw10].filter(Boolean);
+        if (extraSkills.length > 0) {
+          const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
+          paragraphs.push(
+            `Furthermore, I have hands-on experience ${phrase} ${extraSkills.join(' and ')}, as well as a proven ability to drive cross-functional collaboration and deliver measurable outcomes.`
+          );
+        }
       }
 
       return paragraphs.join('\n\n');
+    },
+
+    // ============ EXTRACT COMPANY NAME (ROBUST - from PERFECT WORKS) ============
+    extractCompanyName(jobData) {
+      if (!jobData) return '';
+      
+      let company = jobData.company || '';
+      
+      const isInvalid = (val) => {
+        if (!val || typeof val !== 'string') return true;
+        const lower = val.toLowerCase().trim();
+        return lower === 'company' || lower === 'the company' || lower === 'your company' || lower.length < 2;
+      };
+      
+      if (isInvalid(company)) {
+        // Try to extract from job title like "Senior Engineer at Bugcrowd"
+        const titleMatch = (jobData.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.-]+?)(?:\s*[-|]|\s*$)/i);
+        if (titleMatch) {
+          company = titleMatch[1].trim();
+        }
+      }
+      
+      if (isInvalid(company)) {
+        // Try to extract from URL
+        const url = jobData.url || '';
+        const hostMatch = url.match(/https?:\/\/([^.\/]+)\./i);
+        if (hostMatch && hostMatch[1]) {
+          const subdomain = hostMatch[1].toLowerCase();
+          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire'];
+          if (!blacklist.includes(subdomain) && subdomain.length > 2) {
+            company = subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
+          }
+        }
+      }
+      
+      if (isInvalid(company)) {
+        if (jobData.siteName && !isInvalid(jobData.siteName)) {
+          company = jobData.siteName;
+        }
+      }
+      
+      // Final cleanup
+      if (company && typeof company === 'string') {
+        company = company
+          .replace(/\s*(careers|jobs|hiring|apply|work|join)\s*$/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      
+      return isInvalid(company) ? '' : company;
     },
 
     // ============ FORMAT FOR DIFFERENT OUTPUTS ============
@@ -316,12 +476,19 @@
         issues,
         wordCount
       };
+    },
+
+    // ============ EXTRACT ACHIEVEMENT (HELPER) ============
+    extractAchievement(bullet) {
+      if (!bullet) return 'significant performance improvements';
+      const match = bullet.match(/(\d+%?\s*(?:improvement|increase|reduction|faster|efficiency|growth))/i);
+      return match ? match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
     }
   };
 
   // Export
   global.CoverLetterGenerator = CoverLetterGenerator;
   
-  console.log('[CoverLetterGenerator] v2.0 loaded');
+  console.log('[CoverLetterGenerator] v3.0 loaded - Natural keyword injection enabled');
 
 })(typeof window !== 'undefined' ? window : this);
