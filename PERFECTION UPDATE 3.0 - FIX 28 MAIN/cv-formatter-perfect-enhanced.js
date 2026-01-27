@@ -907,7 +907,7 @@
     <!-- Skills -->
     ${skills ? `
     <div class="cv-section">
-      <div class="cv-section-title">Skills</div>
+      <div class="cv-section-title">Technical Proficiencies</div>
       <div class="cv-skills">${escapeHtml(skills)}</div>
     </div>
     ` : ''}

@@ -723,7 +723,7 @@
 
       // === SKILLS (comma-separated, single line) ===
       if (data.skills && data.skills.length > 0) {
-        addSectionHeader('SKILLS');
+        addSectionHeader('TECHNICAL PROFICIENCIES');
         addText(data.skills.join(', '), false, false, font.body);
         y += 4;
       }
@@ -776,7 +776,7 @@
       }
 
       if (data.skills?.length > 0) {
-        lines.push('SKILLS');
+        lines.push('TECHNICAL PROFICIENCIES');
         lines.push(data.skills.join(', '));
         lines.push('');
       }

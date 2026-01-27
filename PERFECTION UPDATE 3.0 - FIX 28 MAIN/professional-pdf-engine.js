@@ -342,6 +342,7 @@
       let currentSection = '';
       let currentContent = [];
 
+      // FIX v3.3.2: Added TECHNICAL PROFICIENCIES mapping to skills section
       const sectionMap = {
         'PROFESSIONAL SUMMARY': 'summary',
         'SUMMARY': 'summary',
@@ -355,6 +356,10 @@
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
         'CORE SKILLS': 'skills',
+        'TECHNICAL PROFICIENCIES': 'skills',
+        'KEY SKILLS': 'skills',
+        'CORE COMPETENCIES': 'skills',
+        'ADDITIONAL SKILLS': 'skills',
         'CERTIFICATIONS': 'certifications',
         'LICENSES': 'certifications'
       };
@@ -744,7 +749,7 @@
         y = PDF_CONFIG.margins.top;
       }
 
-      y = this.renderSectionTitle(doc, 'SKILLS', y);
+      y = this.renderSectionTitle(doc, 'TECHNICAL PROFICIENCIES', y);
 
       // Format skills as comma-separated list (max 25)
       const skillsText = skills.slice(0, 25).join(', ');
