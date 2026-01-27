@@ -1287,6 +1287,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
  * Handle raw content request from extension
  * Parses text content, applies tailoredLocation, and returns base64 PDF in JSON
  * FIXED: Proper formatting with bold name (24pt), italic job titles, 1.5 line spacing
+ * ENHANCED: Better summary extraction with multiple detection patterns
  */
 async function handleRawContentRequest(body: {
   content: string;
@@ -1297,8 +1298,9 @@ async function handleRawContentRequest(body: {
   fileName?: string;
   firstName?: string;
   lastName?: string;
+  summary?: string; // NEW: Allow passing summary directly from tailor-application
 }): Promise<Response> {
-  const { content, type = "cv", tailoredLocation, jobTitle, company, fileName, firstName, lastName } = body;
+  const { content, type = "cv", tailoredLocation, jobTitle, company, fileName, firstName, lastName, summary: passedSummary } = body;
 
   console.log(
     "[generate-pdf] Raw content request, tailoredLocation:",
@@ -1307,6 +1309,8 @@ async function handleRawContentRequest(body: {
     firstName,
     "lastName:",
     lastName,
+    "passedSummary:",
+    passedSummary ? `${passedSummary.length} chars` : "none",
   );
 
   try {
@@ -1370,18 +1374,23 @@ async function handleRawContentRequest(body: {
     let nameExtracted = "";
     let contactLine = "";
     let linksLine = "";
+    let extractedSummaryFromText = ""; // Track summary extracted from text parsing
 
     const sectionHeaders = [
       "PROFESSIONAL SUMMARY",
       "SUMMARY",
+      "PROFILE",
+      "ABOUT",
       "EXPERIENCE",
       "WORK EXPERIENCE",
+      "EMPLOYMENT",
       "EDUCATION",
       "SKILLS",
       "TECHNICAL SKILLS",
       "CERTIFICATIONS",
       "ACHIEVEMENTS",
       "PROJECTS",
+      "RELEVANT PROJECTS",
     ];
 
     for (const line of lines) {
@@ -1415,23 +1424,56 @@ async function handleRawContentRequest(body: {
         continue;
       }
 
-      // Check for section header
-      if (sectionHeaders.includes(upperTrimmed)) {
+      // Check for section header (expanded matching)
+      const isSectionHeader = sectionHeaders.includes(upperTrimmed) || 
+        sectionHeaders.some(h => upperTrimmed.startsWith(h) || upperTrimmed.endsWith(h));
+      
+      if (isSectionHeader) {
         if (currentSection) {
           sections.push(currentSection);
         }
-        currentSection = { type: upperTrimmed, content: [] };
+        // Normalize section type
+        let sectionType = upperTrimmed;
+        if (sectionType.includes("SUMMARY") || sectionType.includes("PROFILE") || sectionType.includes("ABOUT")) {
+          sectionType = "PROFESSIONAL SUMMARY";
+        }
+        if (sectionType.includes("EXPERIENCE") || sectionType.includes("EMPLOYMENT")) {
+          sectionType = "WORK EXPERIENCE";
+        }
+        currentSection = { type: sectionType, content: [] };
         continue;
       }
 
       // Add to current section
       if (currentSection) {
         currentSection.content.push(trimmed);
+        // Track summary content separately for fallback
+        if (currentSection.type === "PROFESSIONAL SUMMARY") {
+          extractedSummaryFromText += (extractedSummaryFromText ? " " : "") + trimmed;
+        }
       }
     }
 
     if (currentSection) {
       sections.push(currentSection);
+    }
+
+    // CRITICAL: If no summary section was found in text but we have passedSummary, inject it
+    const hasSummarySection = sections.some(s => s.type === "PROFESSIONAL SUMMARY" || s.type.includes("SUMMARY"));
+    if (!hasSummarySection && passedSummary && passedSummary.length > 30) {
+      console.log(`[generate-pdf] Injecting passedSummary (${passedSummary.length} chars) as no summary found in parsed text`);
+      // Insert summary section at the beginning (after header sections)
+      sections.unshift({ type: "PROFESSIONAL SUMMARY", content: [passedSummary] });
+    } else if (hasSummarySection) {
+      // Check if extracted summary is too short, replace with passedSummary if available
+      const summarySection = sections.find(s => s.type === "PROFESSIONAL SUMMARY" || s.type.includes("SUMMARY"));
+      const existingSummaryLength = summarySection?.content.join(" ").length || 0;
+      if (existingSummaryLength < 50 && passedSummary && passedSummary.length > existingSummaryLength) {
+        console.log(`[generate-pdf] Replacing short summary (${existingSummaryLength} chars) with passedSummary (${passedSummary.length} chars)`);
+        if (summarySection) {
+          summarySection.content = [passedSummary];
+        }
+      }
     }
 
     // ============ RENDER PDF ============
