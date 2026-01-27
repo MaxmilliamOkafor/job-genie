@@ -1689,6 +1689,15 @@ class ATSTailor {
     const keywords = this.generatedDocuments.keywords || null;
     const totalKeywords = matchedKeywords.length + missingKeywords.length;
     
+    // ALWAYS show the AI Match Analysis panel when we have any match data
+    const documentsCard = document.getElementById('documentsCard');
+    const aiMatchAnalysis = document.getElementById('aiMatchAnalysis');
+    if (totalKeywords > 0 || matchScore > 0) {
+      // Ensure documentsCard is visible to show AI Match Analysis
+      documentsCard?.classList.remove('hidden');
+      aiMatchAnalysis?.classList.remove('hidden');
+    }
+    
     // Update gauge
     this.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords);
     
@@ -1762,6 +1771,12 @@ class ATSTailor {
     const keywordCountBadge = document.getElementById('keywordCountBadge');
     if (keywordCountBadge) {
       keywordCountBadge.textContent = `${matched} of ${total} keywords matched`;
+    }
+    
+    // Update AI provider name in match panel
+    const matchPanelProvider = document.getElementById('matchPanelProvider');
+    if (matchPanelProvider) {
+      matchPanelProvider.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
     }
   }
 
@@ -2792,12 +2807,14 @@ class ATSTailor {
     const pipelineSteps = document.getElementById('pipelineSteps');
     
     btn.disabled = true;
-    btn.querySelector('.btn-text').textContent = '⚡ Tailoring...';
+    // Only two button states: Orange "⏳⚡ Tailoring...~5s" during processing, Blue "⚡Extract & Apply Keywords to CV~5s" when ready
+    btn.querySelector('.btn-text').textContent = '⏳⚡ Tailoring...';
+    btn.querySelector('.btn-time').textContent = '~5s';
     btn.classList.add('btn-tailoring');
     progressContainer?.classList.remove('hidden');
     pipelineSteps?.classList.remove('hidden');
     if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
-    this.setStatus('⚡ Tailoring...', 'working');
+    this.setStatus('Tailoring...', 'working');
     
     // WIRE UP DEBUG PANELS: Reset and start logging
     if (window.PDFDebugPanel) {
@@ -3301,25 +3318,22 @@ class ATSTailor {
         jobUrl: this.currentJob?.url || window.location?.href
       });
     } finally {
+      // INSTANT RESET: No delays, always ready for next URL
       btn.disabled = false;
       btn.classList.remove('btn-tailoring');
       btn.querySelector('.btn-text').textContent = 'Extract & Apply Keywords to CV';
+      btn.querySelector('.btn-time').textContent = '~5s';
       
-      // Reset UI after short delay, but keep extension ready for next job
-      setTimeout(() => {
-        progressContainer?.classList.add('hidden');
-        [1, 2, 3].forEach(n => {
-          const step = document.getElementById(`step${n}`);
-          if (step) {
-            step.classList.remove('active', 'complete');
-            const icon = step.querySelector('.step-icon');
-            if (icon) icon.textContent = '⏳';
-          }
-        });
-        
-        // Prepare for next application after 2 seconds
-        setTimeout(() => this.resetForNextApplication(), 2000);
-      }, 3000);
+      // Immediately reset progress UI
+      progressContainer?.classList.add('hidden');
+      [1, 2, 3].forEach(n => {
+        const step = document.getElementById(`step${n}`);
+        if (step) {
+          step.classList.remove('active', 'complete');
+          const icon = step.querySelector('.step-icon');
+          if (icon) icon.textContent = '⏳';
+        }
+      });
     }
   }
 
