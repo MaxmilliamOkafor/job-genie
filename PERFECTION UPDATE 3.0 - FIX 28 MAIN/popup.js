@@ -3071,7 +3071,11 @@ class ATSTailor {
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || [],
         keywords: keywords,
-        structuredCv: window.quantumhireStructuredCv // Store reference for later PDF generation
+        structuredCv: window.quantumhireStructuredCv, // Store reference for later PDF generation
+        // CRITICAL: Store professional summary explicitly for PDF generation
+        professionalSummary: result.professionalSummary || result.extractedSummary || 
+          (window.quantumhireStructuredCv?.summary?.text) || 
+          (typeof window.quantumhireStructuredCv?.summary === 'string' ? window.quantumhireStructuredCv.summary : '')
       };
       
       // WIRE UP DEBUG PANELS: Log input data after profile load
@@ -3412,6 +3416,24 @@ class ATSTailor {
         return;
       }
 
+      // Get structuredCv which contains the professional summary
+      const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+      
+      // Extract professional summary from structuredCv or stored data
+      let professionalSummary = '';
+      if (structuredCv?.summary) {
+        professionalSummary = typeof structuredCv.summary === 'string' 
+          ? structuredCv.summary 
+          : structuredCv.summary.text || structuredCv.summary.content || '';
+      }
+      
+      // Also check for stored summary from tailoring result
+      if (!professionalSummary && this.generatedDocuments.professionalSummary) {
+        professionalSummary = this.generatedDocuments.professionalSummary;
+      }
+
+      console.log('[ATS Tailor] regeneratePDFViaBackend - Summary length:', professionalSummary.length);
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
         method: 'POST',
         headers: {
@@ -3427,7 +3449,10 @@ class ATSTailor {
           company: this.currentJob?.company,
           firstName: this.profileInfo?.firstName,
           lastName: this.profileInfo?.lastName,
-          fileName: this.generatedDocuments.cvFileName
+          fileName: this.generatedDocuments.cvFileName,
+          // CRITICAL: Pass summary and structuredCv to ensure Professional Summary is included
+          summary: professionalSummary,
+          structuredCv: structuredCv
         }),
       });
 
