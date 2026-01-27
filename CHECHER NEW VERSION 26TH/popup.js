@@ -1270,6 +1270,7 @@ class ATSTailor {
     } else {
       loginSection?.classList.add('hidden');
       mainSection?.classList.remove('hidden');
+      document.getElementById('aiSettingsPanel')?.classList.remove('hidden');
       if (userEmail) userEmail.textContent = this.session.user?.email || 'Logged in';
       this.setStatus('Ready', 'ready');
     }
