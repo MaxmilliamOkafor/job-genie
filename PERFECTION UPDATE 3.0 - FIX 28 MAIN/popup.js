@@ -6,6 +6,25 @@
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
+// ============ GLOBAL ERROR HANDLER: Prevent extension crashes ============
+// Catches unhandled promise rejections that would otherwise crash the extension
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[ATS Tailor] Unhandled promise rejection:', event.reason);
+  event.preventDefault(); // Prevent the error from crashing the extension
+  
+  // Show user-friendly error message
+  const errorMessage = event.reason?.message || 'An unexpected error occurred';
+  if (window.atsTailor?.showToast) {
+    window.atsTailor.showToast(`Error: ${errorMessage.substring(0, 100)}`, 'error');
+  }
+});
+
+// Global error handler for synchronous errors
+window.addEventListener('error', (event) => {
+  console.error('[ATS Tailor] Unhandled error:', event.error);
+  // Don't prevent default for these - let them be logged
+});
+
 // ============ PERFECTION v3.0: IMMUTABILITY VALIDATION ============
 // Ensures company names, job titles, and dates are NEVER modified by AI
 function validateWorkExperienceImmutability(originalExperience, tailoredExperience) {
@@ -2347,8 +2366,16 @@ class ATSTailor {
         throw new Error(errorData.error || `Request failed: ${response.status}`);
       }
       
-      const result = await response.json();
-      
+      // ROBUST JSON PARSING for AI keywords
+      let result;
+      try {
+        const responseText = await response.text();
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('[ATS Tailor] AI keyword response parse failed:', parseError);
+        this.showToast('AI response was invalid. Please try again.', 'error');
+        return;
+      }
       if (!result.all || result.all.length === 0) {
         this.showToast('AI could not extract keywords from this job description.', 'error');
         return;
@@ -2471,7 +2498,15 @@ class ATSTailor {
           throw new Error(errorText || 'AI extraction failed');
         }
         
-        const result = await response.json();
+        // ROBUST JSON PARSING for keyword extraction
+        let result;
+        try {
+          const responseText = await response.text();
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          console.warn('[ATS Tailor] Keyword response parse failed on attempt', attempt + 1);
+          throw new Error('Invalid response from AI. Retrying...');
+        }
         
         if (result.error) {
           throw new Error(result.error);
@@ -3028,7 +3063,52 @@ class ATSTailor {
         throw new Error(msg);
       }
 
-      const result = await response.json();
+      // ROBUST JSON PARSING: Handle truncated responses gracefully
+      let result;
+      try {
+        const responseText = await response.text();
+        
+        // Try to parse as JSON
+        try {
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          console.warn('[ATS Tailor] JSON parse failed, attempting to repair truncated response...');
+          
+          // Try to repair common truncation patterns
+          let repairedText = responseText;
+          
+          // If response ends with incomplete string, try to close it
+          if (responseText.endsWith('"')) {
+            // Ends mid-key/value - try adding closing braces
+            repairedText = responseText + ': null}';
+          } else if (responseText.match(/"[^"]*$/)) {
+            // Has unclosed string - close it and add braces
+            repairedText = responseText + '"}';
+          }
+          
+          // Add missing closing braces
+          const openBraces = (repairedText.match(/{/g) || []).length;
+          const closeBraces = (repairedText.match(/}/g) || []).length;
+          const missingBraces = openBraces - closeBraces;
+          if (missingBraces > 0) {
+            repairedText += '}'.repeat(missingBraces);
+          }
+          
+          // Try to parse repaired JSON
+          try {
+            result = JSON.parse(repairedText);
+            console.log('[ATS Tailor] Successfully repaired truncated JSON response');
+          } catch (repairError) {
+            console.error('[ATS Tailor] Could not repair JSON:', repairError);
+            console.error('[ATS Tailor] Raw response (first 500 chars):', responseText.substring(0, 500));
+            throw new Error('Server returned invalid response. Please try again.');
+          }
+        }
+      } catch (textError) {
+        console.error('[ATS Tailor] Failed to read response text:', textError);
+        throw new Error('Failed to read server response. Please try again.');
+      }
+      
       if (result.error) throw new Error(result.error);
 
       // ███ CRITICAL: VALIDATE & FIX WORK EXPERIENCE IMMUTABILITY ███
@@ -3546,7 +3626,16 @@ class ATSTailor {
         return;
       }
 
-      const result = await response.json();
+      // ROBUST JSON PARSING for PDF response
+      let result;
+      try {
+        const responseText = await response.text();
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn('[ATS Tailor] PDF response parse failed:', parseError);
+        return;
+      }
+      
       if (result.pdf) {
         this.generatedDocuments.cvPdf = result.pdf;
         this.generatedDocuments.cvFileName = result.fileName || this.generatedDocuments.cvFileName;
@@ -3617,7 +3706,16 @@ class ATSTailor {
             this.showToast('✅ Downloaded!', 'success');
             return;
           } else {
-            const result = await response.json();
+            // ROBUST JSON PARSING for download
+            let result;
+            try {
+              const responseText = await response.text();
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('[ATS Tailor] PDF response parse error:', parseError);
+              this.showToast('PDF generation failed - invalid response', 'error');
+              return;
+            }
             if (result.pdf) {
               const blob = this.base64ToBlob(result.pdf, 'application/pdf');
               const url = URL.createObjectURL(blob);
@@ -3678,7 +3776,16 @@ class ATSTailor {
             this.showToast('✅ Downloaded!', 'success');
             return;
           } else {
-            const result = await response.json();
+            // ROBUST JSON PARSING for cover letter download
+            let result;
+            try {
+              const responseText = await response.text();
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('[ATS Tailor] Cover letter PDF parse error:', parseError);
+              this.showToast('Cover letter PDF generation failed', 'error');
+              return;
+            }
             if (result.pdf) {
               const blob = this.base64ToBlob(result.pdf, 'application/pdf');
               const url = URL.createObjectURL(blob);
@@ -5145,5 +5252,6 @@ ATSTailor.prototype.copyDebugReport = function() {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  new ATSTailor();
+  // Store global reference for error handler access
+  window.atsTailor = new ATSTailor();
 });
