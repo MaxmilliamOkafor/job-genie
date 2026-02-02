@@ -109,7 +109,11 @@
       const fullName = `${firstName} ${lastName}`.trim();
       
       const jobTitle = jobData?.title || 'the position';
-      const company = this.extractCompanyName(jobData) || 'your organisation';
+      // FIX: Never use generic "Company" or fallback - use actual extracted name or Hiring Team
+      let company = this.extractCompanyName(jobData);
+      if (!company || company.toLowerCase() === 'company' || company.toLowerCase() === 'your company') {
+        company = 'the Hiring Team';
+      }
       const domain = this.extractDomain(candidateData);
       const yearsExp = this.calculateYearsExperience(candidateData);
 
@@ -398,8 +402,15 @@
       const isInvalid = (val) => {
         if (!val || typeof val !== 'string') return true;
         const lower = val.toLowerCase().trim();
-        return lower === 'company' || lower === 'the company' || lower === 'your company' || lower.length < 2;
+        // FIX: Expanded list of invalid generic placeholders
+        const invalidNames = ['company', 'the company', 'your company', 'hiring team', 'organization', 'organisation', 'employer'];
+        return invalidNames.includes(lower) || lower.length < 2;
       };
+      
+      // Also check recipientCompany field from AI response
+      if (isInvalid(company) && jobData.recipientCompany) {
+        company = jobData.recipientCompany;
+      }
       
       if (isInvalid(company)) {
         // Try to extract from job title like "Senior Engineer at Bugcrowd"
@@ -410,12 +421,24 @@
       }
       
       if (isInvalid(company)) {
-        // Try to extract from URL
+        // Try to extract from URL path like /company-name/jobs/
+        const url = jobData.url || '';
+        const pathMatch = url.match(/\/([a-z0-9]+-?[a-z0-9]+)\/(?:jobs?|careers?|apply)/i);
+        if (pathMatch && pathMatch[1]) {
+          const pathSegment = pathMatch[1].replace(/-/g, ' ');
+          if (pathSegment.length > 2 && pathSegment.length < 30) {
+            company = pathSegment.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          }
+        }
+      }
+      
+      if (isInvalid(company)) {
+        // Try to extract from URL subdomain
         const url = jobData.url || '';
         const hostMatch = url.match(/https?:\/\/([^.\/]+)\./i);
         if (hostMatch && hostMatch[1]) {
           const subdomain = hostMatch[1].toLowerCase();
-          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire'];
+          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire', 'greenhouse', 'workday', 'smartrecruiters'];
           if (!blacklist.includes(subdomain) && subdomain.length > 2) {
             company = subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
           }
