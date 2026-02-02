@@ -616,6 +616,137 @@
       return match ? match[1] : '';
     },
 
+    // ============ KNOWN TECH FORMATS (Dynamic Skill Formatting) ============
+    // Comprehensive dictionary of known technical terms with correct formatting
+    KNOWN_FORMATS: {
+      // Programming Languages
+      'PYTHON': 'Python', 'JAVA': 'Java', 'JAVASCRIPT': 'JavaScript', 'TYPESCRIPT': 'TypeScript',
+      'C++': 'C++', 'C#': 'C#', 'PHP': 'PHP', 'RUBY': 'Ruby', 'GO': 'Go', 'RUST': 'Rust',
+      'SWIFT': 'Swift', 'KOTLIN': 'Kotlin', 'R': 'R', 'SCALA': 'Scala', 'PERL': 'Perl',
+      
+      // Frameworks & Libraries
+      'REACT': 'React', 'ANGULAR': 'Angular', 'VUE': 'Vue', 'VUE.JS': 'Vue.js', 'VUEJS': 'Vue.js',
+      'NODE': 'Node', 'NODE.JS': 'Node.js', 'NODEJS': 'Node.js', 'NEXT.JS': 'Next.js', 'NEXTJS': 'Next.js',
+      'EXPRESS': 'Express', 'EXPRESS.JS': 'Express.js', 'DJANGO': 'Django', 'FLASK': 'Flask',
+      'SPRING': 'Spring', 'SPRINGBOOT': 'Spring Boot', 'SPRING BOOT': 'Spring Boot',
+      '.NET': '.NET', 'DOTNET': '.NET', 'ASP.NET': 'ASP.NET', 'LARAVEL': 'Laravel',
+      'TENSORFLOW': 'TensorFlow', 'PYTORCH': 'PyTorch', 'PANDAS': 'Pandas', 'NUMPY': 'NumPy',
+      'JQUERY': 'jQuery', 'BOOTSTRAP': 'Bootstrap', 'TAILWIND': 'Tailwind', 'TAILWINDCSS': 'Tailwind CSS',
+      
+      // Databases
+      'SQL': 'SQL', 'NOSQL': 'NoSQL', 'MYSQL': 'MySQL', 'POSTGRESQL': 'PostgreSQL', 'POSTGRES': 'PostgreSQL',
+      'MONGODB': 'MongoDB', 'REDIS': 'Redis', 'ORACLE': 'Oracle', 'SQLITE': 'SQLite',
+      'DYNAMODB': 'DynamoDB', 'CASSANDRA': 'Cassandra', 'ELASTICSEARCH': 'Elasticsearch',
+      
+      // Cloud & DevOps
+      'AWS': 'AWS', 'AZURE': 'Azure', 'GCP': 'GCP', 'GOOGLE CLOUD': 'Google Cloud',
+      'KUBERNETES': 'Kubernetes', 'K8S': 'K8s', 'DOCKER': 'Docker', 'CI/CD': 'CI/CD', 'CICD': 'CI/CD',
+      'TERRAFORM': 'Terraform', 'ANSIBLE': 'Ansible', 'JENKINS': 'Jenkins', 'GITLAB': 'GitLab',
+      'GITHUB': 'GitHub', 'BITBUCKET': 'Bitbucket', 'CIRCLECI': 'CircleCI', 'TRAVIS': 'Travis CI',
+      'CLOUDFORMATION': 'CloudFormation', 'HELM': 'Helm', 'PROMETHEUS': 'Prometheus', 'GRAFANA': 'Grafana',
+      'LAMBDA': 'Lambda', 'EC2': 'EC2', 'S3': 'S3', 'RDS': 'RDS', 'ECS': 'ECS', 'EKS': 'EKS',
+      
+      // Technologies & Concepts
+      'API': 'API', 'REST': 'REST', 'RESTFUL': 'RESTful', 'GRAPHQL': 'GraphQL', 'GRPC': 'gRPC',
+      'HTML': 'HTML', 'HTML5': 'HTML5', 'CSS': 'CSS', 'CSS3': 'CSS3', 'SASS': 'SASS', 'SCSS': 'SCSS', 'LESS': 'Less',
+      'UI': 'UI', 'UX': 'UX', 'UI/UX': 'UI/UX', 'ML': 'ML', 'AI': 'AI', 'NLP': 'NLP', 'ETL': 'ETL',
+      'AGILE': 'Agile', 'SCRUM': 'Scrum', 'KANBAN': 'Kanban', 'JIRA': 'Jira', 'CONFLUENCE': 'Confluence',
+      'GIT': 'Git', 'SVN': 'SVN', 'JSON': 'JSON', 'XML': 'XML', 'YAML': 'YAML', 'TOML': 'TOML',
+      'OAUTH': 'OAuth', 'JWT': 'JWT', 'SSO': 'SSO', 'SAML': 'SAML', 'LDAP': 'LDAP',
+      'LINUX': 'Linux', 'UNIX': 'Unix', 'BASH': 'Bash', 'POWERSHELL': 'PowerShell', 'SHELL': 'Shell',
+      'MICROSERVICES': 'Microservices', 'SERVERLESS': 'Serverless', 'DEVOPS': 'DevOps', 'DEVSECOPS': 'DevSecOps',
+      'SRE': 'SRE', 'IAC': 'IaC', 'LLM': 'LLM', 'IOT': 'IoT', 'BLOCKCHAIN': 'Blockchain',
+      
+      // SAP-specific
+      'SAP': 'SAP', 'ECC': 'ECC', 'S4': 'S4', 'S4HANA': 'S/4HANA', 'S/4HANA': 'S/4HANA',
+      'HANA': 'HANA', 'ABAP': 'ABAP', 'FIORI': 'Fiori', 'BTP': 'BTP',
+      
+      // Testing & QA
+      'JEST': 'Jest', 'MOCHA': 'Mocha', 'CYPRESS': 'Cypress', 'SELENIUM': 'Selenium',
+      'JUNIT': 'JUnit', 'PYTEST': 'pytest', 'POSTMAN': 'Postman', 'SWAGGER': 'Swagger',
+      
+      // Soft Skills & Business
+      'COMPLIANCE': 'Compliance', 'LEADERSHIP': 'Leadership', 'COMMUNICATION': 'Communication',
+      'COLLABORATION': 'Collaboration', 'MANAGEMENT': 'Management', 'ANALYTICS': 'Analytics',
+      'STAKEHOLDER': 'Stakeholder', 'BUDGETING': 'Budgeting', 'FORECASTING': 'Forecasting',
+      
+      // Certifications acronyms
+      'CBAP': 'CBAP', 'IIBA': 'IIBA', 'PMP': 'PMP', 'PMI': 'PMI', 'CPA': 'CPA', 'CFA': 'CFA',
+      'PRINCE2': 'PRINCE2', 'AXELOS': 'AXELOS', 'ITIL': 'ITIL', 'CCNA': 'CCNA', 'CCNP': 'CCNP',
+      'CEH': 'CEH', 'CISSP': 'CISSP', 'CISM': 'CISM', 'TOGAF': 'TOGAF', 'SIX SIGMA': 'Six Sigma',
+      'MICROSOFT': 'Microsoft', 'GOOGLE': 'Google', 'AMAZON': 'Amazon', 'ORACLE': 'Oracle', 'IBM': 'IBM'
+    },
+
+    /**
+     * Dynamically formats any skill name to proper case
+     * Handles: regular words, acronyms, frameworks, technologies
+     * Works for ANY skill that comes from CV tailoring
+     */
+    formatSkillName(skill) {
+      if (!skill) return '';
+      
+      const trimmedSkill = String(skill).trim();
+      
+      // Check known formats first (case-insensitive lookup)
+      const upperSkill = trimmedSkill.toUpperCase();
+      if (this.KNOWN_FORMATS[upperSkill]) {
+        return this.KNOWN_FORMATS[upperSkill];
+      }
+      
+      // Handle version numbers (e.g., "Python 3.9", "Node.js 18")
+      if (/\d/.test(trimmedSkill) && /\s/.test(trimmedSkill)) {
+        const parts = trimmedSkill.split(/\s+/);
+        return parts.map(part => {
+          if (/^\d/.test(part) || /^\d+\.\d+/.test(part)) return part; // Keep version numbers as-is
+          return this.formatSkillName(part); // Recursively format the word part
+        }).join(' ');
+      }
+      
+      // Handle pure acronyms (all caps, 2-5 letters)
+      if (/^[A-Z]{2,5}$/.test(trimmedSkill)) {
+        return trimmedSkill.toUpperCase();
+      }
+      
+      // Handle hyphenated terms (e.g., "end-to-end", "cloud-native")
+      if (trimmedSkill.includes('-')) {
+        return trimmedSkill.split('-')
+          .map(part => {
+            const upper = part.toUpperCase();
+            if (this.KNOWN_FORMATS[upper]) return this.KNOWN_FORMATS[upper];
+            return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+          })
+          .join('-');
+      }
+      
+      // Handle slash-separated terms (e.g., "HTML/CSS", "CI/CD")
+      if (trimmedSkill.includes('/')) {
+        return trimmedSkill.split('/')
+          .map(part => this.formatSkillName(part.trim()))
+          .join('/');
+      }
+      
+      // If already mixed case (like "JavaScript"), preserve it
+      if (trimmedSkill !== trimmedSkill.toUpperCase() && trimmedSkill !== trimmedSkill.toLowerCase()) {
+        return trimmedSkill;
+      }
+      
+      // Default: Title case for regular words
+      return trimmedSkill.charAt(0).toUpperCase() + trimmedSkill.slice(1).toLowerCase();
+    },
+
+    /**
+     * Formats a comma-separated list of skills
+     */
+    formatSkillsList(skillsString) {
+      if (!skillsString) return '';
+      
+      return skillsString
+        .split(',')
+        .map(skill => this.formatSkillName(skill.trim()))
+        .filter(Boolean)
+        .join(', ');
+    },
+
     // ============ PARSE SKILLS ============
     parseSkills(skills) {
       if (!skills) return [];
@@ -631,25 +762,8 @@
           .filter(s => s.length > 1 && s.length < 50);
       }
       
-      // Normalize casing: convert ALL CAPS to Title Case, preserve mixed case
-      return skillList.map(skill => {
-        const trimmed = String(skill).trim();
-        // If skill is all uppercase (and longer than 4 chars), convert to Title Case
-        // Keep short acronyms like AWS, SQL, GCP, CI/CD as-is
-        if (trimmed === trimmed.toUpperCase() && trimmed.length > 4 && !/^[A-Z]{2,5}$/.test(trimmed)) {
-          return trimmed
-            .toLowerCase()
-            .split(/[\s\-\/]+/)
-            .map(word => {
-              // Keep common acronyms uppercase
-              const acronyms = ['aws', 'sql', 'gcp', 'api', 'css', 'html', 'ci', 'cd', 'ml', 'ai', 'ui', 'ux', 'etl', 'llm', 'iac', 'sre', 'devops'];
-              if (acronyms.includes(word.toLowerCase())) return word.toUpperCase();
-              return word.charAt(0).toUpperCase() + word.slice(1);
-            })
-            .join(' ');
-        }
-        return trimmed;
-      });
+      // Apply dynamic formatting to each skill
+      return skillList.map(skill => this.formatSkillName(skill)).filter(Boolean);
     },
 
     // ============ PARSE CERTIFICATIONS ============
@@ -663,28 +777,31 @@
         certList = certs.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 3);
       }
       
-      // Normalize casing: convert ALL CAPS to Title Case for certifications
+      // Apply dynamic formatting to each certification
       return certList.map(cert => {
         const trimmed = String(cert).trim();
-        // If certification is all uppercase, convert to Title Case
-        if (trimmed === trimmed.toUpperCase() && trimmed.length > 5) {
-          return trimmed
-            .toLowerCase()
-            .split(/\s+/)
-            .map(word => {
-              // Keep acronyms uppercase
-              const acronyms = ['cbap', 'iiba', 'aws', 'gcp', 'pmp', 'cpa', 'cfa', 'prince2', 'axelos'];
-              if (acronyms.includes(word.toLowerCase())) return word.toUpperCase();
-              // Keep articles/prepositions lowercase unless first word
-              const lowercase = ['a', 'an', 'the', 'in', 'on', 'at', 'for', 'and', 'of', 'to'];
-              if (lowercase.includes(word.toLowerCase())) return word.toLowerCase();
-              return word.charAt(0).toUpperCase() + word.slice(1);
-            })
-            .join(' ')
-            .replace(/^(\w)/, m => m.toUpperCase()); // Ensure first char is uppercase
+        
+        // If already properly formatted (mixed case), return as-is
+        if (trimmed !== trimmed.toUpperCase() && trimmed !== trimmed.toLowerCase()) {
+          return trimmed;
         }
+        
+        // If all uppercase, format each word
+        if (trimmed === trimmed.toUpperCase()) {
+          return trimmed.split(/\s+/).map((word, idx) => {
+            const upper = word.toUpperCase();
+            // Check known formats
+            if (this.KNOWN_FORMATS[upper]) return this.KNOWN_FORMATS[upper];
+            // Keep articles/prepositions lowercase (except first word)
+            const lowercase = ['a', 'an', 'the', 'in', 'on', 'at', 'for', 'and', 'of', 'to'];
+            if (idx > 0 && lowercase.includes(word.toLowerCase())) return word.toLowerCase();
+            // Title case
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+          }).join(' ');
+        }
+        
         return trimmed;
-      });
+      }).filter(Boolean);
     },
 
     // ============ RENDER HEADER ============
