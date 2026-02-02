@@ -875,9 +875,17 @@
       // Extract info
       const name = data.contact.name;
       const jobTitle = jobData?.title || 'the open position';
-      // ROBUST: Extract company name with multi-source fallback - use "your organization" if empty
+      // FIX 02-02-26: ROBUST company extraction with CRITICAL validation
       let rawCompany = this.extractCompanyName(jobData);
-      const company = rawCompany && rawCompany.trim() ? rawCompany : 'your organization';
+      
+      // Extended validation - NEVER allow these placeholder values
+      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization', 
+                                   'organization', 'n/a', 'unknown', '', 'employer'];
+      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim())) 
+        ? rawCompany 
+        : 'the hiring organization';
+      
+      console.log(`[OpenResume] Cover letter using company: "${company}"`);
       // ROBUST: Ensure keywords is always an array before slicing
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
       const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
@@ -962,8 +970,13 @@
     generateCoverLetterText(data, keywords, jobData, candidateData) {
       const name = data.contact.name;
       const jobTitle = jobData?.title || 'the open position';
-      // ROBUST: Extract company name - NEVER returns "Company" placeholder
-      const company = this.extractCompanyName(jobData);
+      // FIX 02-02-26: ROBUST company extraction with CRITICAL validation
+      let rawCompany = this.extractCompanyName(jobData);
+      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization', 
+                                   'organization', 'n/a', 'unknown', '', 'employer'];
+      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim())) 
+        ? rawCompany 
+        : 'the hiring organization';
       // ROBUST: Ensure keywords is always an array before slicing
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
       const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
