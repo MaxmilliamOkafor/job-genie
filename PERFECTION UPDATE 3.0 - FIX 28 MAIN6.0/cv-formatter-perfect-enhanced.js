@@ -1422,5 +1422,4 @@
     global.RichTextUtils = RichTextUtils;
   }
 
-})(typeof window !== 'undefined' ? window : 
-   typeof global !== 'undefined' ? global
+})(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);
