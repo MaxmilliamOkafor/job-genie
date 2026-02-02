@@ -1,14 +1,14 @@
-// openresume-generator.js - OpenResume-Style ATS PDF Generator v3.3.5
+// openresume-generator.js - OpenResume-Style ATS PDF Generator v3.3.6
 // PERFECT FORMAT: Arial 10.5pt, 1" margins, selectable text, 100% ATS parsing
 // Based on https://github.com/xitanggg/open-resume methodology
-// UPDATED: Enhanced stability delays for high-integrity generation
+// UPDATED v3.3.6: Faster stabilization + prioritize keywords in experience bullets over skills
 
-// OpenResume stability delays (milliseconds)
+// OpenResume stability delays (milliseconds) - REDUCED for faster generation
 const OR_STABILITY_DELAYS = {
-  PRE_PACKAGE: 1500,        // 1.5s before starting package generation
-  POST_CV: 2000,            // 2s after CV PDF completes
-  POST_COVER: 1500,         // 1.5s after cover letter PDF completes
-  SECTION_RENDER: 200,      // 200ms between section renders
+  PRE_PACKAGE: 800,         // 0.8s before starting package generation
+  POST_CV: 1200,            // 1.2s after CV PDF completes
+  POST_COVER: 800,          // 0.8s after cover letter PDF completes
+  SECTION_RENDER: 100,      // 100ms between section renders
 };
 
 // Helper for stability delays
@@ -305,11 +305,11 @@ async function orStabilityDelay(ms, description) {
     },
 
     // ============ TAILOR CV DATA WITH ALL KEYWORDS (100% MATCH) ============
+    // v3.3.6: PRIORITY ORDER: Experience bullets > Summary > Skills (last resort)
     tailorCVData(cvData, keywords, jobData) {
       const tailored = JSON.parse(JSON.stringify(cvData)); // Deep clone
       
       // ROBUST: Support both array and structured keywords
-      // keywords can be: an array, or an object with {all, highPriority, mediumPriority, lowPriority}
       const allKeywords = Array.isArray(keywords) ? keywords : (keywords?.all || []);
       const highPriority = Array.isArray(keywords) ? allKeywords.slice(0, 15) : (keywords?.highPriority || allKeywords.slice(0, 15));
       const mediumPriority = Array.isArray(keywords) ? [] : (keywords?.mediumPriority || []);
@@ -323,16 +323,19 @@ async function orStabilityDelay(ms, description) {
       // 2. Enhance summary with top 5-8 keywords
       tailored.summary = this.enhanceSummary(cvData.summary, [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
 
-      // 3. Inject ALL keywords into experience (3-5x distribution for high/medium, 1-2x for low)
-      tailored.experience = this.injectAllKeywordsIntoExperience(cvData.experience, {
+      // 3. PRIORITY: Inject ALL keywords into experience bullets FIRST
+      // This is where keywords should naturally fit - NOT in skills section
+      const injectionResult = this.injectAllKeywordsIntoExperiencePrioritized(cvData.experience, {
         high: highPriority,
         medium: mediumPriority,
         low: lowPriority,
         all: allKeywords
       });
-
-      // 4. Merge ALL keywords into skills
-      tailored.skills = this.mergeSkills(cvData.skills, allKeywords);
+      tailored.experience = injectionResult.experience;
+      
+      // 4. LAST RESORT: Only add TECHNICAL keywords to skills that couldn't fit in bullets
+      // Soft skills like "collaboration", "teamwork", "attention to detail" should NEVER go in skills
+      tailored.skills = this.mergeSkillsLastResort(cvData.skills, injectionResult.unplacedKeywords, allKeywords);
 
       return tailored;
     },
@@ -441,10 +444,39 @@ async function orStabilityDelay(ms, description) {
       return summary;
     },
 
-    // ============ INJECT ALL KEYWORDS INTO EXPERIENCE (100% MATCH) ============
-    // High/Medium: 3-5x mentions, Low: 1-2x mentions
-    injectAllKeywordsIntoExperience(experience, keywordsByPriority) {
-      if (!experience || experience.length === 0) return experience;
+    // ============ SOFT SKILL KEYWORDS (should NEVER go in skills section) ============
+    // These keywords must be woven into experience bullets naturally, not listed as skills
+    SOFT_SKILL_KEYWORDS: new Set([
+      'collaboration', 'teamwork', 'team building', 'communication', 'leadership',
+      'attention to detail', 'problem solving', 'problem-solving', 'critical thinking',
+      'time management', 'project management', 'stakeholder management', 'ownership',
+      'innovation', 'creativity', 'adaptability', 'flexibility', 'initiative',
+      'mentoring', 'coaching', 'training', 'interpersonal', 'negotiation',
+      'customer focus', 'customer-focused', 'client relations', 'client-facing',
+      'cross-functional', 'cross functional', 'strategic planning', 'strategic thinking',
+      'decision making', 'decision-making', 'analytical', 'analytical skills',
+      'self-motivated', 'proactive', 'results-driven', 'results driven', 'goal-oriented',
+      'detail-oriented', 'detail oriented', 'multitasking', 'multi-tasking',
+      'organizational', 'organizational skills', 'prioritization', 'prioritizing',
+      'verbal communication', 'written communication', 'presentation skills',
+      'conflict resolution', 'relationship building', 'networking', 'persuasion',
+      'emotional intelligence', 'empathy', 'patience', 'reliability', 'dependability',
+      'work ethic', 'professionalism', 'integrity', 'accountability', 'responsibility'
+    ]),
+    
+    // Check if a keyword is a soft skill (should go in bullets, not skills section)
+    isSoftSkill(keyword) {
+      const lower = keyword.toLowerCase().trim();
+      return this.SOFT_SKILL_KEYWORDS.has(lower);
+    },
+
+    // ============ INJECT ALL KEYWORDS INTO EXPERIENCE (PRIORITIZED) ============
+    // v3.3.6: Keywords go in bullets FIRST, track which couldn't be placed
+    // Returns: { experience: [...], unplacedKeywords: [...] }
+    injectAllKeywordsIntoExperiencePrioritized(experience, keywordsByPriority) {
+      if (!experience || experience.length === 0) {
+        return { experience: experience || [], unplacedKeywords: keywordsByPriority.all || [] };
+      }
       
       const { high = [], medium = [], low = [], all = [] } = keywordsByPriority;
       const allKeywords = all.length > 0 ? all : [...high, ...medium, ...low];
@@ -453,6 +485,7 @@ async function orStabilityDelay(ms, description) {
       const mentions = {};
       const targets = {};
       const maxMentions = {};
+      const placed = new Set();
       
       high.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
       medium.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
@@ -467,34 +500,37 @@ async function orStabilityDelay(ms, description) {
         }
       });
 
-      // Count existing mentions
+      // Count existing mentions and mark as placed
       experience.forEach(job => {
-        job.bullets.forEach(bullet => {
+        (job.bullets || []).forEach(bullet => {
+          const bulletLower = bullet.toLowerCase();
           allKeywords.forEach(kw => {
-            if (bullet.toLowerCase().includes(kw.toLowerCase())) {
+            if (bulletLower.includes(kw.toLowerCase())) {
               mentions[kw]++;
+              placed.add(kw);
             }
           });
         });
       });
 
-      // Natural injection phrases
+      // Natural injection phrases for seamless integration
       const phrases = [
         'leveraging', 'utilizing', 'implementing', 'applying',
-        'through', 'incorporating', 'via', 'using', 'with'
+        'through', 'incorporating', 'via', 'using', 'with',
+        'demonstrating', 'ensuring', 'enabling', 'driving'
       ];
       const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
 
-      // AGGRESSIVE injection: process all bullets, inject until all keywords have enough mentions
-      return experience.map((job, jobIndex) => {
-        // More keywords in recent roles
+      // AGGRESSIVE injection: prioritize placing ALL keywords in bullets
+      const enhancedExperience = experience.map((job, jobIndex) => {
+        // More keywords in recent roles (first jobs get more)
         const maxKeywordsPerBullet = Math.max(2, 4 - jobIndex);
         
-        const enhancedBullets = job.bullets.map((bullet) => {
+        const enhancedBullets = (job.bullets || []).map((bullet) => {
           // Find keywords that need more mentions AND aren't in this bullet
           // Prioritize high > medium > low
           const needsMore = allKeywords.filter(kw => {
-            const current = mentions[kw];
+            const current = mentions[kw] || 0;
             const target = targets[kw] || 2;
             const inBullet = bullet.toLowerCase().includes(kw.toLowerCase());
             return current < target && !inBullet;
@@ -504,7 +540,7 @@ async function orStabilityDelay(ms, description) {
 
           let enhanced = bullet;
           
-          // Sort by priority: high first
+          // Sort by priority: high first, then medium, then low
           const sorted = [
             ...needsMore.filter(kw => high.includes(kw)),
             ...needsMore.filter(kw => medium.includes(kw)),
@@ -515,7 +551,7 @@ async function orStabilityDelay(ms, description) {
           const toInject = sorted.slice(0, maxKeywordsPerBullet);
           
           toInject.forEach(kw => {
-            if (mentions[kw] >= (maxMentions[kw] || 5)) return;
+            if ((mentions[kw] || 0) >= (maxMentions[kw] || 5)) return;
             
             const kwLower = kw.toLowerCase();
             const enhancedLower = enhanced.toLowerCase();
@@ -523,34 +559,58 @@ async function orStabilityDelay(ms, description) {
             if (enhancedLower.includes(kwLower)) return; // Already has it
             
             const phrase = getPhrase();
+            let injected = false;
             
-            // Strategy 1: After action verb
-            const verbMatch = enhanced.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Owned|Optimized|Automated|Spearheaded|Directed|Shaped|Drove)\b/i);
-            if (verbMatch) {
+            // Strategy 1: After action verb (most natural)
+            const verbMatch = enhanced.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Owned|Optimized|Automated|Spearheaded|Directed|Shaped|Drove|Established|Architected|Conducted|Executed|Collaborated|Partnered|Coordinated)\b/i);
+            if (verbMatch && !injected) {
               const idx = verbMatch[0].length;
-              enhanced = `${enhanced.slice(0, idx)} ${kw}-focused${enhanced.slice(idx)}`;
-              mentions[kw]++;
-              return;
+              // For soft skills, use natural phrasing
+              if (this.isSoftSkill(kw)) {
+                enhanced = `${enhanced.slice(0, idx)} ${kw} initiatives,${enhanced.slice(idx)}`;
+              } else {
+                enhanced = `${enhanced.slice(0, idx)} ${kw}-focused${enhanced.slice(idx)}`;
+              }
+              mentions[kw] = (mentions[kw] || 0) + 1;
+              placed.add(kw);
+              injected = true;
             }
             
-            // Strategy 2: Before first comma
+            // Strategy 2: Before first comma (mid-sentence)
             const commaIdx = enhanced.indexOf(',');
-            if (commaIdx > 15 && commaIdx < enhanced.length * 0.6) {
-              enhanced = `${enhanced.slice(0, commaIdx)}, ${phrase} ${kw}${enhanced.slice(commaIdx)}`;
-              mentions[kw]++;
-              return;
+            if (!injected && commaIdx > 15 && commaIdx < enhanced.length * 0.6) {
+              if (this.isSoftSkill(kw)) {
+                enhanced = `${enhanced.slice(0, commaIdx)}, demonstrating ${kw}${enhanced.slice(commaIdx)}`;
+              } else {
+                enhanced = `${enhanced.slice(0, commaIdx)}, ${phrase} ${kw}${enhanced.slice(commaIdx)}`;
+              }
+              mentions[kw] = (mentions[kw] || 0) + 1;
+              placed.add(kw);
+              injected = true;
             }
             
             // Strategy 3: Before period at end
-            if (enhanced.endsWith('.')) {
-              enhanced = `${enhanced.slice(0, -1)}, ${phrase} ${kw}.`;
-              mentions[kw]++;
-              return;
+            if (!injected && enhanced.endsWith('.')) {
+              if (this.isSoftSkill(kw)) {
+                enhanced = `${enhanced.slice(0, -1)}, demonstrating strong ${kw}.`;
+              } else {
+                enhanced = `${enhanced.slice(0, -1)}, ${phrase} ${kw}.`;
+              }
+              mentions[kw] = (mentions[kw] || 0) + 1;
+              placed.add(kw);
+              injected = true;
             }
             
-            // Strategy 4: GUARANTEED - just append
-            enhanced = `${enhanced}, ${phrase} ${kw}`;
-            mentions[kw]++;
+            // Strategy 4: GUARANTEED - append naturally
+            if (!injected) {
+              if (this.isSoftSkill(kw)) {
+                enhanced = `${enhanced}, showcasing ${kw}`;
+              } else {
+                enhanced = `${enhanced}, ${phrase} ${kw}`;
+              }
+              mentions[kw] = (mentions[kw] || 0) + 1;
+              placed.add(kw);
+            }
           });
 
           return enhanced;
@@ -558,6 +618,19 @@ async function orStabilityDelay(ms, description) {
 
         return { ...job, bullets: enhancedBullets };
       });
+      
+      // Calculate which keywords couldn't be placed (for skills section last resort)
+      const unplacedKeywords = allKeywords.filter(kw => !placed.has(kw));
+      
+      console.log(`[OpenResume] Keywords placed in bullets: ${placed.size}/${allKeywords.length}`);
+      console.log(`[OpenResume] Unplaced keywords for skills: ${unplacedKeywords.length}`);
+
+      return { experience: enhancedExperience, unplacedKeywords };
+    },
+    
+    // Legacy function for backward compatibility
+    injectAllKeywordsIntoExperience(experience, keywordsByPriority) {
+      return this.injectAllKeywordsIntoExperiencePrioritized(experience, keywordsByPriority).experience;
     },
     
     // Legacy function for backward compatibility
@@ -565,22 +638,35 @@ async function orStabilityDelay(ms, description) {
       return this.injectAllKeywordsIntoExperience(experience, { high: keywords, all: keywords });
     },
 
-    // ============ MERGE SKILLS WITH KEYWORDS ============
-    mergeSkills(existingSkills, keywords) {
+    // ============ MERGE SKILLS - LAST RESORT ONLY ============
+    // v3.3.6: Only add TECHNICAL keywords that couldn't fit in bullets
+    // Soft skills (collaboration, teamwork, etc.) should NEVER appear in skills section
+    mergeSkillsLastResort(existingSkills, unplacedKeywords, allKeywords) {
       const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
       const merged = [...(existingSkills || [])];
 
-      // Add top keywords not already in skills
-      const topKeywords = (keywords.all || keywords).slice(0, 10);
-      topKeywords.forEach(kw => {
+      // ONLY add unplaced TECHNICAL keywords (not soft skills)
+      const technicalUnplaced = (unplacedKeywords || []).filter(kw => !this.isSoftSkill(kw));
+      
+      // Limit additions to prevent skills section bloat
+      const maxToAdd = Math.min(5, technicalUnplaced.length);
+      
+      technicalUnplaced.slice(0, maxToAdd).forEach(kw => {
         if (!skillSet.has(kw.toLowerCase())) {
           merged.push(this.formatSkillName(kw));
           skillSet.add(kw.toLowerCase());
         }
       });
 
+      console.log(`[OpenResume] Skills section: ${existingSkills?.length || 0} original + ${Math.min(maxToAdd, technicalUnplaced.length)} technical keywords added`);
+
       // Limit to 25 skills max
       return merged.slice(0, 25);
+    },
+    
+    // Legacy function for backward compatibility
+    mergeSkills(existingSkills, keywords) {
+      return this.mergeSkillsLastResort(existingSkills, [], keywords);
     },
 
     // ============ FORMAT SKILL NAME ============

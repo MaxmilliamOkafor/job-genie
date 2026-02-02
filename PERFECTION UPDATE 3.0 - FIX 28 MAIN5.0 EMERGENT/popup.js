@@ -1,39 +1,39 @@
-// ATS PERFECTION v3.3.5 - Ultimate CV Tailor Popup Script
+// ATS PERFECTION v3.3.6 - Ultimate CV Tailor Popup Script
 // Features: Professional PDF Engine, Smart CV Parser, Cover Letter Generator
 // Location Strategy, Enterprise CV Parser with Immutable Field Protection
 // Auto-trigger on ATS detection, 100% keyword match
-// UPDATED: Enhanced stability delays for high-integrity file generation (80-110s target)
+// UPDATED v3.3.6: Faster stabilization + prioritize keywords in experience bullets over skills
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
-// ============ STABILITY DELAYS v3.3.5 - PERFECTION INTEGRITY ============
-// Target completion time: 80-110 seconds for high-integrity file generation
-// These delays ensure AI has time to complete processing without truncation
+// ============ STABILITY DELAYS v3.3.6 - FASTER + RELIABLE ============
+// Target completion time: 45-70 seconds (reduced from 80-110s)
+// Optimized delays while maintaining generation integrity
 const STABILITY_DELAYS = {
-  // Post-tailoring stabilization (wait for AI response to fully stream)
-  POST_TAILORING: 4000,           // 4s after AI tailoring API returns
-  // Pre-PDF generation (ensure all data is ready)
-  PRE_PDF_GENERATION: 5000,       // 5s before starting PDF generation
-  // Post-PDF generation (ensure PDF is fully rendered)
-  POST_PDF_GENERATION: 6000,      // 6s after PDF generation completes
-  // Bullet rendering delay (prevent content truncation)
-  BULLET_RENDERING: 3000,         // 3s for bullet points to stabilize
+  // Post-tailoring stabilization (wait for AI response)
+  POST_TAILORING: 2000,           // 2s after AI tailoring API returns
+  // Pre-PDF generation (ensure data ready)
+  PRE_PDF_GENERATION: 2500,       // 2.5s before starting PDF generation
+  // Post-PDF generation (ensure PDF rendered)
+  POST_PDF_GENERATION: 3000,      // 3s after PDF generation completes
+  // Bullet rendering delay
+  BULLET_RENDERING: 1500,         // 1.5s for bullet points
   // Summary rendering delay
-  SUMMARY_RENDERING: 2000,        // 2s for summary to stabilize
-  // OpenAI-specific throttling (additional for rate limiting)
-  OPENAI_STABILIZATION: 3500,     // 3.5s OpenAI-specific stabilization
-  OPENAI_PRE_CALL: 2000,          // 2s before OpenAI API calls
-  OPENAI_POST_CALL: 2500,         // 2.5s after OpenAI API calls
-  // Four-Gate Verification delays
-  GATE_EXTRACTION: 1500,          // 1.5s after keyword extraction gate
-  GATE_TAILORING: 2000,           // 2s after tailoring gate
-  GATE_DISTRIBUTION: 1500,        // 1.5s after keyword distribution gate
-  GATE_CANDIDATE_DATA: 1000,      // 1s after candidate data verification gate
+  SUMMARY_RENDERING: 1000,        // 1s for summary
+  // OpenAI-specific throttling
+  OPENAI_STABILIZATION: 2000,     // 2s OpenAI-specific
+  OPENAI_PRE_CALL: 1000,          // 1s before OpenAI API calls
+  OPENAI_POST_CALL: 1500,         // 1.5s after OpenAI API calls
+  // Four-Gate Verification delays (reduced)
+  GATE_EXTRACTION: 800,           // 0.8s after keyword extraction gate
+  GATE_TAILORING: 1000,           // 1s after tailoring gate
+  GATE_DISTRIBUTION: 800,         // 0.8s after keyword distribution gate
+  GATE_CANDIDATE_DATA: 500,       // 0.5s after candidate data verification gate
 };
 
-// Timeout for tailor-application (increased for stability)
-const TAILOR_TIMEOUT_MS = 120000; // 120 seconds
+// Timeout for tailor-application
+const TAILOR_TIMEOUT_MS = 90000; // 90 seconds (reduced from 120s)
 
 // Helper function for stability delays with logging
 async function stabilityDelay(delayMs, description) {
