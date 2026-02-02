@@ -1,10 +1,29 @@
-// cover-letter-generator.js - Professional Cover Letter Generator v3.0
+// cover-letter-generator.js - Professional Cover Letter Generator v3.3.5
 // Creates tailored cover letters with proper business letter formatting
 // Features: Template system, NATURAL keyword integration (lighter than CV - not for ATS), tone matching
 // Based on PERFECT WORKS cover letter logic
+// UPDATED: Enhanced stability delays for high-integrity generation
+
+// Cover Letter specific stability delays (milliseconds)
+const CL_STABILITY_DELAYS = {
+  PRE_GENERATION: 1500,     // 1.5s before starting generation
+  POST_GENERATION: 2000,    // 2s after generation completes
+  PARAGRAPH_RENDER: 500,    // 0.5s between paragraph builds
+};
 
 (function(global) {
   'use strict';
+
+  // Helper for stability delays
+  function clStabilityDelay(ms, description) {
+    return new Promise(resolve => {
+      console.log(`[CoverLetterGenerator] ⏱️ ${description} (${ms}ms)...`);
+      setTimeout(() => {
+        console.log(`[CoverLetterGenerator] ✓ ${description} complete`);
+        resolve();
+      }, ms);
+    });
+  }
 
   // ============ COVER LETTER TEMPLATES ============
   const TEMPLATES = {

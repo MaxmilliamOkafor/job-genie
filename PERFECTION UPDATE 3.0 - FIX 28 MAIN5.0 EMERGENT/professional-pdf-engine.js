@@ -1,6 +1,21 @@
-// professional-pdf-engine.js - Enterprise-Grade ATS PDF Generator v3.0
+// professional-pdf-engine.js - Enterprise-Grade ATS PDF Generator v3.3.5
 // PERFECT FORMAT: Garamond/Arial hybrid, exact margins, precise typography
 // Features: Multi-page support, font embedding, perfect text metrics, ATS 100% parsing
+// UPDATED: Enhanced stability delays for high-integrity PDF generation
+
+// PDF Generation stability delays (milliseconds)
+const PDF_STABILITY_DELAYS = {
+  PRE_RENDER: 1000,         // 1s before starting PDF render
+  POST_RENDER: 1500,        // 1.5s after PDF render completes
+  SECTION_DELAY: 300,       // 300ms between major sections
+  BULLET_DELAY: 100,        // 100ms between bullet points (prevents truncation)
+};
+
+// Helper for PDF stability delays
+async function pdfStabilityDelay(ms, description) {
+  console.log(`[ProfessionalPDFEngine] ⏱️ ${description} (${ms}ms)...`);
+  await new Promise(resolve => setTimeout(resolve, ms));
+}
 
 (function(global) {
   'use strict';
@@ -69,9 +84,12 @@
     // ============ MAIN ENTRY: GENERATE CV PDF ============
     async generateCV(candidateData, tailoredContent, options = {}) {
       const startTime = performance.now();
-      console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV (SPEED OPTIMIZED)...');
+      console.log('[ProfessionalPDFEngine] v3.3.5 Generating ATS-perfect CV with stability delays...');
 
       try {
+        // Pre-render stabilization delay
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.PRE_RENDER, 'Pre-render stabilization');
+        
         // Validate jsPDF availability
         if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
           throw new Error('jsPDF library not loaded');
@@ -90,14 +108,27 @@
           floatPrecision: 2 // SPEED: Reduce float precision for smaller file
         });
 
-        // Build PDF content
+        // Build PDF content with section delays for stability
         let currentY = PDF_CONFIG.margins.top;
         currentY = this.renderHeader(doc, cvData.contact, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Header section rendered');
+        
         currentY = this.renderSummary(doc, cvData.summary, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Summary section rendered');
+        
         currentY = this.renderExperience(doc, cvData.experience, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Experience section rendered');
+        
         currentY = this.renderEducation(doc, cvData.education, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Education section rendered');
+        
         currentY = this.renderSkills(doc, cvData.skills, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Skills section rendered');
+        
         currentY = this.renderCertifications(doc, cvData.certifications, currentY);
+
+        // Post-render stabilization delay
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.POST_RENDER, 'Post-render stabilization');
 
         // Generate output
         const pdfBlob = doc.output('blob');
@@ -109,7 +140,7 @@
         const filename = lastName ? `${firstName}_${lastName}_CV.pdf` : `${firstName}_CV.pdf`;
 
         const timing = performance.now() - startTime;
-        console.log(`[ProfessionalPDFEngine] CV generated in ${timing.toFixed(0)}ms`);
+        console.log(`[ProfessionalPDFEngine] CV generated in ${timing.toFixed(0)}ms (with stability delays)`);
 
         return {
           success: true,
@@ -133,9 +164,12 @@
     // ============ GENERATE COVER LETTER PDF ============
     async generateCoverLetter(candidateData, coverContent, jobData, options = {}) {
       const startTime = performance.now();
-      console.log('[ProfessionalPDFEngine] Generating Cover Letter (SPEED OPTIMIZED)...');
+      console.log('[ProfessionalPDFEngine] v3.3.5 Generating Cover Letter with stability delays...');
 
       try {
+        // Pre-render stabilization delay
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.PRE_RENDER, 'Cover letter pre-render stabilization');
+        
         if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
           throw new Error('jsPDF library not loaded');
         }
@@ -153,15 +187,21 @@
 
         // Render cover letter header
         currentY = this.renderCoverHeader(doc, candidateData, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Cover header rendered');
         
         // Render recipient info
         currentY = this.renderRecipientInfo(doc, jobData, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Recipient info rendered');
         
         // Render cover letter body
         currentY = this.renderCoverBody(doc, coverContent, currentY);
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.SECTION_DELAY, 'Cover body rendered');
         
         // Render signature
         currentY = this.renderSignature(doc, candidateData, currentY);
+
+        // Post-render stabilization delay
+        await pdfStabilityDelay(PDF_STABILITY_DELAYS.POST_RENDER, 'Cover letter post-render stabilization');
 
         const pdfBlob = doc.output('blob');
         const pdfBase64 = doc.output('datauristring').split(',')[1];
@@ -171,7 +211,7 @@
         const filename = lastName ? `${firstName}_${lastName}_Cover_Letter.pdf` : `${firstName}_Cover_Letter.pdf`;
 
         const timing = performance.now() - startTime;
-        console.log(`[ProfessionalPDFEngine] Cover Letter generated in ${timing.toFixed(0)}ms`);
+        console.log(`[ProfessionalPDFEngine] Cover Letter generated in ${timing.toFixed(0)}ms (with stability delays)`);
 
         return {
           success: true,

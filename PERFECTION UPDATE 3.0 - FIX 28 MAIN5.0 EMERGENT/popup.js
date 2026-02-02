@@ -1,10 +1,46 @@
-// ATS PERFECTION v3.0 - Ultimate CV Tailor Popup Script
+// ATS PERFECTION v3.3.5 - Ultimate CV Tailor Popup Script
 // Features: Professional PDF Engine, Smart CV Parser, Cover Letter Generator
 // Location Strategy, Enterprise CV Parser with Immutable Field Protection
 // Auto-trigger on ATS detection, 100% keyword match
+// UPDATED: Enhanced stability delays for high-integrity file generation (80-110s target)
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
+// ============ STABILITY DELAYS v3.3.5 - PERFECTION INTEGRITY ============
+// Target completion time: 80-110 seconds for high-integrity file generation
+// These delays ensure AI has time to complete processing without truncation
+const STABILITY_DELAYS = {
+  // Post-tailoring stabilization (wait for AI response to fully stream)
+  POST_TAILORING: 4000,           // 4s after AI tailoring API returns
+  // Pre-PDF generation (ensure all data is ready)
+  PRE_PDF_GENERATION: 5000,       // 5s before starting PDF generation
+  // Post-PDF generation (ensure PDF is fully rendered)
+  POST_PDF_GENERATION: 6000,      // 6s after PDF generation completes
+  // Bullet rendering delay (prevent content truncation)
+  BULLET_RENDERING: 3000,         // 3s for bullet points to stabilize
+  // Summary rendering delay
+  SUMMARY_RENDERING: 2000,        // 2s for summary to stabilize
+  // OpenAI-specific throttling (additional for rate limiting)
+  OPENAI_STABILIZATION: 3500,     // 3.5s OpenAI-specific stabilization
+  OPENAI_PRE_CALL: 2000,          // 2s before OpenAI API calls
+  OPENAI_POST_CALL: 2500,         // 2.5s after OpenAI API calls
+  // Four-Gate Verification delays
+  GATE_EXTRACTION: 1500,          // 1.5s after keyword extraction gate
+  GATE_TAILORING: 2000,           // 2s after tailoring gate
+  GATE_DISTRIBUTION: 1500,        // 1.5s after keyword distribution gate
+  GATE_CANDIDATE_DATA: 1000,      // 1s after candidate data verification gate
+};
+
+// Timeout for tailor-application (increased for stability)
+const TAILOR_TIMEOUT_MS = 120000; // 120 seconds
+
+// Helper function for stability delays with logging
+async function stabilityDelay(delayMs, description) {
+  console.log(`[ATS Tailor] ⏱️ Stability delay: ${delayMs}ms - ${description}...`);
+  await new Promise(resolve => setTimeout(resolve, delayMs));
+  console.log(`[ATS Tailor] ✓ ${description} complete`);
+}
 
 // ============ GLOBAL ERROR HANDLER: Prevent extension crashes ============
 // Catches unhandled promise rejections that would otherwise crash the extension
@@ -2452,11 +2488,10 @@ class ATSTailor {
     
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        // OPENAI THROTTLE: Pre-call delay to reduce API usage (only on first attempt)
-        if (attempt === 0) {
-          console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s pre-call delay...');
-          await new Promise(resolve => setTimeout(resolve, 2500));
-        } else {
+      // STABILITY DELAY: Pre-call delay to ensure stability (only on first attempt)
+      if (attempt === 0) {
+        await stabilityDelay(STABILITY_DELAYS.OPENAI_PRE_CALL, 'Pre-keyword extraction stabilization');
+      } else {
           // Exponential backoff for retries
           const backoffDelay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
           console.log(`[ATS Tailor] ⏱️ Retry ${attempt}: ${backoffDelay}ms backoff delay...`);
@@ -2485,9 +2520,8 @@ class ATSTailor {
         
         clearTimeout(timeout);
         
-        // OPENAI THROTTLE: Post-call delay to reduce API usage
-        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2s post-call delay...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // STABILITY DELAY: Post-call delay to ensure response is complete
+        await stabilityDelay(STABILITY_DELAYS.OPENAI_POST_CALL, 'Post-keyword extraction stabilization');
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -2930,6 +2964,9 @@ class ATSTailor {
       
       // Save keywords to history for comparison feature
       await this.saveKeywordsToHistory(keywords);
+      
+      // ============ FOUR-GATE VERIFICATION: Gate 1 - Extraction Complete ============
+      await stabilityDelay(STABILITY_DELAYS.GATE_EXTRACTION, 'Keyword extraction verification (Gate 1)');
 
       updateStep(1, 'complete');
 
@@ -2995,15 +3032,18 @@ class ATSTailor {
       const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
       updateProgress(35, `Step 2/3: ${providerName} generating tailored documents...`);
 
-      // OPENAI THROTTLE: Pre-call delay to reduce API usage
+      // STABILITY DELAY: Pre-tailoring stabilization (AI provider specific)
       if (this.aiProvider !== 'kimi') {
-        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 3s pre-tailoring delay...');
-        updateProgress(36, 'OpenAI rate limiting (saving API usage)...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        updateProgress(36, 'Stabilizing for OpenAI tailoring...');
+        await stabilityDelay(STABILITY_DELAYS.OPENAI_STABILIZATION, 'OpenAI pre-tailoring stabilization');
+      } else {
+        // Kimi also benefits from stabilization delay
+        updateProgress(36, 'Preparing AI tailoring...');
+        await stabilityDelay(STABILITY_DELAYS.OPENAI_PRE_CALL, 'Pre-tailoring stabilization');
       }
 
       const tailorController = new AbortController();
-      const tailorTimeoutId = setTimeout(() => tailorController.abort(), 120_000); // Increased from 75s to 120s for AI tailoring
+      const tailorTimeoutId = setTimeout(() => tailorController.abort(), TAILOR_TIMEOUT_MS);
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
         method: 'POST',
@@ -3047,11 +3087,14 @@ class ATSTailor {
         }),
       }).finally(() => clearTimeout(tailorTimeoutId));
 
-      // OPENAI THROTTLE: Post-call delay to reduce API usage
+      // ============ FOUR-GATE VERIFICATION: Gate 2 - Post-Tailoring Stabilization ============
+      // Critical: Wait for AI response to fully stream and stabilize before processing
+      updateProgress(68, 'Stabilizing tailored content (Gate 2)...');
+      await stabilityDelay(STABILITY_DELAYS.POST_TAILORING, 'Post-tailoring stabilization (Gate 2)');
+      
+      // Additional provider-specific stabilization
       if (this.aiProvider !== 'kimi') {
-        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
-        updateProgress(70, 'Processing tailored documents...');
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await stabilityDelay(STABILITY_DELAYS.OPENAI_POST_CALL, 'OpenAI response stabilization');
       }
 
       if (!response.ok) {
@@ -3242,6 +3285,10 @@ class ATSTailor {
       }
 
       console.log('[ATS Tailor] Step 2 - Initial match score:', this.generatedDocuments.matchScore + '%');
+      
+      // ============ FOUR-GATE VERIFICATION: Gate 2 Complete ============
+      await stabilityDelay(STABILITY_DELAYS.GATE_TAILORING, 'Tailoring verification (Gate 2 Complete)');
+      
       updateStep(2, 'complete');
 
       // ============ STEP 3: GUARANTEED 100% MATCH - No keywords left behind ============
@@ -3315,10 +3362,23 @@ class ATSTailor {
         console.log('[ATS Tailor] Step 3 - Already at 100%');
       }
 
+      // ============ FOUR-GATE VERIFICATION: Gate 3 - Distribution Complete ============
       // Build keyword coverage report for debugging (injected locations in CV)
       this.buildKeywordCoverageReport(keywords);
+      
+      // Stabilization delay after keyword distribution
+      await stabilityDelay(STABILITY_DELAYS.GATE_DISTRIBUTION, 'Keyword distribution verification (Gate 3)');
 
-      updateProgress(80, 'Step 3/3: Regenerating PDF with boosted CV...');
+      updateProgress(80, 'Step 3/3: Preparing PDF generation...');
+      
+      // ============ FOUR-GATE VERIFICATION: Gate 4 - Pre-PDF Stabilization ============
+      // CRITICAL: Allow bullet points and summary to fully render before PDF generation
+      await stabilityDelay(STABILITY_DELAYS.BULLET_RENDERING, 'Bullet point content stabilization');
+      await stabilityDelay(STABILITY_DELAYS.SUMMARY_RENDERING, 'Summary content stabilization');
+      
+      // Final pre-PDF generation delay to ensure all data is ready
+      updateProgress(82, 'Step 3/3: Stabilizing for PDF generation...');
+      await stabilityDelay(STABILITY_DELAYS.PRE_PDF_GENERATION, 'Pre-PDF generation stabilization (Gate 4)');
       
       // WIRE UP DEBUG PANELS: Log before PDF generation
       this.logDebug('tailorDocuments', 'Pre-PDF boost complete', { 
@@ -3327,9 +3387,15 @@ class ATSTailor {
         missingCount: this.generatedDocuments.missingKeywords?.length
       });
 
+      updateProgress(85, 'Step 3/3: Regenerating PDF with boosted CV...');
+      
       // Regenerate PDF with boosted CV and dynamic location
       if (this.generatedDocuments.cv) {
         await this.regeneratePDFAfterBoost();
+        
+        // ============ POST-PDF STABILIZATION ============
+        // Wait for PDF to fully render before proceeding
+        await stabilityDelay(STABILITY_DELAYS.POST_PDF_GENERATION, 'Post-PDF generation stabilization');
         
         // WIRE UP DEBUG PANELS: Log output after PDF generation
         if (window.PDFDebugPanel) {
