@@ -619,22 +619,72 @@
     // ============ PARSE SKILLS ============
     parseSkills(skills) {
       if (!skills) return [];
-      if (Array.isArray(skills)) return skills.filter(Boolean);
       
-      return skills
-        .replace(/[•\-*]/g, ',')
-        .split(/[,\n]/)
-        .map(s => s.trim())
-        .filter(s => s.length > 1 && s.length < 50);
+      let skillList = [];
+      if (Array.isArray(skills)) {
+        skillList = skills.filter(Boolean);
+      } else {
+        skillList = skills
+          .replace(/[•\-*]/g, ',')
+          .split(/[,\n]/)
+          .map(s => s.trim())
+          .filter(s => s.length > 1 && s.length < 50);
+      }
+      
+      // Normalize casing: convert ALL CAPS to Title Case, preserve mixed case
+      return skillList.map(skill => {
+        const trimmed = String(skill).trim();
+        // If skill is all uppercase (and longer than 4 chars), convert to Title Case
+        // Keep short acronyms like AWS, SQL, GCP, CI/CD as-is
+        if (trimmed === trimmed.toUpperCase() && trimmed.length > 4 && !/^[A-Z]{2,5}$/.test(trimmed)) {
+          return trimmed
+            .toLowerCase()
+            .split(/[\s\-\/]+/)
+            .map(word => {
+              // Keep common acronyms uppercase
+              const acronyms = ['aws', 'sql', 'gcp', 'api', 'css', 'html', 'ci', 'cd', 'ml', 'ai', 'ui', 'ux', 'etl', 'llm', 'iac', 'sre', 'devops'];
+              if (acronyms.includes(word.toLowerCase())) return word.toUpperCase();
+              return word.charAt(0).toUpperCase() + word.slice(1);
+            })
+            .join(' ');
+        }
+        return trimmed;
+      });
     },
 
     // ============ PARSE CERTIFICATIONS ============
     parseCertifications(certs) {
       if (!certs) return [];
+      
+      let certList = [];
       if (Array.isArray(certs)) {
-        return certs.map(c => typeof c === 'string' ? c : c.name || c.title || '').filter(Boolean);
+        certList = certs.map(c => typeof c === 'string' ? c : c.name || c.title || '').filter(Boolean);
+      } else {
+        certList = certs.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 3);
       }
-      return certs.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 3);
+      
+      // Normalize casing: convert ALL CAPS to Title Case for certifications
+      return certList.map(cert => {
+        const trimmed = String(cert).trim();
+        // If certification is all uppercase, convert to Title Case
+        if (trimmed === trimmed.toUpperCase() && trimmed.length > 5) {
+          return trimmed
+            .toLowerCase()
+            .split(/\s+/)
+            .map(word => {
+              // Keep acronyms uppercase
+              const acronyms = ['cbap', 'iiba', 'aws', 'gcp', 'pmp', 'cpa', 'cfa', 'prince2', 'axelos'];
+              if (acronyms.includes(word.toLowerCase())) return word.toUpperCase();
+              // Keep articles/prepositions lowercase unless first word
+              const lowercase = ['a', 'an', 'the', 'in', 'on', 'at', 'for', 'and', 'of', 'to'];
+              if (lowercase.includes(word.toLowerCase())) return word.toLowerCase();
+              return word.charAt(0).toUpperCase() + word.slice(1);
+            })
+            .join(' ')
+            .replace(/^(\w)/, m => m.toUpperCase()); // Ensure first char is uppercase
+        }
+        return trimmed;
+      });
     },
 
     // ============ RENDER HEADER ============
