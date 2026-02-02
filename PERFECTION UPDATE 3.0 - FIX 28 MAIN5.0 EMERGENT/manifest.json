@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ATS PERFECTION v3.3.5 - Ultimate CV Tailor",
-  "version": "3.3.5",
-  "description": "PERFECTION v3.3.5: Enhanced stability delays for high-integrity file generation (80-110s target). Four-Gate Verification system prevents content truncation. Ultimate ATS extension with enterprise PDF engine, smart CV parser, cover letter generator, location extraction, immutable field protection, and 100% keyword match.",
+  "name": "ATS PERFECTION v3.3.6 - Ultimate CV Tailor",
+  "version": "3.3.6",
+  "description": "PERFECTION v3.3.6: Faster stabilization (45-70s) + keywords prioritized in experience bullets over skills section. Soft skills (collaboration, teamwork, etc.) woven naturally into bullet points - never dumped in skills. Enterprise PDF engine with immutable field protection.",
   "permissions": [
     "storage",
     "activeTab",

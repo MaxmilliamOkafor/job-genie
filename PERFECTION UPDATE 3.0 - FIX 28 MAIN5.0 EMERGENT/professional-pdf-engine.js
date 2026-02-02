@@ -1,14 +1,14 @@
-// professional-pdf-engine.js - Enterprise-Grade ATS PDF Generator v3.3.5
+// professional-pdf-engine.js - Enterprise-Grade ATS PDF Generator v3.3.6
 // PERFECT FORMAT: Garamond/Arial hybrid, exact margins, precise typography
 // Features: Multi-page support, font embedding, perfect text metrics, ATS 100% parsing
-// UPDATED: Enhanced stability delays for high-integrity PDF generation
+// UPDATED v3.3.6: Faster stabilization + keywords in experience bullets priority
 
-// PDF Generation stability delays (milliseconds)
+// PDF Generation stability delays (milliseconds) - REDUCED for faster generation
 const PDF_STABILITY_DELAYS = {
-  PRE_RENDER: 1000,         // 1s before starting PDF render
-  POST_RENDER: 1500,        // 1.5s after PDF render completes
-  SECTION_DELAY: 300,       // 300ms between major sections
-  BULLET_DELAY: 100,        // 100ms between bullet points (prevents truncation)
+  PRE_RENDER: 500,          // 0.5s before starting PDF render
+  POST_RENDER: 800,         // 0.8s after PDF render completes
+  SECTION_DELAY: 150,       // 150ms between major sections
+  BULLET_DELAY: 50,         // 50ms between bullet points
 };
 
 // Helper for PDF stability delays
