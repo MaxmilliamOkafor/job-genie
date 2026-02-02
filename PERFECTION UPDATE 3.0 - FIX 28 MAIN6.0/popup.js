@@ -902,20 +902,20 @@ class ATSTailor {
     if (showAnimation) {
       btn.classList.add('pressed', 'loading', 'btn-animating');
       btn.classList.remove('btn-tailoring'); // Never use orange
+      btn.classList.add('btn-gradient'); // Keep blue gradient
       btn.disabled = true;
       
-      // Animate the button press visually - ORANGE only
-      btn.style.transform = 'scale(0.95)';
-      btn.style.boxShadow = 'inset 0 4px 12px rgba(0,0,0,0.4)';
-      btn.style.background = 'linear-gradient(135deg, #ff6b35, #f7931e)';
+      // Animate the button press visually - BLUE only (no background change)
+      btn.style.transform = 'scale(0.98)';
       btn.style.transition = 'all 0.15s ease-in-out';
+      // NO inline background - keep the CSS class blue gradient
     }
     
     const btnText = btn.querySelector('.btn-text');
     const btnIcon = btn.querySelector('.btn-icon-left');
     const btnTime = btn.querySelector('.btn-time');
     
-    // Set ORANGE PROCESSING state immediately
+    // Set BLUE PROCESSING state - only icon and text change
     if (btnIcon) btnIcon.textContent = '⏳';
     if (btnText) btnText.textContent = 'Tailoring...';
     if (btnTime) btnTime.textContent = '~5s';
