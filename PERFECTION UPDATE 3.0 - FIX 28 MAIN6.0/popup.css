@@ -891,32 +891,9 @@ body::-webkit-scrollbar-thumb {
   50% { box-shadow: 0 0 25px var(--accent-glow); }
 }
 
-/* ============ TAILORING BUTTON STATE ============ */
-.btn-tailoring {
-  background: linear-gradient(135deg, #ef4444, #f59e0b) !important;
-  animation: tailoring-pulse 1.5s ease-in-out infinite !important;
-  pointer-events: none;
-}
-
-.btn-tailoring .btn-text {
-  animation: tailoring-text-fade 1s ease-in-out infinite;
-}
-
-@keyframes tailoring-pulse {
-  0%, 100% { 
-    box-shadow: 0 0 15px rgba(239, 68, 68, 0.6), 0 0 30px rgba(245, 158, 11, 0.4);
-    transform: scale(1);
-  }
-  50% { 
-    box-shadow: 0 0 25px rgba(239, 68, 68, 0.8), 0 0 50px rgba(245, 158, 11, 0.6);
-    transform: scale(1.02);
-  }
-}
-
-@keyframes tailoring-text-fade {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
+/* ============ TAILORING BUTTON STATE - REMOVED ============ */
+/* Orange state removed - button stays blue throughout */
+/* .btn-tailoring class no longer applies orange styling */
 
 .btn-time {
   font-size: 10px;
