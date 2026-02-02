@@ -898,10 +898,10 @@ class ATSTailor {
     // Highlight step 1 as working
     this.updateStepUI(1, 'working');
     
-    // Show pressed/loading state - ORANGE PROCESSING (no green states)
+    // Show pressed/loading state - BLUE only (no orange states)
     if (showAnimation) {
-      btn.classList.add('pressed', 'loading', 'btn-animating', 'btn-tailoring');
-      btn.classList.remove('btn-gradient');
+      btn.classList.add('pressed', 'loading', 'btn-animating');
+      btn.classList.remove('btn-tailoring'); // Never use orange
       btn.disabled = true;
       
       // Animate the button press visually - ORANGE only
@@ -2848,19 +2848,18 @@ class ATSTailor {
     const pipelineSteps = document.getElementById('pipelineSteps');
     
     btn.disabled = true;
-    // ONLY TWO BUTTON STATES:
-    // 1. ORANGE PROCESSING: icon=⏳, text="Tailoring...", time="~5s", class=btn-tailoring
-    // 2. BLUE READY: icon=⚡, text="Extract & Apply Keywords to CV", time="~5s", class=btn-gradient (default)
+    // SINGLE BUTTON STATE: Blue gradient - always use btn-gradient, never btn-tailoring
     const btnIconLeft = btn.querySelector('.btn-icon-left');
     const btnText = btn.querySelector('.btn-text');
     const btnTime = btn.querySelector('.btn-time');
     
-    // Set ORANGE PROCESSING state
+    // Keep BLUE state while processing (just disable + change text)
     if (btnIconLeft) btnIconLeft.textContent = '⏳';
     if (btnText) btnText.textContent = 'Tailoring...';
     if (btnTime) btnTime.textContent = '~5s';
-    btn.classList.add('btn-tailoring');
-    btn.classList.remove('btn-gradient');
+    // Keep blue gradient - NO orange state
+    btn.classList.remove('btn-tailoring');
+    btn.classList.add('btn-gradient');
     
     progressContainer?.classList.remove('hidden');
     pipelineSteps?.classList.remove('hidden');
