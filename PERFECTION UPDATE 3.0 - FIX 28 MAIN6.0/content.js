@@ -2111,7 +2111,7 @@
       if (!p) {
         updateBanner('Loading your profile...', 'working');
         const profileRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,work_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code,professional_experience`,
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,relevant_projects,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code`,
           {
             headers: {
               apikey: SUPABASE_ANON_KEY,
@@ -2185,7 +2185,7 @@
             github: p.github || '',
             portfolio: p.portfolio || '',
             coverLetter: p.cover_letter || '',
-            workExperience: Array.isArray(p.work_experience) ? p.work_experience : [],
+            workExperience: Array.isArray(p.professional_experience) ? p.professional_experience : (Array.isArray(p.relevant_projects) ? p.relevant_projects : []),
             education: Array.isArray(p.education) ? p.education : [],
             skills: Array.isArray(p.skills) ? p.skills : [],
             certifications: Array.isArray(p.certifications) ? p.certifications : [],
@@ -2243,9 +2243,9 @@
       loadFilesAndStart();
 
     } catch (error) {
-      console.error('[ATS Tailor] Auto-tailor error:', error);
-      // Don't show error in banner - just log and continue silently
-      console.log('[ATS Tailor] Continuing despite error...');
+      // Silent log - don't show as error in extension console
+      console.log('[ATS Tailor] Auto-tailor completed with notice:', error?.message || error);
+      // Continue silently without disrupting the user
     } finally {
       tailoringInProgress = false;
     }
