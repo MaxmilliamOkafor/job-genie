@@ -2903,15 +2903,24 @@ class ATSTailor {
         throw new Error('Please sign in again');
       }
 
+      // Ensure we have a job description first
+      if (!this.currentJob?.description) {
+        await this.detectCurrentJob();
+      }
+      
+      if (!this.currentJob?.description || this.currentJob.description.length < 50) {
+        throw new Error('No job description found. Please navigate to a job posting page and try again.');
+      }
+      
       // FIRST: Call AI Extract Keywords (equivalent to clicking the AI Extract button)
       let keywords = null;
       try {
         keywords = await this.performAIKeywordExtraction();
         console.log('[ATS Tailor] Step 1 - AI Extracted keywords:', keywords?.all?.length || 0);
       } catch (aiError) {
-        console.warn('[ATS Tailor] AI extraction failed, falling back to local extraction:', aiError);
-        // Fallback to local extraction if AI fails
-        keywords = this.extractKeywordsOptimized(this.currentJob?.description || '');
+        // Silent fallback to local extraction if AI fails - no warning needed
+        console.log('[ATS Tailor] Using local keyword extraction');
+        keywords = this.extractKeywordsOptimized(this.currentJob.description);
       }
       
       if (!keywords || !keywords.all || keywords.all.length === 0) {
