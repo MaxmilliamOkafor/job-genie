@@ -1,35 +1,35 @@
-// ATS PERFECTION v3.3.6 - Ultimate CV Tailor Popup Script
+// ATS PERFECTION v3.3.7 - Ultimate CV Tailor Popup Script
 // Features: Professional PDF Engine, Smart CV Parser, Cover Letter Generator
 // Location Strategy, Enterprise CV Parser with Immutable Field Protection
 // Auto-trigger on ATS detection, 100% keyword match
-// UPDATED v3.3.6: Faster stabilization + prioritize keywords in experience bullets over skills
+// UPDATED v3.3.7: Fast generation (30-50s) + aggressive keyword injection into bullets
 
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
-// ============ STABILITY DELAYS v3.3.6 - FASTER + RELIABLE ============
-// Target completion time: 45-70 seconds (reduced from 80-110s)
-// Optimized delays while maintaining generation integrity
+// ============ STABILITY DELAYS v3.3.7 - FASTER + RELIABLE ============
+// Target completion time: 30-50 seconds (optimized from 45-70s)
+// Minimal delays while maintaining generation integrity
 const STABILITY_DELAYS = {
   // Post-tailoring stabilization (wait for AI response)
-  POST_TAILORING: 2000,           // 2s after AI tailoring API returns
+  POST_TAILORING: 1000,           // 1s after AI tailoring API returns
   // Pre-PDF generation (ensure data ready)
-  PRE_PDF_GENERATION: 2500,       // 2.5s before starting PDF generation
+  PRE_PDF_GENERATION: 1500,       // 1.5s before starting PDF generation
   // Post-PDF generation (ensure PDF rendered)
-  POST_PDF_GENERATION: 3000,      // 3s after PDF generation completes
+  POST_PDF_GENERATION: 2000,      // 2s after PDF generation completes
   // Bullet rendering delay
-  BULLET_RENDERING: 1500,         // 1.5s for bullet points
+  BULLET_RENDERING: 800,          // 0.8s for bullet points
   // Summary rendering delay
-  SUMMARY_RENDERING: 1000,        // 1s for summary
+  SUMMARY_RENDERING: 500,         // 0.5s for summary
   // OpenAI-specific throttling
-  OPENAI_STABILIZATION: 2000,     // 2s OpenAI-specific
-  OPENAI_PRE_CALL: 1000,          // 1s before OpenAI API calls
-  OPENAI_POST_CALL: 1500,         // 1.5s after OpenAI API calls
-  // Four-Gate Verification delays (reduced)
-  GATE_EXTRACTION: 800,           // 0.8s after keyword extraction gate
-  GATE_TAILORING: 1000,           // 1s after tailoring gate
-  GATE_DISTRIBUTION: 800,         // 0.8s after keyword distribution gate
-  GATE_CANDIDATE_DATA: 500,       // 0.5s after candidate data verification gate
+  OPENAI_STABILIZATION: 1200,     // 1.2s OpenAI-specific
+  OPENAI_PRE_CALL: 500,           // 0.5s before OpenAI API calls
+  OPENAI_POST_CALL: 800,          // 0.8s after OpenAI API calls
+  // Four-Gate Verification delays (minimal)
+  GATE_EXTRACTION: 400,           // 0.4s after keyword extraction gate
+  GATE_TAILORING: 500,            // 0.5s after tailoring gate
+  GATE_DISTRIBUTION: 400,         // 0.4s after keyword distribution gate
+  GATE_CANDIDATE_DATA: 300,       // 0.3s after candidate data verification gate
 };
 
 // Timeout for tailor-application

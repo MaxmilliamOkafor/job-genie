@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ATS PERFECTION v3.3.6 - Ultimate CV Tailor",
-  "version": "3.3.6",
-  "description": "PERFECTION v3.3.6: Faster stabilization (45-70s) + keywords prioritized in experience bullets over skills section. Soft skills (collaboration, teamwork, etc.) woven naturally into bullet points - never dumped in skills. Enterprise PDF engine with immutable field protection.",
+  "name": "ATS PERFECTION v3.3.7 - Ultimate CV Tailor",
+  "version": "3.3.7",
+  "description": "PERFECTION v3.3.7: Fast generation (30-50s) + aggressive keyword injection into experience bullets. Soft skills woven naturally into bullets - NEVER in skills section. Skills section is last resort for unplaced technical keywords only (max 5).",
   "permissions": [
     "storage",
     "activeTab",

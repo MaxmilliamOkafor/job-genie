@@ -1,14 +1,14 @@
-// openresume-generator.js - OpenResume-Style ATS PDF Generator v3.3.6
+// openresume-generator.js - OpenResume-Style ATS PDF Generator v3.3.7
 // PERFECT FORMAT: Arial 10.5pt, 1" margins, selectable text, 100% ATS parsing
 // Based on https://github.com/xitanggg/open-resume methodology
-// UPDATED v3.3.6: Faster stabilization + prioritize keywords in experience bullets over skills
+// UPDATED v3.3.7: Faster delays + aggressive keyword injection into bullets
 
-// OpenResume stability delays (milliseconds) - REDUCED for faster generation
+// OpenResume stability delays (milliseconds) - MINIMAL for speed
 const OR_STABILITY_DELAYS = {
-  PRE_PACKAGE: 800,         // 0.8s before starting package generation
-  POST_CV: 1200,            // 1.2s after CV PDF completes
-  POST_COVER: 800,          // 0.8s after cover letter PDF completes
-  SECTION_RENDER: 100,      // 100ms between section renders
+  PRE_PACKAGE: 400,         // 0.4s before starting package generation
+  POST_CV: 600,             // 0.6s after CV PDF completes
+  POST_COVER: 400,          // 0.4s after cover letter PDF completes
+  SECTION_RENDER: 50,       // 50ms between section renders
 };
 
 // Helper for stability delays
@@ -54,7 +54,7 @@ async function orStabilityDelay(ms, description) {
     // Returns: { cv: blob, cover: blob, cvFilename, coverFilename, matchScore }
     async generateATSPackage(baseCV, keywords, jobData, candidateData) {
       const startTime = performance.now();
-      console.log('[OpenResume] v3.3.5 Generating ATS Package with stability delays...');
+      console.log('[OpenResume] v3.3.7 Generating ATS Package...');
 
       // Pre-package stabilization delay
       await orStabilityDelay(OR_STABILITY_DELAYS.PRE_PACKAGE, 'Pre-package stabilization');
@@ -446,6 +446,7 @@ async function orStabilityDelay(ms, description) {
 
     // ============ SOFT SKILL KEYWORDS (should NEVER go in skills section) ============
     // These keywords must be woven into experience bullets naturally, not listed as skills
+    // EXPANDED: Any keyword that reads as a personality trait or soft skill goes here
     SOFT_SKILL_KEYWORDS: new Set([
       'collaboration', 'teamwork', 'team building', 'communication', 'leadership',
       'attention to detail', 'problem solving', 'problem-solving', 'critical thinking',
@@ -461,7 +462,13 @@ async function orStabilityDelay(ms, description) {
       'verbal communication', 'written communication', 'presentation skills',
       'conflict resolution', 'relationship building', 'networking', 'persuasion',
       'emotional intelligence', 'empathy', 'patience', 'reliability', 'dependability',
-      'work ethic', 'professionalism', 'integrity', 'accountability', 'responsibility'
+      'work ethic', 'professionalism', 'integrity', 'accountability', 'responsibility',
+      // Additional soft skills commonly extracted from job descriptions
+      'people management', 'team management', 'influence', 'accuracy', 'judgment',
+      'operational judgment', 'navigate ambiguity', 'influence without authority',
+      'strong communication', 'collaborative', 'community-driven', 'scalable workflows',
+      'workflow design', 'sop creation', 'sop', 'care plans', 'care delivery programs',
+      'operational tooling', 'scheduling systems', 'workflow trackers'
     ]),
     
     // Check if a keyword is a soft skill (should go in bullets, not skills section)
@@ -639,23 +646,36 @@ async function orStabilityDelay(ms, description) {
     },
 
     // ============ MERGE SKILLS - LAST RESORT ONLY ============
-    // v3.3.6: Only add TECHNICAL keywords that couldn't fit in bullets
+    // v3.3.7: Only add TECHNICAL keywords that couldn't fit in bullets
     // Soft skills (collaboration, teamwork, etc.) should NEVER appear in skills section
+    // STRICT: Maximum 5 technical keywords can be added, and ONLY if truly unplaceable
     mergeSkillsLastResort(existingSkills, unplacedKeywords, allKeywords) {
       const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
       const merged = [...(existingSkills || [])];
 
-      // ONLY add unplaced TECHNICAL keywords (not soft skills)
-      const technicalUnplaced = (unplacedKeywords || []).filter(kw => !this.isSoftSkill(kw));
+      // STRICT FILTER: Only add unplaced TECHNICAL keywords (not soft skills)
+      // Also filter out common words that aren't real skills
+      const nonSkillWords = new Set(['go', 'ai', 'teams', 'the', 'and', 'or', 'for', 'to', 'in', 'of', 'a', 'is', 'on']);
       
-      // Limit additions to prevent skills section bloat
-      const maxToAdd = Math.min(5, technicalUnplaced.length);
+      const technicalUnplaced = (unplacedKeywords || []).filter(kw => {
+        const lower = kw.toLowerCase().trim();
+        // Skip if it's a soft skill
+        if (this.isSoftSkill(kw)) return false;
+        // Skip if it's a common non-skill word
+        if (nonSkillWords.has(lower)) return false;
+        // Skip if too short (likely not a real skill)
+        if (lower.length < 3) return false;
+        // Skip if already in skills
+        if (skillSet.has(lower)) return false;
+        return true;
+      });
+      
+      // STRICT: Maximum 3 additions (reduced from 5) to keep skills section clean
+      const maxToAdd = Math.min(3, technicalUnplaced.length);
       
       technicalUnplaced.slice(0, maxToAdd).forEach(kw => {
-        if (!skillSet.has(kw.toLowerCase())) {
-          merged.push(this.formatSkillName(kw));
-          skillSet.add(kw.toLowerCase());
-        }
+        merged.push(this.formatSkillName(kw));
+        skillSet.add(kw.toLowerCase());
       });
 
       console.log(`[OpenResume] Skills section: ${existingSkills?.length || 0} original + ${Math.min(maxToAdd, technicalUnplaced.length)} technical keywords added`);

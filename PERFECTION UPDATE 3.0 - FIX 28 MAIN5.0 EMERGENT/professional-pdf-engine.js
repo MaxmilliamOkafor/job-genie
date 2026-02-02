@@ -1,14 +1,14 @@
-// professional-pdf-engine.js - Enterprise-Grade ATS PDF Generator v3.3.6
+// professional-pdf-engine.js - Enterprise-Grade ATS PDF Generator v3.3.7
 // PERFECT FORMAT: Garamond/Arial hybrid, exact margins, precise typography
 // Features: Multi-page support, font embedding, perfect text metrics, ATS 100% parsing
-// UPDATED v3.3.6: Faster stabilization + keywords in experience bullets priority
+// UPDATED v3.3.7: Minimal delays + aggressive keyword injection into bullets
 
-// PDF Generation stability delays (milliseconds) - REDUCED for faster generation
+// PDF Generation stability delays (milliseconds) - MINIMAL for speed
 const PDF_STABILITY_DELAYS = {
-  PRE_RENDER: 500,          // 0.5s before starting PDF render
-  POST_RENDER: 800,         // 0.8s after PDF render completes
-  SECTION_DELAY: 150,       // 150ms between major sections
-  BULLET_DELAY: 50,         // 50ms between bullet points
+  PRE_RENDER: 200,          // 0.2s before starting PDF render
+  POST_RENDER: 400,         // 0.4s after PDF render completes
+  SECTION_DELAY: 50,        // 50ms between major sections
+  BULLET_DELAY: 20,         // 20ms between bullet points
 };
 
 // Helper for PDF stability delays
@@ -84,7 +84,7 @@ async function pdfStabilityDelay(ms, description) {
     // ============ MAIN ENTRY: GENERATE CV PDF ============
     async generateCV(candidateData, tailoredContent, options = {}) {
       const startTime = performance.now();
-      console.log('[ProfessionalPDFEngine] v3.3.5 Generating ATS-perfect CV with stability delays...');
+      console.log('[ProfessionalPDFEngine] v3.3.7 Generating ATS-perfect CV...');
 
       try {
         // Pre-render stabilization delay
