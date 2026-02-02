@@ -285,6 +285,7 @@
     },
 
     // ============ TAILOR CV DATA WITH ALL KEYWORDS (100% MATCH) ============
+    // UPDATED: Uses Strategic Keyword Integration to prioritise Work Experience
     tailorCVData(cvData, keywords, jobData) {
       const tailored = JSON.parse(JSON.stringify(cvData)); // Deep clone
       
@@ -303,16 +304,42 @@
       // 2. Enhance summary with top 5-8 keywords
       tailored.summary = this.enhanceSummary(cvData.summary, [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
 
-      // 3. Inject ALL keywords into experience (3-5x distribution for high/medium, 1-2x for low)
-      tailored.experience = this.injectAllKeywordsIntoExperience(cvData.experience, {
-        high: highPriority,
-        medium: mediumPriority,
-        low: lowPriority,
-        all: allKeywords
-      });
-
-      // 4. Merge ALL keywords into skills
-      tailored.skills = this.mergeSkills(cvData.skills, allKeywords);
+      // 3. STRATEGIC KEYWORD INTEGRATION: Inject keywords into Work Experience first
+      // Use StrategicKeywordIntegration if available (prioritises bullets over skills list)
+      if (typeof StrategicKeywordIntegration !== 'undefined') {
+        console.log('[OpenResume] Using Strategic Keyword Integration for Work Experience');
+        const integrationResult = StrategicKeywordIntegration.enhanceBulletPointsWithKeywords(
+          cvData.experience,
+          { all: allKeywords, highPriority, mediumPriority, lowPriority }
+        );
+        tailored.experience = integrationResult.enhancedExperience;
+        
+        // Remove integrated keywords from skills (they're now in bullets)
+        const integratedKeywords = integrationResult.stats?.integratedKeywords || [];
+        const remainingKeywords = allKeywords.filter(kw => 
+          !integratedKeywords.some(ik => ik.toLowerCase() === kw.toLowerCase())
+        );
+        
+        // Only add remaining keywords to skills (minimal skills list)
+        tailored.skills = this.mergeSkills(cvData.skills, remainingKeywords.slice(0, 10));
+        
+        console.log('[OpenResume] Strategic Integration Stats:', {
+          bulletsModified: integrationResult.stats?.bulletsModified || 0,
+          keywordsIntegrated: integratedKeywords.length,
+          remainingForSkills: remainingKeywords.length
+        });
+      } else {
+        // Fallback to legacy injection
+        tailored.experience = this.injectAllKeywordsIntoExperience(cvData.experience, {
+          high: highPriority,
+          medium: mediumPriority,
+          low: lowPriority,
+          all: allKeywords
+        });
+        
+        // 4. Merge ALL keywords into skills
+        tailored.skills = this.mergeSkills(cvData.skills, allKeywords);
+      }
 
       return tailored;
     },

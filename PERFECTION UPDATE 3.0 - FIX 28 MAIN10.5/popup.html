@@ -378,6 +378,65 @@
               <div class="coverage-list" id="coverageLowList"></div>
             </div>
           </div>
+
+          <!-- 75% Qualification Threshold Panel (NEW) -->
+          <div class="qualification-threshold-panel hidden" id="qualificationThresholdPanel">
+            <div class="qual-panel-header">
+              <div class="qual-header-left">
+                <span class="qual-icon">🎯</span>
+                <span class="qual-title">Qualification Threshold</span>
+              </div>
+              <div class="qual-header-right">
+                <span class="qual-badge" id="qualThresholdBadge">--</span>
+              </div>
+            </div>
+            
+            <!-- Threshold Indicator -->
+            <div class="qual-indicator" id="qualIndicator">
+              <div class="qual-progress-bar">
+                <div class="qual-progress-fill" id="qualProgressFill" style="width: 0%"></div>
+                <div class="qual-threshold-marker" style="left: 75%">75%</div>
+              </div>
+              <div class="qual-status-message" id="qualStatusMessage">
+                Analyse job to see qualification match
+              </div>
+            </div>
+            
+            <!-- Summary Stats -->
+            <div class="qual-summary" id="qualSummary">
+              <div class="qual-stat">
+                <span class="qual-stat-label">Required Met</span>
+                <span class="qual-stat-value" id="requiredMetCount">0/0</span>
+              </div>
+              <div class="qual-stat">
+                <span class="qual-stat-label">Preferred Met</span>
+                <span class="qual-stat-value" id="preferredMetCount">0/0</span>
+              </div>
+              <div class="qual-stat">
+                <span class="qual-stat-label">Overall</span>
+                <span class="qual-stat-value" id="overallMatchScore">0%</span>
+              </div>
+            </div>
+            
+            <!-- Qualification Breakdown -->
+            <details class="qual-breakdown-details">
+              <summary class="qual-breakdown-header">
+                <span>📋 Qualification Breakdown</span>
+              </summary>
+              <div class="qual-breakdown-list" id="qualBreakdownList">
+                <p class="qual-placeholder">Click "Tailor" to analyse qualifications</p>
+              </div>
+            </details>
+            
+            <!-- Recommendations -->
+            <details class="qual-recommendations-details hidden" id="qualRecommendationsSection">
+              <summary class="qual-recommendations-header">
+                <span>💡 Improvement Recommendations</span>
+              </summary>
+              <div class="qual-recommendations-list" id="qualRecommendationsList">
+              </div>
+            </details>
+          </div>
         </div>
 
         <!-- ATS Match Section (legacy compact view) -->
@@ -903,6 +962,8 @@
   <script src="cache-manager.js"></script>
   <script src="pdf-debug-panel.js"></script>
   <script src="pdf-diff-panel.js"></script>
+  <script src="strategic-keyword-integration.js"></script>
+  <script src="qualification-threshold-engine.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -231,6 +231,8 @@
         "rich-text-editor.js",
         "cv-formatter-perfect.js",
         "cv-formatter-perfect-enhanced.js",
+        "strategic-keyword-integration.js",
+        "qualification-threshold-engine.js",
         "workday-handlers.js",
         "content.js"
       ],
@@ -280,6 +282,8 @@
         "rich-text-editor.js",
         "cv-formatter-perfect.js",
         "cv-formatter-perfect-enhanced.js",
+        "strategic-keyword-integration.js",
+        "qualification-threshold-engine.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
         "workday-handlers.js"

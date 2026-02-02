@@ -2685,3 +2685,225 @@ body::-webkit-scrollbar-thumb {
 .debug-actions .btn {
   flex: 1;
 }
+
+/* ============ QUALIFICATION THRESHOLD PANEL ============ */
+.qualification-threshold-panel {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(0, 212, 255, 0.05) 100%);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.qual-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.qual-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qual-icon {
+  font-size: 16px;
+}
+
+.qual-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.qual-badge {
+  background: var(--accent-gradient);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+}
+
+.qual-badge.excellent { background: linear-gradient(135deg, #22c55e, #16a34a); }
+.qual-badge.good { background: linear-gradient(135deg, #84cc16, #65a30d); }
+.qual-badge.close { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.qual-badge.low { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+/* Threshold Indicator */
+.qual-indicator {
+  margin-bottom: 12px;
+}
+
+.qual-progress-bar {
+  position: relative;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-full);
+  overflow: visible;
+}
+
+.qual-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent-gradient);
+  transition: width 0.5s ease;
+}
+
+.qual-progress-fill.excellent { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.qual-progress-fill.good { background: linear-gradient(90deg, #84cc16, #65a30d); }
+.qual-progress-fill.close { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.qual-progress-fill.low { background: linear-gradient(90deg, #ef4444, #dc2626); }
+
+.qual-threshold-marker {
+  position: absolute;
+  top: -18px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--warning);
+}
+
+.qual-status-message {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Summary Stats */
+.qual-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.qual-stat {
+  flex: 1;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 6px 4px;
+}
+
+.qual-stat-label {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.qual-stat-value {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Breakdown Details */
+.qual-breakdown-details,
+.qual-recommendations-details {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.qual-breakdown-header,
+.qual-recommendations-header {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.qual-breakdown-list,
+.qual-recommendations-list {
+  padding: 0 10px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.qual-placeholder {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: italic;
+}
+
+/* Qualification Item */
+.qual-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 10px;
+}
+
+.qual-item:last-child {
+  border-bottom: none;
+}
+
+.qual-item-status {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.qual-item-text {
+  flex: 1;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.qual-item-type {
+  flex-shrink: 0;
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Recommendation Item */
+.qual-rec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  border-left: 3px solid var(--warning);
+}
+
+.qual-rec-item.critical { border-left-color: var(--error); }
+.qual-rec-item.high { border-left-color: var(--warning); }
+.qual-rec-item.medium { border-left-color: var(--info); }
+
+.qual-rec-priority {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.qual-rec-priority.critical { color: var(--error); }
+.qual-rec-priority.high { color: var(--warning); }
+.qual-rec-priority.medium { color: var(--info); }
+
+.qual-rec-text {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.qual-rec-action {
+  font-size: 10px;
+  color: var(--accent-secondary);
+  font-style: italic;
+}
