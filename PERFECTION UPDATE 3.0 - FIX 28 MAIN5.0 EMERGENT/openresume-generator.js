@@ -305,9 +305,16 @@ async function orStabilityDelay(ms, description) {
     },
 
     // ============ TAILOR CV DATA WITH ALL KEYWORDS (100% MATCH) ============
-    // v3.3.6: PRIORITY ORDER: Experience bullets > Summary > Skills (last resort)
+    // v3.3.8: PRIORITY ORDER: Experience bullets > Summary > Skills (last resort)
     tailorCVData(cvData, keywords, jobData) {
-      const tailored = JSON.parse(JSON.stringify(cvData)); // Deep clone
+      // ROBUST: Deep clone with error handling
+      let tailored;
+      try {
+        tailored = JSON.parse(JSON.stringify(cvData));
+      } catch (e) {
+        console.warn('[OpenResume] Failed to deep clone cvData, using shallow copy:', e);
+        tailored = { ...cvData };
+      }
       
       // ROBUST: Support both array and structured keywords
       const allKeywords = Array.isArray(keywords) ? keywords : (keywords?.all || []);
@@ -316,16 +323,17 @@ async function orStabilityDelay(ms, description) {
       const lowPriority = Array.isArray(keywords) ? [] : (keywords?.lowPriority || []);
 
       // 1. Update location to job location
-      if (jobData?.location) {
+      if (jobData?.location && tailored.contact) {
         tailored.contact.location = this.normalizeLocation(jobData.location);
       }
 
       // 2. Enhance summary with top 5-8 keywords
-      tailored.summary = this.enhanceSummary(cvData.summary, [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
+      tailored.summary = this.enhanceSummary(cvData.summary || '', [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
 
       // 3. PRIORITY: Inject ALL keywords into experience bullets FIRST
       // This is where keywords should naturally fit - NOT in skills section
-      const injectionResult = this.injectAllKeywordsIntoExperiencePrioritized(cvData.experience, {
+      const experienceArray = Array.isArray(cvData.experience) ? cvData.experience : [];
+      const injectionResult = this.injectAllKeywordsIntoExperiencePrioritized(experienceArray, {
         high: highPriority,
         medium: mediumPriority,
         low: lowPriority,
@@ -335,7 +343,8 @@ async function orStabilityDelay(ms, description) {
       
       // 4. LAST RESORT: Only add TECHNICAL keywords to skills that couldn't fit in bullets
       // Soft skills like "collaboration", "teamwork", "attention to detail" should NEVER go in skills
-      tailored.skills = this.mergeSkillsLastResort(cvData.skills, injectionResult.unplacedKeywords, allKeywords);
+      const existingSkills = Array.isArray(cvData.skills) ? cvData.skills : [];
+      tailored.skills = this.mergeSkillsLastResort(existingSkills, injectionResult.unplacedKeywords, allKeywords);
 
       return tailored;
     },
@@ -646,18 +655,24 @@ async function orStabilityDelay(ms, description) {
     },
 
     // ============ MERGE SKILLS - LAST RESORT ONLY ============
-    // v3.3.7: Only add TECHNICAL keywords that couldn't fit in bullets
+    // v3.3.8: Only add TECHNICAL keywords that couldn't fit in bullets
     // Soft skills (collaboration, teamwork, etc.) should NEVER appear in skills section
     // STRICT: Maximum 5 technical keywords can be added, and ONLY if truly unplaceable
     mergeSkillsLastResort(existingSkills, unplacedKeywords, allKeywords) {
-      const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
-      const merged = [...(existingSkills || [])];
+      // ROBUST: Ensure existingSkills is always an array
+      const safeExistingSkills = Array.isArray(existingSkills) ? existingSkills : [];
+      const skillSet = new Set(safeExistingSkills.map(s => String(s).toLowerCase()));
+      const merged = [...safeExistingSkills];
 
       // STRICT FILTER: Only add unplaced TECHNICAL keywords (not soft skills)
       // Also filter out common words that aren't real skills
       const nonSkillWords = new Set(['go', 'ai', 'teams', 'the', 'and', 'or', 'for', 'to', 'in', 'of', 'a', 'is', 'on']);
       
-      const technicalUnplaced = (unplacedKeywords || []).filter(kw => {
+      // ROBUST: Ensure unplacedKeywords is always an array
+      const safeUnplacedKeywords = Array.isArray(unplacedKeywords) ? unplacedKeywords : [];
+      
+      const technicalUnplaced = safeUnplacedKeywords.filter(kw => {
+        if (!kw || typeof kw !== 'string') return false;
         const lower = kw.toLowerCase().trim();
         // Skip if it's a soft skill
         if (this.isSoftSkill(kw)) return false;
@@ -678,7 +693,7 @@ async function orStabilityDelay(ms, description) {
         skillSet.add(kw.toLowerCase());
       });
 
-      console.log(`[OpenResume] Skills section: ${existingSkills?.length || 0} original + ${Math.min(maxToAdd, technicalUnplaced.length)} technical keywords added`);
+      console.log(`[OpenResume] Skills section: ${safeExistingSkills.length} original + ${Math.min(maxToAdd, technicalUnplaced.length)} technical keywords added`);
 
       // Limit to 25 skills max
       return merged.slice(0, 25);
