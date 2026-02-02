@@ -3139,12 +3139,9 @@ class ATSTailor {
             const origCompany = originalExp.company || originalExp.companyName || '';
             const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
             
+            // Silent log - immutable field protection is working correctly
             if (aiCompany !== origCompany || aiTitle !== origTitle) {
-              console.warn(`[ATS Tailor] ⚠️ AI modified immutable fields for role ${idx + 1}:`,
-                `Company: "${origCompany}" → "${aiCompany}"`,
-                `Title: "${origTitle}" → "${aiTitle}"`,
-                '→ Forcing back to original values'
-              );
+              console.log(`[ATS Tailor] Immutable field protection applied for role ${idx + 1}`);
             }
             
             // FORCE original values - never trust AI for these fields
