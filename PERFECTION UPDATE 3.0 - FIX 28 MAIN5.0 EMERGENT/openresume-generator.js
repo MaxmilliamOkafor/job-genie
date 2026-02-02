@@ -1,6 +1,21 @@
-// openresume-generator.js - OpenResume-Style ATS PDF Generator
+// openresume-generator.js - OpenResume-Style ATS PDF Generator v3.3.5
 // PERFECT FORMAT: Arial 10.5pt, 1" margins, selectable text, 100% ATS parsing
 // Based on https://github.com/xitanggg/open-resume methodology
+// UPDATED: Enhanced stability delays for high-integrity generation
+
+// OpenResume stability delays (milliseconds)
+const OR_STABILITY_DELAYS = {
+  PRE_PACKAGE: 1500,        // 1.5s before starting package generation
+  POST_CV: 2000,            // 2s after CV PDF completes
+  POST_COVER: 1500,         // 1.5s after cover letter PDF completes
+  SECTION_RENDER: 200,      // 200ms between section renders
+};
+
+// Helper for stability delays
+async function orStabilityDelay(ms, description) {
+  console.log(`[OpenResume] ⏱️ ${description} (${ms}ms)...`);
+  await new Promise(resolve => setTimeout(resolve, ms));
+}
 
 (function(global) {
   'use strict';
@@ -39,7 +54,10 @@
     // Returns: { cv: blob, cover: blob, cvFilename, coverFilename, matchScore }
     async generateATSPackage(baseCV, keywords, jobData, candidateData) {
       const startTime = performance.now();
-      console.log('[OpenResume] Generating ATS Package...');
+      console.log('[OpenResume] v3.3.5 Generating ATS Package with stability delays...');
+
+      // Pre-package stabilization delay
+      await orStabilityDelay(OR_STABILITY_DELAYS.PRE_PACKAGE, 'Pre-package stabilization');
 
       // Parse and structure CV data
       const cvData = this.parseAndStructureCV(baseCV, candidateData);
@@ -47,17 +65,19 @@
       // Tailor CV with keywords
       const tailoredData = this.tailorCVData(cvData, keywords, jobData);
       
-      // Generate CV PDF
+      // Generate CV PDF with post-stabilization
       const cvResult = await this.generateCVPDF(tailoredData, candidateData);
+      await orStabilityDelay(OR_STABILITY_DELAYS.POST_CV, 'Post-CV PDF stabilization');
       
-      // Generate Cover Letter PDF
+      // Generate Cover Letter PDF with post-stabilization
       const coverResult = await this.generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData);
+      await orStabilityDelay(OR_STABILITY_DELAYS.POST_COVER, 'Post-Cover Letter stabilization');
       
       // Calculate match score
       const matchScore = this.calculateMatchScore(tailoredData, keywords);
       
       const timing = performance.now() - startTime;
-      console.log(`[OpenResume] Package generated in ${timing.toFixed(0)}ms`);
+      console.log(`[OpenResume] Package generated in ${timing.toFixed(0)}ms (target: 80-110s for full pipeline)`);
 
       return {
         cv: cvResult.blob,
