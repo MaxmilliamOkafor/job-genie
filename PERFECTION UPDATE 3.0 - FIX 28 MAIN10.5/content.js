@@ -657,6 +657,43 @@
               // Generate cover letter if available
               let coverResult = null;
               if (typeof CoverLetterGenerator !== 'undefined' && CoverLetterGenerator.generate) {
+                // FIX 02-02-26: Add 500ms stabilization delay to ensure jobInfo.company is fully extracted
+                // This prevents race conditions where company extraction hasn't completed yet
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // CRITICAL: Validate and fix company name BEFORE cover letter generation
+                const invalidCompanyNames = ['company', 'your company', 'the company', '', 'n/a', 'unknown'];
+                if (!jobInfo.company || invalidCompanyNames.includes(jobInfo.company.toLowerCase().trim())) {
+                  console.log('[ATS PERFECTION] ⚠️ Invalid company detected, re-extracting...');
+                  // Re-extract company name with aggressive fallbacks
+                  const url = window.location.href;
+                  const hostname = window.location.hostname;
+                  
+                  // Try subdomain first (e.g., okx.greenhouse.io → OKX)
+                  const subdomain = hostname.split('.')[0].toLowerCase();
+                  const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'myworkdayjobs'];
+                  if (!blacklist.includes(subdomain) && subdomain.length > 2 && subdomain.length < 30) {
+                    jobInfo.company = subdomain.length <= 4 ? subdomain.toUpperCase() : subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
+                    console.log(`[ATS PERFECTION] ✅ Extracted company from subdomain: "${jobInfo.company}"`);
+                  }
+                  
+                  // Try title pattern "at Company"
+                  if (!jobInfo.company || invalidCompanyNames.includes(jobInfo.company.toLowerCase().trim())) {
+                    const titleMatch = (document.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.-]+?)(?:\s*[-|]|\s*$)/i);
+                    if (titleMatch) {
+                      jobInfo.company = titleMatch[1].trim();
+                      console.log(`[ATS PERFECTION] ✅ Extracted company from title: "${jobInfo.company}"`);
+                    }
+                  }
+                  
+                  // Final fallback
+                  if (!jobInfo.company || invalidCompanyNames.includes(jobInfo.company.toLowerCase().trim())) {
+                    jobInfo.company = 'the hiring organization';
+                    console.log('[ATS PERFECTION] Using fallback company name');
+                  }
+                }
+                
+                console.log(`[ATS PERFECTION] Cover letter company: "${jobInfo.company}"`);
                 const coverContent = CoverLetterGenerator.generate(enrichedProfile, jobInfo, keywords);
                 coverResult = await ProfessionalPDFEngine.generateCoverLetter(enrichedProfile, coverContent.text, jobInfo);
               }
@@ -1991,9 +2028,12 @@
     if (company) {
       company = company.replace(/\s*(careers|jobs|hiring|apply|work|join)\s*$/i, '').trim();
     }
-    // Final validation: reject "Company" or very short names
-    if (!company || company.toLowerCase() === 'company' || company.length < 2) {
-      company = 'your company';
+    // FIX 02-02-26: Extended validation - NEVER return "Company" or similar placeholders
+    const invalidCompanyNames = ['company', 'your company', 'the company', 'n/a', 'unknown', 'employer', 'organization'];
+    if (!company || invalidCompanyNames.includes(company.toLowerCase().trim()) || company.length < 2) {
+      // Return empty string - let downstream handlers use their own fallback
+      company = '';
+      console.warn('[extractJobInfo] ⚠️ Could not extract company name');
     }
 
     const rawLocation = selectors ? getText(selectors.location) : '';

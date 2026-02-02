@@ -109,11 +109,22 @@
       const fullName = `${firstName} ${lastName}`.trim();
       
       const jobTitle = jobData?.title || 'the position';
-      // FIX: Never use generic "Company" or fallback - use actual extracted name or Hiring Team
+      // FIX 02-02-26: CRITICAL - Never use generic "Company" placeholder
+      // Use extractCompanyName with aggressive validation
       let company = this.extractCompanyName(jobData);
-      if (!company || company.toLowerCase() === 'company' || company.toLowerCase() === 'your company') {
-        company = 'the Hiring Team';
+      
+      // Extended validation - NEVER allow these placeholder values
+      const invalidCompanyNames = [
+        'company', 'your company', 'the company', 'hiring team', 'the hiring team',
+        'organization', 'the organization', 'n/a', 'unknown', '', 'employer'
+      ];
+      
+      if (!company || invalidCompanyNames.includes(company.toLowerCase().trim())) {
+        console.warn(`[CoverLetterGenerator] ⚠️ Invalid company "${company}", using fallback`);
+        company = 'the hiring organization';
       }
+      
+      console.log(`[CoverLetterGenerator] Using company name: "${company}" for cover letter`);
       const domain = this.extractDomain(candidateData);
       const yearsExp = this.calculateYearsExperience(candidateData);
 
