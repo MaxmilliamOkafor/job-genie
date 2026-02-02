@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ATS PERFECTION v3.3.7 - Ultimate CV Tailor",
-  "version": "3.3.7",
+  "version": "3.3.8",
   "description": "PERFECTION v3.3.7: Fast generation (30-50s) + aggressive keyword injection into experience bullets. Soft skills woven naturally into bullets - NEVER in skills section. Skills section is last resort for unplaced technical keywords only (max 5).",
   "permissions": [
     "storage",

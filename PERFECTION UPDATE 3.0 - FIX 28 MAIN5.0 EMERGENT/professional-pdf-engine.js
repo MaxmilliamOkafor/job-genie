@@ -98,14 +98,14 @@ async function pdfStabilityDelay(ms, description) {
         // Parse and structure CV data ONCE
         const cvData = this.structureCVData(candidateData, tailoredContent);
         
-        // Create PDF document with maximum compression for speed
+        // Create PDF document with compression for speed
+        // IMPORTANT: Do NOT use floatPrecision - causes visual drift and misalignments
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
           format: 'a4',
           compress: true,
-          putOnlyUsedFonts: true, // SPEED: Only embed used fonts
-          floatPrecision: 2 // SPEED: Reduce float precision for smaller file
+          putOnlyUsedFonts: true // SPEED: Only embed used fonts
         });
 
         // Build PDF content with section delays for stability
