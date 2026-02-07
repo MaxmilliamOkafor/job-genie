@@ -337,6 +337,35 @@ function extractLocationFromPageText(text) {
 }
 
 /**
+ * CRITICAL FIX: Clean location data - removes prefixes like "location", "locations", "based in"
+ * Prevents errors like "locationsLondon, United Kingdom" or "locationManchester, UK"
+ * @param {string} rawLocation - Raw location string that may contain prefixes
+ * @returns {string} - Cleaned location in format "City, Country" or "City, Region, Country"
+ */
+function cleanLocation(rawLocation) {
+  if (!rawLocation || typeof rawLocation !== 'string') return '';
+  
+  // Remove common prefixes (case-insensitive)
+  let cleaned = rawLocation
+    .replace(/^(location[s]?|based\s*in|located\s*in|office\s*in|work\s*location)[\s:,]*/gi, '')
+    .replace(/^(job\s*location|position\s*location|role\s*location)[\s:,]*/gi, '')
+    .trim();
+  
+  // Validate format (should start with capital letter and contain comma for multi-part locations)
+  if (cleaned && !/^[A-Z]/.test(cleaned)) {
+    // Capitalise first letter if it starts with lowercase
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  
+  // Warn if format looks incorrect (no comma in multi-word location)
+  if (cleaned && cleaned.length > 10 && !/^[A-Z].*,/.test(cleaned)) {
+    console.warn('[ATSLocationTailor] Location format may be incorrect:', cleaned);
+  }
+  
+  return cleaned;
+}
+
+/**
  * FIXED: Normalize location for CV - handles city duplication
  * "Stockholm, Stockholm, Sweden" → "Stockholm, Sweden"
  * "Hong Kong, Hong Kong SAR" → "Hong Kong SAR"
@@ -349,7 +378,11 @@ function extractLocationFromPageText(text) {
 function normalizeLocationForCV(rawLocation) {
   if (!rawLocation) return '';
   
-  let location = rawLocation.trim()
+  // CRITICAL: First clean any location prefixes
+  let location = cleanLocation(rawLocation);
+  
+  // Additional cleanup
+  location = location
     .replace(/[\(\)\[\]]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -646,6 +679,7 @@ function getLocationPreview(rawLocation) {
 // Export
 if (typeof window !== 'undefined') {
   window.ATSLocationTailor = {
+    cleanLocation,
     normalizeLocationForCV,
     normalizeJobLocationForApplication,
     scrapeUniversalLocation,
@@ -657,6 +691,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    cleanLocation,
     normalizeLocationForCV,
     normalizeJobLocationForApplication,
     scrapeUniversalLocation,

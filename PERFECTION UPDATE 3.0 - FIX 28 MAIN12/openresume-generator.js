@@ -422,30 +422,42 @@
     },
 
     // ============ ENHANCE SUMMARY WITH KEYWORDS ============
+    // UPDATED: UK spelling, no banned words, anti-AI detection
     enhanceSummary(summary, keywords) {
       // ROBUST: Ensure keywords is always an array
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
       
+      // Apply ContentQualityEngine if available
+      const sanitise = (text) => {
+        if (typeof ContentQualityEngine !== 'undefined') {
+          return ContentQualityEngine.sanitiseSummary(text);
+        }
+        return text;
+      };
+      
       if (!summary) {
-        // Generate default summary
+        // Generate default summary - UPDATED: No banned phrases
         const topKeywords = keywordsArray.slice(0, 3);
-        return topKeywords.length > 0
-          ? `Results-driven professional with expertise in ${topKeywords.join(', ')}. Proven track record of delivering high-impact solutions and driving measurable business outcomes.`
-          : `Results-driven professional with proven track record of delivering high-impact solutions and driving measurable business outcomes.`;
+        const baseSummary = topKeywords.length > 0
+          ? `Professional with extensive expertise in ${topKeywords.join(', ')}. Track record of delivering high-impact solutions and driving measurable business outcomes.`
+          : `Professional with track record of delivering high-impact solutions and driving measurable business outcomes.`;
+        return sanitise(baseSummary);
       }
 
-      const summaryLower = summary.toLowerCase();
+      let result = sanitise(summary);
+      const summaryLower = result.toLowerCase();
       const missing = keywordsArray.filter(kw => !summaryLower.includes(kw.toLowerCase()));
 
       if (missing.length > 0) {
         const injection = `. Expertise includes ${missing.slice(0, 3).join(', ')}`;
-        if (summary.endsWith('.')) {
-          return summary.slice(0, -1) + injection + '.';
+        if (result.endsWith('.')) {
+          result = result.slice(0, -1) + injection + '.';
+        } else {
+          result = result + injection + '.';
         }
-        return summary + injection + '.';
       }
 
-      return summary;
+      return result;
     },
 
     // ============ INJECT ALL KEYWORDS INTO EXPERIENCE (100% MATCH) ============
@@ -485,10 +497,10 @@
         });
       });
 
-      // Natural injection phrases
+      // Natural injection phrases - UPDATED: No banned words (removed leveraging, utilizing)
       const phrases = [
-        'leveraging', 'utilizing', 'implementing', 'applying',
-        'through', 'incorporating', 'via', 'using', 'with'
+        'implementing', 'applying', 'through', 'incorporating', 
+        'via', 'using', 'with', 'employing'
       ];
       const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
 
@@ -531,8 +543,8 @@
             
             const phrase = getPhrase();
             
-            // Strategy 1: After action verb
-            const verbMatch = enhanced.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Owned|Optimized|Automated|Spearheaded|Directed|Shaped|Drove)\b/i);
+            // Strategy 1: After action verb - UPDATED: Removed "Spearheaded" (banned), replaced "Optimized" with UK spelling
+            const verbMatch = enhanced.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Owned|Optimised|Automated|Directed|Shaped|Drove|Established)\b/i);
             if (verbMatch) {
               const idx = verbMatch[0].length;
               enhanced = `${enhanced.slice(0, idx)} ${kw}-focused${enhanced.slice(idx)}`;
