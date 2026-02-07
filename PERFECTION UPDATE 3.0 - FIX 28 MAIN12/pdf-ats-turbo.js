@@ -95,22 +95,22 @@
       
       // Parse existing CV sections
       const parsed = this.parseCVSections(cvText);
-      
+
       // PROFESSIONAL SUMMARY
       sections.summary = parsed.summary || '';
-      
+
       // EXPERIENCE - Already has keywords injected from tailorCV
       sections.experience = parsed.experience || '';
-      
+
       // SKILLS - FIXED: Proper formatting, no ALL CAPS, comma-separated
       sections.skills = this.formatCleanSkillsSection(parsed.skills);
-      
+
       // EDUCATION - FIXED: Compact single-line format
       sections.education = this.formatEducationSection(parsed.education);
-      
+
       // CERTIFICATIONS - FIXED: Comma-separated, no bullet spam
       sections.certifications = this.formatCertificationsSection(parsed.certifications);
-      
+
       // REMOVED: Technical Proficiencies section (was showing soft skills spam)
       // If meaningful proficiencies exist, merge them into skills
       if (parsed.technicalProficiencies) {
@@ -118,6 +118,15 @@
         if (meaningfulProfs && sections.skills) {
           sections.skills = sections.skills + ', ' + meaningfulProfs;
         }
+      }
+
+      // FINAL: Apply content quality rules (UK spelling + banned phrases) without breaking line layout
+      if (typeof ContentQualityEngine !== 'undefined') {
+        sections.summary = ContentQualityEngine.sanitiseCVBlock(sections.summary);
+        sections.experience = ContentQualityEngine.sanitiseCVBlock(sections.experience);
+        sections.skills = ContentQualityEngine.sanitiseCVBlock(sections.skills);
+        sections.education = ContentQualityEngine.sanitiseCVBlock(sections.education);
+        sections.certifications = ContentQualityEngine.sanitiseCVBlock(sections.certifications);
       }
 
       console.log('[PDFATSTurbo] formatCVForATS - sections formatted');
