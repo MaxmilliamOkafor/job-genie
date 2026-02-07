@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ATS PERFECTION v3.0.1 - Ultimate CV Tailor",
-  "version": "3.0.1",
-  "description": "PERFECTION v3.0.1: Fixed JSON truncation issue, restored stable API parameters. Ultimate ATS extension with auto-trigger, enterprise PDF engine, smart CV parser, cover letter generator, location extraction, immutable field protection, and 100% keyword match.",
+  "name": "ATS PERFECTION v3.0.2 - Ultimate CV Tailor",
+  "version": "3.0.2",
+  "description": "PERFECTION v3.0.2: Anti-AI detection engine, UK spelling enforcement, banned words filter, location data cleaning. Ultimate ATS extension with auto-trigger, enterprise PDF engine, smart CV parser, cover letter generator, location extraction, immutable field protection, and 100% keyword match.",
   "permissions": [
     "storage",
     "activeTab",
@@ -209,6 +209,7 @@
       "js": [
         "debug-logger.js",
         "cache-manager.js",
+        "content-quality-engine.js",
         "mandatory-keywords.js",
         "universal-jd-parser.js",
         "reliable-extractor.js",
@@ -260,6 +261,7 @@
         "debug-settings.js",
         "debug-logger.js",
         "cache-manager.js",
+        "content-quality-engine.js",
         "mandatory-keywords.js",
         "universal-jd-parser.js",
         "reliable-extractor.js",

@@ -279,9 +279,16 @@
       };
     },
 
-    // ============ CLEAN LOCATION (Remove "Remote") ============
+    // ============ CLEAN LOCATION (Remove "Remote" and prefixes) ============
+    // UPDATED: Uses ATSLocationTailor.cleanLocation if available
     cleanLocation(location) {
       if (!location) return '';
+      
+      // Use ATSLocationTailor.cleanLocation if available (handles prefix removal)
+      if (typeof window !== 'undefined' && window.ATSLocationTailor?.cleanLocation) {
+        location = window.ATSLocationTailor.cleanLocation(location);
+      }
+      
       return location
         .replace(/\b(remote|work from home|wfh|virtual|fully remote|remote first)\b/gi, '')
         .replace(/\s*[\(\[]?\s*(remote|wfh|virtual)\s*[\)\]]?\s*/gi, '')
@@ -544,15 +551,25 @@
     },
 
     // ============ NORMALIZE BULLETS ============
+    // UPDATED: Applies ContentQualityEngine for UK spelling and anti-AI detection
     normalizeBullets(bullets) {
       if (!bullets) return [];
+      
+      let normalised = [];
+      
       if (typeof bullets === 'string') {
-        return bullets.split('\n').map(b => b.replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
+        normalised = bullets.split('\n').map(b => b.replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
+      } else if (Array.isArray(bullets)) {
+        normalised = bullets.map(b => String(b).replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
       }
-      if (Array.isArray(bullets)) {
-        return bullets.map(b => String(b).replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
+      
+      // Apply ContentQualityEngine sanitisation if available
+      if (typeof ContentQualityEngine !== 'undefined' && normalised.length > 0) {
+        normalised = ContentQualityEngine.sanitiseBullets(normalised);
+        console.log('[ProfessionalPDFEngine] Applied ContentQualityEngine to bullets');
       }
-      return [];
+      
+      return normalised;
     },
 
     // ============ STRIP DATES FROM FIELD ============

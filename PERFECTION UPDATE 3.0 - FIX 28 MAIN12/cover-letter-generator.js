@@ -65,24 +65,25 @@
     }
   };
 
-  // ============ ACHIEVEMENT PHRASES ============
+  // ============ ACHIEVEMENT PHRASES (UK English, no banned words) ============
   const ACHIEVEMENT_VERBS = [
     'Led', 'Developed', 'Implemented', 'Architected', 'Delivered',
-    'Spearheaded', 'Drove', 'Increased', 'Reduced', 'Optimized',
-    'Transformed', 'Streamlined', 'Built', 'Launched', 'Pioneered'
+    'Directed', 'Drove', 'Increased', 'Reduced', 'Optimised',
+    'Transformed', 'Streamlined', 'Built', 'Launched', 'Established'
   ];
 
   // ============ NATURAL KEYWORD PHRASES (for cover letters - softer than CV) ============
+  // UPDATED: Removed "leveraging" and "utilising" - banned AI buzzwords
   const KEYWORD_PHRASES = [
     'with expertise in',
-    'leveraging',
-    'utilising',
+    'with strong skills in',
     'applying',
     'through',
     'incorporating',
     'employing',
     'using',
-    'via'
+    'via',
+    'working with'
   ];
 
   // ============ COVER LETTER GENERATOR ============
@@ -133,10 +134,19 @@
       console.log(`[CoverLetterGenerator] Using ${topKeywords.length} keywords for natural injection`);
 
       // Build cover letter sections WITH keyword injection
-      const opening = this.selectRandom(templateConfig.opening, { jobTitle, company });
-      const bridge = this.buildBridgeWithKeywords(templateConfig.bridge, { yearsExp, domain }, topKeywords);
-      const body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);
-      const closing = this.buildClosingWithKeywords(templateConfig.closing, { company }, topKeywords);
+      let opening = this.selectRandom(templateConfig.opening, { jobTitle, company });
+      let bridge = this.buildBridgeWithKeywords(templateConfig.bridge, { yearsExp, domain }, topKeywords);
+      let body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);
+      let closing = this.buildClosingWithKeywords(templateConfig.closing, { company }, topKeywords);
+
+      // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
+      if (typeof ContentQualityEngine !== 'undefined') {
+        opening = ContentQualityEngine.sanitiseContent(opening);
+        bridge = ContentQualityEngine.sanitiseContent(bridge);
+        body = ContentQualityEngine.sanitiseContent(body);
+        closing = ContentQualityEngine.sanitiseContent(closing);
+        console.log('[CoverLetterGenerator] Applied ContentQualityEngine sanitisation');
+      }
 
       // Assemble full cover letter
       const paragraphs = [
@@ -154,7 +164,12 @@
         fullName
       ];
 
-      const coverLetter = paragraphs.join('\n');
+      let coverLetter = paragraphs.join('\n');
+      
+      // Final sanitisation pass on complete letter
+      if (typeof ContentQualityEngine !== 'undefined') {
+        coverLetter = ContentQualityEngine.sanitiseContent(coverLetter, { removePronouns: false });
+      }
       
       const timing = performance.now() - startTime;
       console.log(`[CoverLetterGenerator] Generated in ${timing.toFixed(0)}ms with ${topKeywords.length} keywords naturally woven in`);
@@ -387,6 +402,7 @@
       }
 
       // PARAGRAPH 3 (OPTIONAL): Extra context with Keywords 8-10 if available
+      // UPDATED: Removed "proven ability" - banned AI phrase
       if (topKeywords.length > 7) {
         const kw8 = topKeywords[7] || '';
         const kw9 = topKeywords[8] || '';
@@ -396,7 +412,7 @@
         if (extraSkills.length > 0) {
           const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
           paragraphs.push(
-            `Furthermore, I have hands-on experience ${phrase} ${extraSkills.join(' and ')}, as well as a proven ability to drive cross-functional collaboration and deliver measurable outcomes.`
+            `Furthermore, I have hands-on experience ${phrase} ${extraSkills.join(' and ')}, enabling cross-functional collaboration and delivering measurable outcomes.`
           );
         }
       }
