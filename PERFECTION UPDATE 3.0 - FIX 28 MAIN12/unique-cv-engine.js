@@ -14,27 +14,28 @@
     PRESERVE_ACHIEVEMENTS: true
   };
 
-  // ============ ACTION VERBS (Top 1% Candidate Phrasing) ============
+  // ============ ACTION VERBS (Varied, UK spelling, no banned words) ============
   const ACTION_VERBS = [
-    'Led', 'Delivered', 'Engineered', 'Implemented', 'Drove', 'Optimized', 'Architected', 'Spearheaded',
-    'Established', 'Pioneered', 'Accelerated', 'Transformed', 'Streamlined', 'Orchestrated', 'Scaled'
+    'Led', 'Delivered', 'Engineered', 'Implemented', 'Drove', 'Optimised',
+    'Designed', 'Built', 'Established', 'Accelerated', 'Improved',
+    'Streamlined', 'Scaled', 'Reduced', 'Strengthened'
   ];
 
   // ============ BULLET TEMPLATES (8 variations) ============
   const BULLET_TEMPLATES = [
-    '{verb} {keyword1} {achievement} achieving {metric}',
-    'Led {keyword1} {achievement} delivering {metric} results',
-    'Delivered {keyword1} {achievement} reducing {metric} time',
-    'Engineered {keyword1} {achievement} increasing {metric}',
-    'Implemented {keyword1} {achievement} achieving {metric} efficiency',
-    'Drove {keyword1} {achievement} with {metric} success',
-    'Optimized {keyword1} {achievement} yielding {metric} impact',
-    'Architected {keyword1} {achievement} boosting {metric}'
+    '{verb} {keyword1} {achievement}. {metric}',
+    '{metric}. {verb} {keyword1} {achievement}',
+    '{verb} {keyword1} {achievement} and delivered {metric}',
+    '{verb} {keyword1} {achievement}. Reduced cycle time by {metric}',
+    '{verb} {keyword1} {achievement}. Improved reliability by {metric}',
+    '{verb} {keyword1} {achievement} with {metric} impact',
+    '{verb} {keyword1} {achievement}. Maintained quality while scaling to {metric}',
+    '{verb} {keyword1} {achievement}. Increased throughput by {metric}'
   ];
 
-  // ============ NATURAL INJECTION PHRASES (UK SPELLING) ============
+  // ============ NATURAL INJECTION PHRASES (No banned buzzwords) ============
   const INJECTION_PHRASES = [
-    'leveraging', 'utilising', 'through', 'via', 'employing',
+    'using', 'through', 'via', 'employing',
     'incorporating', 'with expertise in', 'applying'
   ];
 

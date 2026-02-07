@@ -2689,9 +2689,10 @@ class ATSTailor {
     let remaining = [...missingKeywords];
     
     // Natural injection phrases for Work Experience
+    // CRITICAL: Never use banned buzzwords (no leveraging/utilizing/utilising)
     const actionPhrases = [
-      'leveraging', 'utilizing', 'implementing', 'applying', 'integrating',
-      'incorporating', 'employing', 'deploying', 'using', 'with expertise in'
+      'using', 'applying', 'implementing', 'integrating',
+      'incorporating', 'employing', 'deploying', 'through', 'via', 'built with'
     ];
     
     const getRandomPhrase = () => actionPhrases[Math.floor(Math.random() * actionPhrases.length)];
@@ -2728,10 +2729,10 @@ class ATSTailor {
           let enhanced = bullet;
           
           if (kwToAdd.length === 1) {
-            // Single keyword: "...by utilizing [keyword]"
+            // Single keyword
             enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]}.`);
           } else if (kwToAdd.length === 2) {
-            // Two keywords: "...through [kw1] and [kw2]"
+            // Two keywords
             enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]} and ${kwToAdd[1]}.`);
           } else {
             // Multiple: "...incorporating [kw1], [kw2], and [kw3]"

@@ -228,8 +228,8 @@
           }
           
           if (toInject.length > 0) {
-            // UK spelling for injection phrases
-            const phrases = ['leveraging', 'utilising', 'through', 'with', 'via'];
+            // CRITICAL: Never use banned buzzwords (no leveraging/utilising)
+            const phrases = ['using', 'through', 'via', 'applying', 'incorporating', 'employing'];
             const phrase = phrases[Math.floor(Math.random() * phrases.length)];
             
             if (text.endsWith('.')) {
@@ -315,7 +315,8 @@
           }
           
           if (toInject.length > 0) {
-            const phrases = ['leveraging', 'utilising', 'through', 'with'];
+            // CRITICAL: Never use banned buzzwords (no leveraging/utilising)
+            const phrases = ['using', 'through', 'via', 'applying', 'incorporating', 'employing'];
             const phrase = phrases[Math.floor(Math.random() * phrases.length)];
             
             if (text.endsWith('.')) {
