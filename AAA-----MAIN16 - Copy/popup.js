@@ -1746,6 +1746,7 @@ class ATSTailor {
    * Handle successful tailoring result
    */
   async handleTailoringSuccess(result, keywords, p) {
+    try {
       // PART 1A: Store structuredCv from tailoring for PDF generation (no re-parsing)
       if (result.resumeStructured || result.structuredCv) {
         window.quantumhireStructuredCv = result.resumeStructured || result.structuredCv;
