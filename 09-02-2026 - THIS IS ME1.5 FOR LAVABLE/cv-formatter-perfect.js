@@ -303,12 +303,13 @@
     },
 
     // ============ DATE PATTERN FOR CLEANING ============
-    // Matches date patterns like: 2023-01 - Present, Jan 2023 - Dec 2024, 2021-2023, etc.
+    // FIX v3.4.0: Also matches MM/YYYY - Present format (e.g., "01/2023 - Present")
     DATE_PATTERNS: [
+      /\d{2}\/\d{4}\s*[-–—]\s*(Present|\d{2}\/\d{4})/gi,
       /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
       /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
       /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
-      /\b(Present|Current)\b/gi
+      /\b(Present|Current|Now)\b/gi
     ],
 
     // Strip date patterns from a string
@@ -322,13 +323,26 @@
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
-    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
+    // Convert dates to consistent format
+    // FIX v3.4.0: Preserve MM/YYYY format if present (e.g., "01/2023 – Present")
     toYearOnly(dateStr) {
       if (!dateStr) return '';
+
+      // Handle MM/YYYY - Present or MM/YYYY - MM/YYYY format
+      const monthYearMatch = String(dateStr).match(/(\d{2}\/\d{4})\s*[-–—]\s*(Present|\d{2}\/\d{4})/i);
+      if (monthYearMatch) {
+        return `${monthYearMatch[1]} – ${monthYearMatch[2]}`;
+      }
+
+      // Check if already in correct format (contains en dash with proper spacing)
+      if (/\d{4}\s*–\s*(Present|\d{4})/.test(dateStr)) {
+        return dateStr.replace(/\s*–\s*/g, ' – '); // Just ensure spacing
+      }
+
       // Extract all 4-digit years
       const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present/i.test(dateStr);
-      
+      const hasPresent = /present|current|now/i.test(dateStr);
+
       if (hasPresent && years && years.length >= 1) {
         return `${years[0]} – Present`;
       } else if (years && years.length >= 2) {
