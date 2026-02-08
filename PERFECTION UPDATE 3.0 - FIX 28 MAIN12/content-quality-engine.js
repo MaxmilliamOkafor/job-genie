@@ -235,68 +235,6 @@
       return result;
     },
 
-    // ============ CV/ATS BLOCK SANITISATION (Preserve line layout) ============
-    // For multi-line CV blocks we avoid adding sentence-ending punctuation per line.
-    sanitiseCVBlock(text) {
-      return this.sanitiseContent(text, {
-        convertToUK: true,
-        removeBannedWords: true,
-        removeEmDashes: true,
-        fixPunctuation: false,
-        removePronouns: true
-      });
-    },
-
-    // ============ FLEXIBLE PHRASE REGEX (handles whitespace/newlines) ============
-    makeFlexiblePhraseRegex(phrase) {
-      const escaped = String(phrase)
-        .trim()
-        .split(/\s+/)
-        .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('\\s+');
-      return new RegExp(`\\b${escaped}\\b`, 'gi');
-    },
-
-    // ============ SENTENCE STRUCTURE VARIATION (Bullet Verb Repetition) ============
-    detectBulletVerbRepetition(bullets) {
-      const warnings = [];
-      if (!Array.isArray(bullets) || bullets.length < 3) return { warnings, counts: {} };
-
-      const counts = {};
-      const normalise = (b) => String(b || '')
-        .replace(/^[•\-\*▪▸]+\s*/, '')
-        .trim();
-
-      for (const b of bullets) {
-        const text = normalise(b);
-        const firstWord = (text.match(/^([A-Za-z]+)/) || [])[1];
-        if (!firstWord) continue;
-        const key = firstWord.toLowerCase();
-        counts[key] = (counts[key] || 0) + 1;
-      }
-
-      const repeats = Object.entries(counts)
-        .filter(([_, n]) => n >= 2)
-        .sort((a, b) => b[1] - a[1]);
-
-      repeats.forEach(([verb, n]) => {
-        warnings.push(`Multiple bullets start with "${verb}" (${n}x). Consider varying openings.`);
-      });
-
-      return { warnings, counts };
-    },
-
-    // Extract bullets from a CV text block and run verb repetition detection.
-    detectBulletVerbRepetitionFromCV(cvText) {
-      const bullets = String(cvText || '')
-        .split(/\n/)
-        .map(l => l.trim())
-        .filter(l => /^[-•*▪▸]\s+/.test(l))
-        .map(l => l.replace(/^[-•*▪▸]\s+/, '').trim());
-
-      return this.detectBulletVerbRepetition(bullets);
-    },
-
     // ============ CONVERT US TO UK SPELLING ============
     convertToUKSpelling(text) {
       if (!text) return text;
@@ -333,13 +271,12 @@
       
       let result = text;
       
-       // Replace banned phrases first (longer matches)
-       // CRITICAL: Use flexible whitespace matching so it still catches "Proven\ntrack record" etc.
-       for (const phrase of BANNED_PHRASES) {
-         const regex = this.makeFlexiblePhraseRegex(phrase);
-         const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
-         result = result.replace(regex, replacement);
-       }
+      // Replace banned phrases first (longer matches)
+      for (const phrase of BANNED_PHRASES) {
+        const regex = new RegExp(phrase, 'gi');
+        const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
+        result = result.replace(regex, replacement);
+      }
       
       // Replace banned words
       for (const word of BANNED_WORDS) {

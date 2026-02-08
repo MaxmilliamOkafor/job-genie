@@ -190,14 +190,13 @@
           }
           
           if (toInject.length > 0) {
-            // CRITICAL: Never use banned buzzwords (no leveraging/utilizing)
-            const phrases = ['using', 'through', 'via', 'applying', 'implementing', 'incorporating'];
+            const phrases = ['leveraging', 'utilizing', 'with', 'implementing', 'applying'];
             const phrase = phrases[Math.floor(Math.random() * phrases.length)];
             
             if (bullet.endsWith('.')) {
               return bullet.slice(0, -1) + `, ${phrase} ${toInject.join(' and ')}.`;
             }
-            return bullet + `, ${phrase} ${toInject.join(' and ')}`;
+            return bullet + ` ${phrase} ${toInject.join(' and ')}`;
           }
           
           return bullet;

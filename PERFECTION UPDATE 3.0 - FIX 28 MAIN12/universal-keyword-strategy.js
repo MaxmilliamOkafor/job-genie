@@ -236,14 +236,14 @@
         const toInject = kwsToAdd.filter(kw => !bulletLower.includes(kw.toLowerCase()));
         if (toInject.length === 0) return;
 
-        // TEMPLATE: "[Action] [KEYWORD1]/[KEYWORD2] [existing content] using [KEYWORD3]"
+        // TEMPLATE: "[Action] [KEYWORD1]/[KEYWORD2] [existing content] using [KEYWORD3]" (UK spelling)
         if (toInject.length === 1) {
-          enhanced = bullet.replace(/\.?\s*$/, `, using ${toInject[0]} principles.`);
+          enhanced = bullet.replace(/\.?\s*$/, `, utilising ${toInject[0]} principles.`);
         } else if (toInject.length === 2) {
           enhanced = bullet.replace(/\.?\s*$/, ` with ${toInject[0]} and ${toInject[1]}.`);
         } else {
           const last = toInject.pop();
-          enhanced = bullet.replace(/\.?\s*$/, `, incorporating ${toInject.join(', ')}, and ${last}.`);
+          enhanced = bullet.replace(/\.?\s*$/, ` leveraging ${toInject.join(', ')}, and ${last}.`);
           toInject.push(last);
         }
 

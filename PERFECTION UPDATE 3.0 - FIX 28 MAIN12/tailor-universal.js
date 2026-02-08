@@ -170,27 +170,30 @@
 
   /**
    * IMPROVED: Inject keyword NATURALLY at the END of bullet points only
-   * Strategy: Append keywords with natural connectors (NO rewriting)
-   * CRITICAL: Never use banned buzzwords (no "leveraging" / "utilizing" / "utilising")
+   * Strategy: Append keywords using "leveraging/utilizing" phrases - NO REWRITING
+   * This preserves the original bullet content while adding ATS keywords
    */
   function injectKeywordNaturally(bulletPrefix, bulletText, keyword) {
     const text = bulletText.trim();
     const kwLower = keyword.toLowerCase();
-
+    
     // Check if keyword already exists - if so, return unchanged
     if (text.toLowerCase().includes(kwLower)) {
       return bulletPrefix + text;
     }
-
-    // Natural injection phrases (UK-friendly, not AI-buzzwords)
-    const phrases = ['using', 'through', 'via', 'applying', 'incorporating', 'employing', 'built with'];
+    
+    // Natural injection phrases - UK spelling for readability
+    const phrases = ['leveraging', 'utilising', 'through', 'with', 'via'];
     const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
-
+    
+    // ONLY append to end - never modify the original bullet content
+    // This preserves the candidate's real achievements and metrics
+    
     // If ends with period, insert before period
     if (text.endsWith('.')) {
       return `${bulletPrefix}${text.slice(0, -1)}, ${getPhrase()} ${keyword}.`;
     }
-
+    
     // Otherwise append
     return `${bulletPrefix}${text}, ${getPhrase()} ${keyword}.`;
   }

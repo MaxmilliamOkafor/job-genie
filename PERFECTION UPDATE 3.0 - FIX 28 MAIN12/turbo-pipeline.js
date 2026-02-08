@@ -229,10 +229,9 @@
     ];
     
     // Natural injection phrases (varied for authenticity)
-    // CRITICAL: Do NOT use banned AI-buzzwords (no "leveraging" / "utilizing" / "utilising")
     const phrases = [
-      'using', 'applying', 'through', 'incorporating', 'employing',
-      'via', 'working with', 'built with'
+      'leveraging', 'utilizing', 'implementing', 'applying', 'with expertise in',
+      'through', 'incorporating', 'employing', 'using', 'via'
     ];
     const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
 
@@ -563,8 +562,8 @@
     const patterns = [
       ', incorporating {} principles',
       ' with focus on {}',
-      ', using {}',
-      ' applying {} methods',
+      ', leveraging {}',
+      ' utilizing {} methodologies',
       ' through {} implementation'
     ];
 
@@ -660,15 +659,6 @@
       distributionStats = distResult.distributionStats;
     }
     timings.distribution = performance.now() - distStart;
-
-    // PHASE 3.5: Final content quality pass (UK spelling + banned phrase removal)
-    if (typeof ContentQualityEngine !== 'undefined') {
-      finalCV = ContentQualityEngine.sanitiseCVBlock(finalCV);
-      const variation = ContentQualityEngine.detectBulletVerbRepetitionFromCV(finalCV);
-      if (variation.warnings.length) {
-        console.warn('[ContentQualityEngine] Bullet variation warnings:', variation.warnings);
-      }
-    }
 
     // PHASE 4: Generate OpenResume-Style CV + Cover Letter PDFs (≤45ms)
     let cvPDF = null;

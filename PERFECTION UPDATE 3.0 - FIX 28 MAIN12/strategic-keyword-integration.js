@@ -39,9 +39,9 @@
     // Technology context: "...using [keyword] and [keyword]"
     techContext: [
       'using {keywords}',
-      'applying {keywords}',
+      'leveraging {keywords}',
       'implementing {keywords}',
-      'employing {keywords}',
+      'utilising {keywords}',
       'deploying {keywords}'
     ],
 
@@ -56,17 +56,17 @@
     // Impact context: "...achieving {metric} through {keyword}"
     impactContext: [
       'achieving {metric} through {keyword}',
-      'producing {metric} via {keyword}',
+      'resulting in {metric} via {keyword}',
       'delivering {metric} using {keyword}'
     ],
 
     // Ending additions: "..., incorporating {keywords}."
     ending: [
       ', incorporating {keywords}',
-      ', using {keywords}',
+      ', utilising {keywords}',
       ' through {keywords}',
       ' via {keywords}',
-      ', applying {keywords}'
+      ', leveraging {keywords}'
     ]
   };
 
@@ -222,7 +222,7 @@
 
       // Tool keywords compatible with any implementation bullet
       if (categorizedKeywords.tool.includes(keyword)) {
-        return /(?:using|with|through|via|implementing|deploying|applying)/i.test(bulletLower);
+        return /(?:using|with|through|via|leveraging|implementing)/i.test(bulletLower);
       }
 
       // Default: compatible if bullet is substantial (>50 chars)
@@ -394,15 +394,15 @@
       );
 
       if (methodKeywords.length > 0) {
-        // Pattern: "...following [methodology] principles"
+        // Pattern: "...following [methodology] methodology"
         return this.appendWithPhrase(bullet, methodKeywords, 'following', ' principles');
       }
 
       // For non-methodology keywords, use standard integration
-      return this.appendWithPhrase(bullet, keywords, 'using');
+      return this.appendWithPhrase(bullet, keywords, 'leveraging');
     },
 
-    // ============ OUTCOME INTEGRATION ==========
+    // ============ OUTCOME INTEGRATION ============
     integrateWithOutcome(bullet, keywords) {
       // Pattern: "...achieving [metric] through [keyword]"
       // Find the metric in the bullet
@@ -418,7 +418,7 @@
       }
 
       // No metric found, use standard ending
-      return this.appendWithPhrase(bullet, keywords, 'through');
+      return this.appendWithPhrase(bullet, keywords, 'utilising');
     },
 
     // ============ PARENTHETICAL INTEGRATION ============
