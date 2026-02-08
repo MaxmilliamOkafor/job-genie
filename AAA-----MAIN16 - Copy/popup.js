@@ -2242,6 +2242,7 @@ class ATSTailor {
   }
 
 
+  /**
    * OPTIMIZED: Full automatic tailoring pipeline
    * IMPLEMENTATION FLOW:
    * 1. Click "AI Extract Keywords" → Wait for full extraction
