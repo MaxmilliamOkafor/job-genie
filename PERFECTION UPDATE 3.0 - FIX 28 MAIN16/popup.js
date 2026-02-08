@@ -1,0 +1,5263 @@
+// ATS PERFECTION v3.0 - Ultimate CV Tailor Popup Script
+// Features: Professional PDF Engine, Smart CV Parser, Cover Letter Generator
+// Location Strategy, Enterprise CV Parser with Immutable Field Protection
+// Auto-trigger on ATS detection, 100% keyword match
+
+const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
+
+// ============ GLOBAL ERROR HANDLER: Prevent extension crashes ============
+// Catches unhandled promise rejections that would otherwise crash the extension
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[ATS Tailor] Unhandled promise rejection:', event.reason);
+  event.preventDefault(); // Prevent the error from crashing the extension
+  
+  // Show user-friendly error message
+  const errorMessage = event.reason?.message || 'An unexpected error occurred';
+  if (window.atsTailor?.showToast) {
+    window.atsTailor.showToast(`Error: ${errorMessage.substring(0, 100)}`, 'error');
+  }
+});
+
+// Global error handler for synchronous errors
+window.addEventListener('error', (event) => {
+  console.error('[ATS Tailor] Unhandled error:', event.error);
+  // Don't prevent default for these - let them be logged
+});
+
+// ============ PERFECTION v3.0: IMMUTABILITY VALIDATION ============
+// Ensures company names, job titles, and dates are NEVER modified by AI
+function validateWorkExperienceImmutability(originalExperience, tailoredExperience) {
+  if (!Array.isArray(originalExperience) || !Array.isArray(tailoredExperience)) {
+    console.warn('[PERFECTION] Cannot validate: invalid experience arrays');
+    return tailoredExperience;
+  }
+
+  return tailoredExperience.map((tailoredExp, index) => {
+    const originalExp = originalExperience[index];
+    if (!originalExp) return tailoredExp;
+
+    // Force original values for IMMUTABLE fields
+    const origCompany = originalExp.company || originalExp.companyName || '';
+    const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
+    const origDates = originalExp.dates || originalExp.date || 
+                      `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`;
+
+    const result = {
+      ...tailoredExp,
+      company: origCompany,     // ← LOCKED FROM ORIGINAL PROFILE
+      companyName: origCompany, // ← LOCKED FROM ORIGINAL PROFILE
+      title: origTitle,         // ← LOCKED FROM ORIGINAL PROFILE
+      jobTitle: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
+      position: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
+      dates: origDates,         // ← LOCKED FROM ORIGINAL PROFILE
+      date: origDates,          // ← LOCKED FROM ORIGINAL PROFILE
+      startDate: originalExp.startDate || tailoredExp.startDate,
+      endDate: originalExp.endDate || tailoredExp.endDate,
+      // Keep tailored bullets/achievements
+      bullets: tailoredExp.bullets || tailoredExp.achievements || tailoredExp.description || originalExp.bullets || [],
+      achievements: tailoredExp.achievements || tailoredExp.bullets || originalExp.achievements || []
+    };
+
+    // Log any detected changes for debugging
+    if (tailoredExp.company !== origCompany || tailoredExp.title !== origTitle) {
+      console.warn(`[PERFECTION] ⚠️ Immutable field override at index ${index}:`, {
+        originalCompany: origCompany,
+        attemptedCompany: tailoredExp.company,
+        originalTitle: origTitle,
+        attemptedTitle: tailoredExp.title
+      });
+    }
+
+    return result;
+  });
+}
+
+console.log('[ATS PERFECTION] v3.0 loaded with immutable field protection');
+
+// ============ TIER 1-2 TECH COMPANY DETECTION (70+ companies) ============
+const TIER1_TECH_COMPANIES = {
+  // FAANG + Major Tech
+  faang: new Set(['google','meta','amazon','microsoft','apple','facebook']),
+  // Enterprise Software  
+  enterprise: new Set(['salesforce','ibm','oracle','adobe','sap','vmware','servicenow','workday']),
+  // Fintech & Payments
+  fintech: new Set(['stripe','paypal','visa','mastercard','block','square']),
+  // SaaS & Cloud
+  saas: new Set(['hubspot','intercom','zendesk','docusign','twilio','slack','atlassian','gitlab','circleci','datadog','datadoghq','unity','udemy']),
+  // Social & Media
+  social: new Set(['linkedin','tiktok','bytedance','snap','snapchat','dropbox','bloomberg']),
+  // Hardware & Semiconductors
+  hardware: new Set(['intel','broadcom','arm','armholdings','tsmc','appliedmaterials','cisco','nvidia','amd','qualcomm']),
+  // Finance & Consulting
+  finance: new Set(['fidelity','morganstanley','jpmorgan','jpmorganchase','blackrock','capitalone','tdsecurities','kpmg','deloitte','accenture','pwc','ey','mckinsey','kkr','fenergo']),
+  // Quant & Trading
+  quant: new Set(['citadel','janestreet','sig','twosigma','deshaw','rentec','renaissancetechnologies','mlp','millennium','virtu','virtufinancial','hudsontrading','hrt','jumptrading']),
+  // Other Major Tech
+  other: new Set(['netflix','tesla','uber','airbnb','palantir','crowdstrike','snowflake','intuit','toast','toasttab','workhuman','draftkings','walmart','roblox','doordash','instacart','rivian','chime','wasabi','wasabitechnologies','samsara','blockchain','similarweb','deepmind','googledeepmind'])
+};
+
+// Supported ATS platforms + major company career sites
+const SUPPORTED_HOSTS = [
+  // Standard ATS (EXCLUDES Lever and Ashby per user preference)
+  'greenhouse.io', 'job-boards.greenhouse.io', 'boards.greenhouse.io',
+  'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
+  'bullhornstaffing.com', 'bullhorn.com', 'teamtailor.com',
+  'workable.com', 'apply.workable.com', 'icims.com',
+  'oracle.com', 'oraclecloud.com', 'taleo.net',
+  // Major company career sites (70+)
+  'google.com', 'meta.com', 'amazon.com', 'microsoft.com', 'apple.com',
+  'salesforce.com', 'ibm.com', 'adobe.com', 'stripe.com', 'hubspot.com',
+  'intel.com', 'servicenow.com', 'workhuman.com', 'intercom.com', 'paypal.com',
+  'tiktok.com', 'linkedin.com', 'dropbox.com', 'twilio.com', 'datadoghq.com',
+  'toasttab.com', 'zendesk.com', 'docusign.com', 'fidelity.com', 'sap.com',
+  'morganstanley.com', 'kpmg.com', 'deloitte.com', 'accenture.com', 'pwc.com',
+  'ey.com', 'citadel.com', 'janestreet.com', 'sig.com', 'twosigma.com',
+  'deshaw.com', 'rentec.com', 'mlp.com', 'virtu.com', 'hudsontrading.com',
+  'jumptrading.com', 'broadcom.com', 'slack.com', 'circleci.com', 'unity.com',
+  'bloomberg.com', 'vmware.com', 'mckinsey.com', 'udemy.com', 'draftkings.com',
+  'walmart.com', 'mastercard.com', 'visa.com', 'blackrock.com', 'tdsecurities.com',
+  'kkr.com', 'fenergo.com', 'appliedmaterials.com', 'tsmc.com', 'arm.com',
+  'deepmind.google', 'cisco.com', 'jpmorgan.com', 'gitlab.com', 'atlassian.com',
+  'snap.com', 'capitalone.com', 'wasabi.com', 'samsara.com', 'blockchain.com',
+  'similarweb.com', 'nvidia.com', 'tesla.com', 'uber.com', 'airbnb.com',
+  'palantir.com', 'crowdstrike.com', 'snowflake.com', 'netflix.com', 'amd.com'
+];
+
+// Performance constants
+const MAX_JD_LENGTH = 10000; // Limit JD to 10k chars for faster processing
+const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+// ███ WORK EXPERIENCE IMMUTABILITY VALIDATOR ███
+// Validates that AI-generated CV data preserves original company names, job titles, and dates
+// These fields should NEVER be modified during tailoring - only bullet points can change
+function validateWorkExperienceImmutability(originalExperience, tailoredExperience) {
+  if (!Array.isArray(originalExperience) || !Array.isArray(tailoredExperience)) {
+    return tailoredExperience || [];
+  }
+  
+  const validated = tailoredExperience.map((tailoredExp, idx) => {
+    const originalExp = originalExperience[idx];
+    if (!originalExp) return tailoredExp;
+    
+    // Extract original immutable values with fallbacks for different field naming conventions
+    const origCompany = originalExp.company || originalExp.companyName || '';
+    const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
+    const origDates = originalExp.dates || `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`.trim();
+    const origStartDate = originalExp.startDate || '';
+    const origEndDate = originalExp.endDate || '';
+    
+    // Return validated object with original immutable fields + tailored bullets
+    return {
+      ...tailoredExp,
+      company: origCompany,      // ← IMMUTABLE
+      companyName: origCompany,  // ← IMMUTABLE (alias)
+      title: origTitle,          // ← IMMUTABLE
+      jobTitle: origTitle,       // ← IMMUTABLE (alias)
+      position: origTitle,       // ← IMMUTABLE (alias)
+      dates: origDates,          // ← IMMUTABLE
+      startDate: origStartDate,  // ← IMMUTABLE
+      endDate: origEndDate,      // ← IMMUTABLE
+      // Bullets/achievements CAN be tailored
+      bullets: tailoredExp.bullets || tailoredExp.description || originalExp.bullets || [],
+      description: tailoredExp.description || tailoredExp.bullets || originalExp.description || [],
+    };
+  });
+  
+  return validated;
+}
+
+class ATSTailor {
+  constructor() {
+    this.session = null;
+    this.currentJob = null;
+    this.generatedDocuments = { 
+      cv: null, 
+      coverLetter: null, 
+      cvPdf: null, 
+      coverPdf: null, 
+      cvFileName: null, 
+      coverFileName: null,
+      matchScore: 0,
+      matchedKeywords: [],
+      missingKeywords: [],
+      keywords: null
+    };
+    this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
+    this.currentPreviewTab = 'cv';
+    this.autoTailorEnabled = true;
+    
+    // AI Provider toggle (Kimi K2 or OpenAI)
+    this.aiProvider = 'kimi'; // 'kimi' or 'openai' - Kimi is default/primary
+    
+    // Workday multi-page state persistence
+    this.workdayState = {
+      currentStep: 0,
+      totalSteps: 0,
+      formData: {},
+      jobId: null,
+      startedAt: null,
+      lastUpdated: null
+    };
+    
+    // Base CV from profile (cached for fast reuse)
+    this.baseCVContent = null;
+    this.baseCVSource = null; // 'uploaded' or 'generated'
+    
+    // Performance: Caches for JD text and keywords per job URL
+    this.jdCache = new Map(); // url -> { jd, timestamp }
+    this.keywordCache = new Map(); // url -> { keywords, timestamp }
+    
+    // Keyword coverage report (diffs original CV vs boosted CV)
+    this._coverageOriginalCV = '';
+    this._defaultLocation = 'Dublin, IE';  // Will be loaded from storage
+    
+    // DOM element references (query once, reuse)
+    this._domRefs = {};
+
+    this.init();
+  }
+
+  // Cache DOM references for performance
+  getDomRef(id) {
+    if (!this._domRefs[id]) {
+      this._domRefs[id] = document.getElementById(id);
+    }
+    return this._domRefs[id];
+  }
+
+  async init() {
+    await this.loadSession();
+    await this.loadAIProviderSettings();
+    await this.loadWorkdayState();
+    await this.loadBaseCVFromProfile();
+    this.bindEvents();
+    this.updateUI();
+    this.updateAIProviderUI();
+
+    // Auto-detect job when popup opens (but do NOT auto-tailor)
+    if (this.session) {
+      await this.refreshSessionIfNeeded();
+      await this.detectCurrentJob();
+    }
+  }
+  
+  // ============ AI PROVIDER SETTINGS (Synced from Profile) ============
+  
+  async loadAIProviderSettings() {
+    return new Promise(async (resolve) => {
+      // First try to load from profile if logged in
+      if (this.session?.access_token && this.session?.user?.id) {
+        try {
+          // SECURITY: API keys are stored in user_api_keys table (no client SELECT access)
+          // We only fetch the enabled flags and preference from profiles
+          const profileRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=preferred_ai_provider,openai_enabled,kimi_enabled`,
+            {
+              headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${this.session.access_token}`,
+              },
+            }
+          );
+          
+          if (profileRes.ok) {
+            const profiles = await profileRes.json();
+            const profile = profiles?.[0];
+            
+            if (profile) {
+              // Determine active provider based on profile settings
+              // openai_enabled/kimi_enabled flags indicate if a valid API key has been saved
+              const preferredProvider = profile.preferred_ai_provider || 'kimi';
+              const kimiEnabled = profile.kimi_enabled ?? false;
+              const openaiEnabled = profile.openai_enabled ?? false;
+              
+              // Use preferred if available and enabled (enabled means API key is configured)
+              if (preferredProvider === 'kimi' && kimiEnabled) {
+                this.aiProvider = 'kimi';
+              } else if (preferredProvider === 'openai' && openaiEnabled) {
+                this.aiProvider = 'openai';
+              } else if (kimiEnabled) {
+                this.aiProvider = 'kimi';
+              } else if (openaiEnabled) {
+                this.aiProvider = 'openai';
+              } else {
+                this.aiProvider = 'kimi'; // default (will fail if no key configured)
+              }
+              
+              console.log('[ATS Tailor] AI Provider loaded from profile:', this.aiProvider);
+              
+              // Save to local storage for consistency
+              await chrome.storage.local.set({ 
+                ai_provider: this.aiProvider,
+                ai_settings: { provider: this.aiProvider, syncedFromProfile: true, savedAt: Date.now() }
+              });
+              
+              resolve();
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('[ATS Tailor] Could not load AI provider from profile:', e);
+        }
+      }
+      
+      // Fallback to local storage
+      chrome.storage.local.get(['ai_provider', 'ai_settings'], (result) => {
+        this.aiProvider = result.ai_provider || result.ai_settings?.provider || 'kimi';
+        console.log('[ATS Tailor] AI Provider loaded from local storage:', this.aiProvider);
+        resolve();
+      });
+    });
+  }
+  
+  async saveAIProviderSettings() {
+    // Save to local storage
+    await chrome.storage.local.set({ 
+      ai_provider: this.aiProvider,
+      ai_settings: { provider: this.aiProvider, savedAt: Date.now() }
+    });
+    
+    // Also save to profile in database if logged in
+    if (this.session?.access_token && this.session?.user?.id) {
+      try {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${this.session.access_token}`,
+              Prefer: 'return=minimal'
+            },
+            body: JSON.stringify({
+              preferred_ai_provider: this.aiProvider
+            })
+          }
+        );
+        console.log('[ATS Tailor] AI Provider saved to profile:', this.aiProvider);
+      } catch (e) {
+        console.warn('[ATS Tailor] Could not save AI provider to profile:', e);
+      }
+    }
+    
+    console.log('[ATS Tailor] AI Provider saved:', this.aiProvider);
+    
+    // Show saved indicator
+    const savedEl = document.getElementById('aiSettingsSaved');
+    if (savedEl) {
+      savedEl.classList.add('visible');
+      setTimeout(() => savedEl.classList.remove('visible'), 2000);
+    }
+  }
+  
+  updateAIProviderUI() {
+    const btnKimi = document.getElementById('btnKimi');
+    const btnOpenAI = document.getElementById('btnOpenAI');
+    const activeLabel = document.getElementById('activeProviderBadge');
+    const modelLabel = document.getElementById('activeModelLabel');
+    const badgeDot = activeLabel?.querySelector('.badge-dot');
+    const badgeText = activeLabel?.querySelector('.badge-text');
+    
+    // Update toggle button states
+    if (btnKimi) {
+      btnKimi.classList.toggle('selected', this.aiProvider === 'kimi');
+    }
+    if (btnOpenAI) {
+      btnOpenAI.classList.toggle('selected', this.aiProvider === 'openai');
+    }
+    
+    // Update info bar
+    if (badgeDot) {
+      badgeDot.classList.remove('kimi', 'openai');
+      badgeDot.classList.add(this.aiProvider);
+    }
+    if (badgeText) {
+      badgeText.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    }
+    if (modelLabel) {
+      modelLabel.textContent = this.aiProvider === 'kimi' ? 'kimi-k2-0711-preview' : 'gpt-4o-mini';
+    }
+  }
+  
+  selectAIProvider(provider) {
+    this.aiProvider = provider;
+    this.saveAIProviderSettings();
+    this.updateAIProviderUI();
+    this.showToast(`AI Provider set to ${provider === 'kimi' ? 'Kimi K2' : 'OpenAI'}`, 'success');
+  }
+  
+  // ============ WORKDAY MULTI-PAGE STATE PERSISTENCE ============
+  
+  async loadWorkdayState() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['workday_multi_page_state'], (result) => {
+        if (result.workday_multi_page_state) {
+          this.workdayState = { ...this.workdayState, ...result.workday_multi_page_state };
+        }
+        resolve();
+      });
+    });
+  }
+  
+  async saveWorkdayState() {
+    this.workdayState.lastUpdated = Date.now();
+    await chrome.storage.local.set({ workday_multi_page_state: this.workdayState });
+  }
+  
+  async clearWorkdayState() {
+    this.workdayState = {
+      currentStep: 0,
+      totalSteps: 0,
+      formData: {},
+      jobId: null,
+      startedAt: null,
+      lastUpdated: null
+    };
+    await chrome.storage.local.remove(['workday_multi_page_state']);
+  }
+  
+  updateWorkdayProgress(step, totalSteps, formData = {}) {
+    this.workdayState.currentStep = step;
+    this.workdayState.totalSteps = totalSteps;
+    this.workdayState.formData = { ...this.workdayState.formData, ...formData };
+    this.saveWorkdayState();
+    this.updateWorkdayProgressUI();
+  }
+  
+  updateWorkdayProgressUI() {
+    const progressEl = document.getElementById('workdayProgress');
+    const stepIndicators = document.querySelectorAll('.workday-step-indicator');
+    const statusEl = document.getElementById('workdayFlowStatus');
+    
+    if (progressEl && this.workdayState.totalSteps > 0) {
+      const percent = (this.workdayState.currentStep / this.workdayState.totalSteps) * 100;
+      progressEl.style.width = `${percent}%`;
+    }
+    
+    stepIndicators.forEach((indicator, idx) => {
+      indicator.classList.toggle('active', idx === this.workdayState.currentStep);
+      indicator.classList.toggle('complete', idx < this.workdayState.currentStep);
+    });
+    
+    if (statusEl) {
+      const stepNames = ['My Information', 'Experience', 'Review'];
+      statusEl.textContent = stepNames[this.workdayState.currentStep] || `Step ${this.workdayState.currentStep + 1}`;
+    }
+  }
+  
+  // ============ BASE CV FROM PROFILE (PDF/DOCX) ============
+  
+  async loadBaseCVFromProfile() {
+    if (!this.session?.access_token || !this.session?.user?.id) {
+      return;
+    }
+    
+    try {
+      // CACHE INTEGRATION: Check for cached profile (5-min TTL)
+      if (typeof CacheManager !== 'undefined') {
+        const cached = CacheManager.getCachedProfile(this.session.user.id);
+        if (cached) {
+          console.log('[ATS Tailor] ⚡ Using cached profile for base CV');
+          this.baseCVContent = cached;
+          this.baseCVSource = 'uploaded';
+          await chrome.storage.local.set({ ats_profile: cached });
+          
+          // Update debug panel if available
+          if (window.PDFDebugPanel && cached.professional_experience) {
+            const expCount = Array.isArray(cached.professional_experience) ? cached.professional_experience.length : 0;
+            const skillsCount = Array.isArray(cached.skills) ? cached.skills.length : 0;
+            window.PDFDebugPanel.updateParseCVDebug({
+              status: 'Cached',
+              fileType: 'PROFILE',
+              fileSize: 'From cache',
+              textLength: expCount > 0 ? `${expCount} roles, ${skillsCount} skills` : '0',
+              parseTime: 'Instant (cached)',
+              textSnippet: cached.professional_experience?.[0] ? 
+                `Latest role: ${cached.professional_experience[0].title || 'Unknown'} at ${cached.professional_experience[0].company || 'Unknown'}` : 
+                'No experience data found'
+            });
+          }
+          return;
+        }
+      }
+      
+      // Fetch profile with CV file info
+      const profileRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=cv_file_path,cv_file_name,cv_uploaded_at`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${this.session.access_token}`,
+          },
+        }
+      );
+      
+      if (!profileRes.ok) return;
+      
+      const profiles = await profileRes.json();
+      const profile = profiles?.[0];
+      
+      if (profile?.cv_file_path) {
+        // CV file exists in storage - download and parse it
+        console.log('[ATS Tailor] Found uploaded CV:', profile.cv_file_name);
+        this.baseCVSource = 'uploaded';
+        
+        // Try to fetch the parsed CV content (cached from parse-cv function)
+        const parsedCVRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=professional_experience,relevant_projects,education,skills,certifications,achievements`,
+          {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${this.session.access_token}`,
+            },
+          }
+        );
+        
+        if (parsedCVRes.ok) {
+          const parsedData = await parsedCVRes.json();
+          if (parsedData?.[0]) {
+            // Store parsed CV data for use in tailoring
+            this.baseCVContent = parsedData[0];
+            console.log('[ATS Tailor] Loaded parsed CV content from profile');
+            
+            // CACHE INTEGRATION: Cache the profile for 5 minutes
+            if (typeof CacheManager !== 'undefined') {
+              CacheManager.setCachedProfile(this.session.user.id, parsedData[0]);
+            }
+            
+            // Store in chrome.storage for debug panel access
+            await chrome.storage.local.set({ ats_profile: parsedData[0] });
+            
+            // WIRE UP Parse CV Debug panel
+            if (window.PDFDebugPanel) {
+              const expCount = Array.isArray(parsedData[0].professional_experience) ? parsedData[0].professional_experience.length : 0;
+              const skillsCount = Array.isArray(parsedData[0].skills) ? parsedData[0].skills.length : 0;
+              window.PDFDebugPanel.updateParseCVDebug({
+                status: 'Loaded',
+                fileType: profile.cv_file_name?.split('.').pop()?.toUpperCase() || 'PDF',
+                fileSize: 'From profile',
+                textLength: expCount > 0 ? `${expCount} roles, ${skillsCount} skills` : '0',
+                parseTime: 'Cached',
+                textSnippet: parsedData[0].professional_experience?.[0] ? 
+                  `Latest role: ${parsedData[0].professional_experience[0].title || 'Unknown'} at ${parsedData[0].professional_experience[0].company || 'Unknown'}` : 
+                  'No experience data found'
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] Could not load base CV from profile:', e);
+    }
+  }
+
+  async refreshSessionIfNeeded() {
+    try {
+      if (!this.session?.refresh_token || !this.session?.access_token) return;
+
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${this.session.access_token}`,
+        },
+      });
+
+      if (res.ok) return;
+
+      const refreshRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ refresh_token: this.session.refresh_token }),
+      });
+
+      if (!refreshRes.ok) {
+        console.warn('[ATS Tailor] refresh failed; clearing session');
+        this.session = null;
+        await chrome.storage.local.remove(['ats_session']);
+        this.updateUI();
+        return;
+      }
+
+      const data = await refreshRes.json();
+      this.session = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user || this.session.user,
+      };
+      await this.saveSession();
+    } catch (e) {
+      console.warn('[ATS Tailor] refreshSessionIfNeeded error', e);
+    }
+  }
+
+  async loadSession() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(
+        ['ats_session', 'ats_stats', 'ats_todayDate', 'ats_autoTailorEnabled', 'ats_lastGeneratedDocuments', 'ats_lastJob', 'ats_defaultLocation'],
+        (result) => {
+          this.session = result.ats_session || null;
+          this.autoTailorEnabled = typeof result.ats_autoTailorEnabled === 'boolean' ? result.ats_autoTailorEnabled : true;
+          
+          // Load default location for Remote jobs
+          this._defaultLocation = result.ats_defaultLocation || 'Dublin, IE';
+
+          // Restore last job/documents for preview continuity
+          this.currentJob = result.ats_lastJob || this.currentJob;
+          if (result.ats_lastGeneratedDocuments) {
+            this.generatedDocuments = { ...this.generatedDocuments, ...result.ats_lastGeneratedDocuments };
+          }
+
+          if (result.ats_stats) {
+            this.stats = result.ats_stats;
+          }
+
+          const today = new Date().toDateString();
+          if (result.ats_todayDate !== today) {
+            this.stats.today = 0;
+            chrome.storage.local.set({ ats_todayDate: today });
+          }
+
+          resolve();
+        }
+      );
+    });
+  }
+
+  async saveSession() {
+    await chrome.storage.local.set({ ats_session: this.session });
+  }
+
+  async saveStats() {
+    await chrome.storage.local.set({
+      ats_stats: this.stats,
+      ats_todayDate: new Date().toDateString()
+    });
+  }
+
+  bindEvents() {
+    document.getElementById('loginBtn')?.addEventListener('click', () => this.login());
+    document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
+    document.getElementById('tailorBtn')?.addEventListener('click', () => this.tailorDocuments({ force: true }));
+    document.getElementById('refreshJob')?.addEventListener('click', () => this.detectCurrentJob());
+    document.getElementById('editJobTitle')?.addEventListener('click', () => this.toggleJobTitleEdit());
+    document.getElementById('jobTitleInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.saveJobTitleEdit(); });
+    document.getElementById('jobTitleInput')?.addEventListener('blur', () => this.saveJobTitleEdit());
+    document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocument('cv'));
+    document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocument('cover'));
+    document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
+    document.getElementById('copyContent')?.addEventListener('click', () => this.copyCurrentContent());
+    document.getElementById('copyCoverageBtn')?.addEventListener('click', () => this.copyCoverageReport());
+    
+    // NEW: Text download buttons
+    document.getElementById('downloadCvText')?.addEventListener('click', () => this.downloadTextVersion('cv'));
+    document.getElementById('downloadCoverText')?.addEventListener('click', () => this.downloadTextVersion('cover'));
+    
+    // AI Provider Selection (toggle buttons - persistent)
+    document.getElementById('btnKimi')?.addEventListener('click', () => this.selectAIProvider('kimi'));
+    document.getElementById('btnOpenAI')?.addEventListener('click', () => this.selectAIProvider('openai'));
+    
+    // Connection Test Button
+    document.getElementById('testConnectionBtn')?.addEventListener('click', () => this.testAPIKeyConnection());
+    
+    // Debug Report Buttons
+    document.getElementById('showDebugReportBtn')?.addEventListener('click', () => this.showDebugReport());
+    document.getElementById('closeDebugReport')?.addEventListener('click', () => this.hideDebugReport());
+    document.getElementById('downloadDebugReport')?.addEventListener('click', () => this.downloadDebugReport());
+    document.getElementById('copyDebugReport')?.addEventListener('click', () => this.copyDebugReport());
+
+    // Bulk Apply Dashboard
+    document.getElementById('openBulkApply')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('bulk-apply.html') });
+    });
+    
+    // Debug Settings Console
+    document.getElementById('openDebugSettings')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('debug-settings.html') });
+    });
+    // Auto Tailor Toggle
+    document.getElementById('autoTailorToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      this.autoTailorEnabled = enabled;
+      chrome.storage.local.set({ ats_autoTailorEnabled: enabled });
+      this.showToast(enabled ? 'Auto tailor enabled' : 'Auto tailor disabled', 'success');
+    });
+    
+    // Auto-Trigger Toggle (NEW)
+    document.getElementById('autoTriggerToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.runtime.sendMessage({ action: 'SET_AUTO_TRIGGER', enabled }, (response) => {
+        if (response?.success) {
+          this.showToast(enabled ? '⚡ Auto-trigger enabled' : 'Auto-trigger disabled', 'success');
+        }
+      });
+    });
+    
+    // Load auto-trigger setting and set checkbox
+    chrome.storage.local.get(['autoTriggerEnabled'], (result) => {
+      const toggle = document.getElementById('autoTriggerToggle');
+      if (toggle) {
+        toggle.checked = result.autoTriggerEnabled !== false; // Default enabled
+      }
+    });
+    
+    // Bulk CSV Automation
+    document.getElementById('csvFileInput')?.addEventListener('change', (e) => this.handleCsvUpload(e));
+    document.getElementById('parseCsvBtn')?.addEventListener('click', () => this.parseCsv());
+    document.getElementById('startBulkAutomation')?.addEventListener('click', () => this.startBulkAutomation());
+    document.getElementById('pauseBulkBtn')?.addEventListener('click', () => this.pauseBulkAutomation());
+    document.getElementById('resumeBulkBtn')?.addEventListener('click', () => this.resumeBulkAutomation());
+    document.getElementById('stopBulkBtn')?.addEventListener('click', () => this.stopBulkAutomation());
+    
+    // Start bulk progress polling
+    this.startBulkProgressPolling();
+    
+    // View Extracted Keywords Button (fast local extraction)
+    document.getElementById('viewKeywordsBtn')?.addEventListener('click', () => this.viewExtractedKeywords());
+    
+    // AI Extract Keywords Button (provider-aware)
+    document.getElementById('aiExtractBtn')?.addEventListener('click', () => this.aiExtractKeywords());
+    
+    // Skill Gap Analysis Button
+    document.getElementById('skillGapBtn')?.addEventListener('click', () => this.showSkillGapPanel());
+    document.getElementById('closeSkillGap')?.addEventListener('click', () => this.hideSkillGapPanel());
+
+    // Workday Full Flow with Multi-Page State
+    document.getElementById('runWorkdayFlow')?.addEventListener('click', () => this.runWorkdayFlow());
+    document.getElementById('workdayAutoToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ workday_auto_enabled: enabled });
+      this.showToast(enabled ? 'Workday automation enabled' : 'Workday automation disabled', 'success');
+    });
+    document.getElementById('saveWorkdayCreds')?.addEventListener('click', () => this.saveWorkdayCredentials());
+    document.getElementById('clearWorkdayState')?.addEventListener('click', () => {
+      this.clearWorkdayState();
+      this.showToast('Workday state cleared', 'success');
+    });
+    
+    // Workday Snapshot Panel buttons
+    document.getElementById('captureSnapshotBtn')?.addEventListener('click', () => this.captureWorkdaySnapshot());
+    document.getElementById('forceWorkdayApplyBtn')?.addEventListener('click', () => this.forceWorkdayApply());
+    
+    // NEW: Automatic Autofill Toggle
+    document.getElementById('autofillEnabledToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ autofill_enabled: enabled });
+      this.showToast(enabled ? '🤖 AI Autofill enabled' : 'AI Autofill disabled', 'success');
+      
+      // Notify content script
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'TOGGLE_AUTOFILL',
+            enabled: enabled
+          }).catch(() => {});
+        }
+      });
+    });
+    
+    // NEW: Manual Autofill Button
+    document.getElementById('manualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
+    
+    // NEW: Saved Responses Panel
+    document.getElementById('viewSavedResponsesBtn')?.addEventListener('click', () => this.viewSavedResponses());
+    document.getElementById('clearSavedResponsesBtn')?.addEventListener('click', () => this.clearSavedResponses());
+    
+    // Default location setting for Remote jobs
+    document.getElementById('saveLocationBtn')?.addEventListener('click', () => this.saveDefaultLocation());
+    document.getElementById('defaultLocationInput')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.saveDefaultLocation();
+    });
+    
+    // Load Workday settings and location settings
+    this.loadWorkdaySettings();
+    this.loadLocationSettings();
+    this.loadAutofillSettings();
+    this.loadSavedResponsesStats();
+    
+    // Check and show Workday snapshot panel if on Workday
+    this.checkWorkdayAndShowSnapshot();
+    
+    // Update Workday progress UI on load
+    this.updateWorkdayProgressUI();
+
+    // Preview tabs
+    document.getElementById('previewCvTab')?.addEventListener('click', () => this.switchPreviewTab('cv'));
+    document.getElementById('previewCoverTab')?.addEventListener('click', () => this.switchPreviewTab('cover'));
+    document.getElementById('previewTextTab')?.addEventListener('click', () => this.switchPreviewTab('text'));
+
+    // Enter key for login
+    document.getElementById('password')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.login();
+    });
+    
+    // Listen for runtime messages to trigger Extract & Apply Keywords button
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === 'TRIGGER_EXTRACT_APPLY' || message.action === 'POPUP_TRIGGER_EXTRACT_APPLY') {
+        console.log('[ATS Tailor Popup] Received trigger message:', message.action, 'with animation:', message.showButtonAnimation);
+        this.triggerExtractApplyWithUI(message.jobInfo, message.showButtonAnimation !== false);
+        sendResponse({ status: 'triggered' });
+        return true;
+      }
+    });
+    
+    // Check for pending automation trigger on popup open
+    this.checkPendingAutomationTrigger();
+  }
+  
+  // NEW: Download text version of CV/Cover Letter
+  downloadTextVersion(type) {
+    const content = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    if (!content) {
+      this.showToast(`No ${type === 'cv' ? 'CV' : 'Cover Letter'} content to download`, 'error');
+      return;
+    }
+    
+    const fileName = type === 'cv' 
+      ? (this.generatedDocuments.cvFileName || 'Resume').replace('.pdf', '') + '.txt'
+      : (this.generatedDocuments.coverFileName || 'Cover_Letter').replace('.pdf', '') + '.txt';
+    
+    // Use ResumeBuilder if available
+    if (typeof ResumeBuilder !== 'undefined' && ResumeBuilder.downloadTextVersion) {
+      ResumeBuilder.downloadTextVersion(content, fileName);
+    } else {
+      // Fallback
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    
+    this.showToast(`Downloaded ${fileName}`, 'success');
+  }
+  
+  /**
+   * Check for pending automation trigger when popup opens
+   * If automation triggered while popup was closed, execute it now
+   */
+  async checkPendingAutomationTrigger() {
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get(['pending_extract_apply'], resolve);
+    });
+
+    if (result.pending_extract_apply?.triggeredFromAutomation) {
+      const pendingTrigger = result.pending_extract_apply;
+      const age = Date.now() - (pendingTrigger.timestamp || 0);
+
+      // Only process if trigger is recent (within 30 seconds)
+      if (age < 30000) {
+        console.log('[ATS Tailor Popup] Found pending automation trigger, executing...');
+
+        // Clear the pending trigger first (prevents double-runs)
+        await chrome.storage.local.remove(['pending_extract_apply']);
+
+        // Trigger immediately (visible button animation)
+        requestAnimationFrame(() => {
+          this.triggerExtractApplyWithUI(pendingTrigger.jobInfo, true);
+        });
+      } else {
+        // Clear stale trigger
+        await chrome.storage.local.remove(['pending_extract_apply']);
+      }
+    }
+  }
+  
+  /**
+   * Trigger Extract & Apply Keywords button with visible pressed/loading state
+   * DIRECT API CALL: Calls tailorDocuments() directly for reliability
+   */
+  async triggerExtractApplyWithUI(jobInfo, showAnimation = true) {
+    const btn = document.getElementById('tailorBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const pipelineSteps = document.getElementById('pipelineSteps');
+    
+    if (!btn) {
+      console.warn('[ATS Tailor Popup] tailorBtn not found');
+      return;
+    }
+    
+    const startTime = performance.now();
+    
+    // Show progress container and pipeline steps immediately
+    progressContainer?.classList.remove('hidden');
+    pipelineSteps?.classList.remove('hidden');
+    
+    // Update progress text
+    const progressText = document.getElementById('progressText');
+    if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
+    
+    // Highlight step 1 as working
+    this.updateStepUI(1, 'working');
+    
+    // Show pressed/loading state - BLUE only (no orange states)
+    if (showAnimation) {
+      btn.classList.add('pressed', 'loading', 'btn-animating');
+      btn.classList.remove('btn-tailoring'); // Never use orange
+      btn.classList.add('btn-gradient'); // Keep blue gradient
+      btn.disabled = true;
+      
+      // Animate the button press visually - BLUE only (no background change)
+      btn.style.transform = 'scale(0.98)';
+      btn.style.transition = 'all 0.15s ease-in-out';
+      // NO inline background - keep the CSS class blue gradient
+    }
+    
+    const btnText = btn.querySelector('.btn-text');
+    const btnIcon = btn.querySelector('.btn-icon-left');
+    const btnTime = btn.querySelector('.btn-time');
+    
+    // Set BLUE PROCESSING state - only icon and text change
+    if (btnIcon) btnIcon.textContent = '⏳';
+    if (btnText) btnText.textContent = 'Tailoring...';
+    if (btnTime) btnTime.textContent = '~5s';
+    
+    // If jobInfo provided, update current job
+    if (jobInfo) {
+      this.currentJob = jobInfo;
+      this.updateJobDisplay();
+    }
+    
+    try {
+      // ============ DIRECT API CALL: Use tailorDocuments() for reliability ============
+      console.log('[ATS Tailor Popup] Starting direct tailorDocuments() call...');
+      
+      // Step 1 complete, Step 2 working
+      this.updateStepUI(1, 'complete');
+      this.updateStepUI(2, 'working');
+      if (progressText) progressText.textContent = 'Step 2/3: Boosting CV to 95-100% match...';
+      
+      // Call tailorDocuments directly - this is the reliable path
+      await this.tailorDocuments({ force: true });
+      
+      // Step 2 complete, Step 3 working
+      this.updateStepUI(2, 'complete');
+      this.updateStepUI(3, 'working');
+      if (progressText) progressText.textContent = 'Step 3/3: Generating ATS CV and Cover Letter...';
+      
+      // Small delay to show step 3, then mark complete
+      await new Promise(r => setTimeout(r, 500));
+      
+      const elapsed = Math.round(performance.now() - startTime);
+      
+      // Mark all steps as complete
+      this.updateStepUI(3, 'complete');
+      if (progressText) progressText.textContent = 'Complete! Tailored CV and Cover Letter ready.';
+      
+      // Success - INSTANT RESET to BLUE READY state (NO green flash, NO delays)
+      btn.style.background = '';
+      btn.style.transform = '';
+      btn.style.boxShadow = '';
+      btn.style.transition = '';
+      btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.add('btn-gradient');
+      btn.disabled = false;
+      
+      // Set BLUE READY state
+      if (btnIcon) btnIcon.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
+      
+      // Hide progress immediately
+      progressContainer?.classList.add('hidden');
+      
+      this.showToast(`Attached! Match: ${this.generatedDocuments.matchScore || 95}%`, 'success');
+      
+      // Notify content script to show green success banner (on PAGE, not extension)
+      chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (tab?.id) {
+          chrome.tabs.sendMessage(tab.id, { 
+            action: 'UPDATE_BANNER',
+            text: 'Tailored CV and Cover Letter attached successfully',
+            status: 'success'
+          }).catch(() => {});
+        }
+      });
+      
+      // Notify background that extraction is complete
+      chrome.runtime.sendMessage({ action: 'EXTRACT_APPLY_COMPLETE' }).catch(() => {});
+      
+    } catch (error) {
+      console.error('[ATS Tailor Popup] Error:', error);
+      
+      // Error - INSTANT RESET to BLUE READY state (show toast for error)
+      btn.style.background = '';
+      btn.style.transform = '';
+      btn.style.boxShadow = '';
+      btn.style.transition = '';
+      btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.add('btn-gradient');
+      btn.disabled = false;
+      
+      // Set BLUE READY state even on error
+      if (btnIcon) btnIcon.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
+      
+      if (progressText) progressText.textContent = `❌ Error: ${error.message}`;
+      progressContainer?.classList.add('hidden');
+      
+      this.showToast(`Error: ${error.message}`, 'error');
+    } finally {
+      // Ensure button is always reset to BLUE READY state (failsafe)
+      btn.classList.remove('pressed', 'loading', 'btn-animating', 'btn-tailoring');
+      btn.classList.add('btn-gradient');
+      btn.disabled = false;
+      btn.style.transform = '';
+      btn.style.boxShadow = '';
+      btn.style.background = '';
+      btn.style.transition = '';
+      
+      if (btnIcon) btnIcon.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
+    }
+  }
+  
+  /**
+   * Helper: Update step UI state (working/complete)
+   */
+  updateStepUI(stepNum, status) {
+    const step = document.getElementById(`step${stepNum}`);
+    if (!step) return;
+    const icon = step.querySelector('.step-icon');
+    if (status === 'working') {
+      icon.textContent = '⏳';
+      step.classList.add('active');
+      step.classList.remove('complete');
+    } else if (status === 'complete') {
+      icon.textContent = '✓';
+      step.classList.remove('active');
+      step.classList.add('complete');
+    }
+  }
+  
+  /**
+   * Trigger LazyApply 28s sync - schedules CV override after LazyApply attaches their CV
+   */
+  async triggerLazyApplySync() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          action: 'LAZYAPPLY_28S_SYNC'
+        });
+        this.showToast(`LazyApply override scheduled in ${response.delay / 1000}s`, 'success');
+      }
+    } catch (e) {
+      this.showToast('Could not schedule LazyApply sync', 'error');
+    }
+  }
+
+  async loadWorkdaySettings() {
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get(['workday_email', 'workday_password', 'workday_verify_password', 'workday_auto_enabled'], resolve);
+    });
+    
+    const emailInput = document.getElementById('workdayEmail');
+    const passwordInput = document.getElementById('workdayPassword');
+    const verifyPasswordInput = document.getElementById('workdayVerifyPassword');
+    const autoToggle = document.getElementById('workdayAutoToggle');
+    const emailDisplay = document.getElementById('workdayEmailDisplay');
+    
+    if (emailInput && result.workday_email) emailInput.value = result.workday_email;
+    if (passwordInput && result.workday_password) passwordInput.value = result.workday_password;
+    if (verifyPasswordInput && result.workday_verify_password) verifyPasswordInput.value = result.workday_verify_password;
+    if (autoToggle) autoToggle.checked = result.workday_auto_enabled !== false;
+    if (emailDisplay && result.workday_email) emailDisplay.textContent = result.workday_email;
+  }
+
+  saveWorkdayCredentials() {
+    const email = document.getElementById('workdayEmail')?.value;
+    const password = document.getElementById('workdayPassword')?.value;
+    const verifyPassword = document.getElementById('workdayVerifyPassword')?.value;
+    
+    if (!email || !password) {
+      this.showToast('Please enter email and password', 'error');
+      return;
+    }
+    
+    const emailDisplay = document.getElementById('workdayEmailDisplay');
+    if (emailDisplay) emailDisplay.textContent = email;
+    
+    chrome.runtime.sendMessage({
+      action: 'UPDATE_WORKDAY_CREDENTIALS',
+      email: email,
+      password: password,
+      verifyPassword: verifyPassword || password
+    });
+    
+    chrome.storage.local.set({
+      workday_email: email,
+      workday_password: password,
+      workday_verify_password: verifyPassword || password
+    });
+    
+    this.showToast('Workday credentials saved!', 'success');
+  }
+  
+  // ============ AUTOFILL SETTINGS ============
+  async loadAutofillSettings() {
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get(['autofill_enabled'], resolve);
+    });
+    
+    const toggle = document.getElementById('autofillEnabledToggle');
+    if (toggle) {
+      toggle.checked = result.autofill_enabled !== false; // Default to enabled
+    }
+  }
+  
+  async runManualAutofill() {
+    const btn = document.getElementById('manualAutofillBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.querySelector('.btn-text').textContent = 'Running...';
+    }
+    
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) {
+        this.showToast('No active tab found', 'error');
+        return;
+      }
+      
+      // Send manual autofill command to content script
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'RUN_MANUAL_AUTOFILL'
+      });
+      
+      if (response?.success) {
+        this.showToast(`✅ Autofill complete! Filled ${response.filledCount || 0} fields`, 'success');
+      } else {
+        this.showToast(response?.error || 'Autofill failed', 'error');
+      }
+    } catch (e) {
+      console.error('[Popup] Manual autofill error:', e);
+      this.showToast('Autofill failed - check console', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'Run Manual Autofill';
+      }
+    }
+  }
+  
+  // ============ SAVED RESPONSES MEMORY ============
+  async loadSavedResponsesStats() {
+    try {
+      const result = await new Promise(resolve => {
+        chrome.storage.local.get(['saved_responses'], resolve);
+      });
+      
+      const responses = result.saved_responses || {};
+      const count = Object.keys(responses).length;
+      
+      const statsEl = document.getElementById('savedResponsesStats');
+      if (statsEl) {
+        statsEl.innerHTML = `<span class="stat-badge">${count} saved responses</span>`;
+      }
+    } catch (e) {
+      console.log('[Popup] Error loading saved responses stats:', e);
+    }
+  }
+  
+  async viewSavedResponses() {
+    const listEl = document.getElementById('savedResponsesList');
+    if (!listEl) return;
+    
+    try {
+      const result = await new Promise(resolve => {
+        chrome.storage.local.get(['saved_responses'], resolve);
+      });
+      
+      const responses = result.saved_responses || {};
+      const entries = Object.entries(responses);
+      
+      if (entries.length === 0) {
+        listEl.innerHTML = '<p class="empty-state">No saved responses yet. Apply to jobs to build your response memory.</p>';
+        listEl.classList.remove('hidden');
+        return;
+      }
+      
+      // Sort by most recently used
+      entries.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+      
+      const html = entries.slice(0, 20).map(([question, data]) => `
+        <div class="saved-response-item">
+          <div class="response-question">${this.escapeHtml(question.substring(0, 80))}${question.length > 80 ? '...' : ''}</div>
+          <div class="response-answer">${this.escapeHtml((data.answer || '').substring(0, 50))}${(data.answer || '').length > 50 ? '...' : ''}</div>
+          <div class="response-meta">Used ${data.useCount || 1}x</div>
+        </div>
+      `).join('');
+      
+      listEl.innerHTML = html;
+      listEl.classList.toggle('hidden', false);
+    } catch (e) {
+      console.error('[Popup] Error viewing saved responses:', e);
+    }
+  }
+  
+  async clearSavedResponses() {
+    if (!confirm('Are you sure you want to clear all saved responses? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await chrome.storage.local.remove(['saved_responses']);
+      this.showToast('Saved responses cleared', 'success');
+      this.loadSavedResponsesStats();
+      
+      const listEl = document.getElementById('savedResponsesList');
+      if (listEl) {
+        listEl.innerHTML = '<p class="empty-state">No saved responses.</p>';
+      }
+    } catch (e) {
+      this.showToast('Failed to clear responses', 'error');
+    }
+  }
+  
+  // Load default location settings
+  loadLocationSettings() {
+    const locationInput = document.getElementById('defaultLocationInput');
+    if (locationInput && this._defaultLocation) {
+      locationInput.value = this._defaultLocation;
+    }
+  }
+  
+  // Save default location for Remote jobs
+  saveDefaultLocation() {
+    const locationInput = document.getElementById('defaultLocationInput');
+    const location = locationInput?.value?.trim();
+    
+    if (!location) {
+      this.showToast('Please enter a valid location', 'error');
+      return;
+    }
+    
+    this._defaultLocation = location;
+    chrome.storage.local.set({ ats_defaultLocation: location });
+    
+    // Also update content script with new default location
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          action: 'UPDATE_DEFAULT_LOCATION',
+          defaultLocation: location
+        }).catch(() => {});
+      }
+    });
+    
+    this.showToast(`Default location set to: ${location}`, 'success');
+  }
+  
+  // ============ BULK CSV AUTOMATION METHODS ============
+  
+  handleCsvUpload(e) {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      this.bulkCsvRaw = event.target?.result || '';
+      this.showToast('CSV loaded - click Parse CSV', 'success');
+    };
+    reader.readAsText(file);
+  }
+  
+  parseCsv() {
+    if (!this.bulkCsvRaw) {
+      this.showToast('Upload a CSV file first', 'error');
+      return;
+    }
+    
+    const lines = this.bulkCsvRaw.split('\n').map(l => l.trim()).filter(Boolean);
+    this.bulkCsvJobs = lines.slice(1).map(line => {
+      const [url] = line.split(',').map(s => s.trim().replace(/"/g, ''));
+      return { url, status: 'pending' };
+    }).filter(job => job.url && (job.url.includes('job') || job.url.includes('career') || job.url.includes('workday') || job.url.includes('greenhouse')));
+    
+    this.updateBulkUI();
+    this.showToast(`Parsed ${this.bulkCsvJobs.length} job URLs`, 'success');
+  }
+  
+  updateBulkUI() {
+    const preview = document.getElementById('csvPreview');
+    const stats = document.getElementById('csvStats');
+    const startBtn = document.getElementById('startBulkAutomation');
+    
+    if (this.bulkCsvJobs?.length) {
+      if (stats) stats.textContent = `${this.bulkCsvJobs.length} jobs parsed`;
+      preview?.classList.remove('hidden');
+      if (startBtn) startBtn.disabled = false;
+    }
+  }
+  
+  async startBulkAutomation() {
+    if (!this.bulkCsvJobs?.length) {
+      this.showToast('Parse CSV first', 'error');
+      return;
+    }
+    
+    this.showToast('Starting bulk automation...', 'success');
+    
+    document.getElementById('bulkControls')?.classList.remove('hidden');
+    document.getElementById('startBulkAutomation').disabled = true;
+    
+    chrome.runtime.sendMessage({
+      action: 'START_BULK_CSV_AUTOMATION',
+      jobs: this.bulkCsvJobs
+    });
+  }
+  
+  pauseBulkAutomation() {
+    chrome.runtime.sendMessage({ action: 'PAUSE_BULK_AUTOMATION' });
+    document.getElementById('pauseBulkBtn')?.classList.add('hidden');
+    document.getElementById('resumeBulkBtn')?.classList.remove('hidden');
+    this.showToast('Bulk automation paused', 'success');
+  }
+  
+  resumeBulkAutomation() {
+    chrome.runtime.sendMessage({ action: 'RESUME_BULK_AUTOMATION' });
+    document.getElementById('pauseBulkBtn')?.classList.remove('hidden');
+    document.getElementById('resumeBulkBtn')?.classList.add('hidden');
+    this.showToast('Bulk automation resumed', 'success');
+  }
+  
+  stopBulkAutomation() {
+    chrome.runtime.sendMessage({ action: 'STOP_BULK_AUTOMATION' });
+    document.getElementById('bulkControls')?.classList.add('hidden');
+    document.getElementById('startBulkAutomation').disabled = false;
+    this.showToast('Bulk automation stopped', 'success');
+  }
+  
+  startBulkProgressPolling() {
+    setInterval(() => {
+      chrome.runtime.sendMessage({ action: 'GET_BULK_PROGRESS' }, (response) => {
+        if (response?.progress) {
+          this.updateBulkProgress(response.progress);
+        }
+      });
+    }, 1000);
+  }
+  
+  updateBulkProgress(progress) {
+    const percent = progress.total ? (progress.completed / progress.total * 100) : 0;
+    const progressFill = document.getElementById('bulkProgressFill');
+    const statusEl = document.getElementById('currentJobStatus');
+    const statsEl = document.getElementById('csvStats');
+    
+    if (progressFill) progressFill.style.width = `${percent}%`;
+    if (statusEl) statusEl.textContent = progress.currentJob || 'Ready';
+    if (statsEl && progress.total > 0) {
+      statsEl.textContent = `${progress.completed}/${progress.total} completed`;
+    }
+  }
+
+  async runWorkdayFlow() {
+    if (!this.session) {
+      this.showToast('Please login first', 'error');
+      return;
+    }
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url?.includes('workday') && !tab?.url?.includes('myworkdayjobs')) {
+      this.showToast('Navigate to a Workday job page first', 'error');
+      return;
+    }
+
+    this.showToast('Starting Workday TOP1 automation...', 'success');
+    this.setStatus('Running Workday TOP1 Flow...', 'working');
+
+    // First capture the snapshot if not already captured
+    await this.captureWorkdaySnapshot();
+
+    let candidateData = null;
+    try {
+      const profileRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=*`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${this.session.access_token}`,
+          },
+        }
+      );
+      const profiles = await profileRes.json();
+      candidateData = profiles?.[0] || null;
+    } catch (e) {
+      console.log('Could not fetch profile for Workday flow');
+    }
+
+    // Send to content script to start the flow
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        action: 'START_WORKDAY_FLOW',
+        candidateData: candidateData
+      });
+    } catch (e) {
+      // Fallback to background
+      chrome.runtime.sendMessage({
+        action: 'TRIGGER_WORKDAY_FLOW',
+        candidateData: candidateData
+      });
+    }
+
+    setTimeout(() => {
+      window.close();
+    }, 1000);
+  }
+  
+  /**
+   * Check if on Workday and show/hide snapshot panel accordingly
+   */
+  async checkWorkdayAndShowSnapshot() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const isWorkday = tab?.url?.includes('workday') || tab?.url?.includes('myworkdayjobs');
+      
+      const snapshotPanel = document.getElementById('workdaySnapshotPanel');
+      if (snapshotPanel) {
+        snapshotPanel.classList.toggle('hidden', !isWorkday);
+      }
+      
+      if (isWorkday) {
+        // Load any existing snapshot
+        await this.loadWorkdaySnapshot();
+      }
+    } catch (e) {
+      console.log('[ATS Tailor] Error checking Workday status:', e);
+    }
+  }
+  
+  /**
+   * Load existing Workday snapshot from storage
+   */
+  async loadWorkdaySnapshot() {
+    try {
+      const result = await new Promise(resolve => {
+        chrome.storage.local.get(['workday_cached_keywords', 'workday_cached_jobInfo'], resolve);
+      });
+      
+      if (result.workday_cached_jobInfo && result.workday_cached_keywords) {
+        this.updateSnapshotUI(result.workday_cached_jobInfo, result.workday_cached_keywords);
+      }
+    } catch (e) {
+      console.log('[ATS Tailor] Error loading snapshot:', e);
+    }
+  }
+  
+  /**
+   * Capture Workday JD snapshot from current page
+   */
+  async captureWorkdaySnapshot() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) {
+        this.showToast('No active tab found', 'error');
+        return;
+      }
+      
+      this.showToast('Capturing JD snapshot...', 'success');
+      
+      // Send message to content script to capture snapshot
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'CAPTURE_WORKDAY_SNAPSHOT'
+      });
+      
+      if (response?.success && response.snapshot) {
+        // Store snapshot
+        chrome.storage.local.set({
+          workday_cached_keywords: response.snapshot.keywords,
+          workday_cached_jobInfo: response.snapshot,
+        });
+        
+        this.updateSnapshotUI(response.snapshot, response.snapshot.keywords);
+        this.showToast(`Captured ${response.snapshot.keywords?.total || 0} keywords!`, 'success');
+      } else {
+        this.showToast('Could not capture JD - try refreshing page', 'error');
+      }
+    } catch (e) {
+      console.error('[ATS Tailor] Snapshot capture error:', e);
+      this.showToast('Capture failed - ensure you are on a Workday job listing', 'error');
+    }
+  }
+  
+  /**
+   * Update the snapshot panel UI with captured data
+   */
+  updateSnapshotUI(jobInfo, keywords) {
+    const badge = document.getElementById('snapshotStatus');
+    const titleEl = document.getElementById('snapshotJobTitle');
+    const companyEl = document.getElementById('snapshotCompany');
+    const locationEl = document.getElementById('snapshotLocation');
+    const keywordsEl = document.getElementById('snapshotKeywords');
+    const jdPreviewEl = document.getElementById('snapshotJDPreview');
+    
+    if (badge) {
+      badge.textContent = 'Captured ✓';
+      badge.classList.add('captured');
+    }
+    if (titleEl) titleEl.textContent = jobInfo.title || '-';
+    if (companyEl) companyEl.textContent = jobInfo.company || '-';
+    if (locationEl) locationEl.textContent = jobInfo.location || '-';
+    if (keywordsEl) keywordsEl.textContent = `${keywords?.total || 0} extracted`;
+    if (jdPreviewEl) jdPreviewEl.textContent = (jobInfo.description || 'No description').substring(0, 500) + '...';
+  }
+  
+  /**
+   * Force click the Apply button after snapshot capture
+   */
+  async forceWorkdayApply() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) {
+        this.showToast('No active tab found', 'error');
+        return;
+      }
+      
+      // First capture snapshot if not done
+      await this.captureWorkdaySnapshot();
+      
+      this.showToast('Clicking Apply button...', 'success');
+      
+      // Send message to content script to click Apply
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        action: 'FORCE_WORKDAY_APPLY'
+      });
+      
+      if (response?.success) {
+        this.showToast('Apply clicked! Navigating...', 'success');
+        setTimeout(() => window.close(), 500);
+      } else {
+        this.showToast(response?.error || 'Could not find Apply button', 'error');
+      }
+    } catch (e) {
+      console.error('[ATS Tailor] Force Apply error:', e);
+      this.showToast('Error clicking Apply - check console', 'error');
+    }
+  }
+
+  copyCurrentContent() {
+    const content = this.currentPreviewTab === 'cv' 
+      ? this.generatedDocuments.cv 
+      : this.generatedDocuments.coverLetter;
+    
+    if (content) {
+      navigator.clipboard.writeText(content)
+        .then(() => this.showToast('Copied to clipboard!', 'success'))
+        .catch(() => this.showToast('Failed to copy', 'error'));
+    } else {
+      this.showToast('No content to copy', 'error');
+    }
+  }
+
+  switchPreviewTab(tab) {
+    this.currentPreviewTab = tab;
+    
+    document.getElementById('previewCvTab')?.classList.toggle('active', tab === 'cv');
+    document.getElementById('previewCoverTab')?.classList.toggle('active', tab === 'cover');
+    document.getElementById('previewTextTab')?.classList.toggle('active', tab === 'text');
+    
+    this.updatePreviewContent();
+  }
+
+  updatePreviewContent() {
+    const previewContent = document.getElementById('previewContent');
+    if (!previewContent) return;
+    
+    // Handle text view tab
+    if (this.currentPreviewTab === 'text') {
+      const cvContent = this.generatedDocuments.cv || '';
+      if (cvContent) {
+        // Show plain text version with monospace formatting
+        previewContent.innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.3; padding: 8px; background: #f5f5f5; border-radius: 4px; overflow-x: auto;">${cvContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+        previewContent.classList.remove('placeholder');
+      } else {
+        previewContent.textContent = 'Generate CV to see text version...';
+        previewContent.classList.add('placeholder');
+      }
+      return;
+    }
+    
+    const content = this.currentPreviewTab === 'cv' 
+      ? this.generatedDocuments.cv 
+      : this.generatedDocuments.coverLetter;
+    
+    const hasPdf = this.currentPreviewTab === 'cv' 
+      ? this.generatedDocuments.cvPdf 
+      : this.generatedDocuments.coverPdf;
+    
+    if (content) {
+      previewContent.innerHTML = this.formatPreviewContent(content, this.currentPreviewTab);
+      previewContent.classList.remove('placeholder');
+    } else if (hasPdf) {
+      previewContent.textContent = `PDF generated - click Download to view the ${this.currentPreviewTab === 'cv' ? 'CV' : 'Cover Letter'}`;
+      previewContent.classList.add('placeholder');
+    } else {
+      previewContent.textContent = 'Click "Tailor CV & Cover Letter" to generate...';
+      previewContent.classList.add('placeholder');
+    }
+  }
+
+  formatPreviewContent(content, type) {
+    if (!content) return '';
+    
+    const escapeHtml = (text) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    };
+    
+    let formatted = escapeHtml(content);
+    
+    if (type === 'cv') {
+      formatted = formatted
+        .replace(/^(PROFESSIONAL SUMMARY|WORK EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|TECHNICAL PROFICIENCIES)/gm, 
+          '<span class="section-header">$1</span>')
+        .replace(/^([A-Z][A-Za-z\s&]+)\s*\|\s*(.+)$/gm, 
+          '<strong>$1</strong> | <span class="date-line">$2</span>')
+        .replace(/^[•▪]\s*/gm, '• ');
+    } else {
+      formatted = formatted
+        .replace(/^(Date:.+)$/m, '<span class="date-line">$1</span>')
+        .replace(/^(Dear .+,)$/m, '<strong>$1</strong>')
+        .replace(/^(Sincerely,|Best regards,|Regards,)$/m, '<br><strong>$1</strong>');
+    }
+    
+    return formatted;
+  }
+
+  updateUI() {
+    const loginSection = document.getElementById('loginSection');
+    const mainSection = document.getElementById('mainSection');
+    const userEmail = document.getElementById('userEmail');
+    
+    if (!this.session) {
+      loginSection?.classList.remove('hidden');
+      mainSection?.classList.add('hidden');
+      this.setStatus('Login Required', 'error');
+    } else {
+      loginSection?.classList.add('hidden');
+      mainSection?.classList.remove('hidden');
+      if (userEmail) userEmail.textContent = this.session.user?.email || 'Logged in';
+      this.setStatus('Ready', 'ready');
+    }
+    
+    document.getElementById('todayCount').textContent = this.stats.today;
+    document.getElementById('totalCount').textContent = this.stats.total;
+    document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
+    
+    const autoTailorToggle = document.getElementById('autoTailorToggle');
+    if (autoTailorToggle) {
+      autoTailorToggle.checked = this.autoTailorEnabled;
+    }
+    
+    const hasDocuments = this.generatedDocuments.cv || 
+                         this.generatedDocuments.coverLetter || 
+                         this.generatedDocuments.cvPdf || 
+                         this.generatedDocuments.coverPdf;
+    if (hasDocuments) {
+      document.getElementById('documentsCard')?.classList.remove('hidden');
+      this.updateDocumentDisplay();
+      this.updatePreviewContent();
+    }
+  }
+
+  updateDocumentDisplay() {
+    const cvFileName = document.getElementById('cvFileName');
+    const coverFileName = document.getElementById('coverFileName');
+    
+    if (cvFileName && this.generatedDocuments.cvFileName) {
+      cvFileName.textContent = this.generatedDocuments.cvFileName;
+      cvFileName.title = this.generatedDocuments.cvFileName;
+    }
+    
+    if (coverFileName && this.generatedDocuments.coverFileName) {
+      coverFileName.textContent = this.generatedDocuments.coverFileName;
+      coverFileName.title = this.generatedDocuments.coverFileName;
+    }
+    
+    const cvSize = document.getElementById('cvSize');
+    const coverSize = document.getElementById('coverSize');
+    
+    if (cvSize && this.generatedDocuments.cvPdf) {
+      const sizeKB = Math.round(this.generatedDocuments.cvPdf.length * 0.75 / 1024);
+      cvSize.textContent = `${sizeKB} KB`;
+    }
+    
+    if (coverSize && this.generatedDocuments.coverPdf) {
+      const sizeKB = Math.round(this.generatedDocuments.coverPdf.length * 0.75 / 1024);
+      coverSize.textContent = `${sizeKB} KB`;
+    }
+    
+    // Update AI Match Analysis Panel
+    this.updateMatchAnalysisUI();
+  }
+
+  /**
+   * OPTIMIZED: Update AI Match Analysis panel with keyword chips
+   * Uses batch DOM updates for performance
+   */
+  updateMatchAnalysisUI() {
+    const matchScore = this.generatedDocuments.matchScore || 0;
+    const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
+    const missingKeywords = this.generatedDocuments.missingKeywords || [];
+    const keywords = this.generatedDocuments.keywords || null;
+    const totalKeywords = matchedKeywords.length + missingKeywords.length;
+    
+    // ALWAYS show the AI Match Analysis panel when we have any match data
+    const documentsCard = document.getElementById('documentsCard');
+    const aiMatchAnalysis = document.getElementById('aiMatchAnalysis');
+    if (totalKeywords > 0 || matchScore > 0) {
+      // Ensure documentsCard is visible to show AI Match Analysis
+      documentsCard?.classList.remove('hidden');
+      aiMatchAnalysis?.classList.remove('hidden');
+    }
+    
+    // Update gauge
+    this.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords);
+    
+    // Build keywords object if not present
+    const cvText = this.generatedDocuments.cv || '';
+    let keywordsObj = keywords;
+    
+    if (!keywordsObj || (!keywordsObj.highPriority && !keywordsObj.all)) {
+      const allKeywords = [...matchedKeywords, ...missingKeywords];
+      if (allKeywords.length > 0) {
+        const highCount = Math.min(15, Math.ceil(allKeywords.length * 0.4));
+        const medCount = Math.min(10, Math.ceil(allKeywords.length * 0.35));
+        keywordsObj = {
+          all: allKeywords,
+          highPriority: allKeywords.slice(0, highCount),
+          mediumPriority: allKeywords.slice(highCount, highCount + medCount),
+          lowPriority: allKeywords.slice(highCount + medCount)
+        };
+      }
+    }
+    
+    // BATCH DOM update for keyword chips
+    if (keywordsObj && (keywordsObj.highPriority || keywordsObj.all)) {
+      this.batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords);
+    } else if (totalKeywords > 0) {
+      // Fallback: manual chip rendering with batch update
+      const highCount = Math.ceil(totalKeywords * 0.4);
+      const medCount = Math.ceil(totalKeywords * 0.35);
+      
+      const allKeywords = [...matchedKeywords, ...missingKeywords];
+      const fallbackObj = {
+        highPriority: allKeywords.slice(0, highCount),
+        mediumPriority: allKeywords.slice(highCount, highCount + medCount),
+        lowPriority: allKeywords.slice(highCount + medCount)
+      };
+      this.batchUpdateKeywordChips(fallbackObj, cvText, matchedKeywords);
+    }
+
+    // NEW: Keyword coverage debug panel (injected locations)
+    this.updateKeywordCoverageUI();
+  }
+
+  /**
+   * OPTIMIZED: Update match gauge with animation
+   */
+  updateMatchGauge(score, matched, total) {
+    const gaugeCircle = document.getElementById('matchGaugeCircle');
+    if (gaugeCircle) {
+      const circumference = 2 * Math.PI * 45;
+      const dashOffset = circumference - (score / 100) * circumference;
+      gaugeCircle.setAttribute('stroke-dashoffset', dashOffset.toString());
+      
+      let strokeColor = '#ff4757';
+      if (score >= 90) strokeColor = '#2ed573';
+      else if (score >= 70) strokeColor = '#00d4ff';
+      else if (score >= 50) strokeColor = '#ffa502';
+      gaugeCircle.setAttribute('stroke', strokeColor);
+    }
+    
+    const matchPercentage = document.getElementById('matchPercentage');
+    if (matchPercentage) matchPercentage.textContent = `${score}%`;
+    
+    const matchSubtitle = document.getElementById('matchSubtitle');
+    if (matchSubtitle) {
+      matchSubtitle.textContent = score >= 90 ? 'Excellent match!' : 
+                                   score >= 70 ? 'Good match' : 
+                                   score >= 50 ? 'Fair match - consider improvements' : 
+                                   'Needs improvement';
+    }
+    
+    const keywordCountBadge = document.getElementById('keywordCountBadge');
+    if (keywordCountBadge) {
+      keywordCountBadge.textContent = `${matched} of ${total} keywords matched`;
+    }
+    
+    // Update AI provider name in match panel
+    const matchPanelProvider = document.getElementById('matchPanelProvider');
+    if (matchPanelProvider) {
+      matchPanelProvider.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    }
+  }
+
+  /**
+   * OPTIMIZED: Batch update all keyword chips in one DOM operation
+   */
+  batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords) {
+    const cvTextLower = cvText.toLowerCase();
+    const matchedSet = new Set(matchedKeywords.map(k => k.toLowerCase()));
+    
+    const sections = [
+      { containerId: 'highPriorityChips', countId: 'highPriorityCount', keywords: keywordsObj.highPriority || [] },
+      { containerId: 'mediumPriorityChips', countId: 'mediumPriorityCount', keywords: keywordsObj.mediumPriority || [] },
+      { containerId: 'lowPriorityChips', countId: 'lowPriorityCount', keywords: keywordsObj.lowPriority || [] }
+    ];
+    
+    sections.forEach(({ containerId, countId, keywords }) => {
+      const container = document.getElementById(containerId);
+      const countEl = document.getElementById(countId);
+      if (!container) return;
+      
+      // Build HTML string for batch insert
+      let matchCount = 0;
+      const chipsHtml = keywords.map(kw => {
+        const kwLower = kw.toLowerCase();
+        const isMatched = matchedSet.has(kwLower) || cvTextLower.includes(kwLower);
+        if (isMatched) matchCount++;
+        
+        const escapedKw = this.escapeHtml(kw);
+        return `<span class="keyword-chip ${isMatched ? 'matched' : 'missing'}"><span class="chip-text">${escapedKw}</span><span class="chip-icon">${isMatched ? '✓' : '✗'}</span></span>`;
+      }).join('');
+      
+      // Single DOM update
+      container.innerHTML = chipsHtml;
+      if (countEl) countEl.textContent = `${matchCount}/${keywords.length}`;
+    });
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  compactCoverageReport(report) {
+    if (!report || !report.keywords) return null;
+
+    const compact = {
+      timestamp: report.timestamp,
+      summary: report.summary,
+      warnings: report.warnings,
+      density: report.density,
+      keywords: {},
+    };
+
+    for (const [keyword, data] of Object.entries(report.keywords)) {
+      compact.keywords[keyword] = {
+        priority: data.priority,
+        finalCount: data.finalCount,
+        targetMin: data.targetMin,
+        targetMax: data.targetMax,
+        meetsTarget: data.meetsTarget,
+        overDensity: data.overDensity,
+        locations: (data.locations || []).slice(0, 6).map((l) => ({
+          section: l.section,
+          context: l.context,
+        })),
+      };
+    }
+
+    return compact;
+  }
+
+  buildKeywordCoverageReport(keywords) {
+    try {
+      const originalCV = this._coverageOriginalCV || '';
+      const tailoredCV = this.generatedDocuments.cv || '';
+      if (!originalCV || !tailoredCV || !keywords?.all?.length) return;
+
+      if (!window.TurboPipeline?.generateKeywordCoverageReport) return;
+
+      const report = window.TurboPipeline.generateKeywordCoverageReport(originalCV, tailoredCV, keywords);
+      const compact = this.compactCoverageReport(report);
+      if (compact) {
+        this.generatedDocuments.coverageReport = compact;
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] Failed to build keyword coverage report:', e);
+    }
+  }
+
+  updateKeywordCoverageUI() {
+    const container = document.getElementById('coverageContainer');
+    if (!container) return;
+
+    const report = this.generatedDocuments.coverageReport;
+    if (!report?.keywords) {
+      container.classList.add('hidden');
+      return;
+    }
+
+    container.classList.remove('hidden');
+
+    const groups = { high: [], medium: [], low: [] };
+    for (const [keyword, data] of Object.entries(report.keywords)) {
+      const priority = data.priority || 'low';
+      (groups[priority] || groups.low).push({ keyword, ...data });
+    }
+
+    const render = (items, listId, countId) => {
+      const list = document.getElementById(listId);
+      const countEl = document.getElementById(countId);
+      if (!list) return;
+
+      const total = items.length;
+      const ok = items.filter((i) => i.meetsTarget).length;
+      if (countEl) countEl.textContent = `${ok}/${total}`;
+
+      const html = items
+        .sort((a, b) => (b.finalCount || 0) - (a.finalCount || 0))
+        .map((i) => {
+          const status = i.overDensity ? 'over' : (i.meetsTarget ? 'ok' : 'under');
+          const badge = i.overDensity ? 'OVER' : (i.meetsTarget ? 'OK' : 'LOW');
+          const sections = Array.from(new Set((i.locations || []).map((l) => l.section))).filter(Boolean);
+
+          const details = (i.locations || []).slice(0, 6).map((l) => {
+            const sec = this.escapeHtml(l.section || 'OTHER');
+            const ctx = this.escapeHtml((l.context || '').replace(/\s+/g, ' ').trim());
+            return `<div class="coverage-location"><span class="coverage-section-label">${sec}</span>${ctx}</div>`;
+          }).join('');
+
+          return `
+            <details class="coverage-item status-${status}">
+              <summary>
+                <div class="coverage-left">
+                  <div class="coverage-keyword">${this.escapeHtml(i.keyword)}</div>
+                  <div class="coverage-meta">${i.finalCount || 0}x • ${sections.join(', ') || '—'}</div>
+                </div>
+                <span class="coverage-badge">${badge}</span>
+              </summary>
+              <div class="coverage-details">${details || '<div class="coverage-location">No locations captured.</div>'}</div>
+            </details>
+          `;
+        })
+        .join('');
+
+      list.innerHTML = html;
+    };
+
+    render(groups.high, 'coverageHighList', 'coverageHighCount');
+    render(groups.medium, 'coverageMediumList', 'coverageMediumCount');
+    render(groups.low, 'coverageLowList', 'coverageLowCount');
+  }
+
+  async copyCoverageReport() {
+    try {
+      const report = this.generatedDocuments.coverageReport;
+      if (!report) {
+        this.showToast('No coverage report available yet', 'error');
+        return;
+      }
+      await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+      this.showToast('Coverage report copied', 'success');
+    } catch (e) {
+      this.showToast('Failed to copy coverage report', 'error');
+    }
+  }
+
+  setStatus(text, type = 'ready') {
+    const indicator = document.getElementById('statusIndicator');
+    const statusText = indicator?.querySelector('.status-text');
+    
+    if (indicator) {
+      indicator.classList.remove('ready', 'error', 'working', 'success');
+      indicator.classList.add(type);
+    }
+    if (statusText) statusText.textContent = text;
+  }
+
+  async login() {
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+    
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value;
+    
+    if (!email || !password) {
+      this.showToast('Please enter email and password', 'error');
+      return;
+    }
+    
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in...';
+    
+    try {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ email, password })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error_description || data.error || 'Login failed');
+      }
+      
+      this.session = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user
+      };
+      
+      await this.saveSession();
+      this.showToast('Logged in successfully!', 'success');
+      this.updateUI();
+      
+      const found = await this.detectCurrentJob();
+      if (found && this.currentJob) {
+        this.tailorDocuments();
+      }
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      this.showToast(error.message || 'Login failed', 'error');
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Sign In';
+    }
+  }
+
+  async logout() {
+    this.session = null;
+    await chrome.storage.local.remove(['ats_session']);
+    this.showToast('Logged out', 'success');
+    this.updateUI();
+  }
+
+  isSupportedHost(hostname) {
+    return SUPPORTED_HOSTS.some(h => hostname === h || hostname.endsWith(`.${h}`));
+  }
+
+  async detectCurrentJob() {
+    this.setStatus('Scanning...', 'working');
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      if (!tab?.id || !tab?.url) {
+        this.currentJob = null;
+        this.updateJobDisplay();
+        this.setStatus('No active tab', 'error');
+        return false;
+      }
+
+      if (
+        tab.url.startsWith('chrome://') ||
+        tab.url.startsWith('about:') ||
+        tab.url.startsWith('edge://') ||
+        tab.url.startsWith('chrome-extension://') ||
+        tab.url.startsWith('moz-extension://')
+      ) {
+        this.currentJob = null;
+        this.updateJobDisplay();
+        this.setStatus('Navigate to a job page', 'error');
+        return false;
+      }
+
+      const url = new URL(tab.url);
+      if (!this.isSupportedHost(url.hostname)) {
+        this.currentJob = null;
+        this.updateJobDisplay();
+        this.setStatus(`Unsupported: ${url.hostname}`, 'error');
+        return false;
+      }
+
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: extractJobInfoFromPageInjected,
+      });
+
+      if (results?.[0]?.result) {
+        this.currentJob = results[0].result;
+        
+        // PERFORMANCE: Limit JD length for faster processing
+        if (this.currentJob.description && this.currentJob.description.length > MAX_JD_LENGTH) {
+          this.currentJob.description = this.currentJob.description.substring(0, MAX_JD_LENGTH);
+        }
+        
+        await chrome.storage.local.set({ ats_lastJob: this.currentJob });
+        this.updateJobDisplay();
+        this.setStatus('Job found!', 'ready');
+        return true;
+      }
+
+      this.currentJob = null;
+      this.updateJobDisplay();
+      this.setStatus('No job found on page', 'error');
+      return false;
+    } catch (error) {
+      console.error('Job detection error:', error);
+      this.currentJob = null;
+      this.updateJobDisplay();
+      this.setStatus('Detection failed', 'error');
+      return false;
+    }
+  }
+
+  updateJobDisplay() {
+    const titleEl = document.getElementById('jobTitle');
+    const companyEl = document.getElementById('jobCompany');
+    const locationEl = document.getElementById('jobLocation');
+    const noJobBadge = document.getElementById('noJobBadge');
+    const companyIndicator = document.getElementById('companyIndicator');
+    const editBtn = document.getElementById('editJobTitle');
+    
+    if (this.currentJob) {
+      if (titleEl) titleEl.textContent = this.currentJob.title || 'Job Position';
+      const company = this.currentJob.company || '';
+      const isValidCompany = company && company.toLowerCase() !== 'the company' && company.toLowerCase() !== 'company';
+      if (companyEl) {
+        companyEl.textContent = isValidCompany ? company : '';
+        companyEl.style.display = isValidCompany ? '' : 'none';
+      }
+      if (locationEl) locationEl.textContent = this.currentJob.location || '';
+      if (noJobBadge) noJobBadge.classList.add('hidden');
+      
+      // Show company detection indicator
+      if (companyIndicator && this.currentJob.companySource) {
+        companyIndicator.classList.remove('hidden', 'domain', 'jsonld', 'manual');
+        const source = this.currentJob.companySource;
+        companyIndicator.classList.add(source);
+        companyIndicator.textContent = source === 'domain' ? '🏢' : source === 'jsonld' ? '📋' : source === 'manual' ? '✏️' : '🌐';
+        companyIndicator.title = `Detected: ${this.currentJob.detectedCompany || company} (${source})`;
+      }
+      
+      // Show edit button for company career sites (not ATS platforms) - EXCLUDES Lever and Ashby
+      const isATSPlatform = ['greenhouse', 'workday', 'myworkdayjobs', 'smartrecruiters', 'workable', 'icims', 'bullhorn', 'teamtailor'].some(p => (this.currentJob.url || '').toLowerCase().includes(p));
+      if (editBtn) editBtn.classList.toggle('hidden', isATSPlatform);
+      
+      // Add to history
+      this.addToHistory(this.currentJob);
+    } else {
+      if (titleEl) titleEl.textContent = 'No job detected';
+      if (companyEl) companyEl.textContent = 'Navigate to a job posting';
+      if (locationEl) locationEl.textContent = '';
+      if (noJobBadge) noJobBadge.classList.remove('hidden');
+      if (companyIndicator) companyIndicator.classList.add('hidden');
+      if (editBtn) editBtn.classList.add('hidden');
+    }
+    this.updateHistoryUI();
+  }
+
+  // Add job to history
+  async addToHistory(job) {
+    if (!job?.title) return;
+    const history = await this.getJobHistory();
+    const entry = { title: job.title, company: job.company, url: job.url, matchScore: this.generatedDocuments?.matchScore || 0, timestamp: Date.now() };
+    const existing = history.findIndex(h => h.url === job.url);
+    if (existing >= 0) history[existing] = entry;
+    else history.unshift(entry);
+    await chrome.storage.local.set({ ats_job_history: history.slice(0, 20) });
+  }
+
+  async getJobHistory() {
+    const result = await new Promise(r => chrome.storage.local.get(['ats_job_history'], r));
+    return result.ats_job_history || [];
+  }
+
+  async updateHistoryUI() {
+    const list = document.getElementById('historyList');
+    if (!list) return;
+    const history = await this.getJobHistory();
+    if (!history.length) {
+      list.innerHTML = '<p class="history-empty">No recent jobs.</p>';
+      return;
+    }
+    list.innerHTML = history.slice(0, 10).map(h => `
+      <div class="history-item" title="${h.url}">
+        <div><div class="history-item-title">${this.escapeHtml(h.title?.substring(0, 30) || 'Job')}</div><div class="history-item-company">${this.escapeHtml(h.company || '')}</div></div>
+        <span class="history-item-score">${h.matchScore || 0}%</span>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * OPTIMIZED: Extract keywords with mandatory pre-pass, caching, and parallel processing
+   * 1. Mandatory pre-pass: Find all known important keywords
+   * 2. TF-IDF extraction: Get JD-specific keywords
+   * 3. Merge: Mandatory keywords get HIGH priority
+   */
+  extractKeywordsOptimized(jobDescription) {
+    if (!jobDescription || jobDescription.length < 50) {
+      return { all: [], highPriority: [], mediumPriority: [], lowPriority: [] };
+    }
+    
+    const jobUrl = this.currentJob?.url || '';
+    
+    // Check cache first
+    const cached = this.keywordCache.get(jobUrl);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_EXPIRY_MS) {
+      console.log('[ATS Tailor] Using cached keywords for:', jobUrl);
+      return cached.keywords;
+    }
+    
+    const startTime = performance.now();
+    
+    // STEP 1: MANDATORY PRE-PASS - Find all known important keywords FIRST
+    let mandatoryFromJD = [];
+    if (window.MandatoryKeywords) {
+      mandatoryFromJD = window.MandatoryKeywords.extractMandatoryFromJD(jobDescription);
+      console.log('[ATS Tailor] Mandatory pre-pass found:', mandatoryFromJD.length, 'keywords');
+    }
+    
+    // STEP 2: TF-IDF/Pattern extraction
+    let keywords = { all: [], highPriority: [], mediumPriority: [], lowPriority: [] };
+    
+    if (window.ReliableExtractor) {
+      keywords = window.ReliableExtractor.extractReliableKeywords(jobDescription, 35);
+    } else if (window.KeywordExtractor) {
+      keywords = window.KeywordExtractor.extractKeywords(jobDescription, 35);
+    } else {
+      keywords = this.fastKeywordExtraction(jobDescription);
+    }
+    
+    // STEP 3: Merge mandatory keywords with extracted (mandatory = HIGH priority)
+    if (window.MandatoryKeywords && mandatoryFromJD.length > 0) {
+      keywords = window.MandatoryKeywords.mergeWithMandatory(keywords, mandatoryFromJD);
+    }
+    
+    const elapsed = performance.now() - startTime;
+    console.log(`[ATS Tailor] Keyword extraction completed in ${elapsed.toFixed(1)}ms, total: ${keywords.all?.length || 0}`);
+    
+    // Cache the result
+    if (jobUrl) {
+      this.keywordCache.set(jobUrl, { keywords, timestamp: Date.now() });
+    }
+    
+    return keywords;
+  }
+
+  /**
+   * View Extracted Keywords - extracts and displays keywords from current job
+   */
+  async viewExtractedKeywords() {
+    const btn = document.getElementById('viewKeywordsBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.querySelector('.btn-text').textContent = 'Extracting...';
+    }
+    
+    try {
+      // Ensure we have job info
+      if (!this.currentJob?.description) {
+        await this.detectCurrentJob();
+      }
+      
+      if (!this.currentJob?.description) {
+        this.showToast('No job description detected. Navigate to a job posting.', 'error');
+        return;
+      }
+      
+      // Extract keywords
+      const keywords = this.extractKeywordsOptimized(this.currentJob.description);
+      
+      if (!keywords.all || keywords.all.length === 0) {
+        this.showToast('No keywords found in job description.', 'error');
+        return;
+      }
+      
+      // Store keywords for UI display
+      this.generatedDocuments.structuredKeywords = keywords;
+      this.generatedDocuments.missingKeywords = keywords.all;
+      this.generatedDocuments.matchedKeywords = [];
+      this.generatedDocuments.matchScore = 0;
+      
+      // Update UI to show extracted keywords
+      this.updateMatchAnalysisUI();
+      
+      // Ensure documents card is visible to show keywords
+      const documentsCard = document.getElementById('documentsCard');
+      if (documentsCard) {
+        documentsCard.classList.remove('hidden');
+      }
+      
+      // Scroll to keywords section
+      const keywordsContainer = document.getElementById('keywordsContainer');
+      if (keywordsContainer) {
+        keywordsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      
+      this.showToast(`Extracted ${keywords.all.length} keywords from job description`, 'success');
+      
+    } catch (error) {
+      console.error('[ATS Tailor] Error extracting keywords:', error);
+      this.showToast('Failed to extract keywords: ' + error.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'View Extracted Keywords';
+      }
+    }
+  }
+
+  /**
+   * AI-powered keyword extraction using GPT-4o-mini (Resume-Matcher style)
+   * Uses user's OpenAI API key from profile
+   */
+  async aiExtractKeywords() {
+    const btn = document.getElementById('aiExtractBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.querySelector('.btn-text').textContent = 'AI Analyzing...';
+    }
+    
+    try {
+      // Ensure we have session
+      if (!this.session?.access_token) {
+        this.showToast('Please login to use AI keyword extraction', 'error');
+        return;
+      }
+      
+      // Ensure we have job info
+      if (!this.currentJob?.description) {
+        await this.detectCurrentJob();
+      }
+      
+      if (!this.currentJob?.description) {
+        this.showToast('No job description detected. Navigate to a job posting.', 'error');
+        return;
+      }
+      
+      // OPENAI THROTTLE: Pre-call delay to reduce API usage
+      console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s pre-call delay...');
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      // Call the AI extraction endpoint
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-keywords-ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          jobDescription: this.currentJob.description,
+          jobTitle: this.currentJob.title,
+          company: this.currentJob.company,
+        }),
+      });
+      
+      // OPENAI THROTTLE: Post-call delay to reduce API usage
+      console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2s post-call delay...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request failed: ${response.status}`);
+      }
+      
+      // ROBUST JSON PARSING for AI keywords
+      let result;
+      try {
+        const responseText = await response.text();
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('[ATS Tailor] AI keyword response parse failed:', parseError);
+        this.showToast('AI response was invalid. Please try again.', 'error');
+        return;
+      }
+      if (!result.all || result.all.length === 0) {
+        this.showToast('AI could not extract keywords from this job description.', 'error');
+        return;
+      }
+      
+      // Store structured keywords for UI display
+      const keywords = {
+        all: result.all,
+        highPriority: result.highPriority || [],
+        mediumPriority: result.mediumPriority || [],
+        lowPriority: result.lowPriority || [],
+        structured: result.structured, // Full Resume-Matcher style breakdown
+      };
+      
+      this.generatedDocuments.structuredKeywords = keywords;
+      this.generatedDocuments.keywords = keywords;
+      this.generatedDocuments.missingKeywords = keywords.all;
+      this.generatedDocuments.matchedKeywords = [];
+      this.generatedDocuments.matchScore = 0;
+      
+      // Update UI to show extracted keywords
+      this.updateMatchAnalysisUI();
+      
+      // Ensure documents card is visible to show keywords
+      const documentsCard = document.getElementById('documentsCard');
+      if (documentsCard) {
+        documentsCard.classList.remove('hidden');
+      }
+      
+      // Scroll to keywords section
+      const keywordsContainer = document.getElementById('keywordsContainer');
+      if (keywordsContainer) {
+        keywordsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      
+      this.showToast(`AI extracted ${result.total} keywords (${result.highPriority?.length || 0} high priority)`, 'success');
+      
+      // Log structured breakdown to console for debugging
+      console.log('[ATS Tailor] AI Structured Keywords:', result.structured);
+      
+    } catch (error) {
+      console.error('[ATS Tailor] AI keyword extraction error:', error);
+      this.showToast('AI extraction failed: ' + error.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'AI Extract Keywords';
+      }
+    }
+  }
+
+  /**
+   * Perform AI keyword extraction - reusable helper for tailorDocuments
+   * Same logic as aiExtractKeywords but returns the result instead of updating UI
+   * Includes retry logic with exponential backoff for transient failures
+   * @returns {Promise<Object>} Keywords object with all, highPriority, mediumPriority, lowPriority
+   */
+  async performAIKeywordExtraction() {
+    // Ensure we have job info
+    if (!this.currentJob?.description) {
+      await this.detectCurrentJob();
+    }
+    
+    if (!this.currentJob?.description) {
+      throw new Error('No job description detected');
+    }
+    
+    // Retry configuration for keyword extraction
+    const MAX_RETRIES = 4;
+    const BASE_DELAY_MS = 500;
+    const MAX_DELAY_MS = 5000;
+    
+    let lastError = null;
+    
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // OPENAI THROTTLE: Pre-call delay to reduce API usage (only on first attempt)
+        if (attempt === 0) {
+          console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s pre-call delay...');
+          await new Promise(resolve => setTimeout(resolve, 2500));
+        } else {
+          // Exponential backoff for retries
+          const backoffDelay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+          console.log(`[ATS Tailor] ⏱️ Retry ${attempt}: ${backoffDelay}ms backoff delay...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+        }
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout (increased)
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-keywords-ai`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.session.access_token}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            jobDescription: this.currentJob.description,
+            jobTitle: this.currentJob.title || '',
+            company: this.currentJob.company || '',
+          }),
+          signal: controller.signal,
+          keepalive: true,
+        });
+        
+        clearTimeout(timeout);
+        
+        // OPENAI THROTTLE: Post-call delay to reduce API usage
+        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2s post-call delay...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          // Retry on 5xx errors or network issues
+          if (response.status >= 500 || response.status === 0) {
+            throw new Error(`Server error (${response.status}): ${errorText || 'retry'}`);
+          }
+          throw new Error(errorText || 'AI extraction failed');
+        }
+        
+        // ROBUST JSON PARSING for keyword extraction
+        let result;
+        try {
+          const responseText = await response.text();
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          console.warn('[ATS Tailor] Keyword response parse failed on attempt', attempt + 1);
+          throw new Error('Invalid response from AI. Retrying...');
+        }
+        
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        
+        // Build keywords object - ensure arrays
+        const keywords = {
+          all: Array.isArray(result.all) ? result.all : [],
+          highPriority: Array.isArray(result.highPriority) ? result.highPriority : [],
+          mediumPriority: Array.isArray(result.mediumPriority) ? result.mediumPriority : [],
+          lowPriority: Array.isArray(result.lowPriority) ? result.lowPriority : [],
+          structured: result.structured, // Full Resume-Matcher style breakdown
+        };
+        
+        console.log('[ATS Tailor] AI extracted', keywords.all.length, 'keywords');
+        return keywords;
+        
+      } catch (error) {
+        lastError = error;
+        
+        // Don't retry on non-retryable errors
+        if (error.name === 'AbortError') {
+          console.warn(`[ATS Tailor] AI extraction timeout on attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
+        } else if (error.message?.includes('401') || error.message?.includes('403')) {
+          // Auth errors - don't retry
+          throw error;
+        } else {
+          console.warn(`[ATS Tailor] AI extraction attempt ${attempt + 1}/${MAX_RETRIES + 1} failed:`, error.message);
+        }
+        
+        // If we have more retries left, wait with exponential backoff
+        if (attempt < MAX_RETRIES) {
+          const delay = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+          console.log(`[ATS Tailor] Retrying AI extraction in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // All retries exhausted
+    throw lastError || new Error('AI keyword extraction failed after retries');
+  }
+
+  /**
+   * OPTIMIZED: Fast single-pass keyword extraction fallback
+   */
+  fastKeywordExtraction(text) {
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'it', 'its', 'you', 'your', 'we', 'our', 'they', 'their', 'who', 'what', 'which', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'if', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'once', 'any']);
+    
+    // Single-pass frequency map
+    const freq = new Map();
+    const words = text.toLowerCase().replace(/[^a-z0-9\-\/\+\#\.]+/g, ' ').split(/\s+/);
+    
+    for (const word of words) {
+      if (word.length > 2 && !stopWords.has(word)) {
+        freq.set(word, (freq.get(word) || 0) + 1);
+      }
+    }
+    
+    // Sort by frequency and get top 35
+    const sorted = [...freq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 35)
+      .map(([word]) => word);
+    
+    // Distribute into priority buckets
+    const highCount = Math.ceil(sorted.length * 0.4);
+    const medCount = Math.ceil(sorted.length * 0.35);
+    
+    return {
+      all: sorted,
+      highPriority: sorted.slice(0, highCount),
+      mediumPriority: sorted.slice(highCount, highCount + medCount),
+      lowPriority: sorted.slice(highCount + medCount)
+    };
+  }
+
+  /**
+   * OPTIMIZED: Calculate match score with single-pass matching
+   */
+  calculateMatchScore(cvText, keywords) {
+    if (!cvText || !keywords?.all || keywords.all.length === 0) {
+      return { matchScore: 0, matchedKeywords: [], missingKeywords: keywords?.all || [] };
+    }
+    
+    const cvTextLower = cvText.toLowerCase();
+    const matched = [];
+    const missing = [];
+    
+    for (const kw of keywords.all) {
+      if (cvTextLower.includes(kw.toLowerCase())) {
+        matched.push(kw);
+      } else {
+        missing.push(kw);
+      }
+    }
+    
+    const matchScore = keywords.all.length > 0 ? Math.round((matched.length / keywords.all.length) * 100) : 0;
+    
+    return { matchScore, matchedKeywords: matched, missingKeywords: missing };
+  }
+
+  /**
+   * OPTIMIZED: Boost CV to 95%+ match with internal keyword injection
+   * Called automatically by tailorDocuments - no separate button needed
+   */
+  async boostCVTo95Plus(cvText, keywords, updateProgress) {
+    if (!cvText || !keywords?.all || keywords.all.length === 0) {
+      return { tailoredCV: cvText, finalScore: 0, matchedKeywords: [], missingKeywords: [] };
+    }
+    
+    const initial = this.calculateMatchScore(cvText, keywords);
+    
+    if (initial.matchScore >= 95) {
+      return { 
+        tailoredCV: cvText, 
+        finalScore: initial.matchScore, 
+        matchedKeywords: initial.matchedKeywords, 
+        missingKeywords: initial.missingKeywords,
+        keywords 
+      };
+    }
+    
+    let tailorResult = null;
+    
+    // Try optimized tailoring modules
+    if (window.TailorUniversal) {
+      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords.all, { targetScore: 95 });
+    } else if (window.AutoTailor95) {
+      const tailor = new window.AutoTailor95({
+        onProgress: updateProgress,
+        onScoreUpdate: (score) => {
+          this.updateMatchGauge(score, 0, keywords.all.length);
+        }
+      });
+      tailorResult = await tailor.autoTailorTo95Plus(this.currentJob?.description || '', cvText);
+    } else if (window.CVTailor) {
+      tailorResult = window.CVTailor.tailorCV(cvText, keywords, { targetScore: 95 });
+    } else {
+      // FAST fallback: Simple keyword injection
+      tailorResult = this.fastKeywordInjection(cvText, keywords, initial.missingKeywords);
+    }
+    
+    if (tailorResult?.tailoredCV) {
+      const finalMatch = this.calculateMatchScore(tailorResult.tailoredCV, keywords);
+      return {
+        tailoredCV: tailorResult.tailoredCV,
+        finalScore: finalMatch.matchScore,
+        matchedKeywords: finalMatch.matchedKeywords,
+        missingKeywords: finalMatch.missingKeywords,
+        injectedKeywords: tailorResult.injectedKeywords || [],
+        keywords
+      };
+    }
+    
+    return { 
+      tailoredCV: cvText, 
+      finalScore: initial.matchScore, 
+      matchedKeywords: initial.matchedKeywords, 
+      missingKeywords: initial.missingKeywords,
+      keywords 
+    };
+  }
+
+  /**
+   * GUARANTEED 100% MATCH: Natural keyword injection into CV
+   * Strategy (prioritizes Work Experience for natural integration):
+   * 1. Experience: Primary focus - 25+ keywords naturally integrated into bullet points
+   * 2. Summary: 5-8 keywords as expertise phrases
+   * 3. Skills: Remaining keywords grouped by category
+   * 4. Catch-all: Any remaining keywords as Technical Proficiencies
+   */
+  fastKeywordInjection(cvText, keywords, missingKeywords) {
+    if (!missingKeywords || missingKeywords.length === 0) {
+      return { tailoredCV: cvText, injectedKeywords: [] };
+    }
+    
+    let tailoredCV = cvText;
+    let injectedKeywords = [];
+    let remaining = [...missingKeywords];
+    
+    // Natural injection phrases for Work Experience
+    // CRITICAL: Never use banned buzzwords (no leveraging/utilizing/utilising)
+    const actionPhrases = [
+      'using', 'applying', 'implementing', 'integrating',
+      'incorporating', 'employing', 'deploying', 'through', 'via', 'built with'
+    ];
+    
+    const getRandomPhrase = () => actionPhrases[Math.floor(Math.random() * actionPhrases.length)];
+    
+    // STEP 1: PRIMARY - Inject into Work Experience (25+ keywords naturally across bullets)
+    if (remaining.length > 0) {
+      const experienceMatch = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
+      if (experienceMatch) {
+        const expStart = experienceMatch.index;
+        const expEnd = expStart + experienceMatch[0].length;
+        let experienceText = experienceMatch[0];
+        
+        // Find all bullet points
+        const bullets = experienceText.match(/^[•\-\*]\s*.+$/gm) || [];
+        // Target 2-3 keywords per bullet for natural integration
+        const keywordsPerBullet = Math.ceil(remaining.length * 0.7 / Math.max(bullets.length, 1));
+        const maxKeywordsInExp = Math.min(remaining.length, bullets.length * 3);
+        const toInject = remaining.slice(0, maxKeywordsInExp);
+        remaining = remaining.slice(maxKeywordsInExp);
+        
+        let keywordIdx = 0;
+        bullets.forEach((bullet, idx) => {
+          if (keywordIdx >= toInject.length) return;
+          
+          // Get 1-3 keywords for this bullet
+          const numToAdd = Math.min(3, Math.ceil((toInject.length - keywordIdx) / (bullets.length - idx)));
+          const kwToAdd = toInject.slice(keywordIdx, keywordIdx + numToAdd);
+          keywordIdx += numToAdd;
+          
+          if (kwToAdd.length === 0) return;
+          
+          // Natural integration based on bullet content
+          const phrase = getRandomPhrase();
+          let enhanced = bullet;
+          
+          if (kwToAdd.length === 1) {
+            // Single keyword
+            enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]}.`);
+          } else if (kwToAdd.length === 2) {
+            // Two keywords
+            enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]} and ${kwToAdd[1]}.`);
+          } else {
+            // Multiple: "...incorporating [kw1], [kw2], and [kw3]"
+            const last = kwToAdd.pop();
+            enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd.join(', ')}, and ${last}.`);
+            kwToAdd.push(last); // Put it back for tracking
+          }
+          
+          experienceText = experienceText.replace(bullet, enhanced);
+          injectedKeywords.push(...kwToAdd);
+        });
+        
+        tailoredCV = tailoredCV.substring(0, expStart) + experienceText + tailoredCV.substring(expEnd);
+      }
+    }
+    
+    // STEP 2: Inject 5-8 keywords into Summary as expertise
+    if (remaining.length > 0) {
+      const summaryMatch = tailoredCV.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+      if (summaryMatch) {
+        const summaryStart = summaryMatch.index;
+        const summaryEnd = summaryStart + summaryMatch[0].length;
+        const summaryText = summaryMatch[2];
+        
+        const toInject = remaining.slice(0, Math.min(8, remaining.length));
+        remaining = remaining.slice(toInject.length);
+        
+        // Build natural expertise sentence
+        let injectionPhrase = '';
+        if (toInject.length <= 3) {
+          injectionPhrase = ` Expertise includes ${toInject.join(', ')}.`;
+        } else if (toInject.length <= 5) {
+          injectionPhrase = ` Strong background in ${toInject.slice(0, 3).join(', ')}, with additional skills in ${toInject.slice(3).join(' and ')}.`;
+        } else {
+          injectionPhrase = ` Core competencies include ${toInject.slice(0, 4).join(', ')}. Proven proficiency in ${toInject.slice(4).join(', ')}.`;
+        }
+        
+        const newSummary = summaryText.trim() + injectionPhrase;
+        tailoredCV = tailoredCV.substring(0, summaryStart) + 
+                     summaryMatch[1] + '\n' + newSummary + 
+                     tailoredCV.substring(summaryEnd);
+        injectedKeywords.push(...toInject);
+      }
+    }
+    
+    // STEP 3: Inject ALL remaining into Skills section (no separate "Additional" section)
+    // FIX v3.3.2: Merge all keywords into single SKILLS section, comma-separated
+    if (remaining.length > 0) {
+      const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+      if (skillsMatch) {
+        const skillsStart = skillsMatch.index;
+        const skillsEnd = skillsStart + skillsMatch[0].length;
+        const skillsText = skillsMatch[2].trim();
+        
+        // Clean up existing skills (remove bullets, normalize)
+        const existingSkills = skillsText
+          .replace(/^[•\-\*]\s*/gm, '')
+          .split(/[,\n]+/)
+          .map(s => s.trim())
+          .filter(Boolean);
+        
+        // Merge with remaining keywords (deduplicated)
+        const allSkills = [...new Set([...existingSkills, ...remaining])];
+        
+        // Format as clean comma-separated list (no bullets, no "Additional:" prefix)
+        const newSkills = allSkills.join(', ');
+        tailoredCV = tailoredCV.substring(0, skillsStart) + 
+                     'SKILLS\n' + newSkills + 
+                     tailoredCV.substring(skillsEnd);
+        injectedKeywords.push(...remaining);
+        remaining = []; // All injected
+      } else {
+        // No skills section found - create one before Certifications
+        const insertPoint = tailoredCV.search(/\n(CERTIFICATIONS|EDUCATION)\n/i);
+        const newSection = `\nSKILLS\n${remaining.join(', ')}\n`;
+        if (insertPoint > 0) {
+          tailoredCV = tailoredCV.substring(0, insertPoint) + newSection + tailoredCV.substring(insertPoint);
+        } else {
+          tailoredCV = tailoredCV + newSection;
+        }
+        injectedKeywords.push(...remaining);
+        remaining = [];
+      }
+    }
+    
+    // STEP 4: REMOVED - No separate "TECHNICAL PROFICIENCIES" section
+    // All keywords are now merged into the single SKILLS section above
+    
+    return { tailoredCV, injectedKeywords };
+  }
+
+  /**
+   * OPTIMIZED: Full automatic tailoring pipeline
+   * IMPLEMENTATION FLOW:
+   * 1. Click "AI Extract Keywords" → Wait for full extraction
+   * 2. Grab 100% match keywords → Integrate naturally into Work Experience bullets
+   * 3. Verify 100% profile match in extension UI
+   * 4. Generate "Tailored_CV_[Job]_[Date].pdf" → Enable preview/download
+   * 5. Auto-attach PDF to application upload field
+   * 
+   * UI updates at each stage for responsiveness
+   */
+  async tailorDocuments(options = {}) {
+    if (!this.currentJob) {
+      this.showToast('No job detected', 'error');
+      return;
+    }
+
+    const startTime = Date.now();
+    const btn = document.getElementById('tailorBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const pipelineSteps = document.getElementById('pipelineSteps');
+    
+    btn.disabled = true;
+    // SINGLE BUTTON STATE: Blue gradient - always use btn-gradient, never btn-tailoring
+    const btnIconLeft = btn.querySelector('.btn-icon-left');
+    const btnText = btn.querySelector('.btn-text');
+    const btnTime = btn.querySelector('.btn-time');
+    
+    // Keep BLUE state while processing (just disable + change text)
+    if (btnIconLeft) btnIconLeft.textContent = '⏳';
+    if (btnText) btnText.textContent = 'Tailoring...';
+    if (btnTime) btnTime.textContent = '~5s';
+    // Keep blue gradient - NO orange state
+    btn.classList.remove('btn-tailoring');
+    btn.classList.add('btn-gradient');
+    
+    progressContainer?.classList.remove('hidden');
+    pipelineSteps?.classList.remove('hidden');
+    if (progressText) progressText.textContent = 'Step 1/3: Extracting keywords from job description...';
+    this.setStatus('Tailoring...', 'working');
+    
+    // WIRE UP DEBUG PANELS: Reset and start logging
+    if (window.PDFDebugPanel) {
+      window.PDFDebugPanel.reset();
+      window.PDFDebugPanel.logStart('popup.tailorDocuments');
+    }
+    this.logDebug('tailorDocuments', 'Pipeline started', { job: this.currentJob?.title });
+
+    const updateProgress = (percent, text) => {
+      if (progressFill) progressFill.style.width = `${percent}%`;
+      if (progressText) progressText.textContent = text;
+    };
+
+    const updateStep = (stepNum, status) => {
+      const step = document.getElementById(`step${stepNum}`);
+      if (!step) return;
+      const icon = step.querySelector('.step-icon');
+      if (status === 'working') {
+        icon.textContent = '⏳';
+        step.classList.add('active');
+        step.classList.remove('complete');
+      } else if (status === 'complete') {
+        icon.textContent = '✓';
+        step.classList.remove('active');
+        step.classList.add('complete');
+      }
+    };
+
+    try {
+      // ============ STEP 1: AI EXTRACT KEYWORDS (Click "AI Extract Keywords" first) ============
+      updateStep(1, 'working');
+      updateProgress(5, 'Step 1/3: AI Extracting keywords from job description...');
+
+      await this.refreshSessionIfNeeded();
+      if (!this.session?.access_token || !this.session?.user?.id) {
+        throw new Error('Please sign in again');
+      }
+
+      // Ensure we have a job description first
+      if (!this.currentJob?.description) {
+        await this.detectCurrentJob();
+      }
+      
+      if (!this.currentJob?.description || this.currentJob.description.length < 50) {
+        throw new Error('No job description found. Please navigate to a job posting page and try again.');
+      }
+      
+      // FIRST: Call AI Extract Keywords (equivalent to clicking the AI Extract button)
+      let keywords = null;
+      try {
+        keywords = await this.performAIKeywordExtraction();
+        console.log('[ATS Tailor] Step 1 - AI Extracted keywords:', keywords?.all?.length || 0);
+      } catch (aiError) {
+        // Silent fallback to local extraction if AI fails - no warning needed
+        console.log('[ATS Tailor] Using local keyword extraction');
+        keywords = this.extractKeywordsOptimized(this.currentJob.description);
+      }
+      
+      if (!keywords || !keywords.all || keywords.all.length === 0) {
+        throw new Error('Could not extract keywords from job description');
+      }
+      
+      // Store keywords immediately for UI
+      this.generatedDocuments.keywords = keywords;
+      
+      // UPDATE UI: Show extracted keywords immediately (before boost)
+      this.generatedDocuments.matchedKeywords = [];
+      this.generatedDocuments.missingKeywords = keywords.all;
+      this.generatedDocuments.matchScore = 0;
+      this.updateMatchAnalysisUI();
+      
+      // Save keywords to history for comparison feature
+      await this.saveKeywordsToHistory(keywords);
+
+      updateStep(1, 'complete');
+
+      // ============ STEP 2: Load Profile & Generate Base CV ============
+      updateStep(2, 'working');
+      updateProgress(20, 'Step 2/3: Loading profile & generating tailored CV...');
+
+      // Fetch user profile (API call) - includes CV file info
+      const profileRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code,cv_file_path,cv_file_name,cv_uploaded_at,preferred_ai_provider`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${this.session.access_token}`,
+          },
+        }
+      );
+
+      if (!profileRes.ok) {
+        const profileError = await profileRes.text().catch(() => '');
+        console.error('[ATS Tailor] Profile load failed:', profileRes.status, profileError);
+        throw new Error(`Profile not found. Please visit the QuantumHire dashboard and complete your profile before tailoring. (Error: ${profileRes.status})`);
+      }
+
+      const profileRows = await profileRes.json();
+      const p = profileRows?.[0] || {};
+      
+      // Update AI provider from profile if set
+      if (p.preferred_ai_provider && ['kimi', 'openai'].includes(p.preferred_ai_provider)) {
+        this.aiProvider = p.preferred_ai_provider;
+        this.saveAIProviderSettings();
+        this.updateAIProviderUI();
+      }
+      
+      // Check if user has uploaded a base CV
+      const hasUploadedCV = !!p.cv_file_path;
+      if (hasUploadedCV) {
+        console.log('[ATS Tailor] Using uploaded CV as base document:', p.cv_file_name);
+        this.baseCVSource = 'uploaded';
+      } else {
+        console.log('[ATS Tailor] No uploaded CV found, using profile data to generate CV');
+        this.baseCVSource = 'generated';
+      }
+
+      // Apply user location rules for tailoring/output
+      // IMPORTANT: never include "Remote" in the candidate location line.
+      const rawCity = String(p.city || '').split('|')[0].trim();
+      const rawCountry = String(p.country || '').trim();
+      const country = rawCountry && rawCountry.toLowerCase() === 'ireland' ? 'IE' : rawCountry;
+      const base = [rawCity, country].filter(Boolean).join(', ').trim();
+      this._defaultLocation = (/\bremote\b/i.test(String(p.city || '')) || /\bdublin\b/i.test(rawCity))
+        ? 'Dublin, IE'
+        : (base || 'Dublin, IE');
+
+      const effectiveJobLocation = window.ATSLocationTailor?.normalizeJobLocationForApplication
+        ? window.ATSLocationTailor.normalizeJobLocationForApplication(this.currentJob.location || '', this._defaultLocation)
+        : (this.currentJob.location || this._defaultLocation);
+      this.currentJob.location = effectiveJobLocation;
+      
+      console.log(`[ATS Tailor] Step 2 - Profile loaded (AI: ${this.aiProvider}), generating base CV...`);
+
+      // Update step text with AI provider info
+      const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+      updateProgress(35, `Step 2/3: ${providerName} generating tailored documents...`);
+
+      // OPENAI THROTTLE: Pre-call delay to reduce API usage
+      if (this.aiProvider !== 'kimi') {
+        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 3s pre-tailoring delay...');
+        updateProgress(36, 'OpenAI rate limiting (saving API usage)...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      const tailorController = new AbortController();
+      const tailorTimeoutId = setTimeout(() => tailorController.abort(), 120_000); // Increased from 75s to 120s for AI tailoring
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        signal: tailorController.signal,
+        body: JSON.stringify({
+          jobTitle: this.currentJob.title || '',
+          company: this.currentJob.company || '',
+          location: this.currentJob.location || '',
+          description: this.currentJob.description || '',
+          requirements: [],
+          aiProvider: this.aiProvider, // Pass selected AI provider
+          userProfile: {
+            firstName: p.first_name || '',
+            lastName: p.last_name || '',
+            email: p.email || this.session.user.email || '',
+            phone: p.phone || '',
+            linkedin: p.linkedin || '',
+            github: p.github || '',
+            portfolio: p.portfolio || '',
+            coverLetter: p.cover_letter || '',
+            professionalExperience: Array.isArray(p.professional_experience) ? p.professional_experience : [],
+            education: Array.isArray(p.education) ? p.education : [],
+            skills: Array.isArray(p.skills) ? p.skills : [],
+            certifications: Array.isArray(p.certifications) ? p.certifications : [],
+            achievements: Array.isArray(p.achievements) ? p.achievements : [],
+            atsStrategy: p.ats_strategy || '',
+            city: this._defaultLocation,
+            country: p.country || undefined,
+            address: p.address || undefined,
+            state: p.state || undefined,
+            zipCode: p.zip_code || undefined,
+            // Pass CV file info so backend knows user has uploaded a base CV
+            cvFilePath: p.cv_file_path || undefined,
+            cvFileName: p.cv_file_name || undefined,
+          },
+        }),
+      }).finally(() => clearTimeout(tailorTimeoutId));
+
+      // OPENAI THROTTLE: Post-call delay to reduce API usage
+      if (this.aiProvider !== 'kimi') {
+        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
+        updateProgress(70, 'Processing tailored documents...');
+        await new Promise(resolve => setTimeout(resolve, 2500));
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        const isHtml = /^\s*</.test((errorText || '').trim());
+        const msg = response.status === 502
+          ? 'Service temporarily unavailable (502). Please retry in a few seconds.'
+          : (!isHtml && errorText ? errorText : `Server error (${response.status})`);
+        throw new Error(msg);
+      }
+
+      // ROBUST JSON PARSING: Handle truncated responses gracefully
+      let result;
+      try {
+        const responseText = await response.text();
+        
+        // Try to parse as JSON
+        try {
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          console.warn('[ATS Tailor] JSON parse failed, attempting to repair truncated response...');
+          
+          // Try to repair common truncation patterns
+          let repairedText = responseText;
+          
+          // If response ends with incomplete string, try to close it
+          if (responseText.endsWith('"')) {
+            // Ends mid-key/value - try adding closing braces
+            repairedText = responseText + ': null}';
+          } else if (responseText.match(/"[^"]*$/)) {
+            // Has unclosed string - close it and add braces
+            repairedText = responseText + '"}';
+          }
+          
+          // Add missing closing braces
+          const openBraces = (repairedText.match(/{/g) || []).length;
+          const closeBraces = (repairedText.match(/}/g) || []).length;
+          const missingBraces = openBraces - closeBraces;
+          if (missingBraces > 0) {
+            repairedText += '}'.repeat(missingBraces);
+          }
+          
+          // Try to parse repaired JSON
+          try {
+            result = JSON.parse(repairedText);
+            console.log('[ATS Tailor] Successfully repaired truncated JSON response');
+          } catch (repairError) {
+            console.error('[ATS Tailor] Could not repair JSON:', repairError);
+            console.error('[ATS Tailor] Raw response (first 500 chars):', responseText.substring(0, 500));
+            throw new Error('Server returned invalid response. Please try again.');
+          }
+        }
+      } catch (textError) {
+        console.error('[ATS Tailor] Failed to read response text:', textError);
+        throw new Error('Failed to read server response. Please try again.');
+      }
+      
+      if (result.error) throw new Error(result.error);
+
+      // ███ CRITICAL: VALIDATE & FIX WORK EXPERIENCE IMMUTABILITY ███
+      // AI may have changed job titles/company names - force them back to profile values
+      const originalExperience = Array.isArray(p.professional_experience) ? p.professional_experience : [];
+      
+      if ((result.resumeStructured || result.structuredCv) && originalExperience.length > 0) {
+        const structuredCv = result.resumeStructured || result.structuredCv;
+        
+        if (Array.isArray(structuredCv.experience)) {
+          console.log('[ATS Tailor] ███ Validating work experience immutability ███');
+          
+          structuredCv.experience = structuredCv.experience.map((aiExp, idx) => {
+            const originalExp = originalExperience[idx];
+            if (!originalExp) return aiExp;
+            
+            // Log any detected changes for debugging
+            const aiCompany = aiExp.company || '';
+            const aiTitle = aiExp.title || '';
+            const origCompany = originalExp.company || originalExp.companyName || '';
+            const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
+            
+            // Silent log - immutable field protection is working correctly
+            if (aiCompany !== origCompany || aiTitle !== origTitle) {
+              console.log(`[ATS Tailor] Immutable field protection applied for role ${idx + 1}`);
+            }
+            
+            // FORCE original values - never trust AI for these fields
+            return {
+              ...aiExp,
+              company: origCompany,  // ← LOCKED FROM ORIGINAL PROFILE
+              title: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
+              dates: originalExp.dates || `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`.trim(),  // ← LOCKED
+              startDate: originalExp.startDate,  // ← LOCKED
+              endDate: originalExp.endDate,      // ← LOCKED
+              // bullets/description CAN be tailored by AI
+              bullets: aiExp.bullets || aiExp.description || originalExp.bullets || originalExp.description || [],
+            };
+          });
+          
+          console.log('[ATS Tailor] ✓ Work experience immutability validated');
+        }
+        
+        // Update result with validated structuredCv
+        result.resumeStructured = structuredCv;
+        result.structuredCv = structuredCv;
+      }
+
+      // PART 1A: Store structuredCv from tailoring for PDF generation (no re-parsing)
+      if (result.resumeStructured || result.structuredCv) {
+        window.quantumhireStructuredCv = result.resumeStructured || result.structuredCv;
+        console.log('[ATS Tailor] structuredCv stored for PDF generation:', window.quantumhireStructuredCv);
+      }
+      
+      // Store location match warnings for UI
+      if (result.locationMatch) {
+        this.locationMatch = result.locationMatch;
+        console.log('[ATS Tailor] Location Match Score:', result.locationMatch.matchScore);
+        
+        // Show location warnings
+        if (result.locationMatch.flags?.sponsorshipNeeded) {
+          this.showToast('⚠️ This role may require visa sponsorship', 'warning');
+        }
+        if (result.locationMatch.flags?.relocationRequired) {
+          this.showToast('⚠️ This role requires relocation', 'warning');
+        }
+        if (result.locationMatch.flags?.timezoneCompatible === false) {
+          this.showToast('⚠️ Timezone may be challenging', 'warning');
+        }
+      }
+
+      // Save original CV (before local boosting) for coverage report diffing
+      this._coverageOriginalCV = result.tailoredResume || '';
+
+      // Filename format: {FirstName}_{LastName}_CV.pdf and {FirstName}_{LastName}_Cover_Letter.pdf
+      const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
+      const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || '';
+      const fileBaseName = lastName ? `${firstName}_${lastName}` : firstName;
+      
+      this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
+
+      this.generatedDocuments = {
+        cv: result.tailoredResume,
+        coverLetter: result.tailoredCoverLetter || result.coverLetter,
+        cvPdf: result.resumePdf,
+        coverPdf: result.coverLetterPdf,
+        cvFileName: `${fileBaseName}_CV.pdf`,
+        coverFileName: `${fileBaseName}_Cover_Letter.pdf`,
+        matchScore: result.matchScore || 0,
+        matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
+        missingKeywords: result.keywordsMissing || result.missingKeywords || [],
+        keywords: keywords,
+        structuredCv: window.quantumhireStructuredCv, // Store reference for later PDF generation
+        // CRITICAL: Store professional summary explicitly for PDF generation
+        professionalSummary: result.professionalSummary || result.extractedSummary || 
+          (window.quantumhireStructuredCv?.summary?.text) || 
+          (typeof window.quantumhireStructuredCv?.summary === 'string' ? window.quantumhireStructuredCv.summary : '')
+      };
+      
+      // WIRE UP DEBUG PANELS: Log input data after profile load
+      if (window.PDFDebugPanel) {
+        window.PDFDebugPanel.logInputData({
+          firstName: p.first_name,
+          lastName: p.last_name,
+          email: p.email,
+          professionalExperience: p.professional_experience,
+          relevantProjects: p.relevant_projects,
+          education: p.education,
+          skills: p.skills,
+          certifications: p.certifications,
+        }, result.tailoredResume);
+      }
+      this.logDebug('tailorDocuments', 'Profile loaded', { 
+        expCount: Array.isArray(p.professional_experience) ? p.professional_experience.length : 0,
+        projectsCount: Array.isArray(p.relevant_projects) ? p.relevant_projects.length : 0,
+        cvLength: (result.tailoredResume || '').length
+      });
+
+      // Calculate initial match score against extracted keywords
+      if (keywords.all?.length > 0 && this.generatedDocuments.cv) {
+        const initial = this.calculateMatchScore(this.generatedDocuments.cv, keywords);
+        this.generatedDocuments.matchedKeywords = initial.matchedKeywords;
+        this.generatedDocuments.missingKeywords = initial.missingKeywords;
+        this.generatedDocuments.matchScore = initial.matchScore;
+        
+        // UPDATE UI: Show initial match score
+        this.updateMatchAnalysisUI();
+      }
+
+      console.log('[ATS Tailor] Step 2 - Initial match score:', this.generatedDocuments.matchScore + '%');
+      updateStep(2, 'complete');
+
+      // ============ STEP 3: GUARANTEED 100% MATCH - No keywords left behind ============
+      updateStep(3, 'working');
+      updateProgress(55, 'Step 3/3: Guaranteeing 100% keyword match...');
+
+      const currentScore = this.generatedDocuments.matchScore || 0;
+      
+      // ALWAYS boost to 100% - no keywords left unmatched
+      if (currentScore < 100 && keywords.all?.length > 0) {
+        try {
+          let boostResult = await this.boostCVTo95Plus(
+            this.generatedDocuments.cv,
+            keywords,
+            (percent, text) => {
+              updateProgress(55 + (percent * 0.15), `Step 3/3: ${text}`);
+            }
+          );
+
+          // If still not 100%, use aggressive injection
+          if (boostResult.finalScore < 100 && boostResult.missingKeywords?.length > 0) {
+            console.log('[ATS Tailor] Applying final injection for remaining', boostResult.missingKeywords.length, 'keywords');
+            const finalInject = this.fastKeywordInjection(
+              boostResult.tailoredCV || this.generatedDocuments.cv,
+              keywords,
+              boostResult.missingKeywords
+            );
+            
+            if (finalInject.tailoredCV) {
+              boostResult.tailoredCV = finalInject.tailoredCV;
+              boostResult.injectedKeywords = [...(boostResult.injectedKeywords || []), ...finalInject.injectedKeywords];
+              
+              // Recalculate final score - should now be 100%
+              const finalMatch = this.calculateMatchScore(boostResult.tailoredCV, keywords);
+              boostResult.finalScore = finalMatch.matchScore;
+              boostResult.matchedKeywords = finalMatch.matchedKeywords;
+              boostResult.missingKeywords = finalMatch.missingKeywords;
+            }
+          }
+
+          if (boostResult.tailoredCV) {
+            this.generatedDocuments.cv = boostResult.tailoredCV;
+            this.generatedDocuments.matchScore = boostResult.finalScore;
+            this.generatedDocuments.matchedKeywords = boostResult.matchedKeywords;
+            this.generatedDocuments.missingKeywords = boostResult.missingKeywords;
+            
+            // UPDATE UI: Show final 100% match score
+            this.updateMatchAnalysisUI();
+            
+            console.log('[ATS Tailor] Step 3 - Final score:', boostResult.finalScore + '%', 
+                        'injected:', boostResult.injectedKeywords?.length || 0, 'keywords');
+          }
+        } catch (boostError) {
+          console.warn('[ATS Tailor] Boost failed, applying fallback injection:', boostError);
+          // Fallback: aggressive injection
+          const fallbackInject = this.fastKeywordInjection(
+            this.generatedDocuments.cv,
+            keywords,
+            this.generatedDocuments.missingKeywords
+          );
+          if (fallbackInject.tailoredCV) {
+            this.generatedDocuments.cv = fallbackInject.tailoredCV;
+            const finalMatch = this.calculateMatchScore(fallbackInject.tailoredCV, keywords);
+            this.generatedDocuments.matchScore = finalMatch.matchScore;
+            this.generatedDocuments.matchedKeywords = finalMatch.matchedKeywords;
+            this.generatedDocuments.missingKeywords = finalMatch.missingKeywords;
+            this.updateMatchAnalysisUI();
+          }
+        }
+      } else if (currentScore >= 100) {
+        console.log('[ATS Tailor] Step 3 - Already at 100%');
+      }
+
+      // Build keyword coverage report for debugging (injected locations in CV)
+      this.buildKeywordCoverageReport(keywords);
+
+      updateProgress(80, 'Step 3/3: Regenerating PDF with boosted CV...');
+      
+      // WIRE UP DEBUG PANELS: Log before PDF generation
+      this.logDebug('tailorDocuments', 'Pre-PDF boost complete', { 
+        finalScore: this.generatedDocuments.matchScore,
+        matchedCount: this.generatedDocuments.matchedKeywords?.length,
+        missingCount: this.generatedDocuments.missingKeywords?.length
+      });
+
+      // Regenerate PDF with boosted CV and dynamic location
+      if (this.generatedDocuments.cv) {
+        await this.regeneratePDFAfterBoost();
+        
+        // WIRE UP DEBUG PANELS: Log output after PDF generation
+        if (window.PDFDebugPanel) {
+          window.PDFDebugPanel.logOutputData({
+            cvBase64Length: (this.generatedDocuments.cvPdf || '').length,
+            coverBase64Length: (this.generatedDocuments.coverPdf || '').length,
+            cvFilename: this.generatedDocuments.cvFileName,
+            coverFilename: this.generatedDocuments.coverFileName,
+          });
+          window.PDFDebugPanel.logComplete();
+        }
+      }
+
+      updateStep(3, 'complete');
+
+      // ============ FINAL: Attach CV & Update UI ============
+      updateProgress(90, 'Attaching tailored CV to application...');
+
+      // CRITICAL: Store files in chrome.storage for content.js attach loop
+      await chrome.storage.local.set({
+        cvPDF: this.generatedDocuments.cvPdf,
+        coverPDF: this.generatedDocuments.coverPdf,
+        coverLetterText: this.generatedDocuments.coverLetter || '',
+        cvFileName: this.generatedDocuments.cvFileName,
+        coverFileName: this.generatedDocuments.coverFileName,
+      });
+      console.log('[ATS Tailor] Stored cvPDF/coverPDF in chrome.storage for content.js');
+      
+      // Auto-attach BOTH CV and Cover Letter to the page
+      try {
+        await this.attachBothDocuments();
+      } catch (attachError) {
+        console.warn('[ATS Tailor] Auto-attach failed:', attachError);
+        // Don't throw - document generation was successful
+      }
+
+      updateProgress(100, 'Complete! 100% keyword match achieved.');
+
+      await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
+
+      const elapsed = (Date.now() - startTime) / 1000;
+      this.stats.today++;
+      this.stats.total++;
+      this.stats.times.push(elapsed);
+      if (this.stats.times.length > 10) this.stats.times.shift();
+      this.stats.avgTime = this.stats.times.reduce((a, b) => a + b, 0) / this.stats.times.length;
+      await this.saveStats();
+      this.updateUI();
+
+      // Show documents card and preview
+      document.getElementById('documentsCard')?.classList.remove('hidden');
+      this.updateDocumentDisplay();
+      this.updatePreviewContent();
+      
+      const finalScore = this.generatedDocuments.matchScore;
+      this.showToast(
+        `Done in ${elapsed.toFixed(1)}s! ${finalScore}% keyword match.`, 
+        'success'
+      );
+      this.setStatus('Complete', 'ready');
+
+      // ============ AUTOMATION COMPLETE: PREPARE FOR NEXT ATS ============
+      // Signal to LazyApply/external automation that this job is complete
+      await this.signalAutomationComplete({
+        success: true,
+        elapsed,
+        matchScore: finalScore,
+        jobUrl: this.currentJob?.url || window.location?.href,
+        company: this.currentJob?.company,
+        title: this.currentJob?.title
+      });
+
+    } catch (error) {
+      console.error('Tailoring error:', error);
+      this.showToast(error.message || 'Failed', 'error');
+      this.setStatus('Error', 'error');
+      
+      // Signal failure to external automation
+      await this.signalAutomationComplete({
+        success: false,
+        error: error.message,
+        jobUrl: this.currentJob?.url || window.location?.href
+      });
+    } finally {
+      // INSTANT RESET TO BLUE READY STATE: No delays, always ready for next URL
+      const btnIconLeft = btn.querySelector('.btn-icon-left');
+      const btnText = btn.querySelector('.btn-text');
+      const btnTime = btn.querySelector('.btn-time');
+      
+      btn.disabled = false;
+      btn.classList.remove('btn-tailoring');
+      btn.classList.add('btn-gradient');
+      
+      // Set BLUE READY state
+      if (btnIconLeft) btnIconLeft.textContent = '⚡';
+      if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
+      if (btnTime) btnTime.textContent = '~5s';
+      
+      // Immediately reset progress UI
+      progressContainer?.classList.add('hidden');
+      [1, 2, 3].forEach(n => {
+        const step = document.getElementById(`step${n}`);
+        if (step) {
+          step.classList.remove('active', 'complete');
+          const icon = step.querySelector('.step-icon');
+          if (icon) icon.textContent = '⏳';
+        }
+      });
+    }
+  }
+
+  /**
+   * Regenerate PDF after CV boost with dynamic location tailoring
+   */
+  async regeneratePDFAfterBoost() {
+    try {
+      console.log('[ATS Tailor] Regenerating PDF after boost (OpenResume style)...');
+      
+      // Get tailored location from job data
+      let tailoredLocation = 'Open to relocation';
+      if (window.LocationTailor && this.currentJob) {
+        tailoredLocation = window.LocationTailor.extractFromJobData(this.currentJob);
+      } else if (this.currentJob?.location) {
+        tailoredLocation = this.currentJob.location;
+      }
+      console.log('[ATS Tailor] Tailored location:', tailoredLocation);
+
+      // Get user profile for header
+      let candidateData = {};
+      try {
+        if (this.session?.access_token && this.session?.user?.id) {
+          const profileRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,professional_experience,relevant_projects,education,skills,certifications,ats_strategy`,
+            {
+              headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${this.session.access_token}`,
+              },
+            }
+          );
+          if (profileRes.ok) {
+            const profiles = await profileRes.json();
+            candidateData = profiles?.[0] || {};
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] Could not fetch profile for PDF regeneration:', e);
+      }
+
+      // PRIORITY 1: Use OpenResume Generator for perfect ATS PDFs
+      if (window.OpenResumeGenerator) {
+        console.log('[ATS Tailor] Using OpenResume Generator for ATS-perfect PDFs...');
+        
+        const atsPackage = await window.OpenResumeGenerator.generateATSPackage(
+          this.generatedDocuments.cv,
+          this.generatedDocuments.keywords || {},
+          {
+            title: this.currentJob?.title || '',
+            company: this.currentJob?.company || '',
+            location: tailoredLocation
+          },
+          {
+            firstName: candidateData.first_name,
+            lastName: candidateData.last_name,
+            email: candidateData.email || this.session?.user?.email,
+            phone: candidateData.phone,
+            linkedin: candidateData.linkedin,
+            github: candidateData.github,
+            portfolio: candidateData.portfolio,
+            professionalExperience: candidateData.professional_experience || [],
+            relevantProjects: candidateData.relevant_projects || [],
+            education: candidateData.education,
+            skills: candidateData.skills,
+            certifications: candidateData.certifications,
+            summary: candidateData.ats_strategy,
+            city: tailoredLocation
+          }
+        );
+
+        if (atsPackage.cvBase64) {
+          this.generatedDocuments.cvPdf = atsPackage.cvBase64;
+          this.generatedDocuments.cvFileName = atsPackage.cvFilename;
+          this.generatedDocuments.tailoredLocation = tailoredLocation;
+          console.log('[ATS Tailor] ✅ OpenResume CV generated:', atsPackage.cvFilename);
+        }
+
+        if (atsPackage.coverBase64) {
+          this.generatedDocuments.coverPdf = atsPackage.coverBase64;
+          this.generatedDocuments.coverFileName = atsPackage.coverFilename;
+          console.log('[ATS Tailor] ✅ OpenResume Cover Letter generated:', atsPackage.coverFilename);
+        }
+
+        if (atsPackage.matchScore) {
+          this.generatedDocuments.matchScore = atsPackage.matchScore;
+        }
+
+        return;
+      }
+
+      // PRIORITY 2: Use PDFATSPerfect if available
+      if (window.PDFATSPerfect) {
+        const pdfResult = await window.PDFATSPerfect.regenerateAfterBoost({
+          jobData: this.currentJob,
+          candidateData: {
+            firstName: candidateData.first_name,
+            lastName: candidateData.last_name,
+            email: candidateData.email || this.session?.user?.email,
+            phone: candidateData.phone,
+            linkedin: candidateData.linkedin,
+            github: candidateData.github,
+            portfolio: candidateData.portfolio
+          },
+          boostedCVText: this.generatedDocuments.cv,
+          currentLocation: tailoredLocation
+        });
+
+        if (pdfResult.pdf) {
+          this.generatedDocuments.cvPdf = pdfResult.pdf;
+          this.generatedDocuments.cvFileName = pdfResult.fileName;
+          this.generatedDocuments.tailoredLocation = pdfResult.location;
+          console.log('[ATS Tailor] PDF regenerated:', pdfResult.fileName);
+          return;
+        } else if (pdfResult.requiresBackendGeneration) {
+          await this.regeneratePDFViaBackend(pdfResult, tailoredLocation);
+          return;
+        }
+      }
+      
+      // PRIORITY 3: Fallback to backend generation
+      await this.regeneratePDFViaBackend(null, tailoredLocation);
+      
+    } catch (error) {
+      console.error('[ATS Tailor] PDF regeneration failed:', error);
+      // Don't throw - boost was successful, just PDF failed
+    }
+  }
+
+  /**
+   * Regenerate PDF via Supabase edge function
+   */
+  async regeneratePDFViaBackend(textFormat, tailoredLocation) {
+    try {
+      if (!this.session?.access_token) {
+        console.warn('[ATS Tailor] No session for backend PDF generation');
+        return;
+      }
+
+      // Get structuredCv which contains the professional summary
+      const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+      
+      // Extract professional summary from structuredCv or stored data
+      let professionalSummary = '';
+      if (structuredCv?.summary) {
+        professionalSummary = typeof structuredCv.summary === 'string' 
+          ? structuredCv.summary 
+          : structuredCv.summary.text || structuredCv.summary.content || '';
+      }
+      
+      // Also check for stored summary from tailoring result
+      if (!professionalSummary && this.generatedDocuments.professionalSummary) {
+        professionalSummary = this.generatedDocuments.professionalSummary;
+      }
+
+      console.log('[ATS Tailor] regeneratePDFViaBackend - Summary length:', professionalSummary.length);
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          content: this.generatedDocuments.cv,
+          type: 'cv',
+          tailoredLocation: tailoredLocation,
+          jobTitle: this.currentJob?.title,
+          company: this.currentJob?.company,
+          firstName: this.profileInfo?.firstName,
+          lastName: this.profileInfo?.lastName,
+          fileName: this.generatedDocuments.cvFileName,
+          // Pass only the summary string to avoid payload bloat
+          summary: professionalSummary
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        const isHtml = /^\s*</.test((errorText || '').trim());
+        const msg = response.status === 502
+          ? 'Service temporarily unavailable (502) during PDF generation.'
+          : (!isHtml && errorText ? errorText : `PDF generation failed (${response.status})`);
+        console.warn('[ATS Tailor] Backend PDF generation failed:', msg);
+        return;
+      }
+
+      // ROBUST JSON PARSING for PDF response
+      let result;
+      try {
+        const responseText = await response.text();
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn('[ATS Tailor] PDF response parse failed:', parseError);
+        return;
+      }
+      
+      if (result.pdf) {
+        this.generatedDocuments.cvPdf = result.pdf;
+        this.generatedDocuments.cvFileName = result.fileName || this.generatedDocuments.cvFileName;
+        console.log('[ATS Tailor] PDF regenerated via backend:', result.fileName);
+      }
+    } catch (error) {
+      console.error('[ATS Tailor] Backend PDF generation failed:', error);
+    }
+  }
+
+  /**
+   * PART 1B: Completely rewritten downloadDocument function
+   * Uses structuredCv from tailoring step - NO re-parsing
+   */
+  async downloadDocument(type) {
+    const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
+    const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const filename = type === 'cv' 
+      ? (this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_'))
+      : (this.generatedDocuments.coverFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter.pdf`.replace(/_+/g, '_'));
+    
+    // If we already have a PDF, download it directly
+    if (doc) {
+      const blob = this.base64ToBlob(doc, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showToast('Downloaded!', 'success');
+      return;
+    }
+    
+    // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
+    const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+    
+    if (type === 'cv' && structuredCv) {
+      try {
+        this.showToast('⏳ Generating PDF...', 'info');
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.session?.access_token || ''}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            type: 'resume',
+            fileName: filename,
+            structuredCv: structuredCv,
+            plainText: textDoc
+          }),
+        });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/pdf')) {
+            const arrayBuffer = await response.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('✅ Downloaded!', 'success');
+            return;
+          } else {
+            // ROBUST JSON PARSING for download
+            let result;
+            try {
+              const responseText = await response.text();
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('[ATS Tailor] PDF response parse error:', parseError);
+              this.showToast('PDF generation failed - invalid response', 'error');
+              return;
+            }
+            if (result.pdf) {
+              const blob = this.base64ToBlob(result.pdf, 'application/pdf');
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = result.fileName || filename;
+              a.click();
+              URL.revokeObjectURL(url);
+              this.showToast('✅ Downloaded!', 'success');
+              return;
+            }
+          }
+        }
+        console.error('[ATS Tailor] PDF generation via structuredCv failed:', response.status);
+      } catch (error) {
+        console.error('[ATS Tailor] PDF download error:', error);
+      }
+    }
+    
+    // If no PDF but we have text, try cover letter generation
+    if (type === 'cover' && textDoc) {
+      const personalInfo = structuredCv?.personalInfo || {
+        firstName: this.profileInfo?.firstName,
+        lastName: this.profileInfo?.lastName,
+        email: this.session?.user?.email,
+        phone: '',
+      };
+      
+      try {
+        this.showToast('⏳ Generating PDF...', 'info');
+        
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.session?.access_token || ''}`,
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            type: 'coverletter',
+            fileName: filename,
+            personalInfo: personalInfo,
+            plainText: textDoc
+          }),
+        });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/pdf')) {
+            const arrayBuffer = await response.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('✅ Downloaded!', 'success');
+            return;
+          } else {
+            // ROBUST JSON PARSING for cover letter download
+            let result;
+            try {
+              const responseText = await response.text();
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('[ATS Tailor] Cover letter PDF parse error:', parseError);
+              this.showToast('Cover letter PDF generation failed', 'error');
+              return;
+            }
+            if (result.pdf) {
+              const blob = this.base64ToBlob(result.pdf, 'application/pdf');
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = result.fileName || filename;
+              a.click();
+              URL.revokeObjectURL(url);
+              this.showToast('✅ Downloaded!', 'success');
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[ATS Tailor] Cover letter PDF generation error:', error);
+      }
+    }
+    
+    // Final fallback: download as text
+    if (textDoc) {
+      const blob = new Blob([textDoc], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename.replace('.pdf', '.txt');
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showToast('Downloaded as text', 'success');
+    } else {
+      this.showToast('No document available', 'error');
+    }
+  }
+
+  base64ToBlob(base64, type) {
+    const byteCharacters = atob(base64);
+    const byteArray = new Uint8Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteArray[i] = byteCharacters.charCodeAt(i);
+    }
+    return new Blob([byteArray], { type });
+  }
+
+  // ============ LAZYAPPLY INTEGRATION: RESET FOR NEXT APPLICATION ============
+  /**
+   * Resets extension state after successful automation, preparing for next ATS platform.
+   * Called automatically after CV & Cover Letter are attached.
+   * Keeps session/profile cached but clears job-specific data.
+   */
+  async resetForNextApplication() {
+    console.log('[ATS Tailor] 🔄 Resetting for next application...');
+    
+    // Clear current job data (will be re-detected on new page)
+    this.currentJob = null;
+    
+    // Clear generated documents (will regenerate for next job)
+    this.generatedDocuments = {
+      cv: null,
+      coverLetter: null,
+      cvPdf: null,
+      coverPdf: null,
+      cvFileName: null,
+      coverFileName: null,
+      matchScore: 0,
+      matchedKeywords: [],
+      missingKeywords: [],
+      keywords: null
+    };
+    
+    // Clear caches for this job URL (keep profile cache)
+    const currentUrl = window.location?.href;
+    if (currentUrl) {
+      this.jdCache.delete(currentUrl);
+      this.keywordCache.delete(currentUrl);
+    }
+    
+    // Clear chrome storage for attached files (new job needs new files)
+    await chrome.storage.local.remove([
+      'cvPDF',
+      'coverPDF',
+      'coverLetterText',
+      'cvFileName',
+      'coverFileName',
+      'ats_lastGeneratedDocuments'
+    ]);
+    
+    // Reset UI elements
+    const documentsCard = document.getElementById('documentsCard');
+    if (documentsCard) documentsCard.classList.add('hidden');
+    
+    // Update status to show readiness
+    this.setStatus('Ready for next job', 'ready');
+    
+    console.log('[ATS Tailor] ✅ Reset complete - ready for next ATS platform');
+    
+    // Broadcast to content script that we're ready
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        chrome.tabs.sendMessage(tab.id, { 
+          action: 'AUTOMATION_RESET_COMPLETE',
+          ready: true,
+          timestamp: Date.now()
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // Ignore - tab may have changed
+    }
+  }
+
+  /**
+   * Signals to external automation tools (LazyApply, etc.) that this job is complete.
+   * Stores completion status in chrome.storage for cross-script access.
+   */
+  async signalAutomationComplete(result) {
+    console.log('[ATS Tailor] 📡 Signaling automation complete:', result.success ? '✅ SUCCESS' : '❌ FAILED');
+    
+    // Store completion status for external tools
+    const completionData = {
+      ...result,
+      timestamp: Date.now(),
+      readyForNext: true
+    };
+    
+    await chrome.storage.local.set({
+      'ats_automation_complete': completionData,
+      'ats_last_job_completed': {
+        url: result.jobUrl,
+        company: result.company,
+        title: result.title,
+        success: result.success,
+        matchScore: result.matchScore,
+        elapsed: result.elapsed,
+        completedAt: new Date().toISOString()
+      }
+    });
+    
+    // Broadcast completion to any listening content scripts
+    try {
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'AUTOMATION_COMPLETE',
+            ...completionData
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      // Ignore broadcast errors
+    }
+    
+    // Also dispatch a custom event for same-page listeners
+    window.dispatchEvent(new CustomEvent('ats-tailor-complete', { 
+      detail: completionData 
+    }));
+    
+    console.log('[ATS Tailor] 📡 Completion signal sent - extension ready for next job');
+  }
+
+
+  async attachDocument(type) {
+    const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
+    const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const filename =
+      type === 'cv'
+        ? this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_')
+        : this.generatedDocuments.coverFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter.pdf`.replace(/_+/g, '_');
+
+    if (!doc && !textDoc) {
+      this.showToast('No document available', 'error');
+      return;
+    }
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) throw new Error('No active tab');
+
+      const res = await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(
+          tab.id,
+          {
+            action: 'attachDocument',
+            type,
+            pdf: doc,
+            text: textDoc,
+            filename,
+          },
+          (response) => {
+            const err = chrome.runtime.lastError;
+            if (err) return reject(new Error(err.message || 'Send message failed'));
+            resolve(response);
+          }
+        );
+      });
+
+      if (res?.success && res?.skipped) {
+        this.showToast(res.message || 'Skipped (no upload field)', 'success');
+        return;
+      }
+
+      if (res?.success) {
+        this.showToast(`${type === 'cv' ? 'CV' : 'Cover Letter'} attached!`, 'success');
+        return;
+      }
+
+      this.showToast(res?.message || 'Failed to attach document', 'error');
+    } catch (error) {
+      console.error('Attach error:', error);
+      this.showToast(error?.message || 'Failed to attach document', 'error');
+    }
+  }
+
+  async attachBothDocuments() {
+    this.showToast('Attaching documents...', 'success');
+    
+    try {
+      // SEQUENTIAL ATTACH: Same proven method as ats-tailor-extension both attach
+      // Step 1: Attach CV first
+      await this.attachDocument('cv');
+      
+      // Step 2: Wait 500ms for UI to settle (prevents race conditions)
+      await new Promise(r => setTimeout(r, 500));
+      
+      // Step 3: Attach Cover Letter
+      await this.attachDocument('cover');
+      
+      this.showToast('Both documents attached!', 'success');
+    } catch (error) {
+      console.error('[ATS Tailor] attachBothDocuments error:', error);
+      this.showToast(error.message || 'Failed to attach documents', 'error');
+    }
+  }
+
+  showToast(message, type = 'success') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  // ============ KEYWORD HISTORY & COMPARISON FEATURE ============
+
+  /**
+   * Save extracted keywords to history for skill gap analysis
+   * @param {Object} keywords - Extracted keywords object
+   */
+  async saveKeywordsToHistory(keywords) {
+    if (!keywords?.all?.length || !this.currentJob) return;
+    
+    try {
+      const historyEntry = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        jobTitle: this.currentJob.title || 'Unknown Position',
+        company: this.currentJob.company || 'Unknown Company',
+        url: this.currentJob.url || '',
+        keywords: {
+          all: keywords.all,
+          highPriority: keywords.highPriority || [],
+          mediumPriority: keywords.mediumPriority || [],
+          lowPriority: keywords.lowPriority || []
+        }
+      };
+      
+      // Get existing history
+      const result = await chrome.storage.local.get(['ats_keyword_history']);
+      const history = result.ats_keyword_history || [];
+      
+      // Add new entry and keep last 20 job postings
+      history.unshift(historyEntry);
+      if (history.length > 20) history.pop();
+      
+      await chrome.storage.local.set({ ats_keyword_history: history });
+      console.log('[ATS Tailor] Saved keywords to history:', historyEntry.jobTitle);
+    } catch (error) {
+      console.warn('[ATS Tailor] Failed to save keyword history:', error);
+    }
+  }
+
+  /**
+   * Get keyword history for comparison
+   * @returns {Promise<Array>} Keyword history entries
+   */
+  async getKeywordHistory() {
+    const result = await chrome.storage.local.get(['ats_keyword_history']);
+    return result.ats_keyword_history || [];
+  }
+
+  /**
+   * Compare keywords between multiple job postings to identify skill gaps
+   * @param {Array<string>} entryIds - IDs of history entries to compare
+   * @returns {Object} Comparison results with common keywords and gaps
+   */
+  async compareKeywords(entryIds = []) {
+    const history = await this.getKeywordHistory();
+    
+    // If no IDs provided, compare all entries
+    const entries = entryIds.length > 0
+      ? history.filter(h => entryIds.includes(h.id))
+      : history;
+    
+    if (entries.length < 2) {
+      return { 
+        error: 'Need at least 2 job postings to compare',
+        entries: entries.length 
+      };
+    }
+    
+    // Count keyword frequency across all jobs
+    const keywordFrequency = new Map();
+    const keywordJobs = new Map();
+    
+    for (const entry of entries) {
+      const allKeywords = entry.keywords?.all || [];
+      for (const kw of allKeywords) {
+        const kwLower = kw.toLowerCase();
+        keywordFrequency.set(kwLower, (keywordFrequency.get(kwLower) || 0) + 1);
+        
+        if (!keywordJobs.has(kwLower)) {
+          keywordJobs.set(kwLower, []);
+        }
+        keywordJobs.get(kwLower).push(entry.jobTitle);
+      }
+    }
+    
+    // Categorize keywords by frequency
+    const totalJobs = entries.length;
+    const commonKeywords = []; // Appears in 70%+ of jobs
+    const frequentKeywords = []; // Appears in 40-69% of jobs
+    const rareKeywords = []; // Appears in <40% of jobs
+    
+    for (const [keyword, count] of keywordFrequency.entries()) {
+      const ratio = count / totalJobs;
+      const keywordInfo = {
+        keyword,
+        count,
+        percentage: Math.round(ratio * 100),
+        jobs: keywordJobs.get(keyword)
+      };
+      
+      if (ratio >= 0.7) {
+        commonKeywords.push(keywordInfo);
+      } else if (ratio >= 0.4) {
+        frequentKeywords.push(keywordInfo);
+      } else {
+        rareKeywords.push(keywordInfo);
+      }
+    }
+    
+    // Sort by frequency
+    commonKeywords.sort((a, b) => b.count - a.count);
+    frequentKeywords.sort((a, b) => b.count - a.count);
+    rareKeywords.sort((a, b) => b.count - a.count);
+    
+    // Identify skill gaps (common keywords user might be missing)
+    const userSkills = new Set(
+      (this.generatedDocuments?.cv || '').toLowerCase().split(/\W+/)
+    );
+    
+    const skillGaps = commonKeywords
+      .filter(k => !userSkills.has(k.keyword))
+      .slice(0, 15);
+    
+    return {
+      totalJobsCompared: totalJobs,
+      commonKeywords: commonKeywords.slice(0, 20),
+      frequentKeywords: frequentKeywords.slice(0, 15),
+      rareKeywords: rareKeywords.slice(0, 10),
+      skillGaps,
+      summary: {
+        totalUniqueKeywords: keywordFrequency.size,
+        coreSkillsCount: commonKeywords.length,
+        gapsIdentified: skillGaps.length
+      }
+    };
+  }
+
+  /**
+   * Show skill gap analysis modal
+   */
+  async showSkillGapAnalysis() {
+    try {
+      const comparison = await this.compareKeywords();
+      
+      if (comparison.error) {
+        this.showToast(comparison.error, 'error');
+        return;
+      }
+      
+      // Build and show results
+      const gapsList = comparison.skillGaps.map(g => g.keyword).join(', ') || 'None identified';
+      const commonList = comparison.commonKeywords.slice(0, 10).map(k => k.keyword).join(', ');
+      
+      console.log('[ATS Tailor] Skill Gap Analysis:', comparison);
+      this.showToast(
+        `Analyzed ${comparison.totalJobsCompared} jobs. ${comparison.summary.gapsIdentified} potential skill gaps found.`,
+        'success'
+      );
+      
+      // Store comparison for UI display
+      this.lastComparison = comparison;
+      
+      return comparison;
+    } catch (error) {
+      console.error('[ATS Tailor] Skill gap analysis error:', error);
+      this.showToast('Failed to analyze skill gaps', 'error');
+    }
+  }
+
+  /**
+   * Show skill gap analysis panel with results
+   */
+  async showSkillGapPanel() {
+    const panel = document.getElementById('skillGapPanel');
+    const btn = document.getElementById('skillGapBtn');
+    
+    if (btn) {
+      btn.disabled = true;
+      btn.querySelector('.btn-text').textContent = 'Analyzing...';
+    }
+    
+    try {
+      const comparison = await this.showSkillGapAnalysis();
+      
+      if (!comparison || comparison.error) {
+        // Check if we have any history
+        const history = await this.getKeywordHistory();
+        if (history.length < 2) {
+          this.showToast('Tailor at least 2 different job postings first to compare skills', 'error');
+          return;
+        }
+        return;
+      }
+      
+      // Populate core skills
+      const coreChips = document.getElementById('coreSkillsChips');
+      if (coreChips) {
+        coreChips.innerHTML = comparison.commonKeywords
+          .map(k => `<span class="skill-chip core" title="Found in ${k.percentage}% of jobs">${this.escapeHtml(k.keyword)} <span class="chip-count">${k.count}</span></span>`)
+          .join('');
+      }
+      
+      // Populate skill gaps
+      const gapsChips = document.getElementById('gapsChips');
+      if (gapsChips) {
+        if (comparison.skillGaps.length > 0) {
+          gapsChips.innerHTML = comparison.skillGaps
+            .map(k => `<span class="skill-chip gap" title="In-demand skill missing from your CV">${this.escapeHtml(k.keyword)} <span class="chip-count">${k.percentage}%</span></span>`)
+            .join('');
+        } else {
+          gapsChips.innerHTML = '<span class="no-gaps">Great! No significant skill gaps detected.</span>';
+        }
+      }
+      
+      // Update summary
+      const summary = document.getElementById('skillGapSummary');
+      if (summary) {
+        summary.innerHTML = `<p>Analyzed <strong>${comparison.totalJobsCompared} job postings</strong>. Found <strong>${comparison.summary.totalUniqueKeywords}</strong> unique keywords with <strong>${comparison.summary.coreSkillsCount}</strong> appearing frequently.</p>`;
+      }
+      
+      // Show panel
+      if (panel) {
+        panel.classList.remove('hidden');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      
+    } catch (error) {
+      console.error('[ATS Tailor] Show skill gap panel error:', error);
+      this.showToast('Failed to analyze skills', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.querySelector('.btn-text').textContent = 'Skill Gap Analysis';
+      }
+    }
+  }
+
+  /**
+   * Hide skill gap analysis panel
+   */
+  hideSkillGapPanel() {
+    const panel = document.getElementById('skillGapPanel');
+    if (panel) {
+      panel.classList.add('hidden');
+    }
+  }
+}
+
+/**
+ * Injected function to extract job information from the current page
+ * Runs in page context - self-contained with no external dependencies
+ * ENHANCED: 70+ company career site selectors for proper job title/company extraction
+ */
+function extractJobInfoFromPageInjected() {
+  const result = {
+    title: '',
+    company: '',
+    location: '',
+    description: '',
+    url: window.location.href,
+    detectedCompany: '', // Company detected from domain
+    companySource: 'auto' // 'auto', 'domain', 'jsonld', 'selector'
+  };
+
+  try {
+    const host = window.location.hostname.toLowerCase().replace(/^www\./, '');
+
+    // --- Helper: get text from first matching selector ---
+    const getText = (...selectors) => {
+      for (const sel of selectors) {
+        try {
+          const el = document.querySelector(sel);
+          if (el?.textContent?.trim()) return el.textContent.trim();
+        } catch (e) {}
+      }
+      return '';
+    };
+
+    // ============ TIER 1-2 COMPANY CAREER SITE SELECTORS (70+) ============
+    // Maps domain → { company name, title selectors, description selectors }
+    const COMPANY_CAREER_SELECTORS = {
+      // ===== FAANG + Major Tech =====
+      'google.com': {
+        company: 'Google',
+        title: ['h2.gc-job-detail__title', 'h2[class*="job-title"]', '.gc-job-detail h2', 'h1.gc-job-detail__title', 'h1[itemprop="title"]', 'h1'],
+        location: ['.gc-job-detail__location', '[itemprop="jobLocation"]', '.location'],
+        description: ['.gc-job-detail__description', '[itemprop="description"]', '.job-description', 'main']
+      },
+      'about.google': {
+        company: 'Google',
+        title: ['h2.gc-job-detail__title', 'h1', 'h2'],
+        location: ['.gc-job-detail__location', '.location'],
+        description: ['.gc-job-detail__description', 'main']
+      },
+      'deepmind.google': {
+        company: 'Google DeepMind',
+        title: ['h1', 'h2.job-title'],
+        location: ['.location', '[class*="location"]'],
+        description: ['.job-description', 'main']
+      },
+      'meta.com': {
+        company: 'Meta',
+        title: ['h1[data-testid="job-title"]', 'h1._8sfs', 'h1'],
+        location: ['[data-testid="job-location"]', '.location'],
+        description: ['[data-testid="job-description"]', '.job-description', 'main']
+      },
+      'amazon.com': {
+        company: 'Amazon',
+        title: ['h1.job-title', 'h1[data-job-title]', 'h1'],
+        location: ['.job-location', '[data-job-location]'],
+        description: ['.job-description', '#job-description', 'main']
+      },
+      'amazon.jobs': {
+        company: 'Amazon',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'microsoft.com': {
+        company: 'Microsoft',
+        title: ['h1.job-title', 'h1[class*="title"]', 'h1'],
+        location: ['.job-location', '[class*="location"]'],
+        description: ['.job-description', '.description', 'main']
+      },
+      'apple.com': {
+        company: 'Apple',
+        title: ['h1#job-title', 'h1.job-details__title', 'h1'],
+        location: ['.job-details__location', '[class*="location"]'],
+        description: ['.job-details__description', '.description', 'main']
+      },
+
+      // ===== Enterprise Software =====
+      'salesforce.com': {
+        company: 'Salesforce',
+        title: ['h1.job-title', 'h1', 'h2.job-title'],
+        location: ['.job-location', '[class*="location"]'],
+        description: ['.job-description', 'main']
+      },
+      'ibm.com': {
+        company: 'IBM',
+        title: ['h1.bx--type-productive-heading-05', 'h1.job-title', 'h1'],
+        location: ['.job-location', '[class*="location"]'],
+        description: ['.job-description', '.description', 'main']
+      },
+      'oracle.com': {
+        company: 'Oracle',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', '#requisitionDescriptionInterface', 'main']
+      },
+      'adobe.com': {
+        company: 'Adobe',
+        title: ['h1.job-title', 'h1[data-automation="job-title"]', 'h1'],
+        location: ['.job-location', '[data-automation="job-location"]'],
+        description: ['.job-description', '[data-automation="job-description"]', 'main']
+      },
+      'sap.com': {
+        company: 'SAP',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'vmware.com': {
+        company: 'VMware',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'servicenow.com': {
+        company: 'ServiceNow',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== Fintech & Payments =====
+      'stripe.com': {
+        company: 'Stripe',
+        title: ['h1.JobDetailPage__title', 'h1[class*="title"]', 'h1'],
+        location: ['.JobDetailPage__location', '[class*="location"]'],
+        description: ['.JobDetailPage__description', '.description', 'main']
+      },
+      'paypal.com': {
+        company: 'PayPal',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'visa.com': {
+        company: 'Visa',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'mastercard.com': {
+        company: 'Mastercard',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== SaaS & Cloud =====
+      'hubspot.com': {
+        company: 'HubSpot',
+        title: ['h1.careers-detail__title', 'h1[class*="job-title"]', 'h1[class*="career"]', 'h1.job-title', '.job-details h1', 'article h1', 'main h1', 'h1'],
+        location: ['.careers-detail__location', '.job-location', '[class*="location"]', 'h3:contains("Dublin")'],
+        description: ['.careers-detail__description', '.job-description', '.careers-detail-content', 'article', 'main']
+      },
+      'intercom.com': {
+        company: 'Intercom',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'zendesk.com': {
+        company: 'Zendesk',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'docusign.com': {
+        company: 'DocuSign',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'twilio.com': {
+        company: 'Twilio',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'slack.com': {
+        company: 'Slack',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'atlassian.com': {
+        company: 'Atlassian',
+        title: ['h1[data-testid="job-title"]', 'h1.job-title', 'h1'],
+        location: ['[data-testid="job-location"]', '.job-location'],
+        description: ['[data-testid="job-description"]', '.job-description', 'main']
+      },
+      'gitlab.com': {
+        company: 'GitLab',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'circleci.com': {
+        company: 'CircleCI',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'datadoghq.com': {
+        company: 'Datadog',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'unity.com': {
+        company: 'Unity',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'udemy.com': {
+        company: 'Udemy',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'workhuman.com': {
+        company: 'Workhuman',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== Social & Media =====
+      'linkedin.com': {
+        company: 'LinkedIn',
+        title: ['h1.topcard__title', 'h1.job-title', 'h1'],
+        location: ['.topcard__flavor--bullet', '.job-location'],
+        description: ['.description__text', '.job-description', 'main']
+      },
+      'tiktok.com': {
+        company: 'TikTok',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'snap.com': {
+        company: 'Snapchat',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'dropbox.com': {
+        company: 'Dropbox',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'bloomberg.com': {
+        company: 'Bloomberg',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== Hardware & Semiconductors =====
+      'intel.com': {
+        company: 'Intel',
+        title: ['h1.job-title', 'h1#jobTitle', 'h1'],
+        location: ['.job-location', '#jobLocation'],
+        description: ['.job-description', '#jobDescription', 'main']
+      },
+      'broadcom.com': {
+        company: 'Broadcom',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'arm.com': {
+        company: 'Arm Holdings',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'tsmc.com': {
+        company: 'TSMC',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'appliedmaterials.com': {
+        company: 'Applied Materials',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'cisco.com': {
+        company: 'Cisco',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'nvidia.com': {
+        company: 'Nvidia',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'amd.com': {
+        company: 'AMD',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== Finance & Consulting (Big 4) =====
+      'fidelity.com': {
+        company: 'Fidelity',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'morganstanley.com': {
+        company: 'Morgan Stanley',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'jpmorgan.com': {
+        company: 'JP Morgan Chase',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'blackrock.com': {
+        company: 'BlackRock',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'capitalone.com': {
+        company: 'Capital One',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'tdsecurities.com': {
+        company: 'TD Securities',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'kpmg.com': {
+        company: 'KPMG',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'deloitte.com': {
+        company: 'Deloitte',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'accenture.com': {
+        company: 'Accenture',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'pwc.com': {
+        company: 'PwC',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'ey.com': {
+        company: 'EY',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'mckinsey.com': {
+        company: 'McKinsey',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'kkr.com': {
+        company: 'KKR',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'fenergo.com': {
+        company: 'Fenergo',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== Quant & Trading Firms =====
+      'citadel.com': {
+        company: 'Citadel',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'janestreet.com': {
+        company: 'Jane Street',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'sig.com': {
+        company: 'SIG',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'twosigma.com': {
+        company: 'Two Sigma',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'deshaw.com': {
+        company: 'DE Shaw',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'rentec.com': {
+        company: 'Renaissance Technologies',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'mlp.com': {
+        company: 'Millennium Management',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'virtu.com': {
+        company: 'Virtu Financial',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'hudsontrading.com': {
+        company: 'Hudson River Trading',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'jumptrading.com': {
+        company: 'Jump Trading',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+
+      // ===== Other Major Tech =====
+      'netflix.com': {
+        company: 'Netflix',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'tesla.com': {
+        company: 'Tesla',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'uber.com': {
+        company: 'Uber',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'airbnb.com': {
+        company: 'Airbnb',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'palantir.com': {
+        company: 'Palantir',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'crowdstrike.com': {
+        company: 'CrowdStrike',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'snowflake.com': {
+        company: 'Snowflake',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'toasttab.com': {
+        company: 'Toast',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'draftkings.com': {
+        company: 'DraftKings',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'wasabi.com': {
+        company: 'Wasabi Technologies',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'samsara.com': {
+        company: 'Samsara',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'blockchain.com': {
+        company: 'Blockchain.com',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'similarweb.com': {
+        company: 'Similarweb',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      },
+      'corporate.walmart.com': {
+        company: 'Walmart',
+        title: ['h1.job-title', 'h1'],
+        location: ['.job-location'],
+        description: ['.job-description', 'main']
+      }
+    };
+
+    // Check if current host matches any known company career site
+    let companyConfig = null;
+    let matchedDomain = null;
+    
+    // Direct match first
+    if (COMPANY_CAREER_SELECTORS[host]) {
+      companyConfig = COMPANY_CAREER_SELECTORS[host];
+      matchedDomain = host;
+    } else {
+      // Partial match - check if host contains any known domain
+      for (const [domain, config] of Object.entries(COMPANY_CAREER_SELECTORS)) {
+        const baseDomain = domain.split('.').slice(-2).join('.');
+        if (host.includes(baseDomain.split('.')[0]) || host.endsWith(baseDomain)) {
+          companyConfig = config;
+          matchedDomain = domain;
+          break;
+        }
+      }
+    }
+
+    // ============ COMPANY-SPECIFIC EXTRACTION ============
+    if (companyConfig) {
+      result.detectedCompany = companyConfig.company;
+      result.companySource = 'domain';
+      result.company = companyConfig.company;
+      
+      // Use company-specific selectors
+      result.title = getText(...companyConfig.title);
+      result.location = getText(...companyConfig.location);
+      result.description = getText(...companyConfig.description);
+      
+      console.log(`[ATS Tailor] Detected ${companyConfig.company} career page, extracted: "${result.title}"`);
+    }
+
+    // ============ ATS PLATFORM SELECTORS ============
+    // --- Greenhouse ---
+    if (!result.title && host.includes('greenhouse')) {
+      result.title = getText('h1.app-title', '.job-title h1', 'h1[class*="job"]', '.posting-headline h1', 'h1');
+      result.company = result.company || getText('.company-name', '[class*="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = result.location || getText('.location', '[class*="location"]', '.posting-categories .location');
+      result.description = result.description || getText('#content', '.content', '.posting-content', '.job-post-content', '[class*="description"]', 'main');
+      result.companySource = 'selector';
+    }
+    // --- Workday / myworkdayjobs ---
+    else if (!result.title && (host.includes('workday') || host.includes('myworkdayjobs'))) {
+      result.title = getText('[data-automation-id="jobPostingHeader"] h2', 'h2[data-automation-id="jobTitle"]', '[data-automation-id="jobPostingTitle"]', 'h1', 'h2');
+      result.company = result.company || getText('[data-automation-id="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = result.location || getText('[data-automation-id="locations"]', '[data-automation-id="location"]', '[class*="location"]');
+      const descEl = document.querySelector('[data-automation-id="jobPostingDescription"]');
+      if (descEl) {
+        result.description = descEl.innerText || descEl.textContent || '';
+      } else {
+        const main = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+        result.description = main.innerText?.substring(0, 15000) || '';
+      }
+      result.companySource = 'selector';
+    }
+    // --- SmartRecruiters ---
+    else if (!result.title && host.includes('smartrecruiters')) {
+      result.title = getText('h1.job-title', 'h1[class*="title"]', 'h1');
+      result.company = result.company || getText('.company-name', '[class*="company"]');
+      result.location = result.location || getText('.job-location', '[class*="location"]');
+      result.description = result.description || getText('.job-description', '.job-sections', '[class*="description"]', 'main');
+      result.companySource = 'selector';
+    }
+    // --- Workable ---
+    else if (!result.title && host.includes('workable')) {
+      result.title = getText('h1[data-ui="job-title"]', 'h1');
+      result.company = result.company || getText('[data-ui="company-name"]', '.company-name');
+      result.location = result.location || getText('[data-ui="job-location"]', '.job-location');
+      result.description = result.description || getText('[data-ui="job-description"]', '.job-description', 'main');
+      result.companySource = 'selector';
+    }
+    // --- Lever --- EXCLUDED per user preference (unsupported)
+    // --- Ashby --- EXCLUDED per user preference (unsupported)
+    // --- Teamtailor ---
+    else if (!result.title && host.includes('teamtailor')) {
+      result.title = getText('h1.job-title', 'h1');
+      result.company = result.company || getText('.company-name', '[class*="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = result.location || getText('.location', '[class*="location"]');
+      result.description = result.description || getText('.job-ad-body', '.job-body', '.description', 'main');
+      result.companySource = 'selector';
+    }
+    // --- iCIMS ---
+    else if (!result.title && host.includes('icims')) {
+      result.title = getText('.iCIMS_Header h1', 'h1.title', 'h1');
+      result.company = result.company || getText('.iCIMS_CompanyName', '[class*="company"]');
+      result.location = result.location || getText('.iCIMS_JobLocation', '[class*="location"]');
+      result.description = result.description || getText('.iCIMS_JobContent', '.iCIMS_MainWrapper', 'main');
+      result.companySource = 'selector';
+    }
+    // --- Bullhorn ---
+    else if (!result.title && host.includes('bullhorn')) {
+      result.title = getText('h1.job-title', 'h1');
+      result.company = result.company || getText('.company-name');
+      result.location = result.location || getText('.job-location', '[class*="location"]');
+      result.description = result.description || getText('.job-description', '.job-details', 'main');
+      result.companySource = 'selector';
+    }
+    // --- Generic fallback ---
+    else if (!result.title) {
+      result.title = getText('h1') || document.title.split('|')[0].split('-')[0].trim();
+      result.company = result.company || document.querySelector('meta[property="og:site_name"]')?.content || '';
+      result.location = result.location || getText('[class*="location"]', '[data-testid*="location"]');
+      result.description = result.description || getText('main', 'article', '[class*="description"]', '#content', '[role="main"]');
+      result.companySource = 'auto';
+    }
+
+    // --- Fallback: Meta tags ---
+    if (!result.title) {
+      result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
+    }
+    if (!result.description || result.description.length < 100) {
+      const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content ||
+                           document.querySelector('meta[name="description"]')?.content || '';
+      if (fallbackDesc.length > result.description.length) {
+        result.description = fallbackDesc;
+      }
+      if (result.description.length < 200) {
+        const mainEl = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+        result.description = (mainEl.innerText || mainEl.textContent || '').substring(0, 15000);
+      }
+    }
+
+    // --- JSON-LD structured data ---
+    const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of jsonLdScripts) {
+      try {
+        let data = JSON.parse(script.textContent);
+        if (Array.isArray(data)) data = data.find(d => d['@type'] === 'JobPosting');
+        if (data?.['@type'] === 'JobPosting') {
+          if (!result.title && data.title) result.title = data.title;
+          if (!result.company && data.hiringOrganization?.name) {
+            result.company = data.hiringOrganization.name;
+            result.companySource = 'jsonld';
+          }
+          if (!result.location) {
+            const loc = data.jobLocation;
+            if (loc?.address?.addressLocality) {
+              result.location = loc.address.addressLocality;
+              if (loc.address.addressRegion) result.location += ', ' + loc.address.addressRegion;
+            } else if (typeof loc === 'string') {
+              result.location = loc;
+            }
+          }
+          if ((!result.description || result.description.length < 200) && data.description) {
+            const temp = document.createElement('div');
+            temp.innerHTML = data.description;
+            const cleanDesc = temp.textContent || temp.innerText || '';
+            if (cleanDesc.length > result.description.length) result.description = cleanDesc;
+          }
+          break;
+        }
+      } catch (e) {}
+    }
+
+    // --- Additional Company Fallbacks ---
+    if (!result.company || result.company.toLowerCase() === 'company' || result.company.length < 2) {
+      const titleMatch = (result.title || document.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.-]+?)(?:\s*[-|]|\s*$)/i);
+      if (titleMatch) result.company = titleMatch[1].trim();
+    }
+    if (!result.company || result.company.toLowerCase() === 'company' || result.company.length < 2) {
+      const subdomain = host.split('.')[0];
+      if (subdomain && subdomain.length > 2 && !['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards'].includes(subdomain.toLowerCase())) {
+        result.company = subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
+      }
+    }
+    if (!result.company || result.company.toLowerCase() === 'company' || result.company.length < 2) {
+      const logoEl = document.querySelector('[class*="logo"] img, [class*="company"] img, header img');
+      if (logoEl?.alt && logoEl.alt.length > 2 && logoEl.alt.length < 50) {
+        result.company = logoEl.alt.replace(/\s*logo\s*/i, '').trim();
+      }
+    }
+    if (result.company) {
+      result.company = result.company.replace(/\s*(careers|jobs|hiring|apply|work|join)\s*$/i, '').trim();
+    }
+    if (!result.company || result.company.toLowerCase() === 'company' || result.company.length < 2) {
+      result.company = '';
+    }
+
+    // --- Cleanup ---
+    result.title = result.title.replace(/\s+/g, ' ').trim().substring(0, 200);
+    result.company = result.company.replace(/\s+/g, ' ').trim().substring(0, 100);
+    result.location = result.location.replace(/\s+/g, ' ').trim().substring(0, 100);
+    result.description = result.description.replace(/\s+/g, ' ').trim().substring(0, 15000);
+
+    // Strip "Remote" from location
+    result.location = result.location
+      .replace(/\b(remote|work\s*from\s*home|wfh|virtual|fully\s*remote)\b/gi, '')
+      .replace(/\s*[\(\[]?\s*(remote|wfh|virtual)\s*[\)\]]?\s*/gi, '')
+      .replace(/\s*(\||,|\/|-)\s*$/g, '')
+      .replace(/^\s*(\||,|\/|-)\s*/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+  } catch (error) {
+    console.error('[ATS Tailor] Extraction error:', error);
+  }
+
+  return result;
+}
+
+// ============ CONNECTION TEST & DEBUG REPORT ============
+
+// Test API Key Connection (calls validate-openai-key or validate-kimi-key)
+ATSTailor.prototype.testAPIKeyConnection = async function() {
+  const testBtn = document.getElementById('testConnectionBtn');
+  const panel = document.getElementById('connectionTestPanel');
+  const statusIcon = document.getElementById('testStatusIcon');
+  const testMessage = document.getElementById('testMessage');
+  const testDetails = document.getElementById('testDetails');
+  const testDetailsText = document.getElementById('testDetailsText');
+  
+  if (!this.session?.access_token) {
+    this.showToast('Please login first', 'error');
+    return;
+  }
+  
+  // Show panel and set loading state
+  panel?.classList.remove('hidden');
+  if (statusIcon) statusIcon.textContent = '⏳';
+  if (testMessage) testMessage.textContent = 'Testing connection...';
+  if (testBtn) testBtn.disabled = true;
+  testDetails?.classList.add('hidden');
+  
+  const startTime = performance.now();
+  
+  try {
+    // Determine which endpoint to call based on current provider
+    const endpoint = this.aiProvider === 'kimi' 
+      ? `${SUPABASE_URL}/functions/v1/validate-kimi-key`
+      : `${SUPABASE_URL}/functions/v1/validate-openai-key`;
+    
+    const providerName = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+    
+    // We can't pass the key directly (security) - the edge function should get it from user_api_keys table
+    // So we call a modified approach: use tailor-application with a test flag
+    // For now, let's test by calling the validate endpoint indirectly
+    
+    // Actually, we need to test if the user has a key configured - call edge function that checks
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/tailor-application`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.session.access_token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        testConnection: true, // Special flag to just test connection
+        jobTitle: 'Test',
+        company: 'Test',
+        description: 'Test connection only',
+        requirements: [],
+        userProfile: { firstName: 'Test', lastName: 'Test', email: 'test@test.com' },
+      }),
+    });
+    
+    const elapsed = Math.round(performance.now() - startTime);
+    const data = await response.json().catch(() => ({}));
+    
+    // Store debug log
+    this._lastConnectionTest = {
+      timestamp: new Date().toISOString(),
+      provider: providerName,
+      status: response.status,
+      elapsed,
+      response: data,
+    };
+    
+    if (response.ok || data.connectionValid) {
+      if (statusIcon) statusIcon.textContent = '✅';
+      if (testMessage) testMessage.textContent = `${providerName} connected (${elapsed}ms)`;
+      this.showToast(`${providerName} API key is valid!`, 'success');
+    } else {
+      if (statusIcon) statusIcon.textContent = '❌';
+      if (testMessage) testMessage.textContent = data.error || `${providerName} connection failed`;
+      
+      // Show details
+      testDetails?.classList.remove('hidden');
+      if (testDetailsText) {
+        testDetailsText.textContent = JSON.stringify({
+          status: response.status,
+          error: data.error,
+          timeout: data.timeout,
+          elapsed: `${elapsed}ms`,
+        }, null, 2);
+      }
+    }
+    
+  } catch (error) {
+    const elapsed = Math.round(performance.now() - startTime);
+    console.error('[ATS Tailor] Connection test error:', error);
+    
+    this._lastConnectionTest = {
+      timestamp: new Date().toISOString(),
+      provider: this.aiProvider,
+      error: error.message,
+      elapsed,
+    };
+    
+    if (statusIcon) statusIcon.textContent = '❌';
+    if (testMessage) testMessage.textContent = error.message || 'Connection test failed';
+    testDetails?.classList.remove('hidden');
+    if (testDetailsText) {
+      testDetailsText.textContent = JSON.stringify({ error: error.message, elapsed: `${elapsed}ms` }, null, 2);
+    }
+  } finally {
+    if (testBtn) testBtn.disabled = false;
+  }
+};
+
+// Debug report data collection
+ATSTailor.prototype._debugLogs = [];
+
+ATSTailor.prototype.addDebugLog = function(stage, data) {
+  this._debugLogs.push({
+    timestamp: new Date().toISOString(),
+    stage,
+    ...data,
+  });
+  // Keep last 50 entries
+  if (this._debugLogs.length > 50) {
+    this._debugLogs.shift();
+  }
+};
+
+// logDebug alias for tailorDocuments and other methods
+ATSTailor.prototype.logDebug = function(stage, message, data = {}) {
+  console.log(`[ATS Tailor] [${stage}] ${message}`, data);
+  this.addDebugLog(stage, { message, ...data });
+};
+
+ATSTailor.prototype.showDebugReport = function() {
+  const panel = document.getElementById('debugReportPanel');
+  const content = document.getElementById('debugReportContent');
+  
+  panel?.classList.remove('hidden');
+  
+  // Compile debug report
+  const report = {
+    generatedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    aiProvider: this.aiProvider,
+    session: this.session ? { userId: this.session.user?.id, email: this.session.user?.email } : null,
+    currentJob: this.currentJob ? {
+      title: this.currentJob.title,
+      company: this.currentJob.company,
+      location: this.currentJob.location,
+      descriptionLength: this.currentJob.description?.length || 0,
+    } : null,
+    lastConnectionTest: this._lastConnectionTest || null,
+    recentLogs: this._debugLogs.slice(-20),
+    generatedDocuments: {
+      hasCv: !!this.generatedDocuments.cv,
+      hasCoverLetter: !!this.generatedDocuments.coverLetter,
+      matchScore: this.generatedDocuments.matchScore,
+      matchedKeywordsCount: this.generatedDocuments.matchedKeywords?.length || 0,
+      missingKeywordsCount: this.generatedDocuments.missingKeywords?.length || 0,
+    },
+  };
+  
+  if (content) {
+    content.innerHTML = `<pre style="font-size: 10px; overflow-x: auto;">${JSON.stringify(report, null, 2)}</pre>`;
+  }
+};
+
+ATSTailor.prototype.hideDebugReport = function() {
+  document.getElementById('debugReportPanel')?.classList.add('hidden');
+};
+
+ATSTailor.prototype.downloadDebugReport = function() {
+  const report = {
+    generatedAt: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    aiProvider: this.aiProvider,
+    session: this.session ? { userId: this.session.user?.id, email: this.session.user?.email } : null,
+    currentJob: this.currentJob,
+    lastConnectionTest: this._lastConnectionTest || null,
+    allLogs: this._debugLogs,
+    generatedDocuments: {
+      hasCv: !!this.generatedDocuments.cv,
+      hasCoverLetter: !!this.generatedDocuments.coverLetter,
+      cvLength: this.generatedDocuments.cv?.length || 0,
+      coverLetterLength: this.generatedDocuments.coverLetter?.length || 0,
+      matchScore: this.generatedDocuments.matchScore,
+      matchedKeywords: this.generatedDocuments.matchedKeywords,
+      missingKeywords: this.generatedDocuments.missingKeywords,
+    },
+  };
+  
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ats-debug-report-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  this.showToast('Debug report downloaded', 'success');
+};
+
+ATSTailor.prototype.copyDebugReport = function() {
+  const report = {
+    generatedAt: new Date().toISOString(),
+    aiProvider: this.aiProvider,
+    currentJob: this.currentJob ? { title: this.currentJob.title, company: this.currentJob.company } : null,
+    lastConnectionTest: this._lastConnectionTest,
+    recentLogs: this._debugLogs.slice(-10),
+  };
+  
+  navigator.clipboard.writeText(JSON.stringify(report, null, 2))
+    .then(() => this.showToast('Debug report copied to clipboard', 'success'))
+    .catch(() => this.showToast('Failed to copy', 'error'));
+};
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  // Store global reference for error handler access
+  window.atsTailor = new ATSTailor();
+});
