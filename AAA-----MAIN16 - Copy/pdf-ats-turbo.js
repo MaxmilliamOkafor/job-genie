@@ -170,7 +170,15 @@
         }
       }
 
-@@ -706,56 +755,59 @@
+      return sections;
+    }
+  }
+
+  /**
+   * Generate Cover Letter PDF with proper formatting
+   */
+  async generateCoverLetterPDF(coverLetterText, applicantName = 'Applicant') {
+    try {
       if (typeof jspdf !== 'undefined' && jspdf.jsPDF) {
         const { jsPDF } = jspdf;
         const { font, fontSize, margins, lineHeight, pageWidth, pageHeight } = this.CONFIG;
