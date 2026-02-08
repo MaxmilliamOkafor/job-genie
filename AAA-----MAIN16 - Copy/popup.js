@@ -639,6 +639,104 @@ class ATSTailor {
     });
   }
 
+  // ============ AUTH (EMAIL/PASSWORD) ============
+  // NOTE: Popup binds loginBtn -> this.login() and logoutBtn -> this.logout()
+  // These methods must exist or the buttons will appear "dead".
+  async login() {
+    const email = String(document.getElementById('email')?.value || '').trim();
+    const password = String(document.getElementById('password')?.value || '');
+
+    if (!email || !password) {
+      this.showToast('Please enter email and password', 'error');
+      return;
+    }
+
+    // Basic client-side validation (server will validate too)
+    if (email.length > 255 || password.length > 200) {
+      this.showToast('Invalid email or password', 'error');
+      return;
+    }
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!emailOk) {
+      this.showToast('Please enter a valid email address', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('loginBtn');
+    const btnText = btn?.querySelector('.btn-text');
+    const originalText = btnText?.textContent;
+
+    try {
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = 'Signing in...';
+      this.setStatus('Signing in...', 'working');
+
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        // Try to provide friendlier errors
+        let msg = 'Sign in failed';
+        try {
+          const err = await res.json();
+          const raw = String(err?.error_description || err?.msg || err?.message || err?.error || '').toLowerCase();
+
+          if (raw.includes('invalid login credentials')) msg = 'Invalid email or password';
+          else if (raw.includes('email not confirmed')) msg = 'Please confirm your email, then try again';
+          else if (raw) msg = err.error_description || err.message || err.error || msg;
+        } catch (_e) {
+          // ignore
+        }
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      this.session = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user,
+      };
+
+      await this.saveSession();
+      await this.loadAIProviderSettings();
+      await this.loadBaseCVFromProfile();
+
+      this.updateUI();
+      this.updateAIProviderUI();
+
+      this.showToast('Welcome back!', 'success');
+      this.setStatus('Ready', 'ready');
+
+      // If popup is open on a job board, try to detect job immediately
+      try {
+        await this.detectCurrentJob();
+      } catch (_e) {
+        // non-fatal
+      }
+    } catch (e) {
+      console.error('[ATS Tailor] login error:', e);
+      this.showToast(e?.message || 'Sign in failed', 'error');
+      this.setStatus('Login Required', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.textContent = originalText || 'Sign In';
+    }
+  }
+
+  async logout() {
+    this.session = null;
+    await chrome.storage.local.remove(['ats_session']);
+    this.updateUI();
+    this.showToast('Logged out', 'success');
+  }
+
   bindEvents() {
     document.getElementById('loginBtn')?.addEventListener('click', () => this.login());
     document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
