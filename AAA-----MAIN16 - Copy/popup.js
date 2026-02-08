@@ -1899,26 +1899,26 @@ class ATSTailor {
 
       // ============ AUTOMATION COMPLETE: PREPARE FOR NEXT ATS ============
       // Signal to LazyApply/external automation that this job is complete
-      await this.signalAutomationComplete({
+      this.signalAutomationComplete({
         success: true,
         elapsed,
         matchScore: finalScore,
         jobUrl: this.currentJob?.url || window.location?.href,
         company: this.currentJob?.company,
-        title: this.currentJob?.title
-      });
+        title: this.currentJob?.title,
+      }).catch(() => {});
 
     } catch (error) {
       console.error('Tailoring error:', error);
       this.showToast(error.message || 'Failed', 'error');
       this.setStatus('Error', 'error');
-      
-      // Signal failure to external automation
-      await this.signalAutomationComplete({
+
+      // Signal failure to external automation (do not await in popup context)
+      this.signalAutomationComplete({
         success: false,
         error: error.message,
-        jobUrl: this.currentJob?.url || window.location?.href
-      });
+        jobUrl: this.currentJob?.url || window.location?.href,
+      }).catch(() => {});
     } finally {
       // INSTANT RESET TO BLUE READY STATE: No delays, always ready for next URL
       const btnIconLeft = btn.querySelector('.btn-icon-left');
