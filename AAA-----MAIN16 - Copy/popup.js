@@ -1739,8 +1739,13 @@ class ATSTailor {
     const autoTailorToggle = document.getElementById('autoTailorToggle');
     if (autoTailorToggle) {
       autoTailorToggle.checked = this.autoTailorEnabled;
-@@ -3168,94 +3246,97 @@ class ATSTailor {
+    }
+  }
 
+  /**
+   * Handle successful tailoring result
+   */
+  async handleTailoringSuccess(result, keywords, p) {
       // PART 1A: Store structuredCv from tailoring for PDF generation (no re-parsing)
       if (result.resumeStructured || result.structuredCv) {
         window.quantumhireStructuredCv = result.resumeStructured || result.structuredCv;
