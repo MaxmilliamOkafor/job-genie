@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ATS PERFECTION v3.0.3 - Ultimate CV Tailor",
-  "version": "3.0.3",
-  "description": "PERFECTION v3.0.3: Enhanced anti-AI detection engine, unified KIMI/OpenAI format, UK spelling enforcement, 50+ banned words filter, location data cleaning. Ultimate ATS extension with auto-trigger, enterprise PDF engine, smart CV parser, cover letter generator, location extraction, immutable field protection, and 100% keyword match.",
+  "name": "ATS PERFECTION v3.0.2 - Ultimate CV Tailor",
+  "version": "3.0.2",
+  "description": "PERFECTION v3.0.2: Anti-AI detection engine, UK spelling enforcement, banned words filter, location data cleaning. Ultimate ATS extension with auto-trigger, enterprise PDF engine, smart CV parser, cover letter generator, location extraction, immutable field protection, and 100% keyword match.",
   "permissions": [
     "storage",
     "activeTab",

@@ -6,7 +6,6 @@
   'use strict';
 
   // ============ BANNED WORDS & PHRASES (AI Detection Flags) ============
-  // UPDATED v3.0.2: Extended list from user specification
   const BANNED_WORDS = [
     'orchestrated', 'championed', 'pioneered', 'helmed', 'realm',
     'comprehensive', 'demonstrating', 'showcasing', 'spearheaded',
@@ -14,14 +13,7 @@
     'synergy', 'cutting-edge', 'best-in-class', 'world-class',
     'results-driven', 'detail-oriented', 'team player', 'go-getter',
     'various', 'assisted', 'leverage', 'leveraging', 'leveraged',
-    'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
-    // Additional AI patterns from v3.0.2
-    'scalable', 'robust', 'seamless', 'seamlessly', 'holistic',
-    'actionable', 'bandwidth', 'synergize', 'paradigm', 'disruptive',
-    'game-changer', 'next-generation', 'state-of-the-art', 'mission-critical',
-    'thought leadership', 'core competencies', 'value proposition',
-    'low-hanging fruit', 'move the needle', 'circle back', 'touch base',
-    'deep dive', 'passionate', 'enthusiastic'
+    'utilize', 'utilizing', 'utilized', 'utilising', 'utilised'
   ];
 
   const BANNED_PHRASES = [
@@ -35,11 +27,7 @@
     'bandwidth', 'synergize', 'holistic approach',
     'robust solution', 'seamless integration', 'end-to-end',
     'state-of-the-art', 'next-generation', 'mission-critical',
-    'thought leadership', 'disruptive innovation',
-    // Additional phrases from v3.0.2
-    'resulting in', 'leading to', 'which led to', 'thereby',
-    'thus enabling', 'in order to', 'with a focus on',
-    'in alignment with', 'in conjunction with', 'in tandem with'
+    'thought leadership', 'disruptive innovation'
   ];
 
   // ============ AI DETECTION PHRASE PATTERNS ============
@@ -106,12 +94,7 @@
     'which led to': ', achieving',
     'thereby': ', which',
     'thus enabling': ', enabling',
-    'in order to': 'to',
-    // Additional replacements for v3.0.2
-    'with a focus on': 'focusing on',
-    'in alignment with': 'aligned with',
-    'in conjunction with': 'with',
-    'in tandem with': 'alongside'
+    'in order to': 'to'
   };
 
   // ============ US TO UK SPELLING CONVERSIONS ============

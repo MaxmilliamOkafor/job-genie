@@ -9,117 +9,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ============ CONTENT QUALITY ENGINE - UK SPELLING & BANNED WORD SANITISATION ============
-// Mirrors the extension's content-quality-engine.js for consistency
-
-const US_TO_UK_SPELLING: Record<string, string> = {
-  // -ize to -ise
-  'optimize': 'optimise', 'optimized': 'optimised', 'optimizing': 'optimising', 'optimization': 'optimisation',
-  'organize': 'organise', 'organized': 'organised', 'organizing': 'organising', 'organization': 'organisation',
-  'analyze': 'analyse', 'analyzed': 'analysed', 'analyzing': 'analysing',
-  'realize': 'realise', 'realized': 'realised', 'realizing': 'realising', 'realization': 'realisation',
-  'specialize': 'specialise', 'specialized': 'specialised', 'specializing': 'specialising', 'specialization': 'specialisation',
-  'recognize': 'recognise', 'recognized': 'recognised', 'recognizing': 'recognising',
-  'prioritize': 'prioritise', 'prioritized': 'prioritised', 'prioritizing': 'prioritising',
-  'standardize': 'standardise', 'standardized': 'standardised', 'standardizing': 'standardising',
-  'customize': 'customise', 'customized': 'customised', 'customizing': 'customising',
-  'minimize': 'minimise', 'minimized': 'minimised', 'minimizing': 'minimising',
-  'maximize': 'maximise', 'maximized': 'maximised', 'maximizing': 'maximising',
-  'centralize': 'centralise', 'centralized': 'centralised', 'modernize': 'modernise', 'modernized': 'modernised',
-  'authorize': 'authorise', 'authorized': 'authorised', 'visualize': 'visualise', 'visualized': 'visualised',
-  'finalize': 'finalise', 'finalized': 'finalised', 'digitize': 'digitise', 'digitized': 'digitised',
-  'summarize': 'summarise', 'summarized': 'summarised', 'emphasize': 'emphasise', 'emphasized': 'emphasised',
-  'utilize': 'use', 'utilized': 'used', 'utilizing': 'using', 'utilise': 'use', 'utilised': 'used', 'utilising': 'using',
-  // -or to -our
-  'color': 'colour', 'colors': 'colours', 'favor': 'favour', 'favors': 'favours', 'favorite': 'favourite',
-  'labor': 'labour', 'labors': 'labours', 'neighbor': 'neighbour', 'neighbors': 'neighbours',
-  'honor': 'honour', 'honors': 'honours', 'behavior': 'behaviour', 'behaviors': 'behaviours',
-  'endeavor': 'endeavour', 'endeavors': 'endeavours',
-  // -er to -re
-  'center': 'centre', 'centers': 'centres', 'centered': 'centred',
-  'meter': 'metre', 'meters': 'metres', 'fiber': 'fibre', 'fibers': 'fibres',
-  // Other
-  'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller',
-  'modeled': 'modelled', 'modeling': 'modelling', 'canceled': 'cancelled', 'canceling': 'cancelling',
-  'labeled': 'labelled', 'labeling': 'labelling', 'program': 'programme', 'programs': 'programmes',
-  'gray': 'grey', 'grays': 'greys', 'judgment': 'judgement', 'judgments': 'judgements',
-  'fulfill': 'fulfil', 'fulfills': 'fulfils', 'skillful': 'skilful',
-  'maneuver': 'manoeuvre', 'maneuvered': 'manoeuvred', 'maneuvering': 'manoeuvring',
-};
-
-const BANNED_WORDS = [
-  'orchestrated', 'championed', 'pioneered', 'helmed', 'realm', 'comprehensive',
-  'demonstrating', 'showcasing', 'spearheaded', 'meticulous', 'approximately',
-  'highly motivated', 'dynamic', 'synergy', 'cutting-edge', 'best-in-class',
-  'world-class', 'results-driven', 'detail-oriented', 'team player', 'go-getter',
-  'various', 'assisted', 'leverage', 'leveraging', 'leveraged'
-];
-
-const BANNED_PHRASES = [
-  'proven ability', 'proven track record', 'proven record', 'the intersection of',
-  'drive impactful outcomes', 'strategic initiatives', 'stakeholder environments',
-  'think outside the box'
-];
-
-const WORD_REPLACEMENTS: Record<string, string> = {
-  'orchestrated': 'directed', 'championed': 'led', 'pioneered': 'established',
-  'helmed': 'led', 'realm': 'field', 'comprehensive': 'thorough',
-  'demonstrating': 'showing', 'showcasing': 'presenting', 'spearheaded': 'led',
-  'meticulous': 'detailed', 'approximately': '', 'highly motivated': 'driven',
-  'dynamic': 'adaptable', 'synergy': 'collaboration', 'cutting-edge': 'modern',
-  'best-in-class': 'leading', 'world-class': 'excellent', 'results-driven': 'focused',
-  'detail-oriented': 'precise', 'team player': 'collaborative', 'go-getter': 'proactive',
-  'various': 'multiple', 'assisted': 'supported', 'leverage': 'use',
-  'leveraging': 'using', 'leveraged': 'used'
-};
-
-const PHRASE_REPLACEMENTS: Record<string, string> = {
-  'proven ability': 'strong ability', 'proven track record': 'track record',
-  'proven record': 'record', 'the intersection of': 'across',
-  'drive impactful outcomes': 'deliver results', 'strategic initiatives': 'key projects',
-  'stakeholder environments': 'business contexts', 'think outside the box': 'approach problems creatively'
-};
-
-function sanitiseContent(text: string): string {
-  if (!text || typeof text !== 'string') return text;
-  let result = text;
-
-  // 1. Convert US to UK spelling
-  const sortedWords = Object.keys(US_TO_UK_SPELLING).sort((a, b) => b.length - a.length);
-  for (const usWord of sortedWords) {
-    const ukWord = US_TO_UK_SPELLING[usWord];
-    const regex = new RegExp(`\\b${usWord}\\b`, 'gi');
-    result = result.replace(regex, (match) => {
-      if (match === match.toUpperCase()) return ukWord.toUpperCase();
-      if (match[0] === match[0].toUpperCase()) return ukWord.charAt(0).toUpperCase() + ukWord.slice(1);
-      return ukWord;
-    });
-  }
-
-  // 2. Replace banned phrases first
-  for (const phrase of BANNED_PHRASES) {
-    const escaped = phrase.split(/\s+/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
-    const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
-    const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
-    result = result.replace(regex, replacement);
-  }
-
-  // 3. Replace banned words
-  for (const word of BANNED_WORDS) {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi');
-    const replacement = WORD_REPLACEMENTS[word.toLowerCase()] || '';
-    result = result.replace(regex, replacement);
-  }
-
-  // 4. Remove em dashes
-  result = result.replace(/\s*—\s*/g, '. ').replace(/\s*–\s*/g, ' - ');
-
-  // 5. Clean up double spaces and punctuation
-  result = result.replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').replace(/,\s*,/g, ',').trim();
-
-  return result;
-}
-
 // Input validation limits
 const MAX_STRING_SHORT = 200;
 const MAX_STRING_MEDIUM = 500;
@@ -1923,40 +1812,6 @@ serve(async (req) => {
 
 CRITICAL MISSION: Achieve 95-100% ATS KEYWORD MATCH while sounding HUMAN and natural.
 
-=== MANDATORY LANGUAGE & SPELLING RULES ===
-YOU MUST USE BRITISH ENGLISH SPELLING THROUGHOUT:
-- "optimise" NOT "optimize"
-- "organise" NOT "organize"
-- "analyse" NOT "analyze"
-- "realise" NOT "realize"
-- "specialise" NOT "specialize"
-- "recognise" NOT "recognize"
-- "colour" NOT "color"
-- "behaviour" NOT "behavior"
-- "centre" NOT "center"
-- "utilise" → use "use" instead (banned word)
-- "utilize" → use "use" instead (banned word)
-- "leveraging" → use "using" or "through" instead (banned word)
-- "proven track record" → use "track record" instead (banned phrase)
-- "proven ability" → use "strong ability" instead (banned phrase)
-
-BANNED WORDS & PHRASES - NEVER USE THESE:
-Orchestrated, championed, pioneered, helmed, realm, comprehensive, demonstrating, showcasing, spearheaded, meticulous, approximately, highly motivated, dynamic, synergy, cutting-edge, best-in-class, world-class, results-driven, detail-oriented, team player, go-getter, various, assisted, leverage, leveraging, leveraged, utilize, utilizing, utilized, utilising, utilised, proven ability, proven track record, proven record, the intersection of, drive impactful outcomes, strategic initiatives, stakeholder environments, think outside the box
-
-APPROVED ALTERNATIVES:
-- Use: Led, directed, managed, built, created, established, facilitated, innovated
-- Use: Field, sector, industry (instead of "realm")
-- Use: Thorough, extensive, complete (instead of "comprehensive")
-- Use: Using, through, via, applying, employing (instead of "leveraging/utilising")
-- Use: Track record, strong ability (instead of "proven track record")
-
-PUNCTUATION RULES:
-- NEVER use EM dashes (—) - use commas or full stops instead
-- Minimise hyphen use - only when grammatically essential
-- Vary sentence structure - avoid repetitive patterns
-- NO personal pronouns (I, my, me, we, our) in CV bullets or summary
-=== END LANGUAGE RULES ===
-
 KEYWORD INTEGRATION STRATEGY (MANDATORY):
 - Current match: ${matchResult.matched.length}/${jdKeywords.allKeywords.length} keywords (${Math.round(currentMatchPercent)}%)
 - Target: 95-100% match (need to add ${keywordsNeededFor95} more keywords)
@@ -1992,11 +1847,13 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 HUMANIZED TONE RULES:
 - Active voice only
 - Vary sentence structure - avoid repetitive patterns
-- Use connectors: "This enabled...", "Achieving...", "Which produced..."
+- Use connectors: "This enabled...", "Resulting in...", "Which led to..."
+- BANNED: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "synergy"
 - Include specific metrics (%, $, time saved, users impacted)
 
 ATS KEYWORD DENSITY TARGETS:
 - Hard Skills: Each must appear 2-3 times across resume
+- Job Title Keywords: Must appear in summary and at least one role
 - Tools/Platforms: Mention in skills section AND in relevant experience bullets
 - Soft Skills: Demonstrate through specific examples, not just list them
 
@@ -2180,26 +2037,24 @@ ${
 
     // Determine API endpoint and model based on provider
     const getApiConfig = () => {
-      // UNIFIED SETTINGS: Both providers now use identical parameters for consistent output
-      const sharedSettings = {
-        temperature: 0.4,     // Balanced for consistent, high-quality output
-        maxTokens: 3500,      // Sufficient for complete JSON without truncation
-        streamChunks: false,
-      };
-
       if (aiProvider === "kimi") {
         return {
           endpoint: "https://api.moonshot.ai/v1/chat/completions",
           model: "kimi-k2-0711-preview",
           providerName: "Kimi K2",
-          ...sharedSettings,
+          // SPEED: Optimized settings - restored maxTokens to prevent JSON truncation
+          temperature: 0.4,    // Slightly higher for better output quality
+          maxTokens: 3500,     // Restored - 2500 caused JSON truncation errors
+          streamChunks: false,
         };
       }
       return {
         endpoint: "https://api.openai.com/v1/chat/completions",
         model: "gpt-4o-mini",
         providerName: "OpenAI",
-        ...sharedSettings,
+        temperature: 0.5,
+        maxTokens: 3000,
+        streamChunks: false,
       };
     };
 
@@ -2354,32 +2209,6 @@ ${
         cvFileName: `${candidateNameForFile}_CV.pdf`,
         coverLetterFileName: `${candidateNameForFile}_Cover_Letter.pdf`,
       };
-    }
-
-    // ============ CRITICAL: APPLY UK SPELLING & BANNED WORD SANITISATION ============
-    // This ensures consistent output regardless of which AI provider (KIMI/OpenAI) is used
-    if (result.tailoredResume) {
-      result.tailoredResume = sanitiseContent(result.tailoredResume);
-      console.log("[ContentQuality] Sanitised tailoredResume for UK spelling and banned words");
-    }
-    if (result.tailoredCoverLetter) {
-      result.tailoredCoverLetter = sanitiseContent(result.tailoredCoverLetter);
-      console.log("[ContentQuality] Sanitised tailoredCoverLetter for UK spelling and banned words");
-    }
-    // Also sanitise structured summary if present
-    if (result.resumeStructured?.summary) {
-      result.resumeStructured.summary = sanitiseContent(result.resumeStructured.summary);
-    }
-    // Sanitise experience bullets if present
-    if (result.resumeStructured?.experience && Array.isArray(result.resumeStructured.experience)) {
-      result.resumeStructured.experience = result.resumeStructured.experience.map((exp: any) => ({
-        ...exp,
-        bullets: Array.isArray(exp.bullets) ? exp.bullets.map((b: string) => sanitiseContent(b)) : exp.bullets
-      }));
-    }
-    // Sanitise cover letter paragraphs if present
-    if (result.coverLetterStructured?.paragraphs && Array.isArray(result.coverLetterStructured.paragraphs)) {
-      result.coverLetterStructured.paragraphs = result.coverLetterStructured.paragraphs.map((p: string) => sanitiseContent(p));
     }
 
     // Ensure all required fields with our pre-calculated values
