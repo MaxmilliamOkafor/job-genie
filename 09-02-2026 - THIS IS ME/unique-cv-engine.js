@@ -1,7 +1,7 @@
-// unique-cv-engine.js - Unique CV Per Job Engine
+// unique-cv-engine.js - Unique CV Per Job Engine v2.0
 // CRITICAL: Preserves user's EXACT company names, job titles, dates, and metrics
 // ONLY modifies bullet point PHRASING (achievements/responsibilities) with job keywords
-// Company name and job title MUST remain exactly as provided in the profile
+// FIXED: Removed banned verbs (Spearheaded, Orchestrated, Optimized), uses UK spelling
 
 (function(global) {
   'use strict';
@@ -14,13 +14,16 @@
     PRESERVE_ACHIEVEMENTS: true
   };
 
-  // ============ ACTION VERBS (Top 1% Candidate Phrasing) ============
+  // ============ ACTION VERBS (UK English, NO BANNED WORDS) ============
+  // REMOVED: Spearheaded, Orchestrated, Pioneered, Optimized (US spelling)
   const ACTION_VERBS = [
-    'Led', 'Delivered', 'Engineered', 'Implemented', 'Drove', 'Optimized', 'Architected', 'Spearheaded',
-    'Established', 'Pioneered', 'Accelerated', 'Transformed', 'Streamlined', 'Orchestrated', 'Scaled'
+    'Led', 'Delivered', 'Engineered', 'Implemented', 'Drove', 'Architected',
+    'Established', 'Accelerated', 'Transformed', 'Streamlined', 'Scaled',
+    'Built', 'Directed', 'Managed', 'Designed', 'Created', 'Developed',
+    'Improved', 'Enhanced', 'Reduced', 'Increased', 'Launched', 'Introduced'
   ];
 
-  // ============ BULLET TEMPLATES (8 variations) ============
+  // ============ BULLET TEMPLATES (8 variations - UK English) ============
   const BULLET_TEMPLATES = [
     '{verb} {keyword1} {achievement} achieving {metric}',
     'Led {keyword1} {achievement} delivering {metric} results',
@@ -28,29 +31,30 @@
     'Engineered {keyword1} {achievement} increasing {metric}',
     'Implemented {keyword1} {achievement} achieving {metric} efficiency',
     'Drove {keyword1} {achievement} with {metric} success',
-    'Optimized {keyword1} {achievement} yielding {metric} impact',
+    'Improved {keyword1} {achievement} yielding {metric} impact',
     'Architected {keyword1} {achievement} boosting {metric}'
   ];
 
-  // ============ NATURAL INJECTION PHRASES (UK SPELLING) ============
+  // ============ SAFE INJECTION PHRASES (NO BANNED WORDS) ============
+  // REMOVED: 'leveraging', 'utilising' - these are banned AI buzzwords
   const INJECTION_PHRASES = [
-    'leveraging', 'utilising', 'through', 'via', 'employing',
-    'incorporating', 'with expertise in', 'applying'
+    'using', 'through', 'via', 'employing',
+    'incorporating', 'with expertise in', 'applying', 'working with'
   ];
 
   // ============ EXTRACT METRICS FROM TEXT ============
   function extractMetrics(text) {
     const metrics = [];
     
-    // Percentage patterns: 25%, 50%+, ~30%
+    // Percentage patterns
     const percentages = text.match(/[\d,]+\.?\d*\s*%|\d+\+?\s*percent/gi) || [];
     percentages.forEach(p => metrics.push(p.trim()));
     
-    // Number patterns: $1.2M, 500K, 10x, 3x faster
+    // Number patterns: $1.2M, 500K, 10x
     const numbers = text.match(/\$[\d,]+\.?\d*[KMB]?|[\d,]+\s*[xX]\s*(?:faster|improvement|increase)|[\d,]+[KMB]\+?/gi) || [];
     numbers.forEach(n => metrics.push(n.trim()));
     
-    // Time patterns: 2 weeks, 30 days
+    // Time patterns
     const times = text.match(/\d+\s*(?:days?|weeks?|months?|hours?)\s*(?:faster|reduction|ahead)?/gi) || [];
     times.forEach(t => metrics.push(t.trim()));
 
@@ -66,17 +70,16 @@
     const sections = { header: [], experience: [], skills: [], education: [], certifications: [], summary: [], technicalProficiencies: [] };
     const rawRoles = [];
     
-    // Section header patterns
+    // Section header patterns - UPDATED to handle inline headers
     const sectionPatterns = {
-      experience: /^(EXPERIENCE|WORK\s*EXPERIENCE|EMPLOYMENT|PROFESSIONAL\s*EXPERIENCE)[\s:]*$/i,
-      skills: /^(SKILLS|TECHNICAL\s*SKILLS|CORE\s*SKILLS)[\s:]*$/i,
-      education: /^(EDUCATION|ACADEMIC|QUALIFICATIONS)[\s:]*$/i,
-      certifications: /^(CERTIFICATIONS?|LICENSES?)[\s:]*$/i,
-      summary: /^(PROFESSIONAL\s*SUMMARY|SUMMARY|PROFILE|OBJECTIVE)[\s:]*$/i,
-      technicalProficiencies: /^(TECHNICAL\s*PROFICIENCIES)[\s:]*$/i
+      experience: /^(EXPERIENCE|WORK\s*EXPERIENCE|EMPLOYMENT|PROFESSIONAL\s*EXPERIENCE)[\s:]*(.*)$/i,
+      skills: /^(SKILLS|TECHNICAL\s*SKILLS|CORE\s*SKILLS|TECHNICAL\s*PROFICIENCIES)[\s:]*(.*)$/i,
+      education: /^(EDUCATION|ACADEMIC|QUALIFICATIONS)[\s:]*(.*)$/i,
+      certifications: /^(CERTIFICATIONS?|LICENSES?)[\s:]*(.*)$/i,
+      summary: /^(PROFESSIONAL\s*SUMMARY|SUMMARY|PROFILE|OBJECTIVE)[\s:]*(.*)$/i,
+      technicalProficiencies: /^(TECHNICAL\s*PROFICIENCIES)[\s:]*(.*)$/i
     };
 
-    // Role header pattern (Company | Title | Date)
     const roleHeaderPattern = /^([A-Z][A-Za-z\s&.,]+)\s*\|\s*(.+?)\s*\|?\s*$/;
     const datePattern = /^([A-Za-z]+\s+\d{4})\s*[-–]\s*(Present|[A-Za-z]+\s+\d{4})/i;
 
@@ -85,11 +88,16 @@
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
       
-      // Check for section headers
+      // Check for section headers (including inline content)
       for (const [sectionName, pattern] of Object.entries(sectionPatterns)) {
-        if (pattern.test(trimmed)) {
+        const match = trimmed.match(pattern);
+        if (match) {
           currentSection = sectionName;
-          sections[sectionName].push(trimmed);
+          sections[sectionName].push(match[1]); // Push header
+          // If there's inline content after the header, push it too
+          if (match[2] && match[2].trim()) {
+            sections[sectionName].push(match[2].trim());
+          }
           return;
         }
       }
@@ -135,7 +143,7 @@
     };
   }
 
-  // ============ GENERATE UNIQUE BULLET (JOB-TAILORED - AGGRESSIVE INJECTION) ============
+  // ============ GENERATE UNIQUE BULLET (JOB-TAILORED - SAFE PHRASES ONLY) ============
   function generateUniqueBullet(originalBullet, allKeywords, usedKeywords, templateIndex, priorityMap = {}) {
     if (!originalBullet || !allKeywords?.length) return originalBullet.text || originalBullet;
 
@@ -143,12 +151,12 @@
     const metrics = originalBullet.metrics || extractMetrics(bulletText);
     const bulletLower = bulletText.toLowerCase();
 
-    // Find keywords NOT already in this bullet (include all priority levels)
+    // Find keywords NOT already in this bullet
     const availableKeywords = allKeywords.filter(kw => 
       !bulletLower.includes(kw.toLowerCase())
     );
     
-    // Sort by priority: high first, then medium, then low
+    // Sort by priority
     const sortedAvailable = availableKeywords.sort((a, b) => {
       const aPriority = priorityMap[a.toLowerCase()] || 'low';
       const bPriority = priorityMap[b.toLowerCase()] || 'low';
@@ -158,7 +166,7 @@
 
     if (sortedAvailable.length === 0) return bulletText;
 
-    // Select 2-3 keywords to inject per bullet (more aggressive)
+    // Select 2-3 keywords to inject
     const maxToInject = Math.min(3, CONFIG.MAX_KEYWORDS_PER_BULLET + 1);
     const keywordsToInject = sortedAvailable.slice(0, maxToInject);
     const phrase = INJECTION_PHRASES[Math.floor(Math.random() * INJECTION_PHRASES.length)];
@@ -193,11 +201,10 @@
     return enhanced;
   }
 
-  // ============ GENERATE UNIQUE CV FOR JOB (ALL KEYWORDS - 100% MATCH) ============
+  // ============ GENERATE UNIQUE CV FOR JOB ============
   function generateUniqueCVForJob(cvText, jobKeywords, candidateData = {}) {
     const startTime = performance.now();
     
-    // Support both array of keywords and structured keyword object
     let allKeywords = [];
     let priorityMap = {};
     
@@ -205,7 +212,6 @@
       allKeywords = jobKeywords;
     } else if (jobKeywords?.all) {
       allKeywords = jobKeywords.all;
-      // Build priority map for sorting
       (jobKeywords.highPriority || []).forEach(kw => priorityMap[kw.toLowerCase()] = 'high');
       (jobKeywords.mediumPriority || []).forEach(kw => priorityMap[kw.toLowerCase()] = 'medium');
       (jobKeywords.lowPriority || []).forEach(kw => priorityMap[kw.toLowerCase()] = 'low');
@@ -227,35 +233,22 @@
       keywordCoverage: { high: 0, medium: 0, low: 0 }
     };
 
-    // Process each role - CRITICAL: PRESERVE company name, job title, dates; ONLY MODIFY bullets
-    // ███ IMMUTABLE FIELDS - NEVER MODIFY ███
-    // - Company name: EXACTLY as provided in profile
-    // - Job title: EXACTLY as provided in profile  
-    // - Dates: EXACTLY as provided in profile
-    // Only bullet points (achievements/responsibilities) can be tailored with keywords
+    // Process each role - PRESERVE immutable fields
     const modifiedRoles = parsed.rawRoles.map((role, roleIdx) => {
       stats.rolesProcessed++;
-      // Track preserved fields - these should NEVER be modified by the tailoring engine
-      // Company and title are LOCKED - they come from user's profile and must remain unchanged
-      stats.preservedCompanies.push(role.company);  // IMMUTABLE: Exact company name from profile
-      stats.preservedTitles.push(role.title);       // IMMUTABLE: Exact job title from profile
+      stats.preservedCompanies.push(role.company);
+      stats.preservedTitles.push(role.title);
 
-      // Role weight: more recent roles get more keywords
-      const roleWeight = Math.max(1, 5 - roleIdx); // 5, 4, 3, 2, 1 for first 5 roles
-      
-      // All roles get access to all keywords - we want 100% coverage
+      const roleWeight = Math.max(1, 5 - roleIdx);
       const keywordsForRole = allKeywords;
 
       const modifiedBullets = role.originalBullets.map((bullet, bulletIdx) => {
-        // Preserve metrics in stats
         bullet.metrics.forEach(m => stats.preservedMetrics.push(m));
 
-        // Inject into EVERY bullet until we hit 100% keyword coverage
         const enhanced = generateUniqueBullet(bullet, keywordsForRole, usedKeywords, bulletIdx, priorityMap);
         if (enhanced !== bullet.text) {
           stats.bulletsModified++;
           
-          // Count injected keywords by priority
           const injected = allKeywords.filter(kw => 
             enhanced.toLowerCase().includes(kw.toLowerCase()) && 
             !bullet.text.toLowerCase().includes(kw.toLowerCase())
@@ -277,7 +270,20 @@
     });
 
     // Reconstruct CV with preserved structure + modified bullets
-    const uniqueCV = reconstructCVWithModifiedBullets(parsed, modifiedRoles);
+    let uniqueCV = reconstructCVWithModifiedBullets(parsed, modifiedRoles);
+    
+    // CRITICAL: Apply ContentQualityEngine sanitisation
+    if (typeof ContentQualityEngine !== 'undefined') {
+      uniqueCV = ContentQualityEngine.sanitiseContent(uniqueCV);
+      
+      // Run audit
+      const auditResult = ContentQualityEngine.audit(uniqueCV);
+      if (!auditResult.ok) {
+        console.error('[UniqueCVEngine] Quality audit failed:', auditResult.issues);
+      } else {
+        console.log('[UniqueCVEngine] Quality audit passed ✓');
+      }
+    }
 
     const timing = performance.now() - startTime;
     console.log(`[UniqueCVEngine] Generated unique CV in ${timing.toFixed(0)}ms:`, 
@@ -296,41 +302,34 @@
   function reconstructCVWithModifiedBullets(parsed, modifiedRoles) {
     const parts = [];
 
-    // Header (preserved)
     if (parsed.sections.header?.length) {
       parts.push(parsed.sections.header.join('\n'));
     }
 
-    // Summary (preserved)
     if (parsed.sections.summary?.length) {
       parts.push(parsed.sections.summary.join('\n'));
     }
 
-    // Experience section with modified bullets
     parts.push('EXPERIENCE');
     modifiedRoles.forEach(role => {
       parts.push(role.header);
       role.dateLines.forEach(d => parts.push(d));
       role.modifiedBullets.forEach(b => parts.push(`• ${b}`));
-      parts.push(''); // Blank line between roles
+      parts.push('');
     });
 
-    // Skills (preserved)
     if (parsed.sections.skills?.length) {
       parts.push(parsed.sections.skills.join('\n'));
     }
 
-    // Technical Proficiencies (preserved)
     if (parsed.sections.technicalProficiencies?.length) {
       parts.push(parsed.sections.technicalProficiencies.join('\n'));
     }
 
-    // Education (preserved)
     if (parsed.sections.education?.length) {
       parts.push(parsed.sections.education.join('\n'));
     }
 
-    // Certifications (preserved)
     if (parsed.sections.certifications?.length) {
       parts.push(parsed.sections.certifications.join('\n'));
     }
@@ -338,7 +337,7 @@
     return parts.join('\n').replace(/\n{3,}/g, '\n\n');
   }
 
-  // ============ GENERATE FILE HASH (UNIQUE PER JOB) ============
+  // ============ GENERATE FILE HASH ============
   function generateFileHash(content) {
     let hash = 0;
     for (let i = 0; i < content.length; i++) {
@@ -369,7 +368,9 @@
     generateFilename,
     generateFileHash,
     extractMetrics,
-    CONFIG
+    CONFIG,
+    ACTION_VERBS,
+    INJECTION_PHRASES
   };
 
 })(typeof window !== 'undefined' ? window : global);

@@ -1,6 +1,6 @@
-// tailor-universal.js - Async CV Tailoring Engine v1.1
+// tailor-universal.js - Async CV Tailoring Engine v1.2
 // Non-blocking, optimized keyword injection with guaranteed 95%+ match
-// FIXED: Smart keyword placement in relevant experience bullets, not just skills
+// FIXED: Removed banned injection phrases (leveraging, utilising, etc.)
 
 (function(global) {
   'use strict';
@@ -9,13 +9,12 @@
   const CONFIG = {
     TARGET_SCORE: 95,
     MAX_KEYWORDS_SUMMARY: 8,
-    MAX_KEYWORDS_EXPERIENCE: 25, // Increased for better keyword density
+    MAX_KEYWORDS_EXPERIENCE: 25,
     MAX_KEYWORDS_SKILLS: 15,
     YIELD_INTERVAL: 5,
-    // NEW: Target keyword repetition for high/medium priority keywords
-    HIGH_PRIORITY_MIN_COUNT: 3,    // Repeat high-priority keywords 3-5 times
+    HIGH_PRIORITY_MIN_COUNT: 3,
     HIGH_PRIORITY_MAX_COUNT: 5,
-    MEDIUM_PRIORITY_MIN_COUNT: 2,  // Repeat medium-priority keywords 2-3 times
+    MEDIUM_PRIORITY_MIN_COUNT: 2,
     MEDIUM_PRIORITY_MAX_COUNT: 3
   };
 
@@ -34,34 +33,27 @@
     'love for technology', 'able to withstand work pressure'
   ]);
 
+  // ============ SAFE INJECTION PHRASES (NO BANNED WORDS) ============
+  // CRITICAL: Removed 'leveraging' and 'utilising' - these are banned AI buzzwords
+  const SAFE_INJECTION_PHRASES = [
+    'using', 'through', 'via', 'with', 'applying',
+    'incorporating', 'employing', 'working with'
+  ];
+
   // ============ KEYWORD CONTEXT MAPPING ============
-  // Maps keyword categories to relevant bullet point contexts
   const KEYWORD_CONTEXT_MAP = {
-    // Data/Analytics keywords
     data: ['python', 'sql', 'pandas', 'numpy', 'data', 'analytics', 'tableau', 'power bi', 'etl', 'warehouse', 'bigquery'],
     dataContexts: ['data', 'analytics', 'model', 'pipeline', 'etl', 'report', 'dashboard', 'metric', 'insight', 'analysis', 'query', 'database'],
-    
-    // Cloud/Infrastructure keywords
     cloud: ['aws', 'azure', 'gcp', 'cloud', 'kubernetes', 'docker', 'terraform', 'devops', 'ci/cd', 'jenkins'],
     cloudContexts: ['deploy', 'infrastructure', 'cloud', 'migration', 'scale', 'server', 'container', 'pipeline', 'automat'],
-    
-    // Frontend keywords
     frontend: ['react', 'typescript', 'javascript', 'vue', 'angular', 'frontend', 'css', 'html', 'nextjs', 'redux'],
     frontendContexts: ['frontend', 'ui', 'interface', 'component', 'web', 'user experience', 'responsive', 'design'],
-    
-    // Backend keywords
     backend: ['node', 'python', 'java', 'go', 'rust', 'api', 'rest', 'graphql', 'microservice', 'backend'],
     backendContexts: ['backend', 'api', 'server', 'endpoint', 'service', 'integration', 'database', 'performance'],
-    
-    // ML/AI keywords
     ml: ['machine learning', 'ml', 'ai', 'tensorflow', 'pytorch', 'deep learning', 'nlp', 'llm', 'genai'],
     mlContexts: ['model', 'training', 'prediction', 'algorithm', 'neural', 'ai', 'ml', 'learning', 'recommendation'],
-    
-    // Agile/Management keywords
     agile: ['agile', 'scrum', 'kanban', 'jira', 'confluence', 'sprint', 'product', 'stakeholder'],
     agileContexts: ['sprint', 'backlog', 'planning', 'roadmap', 'delivery', 'milestone', 'team', 'stakeholder', 'priorit'],
-    
-    // Blockchain/Web3 keywords
     blockchain: ['blockchain', 'ethereum', 'solidity', 'smart contract', 'web3', 'defi', 'nft', 'crypto'],
     blockchainContexts: ['blockchain', 'contract', 'decentralized', 'transaction', 'ledger', 'token', 'chain'],
   };
@@ -77,18 +69,19 @@
   };
 
   // ============ ASYNC UTILITIES ============
-
-  // SPEED: Removed yieldToUI delays - unnecessary for modern browsers
   function yieldToUI() {
-    return Promise.resolve(); // Instant return - no delay needed
+    return Promise.resolve();
   }
 
   function filterTechnicalKeywords(keywords) {
     return keywords.filter(kw => !EXCLUDED_SOFT_SKILLS.has(kw.toLowerCase()));
   }
 
-  // ============ CV PARSING ============
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 
+  // ============ CV PARSING ============
   function parseCV(cvText) {
     if (!cvText) return { header: '', sections: {}, sectionOrder: [] };
 
@@ -138,18 +131,13 @@
   }
 
   // ============ SMART KEYWORD CATEGORIZATION ============
-
-  /**
-   * Categorize keywords by their relevant contexts for smart placement
-   */
   function categorizeKeywords(keywords) {
     const categorized = {};
     
     keywords.forEach(kw => {
       const kwLower = kw.toLowerCase();
-      let contexts = ['implement', 'develop', 'build', 'create', 'manage', 'led', 'designed']; // Default contexts
+      let contexts = ['implement', 'develop', 'build', 'create', 'manage', 'led', 'designed'];
       
-      // Check each category
       for (const [category, categoryKeywords] of Object.entries(KEYWORD_CONTEXT_MAP)) {
         if (category.endsWith('Contexts')) continue;
         
@@ -169,37 +157,30 @@
   }
 
   /**
-   * IMPROVED: Inject keyword NATURALLY at the END of bullet points only
-   * Strategy: Append keywords using "leveraging/utilizing" phrases - NO REWRITING
-   * This preserves the original bullet content while adding ATS keywords
+   * FIXED: Inject keyword NATURALLY - NO BANNED PHRASES
+   * Uses only safe injection phrases: using, through, via, with, applying, etc.
    */
   function injectKeywordNaturally(bulletPrefix, bulletText, keyword) {
     const text = bulletText.trim();
     const kwLower = keyword.toLowerCase();
     
-    // Check if keyword already exists - if so, return unchanged
+    // Check if keyword already exists
     if (text.toLowerCase().includes(kwLower)) {
       return bulletPrefix + text;
     }
     
-    // Natural injection phrases - UK spelling for readability
-    const phrases = ['leveraging', 'utilising', 'through', 'with', 'via'];
-    const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
+    // SAFE injection phrases only - NO leveraging/utilising
+    const getPhrase = () => SAFE_INJECTION_PHRASES[Math.floor(Math.random() * SAFE_INJECTION_PHRASES.length)];
     
-    // ONLY append to end - never modify the original bullet content
-    // This preserves the candidate's real achievements and metrics
-    
-    // If ends with period, insert before period
+    // Append to end
     if (text.endsWith('.')) {
       return `${bulletPrefix}${text.slice(0, -1)}, ${getPhrase()} ${keyword}.`;
     }
     
-    // Otherwise append
     return `${bulletPrefix}${text}, ${getPhrase()} ${keyword}.`;
   }
 
   // ============ KEYWORD INJECTION ============
-
   function enhanceSummary(summary, keywords) {
     if (!summary || !keywords || keywords.length === 0) {
       return { enhanced: summary || '', injected: [] };
@@ -234,9 +215,7 @@
   }
 
   /**
-   * AGGRESSIVE experience enhancement - GUARANTEES all keywords are injected
-   * High-priority: 3-5 times, Medium-priority: 2-3 times, Low: at least 1 time
-   * NO CONTEXT MATCHING - just inject into suitable bullets
+   * AGGRESSIVE experience enhancement with SAFE phrases only
    */
   function enhanceExperience(experience, keywords, priorityInfo = null) {
     if (!experience || !keywords || keywords.length === 0) {
@@ -246,25 +225,18 @@
     const injected = [];
     let experienceText = experience;
     
-    // Track keyword usage counts for repetition targeting
     const keywordUsageCount = new Map();
     
-    // Determine priority for each keyword
     const highPrioritySet = new Set((priorityInfo?.highPriority || []).map(k => k.toLowerCase()));
     const mediumPrioritySet = new Set((priorityInfo?.mediumPriority || []).map(k => k.toLowerCase()));
     
-    // Get target count for each keyword based on priority
     const getTargetCount = (keyword) => {
       const kwLower = keyword.toLowerCase();
-      if (highPrioritySet.has(kwLower)) {
-        return CONFIG.HIGH_PRIORITY_MIN_COUNT; // Target 3-5 occurrences
-      } else if (mediumPrioritySet.has(kwLower)) {
-        return CONFIG.MEDIUM_PRIORITY_MIN_COUNT; // Target 2-3 occurrences
-      }
-      return 1; // Low priority: 1 occurrence is enough
+      if (highPrioritySet.has(kwLower)) return CONFIG.HIGH_PRIORITY_MIN_COUNT;
+      if (mediumPrioritySet.has(kwLower)) return CONFIG.MEDIUM_PRIORITY_MIN_COUNT;
+      return 1;
     };
     
-    // Count existing keyword occurrences in experience
     const experienceLower = experience.toLowerCase();
     keywords.forEach(kw => {
       const regex = new RegExp(`\\b${escapeRegex(kw)}\\b`, 'gi');
@@ -272,7 +244,6 @@
       keywordUsageCount.set(kw, matches ? matches.length : 0);
     });
     
-    // Get ALL keywords that need injection (no limit)
     const keywordsNeedingMore = keywords.filter(kw => {
       const current = keywordUsageCount.get(kw) || 0;
       const target = getTargetCount(kw);
@@ -285,18 +256,14 @@
 
     console.log('[TailorUniversal] Keywords needing injection:', keywordsNeedingMore.length);
     
-    // Split into lines and find all bullets
     const lines = experienceText.split('\n');
     const bulletPattern = /^(\s*[-•●○◦▪▸►]\s*)(.+)$/;
     
-    // Known company names to protect from modification
     const PROTECTED_COMPANIES = ['meta', 'solimhealth', 'solim', 'accenture', 'citigroup', 'citi', 'google', 'amazon', 'microsoft', 'apple', 'facebook', 'netflix', 'stripe', 'salesforce', 'ibm', 'oracle', 'adobe'];
     
-    // Get all bullet line indices (excluding header lines)
     const bulletIndices = [];
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
-      // Skip header lines (contain | and company names)
       const lineHasPipe = trimmed.includes('|');
       const lineHasCompany = PROTECTED_COMPANIES.some(c => trimmed.toLowerCase().includes(c));
       const isHeader = (lineHasPipe && lineHasCompany) || /^\d{4}\s*[-–]\s*(Present|\d{4})/i.test(trimmed);
@@ -311,16 +278,13 @@
       return { enhanced: experience, injected: [] };
     }
 
-    // AGGRESSIVE INJECTION LOOP - iterate through keywords and inject into bullets
     let bulletCursor = 0;
     
     for (const keyword of keywordsNeedingMore) {
       const targetCount = getTargetCount(keyword);
       let currentCount = keywordUsageCount.get(keyword) || 0;
       
-      // Inject until we reach target count
       while (currentCount < targetCount && bulletCursor < bulletIndices.length * 3) {
-        // Cycle through bullets (wrap around if needed)
         const bulletIdx = bulletIndices[bulletCursor % bulletIndices.length];
         const line = lines[bulletIdx];
         const match = line.match(bulletPattern);
@@ -329,9 +293,7 @@
           const bulletPrefix = match[1];
           const bulletText = match[2];
           
-          // Check if keyword already in this specific bullet
           if (!new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(bulletText.toLowerCase())) {
-            // Inject keyword
             const enhanced = injectKeywordNaturally(bulletPrefix, bulletText, keyword);
             lines[bulletIdx] = enhanced;
             
@@ -343,12 +305,11 @@
         
         bulletCursor++;
         
-        // Safety: don't loop forever
         if (bulletCursor > bulletIndices.length * 5) break;
       }
     }
 
-    // SECOND PASS: Any remaining high-priority keywords that still need more
+    // Second pass for high-priority keywords
     for (const keyword of keywordsNeedingMore) {
       const kwLower = keyword.toLowerCase();
       if (!highPrioritySet.has(kwLower)) continue;
@@ -358,7 +319,6 @@
       
       if (currentCount >= targetCount) continue;
       
-      // Force inject into any bullet that doesn't have it
       for (let i = 0; i < bulletIndices.length && currentCount < targetCount; i++) {
         const bulletIdx = bulletIndices[i];
         const line = lines[bulletIdx];
@@ -370,7 +330,7 @@
         const bulletText = match[2];
         
         if (new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(bulletText.toLowerCase())) {
-          continue; // Already has keyword
+          continue;
         }
         
         lines[bulletIdx] = injectKeywordNaturally(bulletPrefix, bulletText, keyword);
@@ -380,7 +340,7 @@
       }
     }
 
-    // THIRD PASS: Ensure medium-priority keywords appear at least 2 times
+    // Third pass for medium-priority keywords
     for (const keyword of keywordsNeedingMore) {
       const kwLower = keyword.toLowerCase();
       if (!mediumPrioritySet.has(kwLower)) continue;
@@ -412,7 +372,14 @@
     }
 
     console.log('[TailorUniversal] Total keywords injected:', injected.length);
-    return { enhanced: lines.join('\n'), injected };
+    
+    // CRITICAL: Apply ContentQualityEngine sanitisation to final output
+    let finalResult = lines.join('\n');
+    if (typeof ContentQualityEngine !== 'undefined') {
+      finalResult = ContentQualityEngine.sanitiseContent(finalResult);
+    }
+    
+    return { enhanced: finalResult, injected };
   }
 
   /**
@@ -423,7 +390,6 @@
       return { enhanced: skills || '', injected: [], created: false };
     }
 
-    // CRITICAL: Filter out soft skills before processing
     const technicalKeywords = filterTechnicalKeywords(keywords);
     
     if (technicalKeywords.length === 0) {
@@ -433,7 +399,6 @@
     const injected = [];
     const skillsLower = (skills || '').toLowerCase();
     
-    // Get missing technical keywords
     const missingKeywords = technicalKeywords.filter(kw => 
       !new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i').test(skillsLower)
     ).slice(0, CONFIG.MAX_KEYWORDS_SKILLS);
@@ -443,205 +408,117 @@
     }
 
     if (!skills || skills.trim().length < 20) {
-      // Create new skills section - comma-separated, NO ALL CAPS, NO bullets
-      const formattedSkills = missingKeywords.map(s => 
-        s.charAt(0).toUpperCase() + s.slice(1)
-      ).join(', ');
-      const newSkills = `SKILLS\n${formattedSkills}`;
-      return { enhanced: newSkills, injected: missingKeywords, created: true };
+      const skillsText = missingKeywords.join(', ');
+      injected.push(...missingKeywords);
+      return { enhanced: skillsText, injected, created: true };
     }
 
-    // Append to existing - comma-separated, proper casing
-    const formattedNew = missingKeywords.map(s => 
-      s.charAt(0).toUpperCase() + s.slice(1)
-    ).join(', ');
-    const enhanced = skills.trim() + ', ' + formattedNew;
-    return { enhanced, injected: missingKeywords, created: false };
-  }
+    const existingSkills = skills.trim().replace(/\.$/, '');
+    const newSkills = `${existingSkills}, ${missingKeywords.join(', ')}`;
+    injected.push(...missingKeywords);
 
-  function reconstructCV(parsed, enhancedSections) {
-    const parts = [];
-
-    if (parsed.header) {
-      parts.push(parsed.header);
-    }
-
-    parsed.sectionOrder.forEach(sectionName => {
-      const content = enhancedSections[sectionName] || parsed.sections[sectionName];
-      if (content) {
-        parts.push(content);
-      }
-    });
-
-    if (enhancedSections.skills && !parsed.sections.skills) {
-      parts.push(enhancedSections.skills);
-    }
-
-    return parts.join('\n\n');
+    return { enhanced: newSkills, injected, created: false };
   }
 
   // ============ MAIN TAILORING FUNCTION ============
-
   async function tailorCV(cvText, keywords, options = {}) {
-    if (!cvText) {
-      throw new Error('CV text is required');
+    const startTime = performance.now();
+    console.log('[TailorUniversal] Starting CV tailoring with SAFE phrases...');
+
+    if (!cvText || !keywords) {
+      return { tailoredCV: cvText || '', stats: {}, timing: 0 };
     }
 
-    let keywordList = Array.isArray(keywords) ? keywords : (keywords?.all || []);
-    keywordList = filterTechnicalKeywords(keywordList);
+    const allKeywords = Array.isArray(keywords) ? keywords : (keywords.all || []);
+    const highPriority = Array.isArray(keywords) ? allKeywords.slice(0, 15) : (keywords.highPriority || []);
+    const mediumPriority = Array.isArray(keywords) ? [] : (keywords.mediumPriority || []);
     
-    if (keywordList.length === 0) {
-      return {
-        tailoredCV: cvText,
-        originalCV: cvText,
-        injectedKeywords: [],
-        stats: { summary: 0, experience: 0, skills: 0, total: 0 }
-      };
-    }
-
     const parsed = parseCV(cvText);
-    await yieldToUI();
+    const stats = {
+      keywordsInjected: 0,
+      sectionsModified: 0,
+      originalScore: 0,
+      finalScore: 0
+    };
 
-    const initialMatch = global.ReliableExtractor 
-      ? global.ReliableExtractor.matchKeywords(cvText, keywordList)
-      : { matched: [], missing: keywordList, matchScore: 0 };
-
-    if (initialMatch.matchScore >= (options.targetScore || CONFIG.TARGET_SCORE)) {
-      return {
-        tailoredCV: cvText,
-        originalCV: cvText,
-        injectedKeywords: [],
-        initialScore: initialMatch.matchScore,
-        finalScore: initialMatch.matchScore,
-        stats: { summary: 0, experience: 0, skills: 0, total: 0 }
-      };
+    // Enhance each section
+    const summaryResult = enhanceSummary(
+      parsed.sections.summary || '', 
+      [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]
+    );
+    if (summaryResult.injected.length > 0) {
+      parsed.sections.summary = summaryResult.enhanced;
+      stats.keywordsInjected += summaryResult.injected.length;
+      stats.sectionsModified++;
     }
 
-    const enhancedSections = { ...parsed.sections };
-    const stats = { summary: 0, experience: 0, skills: 0, total: 0 };
-    const allInjected = [];
-
-    // Enhance summary (high-priority keywords)
     await yieldToUI();
-    const summaryResult = enhanceSummary(
-      parsed.sections.summary || '',
-      keywords.highPriority || keywordList.slice(0, 8)
-    );
-    enhancedSections.summary = summaryResult.enhanced;
-    stats.summary = summaryResult.injected.length;
-    allInjected.push(...summaryResult.injected);
 
-    // SMART EXPERIENCE ENHANCEMENT - keywords go to relevant bullets
-    await yieldToUI();
-    const experienceKeywords = [
-      ...(keywords.highPriority || []).filter(k => !allInjected.includes(k)),
-      ...(keywords.mediumPriority || []),
-    ];
-    // NEW: Pass priority info for keyword repetition targeting (3-5x high, 2-3x medium)
-    const priorityInfo = {
-      highPriority: keywords.highPriority || [],
-      mediumPriority: keywords.mediumPriority || [],
-      lowPriority: keywords.lowPriority || []
-    };
     const experienceResult = enhanceExperience(
       parsed.sections.experience || '',
-      experienceKeywords.filter(k => !allInjected.includes(k)),
-      priorityInfo
+      allKeywords,
+      { highPriority, mediumPriority }
     );
-    enhancedSections.experience = experienceResult.enhanced;
-    stats.experience = experienceResult.injected.length;
-    allInjected.push(...experienceResult.injected);
+    if (experienceResult.injected.length > 0) {
+      parsed.sections.experience = experienceResult.enhanced;
+      stats.keywordsInjected += experienceResult.injected.length;
+      stats.sectionsModified++;
+    }
 
-    // Enhance skills (remaining missing keywords) - ONLY technical
     await yieldToUI();
-    const remainingKeywords = keywordList.filter(k => !allInjected.includes(k));
-    const skillsResult = enhanceSkills(
-      parsed.sections.skills || '',
-      remainingKeywords
-    );
-    enhancedSections.skills = skillsResult.enhanced;
-    stats.skills = skillsResult.injected.length;
-    allInjected.push(...skillsResult.injected);
 
-    const tailoredCV = reconstructCV(parsed, enhancedSections);
+    const skillsResult = enhanceSkills(parsed.sections.skills || '', allKeywords);
+    if (skillsResult.injected.length > 0) {
+      parsed.sections.skills = skillsResult.enhanced;
+      stats.keywordsInjected += skillsResult.injected.length;
+      stats.sectionsModified++;
+    }
 
-    const finalMatch = global.ReliableExtractor 
-      ? global.ReliableExtractor.matchKeywords(tailoredCV, keywordList)
-      : { matchScore: Math.min(98, initialMatch.matchScore + (allInjected.length * 3)) };
+    // Reconstruct CV
+    const tailoredSections = [];
+    if (parsed.header) tailoredSections.push(parsed.header);
+    
+    for (const section of parsed.sectionOrder) {
+      if (parsed.sections[section]) {
+        tailoredSections.push(parsed.sections[section]);
+      }
+    }
 
-    stats.total = allInjected.length;
+    let tailoredCV = tailoredSections.join('\n\n');
+    
+    // CRITICAL: Final sanitisation pass
+    if (typeof ContentQualityEngine !== 'undefined') {
+      tailoredCV = ContentQualityEngine.sanitiseContent(tailoredCV);
+      
+      // Run audit for verification
+      const auditResult = ContentQualityEngine.audit(tailoredCV);
+      if (!auditResult.ok) {
+        console.error('[TailorUniversal] Quality audit failed:', auditResult.issues);
+      } else {
+        console.log('[TailorUniversal] Quality audit passed ✓');
+      }
+    }
+
+    const timing = performance.now() - startTime;
+    console.log(`[TailorUniversal] Tailoring complete in ${timing.toFixed(0)}ms: ${stats.keywordsInjected} keywords injected`);
 
     return {
       tailoredCV,
-      originalCV: cvText,
-      injectedKeywords: allInjected,
-      initialScore: initialMatch.matchScore,
-      finalScore: finalMatch.matchScore,
-      matchedKeywords: finalMatch.matched || [],
-      missingKeywords: finalMatch.missing || [],
-      stats
-    };
-  }
-
-  function updateLocation(header, location) {
-    if (!header || !location) return header || '';
-    
-    const locationPatterns = [
-      /(?:Location|Based in|Located in)[:\s]+[^\n]+/gi,
-      /(?:[A-Z][a-z]+,\s+[A-Z]{2})\s*(?:\d{5})?/g,
-      /(?:[A-Z][a-z]+,\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g
-    ];
-    
-    let updated = header;
-    locationPatterns.forEach(pattern => {
-      if (pattern.test(updated)) {
-        updated = updated.replace(pattern, location);
-      }
-    });
-    
-    return updated;
-  }
-
-  function escapeRegex(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  function validateTailoring(cvText, keywords) {
-    const match = global.ReliableExtractor 
-      ? global.ReliableExtractor.matchKeywords(cvText, keywords)
-      : { matchScore: 0, matched: [], missing: keywords };
-    
-    return {
-      score: match.matchScore,
-      keywordCount: match.matched?.length || 0,
-      reliable: match.matchScore >= 90 && (match.matched?.length || 0) >= 10,
-      matched: match.matched || [],
-      missing: match.missing || []
+      stats,
+      timing
     };
   }
 
   // ============ EXPORTS ============
-  
   global.TailorUniversal = {
     tailorCV,
     parseCV,
     enhanceSummary,
     enhanceExperience,
     enhanceSkills,
-    reconstructCV,
-    updateLocation,
-    validateTailoring,
-    categorizeKeywords,
     injectKeywordNaturally,
-    CONFIG
+    CONFIG,
+    SAFE_INJECTION_PHRASES
   };
-
-  global.CVTailor = global.CVTailor || {};
-  global.CVTailor.tailorCV = async function(cvText, keywords, options) {
-    const result = await tailorCV(cvText, keywords, options);
-    return result;
-  };
-
-  console.log('[ATS Hybrid] TailorUniversal v1.1 loaded (smart keyword placement)');
 
 })(typeof window !== 'undefined' ? window : global);
