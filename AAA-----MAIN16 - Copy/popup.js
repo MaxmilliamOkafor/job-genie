@@ -2624,6 +2624,17 @@ class ATSTailor {
     }
   }
 
+  // ============ STATUS INDICATOR ============
+  setStatus(text, state = 'ready') {
+    const indicator = document.getElementById('statusIndicator');
+    const statusText = indicator?.querySelector('.status-text');
+    if (statusText) statusText.textContent = text;
+
+    // state: 'ready' | 'working' | 'error'
+    indicator?.classList.remove('ready', 'working', 'error');
+    indicator?.classList.add(state);
+  }
+
   showToast(message, type = 'success') {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
