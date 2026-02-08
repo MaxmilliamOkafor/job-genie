@@ -226,6 +226,88 @@ class ATSTailor {
     return this._domRefs[id];
   }
 
+  // Normalize AI output into plain text so preview/download never shows raw JSON blobs
+  normalizeDocumentText(input, type = 'cv') {
+    if (input == null) return '';
+
+    // Already plain text
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (!trimmed) return '';
+
+      // Parse JSON-like payloads returned as strings
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          return this.normalizeDocumentText(JSON.parse(trimmed), type);
+        } catch {
+          // Keep original if not valid JSON
+        }
+      }
+      return input;
+    }
+
+    if (Array.isArray(input)) {
+      return input.map((item) => this.normalizeDocumentText(item, type)).filter(Boolean).join('\n');
+    }
+
+    if (typeof input === 'object') {
+      // Common direct fields from backend
+      const directText = input.text || input.content || input.body || input.plainText || input.tailoredResume || input.tailoredCoverLetter;
+      if (typeof directText === 'string' && directText.trim()) {
+        return this.normalizeDocumentText(directText, type);
+      }
+
+      if (type === 'cover') {
+        const paragraphs = Array.isArray(input.paragraphs) ? input.paragraphs : [];
+        if (paragraphs.length) {
+          return paragraphs
+            .map((p) => (typeof p === 'string' ? p : (p?.text || p?.content || '')))
+            .filter(Boolean)
+            .join('\n\n');
+        }
+      }
+
+      // Resume structured object fallback
+      const lines = [];
+      const fullName = input.name || input.fullName || [input.firstName, input.lastName].filter(Boolean).join(' ');
+      if (fullName) lines.push(String(fullName).toUpperCase());
+
+      const summary = input.summary?.text || input.summary?.content || input.summary || input.professionalSummary;
+      if (summary) lines.push('', 'PROFESSIONAL SUMMARY', String(summary));
+
+      const experience = input.experience || input.workExperience || [];
+      if (Array.isArray(experience) && experience.length) {
+        lines.push('', 'WORK EXPERIENCE');
+        for (const role of experience) {
+          const title = role?.title || role?.jobTitle || role?.position || '';
+          const company = role?.company || role?.companyName || '';
+          const dates = role?.dates || [role?.startDate, role?.endDate].filter(Boolean).join(' - ');
+          lines.push([title, company].filter(Boolean).join(' | ') + (dates ? ` | ${dates}` : ''));
+          const bullets = role?.bullets || role?.achievements || role?.description || [];
+          if (Array.isArray(bullets)) {
+            bullets.forEach((b) => b && lines.push(`• ${String(b).replace(/^\s*[•▪-]\s*/, '')}`));
+          } else if (bullets) {
+            lines.push(`• ${String(bullets).replace(/^\s*[•▪-]\s*/, '')}`);
+          }
+        }
+      }
+
+      const skills = input.skills || input.coreSkills || [];
+      if (Array.isArray(skills) && skills.length) {
+        lines.push('', 'SKILLS', skills.map((s) => (typeof s === 'string' ? s : s?.name || s?.skill)).filter(Boolean).join(', '));
+      }
+
+      const built = lines.join('\n').trim();
+      if (built) return built;
+
+      // Last resort: never leak raw [object Object]
+      return JSON.stringify(input, null, 2);
+    }
+
+    return String(input);
+  }
+
   async init() {
     await this.loadSession();
     await this.loadAIProviderSettings();
@@ -811,7 +893,8 @@ class ATSTailor {
   
   // NEW: Download text version of CV/Cover Letter
   downloadTextVersion(type) {
-    const content = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const rawContent = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const content = this.normalizeDocumentText(rawContent, type === 'cv' ? 'cv' : 'cover');
     if (!content) {
       this.showToast(`No ${type === 'cv' ? 'CV' : 'Cover Letter'} content to download`, 'error');
       return;
@@ -1547,9 +1630,9 @@ class ATSTailor {
   }
 
   copyCurrentContent() {
-    const content = this.currentPreviewTab === 'cv' 
-      ? this.generatedDocuments.cv 
-      : this.generatedDocuments.coverLetter;
+    const content = this.currentPreviewTab === 'cv'
+      ? this.normalizeDocumentText(this.generatedDocuments.cv, 'cv')
+      : this.normalizeDocumentText(this.generatedDocuments.coverLetter, 'cover');
     
     if (content) {
       navigator.clipboard.writeText(content)
@@ -1576,7 +1659,7 @@ class ATSTailor {
     
     // Handle text view tab
     if (this.currentPreviewTab === 'text') {
-      const cvContent = this.generatedDocuments.cv || '';
+      const cvContent = this.normalizeDocumentText(this.generatedDocuments.cv || '', 'cv');
       if (cvContent) {
         // Show plain text version with monospace formatting
         previewContent.innerHTML = `<pre style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.3; padding: 8px; background: #f5f5f5; border-radius: 4px; overflow-x: auto;">${cvContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
@@ -1588,9 +1671,9 @@ class ATSTailor {
       return;
     }
     
-    const content = this.currentPreviewTab === 'cv' 
-      ? this.generatedDocuments.cv 
-      : this.generatedDocuments.coverLetter;
+    const content = this.currentPreviewTab === 'cv'
+      ? this.normalizeDocumentText(this.generatedDocuments.cv, 'cv')
+      : this.normalizeDocumentText(this.generatedDocuments.coverLetter, 'cover');
     
     const hasPdf = this.currentPreviewTab === 'cv' 
       ? this.generatedDocuments.cvPdf 
@@ -3189,9 +3272,6 @@ class ATSTailor {
         }
       }
 
-      // Save original CV (before local boosting) for coverage report diffing
-      this._coverageOriginalCV = result.tailoredResume || '';
-
       // Filename format: {FirstName}_{LastName}_CV.pdf and {FirstName}_{LastName}_Cover_Letter.pdf
       const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
       const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || '';
@@ -3199,9 +3279,21 @@ class ATSTailor {
       
       this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
+      const normalizedCvText = this.normalizeDocumentText(
+        result.tailoredResume || result.resume || result.cv || result.resumeText || result.resumeStructured || result.structuredCv,
+        'cv'
+      );
+      const normalizedCoverText = this.normalizeDocumentText(
+        result.tailoredCoverLetter || result.coverLetter || result.cover || result.coverLetterText,
+        'cover'
+      );
+
+      // Save original CV (before local boosting) for coverage report diffing
+      this._coverageOriginalCV = normalizedCvText || '';
+
       this.generatedDocuments = {
-        cv: result.tailoredResume,
-        coverLetter: result.tailoredCoverLetter || result.coverLetter,
+        cv: normalizedCvText,
+        coverLetter: normalizedCoverText,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
         cvFileName: `${fileBaseName}_CV.pdf`,
@@ -3658,7 +3750,8 @@ class ATSTailor {
    */
   async downloadDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
-    const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const rawTextDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const textDoc = this.normalizeDocumentText(rawTextDoc, type === 'cv' ? 'cv' : 'cover');
     const filename = type === 'cv' 
       ? (this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_'))
       : (this.generatedDocuments.coverFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter.pdf`.replace(/_+/g, '_'));
@@ -3954,7 +4047,8 @@ class ATSTailor {
 
   async attachDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
-    const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const rawTextDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
+    const textDoc = this.normalizeDocumentText(rawTextDoc, type === 'cv' ? 'cv' : 'cover');
     const filename =
       type === 'cv'
         ? this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_')
