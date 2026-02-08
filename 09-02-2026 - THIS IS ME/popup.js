@@ -3270,9 +3270,19 @@ class ATSTailor {
       
       this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
+      // FIX 09-02-26: Apply sanitisation to backend results before storing
+      let sanitisedCV = result.tailoredResume || '';
+      let sanitisedCoverLetter = result.tailoredCoverLetter || result.coverLetter || '';
+      
+      if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.sanitiseContent) {
+        sanitisedCV = ContentQualityEngine.sanitiseContent(sanitisedCV);
+        sanitisedCoverLetter = ContentQualityEngine.sanitiseContent(sanitisedCoverLetter, { removePronouns: false });
+        console.log('[ATS Tailor] Applied ContentQualityEngine sanitisation to tailoring results');
+      }
+      
       this.generatedDocuments = {
-        cv: result.tailoredResume,
-        coverLetter: result.tailoredCoverLetter || result.coverLetter,
+        cv: sanitisedCV,
+        coverLetter: sanitisedCoverLetter,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
         cvFileName: `${fileBaseName}_CV.pdf`,
@@ -3360,7 +3370,14 @@ class ATSTailor {
           }
 
           if (boostResult.tailoredCV) {
-            this.generatedDocuments.cv = boostResult.tailoredCV;
+            // FIX 09-02-26: Apply final sanitisation pass for UK spelling and banned phrases
+            let sanitisedCV = boostResult.tailoredCV;
+            if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.sanitiseContent) {
+              sanitisedCV = ContentQualityEngine.sanitiseContent(sanitisedCV);
+              console.log('[ATS Tailor] Applied final ContentQualityEngine sanitisation');
+            }
+            
+            this.generatedDocuments.cv = sanitisedCV;
             this.generatedDocuments.matchScore = boostResult.finalScore;
             this.generatedDocuments.matchedKeywords = boostResult.matchedKeywords;
             this.generatedDocuments.missingKeywords = boostResult.missingKeywords;
@@ -3370,6 +3387,16 @@ class ATSTailor {
             
             console.log('[ATS Tailor] Step 3 - Final score:', boostResult.finalScore + '%', 
                         'injected:', boostResult.injectedKeywords?.length || 0, 'keywords');
+            
+            // FIX 09-02-26: Run quality audit and log results
+            if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.audit) {
+              const audit = ContentQualityEngine.audit(sanitisedCV);
+              if (!audit.ok) {
+                console.warn('[ATS Tailor] ⚠️ CV Quality audit failed:', audit.issues);
+              } else {
+                console.log('[ATS Tailor] ✅ CV Quality audit passed');
+              }
+            }
           }
         } catch (boostError) {
           console.warn('[ATS Tailor] Boost failed, applying fallback injection:', boostError);
@@ -3380,8 +3407,14 @@ class ATSTailor {
             this.generatedDocuments.missingKeywords
           );
           if (fallbackInject.tailoredCV) {
-            this.generatedDocuments.cv = fallbackInject.tailoredCV;
-            const finalMatch = this.calculateMatchScore(fallbackInject.tailoredCV, keywords);
+            // FIX 09-02-26: Apply final sanitisation
+            let sanitisedCV = fallbackInject.tailoredCV;
+            if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.sanitiseContent) {
+              sanitisedCV = ContentQualityEngine.sanitiseContent(sanitisedCV);
+            }
+            
+            this.generatedDocuments.cv = sanitisedCV;
+            const finalMatch = this.calculateMatchScore(sanitisedCV, keywords);
             this.generatedDocuments.matchScore = finalMatch.matchScore;
             this.generatedDocuments.matchedKeywords = finalMatch.matchedKeywords;
             this.generatedDocuments.missingKeywords = finalMatch.missingKeywords;

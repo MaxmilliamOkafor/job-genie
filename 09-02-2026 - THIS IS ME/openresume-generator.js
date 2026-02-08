@@ -153,6 +153,7 @@
     },
 
     // ============ PARSE CV TEXT ============
+    // FIX v3.3.4: Handle inline headers like "PROFESSIONAL SUMMARY: Experienced..."
     parseCVText(cvText) {
       const result = {
         summary: '',
@@ -172,17 +173,37 @@
         'SUMMARY': 'summary',
         'PROFILE': 'summary',
         'WORK EXPERIENCE': 'experience',
+        'PROFESSIONAL EXPERIENCE': 'experience',
         'EXPERIENCE': 'experience',
         'EMPLOYMENT': 'experience',
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
+        'TECHNICAL PROFICIENCIES': 'skills',
+        'CORE COMPETENCIES': 'skills',
         'EDUCATION': 'education',
         'CERTIFICATIONS': 'certifications'
       };
+      
+      // Build regex pattern for inline headers: "SECTION_NAME: content"
+      const sectionNames = Object.keys(sectionMap).join('|');
+      const inlineHeaderRegex = new RegExp(`^(${sectionNames})\\s*:\\s*(.+)$`, 'i');
 
       for (const line of lines) {
         const trimmed = line.trim();
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
+        
+        // FIX v3.3.4: Check for inline header pattern first (e.g., "PROFESSIONAL SUMMARY: Experienced...")
+        const inlineMatch = trimmed.match(inlineHeaderRegex);
+        if (inlineMatch) {
+          // Save previous section content
+          this.saveSection(result, currentSection, currentContent, currentJob);
+          // Start new section with inline content
+          const headerKey = inlineMatch[1].toUpperCase().trim();
+          currentSection = sectionMap[headerKey] || '';
+          currentContent = [inlineMatch[2].trim()]; // Push inline content as first line
+          currentJob = null;
+          continue;
+        }
 
         if (sectionMap[upperTrimmed]) {
           // Save previous section content
