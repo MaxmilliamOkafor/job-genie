@@ -2684,13 +2684,14 @@ class ATSTailor {
       return { tailoredCV: cvText, injectedKeywords: [] };
     }
     
-    let tailoredCV = cvText;
+    // CRITICAL FIX: First remove any duplicate sections from AI output
+    let tailoredCV = this.removeDuplicateSections(cvText);
     let injectedKeywords = [];
     let remaining = [...missingKeywords];
     
-    // Natural injection phrases for Work Experience
+    // Natural injection phrases for Work Experience - REMOVED banned words
     const actionPhrases = [
-      'leveraging', 'utilizing', 'implementing', 'applying', 'integrating',
+      'implementing', 'applying', 'integrating',
       'incorporating', 'employing', 'deploying', 'using', 'with expertise in'
     ];
     
@@ -2817,10 +2818,81 @@ class ATSTailor {
       }
     }
     
-    // STEP 4: REMOVED - No separate "TECHNICAL PROFICIENCIES" section
-    // All keywords are now merged into the single SKILLS section above
+    // STEP 4: Final cleanup - remove any accidentally created duplicate sections
+    tailoredCV = this.removeDuplicateSections(tailoredCV);
     
     return { tailoredCV, injectedKeywords };
+  }
+
+  /**
+   * CRITICAL FIX: Remove duplicate CV sections (e.g., two SKILLS sections)
+   * This can happen when AI returns content with one skills section and
+   * keyword injection adds another. Merge them into a single clean section.
+   */
+  removeDuplicateSections(cvText) {
+    if (!cvText) return cvText;
+    
+    // Section headers to deduplicate (case-insensitive)
+    const sectionPatterns = [
+      { headers: ['SKILLS', 'TECHNICAL SKILLS', 'CORE SKILLS', 'TECHNICAL PROFICIENCIES', 'KEY SKILLS', 'CORE COMPETENCIES', 'ADDITIONAL SKILLS'], canonical: 'SKILLS' },
+      { headers: ['CERTIFICATIONS', 'LICENSES', 'PROFESSIONAL CERTIFICATIONS'], canonical: 'CERTIFICATIONS' },
+      { headers: ['EDUCATION', 'ACADEMIC', 'QUALIFICATIONS'], canonical: 'EDUCATION' }
+    ];
+    
+    let result = cvText;
+    
+    for (const pattern of sectionPatterns) {
+      // Find all occurrences of this section type
+      const allMatches = [];
+      
+      for (const header of pattern.headers) {
+        const regex = new RegExp(`\\n${header}\\s*\\n([\\s\\S]*?)(?=\\n[A-Z]{3,}[\\s\\n]|$)`, 'gi');
+        let match;
+        while ((match = regex.exec(result)) !== null) {
+          allMatches.push({
+            fullMatch: match[0],
+            content: match[1].trim(),
+            index: match.index,
+            header: header
+          });
+        }
+      }
+      
+      // If multiple sections found, merge them
+      if (allMatches.length > 1) {
+        console.log(`[ATS Tailor] Found ${allMatches.length} duplicate ${pattern.canonical} sections, merging...`);
+        
+        // Sort by position (keep first occurrence as primary)
+        allMatches.sort((a, b) => a.index - b.index);
+        
+        // Collect all content items (deduplicated)
+        const allItems = new Set();
+        for (const match of allMatches) {
+          const items = match.content
+            .replace(/^[•\-\*]\s*/gm, '')
+            .split(/[,\n]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 1 && s.length < 100);
+          items.forEach(item => allItems.add(item.toLowerCase()));
+        }
+        
+        // Remove all but first section from result
+        for (let i = 1; i < allMatches.length; i++) {
+          result = result.replace(allMatches[i].fullMatch, '\n');
+        }
+        
+        // Replace first section with merged content
+        const mergedContent = Array.from(allItems).join(', ');
+        result = result.replace(allMatches[0].fullMatch, `\n${pattern.canonical}\n${mergedContent}\n`);
+        
+        console.log(`[ATS Tailor] Merged ${allItems.size} unique items into single ${pattern.canonical} section`);
+      }
+    }
+    
+    // Clean up extra newlines
+    result = result.replace(/\n{3,}/g, '\n\n');
+    
+    return result;
   }
 
   /**

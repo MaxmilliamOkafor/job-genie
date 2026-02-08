@@ -192,6 +192,7 @@
 
     // ============ STRUCTURE CV DATA ============
     // FIX 27-01-26: Added robust data extraction with multiple fallbacks for OpenAI speed
+    // FIX 09-02-26: Added duplicate section removal and proper text cleaning
     structureCVData(candidateData, tailoredContent) {
       const data = {
         contact: this.extractContact(candidateData),
@@ -214,7 +215,9 @@
 
       // Parse tailored content sections
       if (typeof tailoredContent === 'string') {
-        const parsed = this.parseSections(tailoredContent);
+        // CRITICAL FIX: Clean the text before parsing - remove duplicate sections
+        const cleanedContent = this.removeDuplicateSections(tailoredContent);
+        const parsed = this.parseSections(cleanedContent);
         data.summary = parsed.summary || '';
         data.experience = parsed.experience || [];
         data.education = parsed.education || [];
@@ -251,11 +254,84 @@
         console.log('[ProfessionalPDFEngine] Using candidateData fallback for experience');
         data.experience = this.normalizeExperience(experienceFromCandidate);
       }
+      
+      // DEDUPLICATE skills (in case of merging from multiple sources)
+      if (data.skills.length > 0) {
+        const uniqueSkills = [];
+        const seenLower = new Set();
+        for (const skill of data.skills) {
+          const lower = skill.toLowerCase();
+          if (!seenLower.has(lower)) {
+            uniqueSkills.push(skill);
+            seenLower.add(lower);
+          }
+        }
+        data.skills = uniqueSkills;
+      }
 
       // Log for debugging
       console.log(`[ProfessionalPDFEngine] Structured CV: ${data.experience.length} jobs, ${data.education.length} edu, ${data.skills.length} skills`);
 
       return data;
+    },
+    
+    // ============ REMOVE DUPLICATE SECTIONS ============
+    // CRITICAL FIX: Merges duplicate SKILLS, CERTIFICATIONS, etc. into single sections
+    removeDuplicateSections(cvText) {
+      if (!cvText) return cvText;
+      
+      let result = cvText;
+      
+      // Find and merge duplicate SKILLS sections
+      const skillsHeaders = ['SKILLS', 'TECHNICAL SKILLS', 'CORE SKILLS', 'TECHNICAL PROFICIENCIES', 'KEY SKILLS', 'ADDITIONAL SKILLS'];
+      const skillsMatches = [];
+      
+      for (const header of skillsHeaders) {
+        const regex = new RegExp(`\\n${header}\\s*\\n([^\\n][\\s\\S]*?)(?=\\n[A-Z]{3,}[^a-z]|$)`, 'gi');
+        let match;
+        while ((match = regex.exec(result)) !== null) {
+          // Avoid matching content that's part of a work experience section
+          if (!match[1].includes('|') || match[1].split('|').length < 2) {
+            skillsMatches.push({
+              fullMatch: match[0],
+              content: match[1].trim(),
+              index: match.index,
+              header: header
+            });
+          }
+        }
+      }
+      
+      if (skillsMatches.length > 1) {
+        console.log(`[ProfessionalPDFEngine] Merging ${skillsMatches.length} SKILLS sections`);
+        skillsMatches.sort((a, b) => a.index - b.index);
+        
+        // Collect all skills (deduplicated)
+        const allSkills = new Set();
+        for (const match of skillsMatches) {
+          const items = match.content
+            .replace(/^[•\-\*]\s*/gm, '')
+            .split(/[,\n]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 1 && s.length < 80);
+          items.forEach(item => allSkills.add(item));
+        }
+        
+        // Remove all sections except first
+        for (let i = skillsMatches.length - 1; i >= 1; i--) {
+          result = result.substring(0, skillsMatches[i].index) + 
+                   result.substring(skillsMatches[i].index + skillsMatches[i].fullMatch.length);
+        }
+        
+        // Replace first section with merged content
+        const mergedContent = Array.from(allSkills).join(', ');
+        result = result.replace(skillsMatches[0].fullMatch, `\nSKILLS\n${mergedContent}\n`);
+      }
+      
+      // Clean up extra newlines
+      result = result.replace(/\n{3,}/g, '\n\n');
+      
+      return result;
     },
 
     // ============ EXTRACT CONTACT INFO ============
@@ -395,19 +471,73 @@
 
       switch (section) {
         case 'summary':
-          sections.summary = text;
+          // Only set summary if not already set (take first occurrence)
+          if (!sections.summary) {
+            sections.summary = text;
+          }
           break;
         case 'experience':
-          sections.experience = this.parseExperience(text);
+          // Merge experience entries
+          const newExp = this.parseExperience(text);
+          if (newExp.length > 0) {
+            if (sections.experience.length === 0) {
+              sections.experience = newExp;
+            } else {
+              // Merge avoiding duplicates by company name
+              const existingCompanies = new Set(sections.experience.map(e => (e.company || '').toLowerCase()));
+              for (const exp of newExp) {
+                if (!existingCompanies.has((exp.company || '').toLowerCase())) {
+                  sections.experience.push(exp);
+                }
+              }
+            }
+          }
           break;
         case 'education':
-          sections.education = this.parseEducationText(text);
+          // Merge education entries
+          const newEdu = this.parseEducationText(text);
+          if (newEdu.length > 0) {
+            if (sections.education.length === 0) {
+              sections.education = newEdu;
+            } else {
+              // Merge avoiding duplicates by institution name
+              const existingInst = new Set(sections.education.map(e => (e.institution || '').toLowerCase()));
+              for (const edu of newEdu) {
+                if (!existingInst.has((edu.institution || '').toLowerCase())) {
+                  sections.education.push(edu);
+                }
+              }
+            }
+          }
           break;
         case 'skills':
-          sections.skills = text;
+          // CRITICAL FIX: Merge skills instead of overwriting (handles duplicate SKILLS sections)
+          if (!sections.skills) {
+            sections.skills = text;
+          } else {
+            // Merge new skills with existing, deduplicating
+            const existingSkills = sections.skills.toLowerCase().split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            const newSkills = text.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            const existingSet = new Set(existingSkills);
+            const toAdd = newSkills.filter(s => !existingSet.has(s.toLowerCase()));
+            if (toAdd.length > 0) {
+              sections.skills = sections.skills + ', ' + toAdd.join(', ');
+            }
+          }
           break;
         case 'certifications':
-          sections.certifications = text;
+          // Merge certifications
+          if (!sections.certifications) {
+            sections.certifications = text;
+          } else {
+            const existingCerts = sections.certifications.toLowerCase().split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            const newCerts = text.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            const existingCertSet = new Set(existingCerts);
+            const certsToAdd = newCerts.filter(s => !existingCertSet.has(s.toLowerCase()));
+            if (certsToAdd.length > 0) {
+              sections.certifications = sections.certifications + ', ' + certsToAdd.join(', ');
+            }
+          }
           break;
       }
     },
