@@ -153,7 +153,8 @@
     },
 
     // ============ PARSE CV TEXT ============
-    // FIX v3.3.4: Handle inline headers like "PROFESSIONAL SUMMARY: Experienced..."
+    // FIX v3.4.0: Robust parsing of AI-generated plain text CV with inline headers,
+    // contact info stripping, and proper section detection
     parseCVText(cvText) {
       const result = {
         summary: '',
@@ -163,10 +164,28 @@
         certifications: []
       };
 
+      if (!cvText) return result;
+
+      // STEP 1: Strip contact header lines (name, phone, email, URLs) before section parsing
+      // The AI puts contact info at the top which can pollute section detection
       const lines = cvText.split('\n');
-      let currentSection = '';
-      let currentContent = [];
-      let currentJob = null;
+      let contentStartIndex = 0;
+
+      // Skip leading contact info lines (name, phone/email, links, blank lines)
+      for (let i = 0; i < Math.min(lines.length, 8); i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) { contentStartIndex = i + 1; continue; }
+        // Skip lines that look like contact info
+        if (/^[A-Z][A-Z\s]+$/.test(trimmed) && trimmed.length < 50) { contentStartIndex = i + 1; continue; } // ALL CAPS name
+        if (/[@]/.test(trimmed) || /linkedin\.com|github\.com/i.test(trimmed)) { contentStartIndex = i + 1; continue; } // email/links
+        if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { contentStartIndex = i + 1; continue; } // phone
+        if (/\|/.test(trimmed) && (/[@]/.test(trimmed) || /\+\d/.test(trimmed) || /linkedin|github/i.test(trimmed))) { contentStartIndex = i + 1; continue; } // combined contact line
+        if (/open to relocation/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/https?:\/\//i.test(trimmed) && !trimmed.toUpperCase().startsWith('PROFESSIONAL')) { contentStartIndex = i + 1; continue; }
+        break; // First non-contact line found
+      }
+
+      const contentLines = lines.slice(contentStartIndex);
 
       const sectionMap = {
         'PROFESSIONAL SUMMARY': 'summary',
@@ -180,102 +199,220 @@
         'TECHNICAL SKILLS': 'skills',
         'TECHNICAL PROFICIENCIES': 'skills',
         'CORE COMPETENCIES': 'skills',
+        'KEY SKILLS': 'skills',
+        'ADDITIONAL SKILLS': 'skills',
         'EDUCATION': 'education',
-        'CERTIFICATIONS': 'certifications'
+        'CERTIFICATIONS': 'certifications',
+        'LICENSES': 'certifications'
       };
-      
+
       // Build regex pattern for inline headers: "SECTION_NAME: content"
       const sectionNames = Object.keys(sectionMap).join('|');
       const inlineHeaderRegex = new RegExp(`^(${sectionNames})\\s*:\\s*(.+)$`, 'i');
 
-      for (const line of lines) {
+      let currentSection = '';
+      let currentContent = [];
+
+      for (const line of contentLines) {
         const trimmed = line.trim();
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
-        
-        // FIX v3.3.4: Check for inline header pattern first (e.g., "PROFESSIONAL SUMMARY: Experienced...")
+
+        // Check for inline header pattern first (e.g., "PROFESSIONAL SUMMARY: Experienced...")
         const inlineMatch = trimmed.match(inlineHeaderRegex);
         if (inlineMatch) {
-          // Save previous section content
-          this.saveSection(result, currentSection, currentContent, currentJob);
-          // Start new section with inline content
+          this.saveSection(result, currentSection, currentContent);
           const headerKey = inlineMatch[1].toUpperCase().trim();
           currentSection = sectionMap[headerKey] || '';
-          currentContent = [inlineMatch[2].trim()]; // Push inline content as first line
-          currentJob = null;
+          currentContent = [inlineMatch[2].trim()];
           continue;
         }
 
         if (sectionMap[upperTrimmed]) {
-          // Save previous section content
-          this.saveSection(result, currentSection, currentContent, currentJob);
+          this.saveSection(result, currentSection, currentContent);
           currentSection = sectionMap[upperTrimmed];
           currentContent = [];
-          currentJob = null;
         } else if (currentSection) {
           currentContent.push(line);
         }
       }
 
-      // Save last section
-      this.saveSection(result, currentSection, currentContent, currentJob);
+      this.saveSection(result, currentSection, currentContent);
+
+      // STEP 2: Merge duplicate skills sections (AI sometimes outputs SKILLS + ADDITIONAL SKILLS)
+      if (result.skills.length > 0) {
+        const seen = new Set();
+        result.skills = result.skills.filter(s => {
+          const lower = s.toLowerCase();
+          if (seen.has(lower)) return false;
+          seen.add(lower);
+          return true;
+        });
+      }
 
       return result;
     },
 
-    saveSection(result, section, content, job) {
+    saveSection(result, section, content) {
       if (!section || content.length === 0) return;
 
       const text = content.join('\n').trim();
 
       switch (section) {
         case 'summary':
-          result.summary = text;
+          if (!result.summary) result.summary = text;
           break;
         case 'skills':
-          result.skills = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1);
+          // Merge skills from multiple sections
+          const newSkills = text
+            .replace(/[•\-*]/g, ',')
+            .split(/[,\n]/)
+            .map(s => s.trim())
+            .filter(s => s.length > 1 && s.length < 60);
+          result.skills = [...result.skills, ...newSkills];
           break;
         case 'experience':
-          result.experience = this.parseExperienceText(text);
+          const newExp = this.parseExperienceText(text);
+          if (newExp.length > 0) {
+            // Merge avoiding duplicates by company name
+            const existingCompanies = new Set(result.experience.map(e => (e.company || '').toLowerCase()));
+            for (const exp of newExp) {
+              if (!existingCompanies.has((exp.company || '').toLowerCase())) {
+                result.experience.push(exp);
+                existingCompanies.add((exp.company || '').toLowerCase());
+              }
+            }
+          }
           break;
         case 'education':
-          result.education = this.parseEducationText(text);
+          const newEdu = this.parseEducationText(text);
+          if (newEdu.length > 0) {
+            const existingInst = new Set(result.education.map(e => (e.institution || '').toLowerCase()));
+            for (const edu of newEdu) {
+              if (!existingInst.has((edu.institution || '').toLowerCase())) {
+                result.education.push(edu);
+              }
+            }
+          }
           break;
         case 'certifications':
-          result.certifications = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
+          const newCerts = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
+          const existingCerts = new Set(result.certifications.map(c => c.toLowerCase()));
+          for (const cert of newCerts) {
+            if (!existingCerts.has(cert.toLowerCase())) {
+              result.certifications.push(cert);
+              existingCerts.add(cert.toLowerCase());
+            }
+          }
           break;
       }
     },
 
     // ============ PARSE EXPERIENCE TEXT ============
+    // FIX v3.4.0: Robust job header detection supporting multiple formats:
+    // "Company | Title | Dates", "Company | Title | MM/YYYY - Present", etc.
     parseExperienceText(text) {
       const jobs = [];
       const lines = text.split('\n');
       let currentJob = null;
 
+      // Section headers that should NOT be treated as job entries
+      const sectionHeaders = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment'
+      ]);
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
 
-        // Detect job header: Company | Title | Dates | Location
-        if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) || 
-            /^(Meta|Google|Amazon|Microsoft|Apple|Solim|Accenture|Citigroup)/i.test(trimmed)) {
-          if (currentJob) jobs.push(currentJob);
-          
+        // Skip section header lines
+        if (sectionHeaders.has(trimmed.toLowerCase().replace(/[:\s]+$/, ''))) continue;
+
+        // Detect job header: must have pipe separator and NOT be a bullet
+        if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-') && !trimmed.startsWith('*')) {
+          if (currentJob && currentJob.company) jobs.push(currentJob);
+
           const parts = trimmed.split('|').map(p => p.trim());
+
+          // Extract company, title, dates - clean each field
+          let company = parts[0] || '';
+          let title = parts[1] || '';
+          let dates = parts[2] || '';
+          let location = parts[3] || '';
+
+          // Strip dates that leaked into company or title fields
+          company = this.stripDatesFromField(company);
+          title = this.stripDatesFromField(title);
+
+          // If dates field is empty, check if it's embedded in other fields
+          if (!dates) {
+            const datePattern = /(\d{2}\/\d{4}\s*[-–]\s*(?:Present|\d{2}\/\d{4})|\d{4}\s*[-–]\s*(?:Present|\d{4}))/i;
+            for (const part of parts) {
+              const match = part.match(datePattern);
+              if (match) { dates = match[1]; break; }
+            }
+          }
+
+          // Normalize dates to "YYYY – YYYY" or "MM/YYYY – Present" format
+          dates = this.normalizeDates(dates);
+
+          // Skip if company looks like a section header
+          if (sectionHeaders.has(company.toLowerCase())) continue;
+
           currentJob = {
-            company: parts[0] || '',
-            title: parts[1] || '',
-            dates: parts[2] || '',
-            location: parts[3] || '',
+            company: company,
+            title: title,
+            dates: dates,
+            location: location,
             bullets: []
           };
         } else if (currentJob && /^[-•*▪]/.test(trimmed)) {
-          currentJob.bullets.push(trimmed.replace(/^[-•*▪]\s*/, ''));
+          currentJob.bullets.push(trimmed.replace(/^[-•*▪]\s*/, '').trim());
         }
       }
 
-      if (currentJob) jobs.push(currentJob);
+      if (currentJob && currentJob.company) jobs.push(currentJob);
       return jobs;
+    },
+
+    // ============ STRIP DATES FROM A FIELD ============
+    stripDatesFromField(value) {
+      if (!value) return '';
+      return value
+        .replace(/\d{2}\/\d{4}\s*[-–—]\s*(Present|\d{2}\/\d{4}|\d{4})/gi, '')
+        .replace(/\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi, '')
+        .replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi, '')
+        .replace(/\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi, '')
+        .replace(/\s*\|\s*$/, '')
+        .replace(/^\s*\|\s*/, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    },
+
+    // ============ NORMALIZE DATES ============
+    normalizeDates(dateStr) {
+      if (!dateStr) return '';
+
+      // Handle MM/YYYY - MM/YYYY or MM/YYYY - Present format
+      const monthYearMatch = dateStr.match(/(\d{2}\/\d{4})\s*[-–—]\s*(Present|\d{2}\/\d{4})/i);
+      if (monthYearMatch) {
+        return `${monthYearMatch[1]} – ${monthYearMatch[2]}`;
+      }
+
+      // Handle YYYY - YYYY or YYYY - Present format
+      const years = dateStr.match(/\d{4}/g);
+      const hasPresent = /present/i.test(dateStr);
+
+      if (hasPresent && years && years.length >= 1) {
+        return `${years[0]} – Present`;
+      } else if (years && years.length >= 2) {
+        return `${years[0]} – ${years[1]}`;
+      } else if (years && years.length === 1) {
+        return years[0];
+      }
+
+      // Normalize dashes to en-dash with spaces
+      return dateStr.replace(/\s*[-–—]\s*/g, ' – ');
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -740,32 +877,62 @@
       // === WORK EXPERIENCE ===
       if (data.experience && data.experience.length > 0) {
         addSectionHeader('WORK EXPERIENCE');
-        
+
         data.experience.forEach((job, idx) => {
-          // Job header: Company | Title | Dates | Location
-          const header = [job.company, job.title, job.dates, job.location].filter(Boolean).join(' | ');
-          addText(header, true, false, font.body);
-          y += 2;
+          // Check page break before each job (need room for header + at least 1 bullet)
+          if (y > page.height - margins.bottom - 80) {
+            doc.addPage();
+            y = margins.top;
+          }
+
+          // Line 1: Company name (bold)
+          doc.setFontSize(font.body);
+          doc.setFont(font.family, 'bold');
+          doc.text(job.company, margins.left, y);
+          y += font.body * lineHeight + 2;
+
+          // Line 2: Title (normal) with dates right-aligned
+          doc.setFont(font.family, 'normal');
+          doc.text(job.title, margins.left, y);
+          if (job.dates) {
+            doc.setFont(font.family, 'normal');
+            const datesWidth = doc.getTextWidth(job.dates);
+            doc.text(job.dates, page.width - margins.right - datesWidth, y);
+          }
+          y += font.body * lineHeight + 4;
 
           // Bullets
           job.bullets.forEach(bullet => {
-            const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
+            // Check page break before each bullet
+            if (y > page.height - margins.bottom - 20) {
+              doc.addPage();
+              y = margins.top;
+            }
+
+            const bulletChar = ATS_SPEC.bullets.char;
+            const bulletIndent = ATS_SPEC.bullets.indent;
+            const bulletContentWidth = contentWidth - bulletIndent - 4;
+
             doc.setFont(font.family, 'normal');
             doc.setFontSize(font.body);
-            
-            const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
+
+            // Render bullet character
+            doc.text(bulletChar, margins.left, y);
+
+            // Wrap and render bullet text
+            const bulletLines = doc.splitTextToSize(bullet, bulletContentWidth);
             bulletLines.forEach((line, lineIdx) => {
-              if (y > page.height - margins.bottom - 20) {
+              if (lineIdx > 0 && y > page.height - margins.bottom - 20) {
                 doc.addPage();
                 y = margins.top;
               }
-              const indent = lineIdx === 0 ? 0 : ATS_SPEC.bullets.indent;
-              doc.text(line, margins.left + indent, y);
+              doc.text(line, margins.left + bulletIndent + 4, y);
               y += font.body * lineHeight + 1;
             });
+            y += 1; // Small gap between bullets
           });
 
-          if (idx < data.experience.length - 1) y += 6;
+          if (idx < data.experience.length - 1) y += 8; // Gap between jobs
         });
         y += 4;
       }
@@ -802,45 +969,64 @@
     },
 
     // ============ GENERATE CV TEXT (Fallback) ============
+    // FIX v3.4.0: Consistent text formatting that matches PDF structure
     generateCVText(data) {
       const lines = [];
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      
+
+      // Header: Name, contact info, links
       lines.push(data.contact.name.toUpperCase());
       const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
-      lines.push(contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : ''));
-      lines.push([data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean).join(' | '));
+      if (contactParts.length > 0) {
+        lines.push(contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : ''));
+      }
+      const linkParts = [data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean);
+      if (linkParts.length > 0) {
+        lines.push(linkParts.join(' | '));
+      }
       lines.push('');
 
+      // Professional Summary
       if (data.summary) {
         lines.push('PROFESSIONAL SUMMARY');
         lines.push(data.summary);
         lines.push('');
       }
 
+      // Work Experience
       if (data.experience?.length > 0) {
         lines.push('WORK EXPERIENCE');
-        data.experience.forEach(job => {
-          lines.push([job.company, job.title, job.dates, job.location].filter(Boolean).join(' | '));
+        lines.push('');
+        data.experience.forEach((job, idx) => {
+          // Company | Title | Dates format
+          const headerParts = [job.company, job.title, job.dates].filter(Boolean);
+          lines.push(headerParts.join(' | '));
           job.bullets.forEach(b => lines.push(`- ${b}`));
-          lines.push('');
-        });
-      }
-
-      if (data.education?.length > 0) {
-        lines.push('EDUCATION');
-        data.education.forEach(edu => {
-          lines.push([edu.institution, edu.degree, edu.dates, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).join(' | '));
+          if (idx < data.experience.length - 1) lines.push('');
         });
         lines.push('');
       }
 
+      // Education
+      if (data.education?.length > 0) {
+        lines.push('EDUCATION');
+        lines.push('');
+        data.education.forEach(edu => {
+          const eduParts = [edu.degree, edu.institution, edu.dates].filter(Boolean);
+          const gpaPart = edu.gpa ? ` (${edu.gpa})` : '';
+          lines.push(eduParts.join(' | ') + gpaPart);
+        });
+        lines.push('');
+      }
+
+      // Skills
       if (data.skills?.length > 0) {
-        lines.push('TECHNICAL PROFICIENCIES');
+        lines.push('SKILLS');
         lines.push(data.skills.join(', '));
         lines.push('');
       }
 
+      // Certifications
       if (data.certifications?.length > 0) {
         lines.push('CERTIFICATIONS');
         lines.push(data.certifications.join(', '));

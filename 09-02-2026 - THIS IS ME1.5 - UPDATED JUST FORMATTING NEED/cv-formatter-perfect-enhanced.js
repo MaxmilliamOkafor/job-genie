@@ -241,6 +241,8 @@
     },
 
     // ============ PARSE CV SECTIONS ============
+    // FIX v3.4.0: Handle inline headers (e.g. "PROFESSIONAL SUMMARY: text..."),
+    // strip contact header, support TECHNICAL PROFICIENCIES
     parseSections(content) {
       const sections = {
         summary: '',
@@ -252,10 +254,23 @@
 
       if (!content) return sections;
 
+      // Strip contact header lines before parsing
       const lines = content.split('\n');
+      let contentStartIndex = 0;
+      for (let i = 0; i < Math.min(lines.length, 8); i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) { contentStartIndex = i + 1; continue; }
+        if (/^[A-Z][A-Z\s]{2,40}$/.test(trimmed) && !/^(PROFESSIONAL|WORK|EDUCATION|SKILLS|CERTIFICATIONS|TECHNICAL|EMPLOYMENT|SUMMARY|PROFILE|CORE|EXPERIENCE)/.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/@/.test(trimmed) || /linkedin\.com|github\.com/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/\|/.test(trimmed) && (/@/.test(trimmed) || /\+\d/.test(trimmed) || /linkedin|github/i.test(trimmed))) { contentStartIndex = i + 1; continue; }
+        if (/open to relocation/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/^https?:\/\//i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        break;
+      }
+      const contentLines = lines.slice(contentStartIndex);
+
       let currentSection = '';
       let currentContent = [];
-      let currentJob = null;
 
       const sectionHeaders = {
         'PROFESSIONAL SUMMARY': 'summary',
@@ -271,32 +286,46 @@
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
         'CORE SKILLS': 'skills',
+        'TECHNICAL PROFICIENCIES': 'skills',
+        'KEY SKILLS': 'skills',
+        'ADDITIONAL SKILLS': 'skills',
         'CERTIFICATIONS': 'certifications',
         'LICENSES': 'certifications',
         'CREDENTIALS': 'certifications'
       };
 
-      for (const line of lines) {
+      // Build inline header regex
+      const sectionNames = Object.keys(sectionHeaders).join('|');
+      const inlineHeaderRegex = new RegExp(`^(${sectionNames})\\s*:\\s*(.+)$`, 'i');
+
+      for (const line of contentLines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
 
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
-        // Check for section header
+        // Check for inline header (e.g., "PROFESSIONAL SUMMARY: Experienced...")
+        const inlineMatch = trimmed.match(inlineHeaderRegex);
+        if (inlineMatch) {
+          this.saveParsedSection(sections, currentSection, currentContent, null);
+          const headerKey = inlineMatch[1].toUpperCase().trim();
+          currentSection = sectionHeaders[headerKey] || '';
+          currentContent = [inlineMatch[2].trim()];
+          continue;
+        }
+
+        // Check for standalone section header
         if (sectionHeaders[upperTrimmed]) {
-          // Save previous section
-          this.saveParsedSection(sections, currentSection, currentContent, currentJob);
-          
+          this.saveParsedSection(sections, currentSection, currentContent, null);
           currentSection = sectionHeaders[upperTrimmed];
           currentContent = [];
-          currentJob = null;
         } else if (currentSection) {
           currentContent.push(line);
         }
       }
 
       // Save final section
-      this.saveParsedSection(sections, currentSection, currentContent, currentJob);
+      this.saveParsedSection(sections, currentSection, currentContent, null);
 
       return sections;
     },
@@ -326,12 +355,19 @@
     },
 
     // ============ DATE NORMALISATION HELPERS ============
-    // Normalise dates to "YYYY – YYYY" format with en dash and spaces
+    // FIX v3.4.0: Handle MM/YYYY - Present format properly
     normaliseDates(dateStr) {
       if (!dateStr) return '';
+
+      // Handle MM/YYYY - MM/YYYY or MM/YYYY - Present format
+      const monthYearMatch = String(dateStr).match(/(\d{2}\/\d{4})\s*[-–—]\s*(Present|\d{2}\/\d{4})/i);
+      if (monthYearMatch) {
+        return `${monthYearMatch[1]} – ${monthYearMatch[2]}`;
+      }
+
       return String(dateStr)
         .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
+        .replace(/-/g, '–')            // single hyphen to en dash
         .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
     },
 
@@ -346,8 +382,9 @@
     },
 
     // ============ DATE PATTERN FOR CLEANING ============
-    // Matches date patterns like: 2023-01 - Present, Jan 2023 - Dec 2024, 2021-2023, etc.
+    // FIX v3.4.0: Also matches MM/YYYY - Present format (e.g., "01/2023 - Present")
     DATE_PATTERNS: [
+      /\d{2}\/\d{4}\s*[-–—]\s*(Present|\d{2}\/\d{4})/gi,
       /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
       /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
       /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
@@ -365,19 +402,26 @@
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
-    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
+    // Convert dates to consistent format
+    // FIX v3.4.0: Preserve MM/YYYY format if present (e.g., "01/2023 – Present")
     toYearOnly(dateStr) {
       if (!dateStr) return '';
-      
+
+      // Handle MM/YYYY - Present or MM/YYYY - MM/YYYY format
+      const monthYearMatch = String(dateStr).match(/(\d{2}\/\d{4})\s*[-–—]\s*(Present|\d{2}\/\d{4})/i);
+      if (monthYearMatch) {
+        return `${monthYearMatch[1]} – ${monthYearMatch[2]}`;
+      }
+
       // Check if already in correct format (contains en dash with proper spacing)
       if (/\d{4}\s*–\s*(Present|\d{4})/.test(dateStr)) {
         return dateStr.replace(/\s*–\s*/g, ' – '); // Just ensure spacing
       }
-      
+
       // Extract all 4-digit years
       const years = dateStr.match(/\d{4}/g);
       const hasPresent = /present|current|now/i.test(dateStr);
-      
+
       if (hasPresent && years && years.length >= 1) {
         return `${years[0]} – Present`;
       } else if (years && years.length >= 2) {
