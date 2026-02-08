@@ -239,7 +239,7 @@
   // ============ PERSIST TO CHROME STORAGE (Optional) ============
   async function persistCachesToStorage() {
     if (typeof chrome === 'undefined' || !chrome.storage) return;
-    
+    if (chrome.runtime?.id == null) return;
     try {
       const jdCacheArray = Array.from(jdHashCache.entries()).slice(-50); // Keep last 50
       const keywordCacheArray = Array.from(keywordUrlCache.entries()).slice(-50);
@@ -251,13 +251,18 @@
       console.log('[CacheManager] Caches persisted to storage');
     } catch (e) {
       console.warn('[CacheManager] Failed to persist caches:', e);
+	  const message = String(e?.message || e || '');
+      if (message.includes('Extension context invalidated')) {
+        return;
+      }
     }
   }
 
   async function loadCachesFromStorage() {
     if (typeof chrome === 'undefined' || !chrome.storage) return;
     
-    try {
+    if (chrome.runtime?.id == null) return;
+	try {
       const result = await chrome.storage.local.get([
         CONFIG.STORAGE_KEY_JD_CACHE,
         CONFIG.STORAGE_KEY_KEYWORD_CACHE
@@ -283,6 +288,11 @@
         console.log(`[CacheManager] Loaded ${keywordUrlCache.size} keyword cache entries from storage`);
       }
     } catch (e) {
+      console.warn('[CacheManager] Failed to load caches from storage:', e);
+      const message = String(e?.message || e || '');
+      if (message.includes('Extension context invalidated')) {
+        return;
+      }
       console.warn('[CacheManager] Failed to load caches from storage:', e);
     }
   }

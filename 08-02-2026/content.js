@@ -2005,6 +2005,17 @@
     
     // IMPROVED: Multiple fallback strategies for company extraction
     if (!company) company = getMeta('og:site_name') || '';
+    
+    // FIX: Greenhouse job-boards.greenhouse.io/COMPANY/jobs/... URL pattern
+    if (!company && hostname.includes('greenhouse.io')) {
+      const pathMatch = window.location.pathname.match(/^\/([^\/]+)\/jobs\//i);
+      if (pathMatch && pathMatch[1] && !['embed', 'internal'].includes(pathMatch[1].toLowerCase())) {
+        // Capitalize first letter of each word (e.g., "flip" → "Flip")
+        company = pathMatch[1].split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        console.log('[extractJobInfo] ✅ Extracted company from Greenhouse URL path:', company);
+      }
+    }
+    
     if (!company) {
       // Try to extract from title like "Senior Engineer at Bugcrowd"
       const titleMatch = (getMeta('og:title') || document.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.-]+?)(?:\s*[-|]|\s*$)/i);
