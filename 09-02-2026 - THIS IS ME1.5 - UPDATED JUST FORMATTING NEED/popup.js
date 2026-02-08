@@ -1610,29 +1610,41 @@ class ATSTailor {
 
   formatPreviewContent(content, type) {
     if (!content) return '';
-    
+
     const escapeHtml = (text) => {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
     };
-    
+
     let formatted = escapeHtml(content);
-    
+
     if (type === 'cv') {
+      // FIX v3.4.0: Robust CV preview formatting
+      // Handle inline section headers (e.g., "PROFESSIONAL SUMMARY: text...")
       formatted = formatted
-        .replace(/^(PROFESSIONAL SUMMARY|WORK EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|TECHNICAL PROFICIENCIES)/gm, 
+        .replace(/^(PROFESSIONAL SUMMARY|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|CORE COMPETENCIES|KEY SKILLS|ADDITIONAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|EMPLOYMENT)(\s*:\s*)/gim,
+          '<span class="section-header">$1</span>$2')
+        // Standalone section headers (on their own line)
+        .replace(/^(PROFESSIONAL SUMMARY|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|CORE COMPETENCIES|KEY SKILLS|ADDITIONAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|EMPLOYMENT)\s*$/gm,
           '<span class="section-header">$1</span>')
-        .replace(/^([A-Z][A-Za-z\s&]+)\s*\|\s*(.+)$/gm, 
+        // Job headers with pipe separators: "Company | Title | Dates"
+        .replace(/^([A-Z][A-Za-z\s&.,]+)\s*\|\s*([^|]+)\s*\|\s*(.+)$/gm,
+          '<strong>$1</strong> | $2 | <span class="date-line">$3</span>')
+        // Job headers with pipe but only 2 parts
+        .replace(/^([A-Z][A-Za-z\s&.,]+)\s*\|\s*(.+)$/gm,
           '<strong>$1</strong> | <span class="date-line">$2</span>')
-        .replace(/^[•▪]\s*/gm, '• ');
+        // Bullet points: normalize various bullet chars
+        .replace(/^[-•*▪]\s*/gm, '&bull; ');
     } else {
+      // Cover letter preview
       formatted = formatted
         .replace(/^(Date:.+)$/m, '<span class="date-line">$1</span>')
+        .replace(/^(Re:.+)$/m, '<strong>$1</strong>')
         .replace(/^(Dear .+,)$/m, '<strong>$1</strong>')
-        .replace(/^(Sincerely,|Best regards,|Regards,)$/m, '<br><strong>$1</strong>');
+        .replace(/^(Yours sincerely,|Sincerely,|Best regards,|Regards,|Kind regards,)$/gm, '<br><strong>$1</strong>');
     }
-    
+
     return formatted;
   }
 

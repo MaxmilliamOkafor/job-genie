@@ -245,9 +245,10 @@
     },
 
     // ============ PARSE CV SECTIONS ============
+    // FIX v3.4.0: Handle inline headers, strip contact info, support all section variants
     parseCVSections(cvText) {
       if (!cvText) return {};
-      
+
       const sections = {
         summary: '',
         experience: '',
@@ -258,9 +259,24 @@
       };
 
       const lines = cvText.split('\n');
+
+      // Strip contact header lines
+      let contentStartIndex = 0;
+      for (let i = 0; i < Math.min(lines.length, 8); i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) { contentStartIndex = i + 1; continue; }
+        if (/^[A-Z][A-Z\s]{2,40}$/.test(trimmed) && !/^(PROFESSIONAL|WORK|EDUCATION|SKILLS|CERTIFICATIONS|TECHNICAL|EMPLOYMENT|SUMMARY|PROFILE|CORE|EXPERIENCE)/.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/@/.test(trimmed) || /linkedin\.com|github\.com/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/\|/.test(trimmed) && (/@/.test(trimmed) || /\+\d/.test(trimmed) || /linkedin|github/i.test(trimmed))) { contentStartIndex = i + 1; continue; }
+        if (/open to relocation/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/^https?:\/\//i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        break;
+      }
+      const contentLines = lines.slice(contentStartIndex);
+
       let currentSection = '';
       let currentContent = [];
-      
+
       const sectionHeaders = {
         'PROFESSIONAL SUMMARY': 'summary',
         'SUMMARY': 'summary',
@@ -273,29 +289,51 @@
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
         'CORE SKILLS': 'skills',
+        'KEY SKILLS': 'skills',
+        'ADDITIONAL SKILLS': 'skills',
         'EDUCATION': 'education',
         'ACADEMIC': 'education',
         'CERTIFICATIONS': 'certifications',
         'LICENSES': 'certifications',
         'TECHNICAL PROFICIENCIES': 'technicalProficiencies'
       };
-      
-      for (const line of lines) {
-        const trimmed = line.trim().toUpperCase().replace(/[:\s]+$/, '');
-        
-        if (sectionHeaders[trimmed]) {
+
+      // Build inline header regex
+      const sectionNames = Object.keys(sectionHeaders).join('|');
+      const inlineHeaderRegex = new RegExp(`^(${sectionNames})\\s*:\\s*(.+)$`, 'i');
+
+      for (const line of contentLines) {
+        const trimmed = line.trim();
+        const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
+
+        // Check for inline header first
+        const inlineMatch = trimmed.match(inlineHeaderRegex);
+        if (inlineMatch) {
           if (currentSection && currentContent.length > 0) {
-            sections[currentSection] = currentContent.join('\n').trim();
+            const existing = sections[currentSection] || '';
+            sections[currentSection] = existing ? existing + '\n' + currentContent.join('\n').trim() : currentContent.join('\n').trim();
           }
-          currentSection = sectionHeaders[trimmed];
+          const headerKey = inlineMatch[1].toUpperCase().trim();
+          currentSection = sectionHeaders[headerKey] || '';
+          currentContent = [inlineMatch[2].trim()];
+          continue;
+        }
+
+        if (sectionHeaders[upperTrimmed]) {
+          if (currentSection && currentContent.length > 0) {
+            const existing = sections[currentSection] || '';
+            sections[currentSection] = existing ? existing + '\n' + currentContent.join('\n').trim() : currentContent.join('\n').trim();
+          }
+          currentSection = sectionHeaders[upperTrimmed];
           currentContent = [];
         } else if (currentSection) {
           currentContent.push(line);
         }
       }
-      
+
       if (currentSection && currentContent.length > 0) {
-        sections[currentSection] = currentContent.join('\n').trim();
+        const existing = sections[currentSection] || '';
+        sections[currentSection] = existing ? existing + '\n' + currentContent.join('\n').trim() : currentContent.join('\n').trim();
       }
 
       return sections;

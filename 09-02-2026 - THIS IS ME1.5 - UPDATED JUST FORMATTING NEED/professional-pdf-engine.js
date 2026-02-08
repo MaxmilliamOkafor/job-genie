@@ -231,8 +231,10 @@
 
       // Parse tailored content sections
       if (typeof tailoredContent === 'string') {
+        // CRITICAL FIX: Strip contact header lines before parsing sections
+        const strippedContent = this.stripContactHeader(tailoredContent);
         // CRITICAL FIX: Clean the text before parsing - remove duplicate sections
-        const cleanedContent = this.removeDuplicateSections(tailoredContent);
+        const cleanedContent = this.removeDuplicateSections(strippedContent);
         const parsed = this.parseSections(cleanedContent);
         data.summary = sanitise(parsed.summary || '');
         data.experience = parsed.experience || [];
@@ -310,6 +312,45 @@
     
     // ============ REMOVE DUPLICATE SECTIONS ============
     // CRITICAL FIX: Merges duplicate SKILLS, CERTIFICATIONS, etc. into single sections
+    // ============ STRIP CONTACT HEADER FROM PLAIN TEXT CV ============
+    // FIX v3.4.0: AI-generated CVs have contact info at the top (name, phone, email, links)
+    // that pollutes section parsing. Strip these lines before parsing.
+    stripContactHeader(cvText) {
+      if (!cvText) return cvText;
+
+      const lines = cvText.split('\n');
+      let contentStartIndex = 0;
+
+      // Scan the first 8 lines for contact info patterns
+      for (let i = 0; i < Math.min(lines.length, 8); i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) { contentStartIndex = i + 1; continue; }
+        // ALL CAPS name line (e.g., "MAXMILLIAM OKAFOR")
+        if (/^[A-Z][A-Z\s]{2,40}$/.test(trimmed) && !/^(PROFESSIONAL|WORK|EDUCATION|SKILLS|CERTIFICATIONS|TECHNICAL|EMPLOYMENT|SUMMARY|PROFILE|CORE|EXPERIENCE)/.test(trimmed)) {
+          contentStartIndex = i + 1; continue;
+        }
+        // Email or LinkedIn/GitHub URL line
+        if (/@/.test(trimmed) || /linkedin\.com|github\.com/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        // Phone number line
+        if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { contentStartIndex = i + 1; continue; }
+        // Combined contact line with pipes (phone | email | location)
+        if (/\|/.test(trimmed) && (/@/.test(trimmed) || /\+\d/.test(trimmed) || /linkedin|github/i.test(trimmed))) {
+          contentStartIndex = i + 1; continue;
+        }
+        // "open to relocation" or URL lines
+        if (/open to relocation/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/^https?:\/\//i.test(trimmed) && !/^(PROFESSIONAL|SUMMARY)/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        break; // First non-contact line found
+      }
+
+      if (contentStartIndex > 0) {
+        console.log(`[ProfessionalPDFEngine] Stripped ${contentStartIndex} contact header lines from CV text`);
+        return lines.slice(contentStartIndex).join('\n');
+      }
+
+      return cvText;
+    },
+
     removeDuplicateSections(cvText) {
       if (!cvText) return cvText;
       
@@ -753,9 +794,11 @@
     },
 
     // ============ STRIP DATES FROM FIELD ============
+    // FIX v3.4.0: Also strip MM/YYYY date patterns
     stripDates(value) {
       if (!value) return '';
       return value
+        .replace(/\d{2}\/\d{4}\s*[-–—]\s*(Present|\d{2}\/\d{4})/gi, '')
         .replace(/\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi, '')
         .replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi, '')
         .replace(/\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi, '')
@@ -766,12 +809,20 @@
     },
 
     // ============ NORMALIZE DATES ============
+    // FIX v3.4.0: Handle MM/YYYY - Present and MM/YYYY - MM/YYYY formats
     normalizeDates(dateStr) {
       if (!dateStr) return '';
+
+      // Handle MM/YYYY - MM/YYYY or MM/YYYY - Present format (e.g., "01/2023 - Present")
+      const monthYearMatch = dateStr.match(/(\d{2}\/\d{4})\s*[-–—]\s*(Present|\d{2}\/\d{4})/i);
+      if (monthYearMatch) {
+        return `${monthYearMatch[1]} – ${monthYearMatch[2]}`;
+      }
+
       // Extract years
       const years = dateStr.match(/\d{4}/g);
       const hasPresent = /present/i.test(dateStr);
-      
+
       if (hasPresent && years && years.length >= 1) {
         return `${years[0]} – Present`;
       } else if (years && years.length >= 2) {
@@ -779,9 +830,9 @@
       } else if (years && years.length === 1) {
         return years[0];
       }
-      
-      // Normalize dashes to en-dash
-      return dateStr.replace(/-/g, '–').replace(/\s*–\s*/g, ' – ');
+
+      // Normalize dashes to en-dash with spaces
+      return dateStr.replace(/\s*[-–—]\s*/g, ' – ');
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -1101,34 +1152,55 @@
     },
 
     // ============ RENDER BULLET ============
+    // FIX v3.4.0: Render multi-line bullets line-by-line with proper page breaks
     renderBullet(doc, text, y) {
       const leftMargin = PDF_CONFIG.margins.left;
       const bulletIndent = PDF_CONFIG.bulletIndent;
       const contentWidth = PDF_CONFIG.page.width - leftMargin - PDF_CONFIG.margins.right - bulletIndent - 10;
-      
+
       // Render bullet character
       doc.text(PDF_CONFIG.bullet, leftMargin, y);
-      
+
       // Wrap text
       const lines = doc.splitTextToSize(text, contentWidth);
-      doc.text(lines, leftMargin + bulletIndent + 4, y);
-      
-      return y + (lines.length * PDF_CONFIG.fonts.sizes.bullets * PDF_CONFIG.lineHeight.normal) + PDF_CONFIG.spacing.betweenBullets;
+      const lineSpacing = PDF_CONFIG.fonts.sizes.bullets * PDF_CONFIG.lineHeight.normal;
+
+      for (let i = 0; i < lines.length; i++) {
+        // Check page break for continuation lines
+        if (i > 0 && y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - 20) {
+          doc.addPage();
+          y = PDF_CONFIG.margins.top;
+        }
+        doc.text(lines[i], leftMargin + bulletIndent + 4, y);
+        if (i < lines.length - 1) y += lineSpacing;
+      }
+
+      return y + lineSpacing + PDF_CONFIG.spacing.betweenBullets;
     },
 
     // ============ RENDER PARAGRAPH ============
+    // FIX v3.4.0: Render paragraphs line-by-line with page break support
     renderParagraph(doc, text, y) {
       const leftMargin = PDF_CONFIG.margins.left;
       const contentWidth = PDF_CONFIG.page.width - leftMargin - PDF_CONFIG.margins.right;
-      
+
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
       doc.setTextColor(...PDF_CONFIG.colors.black);
-      
+
       const lines = doc.splitTextToSize(text, contentWidth);
-      doc.text(lines, leftMargin, y);
-      
-      return y + (lines.length * PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal) + PDF_CONFIG.spacing.paragraphGap;
+      const lineSpacing = PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - 20) {
+          doc.addPage();
+          y = PDF_CONFIG.margins.top;
+        }
+        doc.text(lines[i], leftMargin, y);
+        y += lineSpacing;
+      }
+
+      return y + PDF_CONFIG.spacing.paragraphGap;
     },
 
     // ============ COVER LETTER RENDERING ============
@@ -1295,27 +1367,31 @@
       doc.setTextColor(...PDF_CONFIG.colors.black);
 
       const contentWidth = PDF_CONFIG.page.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
-      
+      const lineSpacing = PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.relaxed;
+
       // FIX 02-02-26: Sanitize content to remove any "Company" placeholder lines
       const sanitizedContent = this.sanitizeCoverLetterContent(content);
-      
+
       // Split into paragraphs
       const paragraphs = sanitizedContent.split(/\n\n+/).filter(Boolean);
-      
+
       for (const para of paragraphs) {
         // Skip any paragraph that is just "Company" (final safety check)
         if (para.trim().toLowerCase() === 'company') continue;
-        
+
         const lines = doc.splitTextToSize(para.trim(), contentWidth);
-        
-        // Check page break
-        if (y + (lines.length * PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal) > PDF_CONFIG.page.height - 80) {
-          doc.addPage();
-          y = PDF_CONFIG.margins.top;
+
+        // FIX v3.4.0: Render lines individually with proper page breaks
+        for (let i = 0; i < lines.length; i++) {
+          if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - 20) {
+            doc.addPage();
+            y = PDF_CONFIG.margins.top;
+          }
+          doc.text(lines[i], PDF_CONFIG.margins.left, y);
+          y += lineSpacing;
         }
-        
-        doc.text(lines, PDF_CONFIG.margins.left, y);
-        y += (lines.length * PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.relaxed) + 10;
+
+        y += 10; // Paragraph spacing
       }
 
       return y;

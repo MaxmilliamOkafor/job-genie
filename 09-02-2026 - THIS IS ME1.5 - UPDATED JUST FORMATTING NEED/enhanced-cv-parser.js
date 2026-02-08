@@ -195,6 +195,8 @@
         'TECHNICAL SKILLS': 'skills',
         'CORE SKILLS': 'skills',
         'KEY SKILLS': 'skills',
+        'TECHNICAL PROFICIENCIES': 'skills',
+        'ADDITIONAL SKILLS': 'skills',
         'COMPETENCIES': 'skills',
         'CERTIFICATIONS': 'certifications',
         'LICENSES': 'certifications',
