@@ -9,6 +9,275 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// ============================================================================
+// CONTENT QUALITY ENGINE v3.0.3 - Backend Sanitisation Layer
+// Comprehensive banned words/phrases removal + UK English enforcement
+// ============================================================================
+
+const BANNED_WORDS: string[] = [
+  // Overused Action Verbs
+  'orchestrated', 'championed', 'pioneered', 'helmed', 'spearheaded', 'showcased',
+  'demonstrating', 'showcasing', 'harnessed', 'capitalised', 'drove', 'executed',
+  'deployed', 'implemented',
+  // Vague Descriptors
+  'comprehensive', 'meticulous', 'robust', 'rigorous', 'extensive', 'various',
+  'diverse', 'dynamic', 'proactive', 'strategic', 'innovative', 'creative',
+  'unique', 'exceptional', 'outstanding', 'superior', 'optimal', 'effective',
+  'efficient',
+  // Corporate Buzzwords
+  'synergy', 'synergise', 'paradigm', 'disruptive', 'disruption', 'game-changing',
+  'revolutionary', 'transformative', 'transformation', 'value-added', 'value-add',
+  'best-in-class', 'world-class', 'industry-leading', 'market-leading', 'cutting-edge',
+  'bleeding-edge', 'state-of-the-art', 'next-generation', 'future-proof', 'scalable',
+  'agile', 'seamless', 'seamlessly', 'end-to-end', 'turnkey', 'holistic', 'ecosystem',
+  'low-hanging', 'needle', 'bandwidth', 'circle back', 'touch base', 'deep dive',
+  'drill down', 'unpack', 'offline',
+  // Clichéd Qualifiers
+  'approximately', 'various', 'several', 'multiple', 'numerous', 'many',
+  // Pretentious Language
+  'realm', 'domain', 'sphere', 'landscape', 'space', 'verticals', 'intersection',
+  'forefront', 'thought leader', 'guru', 'ninja', 'rockstar', 'maven', 'wizard',
+  // Weak/Passive Constructions
+  'handled', 'dealt', 'worked on', 'tried to', 'attempted to', 'sought to',
+  // Empty Intensifiers
+  'very', 'really', 'quite', 'extremely', 'highly', 'significantly', 'substantially',
+  'considerably', 'greatly', 'tremendously', 'incredibly',
+];
+
+const BANNED_PHRASES: string[] = [
+  // Complete phrases that must be removed/replaced
+  'proven track record', 'proven ability', 'proven record', 'proven success',
+  'proven history', 'track record of success', 'demonstrated ability',
+  'strong work ethic', 'results-driven', 'results-oriented', 'goal-oriented',
+  'detail-oriented', 'self-motivated', 'highly motivated', 'team player',
+  'fast-paced environment', 'wore many hats', 'hit the ground running',
+  'go-getter', 'self-starter', 'people person', 'think outside the box',
+  'out-of-the-box thinking', 'push the envelope', 'raise the bar',
+  'take it to the next level', 'go the extra mile', '110% effort', 'give 110%',
+  'work hard, play hard', 'passion for excellence', 'passionate about',
+  'dedicated professional', 'seasoned professional', 'consummate professional',
+  'stakeholder environments', 'stakeholder engagement', 'stakeholder management',
+  'cross-functional collaboration', 'matrixed organisation', 'drive impactful outcomes',
+  'deliver value', 'unlock value', 'create value', 'add value', 'maximise value',
+  'optimise performance', 'enhance productivity', 'improve efficiency',
+  'streamline processes', 'drive growth', 'accelerate growth',
+  'was responsible for', 'responsible for managing', 'in charge of',
+  'managed to', 'in order to', 'excellent communication skills',
+  'strong interpersonal skills', 'problem-solving skills', 'critical thinking',
+  'time management', 'multitasking', 'attention to detail', 'works well under pressure',
+  'able to work independently', 'ability to prioritise', 'quick learner',
+  'adaptable', 'flexible', 'the intersection of', 'at the forefront of',
+  'on the cutting edge of', 'strategic initiatives', 'leveraging', 'utilising',
+  'utilising', 'utilizing', 'leveraged', 'utilised', 'utilized',
+];
+
+// US to UK spelling corrections
+const US_TO_UK_SPELLING: Record<string, string> = {
+  'optimized': 'optimised', 'optimizing': 'optimising', 'optimize': 'optimise',
+  'organized': 'organised', 'organizing': 'organising', 'organize': 'organise',
+  'analyzed': 'analysed', 'analyzing': 'analysing', 'analyze': 'analyse',
+  'realized': 'realised', 'realizing': 'realising', 'realize': 'realise',
+  'specialized': 'specialised', 'specializing': 'specialising', 'specialize': 'specialise',
+  'recognized': 'recognised', 'recognizing': 'recognising', 'recognize': 'recognise',
+  'characterized': 'characterised', 'characterizing': 'characterising',
+  'categorized': 'categorised', 'categorizing': 'categorising',
+  'emphasized': 'emphasised', 'emphasizing': 'emphasising',
+  'summarized': 'summarised', 'summarizing': 'summarising',
+  'authorized': 'authorised', 'authorizing': 'authorising',
+  'standardized': 'standardised', 'standardizing': 'standardising',
+  'modernized': 'modernised', 'modernizing': 'modernising',
+  'minimized': 'minimised', 'minimizing': 'minimising',
+  'maximized': 'maximised', 'maximizing': 'maximising',
+  'utilized': 'used', 'utilizing': 'using', 'utilize': 'use',
+  'prioritized': 'prioritised', 'prioritizing': 'prioritising',
+  'customized': 'customised', 'customizing': 'customising',
+  'finalized': 'finalised', 'finalizing': 'finalising',
+  'visualized': 'visualised', 'visualizing': 'visualising',
+  'mobilized': 'mobilised', 'mobilizing': 'mobilising',
+  'criticized': 'criticised', 'criticizing': 'criticising',
+  'digitized': 'digitised', 'digitizing': 'digitising',
+  'harmonized': 'harmonised', 'harmonizing': 'harmonising',
+  'memorized': 'memorised', 'memorizing': 'memorising',
+  'stabilized': 'stabilised', 'stabilizing': 'stabilising',
+  'color': 'colour', 'colors': 'colours',
+  'favor': 'favour', 'favors': 'favours', 'favorable': 'favourable',
+  'flavor': 'flavour', 'flavors': 'flavours',
+  'honor': 'honour', 'honors': 'honours', 'honored': 'honoured',
+  'humor': 'humour',
+  'labor': 'labour', 'labors': 'labours',
+  'neighbor': 'neighbour', 'neighbors': 'neighbours',
+  'behavior': 'behaviour', 'behaviors': 'behaviours',
+  'endeavor': 'endeavour', 'endeavors': 'endeavours',
+  'center': 'centre', 'centers': 'centres', 'centered': 'centred',
+  'theater': 'theatre', 'theaters': 'theatres',
+  'meter': 'metre', 'meters': 'metres',
+  'liter': 'litre', 'liters': 'litres',
+  'fiber': 'fibre', 'fibers': 'fibres',
+  'defense': 'defence',
+  'offense': 'offence',
+  'license': 'licence',
+  'catalog': 'catalogue', 'catalogs': 'catalogues',
+  'dialog': 'dialogue', 'dialogs': 'dialogues',
+  'analog': 'analogue',
+  'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller',
+  'canceled': 'cancelled', 'canceling': 'cancelling',
+  'labeled': 'labelled', 'labeling': 'labelling',
+  'modeled': 'modelled', 'modeling': 'modelling',
+  'fueled': 'fuelled', 'fueling': 'fuelling',
+  'leveled': 'levelled', 'leveling': 'levelling',
+  'marveled': 'marvelled',
+  'signaled': 'signalled', 'signaling': 'signalling',
+  'counselor': 'counsellor',
+  'channeled': 'channelled', 'channeling': 'channelling',
+  'gray': 'grey',
+  'aging': 'ageing',
+  'aluminum': 'aluminium',
+  'artifact': 'artefact',
+  'check': 'cheque',
+  'enrollment': 'enrolment',
+  'fulfillment': 'fulfilment',
+  'installment': 'instalment',
+  'judgment': 'judgement',
+  'maneuver': 'manoeuvre', 'maneuvers': 'manoeuvres',
+  'program': 'programme',
+  'skeptic': 'sceptic', 'skeptical': 'sceptical',
+  'sulfur': 'sulphur',
+  'tire': 'tyre', 'tires': 'tyres',
+  'toward': 'towards',
+};
+
+// Exact phrase replacements (case-insensitive matching, preserve case in output)
+const PHRASE_REPLACEMENTS: Record<string, string> = {
+  'proven track record': 'track record',
+  'proven ability': 'ability',
+  'proven record': 'record',
+  'leveraging': 'using',
+  'leveraged': 'used',
+  'utilising': 'using',
+  'utilised': 'used',
+  'utilizing': 'using',
+  'utilized': 'used',
+  'utilise': 'use',
+  'utilize': 'use',
+  'optimising ci/cd processes': 'improving CI/CD pipelines',
+  'optimizing ci/cd processes': 'improving CI/CD pipelines',
+  'resulting in': 'achieving',
+  'which led to': 'achieving',
+  'leading to': 'achieving',
+  'thereby': 'which',
+  'thus enabling': 'enabling',
+  'in order to': 'to',
+  'highly motivated': 'motivated',
+  'self-motivated': 'motivated',
+  'detail-oriented': 'detail-focused',
+  'results-driven': 'results-focused',
+  'results-oriented': 'results-focused',
+  'passionate about': 'experienced in',
+  'passion for': 'focus on',
+};
+
+function sanitiseContent(text: string): string {
+  if (!text) return '';
+  let result = text;
+  
+  // Step 1: Apply exact phrase replacements first (case-insensitive)
+  for (const [phrase, replacement] of Object.entries(PHRASE_REPLACEMENTS)) {
+    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(regex, replacement);
+  }
+  
+  // Step 2: Apply US to UK spelling corrections
+  for (const [us, uk] of Object.entries(US_TO_UK_SPELLING)) {
+    const regex = new RegExp(`\\b${us}\\b`, 'gi');
+    result = result.replace(regex, (match) => {
+      // Preserve case
+      if (match[0] === match[0].toUpperCase()) {
+        return uk.charAt(0).toUpperCase() + uk.slice(1);
+      }
+      return uk;
+    });
+  }
+  
+  // Step 3: Remove banned phrases
+  for (const phrase of BANNED_PHRASES) {
+    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(regex, '');
+  }
+  
+  // Step 4: Remove EM dashes (—) and replace with commas or full stops
+  result = result.replace(/\s*—\s*/g, ', ');
+  result = result.replace(/—/g, '-');
+  
+  // Step 5: Clean up double spaces and awkward punctuation
+  result = result.replace(/\s{2,}/g, ' ');
+  result = result.replace(/,\s*,/g, ',');
+  result = result.replace(/\.\s*\./g, '.');
+  result = result.replace(/,\s*\./g, '.');
+  result = result.replace(/^\s*,\s*/gm, '');
+  
+  return result.trim();
+}
+
+function sanitiseBullets(bullets: string[]): string[] {
+  if (!Array.isArray(bullets)) return [];
+  return bullets.map(b => sanitiseContent(b)).filter(b => b.length > 0);
+}
+
+interface AuditResult {
+  ok: boolean;
+  issues: string[];
+  bannedWordHits: string[];
+  bannedPhraseHits: string[];
+  usSpellingHits: string[];
+}
+
+function auditContent(text: string): AuditResult {
+  const issues: string[] = [];
+  const bannedWordHits: string[] = [];
+  const bannedPhraseHits: string[] = [];
+  const usSpellingHits: string[] = [];
+  
+  const lowerText = text.toLowerCase();
+  
+  // Check banned phrases
+  for (const phrase of BANNED_PHRASES) {
+    if (lowerText.includes(phrase.toLowerCase())) {
+      bannedPhraseHits.push(phrase);
+      issues.push(`Banned phrase: "${phrase}"`);
+    }
+  }
+  
+  // Check banned words (only if not part of legitimate usage)
+  for (const word of BANNED_WORDS) {
+    const regex = new RegExp(`\\b${word}\\b`, 'i');
+    if (regex.test(lowerText)) {
+      bannedWordHits.push(word);
+      issues.push(`Banned word: "${word}"`);
+    }
+  }
+  
+  // Check US spellings
+  for (const usSpelling of Object.keys(US_TO_UK_SPELLING)) {
+    const regex = new RegExp(`\\b${usSpelling}\\b`, 'i');
+    if (regex.test(text)) {
+      usSpellingHits.push(usSpelling);
+      issues.push(`US spelling: "${usSpelling}"`);
+    }
+  }
+  
+  return {
+    ok: issues.length === 0,
+    issues,
+    bannedWordHits,
+    bannedPhraseHits,
+    usSpellingHits,
+  };
+}
+
+// ============================================================================
+// END CONTENT QUALITY ENGINE
+// ============================================================================
+
 // Input validation limits
 const MAX_STRING_SHORT = 200;
 const MAX_STRING_MEDIUM = 500;
@@ -1847,9 +2116,17 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 HUMANIZED TONE RULES:
 - Active voice only
 - Vary sentence structure - avoid repetitive patterns
-- Use connectors: "This enabled...", "Resulting in...", "Which led to..."
-- BANNED: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "synergy"
-- Include specific metrics (%, $, time saved, users impacted)
+- Use natural connectors: "This enabled...", "achieving...", "which improved..."
+- NEVER USE THESE WORDS/PHRASES (they trigger AI detection):
+  * orchestrated, championed, pioneered, helmed, spearheaded, showcased
+  * leveraging, leveraged, utilising, utilised, utilizing, utilized
+  * comprehensive, meticulous, robust, dynamic, proactive, innovative
+  * synergy, paradigm, cutting-edge, game-changing, world-class, best-in-class
+  * proven track record, proven ability, passionate about, results-driven
+  * stakeholder environments, strategic initiatives, drive impactful outcomes
+  * highly motivated, self-starter, detail-oriented, team player
+- Include specific metrics (%, GBP, time saved, users impacted)
+- ALWAYS use British English spelling: optimised, organised, analysed, colour, centre, behaviour
 
 ATS KEYWORD DENSITY TARGETS:
 - Hard Skills: Each must appear 2-3 times across resume
@@ -1869,7 +2146,7 @@ MUST ADD THESE (${matchResult.missing.length} keywords): ${matchResult.missing.j
 
 Return ONLY valid JSON - no markdown code blocks, no extra text.`;
 
-    const userPrompt = `TASK: Create an ATS-optimized, HUMANIZED application package.
+    const userPrompt = `TASK: Create an ATS-optimised, HUMANISED application package using British English throughout.
 
 === TARGET JOB ===
 Title: ${jobTitle}
@@ -1922,21 +2199,21 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
       • Portfolio URL → FORBIDDEN in summary
       • Location/city → FORBIDDEN in summary
       
-      CORRECT FIRST WORDS: "Experienced", "Senior", "Accomplished", "Strategic", "Innovative"
-      WRONG FIRST WORD: "${candidateName.split(" ")[0]}" (this is the name - BANNED)
-      
-      EXAMPLE OF CORRECT SUMMARY:
-      "Experienced Principal Cloud Architect with over 8 years of expertise in cloud computing, data analytics, and machine learning. Proven track record in designing scalable solutions..."
-      
-      EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
-      "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
-      ███ END DUPLICATION BAN ███
-   - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics
-   - Education
-   - Skills: Prioritize JD keywords (list as: Python, AWS, React, etc. - NO years of experience)
-   - Certifications
+       CORRECT FIRST WORDS: "Experienced", "Senior", "Accomplished", "Director-level", "Lead"
+       WRONG FIRST WORD: "${candidateName.split(" ")[0]}" (this is the name - BANNED)
+       
+       EXAMPLE OF CORRECT SUMMARY:
+       "Experienced Software Engineer with over 8 years of expertise in cloud computing, data analytics, and machine learning. Track record of delivering scalable solutions..."
+       
+       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
+       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
+       ███ END DUPLICATION BAN ███
+    - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics
+    - Education
+    - Skills: Prioritise JD keywords (list as: Python, AWS, React, etc. - NO years of experience)
+    - Certifications
 
-2) CREATE COVER LETTER:
+ 2) CREATE COVER LETTER (British English, no AI buzzwords):
    ${candidateName}
    ${userProfile.email} | ${userProfile.phone}
    
@@ -2210,6 +2487,56 @@ ${
         coverLetterFileName: `${candidateNameForFile}_Cover_Letter.pdf`,
       };
     }
+
+    // ============================================================================
+    // CRITICAL: Apply content sanitisation to remove banned words/phrases
+    // This ensures AI-generated content is clean before returning to client
+    // ============================================================================
+    console.log('[ContentQualityEngine] Sanitising AI-generated content...');
+    
+    // Sanitise the main text fields
+    if (result.tailoredResume) {
+      const beforeAudit = auditContent(result.tailoredResume);
+      result.tailoredResume = sanitiseContent(result.tailoredResume);
+      const afterAudit = auditContent(result.tailoredResume);
+      console.log(`[Resume Audit] Before: ${beforeAudit.issues.length} issues, After: ${afterAudit.issues.length} issues`);
+      if (afterAudit.issues.length > 0) {
+        console.warn(`[Resume Audit] Remaining issues: ${afterAudit.issues.slice(0, 5).join(', ')}`);
+      }
+    }
+    
+    if (result.tailoredCoverLetter) {
+      const beforeAudit = auditContent(result.tailoredCoverLetter);
+      result.tailoredCoverLetter = sanitiseContent(result.tailoredCoverLetter);
+      const afterAudit = auditContent(result.tailoredCoverLetter);
+      console.log(`[Cover Letter Audit] Before: ${beforeAudit.issues.length} issues, After: ${afterAudit.issues.length} issues`);
+      if (afterAudit.issues.length > 0) {
+        console.warn(`[Cover Letter Audit] Remaining issues: ${afterAudit.issues.slice(0, 5).join(', ')}`);
+      }
+    }
+    
+    // Sanitise structured resume fields if present
+    if (result.resumeStructured) {
+      if (result.resumeStructured.summary) {
+        result.resumeStructured.summary = sanitiseContent(result.resumeStructured.summary);
+      }
+      if (result.resumeStructured.experience && Array.isArray(result.resumeStructured.experience)) {
+        result.resumeStructured.experience = result.resumeStructured.experience.map((exp: any) => ({
+          ...exp,
+          bullets: exp.bullets ? sanitiseBullets(exp.bullets) : [],
+        }));
+      }
+    }
+    
+    // Sanitise cover letter paragraphs if present
+    if (result.coverLetterStructured && result.coverLetterStructured.paragraphs) {
+      result.coverLetterStructured.paragraphs = result.coverLetterStructured.paragraphs.map(
+        (p: string) => sanitiseContent(p)
+      );
+    }
+    
+    console.log('[ContentQualityEngine] Sanitisation complete');
+    // ============================================================================
 
     // Ensure all required fields with our pre-calculated values
     result.candidateName = result.candidateName || candidateNameForFile;
