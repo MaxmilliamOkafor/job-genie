@@ -1769,25 +1769,29 @@ class ATSTailor {
         }
       }
 
-      // Save original CV (before local boosting) for coverage report diffing
+      // Save CV for coverage report diffing
       this._coverageOriginalCV = result.tailoredResume || '';
-      this._coverageOriginalCV = this.normalizeGeneratedDocumentContent(result.tailoredResume || '', 'cv');
+      this._coverageOriginalCVNormalized = this.normalizeGeneratedDocumentContent(this._coverageOriginalCV, 'cv');
 
       // Filename format: {FirstName}_{LastName}_CV.pdf and {FirstName}_{LastName}_Cover_Letter.pdf
       const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
       const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || '';
       const fileBaseName = lastName ? `${firstName}_${lastName}` : firstName;
-      
+
       this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
       const normalizedTailoredResume = this.normalizeGeneratedDocumentContent(result.tailoredResume, 'cv');
       const normalizedCoverLetter = this.normalizeGeneratedDocumentContent(result.tailoredCoverLetter || result.coverLetter, 'cover');
 
       this.generatedDocuments = {
-        cv: result.tailoredResume,
-        coverLetter: result.tailoredCoverLetter || result.coverLetter,
+        // Keep normalised versions as the primary fields to avoid PDF/preview mismatches
         cv: normalizedTailoredResume,
         coverLetter: normalizedCoverLetter,
+
+        // Preserve raw outputs for diagnostics
+        cvRaw: result.tailoredResume,
+        coverLetterRaw: result.tailoredCoverLetter || result.coverLetter,
+
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
         cvFileName: `${fileBaseName}_CV.pdf`,
@@ -1798,30 +1802,35 @@ class ATSTailor {
         keywords: keywords,
         structuredCv: window.quantumhireStructuredCv, // Store reference for later PDF generation
         // CRITICAL: Store professional summary explicitly for PDF generation
-        professionalSummary: result.professionalSummary || result.extractedSummary || 
-          (window.quantumhireStructuredCv?.summary?.text) || 
-          (typeof window.quantumhireStructuredCv?.summary === 'string' ? window.quantumhireStructuredCv.summary : '')
+        professionalSummary:
+          result.professionalSummary ||
+          result.extractedSummary ||
+          window.quantumhireStructuredCv?.summary?.text ||
+          (typeof window.quantumhireStructuredCv?.summary === 'string' ? window.quantumhireStructuredCv.summary : ''),
       };
-      
+
       // WIRE UP DEBUG PANELS: Log input data after profile load
       if (window.PDFDebugPanel) {
-        window.PDFDebugPanel.logInputData({
-          firstName: p.first_name,
-          lastName: p.last_name,
-          email: p.email,
-          professionalExperience: p.professional_experience,
-          relevantProjects: p.relevant_projects,
-          education: p.education,
-          skills: p.skills,
-          certifications: p.certifications,
-        }, result.tailoredResume);
-        }, normalizedTailoredResume);
+        window.PDFDebugPanel.logInputData(
+          {
+            firstName: p.first_name,
+            lastName: p.last_name,
+            email: p.email,
+            professionalExperience: p.professional_experience,
+            relevantProjects: p.relevant_projects,
+            education: p.education,
+            skills: p.skills,
+            certifications: p.certifications,
+          },
+          normalizedTailoredResume
+        );
       }
-      this.logDebug('tailorDocuments', 'Profile loaded', { 
+
+      this.logDebug('tailorDocuments', 'Profile loaded', {
         expCount: Array.isArray(p.professional_experience) ? p.professional_experience.length : 0,
         projectsCount: Array.isArray(p.relevant_projects) ? p.relevant_projects.length : 0,
-        cvLength: (result.tailoredResume || '').length
-        cvLength: (normalizedTailoredResume || '').length
+        cvLengthRaw: (result.tailoredResume || '').length,
+        cvLengthNormalised: (normalizedTailoredResume || '').length,
       });
 
       // Regenerate PDF with boosted CV and dynamic location
