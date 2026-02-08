@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV Preview Enhanced - Rich-Text Editor Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: calc(100vh - 40px);
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 20px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .panel-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* Rich Text Editor Styles */
+        .rich-text-editor-container {
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .rich-text-toolbar {
+            background: #f8f9fa;
+            padding: 10px;
+            border-bottom: 1px solid #e1e5e9;
+            display: flex;
+            gap: 8px;
+        }
+
+        .rte-btn {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .rte-btn:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .rte-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .rich-text-editor {
+            min-height: 120px;
+            padding: 15px;
+            outline: none;
+            font-family: inherit;
+            line-height: 1.6;
+        }
+
+        .rich-text-editor:focus {
+            background: #fff;
+        }
+
+        .rich-text-editor:empty:before {
+            content: "Type your education description here... Use Ctrl+B for bold, Ctrl+I for italic...";
+            color: #999;
+            font-style: italic;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        /* CV Preview Styles */
+        .cv-preview {
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10.5pt;
+            line-height: 1.15;
+        }
+
+        .cv-preview-container {
+            padding: 54px;
+        }
+
+        .cv-name {
+            font-size: 20pt;
+            font-weight: bold;
+            text-align: left;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .cv-contact {
+            text-align: left;
+            font-size: 10.5pt;
+            color: #333;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .cv-section {
+            margin-bottom: 16px;
+        }
+
+        .cv-section-title {
+            font-size: 12pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 21pt;
+            margin-bottom: 21pt;
+        }
+
+        .cv-summary {
+            text-align: justify;
+            line-height: 1.25;
+        }
+
+        .cv-job {
+            margin-bottom: 21pt;
+        }
+
+        .cv-company {
+            font-weight: bold;
+            font-size: 11pt;
+        }
+
+        .cv-job-title {
+            font-style: italic;
+            font-size: 10.5pt;
+        }
+
+        .cv-bullet {
+            margin-left: 16px;
+            margin-bottom: 3px;
+        }
+
+        .cv-education-item {
+            margin-bottom: 8px;
+        }
+
+        .cv-education-description {
+            font-size: 9pt;
+            color: #333;
+            margin-top: 2px;
+            line-height: 1.25;
+        }
+
+        .cv-education-description strong {
+            font-weight: bold;
+            color: #000;
+        }
+
+        .cv-education-description em {
+            font-style: italic;
+            color: #000;
+        }
+
+        /* Button Styles */
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        /* Status Messages */
+        .status-message {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        /* File Upload */
+        .file-upload {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .file-upload:hover {
+            border-color: #4facfe;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-upload-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e1e5e9;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            color: #4facfe;
+            border-bottom-color: #4facfe;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Panel - Editor -->
+        <div class="panel">
+            <div class="panel-header">
+                📝 CV Editor with Rich-Text Support
+            </div>
+            <div class="panel-content">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('education-tab', 'education-content')">Education</div>
+                    <div class="tab" onclick="switchTab('experience-tab', 'experience-content')">Experience</div>
+                    <div class="tab" onclick="switchTab('parser-tab', 'parser-content')">CV Parser</div>
+                </div>
+
+                <!-- Education Tab -->
+                <div id="education-content" class="tab-content active">
+                    <div class="form-group">
+                        <label>Institution</label>
+                        <input type="text" id="institution" placeholder="e.g., Stanford University" value="Harvard University">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Degree</label>
+                        <input type="text" id="degree" placeholder="e.g., Master of Science in Computer Science" value="Master of Science in Computer Science">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="text" id="edu-date" placeholder="e.g., 2020-2022" value="2020-2022">
+                        </div>
+                        <div class="form-group">
+                            <label>GPA</label>
+                            <input type="text" id="gpa" placeholder="e.g., 3.9/4.0" value="3.9/4.0">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Description (Rich-Text Enabled)</label>
+                        <div class="rich-text-editor-container">
+                            <div class="rich-text-toolbar">
+                                <button type="button" class="rte-btn" onclick="formatText('bold')">
+                                    <strong>B</strong>
+                                </button>
+                                <button type="button" class="rte-btn" onclick="formatText('italic')">
+                                    <em>I</em>
+                                </button>
+                                <button type="button" class="rte-btn" onclick="formatText('underline')">
+                                    <u>U</u>
+                                </button>
+                            </div>
+                            <div id="education-description" class="rich-text-editor" contenteditable="true">
+                                <strong>Relevant Coursework:</strong> <em>Data Structures, Algorithms, Machine Learning, Artificial Intelligence</em><br>
+                                <strong>Honors:</strong> Dean's List, Graduated with Distinction<br>
+                                <strong>Research:</strong> Published 3 papers in top-tier conferences
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn" onclick="addEducation()">Add Education Entry</button>
+                    <button class="btn btn-secondary" onclick="clearEducation()">Clear</button>
+                </div>
+
+                <!-- Experience Tab -->
+                <div id="experience-content" class="tab-content">
+                    <div class="form-group">
+                        <label>Company</label>
+                        <input type="text" id="company" placeholder="e.g., Meta" value="Meta">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Job Title</label>
+                        <input type="text" id="title" placeholder="e.g., Senior Software Engineer" value="Senior Software Engineer">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Dates</label>
+                            <input type="text" id="dates" placeholder="e.g., 2022-Present" value="2022-Present">
+                        </div>
+                        <div class="form-group">
+                            <label>Location (Optional)</label>
+                            <input type="text" id="location" placeholder="e.g., Menlo Park, CA">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Bullet Points (one per line)</label>
+                        <textarea id="bullets" rows="4" style="width: 100%; padding: 10px; border: 2px solid #e1e5e9; border-radius: 6px; font-family: inherit;" placeholder="• Led cross-functional team of 10 engineers&#10;• Improved system performance by 40%&#10;• Mentored junior developers">• Led cross-functional team of 10 engineers
+• Improved system performance by 40%
+• Mentored junior developers</textarea>
+                    </div>
+
+                    <button class="btn" onclick="addExperience()">Add Experience</button>
+                    <button class="btn btn-secondary" onclick="clearExperience()">Clear</button>
+                </div>
+
+                <!-- Parser Tab -->
+                <div id="parser-content" class="tab-content">
+                    <div class="status-message status-info">
+                        📄 Upload your CV (PDF/DOCX) to parse work experiences and education with rich-text support
+                    </div>
+
+                    <div class="file-upload" onclick="document.getElementById('cv-file').click()">
+                        <input type="file" id="cv-file" accept=".pdf,.docx,.doc,.txt" onchange="handleFileUpload(event)">
+                        <div class="file-upload-label">
+                            📎 Click to upload CV file<br>
+                            <small>Supports PDF, DOCX, DOC, TXT</small>
+                        </div>
+                    </div>
+
+                    <div id="parsed-content" style="display: none;">
+                        <h3>Parsed Work Experiences</h3>
+                        <div id="parsed-experience"></div>
+                        
+                        <h3>Parsed Education</h3>
+                        <div id="parsed-education"></div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button class="btn" onclick="generateCV()">🎯 Generate CV</button>
+                    <button class="btn btn-secondary" onclick="exportPlainText()">📄 Export Plain Text (ATS-Safe)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Preview -->
+        <div class="panel">
+            <div class="panel-header">
+                👁️ CV Preview (Live)
+            </div>
+            <div class="panel-content">
+                <div id="cv-preview" class="cv-preview">
+                    <div class="cv-preview-container">
+                        <div class="cv-name">JOHN DOE</div>
+                        <div class="cv-contact">
+                            <div>john.doe@email.com | New York, NY | Open to relocation</div>
+                            <div>linkedin.com/in/johndoe | github.com/johndoe</div>
+                        </div>
+
+                        <div class="cv-section">
+                            <div class="cv-section-title">Professional Summary</div>
+                            <div class="cv-summary">
+                                Experienced software engineer with expertise in full-stack development, system architecture, and team leadership. Proven track record of delivering scalable solutions and driving innovation.
+                            </div>
+                        </div>
+
+                        <div class="cv-section">
+                            <div class="cv-section-title">Work Experience</div>
+                            
+                            <div class="cv-job">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span class="cv-company">Meta</span>
+                                    <span style="font-size: 9pt; color: #333;">2022 - Present</span>
+                                </div>
+                                <div class="cv-job-title">Senior Software Engineer</div>
+                                <div>
+                                    <div class="cv-bullet">• Led cross-functional team of 10 engineers</div>
+                                    <div class="cv-bullet">• Improved system performance by 40%</div>
+                                    <div class="cv-bullet">• Mentored junior developers</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="cv-section">
+                            <div class="cv-section-title">Education</div>
+                            <div class="cv-education-item">
+                                <div class="cv-education-line">Master of Science in Computer Science | Harvard University | 3.9/4.0</div>
+                                <div class="cv-education-description">
+                                    <strong>Relevant Coursework:</strong> <em>Data Structures, Algorithms, Machine Learning, Artificial Intelligence</em><br>
+                                    <strong>Honors:</strong> Dean's List, Graduated with Distinction<br>
+                                    <strong>Research:</strong> Published 3 papers in top-tier conferences
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="cv-section">
+                            <div class="cv-section-title">Skills</div>
+                            <div>JavaScript, Python, Java, React, Node.js, AWS, Docker, Kubernetes, SQL, NoSQL</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data for demonstration
+        let cvData = {
+            contact: {
+                name: 'John Doe',
+                email: 'john.doe@email.com',
+                phone: '+1 (555) 123-4567',
+                location: 'New York, NY',
+                linkedin: 'linkedin.com/in/johndoe',
+                github: 'github.com/johndoe'
+            },
+            summary: 'Experienced software engineer with expertise in full-stack development, system architecture, and team leadership. Proven track record of delivering scalable solutions and driving innovation.',
+            experience: [
+                {
+                    company: 'Meta',
+                    title: 'Senior Software Engineer',
+                    dates: '2022-Present',
+                    bullets: [
+                        'Led cross-functional team of 10 engineers',
+                        'Improved system performance by 40%',
+                        'Mentored junior developers'
+                    ]
+                }
+            ],
+            education: [
+                {
+                    institution: 'Harvard University',
+                    degree: 'Master of Science in Computer Science',
+                    date: '2020-2022',
+                    gpa: '3.9/4.0',
+                    description: '<strong>Relevant Coursework:</strong> <em>Data Structures, Algorithms, Machine Learning, Artificial Intelligence</em><br><strong>Honors:</strong> Dean\'s List, Graduated with Distinction<br><strong>Research:</strong> Published 3 papers in top-tier conferences',
+                    isRichText: true
+                }
+            ],
+            skills: 'JavaScript, Python, Java, React, Node.js, AWS, Docker, Kubernetes, SQL, NoSQL'
+        };
+
+        // Tab switching
+        function switchTab(tabId, contentId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(contentId).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Rich text formatting
+        function formatText(command) {
+            document.execCommand(command, false, null);
+        }
+
+        // Add education entry
+        function addEducation() {
+            const institution = document.getElementById('institution').value;
+            const degree = document.getElementById('degree').value;
+            const date = document.getElementById('edu-date').value;
+            const gpa = document.getElementById('gpa').value;
+            const description = document.getElementById('education-description').innerHTML;
+            
+            const newEducation = {
+                institution,
+                degree,
+                date,
+                gpa,
+                description,
+                isRichText: true
+            };
+            
+            // Remove existing education with same institution
+            cvData.education = cvData.education.filter(edu => edu.institution !== institution);
+            
+            // Add new education
+            cvData.education.push(newEducation);
+            
+            updatePreview();
+            showStatus('Education entry added successfully!', 'success');
+        }
+
+        // Add experience
+        function addExperience() {
+            const company = document.getElementById('company').value;
+            const title = document.getElementById('title').value;
+            const dates = document.getElementById('dates').value;
+            const location = document.getElementById('location').value;
+            const bulletsText = document.getElementById('bullets').value;
+            
+            const bullets = bulletsText.split('\n').filter(bullet => bullet.trim()).map(bullet => 
+                bullet.replace(/^•\s*|-\s*|\*\s*/, '').trim()
+            );
+            
+            const newExperience = {
+                company,
+                title,
+                dates,
+                location,
+                bullets
+            };
+            
+            // Remove existing experience with same company
+            cvData.experience = cvData.experience.filter(exp => exp.company !== company);
+            
+            // Add new experience
+            cvData.experience.push(newExperience);
+            
+            updatePreview();
+            showStatus('Experience added successfully!', 'success');
+        }
+
+        // Clear functions
+        function clearEducation() {
+            document.getElementById('institution').value = '';
+            document.getElementById('degree').value = '';
+            document.getElementById('edu-date').value = '';
+            document.getElementById('gpa').value = '';
+            document.getElementById('education-description').innerHTML = '';
+        }
+
+        function clearExperience() {
+            document.getElementById('company').value = '';
+            document.getElementById('title').value = '';
+            document.getElementById('dates').value = '';
+            document.getElementById('location').value = '';
+            document.getElementById('bullets').value = '';
+        }
+
+        // Update preview
+        function updatePreview() {
+            const preview = document.getElementById('cv-preview');
+            
+            // Generate HTML preview
+            const html = generateCVHTML();
+            preview.innerHTML = html;
+        }
+
+        // Generate CV HTML
+        function generateCVHTML() {
+            const { contact, summary, experience, education, skills } = cvData;
+            
+            const escapeHtml = (str) => {
+                if (!str) return '';
+                return str.replace(/&/g, '&amp;')
+                         .replace(/</g, '&lt;')
+                         .replace(/>/g, '&gt;')
+                         .replace(/"/g, '&quot;')
+                         .replace(/'/g, '&#39;');
+            };
+
+            const renderEducationDescription = (description, isRichText) => {
+                if (!description) return '';
+                
+                if (isRichText) {
+                    return `<div class="cv-education-description">${description}</div>`;
+                }
+                
+                return `<div class="cv-education-description">${escapeHtml(description)}</div>`;
+            };
+
+            return `
+                <div class="cv-preview-container">
+                    <div class="cv-name">${escapeHtml(contact.name.toUpperCase())}</div>
+                    <div class="cv-contact">
+                        <div>${escapeHtml(contact.email)} | ${escapeHtml(contact.location)} | Open to relocation</div>
+                        ${contact.linkedin ? `<div>${escapeHtml(contact.linkedin)}${contact.github ? ` | ${escapeHtml(contact.github)}` : ''}</div>` : ''}
+                    </div>
+                    
+                    ${summary ? `
+                    <div class="cv-section">
+                        <div class="cv-section-title">Professional Summary</div>
+                        <div class="cv-summary">${escapeHtml(summary)}</div>
+                    </div>
+                    ` : ''}
+                    
+                    ${experience.length > 0 ? `
+                    <div class="cv-section">
+                        <div class="cv-section-title">Work Experience</div>
+                        ${experience.map(job => `
+                        <div class="cv-job">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span class="cv-company">${escapeHtml(job.company)}</span>
+                                ${job.dates ? `<span style="font-size: 9pt; color: #333;">${escapeHtml(job.dates)}</span>` : ''}
+                            </div>
+                            <div class="cv-job-title">${escapeHtml(job.title)}</div>
+                            ${job.bullets.length > 0 ? `
+                            <div>
+                                ${job.bullets.map(bullet => `<div class="cv-bullet">• ${escapeHtml(bullet)}</div>`).join('')}
+                            </div>
+                            ` : ''}
+                        </div>
+                        `).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    ${education.length > 0 ? `
+                    <div class="cv-section">
+                        <div class="cv-section-title">Education</div>
+                        ${education.map(edu => `
+                        <div class="cv-education-item">
+                            <div class="cv-education-line">${[edu.degree, edu.institution, edu.gpa].filter(Boolean).map(f => {
+                                if (edu.isRichText && f === edu.degree) {
+                                    return f;
+                                }
+                                return escapeHtml(f);
+                            }).join(' | ')}</div>
+                            ${edu.description ? renderEducationDescription(edu.description, edu.isRichText) : ''}
+                        </div>
+                        `).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    ${skills ? `
+                    <div class="cv-section">
+                        <div class="cv-section-title">Skills</div>
+                        <div>${escapeHtml(skills)}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Generate CV
+        function generateCV() {
+            updatePreview();
+            showStatus('CV generated successfully! You can now export it.', 'success');
+        }
+
+        // Export plain text (ATS-safe)
+        function exportPlainText() {
+            const plainText = generatePlainText();
+            
+            // Create and download text file
+            const blob = new Blob([plainText], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'CV_ATS_Safe.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showStatus('ATS-safe plain text exported successfully!', 'success');
+        }
+
+        // Generate plain text version
+        function generatePlainText() {
+            const { contact, summary, experience, education, skills } = cvData;
+            const lines = [];
+
+            // Name and contact
+            lines.push(contact.name.toUpperCase());
+            lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + ' | Open to relocation');
+            if (contact.linkedin || contact.github) {
+                lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
+            }
+            lines.push('');
+
+            // Summary
+            if (summary) {
+                lines.push('PROFESSIONAL SUMMARY');
+                lines.push(summary);
+                lines.push('');
+            }
+
+            // Experience
+            if (experience.length > 0) {
+                lines.push('WORK EXPERIENCE');
+                experience.forEach(job => {
+                    const yearDates = job.dates || '';
+                    lines.push(yearDates ? `${job.company}    ${yearDates}` : job.company);
+                    lines.push(job.title);
+                    job.bullets.forEach(bullet => {
+                        lines.push(`• ${bullet}`);
+                    });
+                    lines.push('');
+                });
+            }
+
+            // Education
+            if (education.length > 0) {
+                lines.push('EDUCATION');
+                education.forEach(edu => {
+                    // Extract plain text for ATS compatibility
+                    const plainDegree = edu.degree.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+                    const plainInstitution = edu.institution.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+                    const plainGpa = edu.gpa.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+                    
+                    const educationLine = [plainDegree, plainInstitution, plainGpa].filter(Boolean).join(' | ');
+                    lines.push(educationLine);
+                    
+                    if (edu.description) {
+                        const plainDescription = edu.description.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/\n/g, ' ');
+                        if (plainDescription) {
+                            lines.push(plainDescription);
+                        }
+                    }
+                });
+                lines.push('');
+            }
+
+            // Skills
+            if (skills) {
+                lines.push('SKILLS');
+                lines.push(skills);
+                lines.push('');
+            }
+
+            return lines.join('\n');
+        }
+
+        // Handle file upload for CV parsing
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                parseCVContent(content, file.name);
+            };
+            
+            if (file.type === 'text/plain') {
+                reader.readAsText(file);
+            } else {
+                // For PDF/DOCX, we would need specialized parsers
+                // This is a simplified demonstration
+                reader.readAsText(file);
+            }
+        }
+
+        // Parse CV content (simplified demonstration)
+        function parseCVContent(content, filename) {
+            showStatus(`Parsing ${filename}...`, 'info');
+            
+            // This is a simplified parser demonstration
+            // In a real implementation, you would use the enhanced-cv-parser.js
+            
+            // Simulate parsing delay
+            setTimeout(() => {
+                // Mock parsed data
+                const mockExperience = [
+                    {
+                        company: 'Accenture',
+                        title: 'Software Engineer',
+                        dates: '2020-2022',
+                        bullets: ['Developed enterprise applications', 'Led agile development team']
+                    },
+                    {
+                        company: 'SolimHealth',
+                        title: 'Data Scientist',
+                        dates: '2018-2020',
+                        bullets: ['Built ML models for healthcare', 'Improved patient outcomes by 25%']
+                    }
+                ];
+
+                const mockEducation = [
+                    {
+                        institution: 'MIT',
+                        degree: 'Bachelor of Science in Computer Engineering',
+                        date: '2014-2018',
+                        gpa: '3.8/4.0',
+                        description: '<strong>Honors:</strong> <em>Magna Cum Laude</em>, Dean\'s List<br><strong>Activities:</strong> Robotics Club President',
+                        isRichText: true
+                    }
+                ];
+
+                // Add parsed experience
+                mockExperience.forEach(exp => {
+                    cvData.experience.push(exp);
+                });
+
+                // Add parsed education
+                mockEducation.forEach(edu => {
+                    cvData.education.push(edu);
+                });
+
+                // Update preview
+                updatePreview();
+
+                // Show parsed content
+                document.getElementById('parsed-content').style.display = 'block';
+                document.getElementById('parsed-experience').innerHTML = mockExperience.map(exp => 
+                    `<div style="margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                        <strong>${exp.company}</strong> - ${exp.title} (${exp.dates})
+                    </div>`
+                ).join('');
+
+                document.getElementById('parsed-education').innerHTML = mockEducation.map(edu => 
+                    `<div style="margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                        <strong>${edu.institution}</strong> - ${edu.degree}
+                    </div>`
+                ).join('');
+
+                showStatus('CV parsed successfully! Parsed experiences and education added.', 'success');
+            }, 1500);
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.textContent = message;
+            
+            const panelContent = document.querySelector('.panel-content');
+            panelContent.insertBefore(statusDiv, panelContent.firstChild);
+            
+            setTimeout(() => {
+                statusDiv.remove();
+            }, 5000);
+        }
+
+        // Initialize keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 's':
+                        e.preventDefault();
+                        generateCV();
+                        break;
+                    case 'e':
+                        e.preventDefault();
+                        exportPlainText();
+                        break;
+                }
+            }
+        });
+
+        // Initialize preview
+        updatePreview();
+    </script>
+</body>
+</html>

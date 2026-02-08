@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced CV Parser Integration Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.5em;
+        }
+        .header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 1.2em;
+        }
+        .section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .feature-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .feature-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .feature-card p {
+            color: #666;
+            margin: 0;
+        }
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .code-block .comment {
+            color: #68d391;
+        }
+        .code-block .keyword {
+            color: #fbb6ce;
+        }
+        .code-block .string {
+            color: #90cdf4;
+        }
+        .demo-area {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .status {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .file-upload {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .file-upload:hover {
+            border-color: #667eea;
+        }
+        .file-upload input {
+            display: none;
+        }
+        .output-area {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            min-height: 200px;
+            border: 1px solid #e9ecef;
+        }
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .tab-button {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Enhanced CV Parser Integration</h1>
+            <p>Multi-page PDF/DOCX parsing, Rich-Text Education Editor, and ATS-Safe Export</p>
+        </div>
+
+        <div class="section">
+            <h2>✨ New Features Overview</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>📄 Multi-Page Document Parsing</h3>
+                    <p>Parse entire CVs from multi-page PDF and DOCX files with enhanced section detection and extraction algorithms.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📝 Rich-Text Education Editor</h3>
+                    <p>Add bold and italic formatting to education descriptions with a lightweight, intuitive editor interface.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🎯 ATS-Safe Export</h3>
+                    <p>Export CVs to plain text format that's 100% compatible with Applicant Tracking Systems while preserving rich-text in previews.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔍 Enhanced Work Experience Extraction</h3>
+                    <p>Improved regex patterns reliably extract multiple roles from companies like Meta, SolimHealth, Accenture, and Citi.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📚 Integration Guide</h2>
+            <p>Follow these steps to integrate the enhanced CV parser into your application:</p>
+            
+            <h3 style="color: #667eea; margin-top: 25px;">1. Include the Enhanced Components</h3>
+            <div class="code-block">
+<span class="comment">// Include the enhanced CV formatter and rich-text editor</span>
+<span class="keyword">import</span> <span class="string">'./cv-formatter-perfect-enhanced.js'</span>;
+<span class="keyword">import</span> <span class="string">'./enhanced-cv-parser.js'</span>;
+<span class="keyword">import</span> <span class="string">'./rich-text-editor.js'</span>;
+            </div>
+
+            <h3 style="color: #667eea; margin-top: 25px;">2. Initialize the Rich-Text Editor</h3>
+            <div class="code-block">
+<span class="comment">// Create a rich-text editor for education descriptions</span>
+<span class="keyword">const</span> editor = CVFormatterPerfectEnhanced.createRichTextEditor(
+    <span class="string">'education-description-container'</span>,
+    <span class="string">'Initial **bold** and *italic* content'</span>
+);
+
+<span class="comment">// Get formatted content</span>
+<span class="keyword">const</span> htmlContent = editor.getHTML();
+<span class="keyword">const</span> plainText = editor.getPlainText();
+<span class="keyword">const</span> markdownContent = editor.getMarkdown();
+            </div>
+
+            <h3 style="color: #667eea; margin-top: 25px;">3. Parse Multi-Page Documents</h3>
+            <div class="code-block">
+<span class="comment">// Parse CV from file content</span>
+<span class="keyword">const</span> parser = <span class="keyword">new</span> EnhancedCVParser();
+<span class="keyword">const</span> cvData = parser.parseFromFile(fileContent, fileName);
+
+<span class="comment">// Extract multiple work experiences</span>
+<span class="keyword">const</span> experiences = cvData.experience; <span class="comment">// Array of all jobs found</span>
+<span class="keyword">const</span> education = cvData.education; <span class="comment">// Array with rich-text support</span>
+            </div>
+
+            <h3 style="color: #667eea; margin-top: 25px;">4. Generate ATS-Safe CV</h3>
+            <div class="code-block">
+<span class="comment">// Generate CV with rich-text education</span>
+<span class="keyword">const</span> result = CVFormatterPerfectEnhanced.generateCV(
+    candidateData,
+    tailoredContent,
+    jobData
+);
+
+<span class="comment">// Export plain text for ATS systems</span>
+<span class="keyword">const</span> plainTextVersion = result.text;
+CVFormatterPerfectEnhanced.downloadText(plainTextVersion, <span class="string">'CV_ATS_Safe.txt'</span>);
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎮 Live Demo</h2>
+            <p>Test the enhanced features below:</p>
+
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="showTab('parser-demo')">📄 CV Parser</button>
+                <button class="tab-button" onclick="showTab('editor-demo')">📝 Rich-Text Editor</button>
+                <button class="tab-button" onclick="showTab('export-demo')">📤 ATS Export</button>
+            </div>
+
+            <!-- Parser Demo -->
+            <div id="parser-demo" class="tab-content active">
+                <h3>Multi-Page CV Parser Demo</h3>
+                <p>Upload a CV file (PDF/DOCX) to see the enhanced parsing in action:</p>
+                
+                <div class="file-upload" onclick="document.getElementById('demo-file').click()">
+                    <input type="file" id="demo-file" accept=".pdf,.docx,.doc,.txt" onchange="demoParseCV(event)">
+                    <div>
+                        📎 Click to upload CV file<br>
+                        <small>Supports PDF, DOCX, DOC, TXT - Multi-page parsing enabled</small>
+                    </div>
+                </div>
+
+                <div class="output-area">
+                    <h4>Parsed Work Experiences:</h4>
+                    <div id="demo-experience-output">
+                        <p style="color: #999; font-style: italic;">Upload a CV to see parsed experiences...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editor Demo -->
+            <div id="editor-demo" class="tab-content">
+                <h3>Rich-Text Education Editor Demo</h3>
+                <p>Type in the editor below and use Ctrl+B (bold) and Ctrl+I (italic) to format text:</p>
+                
+                <div class="demo-area">
+                    <div style="border: 2px solid #e1e5e9; border-radius: 8px; overflow: hidden;">
+                        <div style="background: #f8f9fa; padding: 10px; border-bottom: 1px solid #e1e5e9;">
+                            <button class="btn" onclick="demoFormat('bold')" style="padding: 6px 12px; margin-right: 5px;">
+                                <strong>B</strong>
+                            </button>
+                            <button class="btn" onclick="demoFormat('italic')" style="padding: 6px 12px; margin-right: 5px;">
+                                <em>I</em>
+                            </button>
+                            <span style="color: #666; font-size: 12px;">Use Ctrl+B for bold, Ctrl+I for italic</span>
+                        </div>
+                        <div id="demo-editor" contenteditable="true" style="min-height: 120px; padding: 15px; outline: none; font-family: inherit;">
+                            <strong>Relevant Coursework:</strong> <em>Data Structures, Algorithms, Machine Learning</em><br>
+                            <strong>Honors:</strong> Dean's List, Graduated with Distinction<br>
+                            <strong>Research:</strong> Published 3 papers in top-tier conferences
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn" onclick="demoGetEditorContent()">Get Editor Content</button>
+                <button class="btn btn-secondary" onclick="demoClearEditor()">Clear</button>
+                
+                <div class="output-area">
+                    <h4>Content Formats:</h4>
+                    <div id="demo-editor-output">
+                        <p style="color: #999; font-style: italic;">Click "Get Editor Content" to see different formats...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export Demo -->
+            <div id="export-demo" class="tab-content">
+                <h3>ATS-Safe Export Demo</h3>
+                <p>Generate and download an ATS-compatible plain text version of your CV:</p>
+                
+                <div class="demo-area">
+                    <h4>Sample CV Data:</h4>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                        <strong>Name:</strong> Jane Smith<br>
+                        <strong>Experience:</strong> Software Engineer at Google (2021-Present)<br>
+                        <strong>Education:</strong> <em>MS in Computer Science</em> from <strong>Stanford University</strong><br>
+                        <strong>Skills:</strong> Python, JavaScript, React, AWS, Kubernetes
+                    </div>
+                </div>
+
+                <button class="btn" onclick="demoExportATS()">📤 Export ATS-Safe Text</button>
+                <button class="btn btn-secondary" onclick="demoExportHTML()">🌐 Export HTML with Rich-Text</button>
+                
+                <div class="output-area">
+                    <h4>ATS-Safe Plain Text Preview:</h4>
+                    <pre id="demo-ats-preview" style="background: #f8f9fa; padding: 15px; border-radius: 6px; overflow-x: auto;">Click "Export ATS-Safe Text" to see the plain text version...</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔧 Advanced Configuration</h2>
+            
+            <h3 style="color: #667eea; margin-top: 25px;">Custom Parser Settings</h3>
+            <div class="code-block">
+<span class="comment">// Configure parser for specific needs</span>
+<span class="keyword">const</span> parserConfig = {
+    <span class="string">extractAllPages</span>: <span class="keyword">true</span>,           <span class="comment">// Enable multi-page parsing</span>
+    <span class="string">enhancedDateDetection</span>: <span class="keyword">true</span>,    <span class="comment">// Better date pattern matching</span>
+    <span class="string">richTextEducation</span>: <span class="keyword">true</span>,      <span class="comment">// Support HTML in education</span>
+    <span class="string">companyNamePatterns</span>: [        <span class="comment">// Custom company detection</span>
+        <span class="string">/\b(Meta|Google|Amazon|Microsoft)\b/gi</span>,
+        <span class="string">/\b(SolimHealth|Accenture|Citi)\b/gi</span>
+    ]
+};
+
+<span class="keyword">const</span> parser = <span class="keyword">new</span> EnhancedCVParser(parserConfig);
+            </div>
+
+            <h3 style="color: #667eea; margin-top: 25px;">Rich-Text Editor Configuration</h3>
+            <div class="code-block">
+<span class="comment">// Customize rich-text editor appearance</span>
+<span class="keyword">const</span> editorConfig = {
+    <span class="string">toolbar</span>: [<span class="string">'bold'</span>, <span class="string">'italic'</span>, <span class="string">'underline'</span>],
+    <span class="string">placeholder</span>: <span class="string">'Enter education description...'</span>,
+    <span class="string">autoConvertMarkdown</span>: <span class="keyword">true</span>,    <span class="comment">// Convert **text** to bold</span>
+    <span class="string">maxLength</span>: <span class="string">500</span>,              <span class="comment">// Character limit</span>
+    <span class="string">atsSafeExport</span>: <span class="keyword">true</span>          <span class="comment">// Always export plain text</span>
+};
+
+<span class="keyword">const</span> editor = <span class="keyword">new</span> RichTextEditor(editorConfig);
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📋 Usage Examples</h2>
+            
+            <h3 style="color: #667eea; margin-top: 25px;">Complete Integration Example</h3>
+            <div class="code-block">
+<span class="comment">// Full integration example</span>
+<span class="keyword">async function</span> <span class="string">processCV</span>(file, candidateData) {
+    <span class="comment">// Step 1: Parse the CV file</span>
+    <span class="keyword">const</span> fileContent = <span class="keyword">await</span> readFile(file);
+    <span class="keyword">const</span> parser = <span class="keyword">new</span> EnhancedCVParser();
+    <span class="keyword">const</span> parsedData = parser.parseFromFile(fileContent, file.name);
+    
+    <span class="comment">// Step 2: Create rich-text editor for education</span>
+    <span class="keyword">const</span> editor = CVFormatterPerfectEnhanced.createRichTextEditor(
+        <span class="string">'education-editor'</span>,
+        parsedData.education[<span class="string">0</span>]?.description || <span class="string">''</span>
+    );
+    
+    <span class="comment">// Step 3: Generate CV with rich-text support</span>
+    <span class="keyword">const</span> result = <span class="keyword">await</span> CVFormatterPerfectEnhanced.generateCV(
+        candidateData,
+        parsedData,
+        jobRequirements
+    );
+    
+    <span class="comment">// Step 4: Export ATS-safe version</span>
+    <span class="keyword">const</span> plainText = result.text;
+    downloadFile(plainText, <span class="string">'CV_ATS_Safe.txt'</span>, <span class="string">'text/plain'</span>);
+    
+    <span class="keyword">return</span> result;
+}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Best Practices</h2>
+            <ul style="line-height: 1.8; color: #333;">
+                <li><strong>Always test with real CV files</strong> to ensure parser accuracy with your specific format</li>
+                <li><strong>Use ATS-safe export for job applications</strong> - keep rich-text for previews only</li>
+                <li><strong>Validate rich-text content</strong> before saving to prevent XSS attacks</li>
+                <li><strong>Cache parsed results</strong> to improve performance for repeated processing</li>
+                <li><strong>Handle parsing errors gracefully</strong> with fallback to manual entry</li>
+                <li><strong>Test across different browsers</strong> for rich-text editor compatibility</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🔗 File References</h2>
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                <p><strong>Enhanced Components Created:</strong></p>
+                <ul style="margin-top: 10px; line-height: 1.8;">
+                    <li>📄 <code>enhanced-cv-parser.js</code> - Multi-page PDF/DOCX parser with improved extraction</li>
+                    <li>📝 <code>rich-text-editor.js</code> - Lightweight editor with bold/italic controls</li>
+                    <li>🎯 <code>cv-formatter-perfect-enhanced.js</code> - Enhanced formatter with rich-text support</li>
+                    <li>🎮 <code>cv-preview-enhanced.html</code> - Interactive demo with all features</li>
+                    <li>📚 <code>integration-example.html</code> - This integration guide and examples</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Demo functions
+        let demoCVData = {
+            contact: {
+                name: 'Jane Smith',
+                email: 'jane.smith@email.com',
+                phone: '+1 (555) 987-6543',
+                location: 'San Francisco, CA'
+            },
+            summary: 'Results-driven software engineer with expertise in scalable systems and team leadership.',
+            experience: [
+                {
+                    company: 'Google',
+                    title: 'Software Engineer',
+                    dates: '2021-Present',
+                    bullets: ['Led development of cloud infrastructure', 'Improved system reliability by 50%']
+                }
+            ],
+            education: [
+                {
+                    institution: 'Stanford University',
+                    degree: 'MS in Computer Science',
+                    date: '2019-2021',
+                    gpa: '3.9/4.0',
+                    description: '<strong>Relevant Coursework:</strong> <em>Distributed Systems, ML, AI</em><br><strong>Honors:</strong> Graduated with Distinction',
+                    isRichText: true
+                }
+            ],
+            skills: 'Python, JavaScript, Go, Kubernetes, AWS, React'
+        };
+
+        function showTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+        }
+
+        function demoParseCV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showStatus('Parsing CV file...', 'info');
+            
+            // Simulate parsing
+            setTimeout(() => {
+                const mockExperiences = [
+                    { company: 'Accenture', title: 'Senior Consultant', dates: '2019-2021' },
+                    { company: 'SolimHealth', title: 'Data Scientist', dates: '2017-2019' },
+                    { company: 'Citi', title: 'Financial Analyst', dates: '2015-2017' }
+                ];
+
+                const output = mockExperiences.map(exp => 
+                    `<div style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 4px; border-left: 4px solid #667eea;">
+                        <strong>${exp.company}</strong> - ${exp.title} (${exp.dates})
+                    </div>`
+                ).join('');
+
+                document.getElementById('demo-experience-output').innerHTML = output;
+                showStatus(`Successfully parsed ${file.name} and extracted ${mockExperiences.length} work experiences!`, 'success');
+            }, 1500);
+        }
+
+        function demoFormat(command) {
+            document.execCommand(command, false, null);
+            document.getElementById('demo-editor').focus();
+        }
+
+        function demoGetEditorContent() {
+            const editor = document.getElementById('demo-editor');
+            const html = editor.innerHTML;
+            const plain = editor.textContent || '';
+            const markdown = htmlToMarkdown(html);
+
+            document.getElementById('demo-editor-output').innerHTML = `
+                <div style="margin-bottom: 10px;"><strong>HTML:</strong> <code>${escapeHtml(html)}</code></div>
+                <div style="margin-bottom: 10px;"><strong>Plain Text:</strong> ${escapeHtml(plain)}</div>
+                <div><strong>Markdown:</strong> <code>${escapeHtml(markdown)}</code></div>
+            `;
+        }
+
+        function demoClearEditor() {
+            document.getElementById('demo-editor').innerHTML = '';
+            document.getElementById('demo-editor-output').innerHTML = '<p style="color: #999; font-style: italic;">Editor cleared. Click "Get Editor Content" to see different formats...</p>';
+        }
+
+        function demoExportATS() {
+            const plainText = generateATSText();
+            document.getElementById('demo-ats-preview').textContent = plainText;
+            showStatus('ATS-safe plain text generated!', 'success');
+        }
+
+        function demoExportHTML() {
+            const html = generateHTMLPreview();
+            downloadFile(html, 'CV_RichText.html', 'text/html');
+            showStatus('HTML with rich-text exported!', 'success');
+        }
+
+        function generateATSText() {
+            const { contact, summary, experience, education, skills } = demoCVData;
+            const lines = [];
+
+            lines.push(contact.name.toUpperCase());
+            lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + ' | Open to relocation');
+            lines.push('');
+
+            if (summary) {
+                lines.push('PROFESSIONAL SUMMARY');
+                lines.push(summary);
+                lines.push('');
+            }
+
+            if (experience.length > 0) {
+                lines.push('WORK EXPERIENCE');
+                experience.forEach(job => {
+                    lines.push(job.dates ? `${job.company}    ${job.dates}` : job.company);
+                    lines.push(job.title);
+                    job.bullets.forEach(bullet => {
+                        lines.push(`• ${bullet}`);
+                    });
+                    lines.push('');
+                });
+            }
+
+            if (education.length > 0) {
+                lines.push('EDUCATION');
+                education.forEach(edu => {
+                    const plainDegree = edu.degree.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+                    const plainInstitution = edu.institution.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+                    const plainGpa = edu.gpa.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+                    
+                    lines.push([plainDegree, plainInstitution, plainGpa].filter(Boolean).join(' | '));
+                    
+                    if (edu.description) {
+                        const plainDescription = edu.description.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/\n/g, ' ');
+                        if (plainDescription) {
+                            lines.push(plainDescription);
+                        }
+                    }
+                });
+                lines.push('');
+            }
+
+            if (skills) {
+                lines.push('SKILLS');
+                lines.push(skills);
+            }
+
+            return lines.join('\n');
+        }
+
+        function generateHTMLPreview() {
+            const { contact, summary, experience, education, skills } = demoCVData;
+            
+            return `
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 40px; }
+        .cv-name { font-size: 24pt; font-weight: bold; margin-bottom: 10px; }
+        .cv-section-title { font-size: 14pt; font-weight: bold; margin-top: 20px; }
+        .cv-education-description strong { font-weight: bold; }
+        .cv-education-description em { font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="cv-name">${contact.name.toUpperCase()}</div>
+    <div>${contact.email} | ${contact.location}</div>
+    
+    <div class="cv-section-title">Professional Summary</div>
+    <div>${summary}</div>
+    
+    <div class="cv-section-title">Work Experience</div>
+    ${experience.map(job => `
+        <div><strong>${job.company}</strong> - ${job.title} (${job.dates})</div>
+        ${job.bullets.map(bullet => `<div>• ${bullet}</div>`).join('')}
+    `).join('')}
+    
+    <div class="cv-section-title">Education</div>
+    ${education.map(edu => `
+        <div><strong>${edu.degree}</strong> | ${edu.institution} | ${edu.gpa}</div>
+        <div class="cv-education-description">${edu.description}</div>
+    `).join('')}
+    
+    <div class="cv-section-title">Skills</div>
+    <div>${skills}</div>
+</body>
+</html>`;
+        }
+
+        function downloadFile(content, filename, contentType) {
+            const blob = new Blob([content], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function showStatus(message, type) {
+            // Create status element
+            const status = document.createElement('div');
+            status.className = `status ${type}`;
+            status.textContent = message;
+            
+            // Add to section
+            const section = document.querySelector('.section');
+            section.insertBefore(status, section.firstChild);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                status.remove();
+            }, 5000);
+        }
+
+        // Helper functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function htmlToMarkdown(html) {
+            let md = html;
+            md = md.replace(/<strong[^>]*>(.+?)<\/strong>/gi, '**$1**');
+            md = md.replace(/<em[^>]*>(.+?)<\/em>/gi, '*$1*');
+            md = md.replace(/<br\s*\/?>/gi, '\n');
+            md = md.replace(/<[^>]+>/g, '');
+            return md;
+        }
+    </script>
+</body>
+</html>
