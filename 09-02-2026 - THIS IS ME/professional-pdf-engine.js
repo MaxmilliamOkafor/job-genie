@@ -192,7 +192,7 @@
 
     // ============ STRUCTURE CV DATA ============
     // FIX 27-01-26: Added robust data extraction with multiple fallbacks for OpenAI speed
-    // FIX 09-02-26: Added duplicate section removal and proper text cleaning
+    // FIX 09-02-26: Added duplicate section removal, proper text cleaning, and final sanitisation
     structureCVData(candidateData, tailoredContent) {
       const data = {
         contact: this.extractContact(candidateData),
@@ -201,6 +201,22 @@
         education: [],
         skills: [],
         certifications: []
+      };
+      
+      // Helper: Apply ContentQualityEngine sanitisation if available
+      const sanitise = (text) => {
+        if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.sanitiseContent) {
+          return ContentQualityEngine.sanitiseContent(text);
+        }
+        return text;
+      };
+      
+      const sanitiseBullets = (bullets) => {
+        if (!Array.isArray(bullets)) return bullets;
+        if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.sanitiseBullets) {
+          return ContentQualityEngine.sanitiseBullets(bullets);
+        }
+        return bullets.map(b => sanitise(b));
       };
 
       // FIX: Try to get professional experience from candidateData first (most reliable)
@@ -218,14 +234,14 @@
         // CRITICAL FIX: Clean the text before parsing - remove duplicate sections
         const cleanedContent = this.removeDuplicateSections(tailoredContent);
         const parsed = this.parseSections(cleanedContent);
-        data.summary = parsed.summary || '';
+        data.summary = sanitise(parsed.summary || '');
         data.experience = parsed.experience || [];
         data.education = parsed.education || [];
         data.skills = this.parseSkills(parsed.skills || '');
         data.certifications = this.parseCertifications(parsed.certifications || '');
       } else if (typeof tailoredContent === 'object' && tailoredContent !== null) {
         // Structured data from profile - check ALL possible field names
-        data.summary = tailoredContent.summary || tailoredContent.professionalSummary || tailoredContent.professional_summary || '';
+        data.summary = sanitise(tailoredContent.summary || tailoredContent.professionalSummary || tailoredContent.professional_summary || '');
         
         // FIX 27-01-26: Comprehensive experience field checking with candidateData fallback
         const tailoredExperience = tailoredContent.experience || 
@@ -255,6 +271,12 @@
         data.experience = this.normalizeExperience(experienceFromCandidate);
       }
       
+      // FIX 09-02-26: Sanitise all experience bullets for UK spelling and banned phrases
+      data.experience = data.experience.map(job => ({
+        ...job,
+        bullets: sanitiseBullets(job.bullets || [])
+      }));
+      
       // DEDUPLICATE skills (in case of merging from multiple sources)
       if (data.skills.length > 0) {
         const uniqueSkills = [];
@@ -267,6 +289,17 @@
           }
         }
         data.skills = uniqueSkills;
+      }
+      
+      // FIX 09-02-26: Run quality audit and log warnings
+      if (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.audit) {
+        const fullText = [data.summary, ...data.experience.map(e => (e.bullets || []).join(' '))].join(' ');
+        const audit = ContentQualityEngine.audit(fullText);
+        if (!audit.ok) {
+          console.warn('[ProfessionalPDFEngine] ⚠️ Quality audit failed:', audit.issues);
+        } else {
+          console.log('[ProfessionalPDFEngine] ✅ Quality audit passed');
+        }
       }
 
       // Log for debugging
@@ -410,6 +443,7 @@
     },
 
     // ============ PARSE CV SECTIONS ============
+    // FIX v3.3.4: Handle inline headers like "PROFESSIONAL SUMMARY: Experienced..."
     parseSections(text) {
       if (!text) return {};
       
@@ -446,10 +480,26 @@
         'CERTIFICATIONS': 'certifications',
         'LICENSES': 'certifications'
       };
+      
+      // Build regex pattern for inline headers: "SECTION_NAME: content"
+      const sectionNames = Object.keys(sectionMap).join('|');
+      const inlineHeaderRegex = new RegExp(`^(${sectionNames})\\s*:\\s*(.+)$`, 'i');
 
       for (const line of lines) {
         const trimmed = line.trim();
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
+        
+        // FIX v3.3.4: Check for inline header pattern first (e.g., "PROFESSIONAL SUMMARY: Experienced...")
+        const inlineMatch = trimmed.match(inlineHeaderRegex);
+        if (inlineMatch) {
+          // Save previous section
+          this.saveSection(sections, currentSection, currentContent);
+          // Start new section with inline content
+          const headerKey = inlineMatch[1].toUpperCase().trim();
+          currentSection = sectionMap[headerKey] || '';
+          currentContent = [inlineMatch[2].trim()]; // Push inline content as first line
+          continue;
+        }
 
         if (sectionMap[upperTrimmed]) {
           this.saveSection(sections, currentSection, currentContent);
