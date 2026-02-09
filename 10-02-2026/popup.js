@@ -3634,6 +3634,8 @@ class ATSTailor {
 
       console.log('[ATS Tailor] regeneratePDFViaBackend - Summary length:', professionalSummary.length);
 
+      const pdfSafeCvContent = this.dedupeSectionHeaders(this.generatedDocuments.cv || '');
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
         method: 'POST',
         headers: {
@@ -3642,7 +3644,7 @@ class ATSTailor {
           apikey: SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
-          content: this.generatedDocuments.cv,
+          content: pdfSafeCvContent,
           type: 'cv',
           tailoredLocation: tailoredLocation,
           jobTitle: this.currentJob?.title,
@@ -3686,6 +3688,77 @@ class ATSTailor {
   }
 
   /**
+   * Dedupe repeated section headers in plain-text CV/cover content.
+   * Prevents output like: "WORK EXPERIENCE\n\nWORK EXPERIENCE".
+   */
+  dedupeSectionHeaders(text) {
+    if (!text || typeof text !== 'string') return text;
+
+    const HEADER_KEYS = new Set([
+      'PROFESSIONAL SUMMARY',
+      'SUMMARY',
+      'PROFILE',
+      'OBJECTIVE',
+      'WORK EXPERIENCE',
+      'PROFESSIONAL EXPERIENCE',
+      'EXPERIENCE',
+      'EMPLOYMENT',
+      'EDUCATION',
+      'SKILLS',
+      'TECHNICAL SKILLS',
+      'CORE SKILLS',
+      'TECHNICAL PROFICIENCIES',
+      'CERTIFICATIONS',
+      'LICENSES',
+      'PROJECTS',
+      'ACHIEVEMENTS'
+    ]);
+
+    const normaliseHeader = (line) =>
+      (line || '')
+        .toString()
+        .trim()
+        .toUpperCase()
+        .replace(/[:\s]+$/g, '');
+
+    const lines = text.split(/\r?\n/);
+    const out = [];
+
+    let lastHeader = null;
+    let lastHeaderHadContent = true; // true so first header is always allowed
+
+    for (const line of lines) {
+      const trimmed = (line || '').trim();
+      const header = normaliseHeader(line);
+      const isHeader = HEADER_KEYS.has(header);
+
+      if (isHeader) {
+        // If same header repeats before any content, skip it.
+        if (lastHeader === header && !lastHeaderHadContent) {
+          continue;
+        }
+        out.push(header); // standardise header casing
+        lastHeader = header;
+        lastHeaderHadContent = false;
+        continue;
+      }
+
+      // Keep line as-is.
+      out.push(line);
+      if (trimmed) {
+        // Any non-empty non-header line counts as content.
+        lastHeaderHadContent = true;
+      }
+    }
+
+    // Collapse excessive blank lines introduced by removals
+    return out
+      .join('\n')
+      .replace(/\n{4,}/g, '\n\n\n')
+      .trim();
+  }
+
+  /**
    * PART 1B: Completely rewritten downloadDocument function
    * Uses structuredCv from tailoring step - NO re-parsing
    */
@@ -3708,6 +3781,9 @@ class ATSTailor {
         return rawTextDoc;
       }
     })();
+
+    // CRITICAL: Prevent duplicated section headers in any generated output
+    const pdfSafeTextDoc = this.dedupeSectionHeaders(textDoc);
 
     try {
       // If we already have a PDF, download it directly (SAFE: no atob on huge strings)
@@ -3742,7 +3818,7 @@ class ATSTailor {
             type: 'resume',
             fileName: filename,
             structuredCv,
-            plainText: textDoc,
+            plainText: pdfSafeTextDoc,
           }),
         });
 
@@ -3816,7 +3892,7 @@ class ATSTailor {
             type: 'coverletter',
             fileName: filename,
             personalInfo,
-            plainText: textDoc,
+            plainText: pdfSafeTextDoc,
           }),
         });
 
@@ -3867,8 +3943,8 @@ class ATSTailor {
       }
 
       // Final fallback: download as text
-      if (textDoc) {
-        const blob = new Blob([textDoc], { type: 'text/plain' });
+      if (pdfSafeTextDoc) {
+        const blob = new Blob([pdfSafeTextDoc], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
