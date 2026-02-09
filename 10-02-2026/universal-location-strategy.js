@@ -145,6 +145,56 @@ const MAJOR_US_CITIES = [
   'menlo park', 'palo alto', 'mountain view', 'cupertino', 'redwood city', 'rock hill',
 ];
 
+// Common city abbreviations / nicknames → canonical name
+const CITY_ABBREVIATIONS = {
+  'nyc': 'New York',
+  'sf': 'San Francisco',
+  'la': 'Los Angeles',
+  'dc': 'Washington',
+  'philly': 'Philadelphia',
+  'chi': 'Chicago',
+  'atl': 'Atlanta',
+  'bos': 'Boston',
+  'det': 'Detroit',
+  'pdx': 'Portland',
+  'hk': 'Hong Kong',
+  'kl': 'Kuala Lumpur',
+  'cdmx': 'Mexico City',
+  'sp': 'São Paulo',
+  'ba': 'Buenos Aires',
+  'ldn': 'London',
+  'mcr': 'Manchester',
+  'bhx': 'Birmingham',
+};
+
+// Accent normalization map for common city variants
+const ACCENT_MAP = {
+  'münchen': 'Munich',
+  'munchen': 'Munich',
+  'köln': 'Cologne',
+  'koln': 'Cologne',
+  'zürich': 'Zurich',
+  'genève': 'Geneva',
+  'geneve': 'Geneva',
+  'são paulo': 'Sao Paulo',
+  'sao paulo': 'Sao Paulo',
+  'bogotá': 'Bogota',
+  'bogota': 'Bogota',
+  'brasília': 'Brasilia',
+  'brasilia': 'Brasilia',
+  'malmö': 'Malmo',
+  'malmo': 'Malmo',
+  'montréal': 'Montreal',
+  'montreal': 'Montreal',
+  'méxico': 'Mexico City',
+  'méxico city': 'Mexico City',
+  'turkey': 'Turkey',
+  'türkiye': 'Turkey',
+  'turkiye': 'Turkey',
+  'new york city': 'New York',
+  'bengaluru': 'Bangalore',
+};
+
 // City-to-Country mapping for standalone cities (expanded)
 const CITY_COUNTRY_MAP = {
   'stockholm': 'Sweden',
@@ -157,19 +207,48 @@ const CITY_COUNTRY_MAP = {
   'edinburgh': 'United Kingdom',
   'bristol': 'United Kingdom',
   'leeds': 'United Kingdom',
+  'watford': 'United Kingdom',
+  'cambridge': 'United Kingdom',
+  'oxford': 'United Kingdom',
+  'glasgow': 'United Kingdom',
+  'cardiff': 'United Kingdom',
+  'reading': 'United Kingdom',
+  'nottingham': 'United Kingdom',
+  'sheffield': 'United Kingdom',
+  'liverpool': 'United Kingdom',
+  'belfast': 'United Kingdom',
+  'brighton': 'United Kingdom',
+  'bath': 'United Kingdom',
+  'coventry': 'United Kingdom',
+  'leicester': 'United Kingdom',
+  'newcastle': 'United Kingdom',
+  'southampton': 'United Kingdom',
+  'exeter': 'United Kingdom',
+  'york': 'United Kingdom',
+  'welwyn garden city': 'United Kingdom',
   'dublin': 'Ireland',
   'cork': 'Ireland',
+  'galway': 'Ireland',
+  'limerick': 'Ireland',
+  'lucan': 'Ireland',
   'paris': 'France',
   'lyon': 'France',
   'marseille': 'France',
+  'nice': 'France',
+  'toulouse': 'France',
   'berlin': 'Germany',
   'munich': 'Germany',
   'frankfurt': 'Germany',
   'hamburg': 'Germany',
   'cologne': 'Germany',
+  'düsseldorf': 'Germany',
+  'dusseldorf': 'Germany',
+  'stuttgart': 'Germany',
   'amsterdam': 'Netherlands',
   'rotterdam': 'Netherlands',
   'the hague': 'Netherlands',
+  'eindhoven': 'Netherlands',
+  'utrecht': 'Netherlands',
   'singapore': 'Singapore',
   'hong kong': 'Hong Kong SAR',
   'tokyo': 'Japan',
@@ -179,11 +258,13 @@ const CITY_COUNTRY_MAP = {
   'melbourne': 'Australia',
   'brisbane': 'Australia',
   'perth': 'Australia',
+  'adelaide': 'Australia',
   'toronto': 'Canada',
   'vancouver': 'Canada',
   'montreal': 'Canada',
   'ottawa': 'Canada',
   'calgary': 'Canada',
+  'edmonton': 'Canada',
   'zurich': 'Switzerland',
   'geneva': 'Switzerland',
   'basel': 'Switzerland',
@@ -194,15 +275,19 @@ const CITY_COUNTRY_MAP = {
   'vienna': 'Austria',
   'warsaw': 'Poland',
   'krakow': 'Poland',
+  'wroclaw': 'Poland',
   'prague': 'Czech Republic',
+  'brno': 'Czech Republic',
   'lisbon': 'Portugal',
   'porto': 'Portugal',
   'madrid': 'Spain',
   'barcelona': 'Spain',
   'valencia': 'Spain',
+  'seville': 'Spain',
   'milan': 'Italy',
   'rome': 'Italy',
   'turin': 'Italy',
+  'florence': 'Italy',
   'bangalore': 'India',
   'bengaluru': 'India',
   'mumbai': 'India',
@@ -213,6 +298,9 @@ const CITY_COUNTRY_MAP = {
   'pune': 'India',
   'gurgaon': 'India',
   'noida': 'India',
+  'kolkata': 'India',
+  'ahmedabad': 'India',
+  'secunderabad': 'India',
   'tel aviv': 'Israel',
   'jerusalem': 'Israel',
   'dubai': 'United Arab Emirates',
@@ -230,6 +318,7 @@ const CITY_COUNTRY_MAP = {
   'cairo': 'Egypt',
   'nairobi': 'Kenya',
   'lagos': 'Nigeria',
+  'abuja': 'Nigeria',
   'mexico city': 'Mexico',
   'guadalajara': 'Mexico',
   'sao paulo': 'Brazil',
@@ -243,6 +332,8 @@ const CITY_COUNTRY_MAP = {
   'shenzhen': 'China',
   'guangzhou': 'China',
   'hangzhou': 'China',
+  'ankara': 'Turkey',
+  'istanbul': 'Turkey',
 };
 
 function detectPlatformForLocation() {
@@ -363,13 +454,37 @@ function cleanLocation(rawLocation) {
 }
 
 /**
- * Force output to ALWAYS be "City, Country".
+ * Normalize accents and common abbreviations before lookup.
+ * "München" → "Munich", "NYC" → "New York", "Bengaluru" → "Bangalore"
+ */
+function normalizeLocationInput(input) {
+  if (!input) return input;
+  let normalized = input.trim();
+  
+  // Strip accents for lookup (keep original for display if no match)
+  const stripped = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  
+  // Check abbreviation map first
+  const abbr = CITY_ABBREVIATIONS[stripped];
+  if (abbr) return abbr;
+  
+  // Check accent map
+  const accentMatch = ACCENT_MAP[stripped] || ACCENT_MAP[normalized.toLowerCase()];
+  if (accentMatch) return accentMatch;
+  
+  return normalized;
+}
+
+/**
+ * Force output to ALWAYS be "City, XX" (XX = ISO2 uppercase).
  * - If only a country is known, uses capital city as the "City".
  * - If only a city is known, tries to infer country; if not possible, uses the country part of fallback.
  * - Country is normalised to ISO-2 when possible (e.g. "United Kingdom" -> "GB").
+ * - Handles abbreviations (NYC, SF), accented names (München), and typos via fuzzy matching.
  */
 function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
-  const raw = (input || '').toString().trim();
+  const rawInput = normalizeLocationInput((input || '').toString().trim());
+  const raw = rawInput || '';
   const fb = (fallbackLocation || 'Dublin, IE').toString().trim();
 
   const fallbackParts = fb.split(',').map(p => p.trim()).filter(Boolean);
@@ -393,31 +508,43 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
     const parts = raw.split(',').map(p => p.trim()).filter(Boolean);
     if (parts.length === 0) return `${fallbackCityToken}, ${toISO2(fallbackCountryToken) || fallbackCountryToken}`;
 
-    const city = parts[0];
+    // Normalize city part too (handles "München, Germany" → "Munich, DE")
+    const cityNormalized = normalizeLocationInput(parts[0]) || parts[0];
     const countryToken = parts.length >= 2 ? parts[parts.length - 1] : '';
 
     // US state abbreviations: keep as-is but add US
     if (/^[A-Z]{2}$/.test(countryToken) && US_STATES[countryToken.toUpperCase()]) {
-      return `${city}, ${countryToken.toUpperCase()}, US`;
+      return `${cityNormalized}, ${countryToken.toUpperCase()}, US`;
     }
 
     const iso2 = toISO2(countryToken) || toISO2(fallbackCountryToken) || countryToken || fallbackCountryToken;
-    return `${city}, ${iso2}`;
+    return `${cityNormalized}, ${iso2}`;
   }
 
   // Country-only (including codes / fuzzy country names)
   const iso2Country = toISO2(raw);
   if (iso2Country) {
+    // Special case: USA alone → New York, US (user's spec says this)
+    if (['US', 'USA'].includes(raw.toUpperCase()) || /^united\s+states/i.test(raw)) {
+      return 'New York, US';
+    }
+    // India alone → Mumbai, IN (user's spec)
+    if (iso2Country === 'IN' && /^india$/i.test(raw)) {
+      return 'Mumbai, IN';
+    }
     const cap = capitalFor(raw) || capitalFor(iso2Country) || fallbackCityToken;
     return `${cap}, ${iso2Country}`;
   }
 
-  // City-only: attempt city dataset match (optional), then CITY_COUNTRY_MAP fallback, then fallback country.
+  // City-only: attempt city dataset match (fuzzy via Levenshtein in location-db), then CITY_COUNTRY_MAP fallback
   const rawLower = raw.toLowerCase();
 
+  // Try fuzzy city dataset first (handles typos like "Secundrabad" → "Secunderabad, IN")
   const cityHit = db?.findCity?.(raw);
   if (cityHit?.name && cityHit?.countryCode) {
-    return `${cityHit.name}, ${cityHit.countryCode}`;
+    // Capitalize the matched city name properly
+    const displayName = cityHit.name.charAt(0).toUpperCase() + cityHit.name.slice(1);
+    return `${displayName}, ${cityHit.countryCode}`;
   }
 
   const inferredCountryName = CITY_COUNTRY_MAP[rawLower];
@@ -709,6 +836,8 @@ if (typeof window !== 'undefined') {
     cleanLocation,
     normalizeLocationForCV,
     normalizeJobLocationForApplication,
+    normalizeLocationInput,
+    forceCityCountryFormat,
     scrapeUniversalLocation,
     getLocationPreview,
     inferCountryFromCity,
@@ -721,6 +850,8 @@ if (typeof module !== 'undefined' && module.exports) {
     cleanLocation,
     normalizeLocationForCV,
     normalizeJobLocationForApplication,
+    normalizeLocationInput,
+    forceCityCountryFormat,
     scrapeUniversalLocation,
     getLocationPreview,
     inferCountryFromCity,

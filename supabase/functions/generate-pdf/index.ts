@@ -411,11 +411,26 @@ serve(async (req) => {
       }
 
       // === WORK EXPERIENCE ===
-      if (sanitizedData.experience && sanitizedData.experience.length > 0) {
+      // Filter out section-header-as-company entries
+      const HEADER_NAMES_SET = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment',
+      ]);
+      const isHeaderName = (v: string) => {
+        const n = (v || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        return HEADER_NAMES_SET.has(n) || [...HEADER_NAMES_SET].some(h => n === `${h} ${h}`);
+      };
+      const filteredExperience = (sanitizedData.experience || []).filter(exp => {
+        if (isHeaderName(exp.company)) return false;
+        if (!exp.company || exp.company.trim().length < 2) return false;
+        return true;
+      });
+
+      if (filteredExperience.length > 0) {
         drawSectionHeader("Work Experience");
 
-        for (let i = 0; i < sanitizedData.experience.length; i++) {
-          const exp = sanitizedData.experience[i];
+        for (let i = 0; i < filteredExperience.length; i++) {
+          const exp = filteredExperience[i];
           ensureSpace(50);
 
           // CRITICAL: Strip any embedded dates from company/title to prevent duplication
@@ -469,7 +484,7 @@ serve(async (req) => {
           }
 
           // 1.5 line spacing between companies (except after last)
-          if (i < sanitizedData.experience.length - 1) {
+          if (i < filteredExperience.length - 1) {
             yPosition -= SECTION_SPACING;
           }
         }
@@ -991,11 +1006,41 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       }
 
       // WORK EXPERIENCE
-      if (structuredCv.experience && structuredCv.experience.length > 0) {
+      // CRITICAL: Filter out entries where company/title is actually a section header
+      const SECTION_HEADER_NAMES = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held',
+      ]);
+      const isHeaderEntry = (val: string): boolean => {
+        const norm = (val || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        if (SECTION_HEADER_NAMES.has(norm)) return true;
+        // Also catch duplicated forms like "work experience work experience"
+        for (const h of SECTION_HEADER_NAMES) {
+          if (norm === `${h} ${h}`) return true;
+        }
+        return false;
+      };
+      const cleanedExperience = (structuredCv.experience || []).filter(exp => {
+        const co = (exp.company || '').trim();
+        const ti = (exp.title || '').trim();
+        if (isHeaderEntry(co)) {
+          console.log(`[generate-pdf] Stripped header-as-company: "${co}"`);
+          return false;
+        }
+        if (isHeaderEntry(ti) && !co) {
+          console.log(`[generate-pdf] Stripped header-as-title: "${ti}"`);
+          return false;
+        }
+        if (!co || co.length < 2) return false;
+        return true;
+      });
+
+      if (cleanedExperience.length > 0) {
         drawSectionHeader("Work Experience");
 
-        for (let i = 0; i < structuredCv.experience.length; i++) {
-          const exp = structuredCv.experience[i];
+        for (let i = 0; i < cleanedExperience.length; i++) {
+          const exp = cleanedExperience[i];
           ensureSpace(50);
 
           // Company - BOLD
@@ -1036,7 +1081,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
             drawWrappedText(`• ${bullet}`, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
           }
 
-          if (i < structuredCv.experience.length - 1) {
+          if (i < cleanedExperience.length - 1) {
             yPosition -= SECTION_SPACING;
           }
         }
