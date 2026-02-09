@@ -99,7 +99,9 @@
   };
 
   const PHRASE_REPLACEMENTS = {
-    'proven ability': 'strong ability',
+    // "Proven X" phrases (must be removed, not rephrased)
+    // User requirement: replace "proven ability" with plain "ability" (no adjectives)
+    'proven ability': 'ability',
     'proven track record': 'track record',
     'proven record': 'record',
     'proven proficiency': 'proficiency',
@@ -763,7 +765,28 @@
     finalCleanup(text) {
       if (!text) return text;
 
+      const SECTION_HEADERS = [
+        'PROFESSIONAL SUMMARY',
+        'PROFESSIONAL EXPERIENCE',
+        'WORK EXPERIENCE',
+        'EXPERIENCE',
+        'EDUCATION',
+        'SKILLS',
+        'TECHNICAL PROFICIENCIES',
+        'CERTIFICATIONS'
+      ];
+
+      // Build a regex that collapses duplicated headers on a single line:
+      // "WORK EXPERIENCE WORK EXPERIENCE" → "WORK EXPERIENCE"
+      // "SKILLS  SKILLS" → "SKILLS"
+      const dupHeaderRegex = new RegExp(
+        `^(${SECTION_HEADERS.map(h => h.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})(?:\\s+\\1)+$`,
+        'gmi'
+      );
+
       return text
+        // Collapse duplicated section headers (regression guard)
+        .replace(dupHeaderRegex, '$1')
         // Remove double spaces
         .replace(/\s{2,}/g, ' ')
         // Remove empty lines
