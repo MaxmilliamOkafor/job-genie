@@ -36,7 +36,7 @@
       ],
       bridge: [
         'My {yearsExp} years of hands-on experience in {domain} have fueled my passion for this field and prepared me for this exciting opportunity.',
-        'Throughout my {yearsExp}-year career in {domain}, I have developed a deep enthusiasm for solving complex challenges—exactly what this role requires.',
+        'Throughout my {yearsExp}-year career in {domain}, I have developed a deep enthusiasm for solving complex challenges, exactly what this role requires.',
         'Having spent {yearsExp} years in {domain}, I have cultivated both the technical expertise and the drive to excel in this position.'
       ],
       closing: [
