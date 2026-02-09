@@ -3688,8 +3688,9 @@ class ATSTailor {
   }
 
   /**
-   * Dedupe repeated section headers in plain-text CV/cover content.
+   * Dedupe repeated section headers AND split inline headers in plain-text CV/cover content.
    * Prevents output like: "WORK EXPERIENCE\n\nWORK EXPERIENCE".
+   * ALSO FIXES: "SKILLS: PYTHON, JAVA, C++" -> splits to "SKILLS\n" + properly cased content.
    */
   dedupeSectionHeaders(text) {
     if (!text || typeof text !== 'string') return text;
@@ -3721,6 +3722,85 @@ class ATSTailor {
         .toUpperCase()
         .replace(/[:\s]+$/g, '');
 
+    /**
+     * Normalise ALL CAPS content to proper casing (Title Case with acronym preservation).
+     * Example: "PYTHON, JAVA, NODE.JS, AWS" -> "Python, Java, Node.js, AWS"
+     */
+    const normaliseContent = (content) => {
+      if (!content) return '';
+      const trimmed = content.trim();
+      
+      // If content is not all uppercase, return as-is (already properly cased)
+      if (trimmed !== trimmed.toUpperCase()) return trimmed;
+      
+      // Known technical terms with correct casing
+      const KNOWN_FORMATS = {
+        'PYTHON': 'Python', 'JAVA': 'Java', 'JAVASCRIPT': 'JavaScript',
+        'TYPESCRIPT': 'TypeScript', 'NODE.JS': 'Node.js', 'REACT': 'React',
+        'ANGULAR': 'Angular', 'VUE.JS': 'Vue.js', 'MONGODB': 'MongoDB',
+        'POSTGRESQL': 'PostgreSQL', 'MYSQL': 'MySQL', 'REDIS': 'Redis',
+        'DOCKER': 'Docker', 'KUBERNETES': 'Kubernetes', 'TERRAFORM': 'Terraform',
+        'JENKINS': 'Jenkins', 'GITHUB': 'GitHub', 'GITLAB': 'GitLab',
+        'JIRA': 'Jira', 'CONFLUENCE': 'Confluence', 'SLACK': 'Slack',
+        'SALESFORCE': 'Salesforce', 'TABLEAU': 'Tableau', 'POWER BI': 'Power BI',
+        'EXCEL': 'Excel', 'POWERPOINT': 'PowerPoint', 'AZURE': 'Azure',
+        'C++': 'C++', 'C#': 'C#', 'KOTLIN': 'Kotlin', 'SWIFT': 'Swift',
+        'GRAPHQL': 'GraphQL', 'REST': 'REST', 'RESTFUL': 'RESTful',
+        'MACHINE LEARNING': 'Machine Learning', 'DEEP LEARNING': 'Deep Learning',
+        'NATURAL LANGUAGE PROCESSING': 'Natural Language Processing',
+        'DATA SCIENCE': 'Data Science', 'DATA ANALYSIS': 'Data Analysis',
+        'BUSINESS INTELLIGENCE': 'Business Intelligence',
+        'PROJECT MANAGEMENT': 'Project Management', 'AGILE': 'Agile',
+        'SCRUM': 'Scrum', 'DEVOPS': 'DevOps', 'CI/CD': 'CI/CD',
+        'GOOGLE CLOUD': 'Google Cloud', 'GOOGLE CLOUD PLATFORM': 'Google Cloud Platform'
+      };
+      
+      // Acronyms to keep uppercase (2-5 chars)
+      const ACRONYMS = new Set([
+        'AWS', 'GCP', 'SQL', 'API', 'CSS', 'HTML', 'XML', 'JSON', 'REST',
+        'CI', 'CD', 'ML', 'AI', 'UI', 'UX', 'ETL', 'LLM', 'IAC', 'SRE',
+        'PMP', 'CPA', 'CFA', 'MBA', 'PHD', 'IIBA', 'CBAP', 'ITIL'
+      ]);
+      
+      // Split by comma, normalise each term
+      return trimmed.split(',').map(term => {
+        const t = term.trim();
+        const upper = t.toUpperCase();
+        
+        // Check known formats first
+        if (KNOWN_FORMATS[upper]) return KNOWN_FORMATS[upper];
+        
+        // Check if it's a pure acronym
+        if (ACRONYMS.has(upper)) return upper;
+        
+        // Convert to Title Case, preserving acronyms within
+        return t.toLowerCase().split(/[\s\-\/]+/).map((word, idx) => {
+          const wordUpper = word.toUpperCase();
+          if (ACRONYMS.has(wordUpper)) return wordUpper;
+          // Keep version numbers (e.g., "3.9" in "python 3.9")
+          if (/^\d+\.?\d*$/.test(word)) return word;
+          return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
+      }).join(', ');
+    };
+
+    /**
+     * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
+     * Returns { header, content } or null if not an inline header.
+     */
+    const parseInlineHeader = (line) => {
+      const trimmed = (line || '').trim();
+      // Pattern: HEADER: content (header is all caps, followed by colon and content)
+      const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
+      if (inlineMatch) {
+        const potentialHeader = inlineMatch[1].trim().toUpperCase();
+        if (HEADER_KEYS.has(potentialHeader)) {
+          return { header: potentialHeader, content: inlineMatch[2].trim() };
+        }
+      }
+      return null;
+    };
+
     const lines = text.split(/\r?\n/);
     const out = [];
 
@@ -3729,6 +3809,29 @@ class ATSTailor {
 
     for (const line of lines) {
       const trimmed = (line || '').trim();
+      
+      // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
+      const inlineResult = parseInlineHeader(line);
+      if (inlineResult) {
+        // Split inline header into separate header line + normalised content line
+        const { header, content } = inlineResult;
+        
+        // Skip duplicate header if same as last and no content between
+        if (lastHeader === header && !lastHeaderHadContent) {
+          // Just add the content, skip the duplicate header
+          out.push(normaliseContent(content));
+          lastHeaderHadContent = true;
+          continue;
+        }
+        
+        out.push(header); // Add header on its own line
+        out.push(normaliseContent(content)); // Add normalised content on next line
+        lastHeader = header;
+        lastHeaderHadContent = true;
+        continue;
+      }
+      
+      // Standard header detection (header on its own line)
       const header = normaliseHeader(line);
       const isHeader = HEADER_KEYS.has(header);
 

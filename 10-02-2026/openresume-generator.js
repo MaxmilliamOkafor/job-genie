@@ -153,6 +153,7 @@
     },
 
     // ============ PARSE CV TEXT ============
+    // FIX v4.2.0: Handles inline headers like "SKILLS: PYTHON, JAVA, C++" by splitting them
     parseCVText(cvText) {
       const result = {
         summary: '',
@@ -161,11 +162,6 @@
         education: [],
         certifications: []
       };
-
-      const lines = cvText.split('\n');
-      let currentSection = '';
-      let currentContent = [];
-      let currentJob = null;
 
       const sectionMap = {
         'PROFESSIONAL SUMMARY': 'summary',
@@ -176,12 +172,49 @@
         'EMPLOYMENT': 'experience',
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
+        'TECHNICAL PROFICIENCIES': 'skills',
         'EDUCATION': 'education',
         'CERTIFICATIONS': 'certifications'
       };
 
+      /**
+       * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
+       * Returns { header, content } or null if not an inline header.
+       */
+      const parseInlineHeader = (line) => {
+        const trimmed = (line || '').trim();
+        // Pattern: HEADER: content (header is all caps, followed by colon and content)
+        const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
+        if (inlineMatch) {
+          const potentialHeader = inlineMatch[1].trim().toUpperCase();
+          if (sectionMap[potentialHeader]) {
+            return { header: potentialHeader, content: inlineMatch[2].trim() };
+          }
+        }
+        return null;
+      };
+
+      const lines = cvText.split('\n');
+      let currentSection = '';
+      let currentContent = [];
+      let currentJob = null;
+
       for (const line of lines) {
         const trimmed = line.trim();
+        
+        // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
+        const inlineResult = parseInlineHeader(line);
+        if (inlineResult) {
+          // Save previous section content
+          this.saveSection(result, currentSection, currentContent, currentJob);
+          // Start new section with the inline content
+          currentSection = sectionMap[inlineResult.header];
+          currentContent = [inlineResult.content]; // Content goes directly into the section
+          currentJob = null;
+          continue;
+        }
+        
+        // Standard header detection (header on its own line)
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
         if (sectionMap[upperTrimmed]) {
