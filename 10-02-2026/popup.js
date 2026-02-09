@@ -555,8 +555,13 @@ class ATSTailor {
 
   async refreshSessionIfNeeded() {
     try {
-      if (!this.session?.refresh_token || !this.session?.access_token) return;
+      // If no session at all, nothing to refresh
+      if (!this.session?.refresh_token || !this.session?.access_token) {
+        console.log('[ATS Tailor] No session to refresh');
+        return false;
+      }
 
+      // Check if current token is still valid
       const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         headers: {
           apikey: SUPABASE_ANON_KEY,
@@ -564,8 +569,14 @@ class ATSTailor {
         },
       });
 
-      if (res.ok) return;
+      if (res.ok) {
+        console.log('[ATS Tailor] Session still valid');
+        return true;
+      }
 
+      console.log('[ATS Tailor] Session expired, attempting refresh...');
+
+      // Token expired - try to refresh
       const refreshRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
         method: 'POST',
         headers: {
@@ -576,11 +587,17 @@ class ATSTailor {
       });
 
       if (!refreshRes.ok) {
-        console.warn('[ATS Tailor] refresh failed; clearing session');
+        const errorText = await refreshRes.text().catch(() => '');
+        console.warn('[ATS Tailor] Token refresh failed:', refreshRes.status, errorText);
+        
+        // Clear invalid session
         this.session = null;
         await chrome.storage.local.remove(['ats_session']);
         this.updateUI();
-        return;
+        
+        // Show login prompt to user
+        this.showToast('Session expired. Please sign in again.', 'warning');
+        return false;
       }
 
       const data = await refreshRes.json();
@@ -590,8 +607,11 @@ class ATSTailor {
         user: data.user || this.session.user,
       };
       await this.saveSession();
+      console.log('[ATS Tailor] Session refreshed successfully');
+      return true;
     } catch (e) {
-      console.warn('[ATS Tailor] refreshSessionIfNeeded error', e);
+      console.warn('[ATS Tailor] refreshSessionIfNeeded error:', e);
+      return false;
     }
   }
 
@@ -2899,9 +2919,11 @@ class ATSTailor {
       updateStep(1, 'working');
       updateProgress(5, 'Step 1/3: AI Extracting keywords from job description...');
 
-      await this.refreshSessionIfNeeded();
+      const sessionValid = await this.refreshSessionIfNeeded();
       if (!this.session?.access_token || !this.session?.user?.id) {
-        throw new Error('Please sign in again');
+        // Show login screen automatically
+        this.updateUI();
+        throw new Error('Session expired. Please sign in using the form above, then try again.');
       }
 
       // Ensure we have a job description first
