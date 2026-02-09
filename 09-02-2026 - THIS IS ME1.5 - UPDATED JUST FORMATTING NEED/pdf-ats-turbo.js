@@ -258,7 +258,13 @@
         technicalProficiencies: ''
       };
 
-      const lines = cvText.split('\n');
+      // CRITICAL: Normalise newlines first (handles literal \\n from JSON, mixed line endings)
+      const normalised = cvText
+        .replace(/\\n/g, '\n')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+
+      const lines = normalised.split('\n');
 
       // Strip contact header lines
       let contentStartIndex = 0;

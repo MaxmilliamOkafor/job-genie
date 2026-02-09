@@ -1619,30 +1619,33 @@ class ATSTailor {
 
     let formatted = escapeHtml(content);
 
+    // Convert newlines to <br> for HTML display
+    // First convert paragraph breaks (\n\n) to double <br>
+    formatted = formatted.replace(/\n\n/g, '<br><br>');
+    // Then convert single newlines to <br>
+    formatted = formatted.replace(/\n/g, '<br>');
+
     if (type === 'cv') {
-      // FIX v3.4.0: Robust CV preview formatting
+      // Robust CV preview formatting
       // Handle inline section headers (e.g., "PROFESSIONAL SUMMARY: text...")
       formatted = formatted
-        .replace(/^(PROFESSIONAL SUMMARY|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|CORE COMPETENCIES|KEY SKILLS|ADDITIONAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|EMPLOYMENT)(\s*:\s*)/gim,
+        .replace(/(PROFESSIONAL SUMMARY|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|CORE COMPETENCIES|KEY SKILLS|ADDITIONAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|EMPLOYMENT)(\s*:\s*)/gi,
           '<span class="section-header">$1</span>$2')
-        // Standalone section headers (on their own line)
-        .replace(/^(PROFESSIONAL SUMMARY|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|CORE COMPETENCIES|KEY SKILLS|ADDITIONAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|EMPLOYMENT)\s*$/gm,
-          '<span class="section-header">$1</span>')
+        // Standalone section headers
+        .replace(/((?:<br>)+)(PROFESSIONAL SUMMARY|WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|CORE COMPETENCIES|KEY SKILLS|ADDITIONAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS|EMPLOYMENT)((?:<br>|$))/gi,
+          '$1<span class="section-header">$2</span>$3')
         // Job headers with pipe separators: "Company | Title | Dates"
-        .replace(/^([A-Z][A-Za-z\s&.,]+)\s*\|\s*([^|]+)\s*\|\s*(.+)$/gm,
+        .replace(/([A-Z][A-Za-z\s&.,]+)\s*\|\s*([^|<]+)\s*\|\s*([^<]+)/g,
           '<strong>$1</strong> | $2 | <span class="date-line">$3</span>')
-        // Job headers with pipe but only 2 parts
-        .replace(/^([A-Z][A-Za-z\s&.,]+)\s*\|\s*(.+)$/gm,
-          '<strong>$1</strong> | <span class="date-line">$2</span>')
-        // Bullet points: normalize various bullet chars
-        .replace(/^[-•*▪]\s*/gm, '&bull; ');
+        // Bullet points: normalise various bullet chars
+        .replace(/(^|<br>)([-•*▪])\s*/g, '$1&bull; ');
     } else {
       // Cover letter preview
       formatted = formatted
-        .replace(/^(Date:.+)$/m, '<span class="date-line">$1</span>')
-        .replace(/^(Re:.+)$/m, '<strong>$1</strong>')
-        .replace(/^(Dear .+,)$/m, '<strong>$1</strong>')
-        .replace(/^(Yours sincerely,|Sincerely,|Best regards,|Regards,|Kind regards,)$/gm, '<br><strong>$1</strong>');
+        .replace(/(Date:\s*[^<]+)/i, '<span class="date-line">$1</span>')
+        .replace(/(Re:\s*[^<]+)/i, '<strong>$1</strong>')
+        .replace(/(Dear\s+[^<]+,)/i, '<strong>$1</strong>')
+        .replace(/(Yours sincerely,|Sincerely,|Best regards,|Regards,|Kind regards,)/gi, '<strong>$1</strong>');
     }
 
     return formatted;
@@ -3628,7 +3631,8 @@ class ATSTailor {
             certifications: candidateData.certifications,
             summary: candidateData.ats_strategy,
             city: tailoredLocation
-          }
+          },
+          this.generatedDocuments.coverLetter || ''
         );
 
         if (atsPackage.cvBase64) {
