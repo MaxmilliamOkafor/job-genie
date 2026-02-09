@@ -3935,7 +3935,29 @@ class ATSTailor {
       }
 
       // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
-      const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+      let structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+
+      // ██ FINAL GATE: Remove any accidental section header entries from experience ██
+      // Prevents "WORK EXPERIENCE WORK EXPERIENCE" rendering in the generated PDF
+      if (structuredCv && Array.isArray(structuredCv.experience)) {
+        const headerPatterns = ['professional experience', 'work experience', 'experience', 'employment history'];
+        const isDupHeader = (v) => /^(work experience|professional experience|experience)( \1)+$/.test(v.toLowerCase().trim());
+        const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        structuredCv.experience = structuredCv.experience.filter(job => {
+          const company = normalise(job.company || job.companyName || '');
+          const title = normalise(job.title || job.jobTitle || job.position || '');
+          if (headerPatterns.includes(company) || isDupHeader(company)) {
+            console.log('[ATS Tailor] Stripped invalid experience entry (company):', job.company);
+            return false;
+          }
+          if ((headerPatterns.includes(title) || isDupHeader(title)) && !company) {
+            console.log('[ATS Tailor] Stripped invalid experience entry (title):', job.title);
+            return false;
+          }
+          return true;
+        });
+        console.log('[ATS Tailor] ✓ Validated experience entries before PDF:', structuredCv.experience.length);
+      }
 
       if (type === 'cv' && structuredCv) {
         this.showToast('⏳ Generating PDF...', 'info');

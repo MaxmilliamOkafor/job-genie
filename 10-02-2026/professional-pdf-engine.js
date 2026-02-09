@@ -555,11 +555,18 @@
         'employment', 'career', 'roles'
       ];
       
+      // Also detect literal duplicated header strings like "WORK EXPERIENCE WORK EXPERIENCE" in raw fields
+      const collapseDuplicatedHeader = (value) => {
+        const dup = value.match(/^(\s*(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT)\s*)+$/i);
+        if (dup) return ''; // Collapse to empty so it gets filtered
+        return value;
+      };
+
       return experience
         .filter(job => {
-          // Filter out entries where company name is a section header
-          const rawCompany = String(job.company || job.companyName || '').trim();
-          const rawTitle = String(job.title || job.jobTitle || job.position || '').trim();
+          // Collapse duplicated header values before evaluation
+          const rawCompany = collapseDuplicatedHeader(String(job.company || job.companyName || '').trim());
+          const rawTitle = collapseDuplicatedHeader(String(job.title || job.jobTitle || job.position || '').trim());
 
           // Normalise aggressively to catch cases like "# WORK EXPERIENCE" or "WORK EXPERIENCE WORK EXPERIENCE"
           const normaliseHeaderish = (value) => value
