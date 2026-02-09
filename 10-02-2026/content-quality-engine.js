@@ -342,13 +342,112 @@
     // ============ CV/ATS BLOCK SANITISATION (Preserve line layout) ============
     // For multi-line CV blocks we avoid adding sentence-ending punctuation per line.
     sanitiseCVBlock(text) {
-      return this.sanitiseContent(text, {
+      // FIRST: Fix inline headers (e.g., "SKILLS: PYTHON, JAVA, C++" → separate lines with proper casing)
+      let result = this.normaliseInlineHeaders(text);
+      
+      return this.sanitiseContent(result, {
         convertToUK: true,
         removeBannedWords: true,
         removeEmDashes: true,
         fixPunctuation: false,
         removePronouns: true
       });
+    },
+
+    // ============ INLINE HEADER NORMALISATION ============
+    // Converts "SKILLS: PYTHON, JAVA, C++" → "SKILLS\nPython, Java, C++"
+    // Prevents inline headers from being rendered as all-caps bold content
+    normaliseInlineHeaders(text) {
+      if (!text || typeof text !== 'string') return text;
+      
+      const HEADER_KEYS = new Set([
+        'PROFESSIONAL SUMMARY', 'SUMMARY', 'PROFILE', 'OBJECTIVE',
+        'WORK EXPERIENCE', 'PROFESSIONAL EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
+        'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'CORE SKILLS',
+        'TECHNICAL PROFICIENCIES', 'CERTIFICATIONS', 'LICENSES', 'PROJECTS', 'ACHIEVEMENTS'
+      ]);
+      
+      // Known technical terms with correct casing
+      const KNOWN_FORMATS = {
+        'PYTHON': 'Python', 'JAVA': 'Java', 'JAVASCRIPT': 'JavaScript',
+        'TYPESCRIPT': 'TypeScript', 'NODE.JS': 'Node.js', 'REACT': 'React',
+        'ANGULAR': 'Angular', 'VUE.JS': 'Vue.js', 'MONGODB': 'MongoDB',
+        'POSTGRESQL': 'PostgreSQL', 'MYSQL': 'MySQL', 'REDIS': 'Redis',
+        'DOCKER': 'Docker', 'KUBERNETES': 'Kubernetes', 'TERRAFORM': 'Terraform',
+        'JENKINS': 'Jenkins', 'GITHUB': 'GitHub', 'GITLAB': 'GitLab',
+        'JIRA': 'Jira', 'CONFLUENCE': 'Confluence', 'SLACK': 'Slack',
+        'SALESFORCE': 'Salesforce', 'TABLEAU': 'Tableau', 'POWER BI': 'Power BI',
+        'EXCEL': 'Excel', 'POWERPOINT': 'PowerPoint', 'AZURE': 'Azure',
+        'C++': 'C++', 'C#': 'C#', 'KOTLIN': 'Kotlin', 'SWIFT': 'Swift',
+        'GRAPHQL': 'GraphQL', 'REST': 'REST', 'RESTFUL': 'RESTful',
+        'MACHINE LEARNING': 'Machine Learning', 'DEEP LEARNING': 'Deep Learning',
+        'NATURAL LANGUAGE PROCESSING': 'Natural Language Processing',
+        'DATA SCIENCE': 'Data Science', 'DATA ANALYSIS': 'Data Analysis',
+        'BUSINESS INTELLIGENCE': 'Business Intelligence',
+        'PROJECT MANAGEMENT': 'Project Management', 'AGILE': 'Agile',
+        'SCRUM': 'Scrum', 'DEVOPS': 'DevOps', 'CI/CD': 'CI/CD',
+        'GOOGLE CLOUD': 'Google Cloud', 'GOOGLE CLOUD PLATFORM': 'Google Cloud Platform'
+      };
+      
+      // Acronyms to keep uppercase
+      const ACRONYMS = new Set([
+        'AWS', 'GCP', 'SQL', 'API', 'CSS', 'HTML', 'XML', 'JSON', 'REST',
+        'CI', 'CD', 'ML', 'AI', 'UI', 'UX', 'ETL', 'LLM', 'IAC', 'SRE', 'NLP',
+        'PMP', 'CPA', 'CFA', 'MBA', 'PHD', 'IIBA', 'CBAP', 'ITIL', 'HIPAA'
+      ]);
+      
+      // Normalise ALL CAPS content to proper casing
+      const normaliseContent = (content) => {
+        if (!content) return '';
+        const trimmed = content.trim();
+        
+        // If content is not all uppercase, return as-is (already properly cased)
+        if (trimmed !== trimmed.toUpperCase()) return trimmed;
+        
+        // Split by comma, normalise each term
+        return trimmed.split(',').map(term => {
+          const t = term.trim();
+          const upper = t.toUpperCase();
+          
+          // Check known formats first
+          if (KNOWN_FORMATS[upper]) return KNOWN_FORMATS[upper];
+          
+          // Check if it's a pure acronym
+          if (ACRONYMS.has(upper)) return upper;
+          
+          // Convert to Title Case, preserving acronyms within
+          return t.toLowerCase().split(/[\s\-\/]+/).map((word) => {
+            const wordUpper = word.toUpperCase();
+            if (ACRONYMS.has(wordUpper)) return wordUpper;
+            if (/^\d+\.?\d*$/.test(word)) return word;
+            return word.charAt(0).toUpperCase() + word.slice(1);
+          }).join(' ');
+        }).join(', ');
+      };
+      
+      const lines = text.split(/\r?\n/);
+      const out = [];
+      
+      for (const line of lines) {
+        const trimmed = (line || '').trim();
+        
+        // Pattern: HEADER: content (header is all caps, followed by colon and content)
+        const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
+        if (inlineMatch) {
+          const potentialHeader = inlineMatch[1].trim().toUpperCase();
+          if (HEADER_KEYS.has(potentialHeader)) {
+            // Split into header on its own line + normalised content
+            out.push(potentialHeader);
+            out.push(normaliseContent(inlineMatch[2].trim()));
+            continue;
+          }
+        }
+        
+        // Keep line as-is
+        out.push(line);
+      }
+      
+      return out.join('\n');
     },
 
     // ============ FLEXIBLE PHRASE REGEX (handles whitespace/newlines) ============

@@ -92,6 +92,29 @@
   function parseCV(cvText) {
     if (!cvText) return { header: '', sections: {}, sectionOrder: [] };
 
+    /**
+     * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
+     */
+    const SECTION_HEADER_MAP = {
+      'PROFESSIONAL SUMMARY': 'summary', 'SUMMARY': 'summary', 'PROFILE': 'summary', 'OBJECTIVE': 'summary',
+      'WORK EXPERIENCE': 'experience', 'EXPERIENCE': 'experience', 'EMPLOYMENT': 'experience', 'PROFESSIONAL EXPERIENCE': 'experience',
+      'EDUCATION': 'education', 'ACADEMIC': 'education', 'QUALIFICATIONS': 'education',
+      'SKILLS': 'skills', 'TECHNICAL SKILLS': 'skills', 'CORE SKILLS': 'skills', 'TECHNICAL PROFICIENCIES': 'skills',
+      'CERTIFICATIONS': 'certifications', 'LICENSES': 'certifications', 'PROJECTS': 'projects'
+    };
+
+    const parseInlineHeader = (line) => {
+      const trimmed = (line || '').trim();
+      const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
+      if (inlineMatch) {
+        const potentialHeader = inlineMatch[1].trim().toUpperCase();
+        if (SECTION_HEADER_MAP[potentialHeader]) {
+          return { header: potentialHeader, section: SECTION_HEADER_MAP[potentialHeader], content: inlineMatch[2].trim() };
+        }
+      }
+      return null;
+    };
+
     const lines = cvText.split('\n');
     const sections = {};
     const sectionOrder = [];
@@ -99,6 +122,20 @@
     let currentContent = [];
 
     lines.forEach(line => {
+      // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
+      const inlineResult = parseInlineHeader(line);
+      if (inlineResult) {
+        if (currentContent.length > 0 || currentSection !== 'header') {
+          sections[currentSection] = currentContent.join('\n').trim();
+          if (currentSection !== 'header' && !sectionOrder.includes(currentSection)) {
+            sectionOrder.push(currentSection);
+          }
+        }
+        currentSection = inlineResult.section;
+        currentContent = [inlineResult.content]; // Start with the inline content
+        return;
+      }
+
       let foundSection = false;
 
       for (const [sectionName, pattern] of Object.entries(SECTION_PATTERNS)) {
