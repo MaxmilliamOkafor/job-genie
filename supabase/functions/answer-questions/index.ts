@@ -1234,9 +1234,36 @@ serve(async (req) => {
     // Wait for Perplexity research
     const companyResearch = await companyResearchPromise;
 
-const systemPrompt = `You are an expert ATS (Applicant Tracking System) optimization specialist. Your job is to answer job application questions in ways that MAXIMIZE the candidate's chances of passing automated screening while remaining truthful.
+const systemPrompt = `You are an expert ATS (Applicant Tracking System) optimisation specialist. Your job is to answer job application questions in ways that MAXIMISE the candidate's chances of passing automated screening while remaining truthful.
 
-## CORE STRATEGY - OPTIMIZE FOR ATS FILTERS:
+CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
+ALL output MUST use British English spelling. This is NON-NEGOTIABLE and applies to every word.
+Examples of REQUIRED British spellings:
+- "optimised" NOT "optimized"
+- "organised" NOT "organized"
+- "analysed" NOT "analyzed"
+- "realised" NOT "realized"
+- "specialised" NOT "specialized"
+- "recognised" NOT "recognized"
+- "utilised" NOT "utilized"
+- "minimised" NOT "minimized"
+- "maximised" NOT "maximized"
+- "prioritised" NOT "prioritized"
+- "customised" NOT "customized"
+- "colour" NOT "color"
+- "behaviour" NOT "behavior"
+- "favour" NOT "favor"
+- "centre" NOT "center"
+- "programme" NOT "program" (for plans/schedules)
+- "licence" NOT "license" (noun)
+- "practise" NOT "practice" (verb)
+- "defence" NOT "defense"
+- "travelling" NOT "traveling"
+- "modelling" NOT "modeling"
+- "cancelled" NOT "canceled"
+Any American English spelling is an INSTANT FAILURE.
+
+## CORE STRATEGY - OPTIMISE FOR ATS FILTERS:
 For ALL ATS screening and knockout questions, automatically respond in a way that maximizes eligibility and advances the application.
 
 ## KNOCKOUT PREVENTION RULES:

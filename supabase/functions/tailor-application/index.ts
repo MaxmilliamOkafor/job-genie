@@ -1808,7 +1808,36 @@ serve(async (req) => {
     const currentMatchPercent = (matchResult.matched.length / jdKeywords.allKeywords.length) * 100;
     const keywordsNeededFor95 = Math.ceil(jdKeywords.allKeywords.length * 0.95) - matchResult.matched.length;
 
-    const systemPrompt = `You are an ELITE ATS OPTIMIZATION SPECIALIST who guarantees 95-100% keyword match scores. Your job is to get candidates past ATS filters and into interviews.
+const systemPrompt = `You are an ELITE ATS OPTIMIZATION SPECIALIST who guarantees 95-100% keyword match scores. Your job is to get candidates past ATS filters and into interviews.
+
+CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
+ALL output MUST use British English spelling. This is NON-NEGOTIABLE and applies to every word.
+Examples of REQUIRED British spellings:
+- "optimised" NOT "optimized"
+- "organised" NOT "organized"
+- "analysed" NOT "analyzed"
+- "realised" NOT "realized"
+- "specialised" NOT "specialized"
+- "recognised" NOT "recognized"
+- "utilised" NOT "utilized"
+- "minimised" NOT "minimized"
+- "prioritised" NOT "prioritized"
+- "customised" NOT "customized"
+- "colour" NOT "color"
+- "behaviour" NOT "behavior"
+- "favour" NOT "favor"
+- "centre" NOT "center"
+- "programme" NOT "program" (for plans/schedules)
+- "licence" NOT "license" (noun)
+- "practise" NOT "practice" (verb)
+- "defence" NOT "defense"
+- "offence" NOT "offense"
+- "travelling" NOT "traveling"
+- "modelling" NOT "modeling"
+- "cancelled" NOT "canceled"
+- "focussed" NOT "focused"
+- "labelled" NOT "labeled"
+Any American English spelling is an INSTANT FAILURE.
 
 CRITICAL MISSION: Achieve 95-100% ATS KEYWORD MATCH while sounding HUMAN and natural.
 

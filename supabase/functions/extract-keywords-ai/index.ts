@@ -8,7 +8,12 @@ const corsHeaders = {
 };
 
 // Resume-Matcher style structured keyword extraction prompt
-const EXTRACT_KEYWORDS_PROMPT = `You are an expert ATS (Applicant Tracking System) keyword extractor. Analyze the job description and extract structured keywords that are critical for resume matching.
+const EXTRACT_KEYWORDS_PROMPT = `You are an expert ATS (Applicant Tracking System) keyword extractor. Analyse the job description and extract structured keywords that are critical for CV matching.
+
+CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
+ALL output MUST use British English spelling. This is NON-NEGOTIABLE.
+Examples: "optimised" NOT "optimized", "organised" NOT "organized", "analysed" NOT "analyzed", "realised" NOT "realized", "specialised" NOT "specialized", "recognised" NOT "recognized", "utilised" NOT "utilized", "colour" NOT "color", "behaviour" NOT "behavior", "favour" NOT "favor", "centre" NOT "center".
+Any American English spelling is an INSTANT FAILURE.
 
 Extract keywords into these categories:
 1. required_skills: Hard technical skills explicitly required (programming languages, frameworks, tools)

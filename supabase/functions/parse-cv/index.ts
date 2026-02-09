@@ -391,6 +391,11 @@ serve(async (req) => {
             role: 'system',
             content: `You are an expert CV/Resume parser. Extract structured information from the provided CV content and return it as a JSON object.
 
+CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
+ALL output MUST use British English spelling. This is NON-NEGOTIABLE.
+Examples: "optimised" NOT "optimized", "organised" NOT "organized", "analysed" NOT "analyzed", "realised" NOT "realized", "specialised" NOT "specialized", "recognised" NOT "recognized", "utilised" NOT "utilized", "colour" NOT "color", "behaviour" NOT "behavior", "favour" NOT "favor", "centre" NOT "center".
+Any American English spelling is an INSTANT FAILURE.
+
 Important rules:
 - Preserve company names and job titles exactly as written in the CV.
 - Do NOT swap company/title.
@@ -467,6 +472,9 @@ Return ONLY valid JSON, no markdown or explanation.`
           {
             role: 'system',
             content: `You extract ONLY work experience entries from CV text.
+
+CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
+ALL output MUST use British English spelling (e.g., "optimised" NOT "optimized", "organised" NOT "organized", "analysed" NOT "analyzed").
 
 Rules:
 - Output ONLY valid JSON.
