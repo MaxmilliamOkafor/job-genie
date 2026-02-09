@@ -557,9 +557,15 @@
       
       // Also detect literal duplicated header strings like "WORK EXPERIENCE WORK EXPERIENCE" in raw fields
       const collapseDuplicatedHeader = (value) => {
-        const dup = value.match(/^(\s*(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT)\s*)+$/i);
-        if (dup) return ''; // Collapse to empty so it gets filtered
-        return value;
+        // Match repeated section headers (e.g. "WORK EXPERIENCE WORK EXPERIENCE")
+        const collapsed = value.replace(
+          /\b(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)(\s+\1)+\b/gi,
+          '$1'
+        ).trim();
+        // If the entire string is just a section header (after collapsing), return empty
+        const dup = collapsed.match(/^(\s*(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS)\s*)+$/i);
+        if (dup) return '';
+        return collapsed;
       };
 
       return experience
@@ -579,7 +585,13 @@
           const company = normaliseHeaderish(rawCompany);
           const title = normaliseHeaderish(rawTitle);
 
-          const isDupHeader = (v) => /^(work experience|professional experience|experience)( \1)+$/.test(v);
+          const isDupHeader = (v) => {
+            // Check if value is just repeated section headers
+            for (const h of invalidEntryNames) {
+              if (v === (h + ' ' + h) || v === h) return true;
+            }
+            return false;
+          };
 
           // Skip if company name looks like a section header
           if (invalidEntryNames.includes(company) || isDupHeader(company)) {

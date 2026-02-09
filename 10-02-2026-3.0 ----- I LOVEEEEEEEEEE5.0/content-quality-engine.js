@@ -346,14 +346,78 @@
     sanitiseCVBlock(text) {
       // FIRST: Fix inline headers (e.g., "SKILLS: PYTHON, JAVA, C++" → separate lines with proper casing)
       let result = this.normaliseInlineHeaders(text);
-      
-      return this.sanitiseContent(result, {
+
+      result = this.sanitiseContent(result, {
         convertToUK: true,
         removeBannedWords: true,
         removeEmDashes: true,
         fixPunctuation: false,
         removePronouns: true
       });
+
+      // ██ FINAL NEVER-LEAK GUARD ██
+      // Catches any US spellings or banned words that somehow survived the pipeline
+      result = this.neverLeakGuard(result);
+
+      return result;
+    },
+
+    // ============ NEVER-LEAK GUARD ============
+    // Absolute last-resort catch for words that MUST NEVER appear in output
+    neverLeakGuard(text) {
+      if (!text || typeof text !== 'string') return text;
+
+      // These MUST be replaced no matter what — case-insensitive word-boundary match
+      const ABSOLUTE_REPLACEMENTS = [
+        // US spellings that must always be UK
+        [/\butilizing\b/gi, 'using'],
+        [/\butilized\b/gi, 'used'],
+        [/\butilize\b/gi, 'use'],
+        [/\butilizes\b/gi, 'uses'],
+        [/\butilization\b/gi, 'usage'],
+        [/\butilising\b/gi, 'using'],   // Even UK form of utilize is banned (use "using" instead)
+        [/\butilised\b/gi, 'used'],
+        [/\butilise\b/gi, 'use'],
+        [/\butilises\b/gi, 'uses'],
+        [/\butilisation\b/gi, 'usage'],
+        [/\bmodernize\b/gi, 'modernise'],
+        [/\bmodernized\b/gi, 'modernised'],
+        [/\bmodernizing\b/gi, 'modernising'],
+        [/\bmodernizes\b/gi, 'modernises'],
+        [/\bmodernization\b/gi, 'modernisation'],
+        [/\banalyzing\b/gi, 'analysing'],
+        [/\banalyzed\b/gi, 'analysed'],
+        [/\banalyze\b/gi, 'analyse'],
+        [/\banalyzes\b/gi, 'analyses'],
+        [/\banalyzer\b/gi, 'analyser'],
+        [/\boptimizing\b/gi, 'optimising'],
+        [/\boptimized\b/gi, 'optimised'],
+        [/\boptimize\b/gi, 'optimise'],
+        [/\boptimization\b/gi, 'optimisation'],
+        // Banned buzzwords that must never appear
+        [/\borchestrated\b/gi, 'directed'],
+        [/\bchampioned\b/gi, 'led'],
+        [/\bpioneered\b/gi, 'established'],
+        [/\bhelmed\b/gi, 'led'],
+        [/\bspearheaded\b/gi, 'led'],
+        [/\bleveraging\b/gi, 'using'],
+        [/\bleveraged\b/gi, 'used'],
+        [/\bleverage\b/gi, 'use'],
+        [/\bcomprehensive\b/gi, 'thorough'],
+        [/\bmeticulous\b/gi, 'detailed'],
+      ];
+
+      let result = text;
+      for (const [pattern, replacement] of ABSOLUTE_REPLACEMENTS) {
+        result = result.replace(pattern, (match) => {
+          // Preserve capitalisation
+          if (match === match.toUpperCase()) return replacement.toUpperCase();
+          if (match[0] === match[0].toUpperCase()) return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+          return replacement;
+        });
+      }
+
+      return result;
     },
 
     // ============ INLINE HEADER NORMALISATION ============
