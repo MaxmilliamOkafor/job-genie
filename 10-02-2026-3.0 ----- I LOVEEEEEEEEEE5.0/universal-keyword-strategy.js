@@ -39,11 +39,24 @@
       'a/b testing', 'user research', 'analytics', 'kpi', 'metrics', 'optimization', 'scalability'
     ]),
 
-    // LOW ROI: Soft skills (less weight but still needed for completeness)
+    // MEDIUM-LOW ROI: Soft skills — NOT listed in Skills section, woven into Work Experience bullets
+    // These provide ATS value ONLY when demonstrated contextually in experience bullets
     LOW: new Set([
       'communication', 'collaboration', 'teamwork', 'leadership', 'mentoring', 'problem-solving',
       'critical thinking', 'attention to detail', 'time management', 'adaptability', 'flexibility',
-      'diversity', 'inclusion', 'self-motivated', 'proactive', 'innovative'
+      'innovative', 'empathy', 'prioritisation', 'conflict resolution', 'creative thinking',
+      'decision-making', 'initiative', 'roadmap planning', 'negotiation', 'coaching',
+      'facilitation', 'delegation', 'accountability', 'strategic thinking',
+      'relationship building', 'influence', 'change management', 'risk management',
+      'process improvement', 'analytical thinking', 'organisational skills',
+      'customer focus', 'client management', 'vendor management', 'resource management',
+      'budget management', 'capacity planning', 'incident management', 'crisis management',
+      'quality assurance', 'continuous improvement', 'knowledge sharing',
+      'pair programming', 'code review', 'technical writing', 'documentation',
+      'cross-team collaboration', 'stakeholder engagement', 'requirements gathering',
+      'user research', 'design thinking', 'data-driven decision making',
+      'presentation', 'active listening', 'emotional intelligence',
+      'cross-functional', 'stakeholder management'
     ])
   };
 
@@ -175,24 +188,29 @@
     // PROF SUMMARY: 2-3 HIGH ROI keywords (15% density)
     const summaryKeywords = keywords.highROI.slice(0, 3);
 
-    // WORK EXPERIENCE: 70% ALL keywords (2-3 per bullet)
+    // WORK EXPERIENCE: 85% ALL keywords (technical + soft skills in context)
+    // Soft skills (LOW ROI) are EXCLUSIVELY for experience bullets — never in skills section
     const experienceKeywords = [
       ...keywords.highROI,
       ...keywords.mediumROI,
-      ...keywords.unclassified || []
-    ].slice(0, Math.ceil(keywords.all.length * 0.7));
+      ...(keywords.unclassified || []),
+      ...keywords.lowROI  // Soft skills go into experience bullets with contextual phrases
+    ].slice(0, Math.ceil(keywords.all.length * 0.85));
 
     // SKILLS: 15-20 CORE TECHNICAL ONLY (comma-separated, no bullets)
+    // Explicitly exclude soft skills from the skills section
     const skillsKeywords = keywords.highROI.slice(0, 20);
 
     return {
       summary: summaryKeywords,
       experience: experienceKeywords,
       skills: skillsKeywords,
+      softSkillsForExperience: keywords.lowROI || [],
       allocation: {
         summaryCount: summaryKeywords.length,
         experienceCount: experienceKeywords.length,
-        skillsCount: skillsKeywords.length
+        skillsCount: skillsKeywords.length,
+        softSkillCount: (keywords.lowROI || []).length
       }
     };
   }

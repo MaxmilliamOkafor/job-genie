@@ -212,8 +212,8 @@
         type = QUALIFICATION_TYPES.CERTIFICATION;
       }
 
-      // Check for soft skills
-      if (/communication|teamwork|leadership|collaborate|mentor|interpersonal/i.test(lineLower)) {
+      // Check for soft skills (expanded detection)
+      if (/communication|teamwork|leadership|collaborate|mentor|interpersonal|stakeholder|problem.?solving|critical.?thinking|adaptability|flexibility|empathy|prioriti[sz]ation|time.?management|conflict.?resolution|creative.?thinking|decision.?making|initiative|roadmap|negotiation|coaching|facilitation|delegation|accountability|strategic.?thinking|relationship.?building|change.?management|continuous.?improvement|analytical|attention.?to.?detail|cross.?functional|presentation|active.?listening|emotional.?intelligence|risk.?management|process.?improvement|customer.?focus|client.?management|vendor.?management|resource.?management|budget.?management|incident.?management|quality.?assurance|requirements.?gathering|user.?research|design.?thinking|data.?driven/i.test(lineLower)) {
         type = QUALIFICATION_TYPES.SOFT_SKILL;
       }
 
@@ -574,6 +574,97 @@
         low: '#ef4444'        // red
       };
       return colors[status] || '#6b7280';
+    }
+  };
+
+    // ============ AUTO-TAILOR CV TO REACH 75% THRESHOLD ============
+    // Analyses unmet qualifications and generates keyword injection plan
+    autoTailorForThreshold(cvText, jobDescription, options = {}) {
+      const targetThreshold = options.threshold || 75;
+
+      // Step 1: Extract qualifications
+      const qualifications = this.extractQualifications(jobDescription);
+
+      // Step 2: Calculate initial match
+      const initialMatch = this.calculateQualificationMatch(cvText, qualifications);
+
+      console.log(`[QualificationEngine] Initial required match: ${initialMatch.requiredMatch}% (target: ${targetThreshold}%)`);
+
+      if (initialMatch.requiredMatch >= targetThreshold) {
+        return {
+          needsTailoring: false,
+          initialScore: initialMatch.requiredMatch,
+          finalScore: initialMatch.requiredMatch,
+          matchResults: initialMatch,
+          dashboard: this.formatDashboard(initialMatch),
+          recommendations: [],
+          keywordsToInject: []
+        };
+      }
+
+      // Step 3: Generate recommendations
+      const recommendations = this.generateRecommendations(initialMatch, cvText, qualifications);
+
+      // Step 4: Extract keywords needed to close the gap
+      const keywordsToInject = [];
+      const unmetQuals = initialMatch.qualificationBreakdown
+        .filter(q => !q.met)
+        .sort((a, b) => {
+          // Critical/required first, then by confidence (closest to meeting first)
+          if (a.type !== b.type) return a.type === 'required' ? -1 : 1;
+          return b.confidence - a.confidence;
+        });
+
+      for (const qual of unmetQuals) {
+        if (qual.keywords?.length) {
+          keywordsToInject.push(...qual.keywords.filter(kw =>
+            !keywordsToInject.some(existing => existing.toLowerCase() === kw.toLowerCase())
+          ));
+        }
+      }
+
+      // Step 5: Categorise keywords for intelligent placement
+      const categorised = {
+        forExperience: [],  // Technical + soft skills -> work experience bullets
+        forSummary: [],     // High-impact keywords -> professional summary
+        forSkills: []       // Technical keywords -> skills section
+      };
+
+      const softSkillPatterns = /communication|collaboration|leadership|teamwork|mentoring|problem.?solving|critical.?thinking|adaptability|stakeholder|cross.?functional|empathy|prioriti|time.?management|conflict|creative|decision|initiative|negotiation|coaching|facilitation|delegation|strategic|relationship|change.?management|continuous.?improvement|analytical|attention.?to.?detail|presentation|design.?thinking|data.?driven|requirements.?gathering|process.?improvement|customer.?focus|client.?management|vendor.?management|resource.?management|budget.?management|quality.?assurance|incident.?management|knowledge.?sharing|risk.?management/i;
+
+      for (const kw of keywordsToInject) {
+        if (softSkillPatterns.test(kw)) {
+          categorised.forExperience.push(kw);
+        } else {
+          // Technical keywords go to both experience and skills
+          categorised.forExperience.push(kw);
+          categorised.forSkills.push(kw);
+        }
+      }
+
+      // Top 3 high-impact keywords go in summary
+      categorised.forSummary = keywordsToInject.filter(kw => !softSkillPatterns.test(kw)).slice(0, 3);
+
+      console.log('[QualificationEngine] Auto-tailor plan:', {
+        unmetCount: unmetQuals.length,
+        keywordsToInject: keywordsToInject.length,
+        forExperience: categorised.forExperience.length,
+        forSummary: categorised.forSummary.length,
+        forSkills: categorised.forSkills.length
+      });
+
+      return {
+        needsTailoring: true,
+        initialScore: initialMatch.requiredMatch,
+        targetScore: targetThreshold,
+        gap: targetThreshold - initialMatch.requiredMatch,
+        matchResults: initialMatch,
+        dashboard: this.formatDashboard(initialMatch),
+        recommendations,
+        keywordsToInject,
+        categorised,
+        qualifications
+      };
     }
   };
 

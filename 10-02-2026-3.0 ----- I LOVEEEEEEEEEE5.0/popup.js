@@ -2703,10 +2703,52 @@ class ATSTailor {
     if (!missingKeywords || missingKeywords.length === 0) {
       return { tailoredCV: cvText, injectedKeywords: [] };
     }
-    
+
+    // ██ JUNK KEYWORD FILTER ██
+    // These words from job descriptions provide ZERO ATS value and make CVs look unprofessional
+    const JUNK_KEYWORDS = new Set([
+      // Generic JD filler words
+      'customer service', 'high school diploma', 'commission', 'customer-facing',
+      'lawn care', 'independent work', 'motivated', 'benefits', 'fast-paced',
+      'work environment', 'crm software', 'motivation', 'self-motivated',
+      'go-getter', 'passion', 'passionate', 'enthusiasm', 'enthusiastic',
+      'dedicated', 'dedication', 'driven', 'dynamic', 'proactive',
+      'synergy', 'paradigm', 'robust', 'commitment', 'reliable', 'reliability',
+      'integrity', 'professionalism', 'multitasking', 'positive attitude',
+      'work ethic', 'goal-oriented', 'results-oriented', 'mission',
+      'love for technology', 'able to withstand work pressure',
+      'good learning', 'goodjob', 'sidekiq', 'canvas',
+      // JD boilerplate fragments
+      'equal opportunity', 'competitive salary', 'full-time', 'part-time',
+      'base salary', 'bonus', 'stock options', 'health insurance',
+      'dental', 'vision', '401k', 'pto', 'paid time off', 'remote work',
+      'hybrid', 'on-site', 'office', 'headquarters', 'location',
+      'apply now', 'submit resume', 'cover letter', 'interview',
+      // Too generic to be useful
+      'communication skills', 'team player', 'detail-oriented', 'hard-working',
+      'self-starter', 'quick learner', 'fast learner', 'willing to learn',
+      'can-do attitude', 'people person', 'go above and beyond',
+      'think outside the box', 'hit the ground running', 'wear many hats',
+      'training', 'teams', 'environment', 'services', 'solutions',
+      'products', 'clients', 'customers', 'business'
+    ]);
+
+    // Filter out junk keywords before injection
+    const cleanMissing = missingKeywords.filter(kw => {
+      const kwLower = kw.toLowerCase().trim();
+      if (JUNK_KEYWORDS.has(kwLower)) return false;
+      if (kwLower.length < 3) return false;  // Too short to be meaningful
+      if (kwLower.length > 60) return false;  // Too long, likely a sentence fragment
+      return true;
+    });
+
+    if (cleanMissing.length === 0) {
+      return { tailoredCV: cvText, injectedKeywords: [] };
+    }
+
     let tailoredCV = cvText;
     let injectedKeywords = [];
-    let remaining = [...missingKeywords];
+    let remaining = [...cleanMissing];
     
     // Natural injection phrases for Work Experience
     // CRITICAL: Never use banned buzzwords (no leveraging/utilizing/utilising)
@@ -2798,43 +2840,73 @@ class ATSTailor {
       }
     }
     
-    // STEP 3: Inject ALL remaining into Skills section (no separate "Additional" section)
-    // FIX v3.3.2: Merge all keywords into single SKILLS section, comma-separated
+    // STEP 3: Inject ALL remaining into EXISTING Skills section ONLY
+    // CRITICAL FIX v4.0: NEVER create a second SKILLS section — only merge into existing one
+    // Filter soft skills OUT of skills section (they belong in experience bullets only)
     if (remaining.length > 0) {
-      const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
-      if (skillsMatch) {
-        const skillsStart = skillsMatch.index;
-        const skillsEnd = skillsStart + skillsMatch[0].length;
-        const skillsText = skillsMatch[2].trim();
-        
-        // Clean up existing skills (remove bullets, normalize)
-        const existingSkills = skillsText
-          .replace(/^[•\-\*]\s*/gm, '')
-          .split(/[,\n]+/)
-          .map(s => s.trim())
-          .filter(Boolean);
-        
-        // Merge with remaining keywords (deduplicated)
-        const allSkills = [...new Set([...existingSkills, ...remaining])];
-        
-        // Format as clean comma-separated list (no bullets, no "Additional:" prefix)
-        const newSkills = allSkills.join(', ');
-        tailoredCV = tailoredCV.substring(0, skillsStart) + 
-                     'SKILLS\n' + newSkills + 
-                     tailoredCV.substring(skillsEnd);
-        injectedKeywords.push(...remaining);
-        remaining = []; // All injected
-      } else {
-        // No skills section found - create one before Certifications
-        const insertPoint = tailoredCV.search(/\n(CERTIFICATIONS|EDUCATION)\n/i);
-        const newSection = `\nSKILLS\n${remaining.join(', ')}\n`;
-        if (insertPoint > 0) {
-          tailoredCV = tailoredCV.substring(0, insertPoint) + newSection + tailoredCV.substring(insertPoint);
-        } else {
-          tailoredCV = tailoredCV + newSection;
+      // Filter: only inject technical/hard keywords into skills section, NOT soft skills
+      const softSkillFilter = /^(communication|collaboration|teamwork|leadership|mentoring|problem.?solving|critical.?thinking|adaptability|flexibility|empathy|prioriti|time.?management|conflict|creative.?thinking|decision.?making|initiative|negotiation|coaching|facilitation|delegation|accountability|strategic.?thinking|relationship|change.?management|continuous.?improvement|knowledge.?sharing|stakeholder|cross.?functional|presentation|active.?listening|emotional.?intelligence|customer.?focus|client.?management|vendor.?management|resource.?management|budget.?management|incident.?management|quality.?assurance|process.?improvement|requirements.?gathering|design.?thinking|data.?driven|attention.?to.?detail|analytical.?thinking|roadmap.?planning|pair.?programming|code.?review|technical.?writing)$/i;
+
+      const technicalRemaining = remaining.filter(kw => !softSkillFilter.test(kw.trim()));
+      const softRemaining = remaining.filter(kw => softSkillFilter.test(kw.trim()));
+
+      // Try to inject soft skills into experience bullets first
+      if (softRemaining.length > 0) {
+        const expMatch2 = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
+        if (expMatch2) {
+          const eStart = expMatch2.index;
+          const eEnd = eStart + expMatch2[0].length;
+          let eText = expMatch2[0];
+          const eBullets = eText.match(/^[•\-\*]\s*.+$/gm) || [];
+          let sIdx = 0;
+          for (let i = 0; i < eBullets.length && sIdx < softRemaining.length; i++) {
+            const kw = softRemaining[sIdx];
+            if (!eBullets[i].toLowerCase().includes(kw.toLowerCase())) {
+              const enhanced = eBullets[i].replace(/\.?\s*$/, `, demonstrating ${kw}.`);
+              eText = eText.replace(eBullets[i], enhanced);
+              injectedKeywords.push(kw);
+              sIdx++;
+            }
+          }
+          tailoredCV = tailoredCV.substring(0, eStart) + eText + tailoredCV.substring(eEnd);
         }
-        injectedKeywords.push(...remaining);
-        remaining = [];
+      }
+
+      // Merge ONLY technical keywords into the FIRST existing skills section
+      if (technicalRemaining.length > 0) {
+        const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
+        if (skillsMatch) {
+          const skillsStart = skillsMatch.index;
+          const skillsEnd = skillsStart + skillsMatch[0].length;
+          const skillsHeader = skillsMatch[1];
+          const skillsText = skillsMatch[2].trim();
+
+          // Clean up existing skills (remove bullets, normalize)
+          const existingSkills = skillsText
+            .replace(/^[•\-\*]\s*/gm, '')
+            .split(/[,\n]+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+          // Merge with remaining TECHNICAL keywords (deduplicated)
+          const existingSet = new Set(existingSkills.map(s => s.toLowerCase()));
+          const newSkills = [...existingSkills];
+          for (const kw of technicalRemaining) {
+            if (!existingSet.has(kw.toLowerCase())) {
+              newSkills.push(kw);
+              existingSet.add(kw.toLowerCase());
+            }
+          }
+
+          // Format as clean comma-separated list — use SAME header as before (no rename)
+          tailoredCV = tailoredCV.substring(0, skillsStart) +
+                       skillsHeader + '\n' + newSkills.join(', ') +
+                       tailoredCV.substring(skillsEnd);
+          injectedKeywords.push(...technicalRemaining);
+          remaining = [];
+        }
+        // If NO skills section found, DO NOT create one. Remaining keywords are dropped.
+        // This prevents the duplicate SKILLS section bug.
       }
     }
     
@@ -3361,6 +3433,59 @@ class ATSTailor {
         console.log('[ATS Tailor] Step 3 - Already at 100%');
       }
 
+      // ============ QUALIFICATION THRESHOLD CHECK (75%+) ============
+      // After keyword boost, verify the CV meets the 75% required qualification threshold
+      // If not, inject gap-closing keywords from unmet qualifications
+      if (typeof QualificationThresholdEngine !== 'undefined' && this.currentJob?.description) {
+        try {
+          const thresholdResult = QualificationThresholdEngine.autoTailorForThreshold(
+            this.generatedDocuments.cv,
+            this.currentJob.description,
+            { threshold: 75 }
+          );
+
+          // Store qualification results for UI display
+          this.generatedDocuments.qualificationMatch = thresholdResult;
+          this.generatedDocuments.qualificationDashboard = thresholdResult.dashboard;
+
+          if (thresholdResult.needsTailoring && thresholdResult.keywordsToInject?.length > 0) {
+            console.log(`[ATS Tailor] Qualification gap detected: ${thresholdResult.initialScore}% (need ${thresholdResult.targetScore}%). Injecting ${thresholdResult.keywordsToInject.length} gap-closing keywords.`);
+
+            // Inject gap-closing keywords into CV using fastKeywordInjection
+            const gapInject = this.fastKeywordInjection(
+              this.generatedDocuments.cv,
+              { all: thresholdResult.keywordsToInject },
+              thresholdResult.keywordsToInject
+            );
+
+            if (gapInject.tailoredCV) {
+              this.generatedDocuments.cv = gapInject.tailoredCV;
+
+              // Recalculate both keyword score and qualification score
+              const postGapMatch = this.calculateMatchScore(this.generatedDocuments.cv, keywords);
+              this.generatedDocuments.matchScore = postGapMatch.matchScore;
+              this.generatedDocuments.matchedKeywords = postGapMatch.matchedKeywords;
+              this.generatedDocuments.missingKeywords = postGapMatch.missingKeywords;
+
+              // Recalculate qualification threshold
+              const postGapQual = QualificationThresholdEngine.autoTailorForThreshold(
+                this.generatedDocuments.cv,
+                this.currentJob.description,
+                { threshold: 75 }
+              );
+              this.generatedDocuments.qualificationMatch = postGapQual;
+              this.generatedDocuments.qualificationDashboard = postGapQual.dashboard;
+
+              console.log(`[ATS Tailor] Post-gap qualification score: ${postGapQual.initialScore}%`);
+            }
+          } else {
+            console.log(`[ATS Tailor] Qualification threshold met: ${thresholdResult.initialScore}%`);
+          }
+        } catch (qualError) {
+          console.warn('[ATS Tailor] Qualification threshold check failed:', qualError);
+        }
+      }
+
       // Build keyword coverage report for debugging (injected locations in CV)
       this.buildKeywordCoverageReport(keywords);
 
@@ -3839,6 +3964,47 @@ class ATSTailor {
       .replace(/(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)\s*:\s*/gi, (match, header) => {
         return header.toUpperCase() + ': ';
       });
+
+    // CRITICAL FIX v4.0: Merge duplicate SEPARATE section headers
+    // When "SKILLS\ncontent1...\nCERTIFICATIONS\n...\nSKILLS\ncontent2..." exists,
+    // merge content2 into the first SKILLS section and remove the second
+    const MERGEABLE_SECTIONS = ['SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES', 'CORE SKILLS', 'KEY SKILLS', 'CERTIFICATIONS'];
+    for (const sectionName of MERGEABLE_SECTIONS) {
+      const sectionRegex = new RegExp(
+        `^${sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n`,
+        'gim'
+      );
+      const matches = [...fixedText.matchAll(sectionRegex)];
+      if (matches.length > 1) {
+        // Found duplicate section — merge second occurrence into first
+        // Find the content of the second section
+        const secondStart = matches[1].index;
+        const headerLen = matches[1][0].length;
+        const contentStart = secondStart + headerLen;
+        // Content ends at next section header or end of text
+        const nextHeaderMatch = fixedText.slice(contentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
+        const contentEnd = nextHeaderMatch ? contentStart + nextHeaderMatch.index : fixedText.length;
+        const secondContent = fixedText.slice(contentStart, contentEnd).trim();
+
+        if (secondContent) {
+          // Find end of first section's content
+          const firstStart = matches[0].index;
+          const firstHeaderLen = matches[0][0].length;
+          const firstContentStart = firstStart + firstHeaderLen;
+          const nextHeaderAfterFirst = fixedText.slice(firstContentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
+          const firstContentEnd = nextHeaderAfterFirst ? firstContentStart + nextHeaderAfterFirst.index : contentStart - 2;
+
+          // Merge: append second content to first, remove second section entirely
+          const firstContent = fixedText.slice(firstContentStart, firstContentEnd).trim();
+          const mergedContent = firstContent + ', ' + secondContent;
+          fixedText = fixedText.slice(0, firstContentStart) + mergedContent + '\n' +
+                     fixedText.slice(firstContentEnd, secondStart) +
+                     fixedText.slice(contentEnd);
+
+          console.log(`[ATS Tailor] dedupeSectionHeaders: Merged duplicate "${sectionName}" sections`);
+        }
+      }
+    }
 
     const HEADER_KEYS = new Set([
       'PROFESSIONAL SUMMARY',

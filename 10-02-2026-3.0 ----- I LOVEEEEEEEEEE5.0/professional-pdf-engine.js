@@ -90,6 +90,9 @@
           floatPrecision: 2 // SPEED: Reduce float precision for smaller file
         });
 
+        // Reset section dedup tracker for each new PDF
+        this._renderedSections = new Set();
+
         // Build PDF content
         let currentY = PDF_CONFIG.margins.top;
         currentY = this.renderHeader(doc, cvData.contact, currentY);
@@ -986,6 +989,15 @@
 
     // ============ RENDER SECTION TITLE ============
     renderSectionTitle(doc, title, y) {
+      // ██ DUPLICATE SECTION GUARD ██
+      if (!this._renderedSections) this._renderedSections = new Set();
+      const normalised = title.toUpperCase().trim();
+      if (this._renderedSections.has(normalised)) {
+        console.warn(`[PDFEngine] BLOCKED duplicate section header: "${title}"`);
+        return y; // Return unchanged y — skip this section
+      }
+      this._renderedSections.add(normalised);
+
       doc.setFont(PDF_CONFIG.fonts.heading, 'bold');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.sectionTitle);
       doc.setTextColor(...PDF_CONFIG.colors.black);
