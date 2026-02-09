@@ -495,7 +495,67 @@
         const trimmed = line.trim();
         if (!trimmed) continue;
 
-        // Check if this is a job header (company | title | dates | location)
+        // FIX v4.1.0: Check if line is a job header with leading dash
+        // Pattern: "- Company - Title | Dates" or "- Company | Title | Dates"
+        const hasJobHeaderPattern = /^[-]\s*[A-Z][A-Za-z\s&.,]+\s*[-–—]\s*[A-Z]/.test(trimmed) ||
+                                    (/^[-]/.test(trimmed) && trimmed.includes('|') && /\d{4}/.test(trimmed));
+        
+        if (hasJobHeaderPattern) {
+          // This is a job header formatted with leading dash - parse it as such
+          if (currentJob) jobs.push(currentJob);
+          
+          const cleanedLine = trimmed.replace(/^[-]\s*/, '');
+          const parts = cleanedLine.split('|').map(p => p.trim());
+          const firstPart = parts[0] || '';
+          
+          let company = '';
+          let title = '';
+          let dates = parts[2] || '';
+          
+          // Check if first part contains "Company - Title" format
+          if (firstPart.includes(' - ') || firstPart.includes(' – ')) {
+            const companyTitleParts = firstPart.split(/\s*[-–—]\s*/);
+            company = companyTitleParts[0] || '';
+            title = companyTitleParts.slice(1).join(' - ') || parts[1] || '';
+          } else {
+            company = firstPart;
+            title = parts[1] || '';
+          }
+          
+          // Extract dates from remaining parts if needed
+          if (!dates) {
+            for (let j = 1; j < parts.length; j++) {
+              if (/\d{4}/.test(parts[j]) || /present/i.test(parts[j])) {
+                dates = parts[j];
+                break;
+              }
+            }
+          }
+          
+          // Clean fields
+          company = this.stripDatesFromField(company);
+          company = this.cleanCompanyName(company);
+          title = this.stripDatesFromField(title);
+          
+          // Normalise dates
+          const normalisedDates = dates ? String(dates)
+            .replace(/\s*[-–—]\s*/g, ' – ')
+            : '';
+          
+          let titleLine = '';
+          if (title && normalisedDates) {
+            titleLine = `${title} – ${normalisedDates}`;
+          } else if (title) {
+            titleLine = title;
+          } else if (normalisedDates) {
+            titleLine = normalisedDates;
+          }
+          
+          currentJob = { company, title, titleLine, dates, bullets: [] };
+          continue;
+        }
+
+        // Check if this is a standard job header (company | title | dates | location)
         if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
           if (currentJob) {
             jobs.push(currentJob);

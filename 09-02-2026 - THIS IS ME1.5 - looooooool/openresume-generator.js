@@ -377,11 +377,63 @@
         if (!trimmed) continue;
         if (sectionHeaders.has(trimmed.toLowerCase().replace(/[:\s]+$/, ''))) continue;
 
-        // Is this line a bullet point?
-        if (/^[-•*▪]/.test(trimmed)) {
+        // FIX v4.1.0: Check if line starts with "-" but is actually a job header
+        // Pattern: "- Company - Title | Dates" should be parsed as job header, not bullet
+        const startsWithDash = /^[-]/.test(trimmed);
+        const hasJobHeaderPattern = /^[-]\s*[A-Z][A-Za-z\s&.,]+\s*[-–—]\s*[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) ||
+                                    (startsWithDash && trimmed.includes('|') && /\d{4}/.test(trimmed));
+
+        // Is this line a bullet point? (but NOT if it's actually a job header)
+        if (/^[-•*▪]/.test(trimmed) && !hasJobHeaderPattern) {
           if (currentJob) {
             currentJob.bullets.push(trimmed.replace(/^[-•*▪]\s*/, '').trim());
           }
+          pendingCompany = null;
+          pendingDate = null;
+          continue;
+        }
+        
+        // FIX v4.1.0: Handle "- Company - Title | Dates" format (AI sometimes uses this)
+        if (hasJobHeaderPattern) {
+          // Strip leading dash and parse as job header
+          const cleanedLine = trimmed.replace(/^[-]\s*/, '');
+          
+          // Save previous job
+          if (currentJob && currentJob.company) jobs.push(currentJob);
+          
+          // Parse: "Company - Title | Dates" or "Company | Title | Dates"
+          const parts = cleanedLine.split('|').map(p => p.trim());
+          const firstPart = parts[0] || '';
+          
+          let company = '';
+          let title = '';
+          let dates = '';
+          
+          // Check if first part contains "Company - Title" format
+          if (firstPart.includes(' - ') || firstPart.includes(' – ')) {
+            const companyTitleParts = firstPart.split(/\s*[-–—]\s*/);
+            company = companyTitleParts[0] || '';
+            title = companyTitleParts.slice(1).join(' - ') || '';
+          } else {
+            company = firstPart;
+            title = parts[1] || '';
+          }
+          
+          // Extract dates from remaining parts
+          for (let j = 1; j < parts.length; j++) {
+            if (this.isDateLine(parts[j])) {
+              dates = parts[j];
+            } else if (!title) {
+              title = parts[j];
+            }
+          }
+          
+          // Clean fields
+          company = this.stripDatesFromField(company);
+          title = this.stripDatesFromField(title);
+          dates = this.normalizeDates(dates);
+          
+          currentJob = { company, title, dates, location: '', bullets: [] };
           pendingCompany = null;
           pendingDate = null;
           continue;
@@ -1086,9 +1138,10 @@
 
       if (coverLetterText && coverLetterText.trim().length > 100) {
         // USE AI-GENERATED COVER LETTER
-        const cleanedText = this.stripCoverLetterHeader(coverLetterText, name);
+        // FIX v4.1.0: Aggressive deduplication - strip ALL header/footer content from AI text
+        const cleanedText = this.stripCoverLetterHeaderAndFooter(coverLetterText, name);
 
-        // Header
+        // Header (rendered ONCE by us - not from AI text)
         addCenteredText(name.toUpperCase(), true, font.name);
         y += 2;
         const formattedPhone = this.formatPhoneForATS(data.contact?.phone);
@@ -1096,24 +1149,20 @@
         if (contactLine) addCenteredText(contactLine, false, font.body);
         y += 16;
 
-        // Date
-        const dateMatch = cleanedText.match(/^(Date:\s*)?(\d{1,2}\s+\w+\s+\d{4}|\w+\s+\d{1,2},?\s+\d{4})/m);
-        const dateText = dateMatch ? dateMatch[2] || dateMatch[0].replace(/^Date:\s*/i, '') : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-        addText(dateText, false, font.body);
+        // Date (rendered ONCE by us)
+        addText(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }), false, font.body);
         y += 12;
 
-        // Re: line
-        const reMatch = cleanedText.match(/^Re:\s*(.+)$/m);
-        addText(reMatch ? reMatch[0] : `Re: ${jobTitle}`, true, font.body);
+        // Re: line (rendered ONCE by us)
+        addText(`Re: ${jobTitle}`, true, font.body);
         y += 8;
 
-        // Salutation
-        const dearMatch = cleanedText.match(/^(Dear\s+.+[,:])\s*$/m);
-        addText(dearMatch ? dearMatch[1] : 'Dear Hiring Manager,', false, font.body);
+        // Salutation (rendered ONCE by us)
+        addText('Dear Hiring Manager,', false, font.body);
         y += 8;
 
-        // Body paragraphs
-        const bodyParagraphs = this.extractCoverLetterBody(cleanedText);
+        // Body paragraphs ONLY (no header/footer content)
+        const bodyParagraphs = this.extractCoverLetterBodyOnly(cleanedText);
         for (const para of bodyParagraphs) {
           const trimmed = para.trim();
           if (!trimmed) continue;
@@ -1122,9 +1171,8 @@
         }
         y += 6;
 
-        // Closing
-        const closingMatch = cleanedText.match(/^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards),?\s*$/mi);
-        addText(closingMatch ? closingMatch[0].replace(/,?\s*$/, ',') : 'Yours sincerely,', false, font.body);
+        // Closing (rendered ONCE by us)
+        addText('Yours sincerely,', false, font.body);
         y += 16;
         addText(name, true, font.body);
 
@@ -1166,46 +1214,94 @@
       return { base64, blob };
     },
 
-    stripCoverLetterHeader(text, name) {
+    // FIX v4.1.0: Aggressive header AND footer stripping to prevent duplication
+    stripCoverLetterHeaderAndFooter(text, name) {
       if (!text) return '';
       const lines = text.split('\n');
       let startIdx = 0;
-      for (let i = 0; i < Math.min(lines.length, 10); i++) {
+      let endIdx = lines.length;
+      
+      // Strip header lines (name, contact, date, Re:, Dear)
+      for (let i = 0; i < Math.min(lines.length, 15); i++) {
         const trimmed = lines[i].trim();
         if (!trimmed) { startIdx = i + 1; continue; }
+        // Name line (all caps or matches name)
+        if (/^[A-Z][A-Z\s]+$/.test(trimmed) && trimmed.length < 50) { startIdx = i + 1; continue; }
         if (trimmed.toUpperCase() === (name || '').toUpperCase()) { startIdx = i + 1; continue; }
+        // Contact line (email, phone, pipes)
         if (/@/.test(trimmed) && !trimmed.toLowerCase().startsWith('dear')) { startIdx = i + 1; continue; }
         if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { startIdx = i + 1; continue; }
         if (/\|/.test(trimmed) && (/@/.test(trimmed) || /\+\d/.test(trimmed))) { startIdx = i + 1; continue; }
+        // URLs
         if (/^https?:\/\//i.test(trimmed)) { startIdx = i + 1; continue; }
         if (/linkedin\.com|github\.com/i.test(trimmed)) { startIdx = i + 1; continue; }
+        // Date line
+        if (/^\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}$/i.test(trimmed)) { startIdx = i + 1; continue; }
+        if (/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}$/i.test(trimmed)) { startIdx = i + 1; continue; }
+        // Re: line
+        if (/^Re:\s*.+$/i.test(trimmed)) { startIdx = i + 1; continue; }
+        // Dear line - keep finding until we hit Dear, then stop stripping header
+        if (/^Dear\s+/i.test(trimmed)) { startIdx = i + 1; break; }
         break;
       }
-      return lines.slice(startIdx).join('\n');
+      
+      // Strip footer lines (closing signature, name at end)
+      for (let i = lines.length - 1; i > startIdx; i--) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) { endIdx = i; continue; }
+        // Name at end
+        if (trimmed.toUpperCase() === (name || '').toUpperCase()) { endIdx = i; continue; }
+        if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(trimmed)) { endIdx = i; continue; } // First Last format
+        // Closing phrases
+        if (/^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards|Warm regards|Respectfully),?\s*$/i.test(trimmed)) { endIdx = i; continue; }
+        break;
+      }
+      
+      return lines.slice(startIdx, endIdx).join('\n');
     },
 
-    extractCoverLetterBody(text) {
+    // FIX v4.1.0: Extract ONLY the body paragraphs, no header/footer content
+    extractCoverLetterBodyOnly(text) {
       if (!text) return [];
+      
+      // The text should already be stripped of header/footer by stripCoverLetterHeaderAndFooter
+      // But we still need to handle any remaining Dear/Sincerely patterns
       const lines = text.split('\n');
       const bodyLines = [];
-      let inBody = false;
-      const closingPatterns = /^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards|Warm regards|Respectfully),?\s*$/i;
-
+      let foundDear = false;
+      
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!inBody) {
-          if (/^Dear\s+/i.test(trimmed)) { inBody = true; }
+        if (!trimmed) {
+          if (foundDear) bodyLines.push(''); // Preserve paragraph breaks
           continue;
         }
-        if (closingPatterns.test(trimmed)) break;
+        
+        // Skip header remnants
+        if (/^Dear\s+/i.test(trimmed)) { foundDear = true; continue; }
+        if (/^Re:\s*.+$/i.test(trimmed)) continue;
+        if (/^\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}$/i.test(trimmed)) continue;
+        if (/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}$/i.test(trimmed)) continue;
+        if (/^[A-Z][A-Z\s]+$/.test(trimmed) && trimmed.length < 40 && !foundDear) continue; // Name header
+        if (/@/.test(trimmed) && /\|/.test(trimmed)) continue; // Contact line
+        
+        // Skip closing remnants
+        if (/^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards|Warm regards|Respectfully),?\s*$/i.test(trimmed)) break;
+        if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(trimmed) && bodyLines.length > 3) break; // Name at end
+        
         bodyLines.push(line);
+        foundDear = true; // Treat any real content as post-Dear
       }
 
-      const paragraphs = bodyLines.join('\n').split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+      // Split into paragraphs
+      const paragraphs = bodyLines.join('\n').split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 20);
+      
+      // Fallback: if no paragraphs found, try to extract from raw text
       if (paragraphs.length === 0 && text.length > 100) {
         const sentences = text.replace(/^.*?Dear[^,]*,\s*/s, '').replace(/\s*(Yours sincerely|Sincerely|Best regards).*/si, '');
-        if (sentences.length > 50) return [sentences];
+        if (sentences.length > 50) return [sentences.trim()];
       }
+      
       return paragraphs;
     },
 
