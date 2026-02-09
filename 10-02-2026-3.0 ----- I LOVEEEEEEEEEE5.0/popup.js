@@ -3388,6 +3388,16 @@ class ATSTailor {
         }
       }
 
+      // CRITICAL: Apply dedupeSectionHeaders to CV text BEFORE passing to PDF generator
+      // This ensures the OpenResumeGenerator receives clean text without duplicated headers
+      if (this.generatedDocuments.cv) {
+        this.generatedDocuments.cv = this.dedupeSectionHeaders(this.generatedDocuments.cv);
+        console.log('[ATS Tailor] Applied dedupeSectionHeaders to CV text before PDF generation');
+      }
+
+      // CRITICAL: Sanitise the structuredCv before PDF generation (all paths)
+      this.sanitizeStructuredCV();
+
       // Regenerate PDF with boosted CV and dynamic location
       if (this.generatedDocuments.cv) {
         await this.regeneratePDFAfterBoost();
@@ -3710,6 +3720,103 @@ class ATSTailor {
   }
 
   /**
+   * Sanitise the global structuredCv object before ANY PDF generation path.
+   * - Filters bogus experience entries (section headers as company names)
+   * - Deduplicates skills and certifications
+   * - Applies neverLeakGuard to all text fields (summary, bullets, titles)
+   */
+  sanitizeStructuredCV() {
+    const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments?.structuredCv;
+    if (!structuredCv) return;
+
+    const HEADER_PATTERNS = new Set([
+      'professional experience', 'work experience', 'experience',
+      'employment history', 'career history', 'employment',
+      'work history', 'positions held', 'career',
+      'education', 'skills', 'certifications', 'projects', 'achievements',
+      'professional summary', 'summary', 'technical proficiencies',
+      'technical skills', 'core skills'
+    ]);
+
+    const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
+    // Filter bogus experience entries
+    if (Array.isArray(structuredCv.experience)) {
+      structuredCv.experience = structuredCv.experience.filter(job => {
+        const company = normalise(job.company || job.companyName || '');
+        const title = normalise(job.title || job.jobTitle || job.position || '');
+        if (HEADER_PATTERNS.has(company)) {
+          console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-company:', job.company);
+          return false;
+        }
+        if (HEADER_PATTERNS.has(title) && !company) {
+          console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-title:', job.title);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Deduplicate skills
+    if (Array.isArray(structuredCv.skills)) {
+      const seen = new Set();
+      structuredCv.skills = structuredCv.skills.filter(s => {
+        const key = String(s).toLowerCase().trim();
+        if (seen.has(key) || !key) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    // Deduplicate certifications
+    if (Array.isArray(structuredCv.certifications)) {
+      const seen = new Set();
+      structuredCv.certifications = structuredCv.certifications.filter(c => {
+        const key = String(c).toLowerCase().trim();
+        if (seen.has(key) || !key) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    // Apply neverLeakGuard to all text fields
+    const guard = (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.neverLeakGuard)
+      ? ContentQualityEngine.neverLeakGuard.bind(ContentQualityEngine)
+      : null;
+
+    if (guard) {
+      if (structuredCv.summary) structuredCv.summary = guard(structuredCv.summary);
+
+      if (Array.isArray(structuredCv.experience)) {
+        structuredCv.experience.forEach(job => {
+          if (job.title) job.title = guard(job.title);
+          if (Array.isArray(job.bullets)) {
+            job.bullets = job.bullets.map(b => guard(b));
+          }
+          if (Array.isArray(job.achievements)) {
+            job.achievements = job.achievements.map(a => guard(a));
+          }
+          if (Array.isArray(job.responsibilities)) {
+            job.responsibilities = job.responsibilities.map(r => guard(r));
+          }
+        });
+      }
+
+      if (Array.isArray(structuredCv.skills)) {
+        structuredCv.skills = structuredCv.skills.map(s => guard(s));
+      }
+      if (Array.isArray(structuredCv.certifications)) {
+        structuredCv.certifications = structuredCv.certifications.map(c => guard(c));
+      }
+    }
+
+    // Write back
+    if (window.quantumhireStructuredCv) window.quantumhireStructuredCv = structuredCv;
+    if (this.generatedDocuments?.structuredCv) this.generatedDocuments.structuredCv = structuredCv;
+    console.log('[ATS Tailor] sanitizeStructuredCV complete');
+  }
+
+  /**
    * Dedupe repeated section headers AND split inline headers in plain-text CV/cover content.
    * Prevents output like: "WORK EXPERIENCE\n\nWORK EXPERIENCE".
    * ALSO FIXES: "SKILLS: PYTHON, JAVA, C++" -> splits to "SKILLS\n" + properly cased content.
@@ -3945,42 +4052,11 @@ class ATSTailor {
       // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
       let structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
 
-      // ██ FINAL GATE v2: Remove any accidental section header entries from experience ██
-      // Prevents "WORK EXPERIENCE WORK EXPERIENCE" rendering in the generated PDF
-      // Also catches: entries where company OR title is just a section header name
-      if (structuredCv && Array.isArray(structuredCv.experience)) {
-        const headerPatterns = new Set([
-          'professional experience', 'work experience', 'experience',
-          'employment history', 'career history', 'employment',
-          'work history', 'positions held', 'career',
-          'education', 'skills', 'certifications', 'projects', 'achievements'
-        ]);
-        const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-        // Catches repeated headers on same string: "work experience work experience"
-        const isDupHeader = (v) => {
-          const parts = v.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
-          if (parts.length >= 2 && parts.every(p => headerPatterns.has(p))) return true;
-          // "work experience work experience" with single space
-          for (const h of headerPatterns) {
-            if (v === (h + ' ' + h)) return true;
-          }
-          return false;
-        };
-        structuredCv.experience = structuredCv.experience.filter(job => {
-          const company = normalise(job.company || job.companyName || '');
-          const title = normalise(job.title || job.jobTitle || job.position || '');
-          if (headerPatterns.has(company) || isDupHeader(company)) {
-            console.log('[ATS Tailor] Stripped invalid experience entry (company):', job.company);
-            return false;
-          }
-          if ((headerPatterns.has(title) || isDupHeader(title)) && !company) {
-            console.log('[ATS Tailor] Stripped invalid experience entry (title):', job.title);
-            return false;
-          }
-          return true;
-        });
-        console.log('[ATS Tailor] ✓ Validated experience entries before PDF:', structuredCv.experience.length);
-      }
+      // ██ FINAL GATE v3: Sanitise structuredCv via centralised method ██
+      // Filters bogus experience entries, deduplicates skills/certs, applies neverLeakGuard
+      this.sanitizeStructuredCV();
+      // Re-fetch after sanitisation (sanitizeStructuredCV writes back)
+      structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
 
       if (type === 'cv' && structuredCv) {
         this.showToast('⏳ Generating PDF...', 'info');

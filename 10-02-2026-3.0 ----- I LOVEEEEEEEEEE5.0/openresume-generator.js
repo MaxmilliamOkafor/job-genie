@@ -41,11 +41,24 @@
       const startTime = performance.now();
       console.log('[OpenResume] Generating ATS Package...');
 
+      // CRITICAL: Apply dedupeSectionHeaders before parsing to prevent inline duplication
+      let cleanedCV = baseCV;
+      if (typeof window !== 'undefined' && window.quantumhireApp && typeof window.quantumhireApp.dedupeSectionHeaders === 'function') {
+        cleanedCV = window.quantumhireApp.dedupeSectionHeaders(baseCV);
+        console.log('[OpenResume] Applied dedupeSectionHeaders to input text');
+      }
+
       // Parse and structure CV data
-      const cvData = this.parseAndStructureCV(baseCV, candidateData);
-      
+      const cvData = this.parseAndStructureCV(cleanedCV, candidateData);
+
+      // CRITICAL: Sanitise structured data — filter bogus experience, apply neverLeakGuard
+      this.sanitiseStructuredData(cvData);
+
       // Tailor CV with keywords
       const tailoredData = this.tailorCVData(cvData, keywords, jobData);
+
+      // CRITICAL: Re-sanitise after tailoring (tailoring can reintroduce banned words)
+      this.sanitiseStructuredData(tailoredData);
       
       // Generate CV PDF
       const cvResult = await this.generateCVPDF(tailoredData, candidateData);
@@ -139,7 +152,30 @@
       // Parse from CV text if structured data is missing
       if (cvText && data.experience.length === 0) {
         const parsed = this.parseCVText(cvText);
-        Object.assign(data, parsed);
+        // MERGE parsed data with existing candidateData instead of overwriting
+        if (parsed.summary && !data.summary) data.summary = parsed.summary;
+        if (parsed.experience?.length) data.experience = parsed.experience;
+        if (parsed.education?.length && !data.education?.length) data.education = parsed.education;
+        // Merge skills (keep candidateData skills + add parsed skills)
+        if (parsed.skills?.length) {
+          const existingSkills = new Set((data.skills || []).map(s => s.toLowerCase()));
+          for (const skill of parsed.skills) {
+            if (!existingSkills.has(skill.toLowerCase())) {
+              data.skills.push(skill);
+              existingSkills.add(skill.toLowerCase());
+            }
+          }
+        }
+        // Merge certifications
+        if (parsed.certifications?.length) {
+          const existingCerts = new Set((data.certifications || []).map(c => c.toLowerCase()));
+          for (const cert of parsed.certifications) {
+            if (!existingCerts.has(cert.toLowerCase())) {
+              data.certifications.push(cert);
+              existingCerts.add(cert.toLowerCase());
+            }
+          }
+        }
       }
 
       return data;
@@ -241,20 +277,145 @@
 
       switch (section) {
         case 'summary':
-          result.summary = text;
+          // Append if summary already exists (rare but possible)
+          result.summary = result.summary ? result.summary + ' ' + text : text;
           break;
-        case 'skills':
-          result.skills = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1);
+        case 'skills': {
+          // MERGE skills instead of overwriting — prevents loss when AI generates two SKILLS sections
+          const newSkills = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1);
+          const existingSet = new Set((result.skills || []).map(s => s.toLowerCase()));
+          const merged = [...(result.skills || [])];
+          for (const skill of newSkills) {
+            if (!existingSet.has(skill.toLowerCase())) {
+              merged.push(skill);
+              existingSet.add(skill.toLowerCase());
+            }
+          }
+          result.skills = merged;
           break;
-        case 'experience':
-          result.experience = this.parseExperienceText(text);
+        }
+        case 'experience': {
+          // MERGE experience instead of overwriting
+          const newExperience = this.parseExperienceText(text);
+          result.experience = [...(result.experience || []), ...newExperience];
           break;
-        case 'education':
-          result.education = this.parseEducationText(text);
+        }
+        case 'education': {
+          // MERGE education instead of overwriting
+          const newEducation = this.parseEducationText(text);
+          result.education = [...(result.education || []), ...newEducation];
           break;
-        case 'certifications':
-          result.certifications = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
+        }
+        case 'certifications': {
+          // MERGE certifications instead of overwriting
+          const newCerts = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
+          const existingCerts = new Set((result.certifications || []).map(c => c.toLowerCase()));
+          const mergedCerts = [...(result.certifications || [])];
+          for (const cert of newCerts) {
+            if (!existingCerts.has(cert.toLowerCase())) {
+              mergedCerts.push(cert);
+              existingCerts.add(cert.toLowerCase());
+            }
+          }
+          result.certifications = mergedCerts;
           break;
+        }
+      }
+    },
+
+    // ============ SANITISE STRUCTURED DATA ============
+    // Filters out bogus experience entries and applies neverLeakGuard to text fields
+    sanitiseStructuredData(data) {
+      if (!data) return;
+
+      // ── Filter bogus experience entries (section headers misidentified as jobs) ──
+      const HEADER_PATTERNS = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held', 'career',
+        'education', 'skills', 'certifications', 'projects', 'achievements',
+        'professional summary', 'summary', 'technical proficiencies',
+        'technical skills', 'core skills'
+      ]);
+
+      const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      const isDupHeader = (v) => {
+        const parts = v.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
+        if (parts.length >= 2 && parts.every(p => HEADER_PATTERNS.has(p))) return true;
+        for (const h of HEADER_PATTERNS) {
+          if (v === (h + ' ' + h)) return true;
+        }
+        return false;
+      };
+
+      if (Array.isArray(data.experience)) {
+        data.experience = data.experience.filter(job => {
+          const company = normalise(job.company || job.companyName || '');
+          const title = normalise(job.title || job.jobTitle || job.position || '');
+          if (HEADER_PATTERNS.has(company) || isDupHeader(company)) {
+            console.log('[OpenResume] Stripped bogus experience entry (company is header):', job.company);
+            return false;
+          }
+          if ((HEADER_PATTERNS.has(title) || isDupHeader(title)) && !company) {
+            console.log('[OpenResume] Stripped bogus experience entry (title is header):', job.title);
+            return false;
+          }
+          return true;
+        });
+      }
+
+      // ── Apply neverLeakGuard to all text fields ──
+      const guard = (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.neverLeakGuard)
+        ? ContentQualityEngine.neverLeakGuard.bind(ContentQualityEngine)
+        : null;
+
+      if (guard) {
+        // Summary
+        if (data.summary) {
+          data.summary = guard(data.summary);
+        }
+
+        // Experience bullets
+        if (Array.isArray(data.experience)) {
+          data.experience.forEach(job => {
+            if (Array.isArray(job.bullets)) {
+              job.bullets = job.bullets.map(b => guard(b));
+            }
+            if (job.title) job.title = guard(job.title);
+          });
+        }
+
+        // Skills (individual items)
+        if (Array.isArray(data.skills)) {
+          data.skills = data.skills.map(s => guard(s));
+        }
+
+        // Certifications
+        if (Array.isArray(data.certifications)) {
+          data.certifications = data.certifications.map(c => guard(c));
+        }
+      }
+
+      // ── Deduplicate skills ──
+      if (Array.isArray(data.skills)) {
+        const seen = new Set();
+        data.skills = data.skills.filter(s => {
+          const key = s.toLowerCase().trim();
+          if (seen.has(key) || !key) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      // ── Deduplicate certifications ──
+      if (Array.isArray(data.certifications)) {
+        const seen = new Set();
+        data.certifications = data.certifications.filter(c => {
+          const key = c.toLowerCase().trim();
+          if (seen.has(key) || !key) return false;
+          seen.add(key);
+          return true;
+        });
       }
     },
 
