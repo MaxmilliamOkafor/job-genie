@@ -548,48 +548,45 @@
       if (!Array.isArray(experience)) return [];
       
       // Section headers and generic terms that should NOT be treated as job entries
-      const invalidEntryNames = [
+      const invalidEntryNames = new Set([
         'professional experience', 'work experience', 'experience', 
         'employment history', 'career history', 'current role',
         'previous role', 'positions held', 'work history',
         'employment', 'career', 'roles'
-      ];
+      ]);
       
-      // Also detect literal duplicated header strings like "WORK EXPERIENCE WORK EXPERIENCE" in raw fields
-      const collapseDuplicatedHeader = (value) => {
-        const dup = value.match(/^(\s*(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT)\s*)+$/i);
-        if (dup) return ''; // Collapse to empty so it gets filtered
-        return value;
+      const normaliseHeaderish = (value) => String(value || '')
+        .toLowerCase()
+        .replace(/[#:*|]/g, ' ')
+        .replace(/[^a-z\s]/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      // Catches BOTH single headers ("work experience") AND duplicated ("work experience work experience")
+      const isHeaderish = (rawValue) => {
+        const n = normaliseHeaderish(rawValue);
+        if (invalidEntryNames.has(n)) return true;
+        for (const h of invalidEntryNames) {
+          if (n === `${h} ${h}`) return true;
+        }
+        return false;
       };
 
       return experience
         .filter(job => {
-          // Collapse duplicated header values before evaluation
-          const rawCompany = collapseDuplicatedHeader(String(job.company || job.companyName || '').trim());
-          const rawTitle = collapseDuplicatedHeader(String(job.title || job.jobTitle || job.position || '').trim());
-
-          // Normalise aggressively to catch cases like "# WORK EXPERIENCE" or "WORK EXPERIENCE WORK EXPERIENCE"
-          const normaliseHeaderish = (value) => value
-            .toLowerCase()
-            .replace(/[#:*|]/g, ' ')
-            .replace(/[^a-z\s]/g, ' ')
-            .replace(/\s{2,}/g, ' ')
-            .trim();
-
+          const rawCompany = String(job.company || job.companyName || '').trim();
+          const rawTitle = String(job.title || job.jobTitle || job.position || '').trim();
           const company = normaliseHeaderish(rawCompany);
-          const title = normaliseHeaderish(rawTitle);
 
-          const isDupHeader = (v) => /^(work experience|professional experience|experience)( \1)+$/.test(v);
-
-          // Skip if company name looks like a section header
-          if (invalidEntryNames.includes(company) || isDupHeader(company)) {
-            console.log(`[ProfessionalPDFEngine] Skipping invalid company entry: "${rawCompany}"`);
+          // Skip if company name looks like a section header (single OR duplicated)
+          if (isHeaderish(rawCompany)) {
+            console.log(`[ProfessionalPDFEngine] Skipping header-as-company: "${rawCompany}"`);
             return false;
           }
 
           // Skip if title looks like a section header (without a real company)
-          if ((invalidEntryNames.includes(title) || isDupHeader(title)) && !company) {
-            console.log(`[ProfessionalPDFEngine] Skipping invalid title entry: "${rawTitle}"`);
+          if (isHeaderish(rawTitle) && !company) {
+            console.log(`[ProfessionalPDFEngine] Skipping header-as-title: "${rawTitle}"`);
             return false;
           }
 

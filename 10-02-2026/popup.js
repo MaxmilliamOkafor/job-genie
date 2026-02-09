@@ -3940,17 +3940,25 @@ class ATSTailor {
       // ██ FINAL GATE: Remove any accidental section header entries from experience ██
       // Prevents "WORK EXPERIENCE WORK EXPERIENCE" rendering in the generated PDF
       if (structuredCv && Array.isArray(structuredCv.experience)) {
-        const headerPatterns = ['professional experience', 'work experience', 'experience', 'employment history'];
-        const isDupHeader = (v) => /^(work experience|professional experience|experience)( \1)+$/.test(v.toLowerCase().trim());
+        const headerPatterns = new Set(['professional experience', 'work experience', 'experience', 'employment history', 'career history', 'employment', 'work history']);
         const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        const isHeaderish = (v) => {
+          const n = normalise(v);
+          if (headerPatterns.has(n)) return true;
+          // Catch "work experience work experience" or "experience experience"
+          for (const h of headerPatterns) {
+            if (n === `${h} ${h}`) return true;
+          }
+          return false;
+        };
         structuredCv.experience = structuredCv.experience.filter(job => {
           const company = normalise(job.company || job.companyName || '');
           const title = normalise(job.title || job.jobTitle || job.position || '');
-          if (headerPatterns.includes(company) || isDupHeader(company)) {
+          if (isHeaderish(job.company || job.companyName || '') || !company || company.length < 2) {
             console.log('[ATS Tailor] Stripped invalid experience entry (company):', job.company);
             return false;
           }
-          if ((headerPatterns.includes(title) || isDupHeader(title)) && !company) {
+          if (isHeaderish(job.title || job.jobTitle || job.position || '') && !company) {
             console.log('[ATS Tailor] Stripped invalid experience entry (title):', job.title);
             return false;
           }
