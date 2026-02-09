@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
-import { FileText, Download, Loader2, Eye, CheckCircle, AlertTriangle } from 'lucide-react';
+import { FileText, Download, Loader2, Eye, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface CVPreviewModalProps {
   profile: any;
 }
 
-export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => {
+// Internal component wrapped with error boundary
+const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<{
     experienceCount: number;
@@ -25,58 +27,104 @@ export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => {
   const generatePreview = async () => {
     setIsLoading(true);
     setPdfUrl(null);
+    setError(null);
     
     try {
-      // Build profile data for PDF generation
+      // Validate required data exists
+      if (!profile) {
+        throw new Error('Profile data is missing');
+      }
+
+      // Build profile data for PDF generation with safe defaults
       const profileData = {
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        email: profile.email,
-        phone: profile.phone,
-        city: profile.city,
-        country: profile.country,
-        linkedin: profile.linkedin,
-        github: profile.github,
-        portfolio: profile.portfolio,
-        professional_experience: profile.professional_experience || [],
-        relevant_projects: profile.relevant_projects || [],
-        education: profile.education || [],
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        city: profile.city || '',
+        country: profile.country || '',
+        linkedin: profile.linkedin || '',
+        github: profile.github || '',
+        portfolio: profile.portfolio || '',
+        professional_experience: Array.isArray(profile.professional_experience) ? profile.professional_experience : [],
+        relevant_projects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects : [],
+        education: Array.isArray(profile.education) ? profile.education : [],
         skills: profile.skills || { technical: [], soft: [] },
-        certifications: profile.certifications || []
+        certifications: Array.isArray(profile.certifications) ? profile.certifications : []
       };
 
       // Count sections for preview info
       setPreviewData({
-        experienceCount: (profile.professional_experience || []).length,
-        projectsCount: (profile.relevant_projects || []).length,
-        hasSkills: !!(profile.skills?.technical?.length || profile.skills?.soft?.length),
-        hasEducation: !!(profile.education?.length)
+        experienceCount: profileData.professional_experience.length,
+        projectsCount: profileData.relevant_projects.length,
+        hasSkills: !!(profileData.skills?.technical?.length || profileData.skills?.soft?.length),
+        hasEducation: profileData.education.length > 0
       });
 
-      const { data, error } = await supabase.functions.invoke('generate-pdf', {
-        body: { profileData }
-      });
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
-      if (error) throw error;
+      try {
+        const { data, error: apiError } = await supabase.functions.invoke('generate-pdf', {
+          body: { profileData }
+        });
 
-      if (data?.pdfBase64) {
-        // Convert base64 to blob URL for preview
-        const byteCharacters = atob(data.pdfBase64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        clearTimeout(timeoutId);
+
+        if (apiError) {
+          throw new Error(apiError.message || 'Failed to generate PDF');
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        setPdfUrl(url);
-        toast.success('CV preview generated successfully!');
-      } else {
-        throw new Error('No PDF data received');
+
+        if (!data) {
+          throw new Error('No response received from PDF generator');
+        }
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        if (data?.pdfBase64) {
+          // Validate base64 data
+          if (typeof data.pdfBase64 !== 'string' || data.pdfBase64.length < 100) {
+            throw new Error('Invalid PDF data received');
+          }
+
+          // Convert base64 to blob URL for preview with error handling
+          try {
+            const byteCharacters = atob(data.pdfBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            
+            if (byteArray.length < 100) {
+              throw new Error('Generated PDF is too small - may be corrupted');
+            }
+            
+            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            setPdfUrl(url);
+            toast.success('CV preview generated successfully!');
+          } catch (decodeError) {
+            console.error('Failed to decode PDF base64:', decodeError);
+            throw new Error('Failed to decode PDF data - the file may be corrupted');
+          }
+        } else {
+          throw new Error('No PDF data in response');
+        }
+      } catch (fetchError: any) {
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out - please try again');
+        }
+        throw fetchError;
       }
     } catch (error: any) {
       console.error('Error generating CV preview:', error);
-      toast.error(error.message || 'Failed to generate CV preview');
+      const errorMessage = error?.message || 'Failed to generate CV preview';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -85,17 +133,36 @@ export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => {
   const downloadPdf = () => {
     if (!pdfUrl) return;
     
-    const link = document.createElement('a');
-    link.href = pdfUrl;
-    link.download = `${profile.first_name || 'CV'}_${profile.last_name || ''}_Resume.pdf`.replace(/\s+/g, '_');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('PDF downloaded!');
+    try {
+      const firstName = profile?.first_name || 'CV';
+      const lastName = profile?.last_name || '';
+      const safeName = `${firstName}_${lastName}_Resume.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+      
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = safeName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('PDF downloaded!');
+    } catch (downloadError) {
+      console.error('Download failed:', downloadError);
+      toast.error('Failed to download PDF');
+    }
+  };
+
+  // Cleanup blob URL on unmount
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open && pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+      setError(null);
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <Eye className="h-4 w-4" />
@@ -142,6 +209,25 @@ export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => {
               </Button>
             )}
           </div>
+
+          {/* Error display */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>{error}</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={generatePreview}
+                  className="ml-2 gap-1"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Retry
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Section summary */}
           {previewData && (
@@ -204,7 +290,7 @@ export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => {
           <Alert className="border-primary/30">
             <FileText className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              <strong>ATS-Optimized Format:</strong> Company (Bold) on Line 1, Job Title (Italic) + Right-aligned Dates on Line 2. 
+              <strong>ATS-Optimised Format:</strong> Company (Bold) on Line 1, Job Title (Italic) + Right-aligned Dates on Line 2. 
               All bullet points use standard characters for maximum parseability.
             </AlertDescription>
           </Alert>
@@ -213,3 +299,17 @@ export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => {
     </Dialog>
   );
 };
+
+// Export wrapped with ErrorBoundary
+export const CVPreviewModal = ({ profile }: CVPreviewModalProps) => (
+  <ErrorBoundary
+    fallback={
+      <Button variant="outline" className="gap-2" disabled>
+        <AlertTriangle className="h-4 w-4 text-destructive" />
+        Preview Unavailable
+      </Button>
+    }
+  >
+    <CVPreviewModalContent profile={profile} />
+  </ErrorBoundary>
+);
