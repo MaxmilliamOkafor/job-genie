@@ -463,6 +463,28 @@
       if (!text) return text;
       
       let result = text;
+
+      // HARD GUARD: never allow these exact US spellings to leak
+      // Keep meaning; only convert to UK spelling.
+      result = result
+        .replace(/\butiliz(ing|ed|e|es|ation|ations)\b/gi, (m) => {
+          const out = m.toLowerCase().replace(/^utiliz/, 'utilis');
+          if (m === m.toUpperCase()) return out.toUpperCase();
+          if (m[0] === m[0].toUpperCase()) return out.charAt(0).toUpperCase() + out.slice(1);
+          return out;
+        })
+        .replace(/\bmoderniz(e|ed|es|ing|ation|ations)\b/gi, (m) => {
+          const out = m.toLowerCase().replace('moderniz', 'modernis');
+          if (m === m.toUpperCase()) return out.toUpperCase();
+          if (m[0] === m[0].toUpperCase()) return out.charAt(0).toUpperCase() + out.slice(1);
+          return out;
+        })
+        .replace(/\banalyz(e|ed|es|ing|er|ers)\b/gi, (m) => {
+          const out = m.toLowerCase().replace('analyz', 'analys');
+          if (m === m.toUpperCase()) return out.toUpperCase();
+          if (m[0] === m[0].toUpperCase()) return out.charAt(0).toUpperCase() + out.slice(1);
+          return out;
+        });
       
       // Sort by length (longest first) to avoid partial replacements
       const sortedWords = Object.keys(US_TO_UK_SPELLING).sort((a, b) => b.length - a.length);
