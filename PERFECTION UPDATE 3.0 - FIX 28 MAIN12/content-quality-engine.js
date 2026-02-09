@@ -1,6 +1,7 @@
-// content-quality-engine.js - Anti-AI Detection & Content Quality v1.0
-// Features: UK spelling enforcement, banned words filtering, em dash removal, sentence variation
+// content-quality-engine.js - Anti-AI Detection & Content Quality v2.0
+// Features: STRICT UK spelling enforcement, banned words filtering, em dash removal, sentence variation
 // Ensures authentic, human-written content that avoids AI detection patterns
+// CRITICAL: This is the FINAL sanitisation pass - ALL content MUST go through this before output
 
 (function(global) {
   'use strict';
@@ -13,7 +14,11 @@
     'synergy', 'cutting-edge', 'best-in-class', 'world-class',
     'results-driven', 'detail-oriented', 'team player', 'go-getter',
     'various', 'assisted', 'leverage', 'leveraging', 'leveraged',
-    'utilize', 'utilizing', 'utilized', 'utilising', 'utilised'
+    'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
+    'utilise', 'scalable', 'robust', 'seamlessly', 'holistic',
+    'impactful', 'synergistic', 'proactively', 'strategically',
+    'innovatively', 'transformative', 'disruptive', 'groundbreaking',
+    'game-changing', 'revolutionary', 'unparalleled', 'unprecedented'
   ];
 
   const BANNED_PHRASES = [
@@ -27,7 +32,10 @@
     'bandwidth', 'synergize', 'holistic approach',
     'robust solution', 'seamless integration', 'end-to-end',
     'state-of-the-art', 'next-generation', 'mission-critical',
-    'thought leadership', 'disruptive innovation'
+    'thought leadership', 'disruptive innovation',
+    'scalable solutions', 'robust framework', 'seamlessly integrates',
+    'leveraging expertise', 'driving innovation', 'passionate about',
+    'dedicated to excellence', 'committed to delivering'
   ];
 
   // ============ AI DETECTION PHRASE PATTERNS ============
@@ -77,7 +85,24 @@
     'utilizing': 'using',
     'utilized': 'used',
     'utilising': 'using',
-    'utilised': 'used'
+    'utilised': 'used',
+    'utilise': 'use',
+    'scalable': 'flexible',
+    'robust': 'strong',
+    'seamlessly': 'smoothly',
+    'holistic': 'complete',
+    'impactful': 'effective',
+    'synergistic': 'collaborative',
+    'proactively': 'actively',
+    'strategically': 'carefully',
+    'innovatively': 'creatively',
+    'transformative': 'significant',
+    'disruptive': 'innovative',
+    'groundbreaking': 'notable',
+    'game-changing': 'significant',
+    'revolutionary': 'new',
+    'unparalleled': 'exceptional',
+    'unprecedented': 'notable'
   };
 
   const PHRASE_REPLACEMENTS = {
@@ -94,17 +119,26 @@
     'which led to': ', achieving',
     'thereby': ', which',
     'thus enabling': ', enabling',
-    'in order to': 'to'
+    'in order to': 'to',
+    'scalable solutions': 'flexible solutions',
+    'robust framework': 'strong framework',
+    'seamlessly integrates': 'integrates smoothly',
+    'leveraging expertise': 'using expertise',
+    'driving innovation': 'supporting innovation',
+    'passionate about': 'focused on',
+    'dedicated to excellence': 'committed to quality',
+    'committed to delivering': 'focused on delivering'
   };
 
-  // ============ US TO UK SPELLING CONVERSIONS ============
+  // ============ COMPREHENSIVE US TO UK SPELLING CONVERSIONS ============
+  // This is the AUTHORITATIVE list - ALL US spellings MUST be converted
   const US_TO_UK_SPELLING = {
-    // -ize to -ise
-    'optimize': 'optimise', 'optimized': 'optimised', 'optimizing': 'optimising', 'optimization': 'optimisation',
-    'organize': 'organise', 'organized': 'organised', 'organizing': 'organising', 'organization': 'organisation',
-    'analyze': 'analyse', 'analyzed': 'analysed', 'analyzing': 'analysing', 'analysis': 'analysis',
+    // -ize to -ise (CRITICAL - Most common AI detection pattern)
+    'optimize': 'optimise', 'optimized': 'optimised', 'optimizing': 'optimising', 'optimization': 'optimisation', 'optimizer': 'optimiser',
+    'organize': 'organise', 'organized': 'organised', 'organizing': 'organising', 'organization': 'organisation', 'organizational': 'organisational', 'organizer': 'organiser',
+    'analyze': 'analyse', 'analyzed': 'analysed', 'analyzing': 'analysing', 'analyzer': 'analyser',
     'realize': 'realise', 'realized': 'realised', 'realizing': 'realising', 'realization': 'realisation',
-    'specialize': 'specialise', 'specialized': 'specialised', 'specializing': 'specialising', 'specialization': 'specialisation',
+    'specialize': 'specialise', 'specialized': 'specialised', 'specializing': 'specialising', 'specialization': 'specialisation', 'specialist': 'specialist',
     'recognize': 'recognise', 'recognized': 'recognised', 'recognizing': 'recognising', 'recognition': 'recognition',
     'prioritize': 'prioritise', 'prioritized': 'prioritised', 'prioritizing': 'prioritising', 'prioritization': 'prioritisation',
     'standardize': 'standardise', 'standardized': 'standardised', 'standardizing': 'standardising', 'standardization': 'standardisation',
@@ -122,21 +156,85 @@
     'itemize': 'itemise', 'itemized': 'itemised', 'itemizing': 'itemising',
     'summarize': 'summarise', 'summarized': 'summarised', 'summarizing': 'summarising',
     'emphasize': 'emphasise', 'emphasized': 'emphasised', 'emphasizing': 'emphasising',
-    'categorize': 'categorise', 'categorized': 'categorised', 'categorizing': 'categorising',
-    'synchronize': 'synchronise', 'synchronized': 'synchronised', 'synchronizing': 'synchronising',
+    'categorize': 'categorise', 'categorized': 'categorised', 'categorizing': 'categorising', 'categorization': 'categorisation',
+    'synchronize': 'synchronise', 'synchronized': 'synchronised', 'synchronizing': 'synchronising', 'synchronization': 'synchronisation',
     'utilize': 'use', 'utilized': 'used', 'utilizing': 'using', 'utilization': 'usage',
+    'normalize': 'normalise', 'normalized': 'normalised', 'normalizing': 'normalising', 'normalization': 'normalisation',
+    'localize': 'localise', 'localized': 'localised', 'localizing': 'localising', 'localization': 'localisation',
+    'globalize': 'globalise', 'globalized': 'globalised', 'globalizing': 'globalising', 'globalization': 'globalisation',
+    'formalize': 'formalise', 'formalized': 'formalised', 'formalizing': 'formalising', 'formalization': 'formalisation',
+    'generalize': 'generalise', 'generalized': 'generalised', 'generalizing': 'generalising', 'generalization': 'generalisation',
+    'initialize': 'initialise', 'initialized': 'initialised', 'initializing': 'initialising', 'initialization': 'initialisation',
+    'personalize': 'personalise', 'personalized': 'personalised', 'personalizing': 'personalising', 'personalization': 'personalisation',
+    'privatize': 'privatise', 'privatized': 'privatised', 'privatizing': 'privatising', 'privatization': 'privatisation',
+    'publicize': 'publicise', 'publicized': 'publicised', 'publicizing': 'publicising',
+    'rationalize': 'rationalise', 'rationalized': 'rationalised', 'rationalizing': 'rationalising', 'rationalization': 'rationalisation',
+    'revolutionize': 'revolutionise', 'revolutionized': 'revolutionised', 'revolutionizing': 'revolutionising',
+    'stabilize': 'stabilise', 'stabilized': 'stabilised', 'stabilizing': 'stabilising', 'stabilization': 'stabilisation',
+    'terrorize': 'terrorise', 'terrorized': 'terrorised', 'terrorizing': 'terrorising',
+    'capitalize': 'capitalise', 'capitalized': 'capitalised', 'capitalizing': 'capitalising', 'capitalization': 'capitalisation',
+    'characterize': 'characterise', 'characterized': 'characterised', 'characterizing': 'characterising', 'characterization': 'characterisation',
+    'conceptualize': 'conceptualise', 'conceptualized': 'conceptualised', 'conceptualizing': 'conceptualising',
+    'contextualize': 'contextualise', 'contextualized': 'contextualised', 'contextualizing': 'contextualising',
+    'decentralize': 'decentralise', 'decentralized': 'decentralised', 'decentralizing': 'decentralising', 'decentralization': 'decentralisation',
+    'demoralize': 'demoralise', 'demoralized': 'demoralised', 'demoralizing': 'demoralising',
+    'energize': 'energise', 'energized': 'energised', 'energizing': 'energising',
+    'hospitalize': 'hospitalise', 'hospitalized': 'hospitalised', 'hospitalizing': 'hospitalising',
+    'hypothesize': 'hypothesise', 'hypothesized': 'hypothesised', 'hypothesizing': 'hypothesising',
+    'immunize': 'immunise', 'immunized': 'immunised', 'immunizing': 'immunising', 'immunization': 'immunisation',
+    'jeopardize': 'jeopardise', 'jeopardized': 'jeopardised', 'jeopardizing': 'jeopardising',
+    'legalize': 'legalise', 'legalized': 'legalised', 'legalizing': 'legalising', 'legalization': 'legalisation',
+    'liberalize': 'liberalise', 'liberalized': 'liberalised', 'liberalizing': 'liberalising', 'liberalization': 'liberalisation',
+    'marginalize': 'marginalise', 'marginalized': 'marginalised', 'marginalizing': 'marginalising',
+    'materialize': 'materialise', 'materialized': 'materialised', 'materializing': 'materialising',
+    'memorize': 'memorise', 'memorized': 'memorised', 'memorizing': 'memorising',
+    'neutralize': 'neutralise', 'neutralized': 'neutralised', 'neutralizing': 'neutralising',
+    'paralyze': 'paralyse', 'paralyzed': 'paralysed', 'paralyzing': 'paralysing',
+    'patronize': 'patronise', 'patronized': 'patronised', 'patronizing': 'patronising',
+    'penalize': 'penalise', 'penalized': 'penalised', 'penalizing': 'penalising',
+    'pressurize': 'pressurise', 'pressurized': 'pressurised', 'pressurizing': 'pressurising',
+    'radicalize': 'radicalise', 'radicalized': 'radicalised', 'radicalizing': 'radicalising',
+    'randomize': 'randomise', 'randomized': 'randomised', 'randomizing': 'randomising',
+    'reorganize': 'reorganise', 'reorganized': 'reorganised', 'reorganizing': 'reorganising', 'reorganization': 'reorganisation',
+    'revitalize': 'revitalise', 'revitalized': 'revitalised', 'revitalizing': 'revitalising',
+    'romanticize': 'romanticise', 'romanticized': 'romanticised', 'romanticizing': 'romanticising',
+    'scrutinize': 'scrutinise', 'scrutinized': 'scrutinised', 'scrutinizing': 'scrutinising',
+    'sensationalize': 'sensationalise', 'sensationalized': 'sensationalised', 'sensationalizing': 'sensationalising',
+    'socialize': 'socialise', 'socialized': 'socialised', 'socializing': 'socialising',
+    'subsidize': 'subsidise', 'subsidized': 'subsidised', 'subsidizing': 'subsidising',
+    'symbolize': 'symbolise', 'symbolized': 'symbolised', 'symbolizing': 'symbolising',
+    'sympathize': 'sympathise', 'sympathized': 'sympathised', 'sympathizing': 'sympathising',
+    'systematize': 'systematise', 'systematized': 'systematised', 'systematizing': 'systematising',
+    'tantalize': 'tantalise', 'tantalized': 'tantalised', 'tantalizing': 'tantalising',
+    'traumatize': 'traumatise', 'traumatized': 'traumatised', 'traumatizing': 'traumatising',
+    'trivialize': 'trivialise', 'trivialized': 'trivialised', 'trivializing': 'trivialising',
+    'vandalize': 'vandalise', 'vandalized': 'vandalised', 'vandalizing': 'vandalising',
+    'vaporize': 'vaporise', 'vaporized': 'vaporised', 'vaporizing': 'vaporising',
+    'verbalize': 'verbalise', 'verbalized': 'verbalised', 'verbalizing': 'verbalising',
+    'visualize': 'visualise', 'visualized': 'visualised', 'visualizing': 'visualising',
+    'westernize': 'westernise', 'westernized': 'westernised', 'westernizing': 'westernising',
     
     // -or to -our
-    'color': 'colour', 'colors': 'colours', 'colored': 'coloured', 'coloring': 'colouring',
-    'favor': 'favour', 'favors': 'favours', 'favored': 'favoured', 'favoring': 'favouring', 'favorite': 'favourite',
-    'labor': 'labour', 'labors': 'labours', 'labored': 'laboured', 'laboring': 'labouring',
-    'neighbor': 'neighbour', 'neighbors': 'neighbours', 'neighboring': 'neighbouring',
-    'honor': 'honour', 'honors': 'honours', 'honored': 'honoured', 'honoring': 'honouring',
-    'humor': 'humour', 'humors': 'humours',
+    'color': 'colour', 'colors': 'colours', 'colored': 'coloured', 'coloring': 'colouring', 'colorful': 'colourful',
+    'favor': 'favour', 'favors': 'favours', 'favored': 'favoured', 'favoring': 'favouring', 'favorite': 'favourite', 'favorable': 'favourable', 'favorably': 'favourably',
+    'labor': 'labour', 'labors': 'labours', 'labored': 'laboured', 'laboring': 'labouring', 'laborer': 'labourer',
+    'neighbor': 'neighbour', 'neighbors': 'neighbours', 'neighboring': 'neighbouring', 'neighborhood': 'neighbourhood',
+    'honor': 'honour', 'honors': 'honours', 'honored': 'honoured', 'honoring': 'honouring', 'honorable': 'honourable',
+    'humor': 'humour', 'humors': 'humours', 'humorous': 'humourous',
     'behavior': 'behaviour', 'behaviors': 'behaviours', 'behavioral': 'behavioural',
-    'endeavor': 'endeavour', 'endeavors': 'endeavours', 'endeavored': 'endeavoured',
-    'harbor': 'harbour', 'harbors': 'harbours',
-    'flavor': 'flavour', 'flavors': 'flavours', 'flavored': 'flavoured',
+    'endeavor': 'endeavour', 'endeavors': 'endeavours', 'endeavored': 'endeavoured', 'endeavoring': 'endeavouring',
+    'harbor': 'harbour', 'harbors': 'harbours', 'harbored': 'harboured', 'harboring': 'harbouring',
+    'flavor': 'flavour', 'flavors': 'flavours', 'flavored': 'flavoured', 'flavoring': 'flavouring', 'flavorful': 'flavourful',
+    'savior': 'saviour', 'saviors': 'saviours',
+    'vigor': 'vigour', 'vigorous': 'vigourous',
+    'rigor': 'rigour', 'rigorous': 'rigourous',
+    'rumor': 'rumour', 'rumors': 'rumours', 'rumored': 'rumoured',
+    'tumor': 'tumour', 'tumors': 'tumours',
+    'clamor': 'clamour', 'clamored': 'clamoured', 'clamoring': 'clamouring',
+    'glamor': 'glamour', 'glamorous': 'glamourous',
+    'odor': 'odour', 'odors': 'odours', 'odorless': 'odourless',
+    'parlor': 'parlour', 'parlors': 'parlours',
+    'valor': 'valour',
     
     // -er to -re
     'center': 'centre', 'centers': 'centres', 'centered': 'centred', 'centering': 'centring',
@@ -144,47 +242,109 @@
     'liter': 'litre', 'liters': 'litres',
     'fiber': 'fibre', 'fibers': 'fibres',
     'theater': 'theatre', 'theaters': 'theatres',
+    'caliber': 'calibre',
+    'somber': 'sombre',
+    'specter': 'spectre', 'specters': 'spectres',
+    'scepter': 'sceptre', 'scepters': 'sceptres',
+    'luster': 'lustre',
+    'meager': 'meagre',
     
     // -log to -logue
     'analog': 'analogue', 'analogs': 'analogues',
-    'catalog': 'catalogue', 'catalogs': 'catalogues', 'cataloged': 'catalogued',
+    'catalog': 'catalogue', 'catalogs': 'catalogues', 'cataloged': 'catalogued', 'cataloging': 'cataloguing',
     'dialog': 'dialogue', 'dialogs': 'dialogues',
+    'monolog': 'monologue', 'monologs': 'monologues',
+    'prolog': 'prologue', 'prologs': 'prologues',
+    'epilog': 'epilogue', 'epilogs': 'epilogues',
     
     // -ense to -ence
-    'defense': 'defence', 'defenses': 'defences',
-    'offense': 'offence', 'offenses': 'offences',
-    'license': 'licence', 'licenses': 'licences',
+    'defense': 'defence', 'defenses': 'defences', 'defensive': 'defensive',
+    'offense': 'offence', 'offenses': 'offences', 'offensive': 'offensive',
+    'license': 'licence', 'licenses': 'licences', 'licensed': 'licenced', 'licensing': 'licencing',
+    'pretense': 'pretence', 'pretenses': 'pretences',
     
-    // -l to -ll (past tense)
-    'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller',
-    'modeled': 'modelled', 'modeling': 'modelling',
-    'canceled': 'cancelled', 'canceling': 'cancelling',
+    // -l to -ll (past tense/gerund)
+    'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller', 'travelers': 'travellers',
+    'modeled': 'modelled', 'modeling': 'modelling', 'modeler': 'modeller',
+    'canceled': 'cancelled', 'canceling': 'cancelling', 'cancellation': 'cancellation',
     'labeled': 'labelled', 'labeling': 'labelling',
     'leveled': 'levelled', 'leveling': 'levelling',
     'fueled': 'fuelled', 'fueling': 'fuelling',
     'signaled': 'signalled', 'signaling': 'signalling',
+    'counseled': 'counselled', 'counseling': 'counselling', 'counselor': 'counsellor',
+    'paneled': 'panelled', 'paneling': 'panelling',
+    'channeled': 'channelled', 'channeling': 'channelling',
+    'dueled': 'duelled', 'dueling': 'duelling',
+    'equaled': 'equalled', 'equaling': 'equalling',
+    'jeweled': 'jewelled', 'jeweler': 'jeweller', 'jewelry': 'jewellery',
+    'marveled': 'marvelled', 'marveling': 'marvelling', 'marvelous': 'marvellous',
+    'rivaled': 'rivalled', 'rivaling': 'rivalling',
+    'totaled': 'totalled', 'totaling': 'totalling',
+    'dialed': 'dialled', 'dialing': 'dialling',
     
     // Other common differences
-    'program': 'programme', 'programs': 'programmes', 'programed': 'programmed', 'programing': 'programming',
+    'program': 'programme', 'programs': 'programmes',
     'gray': 'grey', 'grays': 'greys',
     'acknowledgment': 'acknowledgement', 'acknowledgments': 'acknowledgements',
     'judgment': 'judgement', 'judgments': 'judgements',
-    'fulfill': 'fulfil', 'fulfills': 'fulfils', 'fulfilled': 'fulfilled', 'fulfilling': 'fulfilling',
-    'skillful': 'skilful',
+    'fulfill': 'fulfil', 'fulfills': 'fulfils', 'fulfilled': 'fulfilled', 'fulfilling': 'fulfilling', 'fulfillment': 'fulfilment',
+    'skillful': 'skilful', 'skillfully': 'skilfully',
+    'willful': 'wilful', 'willfully': 'wilfully',
     'enrollment': 'enrolment', 'enrollments': 'enrolments',
     'installment': 'instalment', 'installments': 'instalments',
     'aging': 'ageing',
     'artifact': 'artefact', 'artifacts': 'artefacts',
-    'esthetic': 'aesthetic', 'esthetics': 'aesthetics',
+    'esthetic': 'aesthetic', 'esthetics': 'aesthetics', 'esthetically': 'aesthetically',
     'aluminum': 'aluminium',
     'skeptic': 'sceptic', 'skeptical': 'sceptical', 'skepticism': 'scepticism',
-    'check': 'cheque', // Only for bank cheques - handle carefully
-    'maneuver': 'manoeuvre', 'maneuvered': 'manoeuvred', 'maneuvering': 'manoeuvring',
-    'draft': 'draught', // Only for certain contexts
+    'maneuver': 'manoeuvre', 'maneuvered': 'manoeuvred', 'maneuvering': 'manoeuvring', 'maneuvers': 'manoeuvres',
     'plow': 'plough', 'plowed': 'ploughed', 'plowing': 'ploughing',
-    'curb': 'kerb', // Only for road context
-    'tire': 'tyre', 'tires': 'tyres', // Only for wheels
-    'inquire': 'enquire', 'inquired': 'enquired', 'inquiring': 'enquiring', 'inquiry': 'enquiry',
+    'inquire': 'enquire', 'inquired': 'enquired', 'inquiring': 'enquiring', 'inquiry': 'enquiry', 'inquiries': 'enquiries',
+    'toward': 'towards',
+    'backward': 'backwards',
+    'forward': 'forwards',
+    'afterward': 'afterwards',
+    'upward': 'upwards',
+    'downward': 'downwards',
+    'inward': 'inwards',
+    'outward': 'outwards',
+    'apologize': 'apologise', 'apologized': 'apologised', 'apologizing': 'apologising',
+    'criticize': 'criticise', 'criticized': 'criticised', 'criticizing': 'criticising', 'criticism': 'criticism',
+    'baptize': 'baptise', 'baptized': 'baptised', 'baptizing': 'baptising',
+    'analyze': 'analyse', 'analyzed': 'analysed', 'analyzing': 'analysing',
+    'paralyze': 'paralyse', 'paralyzed': 'paralysed', 'paralyzing': 'paralysing',
+    'catalyze': 'catalyse', 'catalyzed': 'catalysed', 'catalyzing': 'catalysing',
+    'cozy': 'cosy',
+    'donut': 'doughnut', 'donuts': 'doughnuts',
+    'draft': 'draught',
+    'fulfill': 'fulfil',
+    'installment': 'instalment',
+    'sulfur': 'sulphur',
+    'tire': 'tyre', 'tires': 'tyres',
+    'curb': 'kerb',
+    'pajamas': 'pyjamas',
+    'check': 'cheque', 'checks': 'cheques', // For bank context
+    'ax': 'axe',
+    'peddler': 'pedlar',
+    'molt': 'moult', 'molted': 'moulted', 'molting': 'moulting',
+    'smolder': 'smoulder', 'smoldered': 'smouldered', 'smoldering': 'smouldering',
+    'mold': 'mould', 'molded': 'moulded', 'molding': 'moulding', 'moldy': 'mouldy',
+    'story': 'storey', 'stories': 'storeys', // For buildings
+    'pediatric': 'paediatric', 'pediatrics': 'paediatrics', 'pediatrician': 'paediatrician',
+    'anesthesia': 'anaesthesia', 'anesthetic': 'anaesthetic', 'anesthetics': 'anaesthetics',
+    'encyclopedia': 'encyclopaedia', 'encyclopedias': 'encyclopaedias',
+    'gynecology': 'gynaecology', 'gynecologist': 'gynaecologist',
+    'archeology': 'archaeology', 'archeological': 'archaeological', 'archeologist': 'archaeologist',
+    'medieval': 'mediaeval',
+    'fetus': 'foetus', 'fetuses': 'foetuses',
+    'hemophilia': 'haemophilia',
+    'leukemia': 'leukaemia',
+    'orthopedic': 'orthopaedic', 'orthopedics': 'orthopaedics',
+    'esophagus': 'oesophagus',
+    'estrogen': 'oestrogen',
+    'dialog': 'dialogue',
+    'catalog': 'catalogue',
+    'canceled': 'cancelled',
   };
 
   // ============ CONTENT QUALITY ENGINE ============
@@ -298,6 +458,7 @@
     },
 
     // ============ CONVERT US TO UK SPELLING ============
+    // CRITICAL: This is the PRIMARY UK enforcement layer
     convertToUKSpelling(text) {
       if (!text) return text;
       
@@ -324,6 +485,60 @@
         });
       }
       
+      // FALLBACK REGEX: Catch ANY remaining -ize/-ization patterns not in dictionary
+      // This is the nuclear option to ensure NO US spellings escape
+      result = result.replace(/\b(\w+)(izing)\b/gi, (match, root, suffix) => {
+        const lowerRoot = root.toLowerCase();
+        // Skip if already handled or if it's a word that genuinely ends in -izing in UK English
+        const exceptions = ['prizing', 'sizing', 'seizing'];
+        if (exceptions.includes(lowerRoot + suffix.toLowerCase())) return match;
+        const replacement = root + 'ising';
+        // Preserve case
+        if (match[0] === match[0].toUpperCase()) {
+          return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+      });
+      
+      result = result.replace(/\b(\w+)(ized)\b/gi, (match, root, suffix) => {
+        const lowerRoot = root.toLowerCase();
+        const exceptions = ['prized', 'sized', 'seized'];
+        if (exceptions.includes(lowerRoot + suffix.toLowerCase())) return match;
+        const replacement = root + 'ised';
+        if (match[0] === match[0].toUpperCase()) {
+          return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+      });
+      
+      result = result.replace(/\b(\w+)(ize)\b/gi, (match, root, suffix) => {
+        const lowerRoot = root.toLowerCase();
+        const exceptions = ['prize', 'size', 'seize'];
+        if (exceptions.includes(lowerRoot + suffix.toLowerCase())) return match;
+        const replacement = root + 'ise';
+        if (match[0] === match[0].toUpperCase()) {
+          return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+      });
+      
+      result = result.replace(/\b(\w+)(ization)\b/gi, (match, root, suffix) => {
+        const replacement = root + 'isation';
+        if (match[0] === match[0].toUpperCase()) {
+          return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+      });
+      
+      result = result.replace(/\b(\w+)(izations)\b/gi, (match, root, suffix) => {
+        const replacement = root + 'isations';
+        if (match[0] === match[0].toUpperCase()) {
+          return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+      });
+      
+      console.log('[ContentQualityEngine] UK spelling conversion complete');
       return result;
     },
 
@@ -571,6 +786,6 @@
   // Export
   global.ContentQualityEngine = ContentQualityEngine;
   
-  console.log('[ContentQualityEngine] v1.0 loaded - Anti-AI Detection & UK Spelling Active');
+  console.log('[ContentQualityEngine] v2.0 loaded - STRICT UK English & Anti-AI Detection Active');
 
 })(typeof window !== 'undefined' ? window : this);
