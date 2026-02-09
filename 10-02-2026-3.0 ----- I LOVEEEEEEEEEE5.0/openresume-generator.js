@@ -499,40 +499,59 @@
       tailored.summary = this.enhanceSummary(cvData.summary, [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
 
       // 3. STRATEGIC KEYWORD INTEGRATION: Inject keywords into Work Experience first
+      // Soft skills go ONLY into experience bullets, NEVER into skills section
+      // Use TailorUniversal to identify soft skills if available
+      const softSkillSet = (typeof TailorUniversal !== 'undefined' && TailorUniversal.SOFT_SKILLS_FOR_EXPERIENCE)
+        ? TailorUniversal.SOFT_SKILLS_FOR_EXPERIENCE
+        : new Set(['leadership', 'communication', 'collaboration', 'teamwork', 'mentoring',
+          'problem-solving', 'critical thinking', 'adaptability', 'stakeholder management',
+          'cross-functional', 'empathy', 'prioritisation', 'time management', 'conflict resolution',
+          'creative thinking', 'decision-making', 'initiative', 'roadmap planning',
+          'negotiation', 'coaching', 'facilitation', 'delegation', 'strategic thinking',
+          'relationship building', 'change management', 'continuous improvement',
+          'knowledge sharing', 'stakeholder engagement', 'requirements gathering',
+          'analytical thinking', 'attention to detail', 'process improvement']);
+
+      const softSkillKeywords = allKeywords.filter(kw => softSkillSet.has(kw.toLowerCase()));
+      const technicalKeywords = allKeywords.filter(kw => !softSkillSet.has(kw.toLowerCase()));
+
       // Use StrategicKeywordIntegration if available (prioritises bullets over skills list)
       if (typeof StrategicKeywordIntegration !== 'undefined') {
         console.log('[OpenResume] Using Strategic Keyword Integration for Work Experience');
+        // Pass ALL keywords (technical + soft) to experience integration
         const integrationResult = StrategicKeywordIntegration.enhanceBulletPointsWithKeywords(
           cvData.experience,
-          { all: allKeywords, highPriority, mediumPriority, lowPriority }
+          { all: allKeywords, highPriority, mediumPriority: [...mediumPriority, ...softSkillKeywords], lowPriority }
         );
         tailored.experience = integrationResult.enhancedExperience;
-        
+
         // Remove integrated keywords from skills (they're now in bullets)
+        // Also remove ALL soft skills from skills list (they belong in experience only)
         const integratedKeywords = integrationResult.stats?.integratedKeywords || [];
-        const remainingKeywords = allKeywords.filter(kw => 
+        const remainingKeywords = technicalKeywords.filter(kw =>
           !integratedKeywords.some(ik => ik.toLowerCase() === kw.toLowerCase())
         );
-        
-        // Only add remaining keywords to skills (minimal skills list)
+
+        // Only add remaining TECHNICAL keywords to skills (minimal skills list)
         tailored.skills = this.mergeSkills(cvData.skills, remainingKeywords.slice(0, 10));
-        
+
         console.log('[OpenResume] Strategic Integration Stats:', {
           bulletsModified: integrationResult.stats?.bulletsModified || 0,
           keywordsIntegrated: integratedKeywords.length,
+          softSkillsIntegrated: softSkillKeywords.length,
           remainingForSkills: remainingKeywords.length
         });
       } else {
-        // Fallback to legacy injection
+        // Fallback to legacy injection — include soft skills in experience
         tailored.experience = this.injectAllKeywordsIntoExperience(cvData.experience, {
           high: highPriority,
-          medium: mediumPriority,
+          medium: [...mediumPriority, ...softSkillKeywords],
           low: lowPriority,
           all: allKeywords
         });
-        
-        // 4. Merge ALL keywords into skills
-        tailored.skills = this.mergeSkills(cvData.skills, allKeywords);
+
+        // Only merge TECHNICAL keywords into skills (not soft skills)
+        tailored.skills = this.mergeSkills(cvData.skills, technicalKeywords);
       }
 
       return tailored;
@@ -780,15 +799,33 @@
 
     // ============ MERGE SKILLS WITH KEYWORDS ============
     mergeSkills(existingSkills, keywords) {
-      const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
-      const merged = [...(existingSkills || [])];
+      // Junk keywords that must NEVER appear in the skills section
+      const SKILLS_BLOCKLIST = new Set([
+        'customer service', 'high school diploma', 'commission', 'customer-facing',
+        'lawn care', 'independent work', 'motivated', 'benefits', 'fast-paced',
+        'work environment', 'crm software', 'motivation', 'self-motivated',
+        'passion', 'passionate', 'enthusiasm', 'driven', 'dynamic', 'proactive',
+        'synergy', 'paradigm', 'robust', 'commitment', 'reliable', 'reliability',
+        'integrity', 'professionalism', 'multitasking', 'positive attitude',
+        'work ethic', 'goal-oriented', 'results-oriented', 'training', 'teams',
+        'environment', 'services', 'solutions', 'products', 'clients', 'customers',
+        'business', 'communication skills', 'team player', 'detail-oriented',
+        'hard-working', 'self-starter', 'quick learner', 'fast learner',
+        'go-getter', 'can-do attitude', 'dedication', 'go above and beyond'
+      ]);
 
-      // Add top keywords not already in skills
+      const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
+      const merged = [...(existingSkills || [])].filter(s =>
+        !SKILLS_BLOCKLIST.has(s.toLowerCase()) && s.trim().length >= 2
+      );
+
+      // Add top keywords not already in skills (filtered)
       const topKeywords = (keywords.all || keywords).slice(0, 10);
       topKeywords.forEach(kw => {
-        if (!skillSet.has(kw.toLowerCase())) {
+        const kwLower = kw.toLowerCase();
+        if (!skillSet.has(kwLower) && !SKILLS_BLOCKLIST.has(kwLower) && kw.trim().length >= 2) {
           merged.push(this.formatSkillName(kw));
-          skillSet.add(kw.toLowerCase());
+          skillSet.add(kwLower);
         }
       });
 
@@ -868,8 +905,20 @@
         });
       };
 
-      // Helper: Add section header with line
+      // ██ SECTION HEADER DEDUP GUARD ██
+      // Tracks which section headers have been rendered — prevents duplicate sections in PDF
+      const renderedSections = new Set();
+
+      // Helper: Add section header with line — GUARDED against duplicates
       const addSectionHeader = (title) => {
+        // CRITICAL: Never render the same section header twice
+        const normalised = title.toUpperCase().trim();
+        if (renderedSections.has(normalised)) {
+          console.warn(`[OpenResume] BLOCKED duplicate section header: "${title}"`);
+          return false; // Signal that section was skipped
+        }
+        renderedSections.add(normalised);
+
         if (y > page.height - margins.bottom - 50) {
           doc.addPage();
           y = margins.top;
@@ -955,16 +1004,19 @@
       }
 
       // === SKILLS (comma-separated, single line) ===
+      // GUARDED: addSectionHeader returns false if section already rendered
       if (data.skills && data.skills.length > 0) {
-        addSectionHeader('TECHNICAL PROFICIENCIES');
-        addText(data.skills.join(', '), false, false, font.body);
-        y += 4;
+        if (addSectionHeader('TECHNICAL PROFICIENCIES') !== false) {
+          addText(data.skills.join(', '), false, false, font.body);
+          y += 4;
+        }
       }
 
       // === CERTIFICATIONS ===
       if (data.certifications && data.certifications.length > 0) {
-        addSectionHeader('CERTIFICATIONS');
-        addText(data.certifications.join(', '), false, false, font.body);
+        if (addSectionHeader('CERTIFICATIONS') !== false) {
+          addText(data.certifications.join(', '), false, false, font.body);
+        }
       }
 
       // Generate output

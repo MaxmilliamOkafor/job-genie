@@ -24,7 +24,9 @@
     // Methodology Integration - adds methodology context
     METHODOLOGY: 'methodology',
     // Outcome Amplification - adds impact context
-    OUTCOME: 'outcome'
+    OUTCOME: 'outcome',
+    // Soft Skill - natural integration for interpersonal/leadership keywords
+    SOFT_SKILL: 'soft_skill'
   };
 
   // ============ NATURAL INTEGRATION TEMPLATES ============
@@ -87,7 +89,21 @@
     soft_skill: new Set([
       'leadership', 'communication', 'collaboration', 'teamwork', 'mentoring',
       'problem-solving', 'critical thinking', 'adaptability', 'flexibility',
-      'stakeholder management', 'cross-functional', 'interpersonal'
+      'stakeholder management', 'cross-functional', 'interpersonal',
+      'empathy', 'prioritisation', 'time management', 'conflict resolution',
+      'creative thinking', 'decision-making', 'initiative', 'roadmap planning',
+      'negotiation', 'presentation', 'facilitation', 'coaching',
+      'emotional intelligence', 'active listening', 'delegation', 'accountability',
+      'strategic thinking', 'relationship building', 'influence',
+      'change management', 'risk management', 'process improvement',
+      'analytical thinking', 'attention to detail', 'organisational skills',
+      'customer focus', 'client management', 'vendor management',
+      'resource management', 'budget management', 'capacity planning',
+      'incident management', 'crisis management', 'quality assurance',
+      'continuous improvement', 'knowledge sharing', 'pair programming',
+      'code review', 'technical writing', 'documentation',
+      'cross-team collaboration', 'stakeholder engagement', 'requirements gathering',
+      'user research', 'design thinking', 'data-driven decision making'
     ]),
     domain: new Set([
       'machine learning', 'deep learning', 'nlp', 'computer vision', 'ai',
@@ -166,6 +182,7 @@
           const allKeywords = [
             ...categorizedKeywords.technical,
             ...categorizedKeywords.methodology,
+            ...categorizedKeywords.soft_skill,  // Include soft skills for experience integration
             ...categorizedKeywords.domain,
             ...categorizedKeywords.tool,
             ...categorizedKeywords.uncategorized
@@ -220,6 +237,11 @@
         return /(?:improved|reduced|increased|achieved|delivered|optimised|enhanced)/i.test(bulletLower);
       }
 
+      // Soft skill keywords compatible with leadership, team, and outcome bullets
+      if (categorizedKeywords.soft_skill.includes(keyword)) {
+        return /(?:led|managed|collaborated|coordinated|mentored|coached|facilitated|presented|resolved|negotiated|prioritised|drove|improved|reduced|increased|delivered|achieved|established|implemented|supported|partnered|engaged|communicated|trained|guided|oversaw|directed|planned|reviewed|analysed)/i.test(bulletLower);
+      }
+
       // Tool keywords compatible with any implementation bullet
       if (categorizedKeywords.tool.includes(keyword)) {
         return /(?:using|with|through|via|implementing|deploying|applying)/i.test(bulletLower);
@@ -242,6 +264,11 @@
       // Check for methodology context
       if (/(?:process|workflow|initiative|project|sprint|iteration)/i.test(bulletLower)) {
         strategies.push(INJECTION_STRATEGIES.METHODOLOGY);
+      }
+
+      // Check for soft skill context (team, stakeholder, collaboration, leadership)
+      if (/(?:team|stakeholder|client|cross-functional|collaborated|mentored|led|coached|facilitated|partner|relationship|communicated)/i.test(bulletLower)) {
+        strategies.push(INJECTION_STRATEGIES.SOFT_SKILL);
       }
 
       // Check for metrics/outcomes
@@ -350,6 +377,10 @@
           enhanced = this.integrateWithMethodology(bullet, missing, categorized);
           break;
 
+        case INJECTION_STRATEGIES.SOFT_SKILL:
+          enhanced = this.integrateWithSoftSkill(bullet, missing);
+          break;
+
         case INJECTION_STRATEGIES.OUTCOME:
           enhanced = this.integrateWithOutcome(bullet, missing);
           break;
@@ -419,6 +450,79 @@
 
       // No metric found, use standard ending
       return this.appendWithPhrase(bullet, keywords, 'through');
+    },
+
+    // ============ SOFT SKILL INTEGRATION ============
+    integrateWithSoftSkill(bullet, keywords) {
+      // Natural integration of soft skills into experience bullets
+      // Strategy: Use contextual phrases that demonstrate the skill in action
+      const SOFT_SKILL_PHRASES = {
+        'leadership': ['demonstrating strong leadership', 'providing leadership across'],
+        'communication': ['through effective communication', 'ensuring clear communication with'],
+        'collaboration': ['in close collaboration with', 'fostering collaboration across'],
+        'teamwork': ['through cross-team collaboration', 'fostering teamwork across'],
+        'mentoring': ['while mentoring junior team members', 'including mentoring and coaching'],
+        'problem-solving': ['applying structured problem-solving', 'through systematic problem-solving'],
+        'critical thinking': ['applying critical thinking to', 'through critical analysis and'],
+        'adaptability': ['demonstrating adaptability in', 'with adaptability to evolving'],
+        'stakeholder management': ['with effective stakeholder management', 'ensuring stakeholder alignment'],
+        'cross-functional': ['across cross-functional teams', 'with cross-functional collaboration'],
+        'conflict resolution': ['facilitating conflict resolution', 'resolving conflicts through'],
+        'decision-making': ['driving data-informed decision-making', 'through effective decision-making'],
+        'initiative': ['taking initiative to', 'demonstrating initiative in'],
+        'empathy': ['with empathy and understanding', 'demonstrating empathy towards'],
+        'prioritisation': ['through effective prioritisation', 'applying clear prioritisation of'],
+        'time management': ['with strong time management', 'through effective time management'],
+        'creative thinking': ['applying creative thinking to', 'through creative problem-solving'],
+        'negotiation': ['through effective negotiation', 'negotiating with key stakeholders'],
+        'coaching': ['including coaching team members', 'through coaching and development'],
+        'facilitation': ['facilitating key discussions', 'through skilled facilitation'],
+        'delegation': ['with effective delegation', 'through strategic delegation'],
+        'strategic thinking': ['applying strategic thinking', 'through strategic analysis'],
+        'relationship building': ['building strong relationships with', 'fostering productive relationships'],
+        'change management': ['driving change management', 'through effective change management'],
+        'continuous improvement': ['driving continuous improvement', 'fostering a culture of continuous improvement'],
+        'knowledge sharing': ['promoting knowledge sharing', 'through knowledge sharing and documentation'],
+        'presentation': ['delivering presentations to', 'presenting findings to'],
+        'analytical thinking': ['applying analytical thinking', 'through thorough analysis'],
+        'attention to detail': ['with meticulous attention to detail', 'ensuring attention to detail in'],
+        'roadmap planning': ['contributing to roadmap planning', 'through strategic roadmap planning'],
+        'client management': ['ensuring effective client management', 'with strong client engagement'],
+        'vendor management': ['managing vendor relationships', 'coordinating with external vendors'],
+        'resource management': ['through effective resource management', 'optimising resource allocation'],
+        'budget management': ['managing project budgets', 'within agreed budget constraints'],
+        'incident management': ['leading incident management', 'through structured incident response'],
+        'quality assurance': ['ensuring quality assurance', 'maintaining high quality standards'],
+        'requirements gathering': ['through thorough requirements gathering', 'gathering and refining requirements'],
+        'design thinking': ['applying design thinking principles', 'using design thinking methodologies'],
+        'data-driven decision making': ['enabling data-driven decision making', 'through data-informed insights'],
+        'stakeholder engagement': ['with proactive stakeholder engagement', 'ensuring stakeholder buy-in'],
+        'process improvement': ['driving process improvement', 'optimising existing processes']
+      };
+
+      // Find matching phrases for keywords
+      const kwLower = keywords.map(k => k.toLowerCase());
+      const matchedPhrases = [];
+
+      for (const kw of kwLower) {
+        if (SOFT_SKILL_PHRASES[kw]) {
+          // Pick a random phrase from available options
+          const options = SOFT_SKILL_PHRASES[kw];
+          matchedPhrases.push(options[Math.floor(Math.random() * options.length)]);
+        }
+      }
+
+      if (matchedPhrases.length > 0) {
+        // Use the first matched phrase as a natural extension
+        const phrase = matchedPhrases[0];
+        if (bullet.endsWith('.')) {
+          return `${bullet.slice(0, -1)}, ${phrase}.`;
+        }
+        return `${bullet}, ${phrase}`;
+      }
+
+      // Fallback: use generic soft skill ending
+      return this.appendWithPhrase(bullet, keywords, 'demonstrating');
     },
 
     // ============ PARENTHETICAL INTEGRATION ============
