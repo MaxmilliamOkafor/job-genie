@@ -3717,9 +3717,17 @@ class ATSTailor {
   dedupeSectionHeaders(text) {
     if (!text || typeof text !== 'string') return text;
 
+    // CRITICAL FIX v2: Collapse inline duplicated headers on the SAME line
+    // "WORK EXPERIENCE WORK EXPERIENCE" → "WORK EXPERIENCE"
+    // "PROFESSIONAL EXPERIENCE PROFESSIONAL EXPERIENCE" → "PROFESSIONAL EXPERIENCE"
+    let fixedText = text.replace(
+      /\b(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|PROFESSIONAL SUMMARY|SUMMARY)(\s+\1)+\b/gi,
+      (match, header) => header.toUpperCase()
+    );
+
     // CRITICAL FIX: Break apart concatenated headers (e.g., "...GOOGLE CLOCERTIFICATIONS:...")
     // This happens when AI truncates a word and immediately starts the next section
-    let fixedText = text
+    fixedText = fixedText
       .replace(/([A-Za-z])(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)(\s*:|\s+[A-Z])/g, '$1\n$2$3')
       .replace(/(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)\s*:\s*/gi, (match, header) => {
         return header.toUpperCase() + ': ';
@@ -3937,20 +3945,35 @@ class ATSTailor {
       // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
       let structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
 
-      // ██ FINAL GATE: Remove any accidental section header entries from experience ██
+      // ██ FINAL GATE v2: Remove any accidental section header entries from experience ██
       // Prevents "WORK EXPERIENCE WORK EXPERIENCE" rendering in the generated PDF
+      // Also catches: entries where company OR title is just a section header name
       if (structuredCv && Array.isArray(structuredCv.experience)) {
-        const headerPatterns = ['professional experience', 'work experience', 'experience', 'employment history'];
-        const isDupHeader = (v) => /^(work experience|professional experience|experience)( \1)+$/.test(v.toLowerCase().trim());
+        const headerPatterns = new Set([
+          'professional experience', 'work experience', 'experience',
+          'employment history', 'career history', 'employment',
+          'work history', 'positions held', 'career',
+          'education', 'skills', 'certifications', 'projects', 'achievements'
+        ]);
         const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        // Catches repeated headers on same string: "work experience work experience"
+        const isDupHeader = (v) => {
+          const parts = v.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
+          if (parts.length >= 2 && parts.every(p => headerPatterns.has(p))) return true;
+          // "work experience work experience" with single space
+          for (const h of headerPatterns) {
+            if (v === (h + ' ' + h)) return true;
+          }
+          return false;
+        };
         structuredCv.experience = structuredCv.experience.filter(job => {
           const company = normalise(job.company || job.companyName || '');
           const title = normalise(job.title || job.jobTitle || job.position || '');
-          if (headerPatterns.includes(company) || isDupHeader(company)) {
+          if (headerPatterns.has(company) || isDupHeader(company)) {
             console.log('[ATS Tailor] Stripped invalid experience entry (company):', job.company);
             return false;
           }
-          if ((headerPatterns.includes(title) || isDupHeader(title)) && !company) {
+          if ((headerPatterns.has(title) || isDupHeader(title)) && !company) {
             console.log('[ATS Tailor] Stripped invalid experience entry (title):', job.title);
             return false;
           }
