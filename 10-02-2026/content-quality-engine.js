@@ -7,27 +7,35 @@
   'use strict';
 
   // ============ BANNED WORDS & PHRASES (AI Detection Flags) ============
+  // COMPLETE LIST - Never use these words in CV/Cover Letter content
   const BANNED_WORDS = [
+    // Original banned list
     'orchestrated', 'championed', 'pioneered', 'helmed', 'realm',
     'comprehensive', 'demonstrating', 'showcasing', 'spearheaded',
-    'meticulous', 'approximately', 'highly motivated', 'dynamic',
-    'synergy', 'cutting-edge', 'best-in-class', 'world-class',
-    'results-driven', 'detail-oriented', 'team player', 'go-getter',
-    'various', 'assisted', 'leverage', 'leveraging', 'leveraged',
+    'meticulous', 'approximately', 'dynamic', 'synergy', 'cutting-edge',
+    'best-in-class', 'world-class', 'results-driven', 'detail-oriented',
+    'team player', 'go-getter', 'various', 'assisted',
+    // Leverage/Utilize variants (buzzword usage)
+    'leverage', 'leveraging', 'leveraged',
     'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
-    'utilise', 'utilization', 'utilisation'
+    'utilise', 'utilization', 'utilisation',
+    // Additional banned terms from spec
+    'measurable' // Replace with actual metrics/numbers
   ];
 
   const BANNED_PHRASES = [
+    // Proven X phrases
     'proven ability', 'proven track record', 'proven record',
     'proven proficiency', 'proven proficiency in', 'proven expertise',
+    // Buzzword phrases
     'the intersection of', 'drive impactful outcomes',
     'strategic initiatives', 'stakeholder environments',
-    'think outside the box', 'deep dive', 'low-hanging fruit',
-    'move the needle', 'circle back', 'touch base',
-    'game-changer', 'paradigm shift', 'best practices',
-    'core competencies', 'value proposition', 'actionable insights',
-    'bandwidth', 'synergize', 'holistic approach',
+    'think outside the box', 'highly motivated',
+    // Corporate jargon
+    'deep dive', 'low-hanging fruit', 'move the needle',
+    'circle back', 'touch base', 'game-changer', 'paradigm shift',
+    'best practices', 'core competencies', 'value proposition',
+    'actionable insights', 'bandwidth', 'synergize', 'holistic approach',
     'robust solution', 'seamless integration', 'end-to-end',
     'state-of-the-art', 'next-generation', 'mission-critical',
     'thought leadership', 'disruptive innovation',
@@ -55,13 +63,13 @@
     'championed': 'led',
     'pioneered': 'established',
     'helmed': 'led',
-    'realm': 'field',
-    'comprehensive': 'thorough',
+    'realm': 'field',           // Alternative: industry, sector
+    'comprehensive': 'thorough', // Alternative: extensive, complete
     'demonstrating': 'showing',
     'showcasing': 'presenting',
     'spearheaded': 'led',
-    'meticulous': 'detailed',
-    'approximately': '', // Remove and use specific numbers with +
+    'meticulous': 'detailed',    // Alternative: precise, exact
+    'approximately': '',         // Remove - use specific numbers with +
     'highly motivated': 'driven',
     'dynamic': 'adaptable',
     'synergy': 'collaboration',
@@ -74,7 +82,8 @@
     'go-getter': 'proactive',
     'various': 'multiple',
     'assisted': 'supported',
-    'leverage': 'use',
+    // Leverage/Utilize - replace with simpler alternatives
+    'leverage': 'use',           // Alternative: employ, apply
     'leveraging': 'using',
     'leveraged': 'used',
     'utilize': 'use',
@@ -84,7 +93,9 @@
     'utilised': 'used',
     'utilise': 'use',
     'utilization': 'usage',
-    'utilisation': 'usage'
+    'utilisation': 'usage',
+    // Additional
+    'measurable': 'quantified'
   };
 
   const PHRASE_REPLACEMENTS = {
@@ -94,13 +105,15 @@
     'proven proficiency': 'proficiency',
     'proven proficiency in': 'proficiency in',
     'proven expertise': 'expertise',
-    'the intersection of': 'across',
+    'the intersection of': 'across',        // Alternative: spanning, throughout
     'drive impactful outcomes': 'deliver results',
     'strategic initiatives': 'key projects',
     'stakeholder environments': 'business contexts',
     'think outside the box': 'approach problems creatively',
+    'highly motivated': 'driven',
     'optimizing ci/cd processes': 'improving CI/CD pipelines',
     'optimising ci/cd processes': 'improving CI/CD pipelines',
+    // AI detection patterns
     'resulting in': 'achieving',
     'leading to': 'producing',
     'which led to': ', achieving',
