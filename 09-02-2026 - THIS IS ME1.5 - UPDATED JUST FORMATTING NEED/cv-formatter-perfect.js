@@ -179,8 +179,11 @@
 
       if (!content) return sections;
 
+      // CRITICAL: Normalise newlines first (handles literal \\n from JSON, mixed line endings)
+      const normalised = content.replace(/\\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
       // Strip contact header lines before parsing
-      const lines = content.split('\n');
+      const lines = normalised.split('\n');
       let contentStartIndex = 0;
       for (let i = 0; i < Math.min(lines.length, 8); i++) {
         const trimmed = lines[i].trim();

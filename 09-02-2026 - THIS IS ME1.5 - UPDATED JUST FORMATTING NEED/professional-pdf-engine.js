@@ -231,8 +231,13 @@
 
       // Parse tailored content sections
       if (typeof tailoredContent === 'string') {
+        // CRITICAL FIX: Normalise newlines first (handles literal \\n from JSON, mixed line endings)
+        let normalisedContent = tailoredContent
+          .replace(/\\n/g, '\n')
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n');
         // CRITICAL FIX: Strip contact header lines before parsing sections
-        const strippedContent = this.stripContactHeader(tailoredContent);
+        const strippedContent = this.stripContactHeader(normalisedContent);
         // CRITICAL FIX: Clean the text before parsing - remove duplicate sections
         const cleanedContent = this.removeDuplicateSections(strippedContent);
         const parsed = this.parseSections(cleanedContent);

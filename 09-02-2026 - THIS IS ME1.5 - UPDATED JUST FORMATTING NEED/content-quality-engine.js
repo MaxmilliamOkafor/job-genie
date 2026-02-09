@@ -404,30 +404,30 @@
     // ============ FIX PUNCTUATION ============
     fixPunctuation(text) {
       if (!text) return text;
-      
+
       return text
         // Remove excessive commas
         .replace(/,(\s*,)+/g, ',')
         // Fix comma spacing
-        .replace(/\s+,/g, ',')
+        .replace(/[ \t]+,/g, ',')
         .replace(/,(?!\s)/g, ', ')
         // Fix period spacing
-        .replace(/\s+\./g, '.')
+        .replace(/[ \t]+\./g, '.')
         .replace(/\.(?!\s|$|\d)/g, '. ')
         // Remove trailing punctuation from bullets
         .replace(/[,;]\s*$/gm, '')
-        // Clean up multiple spaces
-        .replace(/\s{2,}/g, ' ');
+        // Clean up multiple HORIZONTAL spaces only (preserve newlines!)
+        .replace(/[^\S\n\r]{2,}/g, ' ');
     },
 
     // ============ REMOVE PERSONAL PRONOUNS ============
     removePronouns(text) {
       if (!text) return text;
-      
+
       return text
         // Remove "I " at start of sentences
         .replace(/\bI\s+/g, '')
-        // Remove "my " 
+        // Remove "my "
         .replace(/\bmy\s+/g, '')
         // Remove "me " where it makes sense
         .replace(/\b(to|with|for)\s+me\b/gi, '')
@@ -436,19 +436,19 @@
         .replace(/\bwe\s+/g, '')
         // Remove "our "
         .replace(/\bour\s+/g, '')
-        // Clean up leftover issues
-        .replace(/\s{2,}/g, ' ')
+        // Clean up leftover horizontal spaces only (preserve newlines!)
+        .replace(/[^\S\n\r]{2,}/g, ' ')
         .trim();
     },
 
     // ============ FINAL CLEANUP ============
     finalCleanup(text) {
       if (!text) return text;
-      
+
       return text
-        // Remove double spaces
-        .replace(/\s{2,}/g, ' ')
-        // Remove empty lines
+        // Remove double HORIZONTAL spaces only (preserve newlines!)
+        .replace(/[^\S\n\r]{2,}/g, ' ')
+        // Collapse 3+ blank lines into 2 (preserve paragraph breaks)
         .replace(/\n\s*\n\s*\n/g, '\n\n')
         // Fix capitalisation after periods
         .replace(/\.\s+([a-z])/g, (match, letter) => `. ${letter.toUpperCase()}`)

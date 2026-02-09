@@ -37,25 +37,30 @@
 
     // ============ GENERATE COMPLETE ATS PACKAGE ============
     // Returns: { cv: blob, cover: blob, cvFilename, coverFilename, matchScore }
-    async generateATSPackage(baseCV, keywords, jobData, candidateData) {
+    async generateATSPackage(baseCV, keywords, jobData, candidateData, coverLetterText) {
       const startTime = performance.now();
       console.log('[OpenResume] Generating ATS Package...');
 
+      // CRITICAL: Normalise newlines in input text before ANY parsing
+      // Handles literal \\n from JSON, missing newlines, and mixed line endings
+      const normalisedCV = this.normaliseNewlines(baseCV);
+      const normalisedCoverLetter = this.normaliseNewlines(coverLetterText);
+
       // Parse and structure CV data
-      const cvData = this.parseAndStructureCV(baseCV, candidateData);
-      
+      const cvData = this.parseAndStructureCV(normalisedCV, candidateData);
+
       // Tailor CV with keywords
       const tailoredData = this.tailorCVData(cvData, keywords, jobData);
-      
+
       // Generate CV PDF
       const cvResult = await this.generateCVPDF(tailoredData, candidateData);
-      
-      // Generate Cover Letter PDF
-      const coverResult = await this.generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData);
-      
+
+      // Generate Cover Letter PDF (uses AI text when available, otherwise template)
+      const coverResult = await this.generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData, normalisedCoverLetter);
+
       // Calculate match score
       const matchScore = this.calculateMatchScore(tailoredData, keywords);
-      
+
       const timing = performance.now() - startTime;
       console.log(`[OpenResume] Package generated in ${timing.toFixed(0)}ms`);
 
@@ -70,6 +75,63 @@
         timing,
         tailoredData
       };
+    },
+
+    // ============ NORMALISE NEWLINES ============
+    // Ensures text has actual newline characters for reliable parsing
+    normaliseNewlines(text) {
+      if (!text || typeof text !== 'string') return text || '';
+
+      let result = text;
+
+      // Convert literal \\n sequences to actual newlines (double-escaped from JSON)
+      result = result.replace(/\\n/g, '\n');
+
+      // Normalise Windows line endings
+      result = result.replace(/\r\n/g, '\n');
+      result = result.replace(/\r/g, '\n');
+
+      // If text has NO newlines at all (one giant line), attempt to restore structure
+      // by detecting section headers embedded in the text
+      if (!result.includes('\n') && result.length > 200) {
+        console.warn('[OpenResume] Text has no newlines - attempting structural restoration');
+        result = this.restoreTextStructure(result);
+      }
+
+      return result;
+    },
+
+    // ============ RESTORE TEXT STRUCTURE ============
+    // Emergency fallback: splits a single-line text blob into structured sections
+    restoreTextStructure(text) {
+      if (!text) return text;
+
+      const sectionHeaders = [
+        'PROFESSIONAL SUMMARY', 'SUMMARY', 'PROFILE',
+        'WORK EXPERIENCE', 'PROFESSIONAL EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
+        'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES',
+        'CORE COMPETENCIES', 'KEY SKILLS', 'ADDITIONAL SKILLS',
+        'CERTIFICATIONS', 'LICENSES', 'ACHIEVEMENTS', 'PROJECTS'
+      ];
+
+      let result = text;
+
+      // Insert newlines before section headers
+      for (const header of sectionHeaders) {
+        // Match "HEADER:" or "HEADER " preceded by non-newline content
+        const regex = new RegExp(`(?<!^)\\b(${header})\\s*:?\\s*`, 'gi');
+        result = result.replace(regex, (match, h) => {
+          return `\n\n${h.toUpperCase()}\n`;
+        });
+      }
+
+      // Insert newlines before bullet-like patterns
+      result = result.replace(/([.!?])\s+([-•*])\s+/g, '$1\n$2 ');
+
+      // Insert newlines before "Company | Title" patterns
+      result = result.replace(/([.!?])\s+([A-Z][A-Za-z\s&.,]+\s*\|\s*[A-Za-z])/g, '$1\n\n$2');
+
+      return result.trim();
     },
 
     // ============ PARSE AND STRUCTURE CV ============
@@ -104,14 +166,36 @@
         data.contact.portfolio = candidateData.portfolio || '';
         
         // Extract structured data if available
-        if (candidateData.workExperience || candidateData.work_experience) {
-          data.experience = (candidateData.workExperience || candidateData.work_experience).map(exp => ({
-            company: exp.company || exp.organization || '',
-            title: exp.title || exp.position || exp.role || '',
-            dates: exp.dates || exp.duration || `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
-            location: exp.location || '',
-            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || [])
-          }));
+        // Support ALL field name variants: workExperience, work_experience, professionalExperience, professional_experience
+        const rawExperience = candidateData.workExperience || candidateData.work_experience
+          || candidateData.professionalExperience || candidateData.professional_experience;
+        if (rawExperience && Array.isArray(rawExperience) && rawExperience.length > 0) {
+          data.experience = rawExperience.map(exp => {
+            // Build dates string from startDate/endDate if dates field missing
+            let dates = exp.dates || exp.duration || '';
+            if (!dates && (exp.startDate || exp.start_date)) {
+              const start = exp.startDate || exp.start_date || '';
+              const end = exp.endDate || exp.end_date || 'Present';
+              dates = `${start} - ${end}`;
+            }
+            // Normalise dates to MM/YYYY format
+            dates = this.normalizeDates(dates);
+
+            // Extract bullets from bullets array OR description string
+            let bullets = exp.bullets || exp.achievements || exp.responsibilities || [];
+            if ((!bullets || (Array.isArray(bullets) && bullets.length === 0)) && exp.description) {
+              bullets = exp.description.split('\n').filter(b => b.trim());
+            }
+
+            return {
+              company: exp.company || exp.organization || '',
+              title: exp.title || exp.position || exp.role || '',
+              dates: dates,
+              location: exp.location || '',
+              bullets: this.normalizeBullets(bullets)
+            };
+          });
+          console.log(`[OpenResume] Loaded ${data.experience.length} work experiences from profile data`);
         }
         
         if (candidateData.skills) {
@@ -1036,7 +1120,7 @@
     },
 
     // ============ GENERATE COVER LETTER PDF ============
-    async generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData) {
+    async generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData, coverLetterText) {
       const startTime = performance.now();
 
       // Generate filename: {FirstName}_{LastName}_Cover_Letter.pdf (user requested format)
@@ -1050,11 +1134,11 @@
       let pdfBase64 = null;
 
       if (typeof jspdf !== 'undefined' && jspdf.jsPDF) {
-        const result = await this.renderCoverLetterWithJsPDF(tailoredData, keywords, jobData, candidateData);
+        const result = await this.renderCoverLetterWithJsPDF(tailoredData, keywords, jobData, candidateData, coverLetterText);
         pdfBlob = result.blob;
         pdfBase64 = result.base64;
       } else {
-        const text = this.generateCoverLetterText(tailoredData, keywords, jobData, candidateData);
+        const text = coverLetterText || this.generateCoverLetterText(tailoredData, keywords, jobData, candidateData);
         pdfBase64 = btoa(unescape(encodeURIComponent(text)));
       }
 
@@ -1064,7 +1148,8 @@
     },
 
     // ============ RENDER COVER LETTER WITH JSPDF ============
-    async renderCoverLetterWithJsPDF(data, keywords, jobData, candidateData) {
+    // REVAMPED: Uses AI-generated cover letter text when available, with proper paragraph rendering
+    async renderCoverLetterWithJsPDF(data, keywords, jobData, candidateData, coverLetterText) {
       const { jsPDF } = jspdf;
       const { font, margins, lineHeight, page } = ATS_SPEC;
       const contentWidth = page.width - margins.left - margins.right;
@@ -1073,12 +1158,17 @@
       doc.setFont(font.family, 'normal');
       let y = margins.top;
 
+      // Helper: Add text with word wrap and page breaks
       const addText = (text, isBold = false, size = font.body) => {
         doc.setFontSize(size);
         doc.setFont(font.family, isBold ? 'bold' : 'normal');
-        
+
         const lines = doc.splitTextToSize(text, contentWidth);
         lines.forEach(line => {
+          if (y > page.height - margins.bottom - 20) {
+            doc.addPage();
+            y = margins.top;
+          }
           doc.text(line, margins.left, y);
           y += size * lineHeight + 2;
         });
@@ -1087,87 +1177,250 @@
       const addCenteredText = (text, isBold = false, size = font.body) => {
         doc.setFontSize(size);
         doc.setFont(font.family, isBold ? 'bold' : 'normal');
+        if (y > page.height - margins.bottom - 20) {
+          doc.addPage();
+          y = margins.top;
+        }
         doc.text(text, page.width / 2, y, { align: 'center' });
         y += size * lineHeight + 2;
       };
 
       // Extract info
-      const name = data.contact.name;
+      const name = data.contact?.name || `${candidateData?.firstName || ''} ${candidateData?.lastName || ''}`.trim() || 'Applicant';
       const jobTitle = jobData?.title || 'the open position';
-      // FIX 02-02-26: ROBUST company extraction with CRITICAL validation
       let rawCompany = this.extractCompanyName(jobData);
-      
-      // Extended validation - NEVER allow these placeholder values
-      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization', 
-                                   'organization', 'n/a', 'unknown', '', 'employer'];
-      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim())) 
-        ? rawCompany 
-        : 'the hiring organization';
-      
+      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization',
+                                   'organisation', 'n/a', 'unknown', '', 'employer'];
+      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim()))
+        ? rawCompany
+        : 'the hiring organisation';
+
       console.log(`[OpenResume] Cover letter using company: "${company}"`);
-      // ROBUST: Ensure keywords is always an array before slicing
-      const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
-      const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
-      const topExp = data.experience?.[0]?.company || 'my previous roles';
 
-      // === HEADER ===
-      addCenteredText(name.toUpperCase(), true, font.name);
-      y += 2;
-      
-      // Phone | Email format (no location in cover letter header)
-      const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const contactLine = [formattedPhone, data.contact.email].filter(Boolean).join(' | ');
-      addCenteredText(contactLine, false, font.body);
-      y += 16;
+      // === STRATEGY: Use AI-generated text if available, otherwise generate from template ===
+      if (coverLetterText && coverLetterText.trim().length > 100) {
+        console.log('[OpenResume] Using AI-generated cover letter text for PDF');
+        this.renderAICoverLetterPDF(doc, coverLetterText, data, name, jobTitle, company, {
+          font, margins, lineHeight, page, contentWidth, addText, addCenteredText, y
+        });
+        // y is managed via closure in addText/addCenteredText
+      } else {
+        console.log('[OpenResume] Using template-based cover letter (no AI text available)');
+        // === HEADER ===
+        addCenteredText(name.toUpperCase(), true, font.name);
+        y += 2;
 
-      // === DATE ===
-      const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      addText(today, false, font.body);
-      y += 12;
+        const formattedPhone = this.formatPhoneForATS(data.contact?.phone);
+        const contactLine = [formattedPhone, data.contact?.email].filter(Boolean).join(' | ');
+        if (contactLine) addCenteredText(contactLine, false, font.body);
+        y += 16;
 
-      // === SUBJECT LINE (NO COMPANY NAME LINE) ===
-      addText(`Re: ${jobTitle}`, true, font.body);
-      y += 8;
+        // === DATE ===
+        const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        addText(today, false, font.body);
+        y += 12;
 
-      // === SALUTATION ===
-      addText('Dear Hiring Manager,', false, font.body);
-      y += 8;
+        // === SUBJECT LINE ===
+        addText(`Re: ${jobTitle}`, true, font.body);
+        y += 8;
 
-      // === PARAGRAPH 1: Interest + Keywords ===
-      const kw1 = highPriority[0] || 'software development';
-      const kw2 = highPriority[1] || 'technical solutions';
-      const years = this.extractYearsExperience(data.summary) || '7+';
-      
-      const para1 = `I am excited to apply for the ${jobTitle} position at ${company}. With ${years} years of experience leading ${kw1} and ${kw2} initiatives, I consistently deliver measurable business impact through innovative technical solutions and cross-functional collaboration.`;
-      addText(para1, false, font.body);
-      y += 18; // Proper paragraph spacing
+        // === SALUTATION ===
+        addText('Dear Hiring Manager,', false, font.body);
+        y += 8;
 
-      // === PARAGRAPH 2: Proof + Keywords ===
-      const kw3 = highPriority[2] || 'project delivery';
-      const kw4 = highPriority[3] || 'team leadership';
-      const topBullet = data.experience?.[0]?.bullets?.[0] || 'driving efficiency improvements of 30%+';
+        // === BODY PARAGRAPHS ===
+        const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
+        const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
+        const topExp = data.experience?.[0]?.company || 'previous roles';
+        const kw1 = highPriority[0] || 'technical solutions';
+        const kw2 = highPriority[1] || 'cross-functional collaboration';
+        const years = this.extractYearsExperience(data.summary) || '7+';
 
-      const para2 = `At ${topExp}, I led ${kw3} implementations that resulted in ${this.extractAchievement(topBullet)}. I have extensive experience mentoring cross-functional teams and applying ${kw4} methodologies to deliver complex projects on time and within budget.`;
-      addText(para2, false, font.body);
-      y += 18; // Proper paragraph spacing
+        const para1 = `I am writing to express my interest in the ${jobTitle} position at ${company}. With ${years} years of experience in ${kw1} and ${kw2}, I have consistently delivered measurable business impact through innovative solutions.`;
+        addText(para1, false, font.body);
+        y += 14;
 
-      // === PARAGRAPH 3: Call to Action ===
-      const kw5 = highPriority[4] || 'technical leadership';
-      
-      const para3 = `I would welcome the opportunity to discuss how my ${kw5} expertise can contribute to ${company}'s continued success. Thank you for considering my application. I look forward to the possibility of contributing to your team.`;
-      addText(para3, false, font.body);
-      y += 20; // Extra spacing before closing
+        const kw3 = highPriority[2] || 'project delivery';
+        const kw4 = highPriority[3] || 'team leadership';
+        const topBullet = data.experience?.[0]?.bullets?.[0] || 'driving efficiency improvements of 30%+';
+        const para2 = `At ${topExp}, I led ${kw3} initiatives that achieved ${this.extractAchievement(topBullet)}. I bring extensive experience in ${kw4} and delivering complex projects on time and within budget.`;
+        addText(para2, false, font.body);
+        y += 14;
 
-      // === CLOSING ===
-      addText('Sincerely,', false, font.body);
-      y += 16;
-      addText(name, true, font.body);
+        const kw5 = highPriority[4] || 'technical leadership';
+        const para3 = `I would welcome the opportunity to discuss how my ${kw5} expertise can contribute to ${company}'s continued success. Thank you for considering my application.`;
+        addText(para3, false, font.body);
+        y += 20;
+
+        // === CLOSING ===
+        addText('Yours sincerely,', false, font.body);
+        y += 16;
+        addText(name, true, font.body);
+      }
 
       // Generate output
       const base64 = doc.output('datauristring').split(',')[1];
       const blob = doc.output('blob');
 
       return { base64, blob };
+    },
+
+    // ============ RENDER AI-GENERATED COVER LETTER INTO PDF ============
+    // Parses the AI cover letter text and renders each structural element properly
+    renderAICoverLetterPDF(doc, coverText, data, name, jobTitle, company, spec) {
+      const { font, margins, lineHeight, page, contentWidth } = spec;
+      let y = margins.top;
+
+      // Helper functions
+      const addTextLine = (text, isBold = false, size = font.body) => {
+        doc.setFontSize(size);
+        doc.setFont(font.family, isBold ? 'bold' : 'normal');
+        const lines = doc.splitTextToSize(text, contentWidth);
+        lines.forEach(line => {
+          if (y > page.height - margins.bottom - 20) {
+            doc.addPage();
+            y = margins.top;
+          }
+          doc.text(line, margins.left, y);
+          y += size * lineHeight + 2;
+        });
+      };
+
+      const addCentered = (text, isBold = false, size = font.body) => {
+        doc.setFontSize(size);
+        doc.setFont(font.family, isBold ? 'bold' : 'normal');
+        if (y > page.height - margins.bottom - 20) {
+          doc.addPage();
+          y = margins.top;
+        }
+        doc.text(text, page.width / 2, y, { align: 'center' });
+        y += size * lineHeight + 2;
+      };
+
+      // Step 1: Strip contact/header info from AI text (we render our own header)
+      const cleanedText = this.stripCoverLetterHeader(coverText, name);
+
+      // Step 2: Render professional header
+      addCentered(name.toUpperCase(), true, font.name);
+      y += 2;
+
+      const formattedPhone = this.formatPhoneForATS(data.contact?.phone);
+      const contactLine = [formattedPhone, data.contact?.email].filter(Boolean).join(' | ');
+      if (contactLine) addCentered(contactLine, false, font.body);
+      y += 16;
+
+      // Step 3: Extract and render date
+      const dateMatch = cleanedText.match(/^(Date:\s*)?(\w+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+\w+\s+\d{4})/m);
+      const today = dateMatch
+        ? dateMatch[2] || dateMatch[0].replace(/^Date:\s*/i, '')
+        : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      addTextLine(today, false, font.body);
+      y += 12;
+
+      // Step 4: Extract and render subject/Re line
+      const reMatch = cleanedText.match(/^Re:\s*(.+)$/m);
+      const reLine = reMatch ? reMatch[0] : `Re: ${jobTitle}`;
+      addTextLine(reLine, true, font.body);
+      y += 8;
+
+      // Step 5: Render salutation
+      const dearMatch = cleanedText.match(/^(Dear\s+.+[,:])\s*$/m);
+      const salutation = dearMatch ? dearMatch[1] : 'Dear Hiring Manager,';
+      addTextLine(salutation, false, font.body);
+      y += 8;
+
+      // Step 6: Extract body paragraphs (everything between salutation and closing)
+      const bodyParagraphs = this.extractCoverLetterBody(cleanedText);
+
+      // Render each paragraph with proper spacing
+      for (const para of bodyParagraphs) {
+        const trimmed = para.trim();
+        if (!trimmed) continue;
+
+        addTextLine(trimmed, false, font.body);
+        y += 14; // Paragraph spacing
+      }
+
+      y += 6; // Extra spacing before closing
+
+      // Step 7: Render closing
+      const closingMatch = cleanedText.match(/^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards),?\s*$/mi);
+      const closing = closingMatch ? closingMatch[0].replace(/,?\s*$/, ',') : 'Yours sincerely,';
+      addTextLine(closing, false, font.body);
+      y += 16;
+      addTextLine(name, true, font.body);
+    },
+
+    // ============ STRIP COVER LETTER HEADER FROM AI TEXT ============
+    // Removes contact info, name, email, phone that the AI may have included at the top
+    stripCoverLetterHeader(text, name) {
+      if (!text) return '';
+      const lines = text.split('\n');
+      let startIdx = 0;
+
+      for (let i = 0; i < Math.min(lines.length, 10); i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) { startIdx = i + 1; continue; }
+
+        // Skip lines that are contact info
+        if (trimmed.toUpperCase() === (name || '').toUpperCase()) { startIdx = i + 1; continue; }
+        if (/@/.test(trimmed) && !trimmed.toLowerCase().startsWith('dear')) { startIdx = i + 1; continue; }
+        if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { startIdx = i + 1; continue; }
+        if (/\|/.test(trimmed) && (/@/.test(trimmed) || /\+\d/.test(trimmed))) { startIdx = i + 1; continue; }
+        if (/^https?:\/\//i.test(trimmed)) { startIdx = i + 1; continue; }
+        if (/linkedin\.com|github\.com/i.test(trimmed)) { startIdx = i + 1; continue; }
+        break;
+      }
+
+      return lines.slice(startIdx).join('\n');
+    },
+
+    // ============ EXTRACT COVER LETTER BODY PARAGRAPHS ============
+    // Returns array of body paragraphs (excluding date, Re:, Dear, and closing)
+    extractCoverLetterBody(text) {
+      if (!text) return [];
+      const lines = text.split('\n');
+      const bodyLines = [];
+      let inBody = false;
+      let closingFound = false;
+
+      const closingPatterns = /^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards|Warm regards|Respectfully),?\s*$/i;
+      const headerPatterns = /^(Date:|Re:|Dear\s+|[A-Z][a-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Z][a-z]+\s+\d{4})/;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Skip everything until after "Dear..."
+        if (!inBody) {
+          if (/^Dear\s+/i.test(trimmed)) {
+            inBody = true;
+          }
+          continue;
+        }
+
+        // Stop at closing
+        if (closingPatterns.test(trimmed)) {
+          closingFound = true;
+          break;
+        }
+
+        bodyLines.push(line);
+      }
+
+      // Split into paragraphs by blank lines
+      const paragraphs = bodyLines.join('\n').split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+
+      // If no paragraphs were extracted (parsing failed), use fallback
+      if (paragraphs.length === 0 && text.length > 100) {
+        console.warn('[OpenResume] Could not extract body paragraphs, using full text fallback');
+        // Try splitting by sentences into 3 chunks
+        const sentences = text.replace(/^.*?Dear[^,]*,\s*/s, '').replace(/\s*(Yours sincerely|Sincerely|Best regards).*/si, '');
+        if (sentences.length > 50) {
+          return [sentences];
+        }
+      }
+
+      return paragraphs;
     },
 
     // ============ HELPER: Extract Years Experience ============
@@ -1209,7 +1462,7 @@
         name.toUpperCase(),
         [formattedPhone, data.contact.email].filter(Boolean).join(' | '),
         '',
-        new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
         '',
         `Re: ${jobTitle}`,
         '',
@@ -1221,7 +1474,7 @@
         '',
         `I would welcome the opportunity to discuss how my ${highPriority[4] || 'expertise'} can contribute to ${company}'s success. Thank you for your consideration.`,
         '',
-        'Sincerely,',
+        'Yours sincerely,',
         name
       ];
 
