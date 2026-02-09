@@ -471,6 +471,43 @@
 
       let result = text;
 
+      // HARD GUARD: never allow these exact US spellings to leak (even if other steps are changed)
+      // Note: keep meaning; only convert to UK spelling.
+      result = result
+        .replace(/\butiliz(ing|ed|e|es|ation|ations)\b/gi, (m) => {
+          const lower = m.toLowerCase();
+          const map = {
+            utilising: 'utilising',
+            utilised: 'utilised',
+            utilise: 'utilise',
+            utilises: 'utilises',
+            utilisation: 'utilisation',
+            utilisations: 'utilisations',
+          };
+
+          // Convert using suffix mapping
+          const converted = lower
+            .replace(/^utiliz/, 'utilis')
+            .replace(/isation$/, 'isation')
+            .replace(/isations$/, 'isations');
+          const out = map[converted] || converted;
+          if (m === m.toUpperCase()) return out.toUpperCase();
+          if (m[0] === m[0].toUpperCase()) return out.charAt(0).toUpperCase() + out.slice(1);
+          return out;
+        })
+        .replace(/\bmoderniz(e|ed|es|ing|ation|ations)\b/gi, (m) => {
+          const out = m.toLowerCase().replace('moderniz', 'modernis');
+          if (m === m.toUpperCase()) return out.toUpperCase();
+          if (m[0] === m[0].toUpperCase()) return out.charAt(0).toUpperCase() + out.slice(1);
+          return out;
+        })
+        .replace(/\banalyz(e|ed|es|ing|er|ers)\b/gi, (m) => {
+          const out = m.toLowerCase().replace('analyz', 'analys');
+          if (m === m.toUpperCase()) return out.toUpperCase();
+          if (m[0] === m[0].toUpperCase()) return out.charAt(0).toUpperCase() + out.slice(1);
+          return out;
+        });
+
       // Sort by length (longest first) to avoid partial replacements
       const sortedWords = Object.keys(US_TO_UK_SPELLING).sort((a, b) => b.length - a.length);
 

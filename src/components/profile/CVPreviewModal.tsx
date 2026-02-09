@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,13 +24,60 @@ const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
     hasEducation: boolean;
   } | null>(null);
 
-  const generatePreview = async () => {
-    setIsLoading(true);
-    setPdfUrl(null);
-    setError(null);
-    
+  // Prevent late async responses from updating state after close/unmount
+  const requestSeqRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const revokePdfUrl = () => {
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+    }
+  };
+
+  const base64PdfToBlobUrl = async (pdfBase64: string): Promise<string> => {
+    // Use a data URL + fetch to avoid atob() on huge strings (can crash the tab)
+    const res = await fetch(`data:application/pdf;base64,${pdfBase64}`);
+    const blob = await res.blob();
+
+    if (!blob || blob.size < 512) {
+      throw new Error('Generated PDF looks corrupted (file too small)');
+    }
+
+    return URL.createObjectURL(blob);
+  };
+
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
+    let timeoutId: number | undefined;
+
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error(message)), ms);
+    });
+
     try {
-      // Validate required data exists
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    }
+  };
+
+  const generatePreview = async () => {
+    const currentRequest = ++requestSeqRef.current;
+
+    setIsLoading(true);
+    setError(null);
+
+    // Clean up any previous URL before generating a new one
+    revokePdfUrl();
+    setPdfUrl(null);
+
+    try {
       if (!profile) {
         throw new Error('Profile data is missing');
       }
@@ -50,7 +97,7 @@ const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
         relevant_projects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects : [],
         education: Array.isArray(profile.education) ? profile.education : [],
         skills: profile.skills || { technical: [], soft: [] },
-        certifications: Array.isArray(profile.certifications) ? profile.certifications : []
+        certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
       };
 
       // Count sections for preview info
@@ -58,75 +105,62 @@ const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
         experienceCount: profileData.professional_experience.length,
         projectsCount: profileData.relevant_projects.length,
         hasSkills: !!(profileData.skills?.technical?.length || profileData.skills?.soft?.length),
-        hasEducation: profileData.education.length > 0
+        hasEducation: profileData.education.length > 0,
       });
 
-      // Create abort controller for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const invokePromise = supabase.functions.invoke('generate-pdf', {
+        body: { profileData },
+      });
 
-      try {
-        const { data, error: apiError } = await supabase.functions.invoke('generate-pdf', {
-          body: { profileData }
-        });
+      const { data, error: apiError } = await withTimeout(
+        invokePromise,
+        65000,
+        'PDF generation timed out - please try again',
+      );
 
-        clearTimeout(timeoutId);
+      // Ignore late responses after a newer request started or modal closed
+      if (!isMountedRef.current || requestSeqRef.current !== currentRequest) return;
 
-        if (apiError) {
-          throw new Error(apiError.message || 'Failed to generate PDF');
-        }
-
-        if (!data) {
-          throw new Error('No response received from PDF generator');
-        }
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        if (data?.pdfBase64) {
-          // Validate base64 data
-          if (typeof data.pdfBase64 !== 'string' || data.pdfBase64.length < 100) {
-            throw new Error('Invalid PDF data received');
-          }
-
-          // Convert base64 to blob URL for preview with error handling
-          try {
-            const byteCharacters = atob(data.pdfBase64);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            
-            if (byteArray.length < 100) {
-              throw new Error('Generated PDF is too small - may be corrupted');
-            }
-            
-            const blob = new Blob([byteArray], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            setPdfUrl(url);
-            toast.success('CV preview generated successfully!');
-          } catch (decodeError) {
-            console.error('Failed to decode PDF base64:', decodeError);
-            throw new Error('Failed to decode PDF data - the file may be corrupted');
-          }
-        } else {
-          throw new Error('No PDF data in response');
-        }
-      } catch (fetchError: any) {
-        if (fetchError.name === 'AbortError') {
-          throw new Error('Request timed out - please try again');
-        }
-        throw fetchError;
+      if (apiError) {
+        throw new Error(apiError.message || 'Failed to generate PDF');
       }
-    } catch (error: any) {
-      console.error('Error generating CV preview:', error);
-      const errorMessage = error?.message || 'Failed to generate CV preview';
+
+      if (!data) {
+        throw new Error('No response received from PDF generator');
+      }
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (typeof data?.pdfBase64 !== 'string' || data.pdfBase64.length < 1000) {
+        throw new Error('Invalid PDF data received');
+      }
+
+      // Guard against unusually large payloads that could crash the tab
+      if (data.pdfBase64.length > 25_000_000) {
+        throw new Error('PDF is too large to preview safely. Please download instead.');
+      }
+
+      const url = await base64PdfToBlobUrl(data.pdfBase64);
+
+      if (!isMountedRef.current || requestSeqRef.current !== currentRequest) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      setPdfUrl(url);
+      toast.success('CV preview generated successfully!');
+    } catch (err: any) {
+      console.error('Error generating CV preview:', err);
+      const errorMessage = err?.message || 'Failed to generate CV preview';
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setIsLoading(false);
+      // Only clear loading if this is still the latest request
+      if (requestSeqRef.current === currentRequest) {
+        setIsLoading(false);
+      }
     }
   };
 
