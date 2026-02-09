@@ -340,29 +340,99 @@ function extractLocationFromPageText(text) {
  * CRITICAL FIX: Clean location data - removes prefixes like "location", "locations", "based in"
  * Prevents errors like "locationsLondon, United Kingdom" or "locationManchester, UK"
  * @param {string} rawLocation - Raw location string that may contain prefixes
- * @returns {string} - Cleaned location in format "City, Country" or "City, Region, Country"
+ * @returns {string} - Cleaned location string (still raw-ish; formatting happens later)
  */
 function cleanLocation(rawLocation) {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
-  
+
   // Remove common prefixes (case-insensitive)
   let cleaned = rawLocation
     .replace(/^(location[s]?|based\s*in|located\s*in|office\s*in|work\s*location)[\s:,]*/gi, '')
     .replace(/^(job\s*location|position\s*location|role\s*location)[\s:,]*/gi, '')
     .trim();
-  
-  // Validate format (should start with capital letter and contain comma for multi-part locations)
+
+  // Remove stray leading punctuation/colons that often remain after prefix stripping
+  cleaned = cleaned.replace(/^[:\-–—|,\s]+/, '').trim();
+
+  // Capitalise first letter if it starts with lowercase
   if (cleaned && !/^[A-Z]/.test(cleaned)) {
-    // Capitalise first letter if it starts with lowercase
     cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
-  
-  // Warn if format looks incorrect (no comma in multi-word location)
-  if (cleaned && cleaned.length > 10 && !/^[A-Z].*,/.test(cleaned)) {
-    console.warn('[ATSLocationTailor] Location format may be incorrect:', cleaned);
-  }
-  
+
   return cleaned;
+}
+
+/**
+ * Force output to ALWAYS be "City, Country".
+ * - If only a country is known, uses capital city as the "City".
+ * - If only a city is known, tries to infer country; if not possible, uses the country part of fallback.
+ * - Country is normalised to ISO-2 when possible (e.g. "United Kingdom" -> "GB").
+ */
+function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
+  const raw = (input || '').toString().trim();
+  const fb = (fallbackLocation || 'Dublin, IE').toString().trim();
+
+  const fallbackParts = fb.split(',').map(p => p.trim()).filter(Boolean);
+  const fallbackCountryToken = fallbackParts.length >= 2 ? fallbackParts[fallbackParts.length - 1] : 'IE';
+  const fallbackCityToken = fallbackParts[0] || 'Dublin';
+
+  const db = typeof window !== 'undefined' ? window.ATSLocationDB : null;
+
+  const toISO2 = (token) => {
+    const t = (token || '').toString().trim();
+    if (!t) return null;
+    if (/^[A-Z]{2}$/.test(t)) return t;
+    const iso = db?.toISO2?.(t);
+    return iso || null;
+  };
+
+  const capitalFor = (token) => db?.capitalFor?.(token) || null;
+
+  // If already has commas, we normalise the last part into an ISO2 when possible.
+  if (raw.includes(',')) {
+    const parts = raw.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length === 0) return `${fallbackCityToken}, ${toISO2(fallbackCountryToken) || fallbackCountryToken}`;
+
+    const city = parts[0];
+    const countryToken = parts.length >= 2 ? parts[parts.length - 1] : '';
+
+    // US state abbreviations: keep as-is but add US
+    if (/^[A-Z]{2}$/.test(countryToken) && US_STATES[countryToken.toUpperCase()]) {
+      return `${city}, ${countryToken.toUpperCase()}, US`;
+    }
+
+    const iso2 = toISO2(countryToken) || toISO2(fallbackCountryToken) || countryToken || fallbackCountryToken;
+    return `${city}, ${iso2}`;
+  }
+
+  // Country-only (including codes / fuzzy country names)
+  const iso2Country = toISO2(raw);
+  if (iso2Country) {
+    const cap = capitalFor(raw) || capitalFor(iso2Country) || fallbackCityToken;
+    return `${cap}, ${iso2Country}`;
+  }
+
+  // City-only: attempt city dataset match (optional), then CITY_COUNTRY_MAP fallback, then fallback country.
+  const rawLower = raw.toLowerCase();
+
+  const cityHit = db?.findCity?.(raw);
+  if (cityHit?.name && cityHit?.countryCode) {
+    return `${cityHit.name}, ${cityHit.countryCode}`;
+  }
+
+  const inferredCountryName = CITY_COUNTRY_MAP[rawLower];
+  if (inferredCountryName) {
+    const inferredISO2 = toISO2(inferredCountryName) || inferredCountryName;
+    return `${raw}, ${inferredISO2}`;
+  }
+
+  if (MAJOR_US_CITIES.some(c => rawLower.includes(c))) {
+    return `${raw}, US`;
+  }
+
+  // Final safety: guarantee comma output using fallback country
+  const fbISO2 = toISO2(fallbackCountryToken) || fallbackCountryToken;
+  return `${raw || fallbackCityToken}, ${fbISO2}`;
 }
 
 /**
@@ -375,27 +445,23 @@ function cleanLocation(rawLocation) {
  * "Dublin, IE | Remote" -> "Dublin, IE"
  * "Remote" -> "" (empty, caller should fallback to default)
  */
-function normalizeLocationForCV(rawLocation) {
+function normalizeLocationForCV(rawLocation, fallbackLocation = 'Dublin, IE') {
   if (!rawLocation) return '';
-  
+
   // CRITICAL: First clean any location prefixes
   let location = cleanLocation(rawLocation);
-  
+
   // Additional cleanup
   location = location
     .replace(/[\(\)\[\]]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  
+
   // HARD RULE: NEVER include "Remote" in CV location header (recruiter red flag)
-  // Strip "Remote" and similar terms from ALL locations
-  // User rule: "Remote" should never appear in the CV location line
-  
-  // If location is ONLY "Remote" or similar, return empty for fallback
   if (/^(remote|work from home|wfh|virtual|fully remote|remote first)$/i.test(location)) {
     return '';
   }
-  
+
   // Strip Remote from any location string
   location = location
     .replace(/\b(remote|work\s*from\s*home|wfh|virtual|fully\s*remote|remote\s*first|remote\s*friendly)\b/gi, '')
@@ -405,23 +471,21 @@ function normalizeLocationForCV(rawLocation) {
     .replace(/^\s*(\||,|\/|\u2013|\u2014|-|\u00b7)\s*/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
-  
-  // If empty after stripping Remote, return empty for fallback
-  if (!location || location.length < 2) {
-    return '';
-  }
-  
+
+  if (!location || location.length < 2) return '';
+
   // Handle Hybrid (keep this as it's a valid on-site indicator)
   if (/\bhybrid\b/i.test(location)) {
     const cityMatch = location.match(/hybrid\s*(?:[\-\–\|,]\s*)?(.+)/i);
     if (cityMatch && cityMatch[1]?.trim()) {
-      return `Hybrid - ${deduplicateAndFormat(cityMatch[1].trim())}`;
+      const formatted = deduplicateAndFormat(cityMatch[1].trim(), fallbackLocation);
+      return `Hybrid - ${formatted}`;
     }
     return 'Hybrid';
   }
-  
-  // CRITICAL FIX: Remove duplicates before further processing
-  return deduplicateAndFormat(location);
+
+  // Remove duplicates and FORCE "City, Country"
+  return deduplicateAndFormat(location, fallbackLocation);
 }
 
 /**
@@ -465,28 +529,29 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
       return city;
     }
     
-    // RULE 3: "Remote" + country → country only (normalized)
+    // RULE 3: "Remote" + country → country only (normalised)
     const remoteCountryMatch = raw.match(/remote\s*(?:[-–—,\|(\s]+)?\s*(USA|US|United States|Ireland|UK|United Kingdom|Canada|Germany|France|Netherlands|Australia|Singapore|India|Sweden|Spain|Italy|Portugal)\b/i);
     if (remoteCountryMatch && remoteCountryMatch[1]) {
-      const country = normalizeCountry(remoteCountryMatch[1]);
       // If it's USA without a city, default to California
       if (/^(USA|US|United States)$/i.test(remoteCountryMatch[1])) {
-        return 'California, United States';
+        return 'California, US';
       }
-      return country;
+
+      // Country-only should still become "Capital, CC"
+      return forceCityCountryFormat(remoteCountryMatch[1], fallback);
     }
-    
+
     // Any other Remote pattern → fallback to profile location
     return fallback;
   }
 
   // RULE 4: "USA"/"United States" alone (no city) → California default
   if (/^(usa|us|united\s+states)$/i.test(raw)) {
-    return 'California, United States';
+    return 'California, US';
   }
 
   // Normalize first (handles duplicates, etc.)
-  const normalized = normalizeLocationForCV(raw);
+  const normalized = normalizeLocationForCV(raw, fallback);
 
   // Double-check if normalized became empty (was Remote-only)
   if (!normalized || normalized.length < 2) {
@@ -495,10 +560,11 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
 
   // Check again after normalization for USA-only
   if (/^(usa|us|united\s+states)$/i.test(normalized)) {
-    return 'California, United States';
+    return 'California, US';
   }
 
-  return normalized;
+  // Ensure final output ALWAYS "City, Country"
+  return forceCityCountryFormat(normalized, fallback);
 }
 /**
  * FIXED: Remove duplicate city/region parts and format as "City, Country"
@@ -506,86 +572,47 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
  * "Rock Hill, SC" → "Rock Hill, SC, United States"
  * "Singapore, Singapore" → "Singapore"
  */
-function deduplicateAndFormat(location) {
-  if (!location) return 'Remote';
-  
+function deduplicateAndFormat(location, fallbackLocation = 'Dublin, IE') {
+  if (!location) return '';
+
   // Split by comma and deduplicate (case-insensitive)
   const parts = location.split(/,\s*/);
   const uniqueParts = [];
   const seen = new Set();
-  
+
   for (const part of parts) {
     const trimmed = part.trim();
     const normalized = trimmed.toLowerCase();
-    
-    // Skip empty parts or already seen (case-insensitive)
-    if (!normalized || normalized.length === 0) continue;
+
+    if (!normalized) continue;
     if (seen.has(normalized)) continue;
-    
+
     seen.add(normalized);
     uniqueParts.push(trimmed);
   }
-  
-  if (uniqueParts.length === 0) return 'Remote';
-  
-  // If only one part, try to infer country from city
+
+  if (uniqueParts.length === 0) return '';
+
+  // 1-part input: could be City-only OR Country-only.
   if (uniqueParts.length === 1) {
-    const city = uniqueParts[0];
-    const cityLower = city.toLowerCase();
-    
-    // Check if it's a known city
-    const inferredCountry = CITY_COUNTRY_MAP[cityLower];
-    if (inferredCountry) {
-      // Special case: city IS the country (Singapore)
-      if (cityLower === inferredCountry.toLowerCase()) {
-        return inferredCountry;
-      }
-      return `${city}, ${inferredCountry}`;
-    }
-    
-    // Check if it's a US city
-    if (MAJOR_US_CITIES.some(c => cityLower.includes(c))) {
-      return `${city}, United States`;
-    }
-    
-    return city;
+    return forceCityCountryFormat(uniqueParts[0], fallbackLocation);
   }
-  
+
   // Two or more parts
   const firstPart = uniqueParts[0];
   const lastPart = uniqueParts[uniqueParts.length - 1];
-  const lastPartLower = lastPart.toLowerCase();
-  
-  // Check if last part is a US state code (2 letters)
+
+  // US state code at end
   if (/^[A-Z]{2}$/i.test(lastPart) && US_STATES[lastPart.toUpperCase()]) {
-    // It's a US state abbreviation: "Rock Hill, SC" → "Rock Hill, SC, United States"
     if (uniqueParts.length === 2) {
-      return `${firstPart}, ${lastPart.toUpperCase()}, United States`;
+      return `${firstPart}, ${lastPart.toUpperCase()}, US`;
     }
-    return uniqueParts.join(', ');
+    // If already has more parts, just keep but normalise US to ISO2
+    return forceCityCountryFormat(uniqueParts.join(', '), fallbackLocation);
   }
-  
-  // Normalize the country name
-  const normalizedCountry = normalizeCountry(lastPart);
-  const firstPartLower = firstPart.toLowerCase();
-  
-  // Check if city IS the country (e.g., "Singapore, Singapore")
-  if (firstPartLower === normalizedCountry.toLowerCase()) {
-    return normalizedCountry;
-  }
-  
-  // Check for Hong Kong style: "Hong Kong, Hong Kong SAR" 
-  if (firstPartLower.includes('hong kong') && normalizedCountry.toLowerCase().includes('hong kong')) {
-    return 'Hong Kong SAR';
-  }
-  
-  // Check for city-state patterns (e.g., "Monaco, Monaco")
-  if (firstPartLower === lastPartLower) {
-    return firstPart;
-  }
-  
-  // Standard format: "City, Country"
-  return `${firstPart}, ${normalizedCountry}`;
+
+  // Standard: City + Country-ish -> normalise/force to City, ISO2
+  return forceCityCountryFormat(`${firstPart}, ${lastPart}`, fallbackLocation);
 }
 
 function normalizeCityState(input) {
