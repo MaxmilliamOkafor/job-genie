@@ -58,6 +58,101 @@
     return metrics;
   }
 
+  // ============ SECTION HEADER DEFINITIONS ============
+  const SECTION_HEADER_MAP = {
+    'PROFESSIONAL SUMMARY': 'summary',
+    'SUMMARY': 'summary',
+    'PROFILE': 'summary',
+    'OBJECTIVE': 'summary',
+    'WORK EXPERIENCE': 'experience',
+    'PROFESSIONAL EXPERIENCE': 'experience',
+    'EXPERIENCE': 'experience',
+    'EMPLOYMENT': 'experience',
+    'SKILLS': 'skills',
+    'TECHNICAL SKILLS': 'skills',
+    'CORE SKILLS': 'skills',
+    'TECHNICAL PROFICIENCIES': 'technicalProficiencies',
+    'EDUCATION': 'education',
+    'ACADEMIC': 'education',
+    'QUALIFICATIONS': 'education',
+    'CERTIFICATIONS': 'certifications',
+    'CERTIFICATION': 'certifications',
+    'LICENSES': 'certifications'
+  };
+
+  /**
+   * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
+   * Returns { header, sectionName, content } or null if not an inline header.
+   */
+  function parseInlineHeader(line) {
+    const trimmed = (line || '').trim();
+    // Pattern: HEADER: content (header is all caps, followed by colon and content)
+    const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
+    if (inlineMatch) {
+      const potentialHeader = inlineMatch[1].trim().toUpperCase();
+      if (SECTION_HEADER_MAP[potentialHeader]) {
+        return { 
+          header: potentialHeader, 
+          sectionName: SECTION_HEADER_MAP[potentialHeader],
+          content: inlineMatch[2].trim() 
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Normalise ALL CAPS content to proper casing (Title Case with acronym preservation).
+   * Example: "PYTHON, JAVA, NODE.JS, AWS" -> "Python, Java, Node.js, AWS"
+   */
+  function normaliseCapsContent(content) {
+    if (!content) return '';
+    const trimmed = content.trim();
+    
+    // If content is not all uppercase, return as-is (already properly cased)
+    if (trimmed !== trimmed.toUpperCase()) return trimmed;
+    
+    // Known technical terms with correct casing
+    const KNOWN_FORMATS = {
+      'PYTHON': 'Python', 'JAVA': 'Java', 'JAVASCRIPT': 'JavaScript',
+      'TYPESCRIPT': 'TypeScript', 'NODE.JS': 'Node.js', 'REACT': 'React',
+      'ANGULAR': 'Angular', 'VUE.JS': 'Vue.js', 'MONGODB': 'MongoDB',
+      'POSTGRESQL': 'PostgreSQL', 'MYSQL': 'MySQL', 'REDIS': 'Redis',
+      'DOCKER': 'Docker', 'KUBERNETES': 'Kubernetes', 'TERRAFORM': 'Terraform',
+      'JENKINS': 'Jenkins', 'GITHUB': 'GitHub', 'GITLAB': 'GitLab',
+      'AZURE': 'Azure', 'C++': 'C++', 'C#': 'C#', 'KOTLIN': 'Kotlin',
+      'GRAPHQL': 'GraphQL', 'DEVOPS': 'DevOps', 'CI/CD': 'CI/CD',
+      'GOOGLE CLOUD': 'Google Cloud', 'GOOGLE CLOUD PLATFORM': 'Google Cloud Platform'
+    };
+    
+    // Acronyms to keep uppercase
+    const ACRONYMS = new Set([
+      'AWS', 'GCP', 'SQL', 'API', 'CSS', 'HTML', 'XML', 'JSON', 'REST',
+      'CI', 'CD', 'ML', 'AI', 'UI', 'UX', 'ETL', 'LLM', 'SRE', 'NLP',
+      'PMP', 'CPA', 'CFA', 'MBA', 'PHD', 'IIBA', 'CBAP', 'ITIL'
+    ]);
+    
+    // Split by comma, normalise each term
+    return trimmed.split(',').map(term => {
+      const t = term.trim();
+      const upper = t.toUpperCase();
+      
+      // Check known formats first
+      if (KNOWN_FORMATS[upper]) return KNOWN_FORMATS[upper];
+      
+      // Check if it's a pure acronym
+      if (ACRONYMS.has(upper)) return upper;
+      
+      // Convert to Title Case, preserving acronyms within
+      return t.toLowerCase().split(/[\s\-\/]+/).map((word) => {
+        const wordUpper = word.toUpperCase();
+        if (ACRONYMS.has(wordUpper)) return wordUpper;
+        if (/^\d+\.?\d*$/.test(word)) return word;
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }).join(' ');
+    }).join(', ');
+  }
+
   // ============ PARSE USER CV STRUCTURE ============
   function parseUserCV(cvText) {
     if (!cvText) return { header: '', sections: {}, rawRoles: [] };
@@ -67,7 +162,7 @@
     const sections = { header: [], experience: [], skills: [], education: [], certifications: [], summary: [], technicalProficiencies: [] };
     const rawRoles = [];
     
-    // Section header patterns
+    // Section header patterns (for standalone headers on their own line)
     const sectionPatterns = {
       experience: /^(EXPERIENCE|WORK\s*EXPERIENCE|EMPLOYMENT|PROFESSIONAL\s*EXPERIENCE)[\s:]*$/i,
       skills: /^(SKILLS|TECHNICAL\s*SKILLS|CORE\s*SKILLS)[\s:]*$/i,
@@ -86,7 +181,20 @@
     lines.forEach((line, idx) => {
       const trimmed = line.trim();
       
-      // Check for section headers
+      // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
+      const inlineResult = parseInlineHeader(line);
+      if (inlineResult) {
+        // Switch to the new section and store the normalised content
+        currentSection = inlineResult.sectionName;
+        if (sections[currentSection]) {
+          // Add the header name (for reconstruction) and normalised content
+          sections[currentSection].push(inlineResult.header);
+          sections[currentSection].push(normaliseCapsContent(inlineResult.content));
+        }
+        return;
+      }
+      
+      // Check for standalone section headers
       for (const [sectionName, pattern] of Object.entries(sectionPatterns)) {
         if (pattern.test(trimmed)) {
           currentSection = sectionName;

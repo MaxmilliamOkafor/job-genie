@@ -3717,6 +3717,14 @@ class ATSTailor {
   dedupeSectionHeaders(text) {
     if (!text || typeof text !== 'string') return text;
 
+    // CRITICAL FIX: Break apart concatenated headers (e.g., "...GOOGLE CLOCERTIFICATIONS:...")
+    // This happens when AI truncates a word and immediately starts the next section
+    let fixedText = text
+      .replace(/([A-Za-z])(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)(\s*:|\s+[A-Z])/g, '$1\n$2$3')
+      .replace(/(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)\s*:\s*/gi, (match, header) => {
+        return header.toUpperCase() + ': ';
+      });
+
     const HEADER_KEYS = new Set([
       'PROFESSIONAL SUMMARY',
       'SUMMARY',
@@ -3823,7 +3831,7 @@ class ATSTailor {
       return null;
     };
 
-    const lines = text.split(/\r?\n/);
+    const lines = fixedText.split(/\r?\n/);
     const out = [];
 
     let lastHeader = null;
