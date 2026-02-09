@@ -6,114 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ============================================================================
-// CONTENT QUALITY ENGINE v3.0.3 - Backend Sanitisation Layer for PDF Generation
-// Comprehensive banned words/phrases removal + UK English enforcement
-// ============================================================================
-
-const BANNED_PHRASES: string[] = [
-  'proven track record', 'proven ability', 'proven record', 'proven success',
-  'proven history', 'track record of success', 'demonstrated ability',
-  'strong work ethic', 'results-driven', 'results-oriented', 'goal-oriented',
-  'detail-oriented', 'self-motivated', 'highly motivated', 'team player',
-  'fast-paced environment', 'wore many hats', 'hit the ground running',
-  'go-getter', 'self-starter', 'people person', 'think outside the box',
-  'out-of-the-box thinking', 'push the envelope', 'raise the bar',
-  'take it to the next level', 'go the extra mile', '110% effort', 'give 110%',
-  'work hard, play hard', 'passion for excellence', 'passionate about',
-  'dedicated professional', 'seasoned professional', 'consummate professional',
-  'stakeholder environments', 'stakeholder engagement', 'stakeholder management',
-  'cross-functional collaboration', 'matrixed organisation', 'drive impactful outcomes',
-  'deliver value', 'unlock value', 'create value', 'add value', 'maximise value',
-  'optimise performance', 'enhance productivity', 'improve efficiency',
-  'streamline processes', 'drive growth', 'accelerate growth',
-  'was responsible for', 'responsible for managing', 'in charge of',
-  'managed to', 'in order to', 'excellent communication skills',
-  'strong interpersonal skills', 'problem-solving skills', 'critical thinking',
-  'time management', 'multitasking', 'attention to detail', 'works well under pressure',
-  'able to work independently', 'ability to prioritise', 'quick learner',
-  'the intersection of', 'at the forefront of', 'on the cutting edge of',
-  'strategic initiatives', 'leveraging', 'utilising', 'utilizing', 'leveraged', 'utilised', 'utilized',
-];
-
-const US_TO_UK_SPELLING: Record<string, string> = {
-  'optimized': 'optimised', 'optimizing': 'optimising', 'optimize': 'optimise',
-  'organized': 'organised', 'organizing': 'organising', 'organize': 'organise',
-  'analyzed': 'analysed', 'analyzing': 'analysing', 'analyze': 'analyse',
-  'realized': 'realised', 'realizing': 'realising', 'realize': 'realise',
-  'specialized': 'specialised', 'specializing': 'specialising',
-  'recognized': 'recognised', 'recognizing': 'recognising',
-  'characterized': 'characterised', 'categorized': 'categorised',
-  'emphasized': 'emphasised', 'summarized': 'summarised',
-  'authorized': 'authorised', 'standardized': 'standardised',
-  'modernized': 'modernised', 'minimized': 'minimised', 'maximized': 'maximised',
-  'utilized': 'used', 'utilizing': 'using', 'utilize': 'use',
-  'prioritized': 'prioritised', 'customized': 'customised',
-  'finalized': 'finalised', 'visualized': 'visualised',
-  'color': 'colour', 'colors': 'colours',
-  'favor': 'favour', 'favorable': 'favourable',
-  'honor': 'honour', 'honored': 'honoured',
-  'behavior': 'behaviour', 'behaviors': 'behaviours',
-  'center': 'centre', 'centers': 'centres', 'centered': 'centred',
-  'theater': 'theatre', 'meter': 'metre', 'liter': 'litre',
-  'defense': 'defence', 'offense': 'offence', 'license': 'licence',
-  'catalog': 'catalogue', 'dialog': 'dialogue', 'analog': 'analogue',
-  'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller',
-  'canceled': 'cancelled', 'labeled': 'labelled', 'modeled': 'modelled',
-  'gray': 'grey', 'aging': 'ageing', 'judgment': 'judgement',
-  'program': 'programme', 'skeptic': 'sceptic', 'toward': 'towards',
-};
-
-const PHRASE_REPLACEMENTS: Record<string, string> = {
-  'proven track record': 'track record',
-  'proven ability': 'ability',
-  'leveraging': 'using', 'leveraged': 'used',
-  'utilising': 'using', 'utilised': 'used',
-  'utilizing': 'using', 'utilized': 'used',
-  'resulting in': 'achieving', 'which led to': 'achieving',
-  'leading to': 'achieving', 'thereby': 'which',
-  'thus enabling': 'enabling', 'in order to': 'to',
-  'highly motivated': 'motivated', 'self-motivated': 'motivated',
-  'detail-oriented': 'detail-focused', 'results-driven': 'results-focused',
-  'passionate about': 'experienced in', 'passion for': 'focus on',
-};
-
-function sanitiseContentForPdf(text: string): string {
-  if (!text) return '';
-  let result = text;
-  
-  // Apply phrase replacements
-  for (const [phrase, replacement] of Object.entries(PHRASE_REPLACEMENTS)) {
-    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(regex, replacement);
-  }
-  
-  // Apply UK spelling
-  for (const [us, uk] of Object.entries(US_TO_UK_SPELLING)) {
-    const regex = new RegExp(`\\b${us}\\b`, 'gi');
-    result = result.replace(regex, (match) => {
-      if (match[0] === match[0].toUpperCase()) {
-        return uk.charAt(0).toUpperCase() + uk.slice(1);
-      }
-      return uk;
-    });
-  }
-  
-  // Remove banned phrases
-  for (const phrase of BANNED_PHRASES) {
-    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(regex, '');
-  }
-  
-  // Remove EM dashes and clean up
-  result = result.replace(/\s*—\s*/g, ', ').replace(/—/g, '-');
-  result = result.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/^\s*,\s*/gm, '');
-  
-  return result.trim();
-}
-
-// ============================================================================
-
 interface ResumeData {
   type: "resume" | "cover_letter";
   personalInfo: {
@@ -186,14 +78,11 @@ const stripDatesFromField = (fieldValue: string): string => {
     .trim();
 };
 
-// ULTRA ATS-SAFE: Sanitize text - only ASCII, no special characters + banned phrase removal
+// ULTRA ATS-SAFE: Sanitize text - only ASCII, no special characters
 const sanitizeText = (text: string | null | undefined): string => {
   if (!text) return "";
-  // First apply content quality sanitisation
-  let sanitised = sanitiseContentForPdf(String(text));
-  
   return (
-    sanitised
+    String(text)
       // Remove all newlines, tabs
       .replace(/[\n\r\t]/g, " ")
       // Normalize whitespace

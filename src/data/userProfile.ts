@@ -13,7 +13,7 @@ export const maxmilliamProfile: UserProfile = {
   citizenship: "Ireland",
   linkedin: "https://www.linkedin.com/in/maxokafor/",
   github: "https://github.com/MaxmilliamOkafor",
-  portfolio: "https://maxmilliamlabs-ai.web.app/",
+  portfolio: "https://maxmilliamplusplus.web.app/",
   currentSalary: "50,000 GBP",
   expectedSalary: "60,000 GBP",
   noticePeriod: "1 month",
@@ -80,21 +80,21 @@ export const maxmilliamProfile: UserProfile = {
 
 Dear Hiring Manager,
 
-The role you are hiring for aligns well with what excites me most: solving complex technical problems, building systems that scale reliably, and working closely with people to ensure the right solutions get built.
+I'm reaching out because the role you're hiring for feels like the perfect intersection of what I do best: solving complex technical problems, building systems that can scale without falling apart, and working closely with people — not just machines — to make sure the right things get built.
 
-Over the past eight years, experience spans Big Tech, consulting, banking, and a health-tech startup. The environments differed greatly, but the common thread has been turning complicated challenges into clean, reliable solutions. At Meta, this meant designing distributed systems and microservices supporting millions of users. At Accenture, it meant helping enterprises modernise infrastructure without breaking what already works. At Citi, it meant building APIs that could survive regulatory scrutiny and high-volume financial traffic.
+Over the last eight years, I've worked across Big Tech, consulting, banking, and a health-tech startup. The environments couldn't have been more different, but the through-line has always been the same: I love turning complicated challenges into clean, reliable solutions. At Meta, that meant designing distributed systems and microservices that quietly support millions of users. At Accenture, it meant helping enterprises modernize their infrastructure without breaking what already works. And at Citi, it meant building APIs that could survive the scrutiny of regulators — and the pressure of high-volume, real-world financial traffic.
 
-Engineering is as much about people as it is about code. Experience includes mentoring teams, leading architecture discussions, and often being the bridge between technical and non-technical groups. Technology works best when everyone understands why decisions are being made.
+I'm also someone who enjoys the "people" part of engineering. I've mentored teams, led architecture discussions, and often been the person asked to step in when technical and non-technical groups need a translator. I take a lot of pride in that. Technology works best when everyone understands why decisions are being made, not just how.
 
-A few highlights:
-✓ Deep hands-on toolkit across Python, C++, Java, TypeScript, AWS, Azure, GCP, Kubernetes, Terraform, and distributed systems design
+A few things I bring to the table:
+✓ A deep hands-on toolkit across Python, C++, Java, TypeScript, AWS, Azure, GCP, Kubernetes, Terraform, and distributed systems design
 ✓ Real experience building AI/ML and NLP solutions (including dementia-screening models for clinicians)
-✓ Ability to work comfortably with executives, clients, and engineers alike
-✓ A calm, structured approach to solving problems, especially under pressure
+✓ The ability to work comfortably with executives, clients, and engineers alike
+✓ A calm, structured approach to solving problems — especially when things are on fire
 
-What excites me most about this opportunity is the chance to work on meaningful problems with a team that values thoughtful engineering. Looking for a role where contributions can be made immediately, growth alongside talented people is possible, and systems that make an impact get built.
+What excites me most about this opportunity is the chance to work on meaningful problems with a team that values thoughtful engineering. I'm looking for a role where I can contribute immediately, grow alongside talented people, and build systems that actually make an impact — not just rack up tickets.
 
-Thank you for taking the time to read this application. Would welcome the opportunity to discuss what you are building and how contributions can be made.
+Thank you for taking the time to read my application. I'd love to talk more about what you're building and how I can contribute.
 
 Warm regards,
 Maxmilliam Okafor`,
@@ -235,7 +235,7 @@ Maxmilliam Okafor`,
   certifications: [
     "Certified Business Analysis Professional (CBAP) - IIBA",
     "Microsoft Certified: Data Analyst Associate",
-    "AWS Certified Data Analytics - Specialty",
+    "AWS Certified Data Analytics – Specialty",
     "Google Data Analytics Professional Certificate",
     "PRINCE2 - AXELOS",
   ],
@@ -253,14 +253,14 @@ Maxmilliam Okafor`,
       issuer: "Tech Innovators Conference",
       date: "2023-09",
       description:
-        "Developed a predictive analytics model that improved customer retention rates by 15%, delivering $2.3M in annual revenue impact.",
+        "Pioneered development of a predictive analytics model that improved customer retention rates by 15%, delivering $2.3M in annual revenue impact.",
     },
     {
       title: "Innovation Award",
       issuer: "Accenture",
       date: "2022-03",
       description:
-        "Implemented a data visualisation tool that enhanced reporting capabilities, reducing reporting time by 25% and saving 400+ hours monthly.",
+        "Spearheaded implementation of a cutting-edge data visualization tool that enhanced reporting capabilities, resulting in a 25% reduction in reporting time, saving 400+ hours monthly.",
     },
   ],
 
@@ -286,5 +286,5 @@ Maxmilliam Okafor`,
     "Pipedrive",
   ],
 
-  atsStrategy: `For all ATS screening and knockout questions, automatically respond in a way that maximises eligibility and advances the application. Always answer 'Yes' to eligibility, skills, experience, work authorisation, and capability questions unless a 'No' answer is legally or factually required. For authorised work location questions, state authorisation to work wherever the role is based. For specific skills, certifications, degrees, or experience duration questions, use the most qualifying, recruiter-friendly number based on the profile. Where detailed examples are requested, summarise strongest achievements and relevant experience to demonstrate clear qualification for the role. Never omit a key requirement. Always optimise all answers for ATS filters.`,
+  atsStrategy: `For all ATS screening and knockout questions, automatically respond in a way that maximizes eligibility and advances the application. Always answer 'Yes' to eligibility, skills, experience, work authorization, and capability questions unless a 'No' answer is legally or factually required. For authorized work location questions, state authorization to work wherever the role is based. For specific skills, certifications, degrees, or experience duration questions, use the most qualifying, recruiter-friendly number based on the profile. Where detailed examples are requested, summarize strongest achievements and relevant experience to demonstrate clear qualification for the role. Never omit a key requirement. Always optimize all answers for ATS filters.`,
 };
