@@ -1,68 +1,57 @@
-// openresume-generator.js - OpenResume-Style ATS PDF Generator
-// PERFECT FORMAT: Arial 10.5pt, 1" margins, selectable text, 100% ATS parsing
-// Based on https://github.com/xitanggg/open-resume methodology
+// openresume-generator.js - ATS PDF Generator v4.0
+// REWRITTEN: Bulletproof parsing, Option B format, 100% ATS compatibility
+// Format: Company (bold), Title | Dates (italic), bullets
+// Sections: PROFESSIONAL SUMMARY, WORK EXPERIENCE, EDUCATION, SKILLS, CERTIFICATIONS only
 
 (function(global) {
   'use strict';
 
-  // ============ OPENRESUME ATS SPECIFICATIONS ============
+  // ============ ATS SPECIFICATIONS ============
   const ATS_SPEC = {
     font: {
-      family: 'helvetica', // jsPDF uses helvetica as Arial equivalent
-      name: 14,            // Name: 14pt
-      sectionTitle: 11,    // Section headers: 11pt bold
-      body: 10.5,          // Body text: 10.5pt (critical)
-      small: 9             // Small text: 9pt
+      family: 'helvetica',
+      name: 14,
+      sectionTitle: 11,
+      body: 10.5,
+      small: 9
     },
     margins: {
-      top: 72,    // 1 inch = 72pt
+      top: 72,
       bottom: 72,
       left: 72,
       right: 72
     },
     lineHeight: 1.15,
     page: {
-      width: 595.28,   // A4 width in points
-      height: 841.89,  // A4 height in points
+      width: 595.28,
+      height: 841.89,
       maxPages: 2
     },
     bullets: {
-      char: '-',       // Standard Unicode dash (ATS safe)
+      char: '-',
       indent: 10
     }
   };
 
-  // ============ MAIN GENERATOR CLASS ============
+  // ============ MAIN GENERATOR ============
   const OpenResumeGenerator = {
 
     // ============ GENERATE COMPLETE ATS PACKAGE ============
-    // Returns: { cv: blob, cover: blob, cvFilename, coverFilename, matchScore }
     async generateATSPackage(baseCV, keywords, jobData, candidateData, coverLetterText) {
       const startTime = performance.now();
-      console.log('[OpenResume] Generating ATS Package...');
+      console.log('[ATSGen] Generating ATS Package v4.0...');
 
-      // CRITICAL: Normalise newlines in input text before ANY parsing
-      // Handles literal \\n from JSON, missing newlines, and mixed line endings
       const normalisedCV = this.normaliseNewlines(baseCV);
       const normalisedCoverLetter = this.normaliseNewlines(coverLetterText);
 
-      // Parse and structure CV data
       const cvData = this.parseAndStructureCV(normalisedCV, candidateData);
-
-      // Tailor CV with keywords
       const tailoredData = this.tailorCVData(cvData, keywords, jobData);
-
-      // Generate CV PDF
       const cvResult = await this.generateCVPDF(tailoredData, candidateData);
-
-      // Generate Cover Letter PDF (uses AI text when available, otherwise template)
       const coverResult = await this.generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData, normalisedCoverLetter);
-
-      // Calculate match score
       const matchScore = this.calculateMatchScore(tailoredData, keywords);
 
       const timing = performance.now() - startTime;
-      console.log(`[OpenResume] Package generated in ${timing.toFixed(0)}ms`);
+      console.log(`[ATSGen] Package generated in ${timing.toFixed(0)}ms`);
 
       return {
         cv: cvResult.blob,
@@ -78,34 +67,22 @@
     },
 
     // ============ NORMALISE NEWLINES ============
-    // Ensures text has actual newline characters for reliable parsing
     normaliseNewlines(text) {
       if (!text || typeof text !== 'string') return text || '';
-
       let result = text;
-
-      // Convert literal \\n sequences to actual newlines (double-escaped from JSON)
       result = result.replace(/\\n/g, '\n');
-
-      // Normalise Windows line endings
       result = result.replace(/\r\n/g, '\n');
       result = result.replace(/\r/g, '\n');
-
-      // If text has NO newlines at all (one giant line), attempt to restore structure
-      // by detecting section headers embedded in the text
       if (!result.includes('\n') && result.length > 200) {
-        console.warn('[OpenResume] Text has no newlines - attempting structural restoration');
+        console.warn('[ATSGen] Text has no newlines - attempting structural restoration');
         result = this.restoreTextStructure(result);
       }
-
       return result;
     },
 
     // ============ RESTORE TEXT STRUCTURE ============
-    // Emergency fallback: splits a single-line text blob into structured sections
     restoreTextStructure(text) {
       if (!text) return text;
-
       const sectionHeaders = [
         'PROFESSIONAL SUMMARY', 'SUMMARY', 'PROFILE',
         'WORK EXPERIENCE', 'PROFESSIONAL EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
@@ -113,39 +90,48 @@
         'CORE COMPETENCIES', 'KEY SKILLS', 'ADDITIONAL SKILLS',
         'CERTIFICATIONS', 'LICENSES', 'ACHIEVEMENTS', 'PROJECTS'
       ];
-
       let result = text;
-
-      // Insert newlines before section headers
       for (const header of sectionHeaders) {
-        // Match "HEADER:" or "HEADER " preceded by non-newline content
         const regex = new RegExp(`(?<!^)\\b(${header})\\s*:?\\s*`, 'gi');
-        result = result.replace(regex, (match, h) => {
-          return `\n\n${h.toUpperCase()}\n`;
-        });
+        result = result.replace(regex, (match, h) => `\n\n${h.toUpperCase()}\n`);
       }
-
-      // Insert newlines before bullet-like patterns
       result = result.replace(/([.!?])\s+([-•*])\s+/g, '$1\n$2 ');
-
-      // Insert newlines before "Company | Title" patterns
       result = result.replace(/([.!?])\s+([A-Z][A-Za-z\s&.,]+\s*\|\s*[A-Za-z])/g, '$1\n\n$2');
-
       return result.trim();
+    },
+
+    // ============ DETECT IF A STRING IS PRIMARILY A DATE ============
+    isDateLine(str) {
+      if (!str) return false;
+      const trimmed = str.trim();
+      // Matches: "January 2023", "01/2023", "2023", "Present", "January 2023 - Present",
+      // "01/2023 - 12/2025", "2023 - Present", "2023 - 2025"
+      const datePatterns = [
+        /^\d{2}\/\d{4}\s*[-–—]\s*(Present|\d{2}\/\d{4})$/i,
+        /^\d{4}\s*[-–—]\s*(Present|\d{4})$/i,
+        /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{4}$/i,
+        /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{4}\s*[-–—]\s*(Present|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{4})$/i,
+        /^Present$/i,
+        /^\d{4}$/,
+        /^\d{2}\/\d{4}$/
+      ];
+      return datePatterns.some(p => p.test(trimmed));
+    },
+
+    // ============ DETECT IF A LINE IS PRIMARILY A DATE RANGE (with pipes) ============
+    isDateRangeLine(str) {
+      if (!str) return false;
+      const trimmed = str.trim();
+      // Lines like "Present | 2023 - Present" or "December 2025 | 2024 - 2025"
+      // Split by pipe and check if ALL parts are dates
+      const parts = trimmed.split('|').map(p => p.trim());
+      return parts.every(p => this.isDateLine(p));
     },
 
     // ============ PARSE AND STRUCTURE CV ============
     parseAndStructureCV(cvText, candidateData) {
       const data = {
-        contact: {
-          name: '',
-          phone: '',
-          email: '',
-          location: '',
-          linkedin: '',
-          github: '',
-          portfolio: ''
-        },
+        contact: { name: '', phone: '', email: '', location: '', linkedin: '', github: '', portfolio: '' },
         summary: '',
         experience: [],
         skills: [],
@@ -153,40 +139,32 @@
         certifications: []
       };
 
-      // Extract from candidate data first
       if (candidateData) {
         data.contact.name = `${candidateData.firstName || candidateData.first_name || ''} ${candidateData.lastName || candidateData.last_name || ''}`.trim();
         data.contact.phone = candidateData.phone || '';
         data.contact.email = candidateData.email || '';
-        // CRITICAL: Strip "Remote" from location - user rule: never include Remote in CV
         const rawLocation = candidateData.city || candidateData.location || '';
         data.contact.location = this.normalizeLocation(rawLocation) || 'Dublin, IE';
         data.contact.linkedin = candidateData.linkedin || '';
         data.contact.github = candidateData.github || '';
         data.contact.portfolio = candidateData.portfolio || '';
-        
-        // Extract structured data if available
-        // Support ALL field name variants: workExperience, work_experience, professionalExperience, professional_experience
-        const rawExperience = candidateData.workExperience || candidateData.work_experience
+
+        // Extract structured work experience - support ALL field name variants
+        const rawExp = candidateData.workExperience || candidateData.work_experience
           || candidateData.professionalExperience || candidateData.professional_experience;
-        if (rawExperience && Array.isArray(rawExperience) && rawExperience.length > 0) {
-          data.experience = rawExperience.map(exp => {
-            // Build dates string from startDate/endDate if dates field missing
+        if (rawExp && Array.isArray(rawExp) && rawExp.length > 0) {
+          data.experience = rawExp.map(exp => {
             let dates = exp.dates || exp.duration || '';
             if (!dates && (exp.startDate || exp.start_date)) {
               const start = exp.startDate || exp.start_date || '';
               const end = exp.endDate || exp.end_date || 'Present';
               dates = `${start} - ${end}`;
             }
-            // Normalise dates to MM/YYYY format
             dates = this.normalizeDates(dates);
-
-            // Extract bullets from bullets array OR description string
             let bullets = exp.bullets || exp.achievements || exp.responsibilities || [];
             if ((!bullets || (Array.isArray(bullets) && bullets.length === 0)) && exp.description) {
               bullets = exp.description.split('\n').filter(b => b.trim());
             }
-
             return {
               company: exp.company || exp.organization || '',
               title: exp.title || exp.position || exp.role || '',
@@ -195,102 +173,95 @@
               bullets: this.normalizeBullets(bullets)
             };
           });
-          console.log(`[OpenResume] Loaded ${data.experience.length} work experiences from profile data`);
+          console.log(`[ATSGen] Loaded ${data.experience.length} experiences from profile`);
         }
-        
+
         if (candidateData.skills) {
-          data.skills = Array.isArray(candidateData.skills) 
-            ? candidateData.skills 
+          data.skills = Array.isArray(candidateData.skills)
+            ? candidateData.skills
             : candidateData.skills.split(',').map(s => s.trim());
         }
-        
+
         if (candidateData.education) {
-          data.education = candidateData.education.map(edu => ({
+          data.education = (Array.isArray(candidateData.education) ? candidateData.education : []).map(edu => ({
             institution: edu.institution || edu.school || edu.university || '',
             degree: edu.degree || '',
             dates: edu.dates || edu.graduationDate || '',
             gpa: edu.gpa || ''
           }));
         }
-        
+
         if (candidateData.certifications) {
-          data.certifications = Array.isArray(candidateData.certifications) 
-            ? candidateData.certifications 
+          data.certifications = Array.isArray(candidateData.certifications)
+            ? candidateData.certifications
             : [candidateData.certifications];
         }
       }
 
-      // Parse from CV text if structured data is missing
+      // ONLY parse from text if structured experience is empty
       if (cvText && data.experience.length === 0) {
+        console.log('[ATSGen] No structured experience - parsing from CV text');
         const parsed = this.parseCVText(cvText);
-        Object.assign(data, parsed);
+        // Merge parsed data, but don't overwrite non-empty fields
+        if (!data.summary && parsed.summary) data.summary = parsed.summary;
+        if (parsed.experience.length > 0) data.experience = parsed.experience;
+        if (data.skills.length === 0 && parsed.skills.length > 0) data.skills = parsed.skills;
+        if (data.education.length === 0 && parsed.education.length > 0) data.education = parsed.education;
+        if (data.certifications.length === 0 && parsed.certifications.length > 0) data.certifications = parsed.certifications;
+      } else if (cvText) {
+        // Even with structured experience, extract summary and other missing sections from text
+        const parsed = this.parseCVText(cvText);
+        if (!data.summary && parsed.summary) data.summary = parsed.summary;
+        if (data.skills.length === 0 && parsed.skills.length > 0) data.skills = parsed.skills;
+        if (data.education.length === 0 && parsed.education.length > 0) data.education = parsed.education;
+        if (data.certifications.length === 0 && parsed.certifications.length > 0) data.certifications = parsed.certifications;
       }
 
       return data;
     },
 
-    // ============ NORMALIZE BULLETS TO ARRAY ============
     normalizeBullets(bullets) {
       if (!bullets) return [];
-      if (Array.isArray(bullets)) return bullets.map(b => b.replace(/^[-•*▪]\s*/, '').trim());
-      return bullets.split('\n').filter(b => b.trim()).map(b => b.replace(/^[-•*▪]\s*/, '').trim());
+      if (Array.isArray(bullets)) return bullets.map(b => b.replace(/^[-•*▪]\s*/, '').trim()).filter(b => b.length > 0);
+      return bullets.split('\n').filter(b => b.trim()).map(b => b.replace(/^[-•*▪]\s*/, '').trim()).filter(b => b.length > 0);
     },
 
     // ============ PARSE CV TEXT ============
-    // FIX v3.4.0: Robust parsing of AI-generated plain text CV with inline headers,
-    // contact info stripping, and proper section detection
     parseCVText(cvText) {
-      const result = {
-        summary: '',
-        experience: [],
-        skills: [],
-        education: [],
-        certifications: []
-      };
-
+      const result = { summary: '', experience: [], skills: [], education: [], certifications: [] };
       if (!cvText) return result;
 
-      // STEP 1: Strip contact header lines (name, phone, email, URLs) before section parsing
-      // The AI puts contact info at the top which can pollute section detection
       const lines = cvText.split('\n');
       let contentStartIndex = 0;
 
-      // Skip leading contact info lines (name, phone/email, links, blank lines)
+      // Skip contact header lines
       for (let i = 0; i < Math.min(lines.length, 8); i++) {
         const trimmed = lines[i].trim();
         if (!trimmed) { contentStartIndex = i + 1; continue; }
-        // Skip lines that look like contact info
-        if (/^[A-Z][A-Z\s]+$/.test(trimmed) && trimmed.length < 50) { contentStartIndex = i + 1; continue; } // ALL CAPS name
-        if (/[@]/.test(trimmed) || /linkedin\.com|github\.com/i.test(trimmed)) { contentStartIndex = i + 1; continue; } // email/links
-        if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { contentStartIndex = i + 1; continue; } // phone
-        if (/\|/.test(trimmed) && (/[@]/.test(trimmed) || /\+\d/.test(trimmed) || /linkedin|github/i.test(trimmed))) { contentStartIndex = i + 1; continue; } // combined contact line
+        if (/^[A-Z][A-Z\s]+$/.test(trimmed) && trimmed.length < 50 &&
+            !/^(PROFESSIONAL|WORK|EDUCATION|SKILLS|CERTIFICATIONS|TECHNICAL|CORE|KEY|ADDITIONAL|EMPLOYMENT|EXPERIENCE|SUMMARY|PROFILE)/.test(trimmed)) {
+          contentStartIndex = i + 1; continue;
+        }
+        if (/@/.test(trimmed) || /linkedin\.com|github\.com/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { contentStartIndex = i + 1; continue; }
+        if (/\|/.test(trimmed) && (/@/.test(trimmed) || /\+\d/.test(trimmed) || /linkedin|github/i.test(trimmed))) { contentStartIndex = i + 1; continue; }
         if (/open to relocation/i.test(trimmed)) { contentStartIndex = i + 1; continue; }
-        if (/https?:\/\//i.test(trimmed) && !trimmed.toUpperCase().startsWith('PROFESSIONAL')) { contentStartIndex = i + 1; continue; }
-        break; // First non-contact line found
+        if (/https?:\/\//i.test(trimmed)) { contentStartIndex = i + 1; continue; }
+        break;
       }
 
       const contentLines = lines.slice(contentStartIndex);
-
       const sectionMap = {
-        'PROFESSIONAL SUMMARY': 'summary',
-        'SUMMARY': 'summary',
-        'PROFILE': 'summary',
-        'WORK EXPERIENCE': 'experience',
-        'PROFESSIONAL EXPERIENCE': 'experience',
-        'EXPERIENCE': 'experience',
-        'EMPLOYMENT': 'experience',
-        'SKILLS': 'skills',
-        'TECHNICAL SKILLS': 'skills',
-        'TECHNICAL PROFICIENCIES': 'skills',
-        'CORE COMPETENCIES': 'skills',
-        'KEY SKILLS': 'skills',
-        'ADDITIONAL SKILLS': 'skills',
+        'PROFESSIONAL SUMMARY': 'summary', 'SUMMARY': 'summary', 'PROFILE': 'summary',
+        'WORK EXPERIENCE': 'experience', 'PROFESSIONAL EXPERIENCE': 'experience',
+        'EXPERIENCE': 'experience', 'EMPLOYMENT': 'experience',
+        'SKILLS': 'skills', 'TECHNICAL SKILLS': 'skills', 'TECHNICAL PROFICIENCIES': 'skills',
+        'CORE COMPETENCIES': 'skills', 'KEY SKILLS': 'skills', 'ADDITIONAL SKILLS': 'skills',
+        'SOFT SKILLS': 'skills',
         'EDUCATION': 'education',
-        'CERTIFICATIONS': 'certifications',
-        'LICENSES': 'certifications'
+        'CERTIFICATIONS': 'certifications', 'LICENSES': 'certifications'
       };
 
-      // Build regex pattern for inline headers: "SECTION_NAME: content"
       const sectionNames = Object.keys(sectionMap).join('|');
       const inlineHeaderRegex = new RegExp(`^(${sectionNames})\\s*:\\s*(.+)$`, 'i');
 
@@ -301,7 +272,6 @@
         const trimmed = line.trim();
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
-        // Check for inline header pattern first (e.g., "PROFESSIONAL SUMMARY: Experienced...")
         const inlineMatch = trimmed.match(inlineHeaderRegex);
         if (inlineMatch) {
           this.saveSection(result, currentSection, currentContent);
@@ -322,7 +292,7 @@
 
       this.saveSection(result, currentSection, currentContent);
 
-      // STEP 2: Merge duplicate skills sections (AI sometimes outputs SKILLS + ADDITIONAL SKILLS)
+      // Deduplicate skills
       if (result.skills.length > 0) {
         const seen = new Set();
         result.skills = result.skills.filter(s => {
@@ -338,7 +308,6 @@
 
     saveSection(result, section, content) {
       if (!section || content.length === 0) return;
-
       const text = content.join('\n').trim();
 
       switch (section) {
@@ -346,18 +315,12 @@
           if (!result.summary) result.summary = text;
           break;
         case 'skills':
-          // Merge skills from multiple sections
-          const newSkills = text
-            .replace(/[•\-*]/g, ',')
-            .split(/[,\n]/)
-            .map(s => s.trim())
-            .filter(s => s.length > 1 && s.length < 60);
+          const newSkills = text.replace(/[•\-*]/g, ',').split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1 && s.length < 60);
           result.skills = [...result.skills, ...newSkills];
           break;
         case 'experience':
           const newExp = this.parseExperienceText(text);
           if (newExp.length > 0) {
-            // Merge avoiding duplicates by company name
             const existingCompanies = new Set(result.experience.map(e => (e.company || '').toLowerCase()));
             for (const exp of newExp) {
               if (!existingCompanies.has((exp.company || '').toLowerCase())) {
@@ -391,75 +354,197 @@
       }
     },
 
-    // ============ PARSE EXPERIENCE TEXT ============
-    // FIX v3.4.0: Robust job header detection supporting multiple formats:
-    // "Company | Title | Dates", "Company | Title | MM/YYYY - Present", etc.
+    // ============ PARSE EXPERIENCE TEXT - BULLETPROOF v4.0 ============
+    // Handles ALL common AI output formats:
+    // Format A: "Company | Title | Dates" then bullets
+    // Format B: "Company\nTitle | Dates" then bullets
+    // Format C: "Dates\nCompany | Title" then bullets (date-first)
+    // Format D: "Company\nTitle\nDates" then bullets
     parseExperienceText(text) {
       const jobs = [];
       const lines = text.split('\n');
       let currentJob = null;
+      let pendingCompany = null;
+      let pendingDate = null;
 
-      // Section headers that should NOT be treated as job entries
       const sectionHeaders = new Set([
         'professional experience', 'work experience', 'experience',
         'employment history', 'career history', 'employment'
       ]);
 
-      for (const line of lines) {
-        const trimmed = line.trim();
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
         if (!trimmed) continue;
-
-        // Skip section header lines
         if (sectionHeaders.has(trimmed.toLowerCase().replace(/[:\s]+$/, ''))) continue;
 
-        // Detect job header: must have pipe separator and NOT be a bullet
-        if (trimmed.includes('|') && !trimmed.startsWith('•') && !trimmed.startsWith('-') && !trimmed.startsWith('*')) {
-          if (currentJob && currentJob.company) jobs.push(currentJob);
+        // Is this line a bullet point?
+        if (/^[-•*▪]/.test(trimmed)) {
+          if (currentJob) {
+            currentJob.bullets.push(trimmed.replace(/^[-•*▪]\s*/, '').trim());
+          }
+          pendingCompany = null;
+          pendingDate = null;
+          continue;
+        }
 
+        // Is this line purely a date/date range (including with pipes)?
+        if (this.isDateRangeLine(trimmed) || this.isDateLine(trimmed)) {
+          // Save as pending date for the next job entry
+          pendingDate = trimmed.replace(/\|/g, ' ').replace(/\s{2,}/g, ' ').trim();
+          continue;
+        }
+
+        // Does this line contain pipe separators? (potential job header)
+        if (trimmed.includes('|')) {
           const parts = trimmed.split('|').map(p => p.trim());
 
-          // Extract company, title, dates - clean each field
-          let company = parts[0] || '';
-          let title = parts[1] || '';
-          let dates = parts[2] || '';
-          let location = parts[3] || '';
-
-          // Strip dates that leaked into company or title fields
-          company = this.stripDatesFromField(company);
-          title = this.stripDatesFromField(title);
-
-          // If dates field is empty, check if it's embedded in other fields
-          if (!dates) {
-            const datePattern = /(\d{2}\/\d{4}\s*[-–]\s*(?:Present|\d{2}\/\d{4})|\d{4}\s*[-–]\s*(?:Present|\d{4}))/i;
-            for (const part of parts) {
-              const match = part.match(datePattern);
-              if (match) { dates = match[1]; break; }
+          // Filter out parts that are purely dates
+          const nonDateParts = [];
+          const dateParts = [];
+          for (const part of parts) {
+            if (this.isDateLine(part)) {
+              dateParts.push(part);
+            } else {
+              nonDateParts.push(part);
             }
           }
 
-          // Normalize dates to "YYYY – YYYY" or "MM/YYYY – Present" format
+          // If ALL parts are dates, this is a date line, not a job header
+          if (nonDateParts.length === 0) {
+            pendingDate = trimmed.replace(/\|/g, ' ').replace(/\s{2,}/g, ' ').trim();
+            continue;
+          }
+
+          // We have a real job header with at least one non-date part
+          if (currentJob && currentJob.company) jobs.push(currentJob);
+
+          let company = '';
+          let title = '';
+          let dates = dateParts.join(' – ') || '';
+
+          if (nonDateParts.length >= 2) {
+            company = nonDateParts[0];
+            title = nonDateParts[1];
+            // If 3+ non-date parts, might be Company | Title | SubTitle
+            if (nonDateParts.length >= 3) {
+              // Check if part 3 is actually a subtitle or location
+              title = nonDateParts.slice(1).join(' | ');
+            }
+          } else if (nonDateParts.length === 1) {
+            // Single non-date part - could be "Company" or "Title"
+            // If we have a pending company, this is the title
+            if (pendingCompany) {
+              company = pendingCompany;
+              title = nonDateParts[0];
+              pendingCompany = null;
+            } else {
+              company = nonDateParts[0];
+            }
+          }
+
+          // If there's also a separate date extracted from the parts
+          if (!dates) {
+            // Check if any part contains an embedded date range
+            for (const part of parts) {
+              const dateMatch = part.match(/(\d{2}\/\d{4}\s*[-–]\s*(?:Present|\d{2}\/\d{4})|\d{4}\s*[-–]\s*(?:Present|\d{4}))/i);
+              if (dateMatch) {
+                dates = dateMatch[1];
+                break;
+              }
+            }
+          }
+
+          // Use pending date if no dates found in header
+          if (!dates && pendingDate) {
+            dates = pendingDate;
+            pendingDate = null;
+          }
+
+          // Clean company and title from any remaining dates
+          company = this.stripDatesFromField(company);
+          title = this.stripDatesFromField(title);
           dates = this.normalizeDates(dates);
 
-          // Skip if company looks like a section header
+          // Validate company - skip if it looks like a section header
           if (sectionHeaders.has(company.toLowerCase())) continue;
 
-          currentJob = {
-            company: company,
-            title: title,
-            dates: dates,
-            location: location,
-            bullets: []
-          };
-        } else if (currentJob && /^[-•*▪]/.test(trimmed)) {
-          currentJob.bullets.push(trimmed.replace(/^[-•*▪]\s*/, '').trim());
+          currentJob = { company, title, dates, location: '', bullets: [] };
+          pendingCompany = null;
+          pendingDate = null;
+
+        } else {
+          // Non-bullet, non-date, non-pipe line
+          // This could be a standalone company name, title, or continuation text
+
+          // If we have a pending date and no current job, this might be a company name after a date
+          if (pendingDate && !currentJob) {
+            // Date came first, so this line is likely the company or company + title
+            if (currentJob && currentJob.company) jobs.push(currentJob);
+            currentJob = {
+              company: trimmed,
+              title: '',
+              dates: this.normalizeDates(pendingDate),
+              location: '',
+              bullets: []
+            };
+            pendingDate = null;
+            pendingCompany = null;
+            continue;
+          }
+
+          // Check if this line looks like a company name (starts with uppercase, no bullet chars)
+          const looksLikeCompanyOrTitle = /^[A-Z]/.test(trimmed) && trimmed.length > 2 && trimmed.length < 80;
+
+          if (looksLikeCompanyOrTitle && !currentJob) {
+            // First non-header line in experience section - probably a company name
+            pendingCompany = trimmed;
+            continue;
+          }
+
+          if (looksLikeCompanyOrTitle && currentJob && currentJob.bullets.length === 0 && !currentJob.title) {
+            // We have a company but no title and no bullets yet - this might be the title
+            currentJob.title = trimmed;
+            continue;
+          }
+
+          if (pendingCompany && looksLikeCompanyOrTitle) {
+            // We had a pending company and now see another line - save as new job
+            if (currentJob && currentJob.company) jobs.push(currentJob);
+            currentJob = {
+              company: pendingCompany,
+              title: trimmed,
+              dates: pendingDate ? this.normalizeDates(pendingDate) : '',
+              location: '',
+              bullets: []
+            };
+            pendingCompany = null;
+            pendingDate = null;
+            continue;
+          }
+
+          // If we're in a job and have bullets, this might be continuation text or a new company
+          if (currentJob && currentJob.bullets.length > 0 && looksLikeCompanyOrTitle) {
+            // Looks like a new company name
+            if (currentJob.company) jobs.push(currentJob);
+            pendingCompany = trimmed;
+            currentJob = null;
+            continue;
+          }
         }
       }
 
       if (currentJob && currentJob.company) jobs.push(currentJob);
-      return jobs;
+
+      // Post-processing: validate and clean all jobs
+      return jobs.filter(job => {
+        // Remove jobs where company is just a date
+        if (this.isDateLine(job.company)) return false;
+        // Remove jobs with no company
+        if (!job.company || job.company.length < 2) return false;
+        return true;
+      });
     },
 
-    // ============ STRIP DATES FROM A FIELD ============
     stripDatesFromField(value) {
       if (!value) return '';
       return value
@@ -467,371 +552,227 @@
         .replace(/\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi, '')
         .replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi, '')
         .replace(/\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi, '')
-        .replace(/\s*\|\s*$/, '')
-        .replace(/^\s*\|\s*/, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+        .replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '')
+        .replace(/[^\S\n\r]{2,}/g, ' ').trim();
     },
 
-    // ============ NORMALIZE DATES ============
     normalizeDates(dateStr) {
       if (!dateStr) return '';
-
-      // Handle MM/YYYY - MM/YYYY or MM/YYYY - Present format
       const monthYearMatch = dateStr.match(/(\d{2}\/\d{4})\s*[-–—]\s*(Present|\d{2}\/\d{4})/i);
-      if (monthYearMatch) {
-        return `${monthYearMatch[1]} – ${monthYearMatch[2]}`;
-      }
+      if (monthYearMatch) return `${monthYearMatch[1]} - ${monthYearMatch[2]}`;
 
-      // Handle YYYY - YYYY or YYYY - Present format
       const years = dateStr.match(/\d{4}/g);
       const hasPresent = /present/i.test(dateStr);
-
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
-      }
-
-      // Normalize dashes to en-dash with spaces
-      return dateStr.replace(/\s*[-–—]\s*/g, ' – ');
+      if (hasPresent && years && years.length >= 1) return `${years[0]} - Present`;
+      if (years && years.length >= 2) return `${years[0]} - ${years[1]}`;
+      if (years && years.length === 1) return years[0];
+      return dateStr.replace(/\s*[-–—]\s*/g, ' - ');
     },
 
-    // ============ PARSE EDUCATION TEXT ============
     parseEducationText(text) {
       const entries = [];
       const lines = text.split('\n').filter(l => l.trim());
+      let currentEntry = null;
 
       for (const line of lines) {
-        const parts = line.split('|').map(p => p.trim());
-        if (parts.length >= 2) {
-          entries.push({
-            institution: parts[0],
-            degree: parts[1],
-            dates: parts[2] || '',
-            gpa: parts[3] || ''
-          });
-        } else if (line.trim()) {
-          entries.push({
-            institution: line.trim(),
-            degree: '',
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Check if this line has pipe separators (structured education line)
+        if (trimmed.includes('|')) {
+          const parts = trimmed.split('|').map(p => p.trim());
+          if (parts.length >= 2) {
+            entries.push({
+              institution: parts[0],
+              degree: parts[1],
+              dates: parts[2] || '',
+              gpa: parts[3] || ''
+            });
+            currentEntry = null;
+            continue;
+          }
+        }
+
+        // Check if line looks like a degree (contains keywords)
+        const isDegree = /\b(bachelor|master|msc|bsc|ba|ma|mba|phd|doctorate|diploma|certificate|degree|science|arts|engineering)\b/i.test(trimmed);
+        // Check if line looks like an institution
+        const isInstitution = /\b(university|college|institute|school|academy|polytechnic)\b/i.test(trimmed);
+
+        if (isDegree) {
+          // Extract GPA if embedded: "Degree - Grade (GPA)"
+          const gpaMatch = trimmed.match(/[\(\[]?\s*(\d+\.\d+\/\d+\.\d+)\s*[\)\]]?/);
+          const gradeMatch = trimmed.match(/\s*[-–]\s*(Distinction|First Class|Upper Second|Lower Second|Pass|Merit|Honours?)[^)]*(\(\d+\.\d+\/\d+\.\d+\))?/i);
+
+          currentEntry = {
+            degree: trimmed,
+            institution: '',
             dates: '',
-            gpa: ''
-          });
+            gpa: gpaMatch ? gpaMatch[1] : ''
+          };
+          entries.push(currentEntry);
+        } else if (isInstitution && currentEntry) {
+          currentEntry.institution = trimmed;
+          currentEntry = null;
+        } else if (isInstitution) {
+          entries.push({ institution: trimmed, degree: '', dates: '', gpa: '' });
+          currentEntry = null;
+        } else if (currentEntry && !currentEntry.institution) {
+          // Might be the institution line after a degree
+          currentEntry.institution = trimmed;
+          currentEntry = null;
+        } else {
+          entries.push({ institution: trimmed, degree: '', dates: '', gpa: '' });
+          currentEntry = null;
         }
       }
 
       return entries;
     },
 
-    // ============ TAILOR CV DATA WITH ALL KEYWORDS (100% MATCH) ============
-    // UPDATED: Uses Strategic Keyword Integration to prioritise Work Experience
+    // ============ TAILOR CV DATA ============
     tailorCVData(cvData, keywords, jobData) {
-      const tailored = JSON.parse(JSON.stringify(cvData)); // Deep clone
-      
-      // ROBUST: Support both array and structured keywords
-      // keywords can be: an array, or an object with {all, highPriority, mediumPriority, lowPriority}
+      const tailored = JSON.parse(JSON.stringify(cvData));
       const allKeywords = Array.isArray(keywords) ? keywords : (keywords?.all || []);
       const highPriority = Array.isArray(keywords) ? allKeywords.slice(0, 15) : (keywords?.highPriority || allKeywords.slice(0, 15));
       const mediumPriority = Array.isArray(keywords) ? [] : (keywords?.mediumPriority || []);
       const lowPriority = Array.isArray(keywords) ? [] : (keywords?.lowPriority || []);
 
-      // 1. Update location to job location
       if (jobData?.location) {
         tailored.contact.location = this.normalizeLocation(jobData.location);
       }
 
-      // 2. Enhance summary with top 5-8 keywords
       tailored.summary = this.enhanceSummary(cvData.summary, [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
 
-      // 3. STRATEGIC KEYWORD INTEGRATION: Inject keywords into Work Experience first
-      // Use StrategicKeywordIntegration if available (prioritises bullets over skills list)
       if (typeof StrategicKeywordIntegration !== 'undefined') {
-        console.log('[OpenResume] Using Strategic Keyword Integration for Work Experience');
         const integrationResult = StrategicKeywordIntegration.enhanceBulletPointsWithKeywords(
-          cvData.experience,
-          { all: allKeywords, highPriority, mediumPriority, lowPriority }
+          cvData.experience, { all: allKeywords, highPriority, mediumPriority, lowPriority }
         );
         tailored.experience = integrationResult.enhancedExperience;
-        
-        // Remove integrated keywords from skills (they're now in bullets)
         const integratedKeywords = integrationResult.stats?.integratedKeywords || [];
-        const remainingKeywords = allKeywords.filter(kw => 
+        const remainingKeywords = allKeywords.filter(kw =>
           !integratedKeywords.some(ik => ik.toLowerCase() === kw.toLowerCase())
         );
-        
-        // Only add remaining keywords to skills (minimal skills list)
         tailored.skills = this.mergeSkills(cvData.skills, remainingKeywords.slice(0, 10));
-        
-        console.log('[OpenResume] Strategic Integration Stats:', {
-          bulletsModified: integrationResult.stats?.bulletsModified || 0,
-          keywordsIntegrated: integratedKeywords.length,
-          remainingForSkills: remainingKeywords.length
-        });
       } else {
-        // Fallback to legacy injection
         tailored.experience = this.injectAllKeywordsIntoExperience(cvData.experience, {
-          high: highPriority,
-          medium: mediumPriority,
-          low: lowPriority,
-          all: allKeywords
+          high: highPriority, medium: mediumPriority, low: lowPriority, all: allKeywords
         });
-        
-        // 4. Merge ALL keywords into skills
         tailored.skills = this.mergeSkills(cvData.skills, allKeywords);
       }
 
       return tailored;
     },
 
-    // ============ NORMALIZE LOCATION ============
-    // HARD RULE: NEVER include "Remote" in CV location (recruiter red flag)
-    // Output format: "City, State" for US cities (e.g., "San Francisco, CA")
     normalizeLocation(location) {
       if (!location) return '';
-      
-      // CRITICAL: Strip "Remote" and similar terms first
       let normalized = location
         .replace(/\b(remote|work\s*from\s*home|wfh|virtual|fully\s*remote|remote\s*first|remote\s*friendly)\b/gi, '')
         .replace(/\s*[\(\[]?\s*(remote|wfh|virtual)\s*[\)\]]?\s*/gi, '')
         .replace(/\s*(\||,|\/|-)\s*(\||,|\/|-)\s*/g, ', ')
-        .replace(/\s*(\||,|\/|-)\s*$/g, '')
-        .replace(/^\s*(\||,|\/|-)\s*/g, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      
-      // If empty after stripping Remote, return empty for fallback
-      if (!normalized || normalized.length < 3) {
-        return '';
-      }
-      
-      // US State abbreviation mapping for "City, State" format
+        .replace(/\s*(\||,|\/|-)\s*$/g, '').replace(/^\s*(\||,|\/|-)\s*/g, '')
+        .replace(/\s{2,}/g, ' ').trim();
+      if (!normalized || normalized.length < 3) return '';
       const stateAbbrev = {
         'california': 'CA', 'texas': 'TX', 'new york': 'NY', 'florida': 'FL',
         'illinois': 'IL', 'pennsylvania': 'PA', 'ohio': 'OH', 'georgia': 'GA',
         'north carolina': 'NC', 'michigan': 'MI', 'new jersey': 'NJ', 'virginia': 'VA',
         'washington': 'WA', 'arizona': 'AZ', 'massachusetts': 'MA', 'tennessee': 'TN',
         'indiana': 'IN', 'missouri': 'MO', 'maryland': 'MD', 'wisconsin': 'WI',
-        'colorado': 'CO', 'minnesota': 'MN', 'south carolina': 'SC', 'alabama': 'AL',
-        'louisiana': 'LA', 'kentucky': 'KY', 'oregon': 'OR', 'oklahoma': 'OK',
-        'connecticut': 'CT', 'utah': 'UT', 'iowa': 'IA', 'nevada': 'NV',
-        'arkansas': 'AR', 'mississippi': 'MS', 'kansas': 'KS', 'new mexico': 'NM',
-        'nebraska': 'NE', 'idaho': 'ID', 'west virginia': 'WV', 'hawaii': 'HI',
-        'new hampshire': 'NH', 'maine': 'ME', 'montana': 'MT', 'rhode island': 'RI',
-        'delaware': 'DE', 'south dakota': 'SD', 'north dakota': 'ND', 'alaska': 'AK',
-        'vermont': 'VT', 'wyoming': 'WY', 'district of columbia': 'DC'
+        'colorado': 'CO', 'minnesota': 'MN', 'connecticut': 'CT', 'utah': 'UT',
+        'iowa': 'IA', 'nevada': 'NV', 'hawaii': 'HI', 'district of columbia': 'DC'
       };
-      
-      // Convert full state names to abbreviations (City, California -> City, CA)
       for (const [full, abbrev] of Object.entries(stateAbbrev)) {
         const regex = new RegExp(`,\\s*${full}\\s*$`, 'i');
-        if (regex.test(normalized)) {
-          normalized = normalized.replace(regex, `, ${abbrev}`);
-          break;
-        }
+        if (regex.test(normalized)) { normalized = normalized.replace(regex, `, ${abbrev}`); break; }
       }
-      
-      // Remove "USA", "United States", "US" suffixes but keep state abbreviation
-      normalized = normalized
-        .replace(/,\s*(US|USA|United States)\s*$/i, '')
-        .replace(/,\s*(UK|United Kingdom)\s*$/i, '')
-        .trim();
-      
+      normalized = normalized.replace(/,\s*(US|USA|United States)\s*$/i, '').replace(/,\s*(UK|United Kingdom)\s*$/i, '').trim();
       return normalized;
     },
-    
-    // ============ FORMAT PHONE FOR ATS ============
-    // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
+
     formatPhoneForATS(phone) {
       if (!phone) return '';
-      
-      // Remove all non-digit and non-plus characters
       let cleaned = phone.replace(/[^\d+]/g, '');
-      
-      // If starts with +, format as "+XXX: rest"
       if (cleaned.startsWith('+')) {
-        // Match country code (1-3 digits after +)
         const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
-        if (match) {
-          return `+${match[1]}: ${match[2]}`;
-        }
+        if (match) return `+${match[1]}: ${match[2]}`;
       }
-      
-      // Return original if no country code detected
       return phone;
     },
 
-    // ============ ENHANCE SUMMARY WITH KEYWORDS ============
-    // UPDATED: UK spelling, no banned words, anti-AI detection
     enhanceSummary(summary, keywords) {
-      // ROBUST: Ensure keywords is always an array
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
-      
-      // Apply ContentQualityEngine if available
       const sanitise = (text) => {
-        if (typeof ContentQualityEngine !== 'undefined') {
-          return ContentQualityEngine.sanitiseSummary(text);
-        }
+        if (typeof ContentQualityEngine !== 'undefined') return ContentQualityEngine.sanitiseSummary(text);
         return text;
       };
-      
       if (!summary) {
-        // Generate default summary - UPDATED: No banned phrases
         const topKeywords = keywordsArray.slice(0, 3);
         const baseSummary = topKeywords.length > 0
           ? `Professional with extensive expertise in ${topKeywords.join(', ')}. Track record of delivering high-impact solutions and driving measurable business outcomes.`
           : `Professional with track record of delivering high-impact solutions and driving measurable business outcomes.`;
         return sanitise(baseSummary);
       }
-
       let result = sanitise(summary);
       const summaryLower = result.toLowerCase();
       const missing = keywordsArray.filter(kw => !summaryLower.includes(kw.toLowerCase()));
-
       if (missing.length > 0) {
         const injection = `. Expertise includes ${missing.slice(0, 3).join(', ')}`;
-        if (result.endsWith('.')) {
-          result = result.slice(0, -1) + injection + '.';
-        } else {
-          result = result + injection + '.';
-        }
+        result = result.endsWith('.') ? result.slice(0, -1) + injection + '.' : result + injection + '.';
       }
-
       return result;
     },
 
-    // ============ INJECT ALL KEYWORDS INTO EXPERIENCE (100% MATCH) ============
-    // High/Medium: 3-5x mentions, Low: 1-2x mentions
     injectAllKeywordsIntoExperience(experience, keywordsByPriority) {
       if (!experience || experience.length === 0) return experience;
-      
       const { high = [], medium = [], low = [], all = [] } = keywordsByPriority;
       const allKeywords = all.length > 0 ? all : [...high, ...medium, ...low];
-
-      // Track keyword mentions with priority-based targets
       const mentions = {};
       const targets = {};
       const maxMentions = {};
-      
       high.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
       medium.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
       low.forEach(kw => { mentions[kw] = 0; targets[kw] = 1; maxMentions[kw] = 2; });
-      
-      // For keywords not categorized, default to medium priority targets
       allKeywords.forEach(kw => {
-        if (mentions[kw] === undefined) {
-          mentions[kw] = 0;
-          targets[kw] = 2;
-          maxMentions[kw] = 3;
-        }
+        if (mentions[kw] === undefined) { mentions[kw] = 0; targets[kw] = 2; maxMentions[kw] = 3; }
       });
-
-      // Count existing mentions
       experience.forEach(job => {
         job.bullets.forEach(bullet => {
-          allKeywords.forEach(kw => {
-            if (bullet.toLowerCase().includes(kw.toLowerCase())) {
-              mentions[kw]++;
-            }
-          });
+          allKeywords.forEach(kw => { if (bullet.toLowerCase().includes(kw.toLowerCase())) mentions[kw]++; });
         });
       });
-
-      // Natural injection phrases - UPDATED: No banned words (removed leveraging, utilizing)
-      const phrases = [
-        'implementing', 'applying', 'through', 'incorporating', 
-        'via', 'using', 'with', 'employing'
-      ];
+      const phrases = ['implementing', 'applying', 'through', 'incorporating', 'via', 'using', 'with', 'employing'];
       const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
 
-      // AGGRESSIVE injection: process all bullets, inject until all keywords have enough mentions
       return experience.map((job, jobIndex) => {
-        // More keywords in recent roles
-        const maxKeywordsPerBullet = Math.max(2, 4 - jobIndex);
-        
-        const enhancedBullets = job.bullets.map((bullet) => {
-          // Find keywords that need more mentions AND aren't in this bullet
-          // Prioritize high > medium > low
+        const maxKwPerBullet = Math.max(2, 4 - jobIndex);
+        const enhancedBullets = job.bullets.map(bullet => {
           const needsMore = allKeywords.filter(kw => {
-            const current = mentions[kw];
-            const target = targets[kw] || 2;
-            const inBullet = bullet.toLowerCase().includes(kw.toLowerCase());
-            return current < target && !inBullet;
+            return mentions[kw] < (targets[kw] || 2) && !bullet.toLowerCase().includes(kw.toLowerCase());
           });
-
           if (needsMore.length === 0) return bullet;
-
           let enhanced = bullet;
-          
-          // Sort by priority: high first
-          const sorted = [
-            ...needsMore.filter(kw => high.includes(kw)),
-            ...needsMore.filter(kw => medium.includes(kw)),
-            ...needsMore.filter(kw => low.includes(kw))
-          ];
-          
-          // Inject up to maxKeywordsPerBullet keywords per bullet
-          const toInject = sorted.slice(0, maxKeywordsPerBullet);
-          
-          toInject.forEach(kw => {
+          const sorted = [...needsMore.filter(kw => high.includes(kw)), ...needsMore.filter(kw => medium.includes(kw)), ...needsMore.filter(kw => low.includes(kw))];
+          sorted.slice(0, maxKwPerBullet).forEach(kw => {
             if (mentions[kw] >= (maxMentions[kw] || 5)) return;
-            
-            const kwLower = kw.toLowerCase();
-            const enhancedLower = enhanced.toLowerCase();
-            
-            if (enhancedLower.includes(kwLower)) return; // Already has it
-            
+            if (enhanced.toLowerCase().includes(kw.toLowerCase())) return;
             const phrase = getPhrase();
-            
-            // Strategy 1: After action verb - UPDATED: Removed "Spearheaded" (banned), replaced "Optimized" with UK spelling
-            const verbMatch = enhanced.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Owned|Optimised|Automated|Directed|Shaped|Drove|Established)\b/i);
-            if (verbMatch) {
-              const idx = verbMatch[0].length;
-              enhanced = `${enhanced.slice(0, idx)} ${kw}-focused${enhanced.slice(idx)}`;
-              mentions[kw]++;
-              return;
-            }
-            
-            // Strategy 2: Before first comma
-            const commaIdx = enhanced.indexOf(',');
-            if (commaIdx > 15 && commaIdx < enhanced.length * 0.6) {
-              enhanced = `${enhanced.slice(0, commaIdx)}, ${phrase} ${kw}${enhanced.slice(commaIdx)}`;
-              mentions[kw]++;
-              return;
-            }
-            
-            // Strategy 3: Before period at end
-            if (enhanced.endsWith('.')) {
-              enhanced = `${enhanced.slice(0, -1)}, ${phrase} ${kw}.`;
-              mentions[kw]++;
-              return;
-            }
-            
-            // Strategy 4: GUARANTEED - just append
-            enhanced = `${enhanced}, ${phrase} ${kw}`;
+            if (enhanced.endsWith('.')) { enhanced = `${enhanced.slice(0, -1)}, ${phrase} ${kw}.`; }
+            else { enhanced = `${enhanced}, ${phrase} ${kw}`; }
             mentions[kw]++;
           });
-
           return enhanced;
         });
-
         return { ...job, bullets: enhancedBullets };
       });
     },
-    
-    // Legacy function for backward compatibility
+
     injectKeywordsIntoExperience(experience, keywords, options = {}) {
       return this.injectAllKeywordsIntoExperience(experience, { high: keywords, all: keywords });
     },
 
-    // ============ MERGE SKILLS WITH KEYWORDS ============
     mergeSkills(existingSkills, keywords) {
       const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
       const merged = [...(existingSkills || [])];
-
-      // Add top keywords not already in skills
       const topKeywords = (keywords.all || keywords).slice(0, 10);
       topKeywords.forEach(kw => {
         if (!skillSet.has(kw.toLowerCase())) {
@@ -839,19 +780,11 @@
           skillSet.add(kw.toLowerCase());
         }
       });
-
-      // Limit to 25 skills max
       return merged.slice(0, 25);
     },
 
-    // ============ FORMAT SKILL NAME ============
     formatSkillName(skill) {
-      const acronyms = new Set([
-        'SQL', 'AWS', 'GCP', 'API', 'REST', 'HTML', 'CSS', 'JSON', 'XML',
-        'CI', 'CD', 'ETL', 'ML', 'AI', 'NLP', 'LLM', 'UI', 'UX', 'SDK',
-        'HTTP', 'JWT', 'OAuth', 'CRUD', 'ORM', 'MVC', 'TDD', 'NoSQL'
-      ]);
-
+      const acronyms = new Set(['SQL', 'AWS', 'GCP', 'API', 'REST', 'HTML', 'CSS', 'JSON', 'XML', 'CI', 'CD', 'ETL', 'ML', 'AI', 'NLP', 'LLM', 'UI', 'UX', 'SDK', 'HTTP', 'JWT', 'NoSQL']);
       return skill.split(/\s+/).map(word => {
         const upper = word.toUpperCase();
         if (acronyms.has(upper)) return upper;
@@ -860,15 +793,11 @@
       }).join(' ');
     },
 
-    // ============ GENERATE CV PDF (OpenResume Style) ============
+    // ============ GENERATE CV PDF ============
     async generateCVPDF(tailoredData, candidateData) {
       const startTime = performance.now();
-
-      // Generate filename: {FirstName}_{LastName}_CV.pdf (user requested format)
-      const firstName = (candidateData?.firstName || candidateData?.first_name || 'Applicant')
-        .trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
-      const lastName = (candidateData?.lastName || candidateData?.last_name || '')
-        .trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const firstName = (candidateData?.firstName || candidateData?.first_name || 'Applicant').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
+      const lastName = (candidateData?.lastName || candidateData?.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const filename = lastName ? `${firstName}_${lastName}_CV.pdf` : `${firstName}_CV.pdf`;
 
       let pdfBlob = null;
@@ -879,17 +808,17 @@
         pdfBlob = result.blob;
         pdfBase64 = result.base64;
       } else {
-        // Fallback: text-based PDF
         const text = this.generateCVText(tailoredData);
         pdfBase64 = btoa(unescape(encodeURIComponent(text)));
       }
 
-      console.log(`[OpenResume] CV PDF generated in ${(performance.now() - startTime).toFixed(0)}ms`);
-
+      console.log(`[ATSGen] CV PDF generated in ${(performance.now() - startTime).toFixed(0)}ms`);
       return { blob: pdfBlob, base64: pdfBase64, filename };
     },
 
-    // ============ RENDER CV WITH JSPDF (OpenResume Style) ============
+    // ============ RENDER CV WITH JSPDF - OPTION B FORMAT ============
+    // Format: Company (bold), Title | Dates (italic), bullets with dash
+    // Sections: PROFESSIONAL SUMMARY, WORK EXPERIENCE, EDUCATION, SKILLS, CERTIFICATIONS
     async renderCVWithJsPDF(data) {
       const { jsPDF } = jspdf;
       const { font, margins, lineHeight, page } = ATS_SPEC;
@@ -899,235 +828,209 @@
       doc.setFont(font.family, 'normal');
       let y = margins.top;
 
-      // Helper: Add text with word wrap and page breaks
-      const addText = (text, isBold = false, isCentered = false, size = font.body) => {
+      // ---- HELPERS ----
+      const checkPageBreak = (needed = 30) => {
+        if (y > page.height - margins.bottom - needed) { doc.addPage(); y = margins.top; }
+      };
+
+      const addWrappedText = (text, isBold = false, isItalic = false, size = font.body, indent = 0) => {
         doc.setFontSize(size);
-        doc.setFont(font.family, isBold ? 'bold' : 'normal');
-        
-        const lines = doc.splitTextToSize(text, contentWidth);
+        const style = isBold ? 'bold' : (isItalic ? 'italic' : 'normal');
+        doc.setFont(font.family, style);
+        const lines = doc.splitTextToSize(text, contentWidth - indent);
         lines.forEach(line => {
-          if (y > page.height - margins.bottom - 20) {
-            doc.addPage();
-            y = margins.top;
-          }
-          const x = isCentered ? (page.width - doc.getTextWidth(line)) / 2 : margins.left;
-          doc.text(line, x, y);
-          y += size * lineHeight + 2;
+          checkPageBreak();
+          doc.text(line, margins.left + indent, y);
+          y += size * lineHeight + 1.5;
         });
       };
 
-      // Helper: Add section header with line
-      const addSectionHeader = (title) => {
-        if (y > page.height - margins.bottom - 50) {
-          doc.addPage();
-          y = margins.top;
-        }
-        y += 10;
-        addText(title, true, false, font.sectionTitle);
-        doc.setLineWidth(0.5);
-        doc.line(margins.left, y - 2, page.width - margins.right, y - 2);
-        y += 4;
+      const addCenteredText = (text, isBold = false, size = font.body) => {
+        doc.setFontSize(size);
+        doc.setFont(font.family, isBold ? 'bold' : 'normal');
+        checkPageBreak();
+        doc.text(text, page.width / 2, y, { align: 'center' });
+        y += size * lineHeight + 1.5;
       };
 
-      // === NAME ===
-      addText(data.contact.name.toUpperCase(), true, true, font.name);
+      const addSectionHeader = (title) => {
+        checkPageBreak(50);
+        y += 10;
+        doc.setFontSize(font.sectionTitle);
+        doc.setFont(font.family, 'bold');
+        doc.text(title, margins.left, y);
+        y += 3;
+        doc.setLineWidth(0.75);
+        doc.line(margins.left, y, page.width - margins.right, y);
+        y += 8;
+      };
+
+      // ---- NAME ----
+      addCenteredText(data.contact.name.toUpperCase(), true, font.name);
       y += 2;
 
-      // === CONTACT LINE ===
-      // Format: "+CountryCode: Number | email | City, State | open to relocation"
+      // ---- CONTACT LINE ----
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
       if (contactParts.length > 0) {
-        // Add "open to relocation" if location exists
         const contactLine = contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : '');
-        addText(contactLine, false, true, font.body);
+        addCenteredText(contactLine, false, font.small);
       }
 
-      // === LINKS LINE ===
+      // ---- LINKS LINE ----
       const linkParts = [data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean);
       if (linkParts.length > 0) {
-        addText(linkParts.join(' | '), false, true, font.small);
+        addCenteredText(linkParts.join(' | '), false, font.small);
       }
+      y += 4;
 
-      y += 8;
-
-      // === PROFESSIONAL SUMMARY ===
+      // ---- PROFESSIONAL SUMMARY ----
       if (data.summary) {
         addSectionHeader('PROFESSIONAL SUMMARY');
-        addText(data.summary, false, false, font.body);
-        y += 4;
+        addWrappedText(data.summary, false, false, font.body);
+        y += 2;
       }
 
-      // === WORK EXPERIENCE ===
+      // ---- WORK EXPERIENCE ----
       if (data.experience && data.experience.length > 0) {
         addSectionHeader('WORK EXPERIENCE');
 
         data.experience.forEach((job, idx) => {
-          // Check page break before each job (need room for header + at least 1 bullet)
-          if (y > page.height - margins.bottom - 80) {
-            doc.addPage();
-            y = margins.top;
-          }
+          checkPageBreak(60);
 
-          // Line 1: Company name (bold)
+          // Line 1: COMPANY NAME (bold)
           doc.setFontSize(font.body);
           doc.setFont(font.family, 'bold');
           doc.text(job.company, margins.left, y);
           y += font.body * lineHeight + 2;
 
-          // Line 2: Title (normal) with dates right-aligned
-          doc.setFont(font.family, 'normal');
-          doc.text(job.title, margins.left, y);
-          if (job.dates) {
-            doc.setFont(font.family, 'normal');
-            const datesWidth = doc.getTextWidth(job.dates);
-            doc.text(job.dates, page.width - margins.right - datesWidth, y);
+          // Line 2: Title | Dates (italic title, normal dates right-aligned)
+          if (job.title || job.dates) {
+            doc.setFontSize(font.body);
+            doc.setFont(font.family, 'italic');
+            const titleText = job.title || '';
+            const datesText = job.dates || '';
+
+            if (datesText) {
+              // Render "Title | Dates" with dates right-aligned
+              doc.text(titleText + (titleText ? ' | ' + datesText : datesText), margins.left, y);
+            } else {
+              doc.text(titleText, margins.left, y);
+            }
+            y += font.body * lineHeight + 4;
           }
-          y += font.body * lineHeight + 4;
 
           // Bullets
           job.bullets.forEach(bullet => {
-            // Check page break before each bullet
-            if (y > page.height - margins.bottom - 20) {
-              doc.addPage();
-              y = margins.top;
-            }
-
-            const bulletChar = ATS_SPEC.bullets.char;
+            checkPageBreak();
             const bulletIndent = ATS_SPEC.bullets.indent;
             const bulletContentWidth = contentWidth - bulletIndent - 4;
 
             doc.setFont(font.family, 'normal');
             doc.setFontSize(font.body);
+            doc.text('-', margins.left, y);
 
-            // Render bullet character
-            doc.text(bulletChar, margins.left, y);
-
-            // Wrap and render bullet text
             const bulletLines = doc.splitTextToSize(bullet, bulletContentWidth);
             bulletLines.forEach((line, lineIdx) => {
-              if (lineIdx > 0 && y > page.height - margins.bottom - 20) {
-                doc.addPage();
-                y = margins.top;
-              }
+              if (lineIdx > 0) checkPageBreak();
               doc.text(line, margins.left + bulletIndent + 4, y);
               y += font.body * lineHeight + 1;
             });
-            y += 1; // Small gap between bullets
+            y += 1;
           });
 
-          if (idx < data.experience.length - 1) y += 8; // Gap between jobs
+          if (idx < data.experience.length - 1) y += 6;
         });
-        y += 4;
+        y += 2;
       }
 
-      // === EDUCATION ===
+      // ---- EDUCATION ----
       if (data.education && data.education.length > 0) {
         addSectionHeader('EDUCATION');
-        
+
         data.education.forEach(edu => {
-          const eduLine = [edu.institution, edu.degree, edu.dates, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).join(' | ');
-          addText(eduLine, false, false, font.body);
+          checkPageBreak(30);
+
+          // Line 1: Degree (bold) - include GPA if available
+          const degreeLine = [edu.degree, edu.gpa ? `(${edu.gpa})` : ''].filter(Boolean).join(' ');
+          if (degreeLine) {
+            doc.setFontSize(font.body);
+            doc.setFont(font.family, 'bold');
+            const degreeLines = doc.splitTextToSize(degreeLine, contentWidth);
+            degreeLines.forEach(line => {
+              checkPageBreak();
+              doc.text(line, margins.left, y);
+              y += font.body * lineHeight + 1.5;
+            });
+          }
+
+          // Line 2: Institution (normal)
+          if (edu.institution) {
+            doc.setFontSize(font.body);
+            doc.setFont(font.family, 'normal');
+            doc.text(edu.institution, margins.left, y);
+            y += font.body * lineHeight + 4;
+          }
         });
-        y += 4;
+        y += 2;
       }
 
-      // === SKILLS (comma-separated, single line) ===
+      // ---- SKILLS (comma-separated) ----
       if (data.skills && data.skills.length > 0) {
-        addSectionHeader('TECHNICAL PROFICIENCIES');
-        addText(data.skills.join(', '), false, false, font.body);
-        y += 4;
+        addSectionHeader('SKILLS');
+        addWrappedText(data.skills.join(', '), false, false, font.body);
+        y += 2;
       }
 
-      // === CERTIFICATIONS ===
+      // ---- CERTIFICATIONS (comma-separated) ----
       if (data.certifications && data.certifications.length > 0) {
         addSectionHeader('CERTIFICATIONS');
-        addText(data.certifications.join(', '), false, false, font.body);
+        addWrappedText(data.certifications.join(', '), false, false, font.body);
       }
 
-      // Generate output
       const base64 = doc.output('datauristring').split(',')[1];
       const blob = doc.output('blob');
-
       return { base64, blob };
     },
 
-    // ============ GENERATE CV TEXT (Fallback) ============
-    // FIX v3.4.0: Consistent text formatting that matches PDF structure
     generateCVText(data) {
       const lines = [];
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-
-      // Header: Name, contact info, links
       lines.push(data.contact.name.toUpperCase());
       const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
-      if (contactParts.length > 0) {
-        lines.push(contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : ''));
-      }
+      if (contactParts.length > 0) lines.push(contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : ''));
       const linkParts = [data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean);
-      if (linkParts.length > 0) {
-        lines.push(linkParts.join(' | '));
-      }
+      if (linkParts.length > 0) lines.push(linkParts.join(' | '));
       lines.push('');
-
-      // Professional Summary
-      if (data.summary) {
-        lines.push('PROFESSIONAL SUMMARY');
-        lines.push(data.summary);
-        lines.push('');
-      }
-
-      // Work Experience
+      if (data.summary) { lines.push('PROFESSIONAL SUMMARY'); lines.push(data.summary); lines.push(''); }
       if (data.experience?.length > 0) {
-        lines.push('WORK EXPERIENCE');
-        lines.push('');
+        lines.push('WORK EXPERIENCE'); lines.push('');
         data.experience.forEach((job, idx) => {
-          // Company | Title | Dates format
-          const headerParts = [job.company, job.title, job.dates].filter(Boolean);
-          lines.push(headerParts.join(' | '));
+          lines.push(job.company);
+          lines.push(`${job.title} | ${job.dates}`);
           job.bullets.forEach(b => lines.push(`- ${b}`));
           if (idx < data.experience.length - 1) lines.push('');
         });
         lines.push('');
       }
-
-      // Education
       if (data.education?.length > 0) {
-        lines.push('EDUCATION');
-        lines.push('');
+        lines.push('EDUCATION'); lines.push('');
         data.education.forEach(edu => {
-          const eduParts = [edu.degree, edu.institution, edu.dates].filter(Boolean);
-          const gpaPart = edu.gpa ? ` (${edu.gpa})` : '';
-          lines.push(eduParts.join(' | ') + gpaPart);
+          if (edu.degree) lines.push(edu.degree + (edu.gpa ? ` (${edu.gpa})` : ''));
+          if (edu.institution) lines.push(edu.institution);
+          lines.push('');
         });
-        lines.push('');
       }
-
-      // Skills
-      if (data.skills?.length > 0) {
-        lines.push('SKILLS');
-        lines.push(data.skills.join(', '));
-        lines.push('');
-      }
-
-      // Certifications
-      if (data.certifications?.length > 0) {
-        lines.push('CERTIFICATIONS');
-        lines.push(data.certifications.join(', '));
-      }
-
+      if (data.skills?.length > 0) { lines.push('SKILLS'); lines.push(data.skills.join(', ')); lines.push(''); }
+      if (data.certifications?.length > 0) { lines.push('CERTIFICATIONS'); lines.push(data.certifications.join(', ')); }
       return lines.join('\n');
     },
 
-    // ============ GENERATE COVER LETTER PDF ============
+    // ============ COVER LETTER PDF ============
     async generateCoverLetterPDF(tailoredData, keywords, jobData, candidateData, coverLetterText) {
       const startTime = performance.now();
-
-      // Generate filename: {FirstName}_{LastName}_Cover_Letter.pdf (user requested format)
-      const firstName = (candidateData?.firstName || candidateData?.first_name || 'Applicant')
-        .trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
-      const lastName = (candidateData?.lastName || candidateData?.last_name || '')
-        .trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const firstName = (candidateData?.firstName || candidateData?.first_name || 'Applicant').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
+      const lastName = (candidateData?.lastName || candidateData?.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const filename = lastName ? `${firstName}_${lastName}_Cover_Letter.pdf` : `${firstName}_Cover_Letter.pdf`;
 
       let pdfBlob = null;
@@ -1142,13 +1045,11 @@
         pdfBase64 = btoa(unescape(encodeURIComponent(text)));
       }
 
-      console.log(`[OpenResume] Cover Letter PDF generated in ${(performance.now() - startTime).toFixed(0)}ms`);
-
+      console.log(`[ATSGen] Cover Letter PDF generated in ${(performance.now() - startTime).toFixed(0)}ms`);
       return { blob: pdfBlob, base64: pdfBase64, filename };
     },
 
-    // ============ RENDER COVER LETTER WITH JSPDF ============
-    // REVAMPED: Uses AI-generated cover letter text when available, with proper paragraph rendering
+    // ============ RENDER COVER LETTER ============
     async renderCoverLetterWithJsPDF(data, keywords, jobData, candidateData, coverLetterText) {
       const { jsPDF } = jspdf;
       const { font, margins, lineHeight, page } = ATS_SPEC;
@@ -1158,17 +1059,12 @@
       doc.setFont(font.family, 'normal');
       let y = margins.top;
 
-      // Helper: Add text with word wrap and page breaks
       const addText = (text, isBold = false, size = font.body) => {
         doc.setFontSize(size);
         doc.setFont(font.family, isBold ? 'bold' : 'normal');
-
         const lines = doc.splitTextToSize(text, contentWidth);
         lines.forEach(line => {
-          if (y > page.height - margins.bottom - 20) {
-            doc.addPage();
-            y = margins.top;
-          }
+          if (y > page.height - margins.bottom - 20) { doc.addPage(); y = margins.top; }
           doc.text(line, margins.left, y);
           y += size * lineHeight + 2;
         });
@@ -1177,192 +1073,106 @@
       const addCenteredText = (text, isBold = false, size = font.body) => {
         doc.setFontSize(size);
         doc.setFont(font.family, isBold ? 'bold' : 'normal');
-        if (y > page.height - margins.bottom - 20) {
-          doc.addPage();
-          y = margins.top;
-        }
+        if (y > page.height - margins.bottom - 20) { doc.addPage(); y = margins.top; }
         doc.text(text, page.width / 2, y, { align: 'center' });
         y += size * lineHeight + 2;
       };
 
-      // Extract info
       const name = data.contact?.name || `${candidateData?.firstName || ''} ${candidateData?.lastName || ''}`.trim() || 'Applicant';
       const jobTitle = jobData?.title || 'the open position';
       let rawCompany = this.extractCompanyName(jobData);
-      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization',
-                                   'organisation', 'n/a', 'unknown', '', 'employer'];
-      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim()))
-        ? rawCompany
-        : 'the hiring organisation';
+      const invalidNames = ['company', 'your company', 'the company', 'your organization', 'organisation', 'n/a', 'unknown', '', 'employer'];
+      const company = (rawCompany && !invalidNames.includes(rawCompany.toLowerCase().trim())) ? rawCompany : 'the hiring organisation';
 
-      console.log(`[OpenResume] Cover letter using company: "${company}"`);
-
-      // === STRATEGY: Use AI-generated text if available, otherwise generate from template ===
       if (coverLetterText && coverLetterText.trim().length > 100) {
-        console.log('[OpenResume] Using AI-generated cover letter text for PDF');
-        this.renderAICoverLetterPDF(doc, coverLetterText, data, name, jobTitle, company, {
-          font, margins, lineHeight, page, contentWidth, addText, addCenteredText, y
-        });
-        // y is managed via closure in addText/addCenteredText
-      } else {
-        console.log('[OpenResume] Using template-based cover letter (no AI text available)');
-        // === HEADER ===
+        // USE AI-GENERATED COVER LETTER
+        const cleanedText = this.stripCoverLetterHeader(coverLetterText, name);
+
+        // Header
         addCenteredText(name.toUpperCase(), true, font.name);
         y += 2;
-
         const formattedPhone = this.formatPhoneForATS(data.contact?.phone);
         const contactLine = [formattedPhone, data.contact?.email].filter(Boolean).join(' | ');
         if (contactLine) addCenteredText(contactLine, false, font.body);
         y += 16;
 
-        // === DATE ===
-        const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-        addText(today, false, font.body);
+        // Date
+        const dateMatch = cleanedText.match(/^(Date:\s*)?(\d{1,2}\s+\w+\s+\d{4}|\w+\s+\d{1,2},?\s+\d{4})/m);
+        const dateText = dateMatch ? dateMatch[2] || dateMatch[0].replace(/^Date:\s*/i, '') : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        addText(dateText, false, font.body);
         y += 12;
 
-        // === SUBJECT LINE ===
-        addText(`Re: ${jobTitle}`, true, font.body);
+        // Re: line
+        const reMatch = cleanedText.match(/^Re:\s*(.+)$/m);
+        addText(reMatch ? reMatch[0] : `Re: ${jobTitle}`, true, font.body);
         y += 8;
 
-        // === SALUTATION ===
+        // Salutation
+        const dearMatch = cleanedText.match(/^(Dear\s+.+[,:])\s*$/m);
+        addText(dearMatch ? dearMatch[1] : 'Dear Hiring Manager,', false, font.body);
+        y += 8;
+
+        // Body paragraphs
+        const bodyParagraphs = this.extractCoverLetterBody(cleanedText);
+        for (const para of bodyParagraphs) {
+          const trimmed = para.trim();
+          if (!trimmed) continue;
+          addText(trimmed, false, font.body);
+          y += 14;
+        }
+        y += 6;
+
+        // Closing
+        const closingMatch = cleanedText.match(/^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards),?\s*$/mi);
+        addText(closingMatch ? closingMatch[0].replace(/,?\s*$/, ',') : 'Yours sincerely,', false, font.body);
+        y += 16;
+        addText(name, true, font.body);
+
+      } else {
+        // TEMPLATE-BASED COVER LETTER
+        addCenteredText(name.toUpperCase(), true, font.name);
+        y += 2;
+        const formattedPhone = this.formatPhoneForATS(data.contact?.phone);
+        const contactLine = [formattedPhone, data.contact?.email].filter(Boolean).join(' | ');
+        if (contactLine) addCenteredText(contactLine, false, font.body);
+        y += 16;
+
+        addText(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }), false, font.body);
+        y += 12;
+        addText(`Re: ${jobTitle}`, true, font.body);
+        y += 8;
         addText('Dear Hiring Manager,', false, font.body);
         y += 8;
 
-        // === BODY PARAGRAPHS ===
-        const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
-        const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
+        const kwa = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
+        const hp = Array.isArray(kwa) ? kwa.slice(0, 5) : [];
         const topExp = data.experience?.[0]?.company || 'previous roles';
-        const kw1 = highPriority[0] || 'technical solutions';
-        const kw2 = highPriority[1] || 'cross-functional collaboration';
         const years = this.extractYearsExperience(data.summary) || '7+';
 
-        const para1 = `I am writing to express my interest in the ${jobTitle} position at ${company}. With ${years} years of experience in ${kw1} and ${kw2}, I have consistently delivered measurable business impact through innovative solutions.`;
-        addText(para1, false, font.body);
+        addText(`I am writing to express my interest in the ${jobTitle} position at ${company}. With ${years} years of experience in ${hp[0] || 'technical solutions'} and ${hp[1] || 'cross-functional collaboration'}, I have consistently delivered measurable business impact.`, false, font.body);
         y += 14;
-
-        const kw3 = highPriority[2] || 'project delivery';
-        const kw4 = highPriority[3] || 'team leadership';
-        const topBullet = data.experience?.[0]?.bullets?.[0] || 'driving efficiency improvements of 30%+';
-        const para2 = `At ${topExp}, I led ${kw3} initiatives that achieved ${this.extractAchievement(topBullet)}. I bring extensive experience in ${kw4} and delivering complex projects on time and within budget.`;
-        addText(para2, false, font.body);
+        addText(`At ${topExp}, I led ${hp[2] || 'project delivery'} initiatives and bring extensive experience in ${hp[3] || 'team leadership'} and delivering complex projects on time and within budget.`, false, font.body);
         y += 14;
-
-        const kw5 = highPriority[4] || 'technical leadership';
-        const para3 = `I would welcome the opportunity to discuss how my ${kw5} expertise can contribute to ${company}'s continued success. Thank you for considering my application.`;
-        addText(para3, false, font.body);
+        addText(`I would welcome the opportunity to discuss how my ${hp[4] || 'technical leadership'} expertise can contribute to ${company}'s continued success. Thank you for considering my application.`, false, font.body);
         y += 20;
 
-        // === CLOSING ===
         addText('Yours sincerely,', false, font.body);
         y += 16;
         addText(name, true, font.body);
       }
 
-      // Generate output
       const base64 = doc.output('datauristring').split(',')[1];
       const blob = doc.output('blob');
-
       return { base64, blob };
     },
 
-    // ============ RENDER AI-GENERATED COVER LETTER INTO PDF ============
-    // Parses the AI cover letter text and renders each structural element properly
-    renderAICoverLetterPDF(doc, coverText, data, name, jobTitle, company, spec) {
-      const { font, margins, lineHeight, page, contentWidth } = spec;
-      let y = margins.top;
-
-      // Helper functions
-      const addTextLine = (text, isBold = false, size = font.body) => {
-        doc.setFontSize(size);
-        doc.setFont(font.family, isBold ? 'bold' : 'normal');
-        const lines = doc.splitTextToSize(text, contentWidth);
-        lines.forEach(line => {
-          if (y > page.height - margins.bottom - 20) {
-            doc.addPage();
-            y = margins.top;
-          }
-          doc.text(line, margins.left, y);
-          y += size * lineHeight + 2;
-        });
-      };
-
-      const addCentered = (text, isBold = false, size = font.body) => {
-        doc.setFontSize(size);
-        doc.setFont(font.family, isBold ? 'bold' : 'normal');
-        if (y > page.height - margins.bottom - 20) {
-          doc.addPage();
-          y = margins.top;
-        }
-        doc.text(text, page.width / 2, y, { align: 'center' });
-        y += size * lineHeight + 2;
-      };
-
-      // Step 1: Strip contact/header info from AI text (we render our own header)
-      const cleanedText = this.stripCoverLetterHeader(coverText, name);
-
-      // Step 2: Render professional header
-      addCentered(name.toUpperCase(), true, font.name);
-      y += 2;
-
-      const formattedPhone = this.formatPhoneForATS(data.contact?.phone);
-      const contactLine = [formattedPhone, data.contact?.email].filter(Boolean).join(' | ');
-      if (contactLine) addCentered(contactLine, false, font.body);
-      y += 16;
-
-      // Step 3: Extract and render date
-      const dateMatch = cleanedText.match(/^(Date:\s*)?(\w+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+\w+\s+\d{4})/m);
-      const today = dateMatch
-        ? dateMatch[2] || dateMatch[0].replace(/^Date:\s*/i, '')
-        : new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-      addTextLine(today, false, font.body);
-      y += 12;
-
-      // Step 4: Extract and render subject/Re line
-      const reMatch = cleanedText.match(/^Re:\s*(.+)$/m);
-      const reLine = reMatch ? reMatch[0] : `Re: ${jobTitle}`;
-      addTextLine(reLine, true, font.body);
-      y += 8;
-
-      // Step 5: Render salutation
-      const dearMatch = cleanedText.match(/^(Dear\s+.+[,:])\s*$/m);
-      const salutation = dearMatch ? dearMatch[1] : 'Dear Hiring Manager,';
-      addTextLine(salutation, false, font.body);
-      y += 8;
-
-      // Step 6: Extract body paragraphs (everything between salutation and closing)
-      const bodyParagraphs = this.extractCoverLetterBody(cleanedText);
-
-      // Render each paragraph with proper spacing
-      for (const para of bodyParagraphs) {
-        const trimmed = para.trim();
-        if (!trimmed) continue;
-
-        addTextLine(trimmed, false, font.body);
-        y += 14; // Paragraph spacing
-      }
-
-      y += 6; // Extra spacing before closing
-
-      // Step 7: Render closing
-      const closingMatch = cleanedText.match(/^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards),?\s*$/mi);
-      const closing = closingMatch ? closingMatch[0].replace(/,?\s*$/, ',') : 'Yours sincerely,';
-      addTextLine(closing, false, font.body);
-      y += 16;
-      addTextLine(name, true, font.body);
-    },
-
-    // ============ STRIP COVER LETTER HEADER FROM AI TEXT ============
-    // Removes contact info, name, email, phone that the AI may have included at the top
     stripCoverLetterHeader(text, name) {
       if (!text) return '';
       const lines = text.split('\n');
       let startIdx = 0;
-
       for (let i = 0; i < Math.min(lines.length, 10); i++) {
         const trimmed = lines[i].trim();
         if (!trimmed) { startIdx = i + 1; continue; }
-
-        // Skip lines that are contact info
         if (trimmed.toUpperCase() === (name || '').toUpperCase()) { startIdx = i + 1; continue; }
         if (/@/.test(trimmed) && !trimmed.toLowerCase().startsWith('dear')) { startIdx = i + 1; continue; }
         if (/^\+?\d[\d\s\-\(\):]+$/.test(trimmed.replace(/[|]/g, '').trim())) { startIdx = i + 1; continue; }
@@ -1371,94 +1181,56 @@
         if (/linkedin\.com|github\.com/i.test(trimmed)) { startIdx = i + 1; continue; }
         break;
       }
-
       return lines.slice(startIdx).join('\n');
     },
 
-    // ============ EXTRACT COVER LETTER BODY PARAGRAPHS ============
-    // Returns array of body paragraphs (excluding date, Re:, Dear, and closing)
     extractCoverLetterBody(text) {
       if (!text) return [];
       const lines = text.split('\n');
       const bodyLines = [];
       let inBody = false;
-      let closingFound = false;
-
       const closingPatterns = /^(Yours sincerely|Sincerely|Best regards|Kind regards|Regards|Warm regards|Respectfully),?\s*$/i;
-      const headerPatterns = /^(Date:|Re:|Dear\s+|[A-Z][a-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Z][a-z]+\s+\d{4})/;
 
       for (const line of lines) {
         const trimmed = line.trim();
-
-        // Skip everything until after "Dear..."
         if (!inBody) {
-          if (/^Dear\s+/i.test(trimmed)) {
-            inBody = true;
-          }
+          if (/^Dear\s+/i.test(trimmed)) { inBody = true; }
           continue;
         }
-
-        // Stop at closing
-        if (closingPatterns.test(trimmed)) {
-          closingFound = true;
-          break;
-        }
-
+        if (closingPatterns.test(trimmed)) break;
         bodyLines.push(line);
       }
 
-      // Split into paragraphs by blank lines
       const paragraphs = bodyLines.join('\n').split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
-
-      // If no paragraphs were extracted (parsing failed), use fallback
       if (paragraphs.length === 0 && text.length > 100) {
-        console.warn('[OpenResume] Could not extract body paragraphs, using full text fallback');
-        // Try splitting by sentences into 3 chunks
         const sentences = text.replace(/^.*?Dear[^,]*,\s*/s, '').replace(/\s*(Yours sincerely|Sincerely|Best regards).*/si, '');
-        if (sentences.length > 50) {
-          return [sentences];
-        }
+        if (sentences.length > 50) return [sentences];
       }
-
       return paragraphs;
     },
 
-    // ============ HELPER: Extract Years Experience ============
     extractYearsExperience(summary) {
       if (!summary) return null;
       const match = summary.match(/(\d+)\+?\s*years?/i);
       return match ? match[1] : null;
     },
 
-    // ============ HELPER: Extract Achievement ============
     extractAchievement(bullet) {
       if (!bullet) return 'significant performance improvements';
-      // Try to extract a quantified achievement
       const match = bullet.match(/(\d+%?\s*(?:improvement|increase|reduction|faster|efficiency|growth))/i);
       return match ? match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
     },
 
-    // ============ GENERATE COVER LETTER TEXT (Fallback) ============
     generateCoverLetterText(data, keywords, jobData, candidateData) {
       const name = data.contact.name;
       const jobTitle = jobData?.title || 'the open position';
-      // FIX 02-02-26: ROBUST company extraction with CRITICAL validation
       let rawCompany = this.extractCompanyName(jobData);
-      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization', 
-                                   'organization', 'n/a', 'unknown', '', 'employer'];
-      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim())) 
-        ? rawCompany 
-        : 'the hiring organization';
-      // ROBUST: Ensure keywords is always an array before slicing
-      const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
-      const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
-      // Default keywords if empty
-      const kw1 = highPriority[0] || 'technical solutions';
-      const kw2 = highPriority[1] || 'cross-functional collaboration';
-
-      // Format: Name, Phone | Email, Date, Re: Title, Dear Hiring Manager (NO company name line)
+      const invalidNames = ['company', 'your company', 'the company', 'your organization', 'organization', 'n/a', 'unknown', '', 'employer'];
+      const company = (rawCompany && !invalidNames.includes(rawCompany.toLowerCase().trim())) ? rawCompany : 'the hiring organisation';
+      const kwa = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
+      const hp = Array.isArray(kwa) ? kwa.slice(0, 5) : [];
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const lines = [
+      return [
         name.toUpperCase(),
         [formattedPhone, data.contact.email].filter(Boolean).join(' | '),
         '',
@@ -1468,137 +1240,70 @@
         '',
         'Dear Hiring Manager,',
         '',
-        `I am excited to apply for the ${jobTitle} position at ${company}. With experience in ${kw1} and ${kw2}, I deliver measurable business impact through innovative solutions.`,
+        `I am writing to express my interest in the ${jobTitle} position at ${company}. With experience in ${hp[0] || 'technical solutions'} and ${hp[1] || 'cross-functional collaboration'}, I deliver measurable business impact.`,
         '',
-        `In my previous roles, I have successfully implemented ${highPriority[2] || 'technical'} solutions and led ${highPriority[3] || 'cross-functional'} initiatives resulting in significant improvements.`,
+        `In previous roles, I have successfully implemented ${hp[2] || 'technical'} solutions and led ${hp[3] || 'cross-functional'} initiatives producing significant improvements.`,
         '',
-        `I would welcome the opportunity to discuss how my ${highPriority[4] || 'expertise'} can contribute to ${company}'s success. Thank you for your consideration.`,
+        `I would welcome the opportunity to discuss how my ${hp[4] || 'expertise'} can contribute to ${company}'s success. Thank you for your consideration.`,
         '',
         'Yours sincerely,',
         name
-      ];
-
-      return lines.join('\n');
+      ].join('\n');
     },
 
-    // ============ CALCULATE MATCH SCORE ============
     calculateMatchScore(tailoredData, keywords) {
       const allKeywords = keywords.all || keywords;
       if (!allKeywords || allKeywords.length === 0) return 0;
-
-      // Build text from all sections
       const text = [
-        tailoredData.summary,
-        tailoredData.skills?.join(' '),
+        tailoredData.summary, tailoredData.skills?.join(' '),
         tailoredData.experience?.map(e => e.bullets?.join(' ')).join(' '),
         tailoredData.certifications?.join(' ')
       ].filter(Boolean).join(' ').toLowerCase();
-
-      // Count matches
       let matches = 0;
-      allKeywords.forEach(kw => {
-        if (text.includes(kw.toLowerCase())) matches++;
-      });
-
-      const score = Math.round((matches / allKeywords.length) * 100);
-      console.log(`[OpenResume] Match Score: ${score}% (${matches}/${allKeywords.length})`);
-      return score;
+      allKeywords.forEach(kw => { if (text.includes(kw.toLowerCase())) matches++; });
+      return Math.round((matches / allKeywords.length) * 100);
     },
 
-    // ============ HELPER: Extract Company Name with Multi-Source Fallback (100% ACCURACY) ============
-    // CRITICAL: This function MUST return a valid company name, NEVER "Company" or empty for cover letters
     extractCompanyName(jobData) {
-      if (!jobData) return 'the hiring organization';
-      
-      // Try jobData.company first
+      if (!jobData) return 'the hiring organisation';
       let company = jobData.company || '';
-      
-      // Extended list of invalid placeholder values
-      const invalidNames = [
-        'company', 'the company', 'your company', 'hiring team', 'organization', 
-        'organisation', 'employer', 'n/a', 'unknown', 'hiring company', 'the hiring company',
-        '[company]', '{company}', '{{company}}', 'company name', '[company name]'
-      ];
-      
-      // Validate: reject invalid values
-      const isInvalid = (val) => {
-        if (!val || typeof val !== 'string') return true;
-        const lower = val.toLowerCase().trim();
-        return invalidNames.includes(lower) || lower.length < 2;
-      };
-      
-      // STRATEGY 1: Check companyName alternate field
-      if (isInvalid(company) && jobData.companyName) {
-        company = jobData.companyName;
-      }
-      
-      // STRATEGY 2: Check recipientCompany field from AI response
-      if (isInvalid(company) && jobData.recipientCompany) {
-        company = jobData.recipientCompany;
-      }
-      
-      // STRATEGY 3: Extract from job title like "Senior Engineer at Bugcrowd"
+      const invalidNames = ['company', 'the company', 'your company', 'hiring team', 'organization', 'organisation', 'employer', 'n/a', 'unknown', 'hiring company', '[company]', '{company}', '{{company}}', 'company name'];
+      const isInvalid = (val) => { if (!val || typeof val !== 'string') return true; return invalidNames.includes(val.toLowerCase().trim()) || val.trim().length < 2; };
+
+      if (isInvalid(company) && jobData.companyName) company = jobData.companyName;
+      if (isInvalid(company) && jobData.recipientCompany) company = jobData.recipientCompany;
       if (isInvalid(company)) {
         const titleMatch = (jobData.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.\-]+?)(?:\s*[-|–—]|\s*$)/i);
-        if (titleMatch) {
-          company = titleMatch[1].trim();
-        }
+        if (titleMatch) company = titleMatch[1].trim();
       }
-      
-      // STRATEGY 4: Extract from URL path (e.g., /okx/jobs/ → OKX)
       if (isInvalid(company)) {
         const url = jobData.url || '';
         const pathMatch = url.match(/\/([a-zA-Z][a-zA-Z0-9\-]{1,30})\/(?:jobs?|careers?|apply|positions?)/i);
         if (pathMatch && pathMatch[1]) {
-          const pathSegment = pathMatch[1].toLowerCase();
-          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'hire', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims', 'taleo'];
-          if (!blacklist.includes(pathSegment)) {
-            company = pathSegment.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-          }
+          const seg = pathMatch[1].toLowerCase();
+          const bl = ['www', 'apply', 'jobs', 'careers', 'boards', 'hire', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims', 'taleo'];
+          if (!bl.includes(seg)) company = seg.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         }
       }
-      
-      // STRATEGY 5: Extract from URL subdomain (e.g., okx.greenhouse.io → OKX)
       if (isInvalid(company)) {
         const url = jobData.url || '';
         const hostMatch = url.match(/https?:\/\/([^.\/]+)\./i);
         if (hostMatch && hostMatch[1]) {
-          const subdomain = hostMatch[1].toLowerCase();
-          const blacklist = ['www', 'apply', 'jobs', 'careers', 'boards', 'job-boards', 'hire', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims', 'taleo', 'myworkdayjobs'];
-          if (!blacklist.includes(subdomain) && subdomain.length > 2 && subdomain.length < 30) {
-            company = subdomain.toUpperCase().length <= 4 ? subdomain.toUpperCase() : subdomain.charAt(0).toUpperCase() + subdomain.slice(1);
-          }
+          const sub = hostMatch[1].toLowerCase();
+          const bl = ['www', 'apply', 'jobs', 'careers', 'boards', 'hire', 'greenhouse', 'lever', 'workday', 'smartrecruiters', 'icims', 'taleo', 'myworkdayjobs'];
+          if (!bl.includes(sub) && sub.length > 2 && sub.length < 30) company = sub.toUpperCase().length <= 4 ? sub.toUpperCase() : sub.charAt(0).toUpperCase() + sub.slice(1);
         }
       }
-      
-      // STRATEGY 6: Use siteName from stored metadata
-      if (isInvalid(company)) {
-        if (jobData.siteName && !isInvalid(jobData.siteName)) {
-          company = jobData.siteName;
-        }
-      }
-      
-      // Final cleanup and sanitization
+      if (isInvalid(company) && jobData.siteName && !isInvalid(jobData.siteName)) company = jobData.siteName;
       if (company && typeof company === 'string') {
-        company = company
-          .replace(/\s*(careers|jobs|hiring|apply|work|join|inc\.?|ltd\.?|llc\.?)\s*$/i, '')
-          .replace(/\(formerly[^)]*\)/gi, '') // Remove "(formerly X)" suffixes
-          .replace(/\s+/g, ' ')
-          .trim();
+        company = company.replace(/\s*(careers|jobs|hiring|apply|work|join|inc\.?|ltd\.?|llc\.?)\s*$/i, '').replace(/\(formerly[^)]*\)/gi, '').replace(/\s+/g, ' ').trim();
       }
-      
-      // CRITICAL: NEVER return empty - use intelligent fallback for cover letters
-      if (isInvalid(company)) {
-        console.warn('[OpenResume] ⚠️ Could not extract company name, using fallback');
-        return 'the hiring organization';
-      }
-      
-      console.log(`[OpenResume] ✅ Extracted company name: "${company}"`);
+      if (isInvalid(company)) return 'the hiring organisation';
       return company;
     }
   };
 
-  // ============ EXPORT ============
   global.OpenResumeGenerator = OpenResumeGenerator;
+  console.log('[ATSGen] ATS PDF Generator v4.0 loaded');
 
 })(typeof window !== 'undefined' ? window : this);
