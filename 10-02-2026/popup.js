@@ -2767,7 +2767,7 @@ class ATSTailor {
         } else if (toInject.length <= 5) {
           injectionPhrase = ` Strong background in ${toInject.slice(0, 3).join(', ')}, with additional skills in ${toInject.slice(3).join(' and ')}.`;
         } else {
-          injectionPhrase = ` Core competencies include ${toInject.slice(0, 4).join(', ')}. Proven proficiency in ${toInject.slice(4).join(', ')}.`;
+          injectionPhrase = ` Core skills include ${toInject.slice(0, 4).join(', ')}. Proficiency in ${toInject.slice(4).join(', ')}.`;
         }
         
         const newSummary = summaryText.trim() + injectionPhrase;
@@ -3332,6 +3332,21 @@ class ATSTailor {
         matchedCount: this.generatedDocuments.matchedKeywords?.length,
         missingCount: this.generatedDocuments.missingKeywords?.length
       });
+
+      // CRITICAL: Apply ContentQualityEngine sanitisation to final CV and cover letter
+      // Ensures UK spelling, no banned words, no em dashes in ALL output
+      if (typeof ContentQualityEngine !== 'undefined') {
+        if (this.generatedDocuments.cv) {
+          this.generatedDocuments.cv = ContentQualityEngine.sanitiseCVBlock(this.generatedDocuments.cv);
+          console.log('[ATS Tailor] Applied ContentQualityEngine to final CV');
+        }
+        if (this.generatedDocuments.coverLetter) {
+          this.generatedDocuments.coverLetter = ContentQualityEngine.sanitiseContent(
+            this.generatedDocuments.coverLetter, { removePronouns: false }
+          );
+          console.log('[ATS Tailor] Applied ContentQualityEngine to cover letter');
+        }
+      }
 
       // Regenerate PDF with boosted CV and dynamic location
       if (this.generatedDocuments.cv) {

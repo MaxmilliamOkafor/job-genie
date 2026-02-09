@@ -1,6 +1,7 @@
-// content-quality-engine.js - Anti-AI Detection & Content Quality v1.0
+// content-quality-engine.js - Anti-AI Detection & Content Quality v2.0
 // Features: UK spelling enforcement, banned words filtering, em dash removal, sentence variation
 // Ensures authentic, human-written content that avoids AI detection patterns
+// v2.0: Comprehensive UK spelling, expanded banned words, sentence structure variation detection
 
 (function(global) {
   'use strict';
@@ -13,11 +14,13 @@
     'synergy', 'cutting-edge', 'best-in-class', 'world-class',
     'results-driven', 'detail-oriented', 'team player', 'go-getter',
     'various', 'assisted', 'leverage', 'leveraging', 'leveraged',
-    'utilize', 'utilizing', 'utilized', 'utilising', 'utilised'
+    'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
+    'utilise', 'utilization', 'utilisation'
   ];
 
   const BANNED_PHRASES = [
     'proven ability', 'proven track record', 'proven record',
+    'proven proficiency', 'proven proficiency in', 'proven expertise',
     'the intersection of', 'drive impactful outcomes',
     'strategic initiatives', 'stakeholder environments',
     'think outside the box', 'deep dive', 'low-hanging fruit',
@@ -27,7 +30,8 @@
     'bandwidth', 'synergize', 'holistic approach',
     'robust solution', 'seamless integration', 'end-to-end',
     'state-of-the-art', 'next-generation', 'mission-critical',
-    'thought leadership', 'disruptive innovation'
+    'thought leadership', 'disruptive innovation',
+    'optimizing ci/cd processes', 'optimising ci/cd processes'
   ];
 
   // ============ AI DETECTION PHRASE PATTERNS ============
@@ -77,18 +81,26 @@
     'utilizing': 'using',
     'utilized': 'used',
     'utilising': 'using',
-    'utilised': 'used'
+    'utilised': 'used',
+    'utilise': 'use',
+    'utilization': 'usage',
+    'utilisation': 'usage'
   };
 
   const PHRASE_REPLACEMENTS = {
     'proven ability': 'strong ability',
     'proven track record': 'track record',
     'proven record': 'record',
+    'proven proficiency': 'proficiency',
+    'proven proficiency in': 'proficiency in',
+    'proven expertise': 'expertise',
     'the intersection of': 'across',
     'drive impactful outcomes': 'deliver results',
     'strategic initiatives': 'key projects',
     'stakeholder environments': 'business contexts',
     'think outside the box': 'approach problems creatively',
+    'optimizing ci/cd processes': 'improving CI/CD pipelines',
+    'optimising ci/cd processes': 'improving CI/CD pipelines',
     'resulting in': 'achieving',
     'leading to': 'producing',
     'which led to': ', achieving',
@@ -98,94 +110,168 @@
   };
 
   // ============ US TO UK SPELLING CONVERSIONS ============
+  // COMPREHENSIVE: Covers -ize/-ise, -or/-our, -er/-re, -ense/-ence, -og/-ogue, -l/-ll, -yze/-yse, misc
   const US_TO_UK_SPELLING = {
-    // -ize to -ise
+    // -ize to -ise (all forms)
     'optimize': 'optimise', 'optimized': 'optimised', 'optimizing': 'optimising', 'optimization': 'optimisation',
     'organize': 'organise', 'organized': 'organised', 'organizing': 'organising', 'organization': 'organisation',
-    'analyze': 'analyse', 'analyzed': 'analysed', 'analyzing': 'analysing', 'analysis': 'analysis',
     'realize': 'realise', 'realized': 'realised', 'realizing': 'realising', 'realization': 'realisation',
     'specialize': 'specialise', 'specialized': 'specialised', 'specializing': 'specialising', 'specialization': 'specialisation',
     'recognize': 'recognise', 'recognized': 'recognised', 'recognizing': 'recognising', 'recognition': 'recognition',
-    'prioritize': 'prioritise', 'prioritized': 'prioritised', 'prioritizing': 'prioritising', 'prioritization': 'prioritisation',
+    'characterize': 'characterise', 'characterized': 'characterised', 'characterizing': 'characterising', 'characterization': 'characterisation',
+    'categorize': 'categorise', 'categorized': 'categorised', 'categorizing': 'categorising', 'categorization': 'categorisation',
+    'emphasize': 'emphasise', 'emphasized': 'emphasised', 'emphasizing': 'emphasising',
+    'summarize': 'summarise', 'summarized': 'summarised', 'summarizing': 'summarising',
+    'authorize': 'authorise', 'authorized': 'authorised', 'authorizing': 'authorising', 'authorization': 'authorisation',
     'standardize': 'standardise', 'standardized': 'standardised', 'standardizing': 'standardising', 'standardization': 'standardisation',
-    'customize': 'customise', 'customized': 'customised', 'customizing': 'customising', 'customization': 'customisation',
+    'modernize': 'modernise', 'modernized': 'modernised', 'modernizing': 'modernising', 'modernization': 'modernisation',
     'minimize': 'minimise', 'minimized': 'minimised', 'minimizing': 'minimising', 'minimization': 'minimisation',
     'maximize': 'maximise', 'maximized': 'maximised', 'maximizing': 'maximising', 'maximization': 'maximisation',
-    'centralize': 'centralise', 'centralized': 'centralised', 'centralizing': 'centralising', 'centralization': 'centralisation',
-    'modernize': 'modernise', 'modernized': 'modernised', 'modernizing': 'modernising', 'modernization': 'modernisation',
-    'authorize': 'authorise', 'authorized': 'authorised', 'authorizing': 'authorising', 'authorization': 'authorisation',
-    'visualize': 'visualise', 'visualized': 'visualised', 'visualizing': 'visualising', 'visualization': 'visualisation',
+    'prioritize': 'prioritise', 'prioritized': 'prioritised', 'prioritizing': 'prioritising', 'prioritization': 'prioritisation',
+    'customize': 'customise', 'customized': 'customised', 'customizing': 'customising', 'customization': 'customisation',
     'finalize': 'finalise', 'finalized': 'finalised', 'finalizing': 'finalising', 'finalization': 'finalisation',
+    'visualize': 'visualise', 'visualized': 'visualised', 'visualizing': 'visualising', 'visualization': 'visualisation',
+    'mobilize': 'mobilise', 'mobilized': 'mobilised', 'mobilizing': 'mobilising', 'mobilization': 'mobilisation',
+    'dramatize': 'dramatise', 'dramatized': 'dramatised', 'dramatizing': 'dramatising',
+    'criticize': 'criticise', 'criticized': 'criticised', 'criticizing': 'criticising', 'criticism': 'criticism',
+    'apologize': 'apologise', 'apologized': 'apologised', 'apologizing': 'apologising',
     'digitize': 'digitise', 'digitized': 'digitised', 'digitizing': 'digitising', 'digitization': 'digitisation',
+    'terrorize': 'terrorise', 'terrorized': 'terrorised', 'terrorizing': 'terrorising',
     'harmonize': 'harmonise', 'harmonized': 'harmonised', 'harmonizing': 'harmonising', 'harmonization': 'harmonisation',
+    'memorize': 'memorise', 'memorized': 'memorised', 'memorizing': 'memorising',
+    'sterilize': 'sterilise', 'sterilized': 'sterilised', 'sterilizing': 'sterilising', 'sterilization': 'sterilisation',
+    'stabilize': 'stabilise', 'stabilized': 'stabilised', 'stabilizing': 'stabilising', 'stabilization': 'stabilisation',
+    'centralize': 'centralise', 'centralized': 'centralised', 'centralizing': 'centralising', 'centralization': 'centralisation',
     'monetize': 'monetise', 'monetized': 'monetised', 'monetizing': 'monetising', 'monetization': 'monetisation',
     'itemize': 'itemise', 'itemized': 'itemised', 'itemizing': 'itemising',
-    'summarize': 'summarise', 'summarized': 'summarised', 'summarizing': 'summarising',
-    'emphasize': 'emphasise', 'emphasized': 'emphasised', 'emphasizing': 'emphasising',
-    'categorize': 'categorise', 'categorized': 'categorised', 'categorizing': 'categorising',
     'synchronize': 'synchronise', 'synchronized': 'synchronised', 'synchronizing': 'synchronising',
+    'normalize': 'normalise', 'normalized': 'normalised', 'normalizing': 'normalising', 'normalization': 'normalisation',
+    'localize': 'localise', 'localized': 'localised', 'localizing': 'localising', 'localization': 'localisation',
+    'globalize': 'globalise', 'globalized': 'globalised', 'globalizing': 'globalising', 'globalization': 'globalisation',
+    'capitalize': 'capitalise', 'capitalized': 'capitalised', 'capitalizing': 'capitalising', 'capitalization': 'capitalisation',
+    'rationalize': 'rationalise', 'rationalized': 'rationalised', 'rationalizing': 'rationalising',
+    'neutralize': 'neutralise', 'neutralized': 'neutralised', 'neutralizing': 'neutralising',
+    'privatize': 'privatise', 'privatized': 'privatised', 'privatizing': 'privatising', 'privatization': 'privatisation',
+    'randomize': 'randomise', 'randomized': 'randomised', 'randomizing': 'randomising',
+    'customize': 'customise', 'customized': 'customised', 'customizing': 'customising',
+    'incentivize': 'incentivise', 'incentivized': 'incentivised', 'incentivizing': 'incentivising',
     'utilize': 'use', 'utilized': 'used', 'utilizing': 'using', 'utilization': 'usage',
-    
+    'utilise': 'use', 'utilised': 'used', 'utilising': 'using', 'utilisation': 'usage',
+
+    // -yze to -yse
+    'analyze': 'analyse', 'analyzed': 'analysed', 'analyzing': 'analysing', 'analysis': 'analysis',
+    'paralyze': 'paralyse', 'paralyzed': 'paralysed', 'paralyzing': 'paralysing',
+    'catalyze': 'catalyse', 'catalyzed': 'catalysed', 'catalyzing': 'catalysing',
+
     // -or to -our
     'color': 'colour', 'colors': 'colours', 'colored': 'coloured', 'coloring': 'colouring',
     'favor': 'favour', 'favors': 'favours', 'favored': 'favoured', 'favoring': 'favouring', 'favorite': 'favourite',
-    'labor': 'labour', 'labors': 'labours', 'labored': 'laboured', 'laboring': 'labouring',
-    'neighbor': 'neighbour', 'neighbors': 'neighbours', 'neighboring': 'neighbouring',
+    'flavor': 'flavour', 'flavors': 'flavours', 'flavored': 'flavoured',
     'honor': 'honour', 'honors': 'honours', 'honored': 'honoured', 'honoring': 'honouring',
     'humor': 'humour', 'humors': 'humours',
+    'labor': 'labour', 'labors': 'labours', 'labored': 'laboured', 'laboring': 'labouring',
+    'neighbor': 'neighbour', 'neighbors': 'neighbours', 'neighboring': 'neighbouring',
+    'rumor': 'rumour', 'rumors': 'rumours',
+    'vigor': 'vigour', 'vigorous': 'vigorous',
+    'vapor': 'vapour', 'vapors': 'vapours',
+    'splendor': 'splendour',
+    'candor': 'candour',
+    'odor': 'odour', 'odors': 'odours',
+    'parlor': 'parlour', 'parlors': 'parlours',
+    'savior': 'saviour', 'saviors': 'saviours',
     'behavior': 'behaviour', 'behaviors': 'behaviours', 'behavioral': 'behavioural',
     'endeavor': 'endeavour', 'endeavors': 'endeavours', 'endeavored': 'endeavoured',
     'harbor': 'harbour', 'harbors': 'harbours',
-    'flavor': 'flavour', 'flavors': 'flavours', 'flavored': 'flavoured',
-    
+
     // -er to -re
     'center': 'centre', 'centers': 'centres', 'centered': 'centred', 'centering': 'centring',
+    'theater': 'theatre', 'theaters': 'theatres',
     'meter': 'metre', 'meters': 'metres',
     'liter': 'litre', 'liters': 'litres',
     'fiber': 'fibre', 'fibers': 'fibres',
-    'theater': 'theatre', 'theaters': 'theatres',
-    
-    // -log to -logue
-    'analog': 'analogue', 'analogs': 'analogues',
-    'catalog': 'catalogue', 'catalogs': 'catalogues', 'cataloged': 'catalogued',
-    'dialog': 'dialogue', 'dialogs': 'dialogues',
-    
+    'caliber': 'calibre',
+    'saber': 'sabre', 'sabers': 'sabres',
+    'somber': 'sombre',
+    'specter': 'spectre', 'specters': 'spectres',
+
     // -ense to -ence
     'defense': 'defence', 'defenses': 'defences',
     'offense': 'offence', 'offenses': 'offences',
     'license': 'licence', 'licenses': 'licences',
-    
-    // -l to -ll (past tense)
-    'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller',
-    'modeled': 'modelled', 'modeling': 'modelling',
+    'pretense': 'pretence', 'pretenses': 'pretences',
+
+    // -og to -ogue
+    'catalog': 'catalogue', 'catalogs': 'catalogues', 'cataloged': 'catalogued',
+    'dialog': 'dialogue', 'dialogs': 'dialogues',
+    'analog': 'analogue', 'analogs': 'analogues',
+    'monolog': 'monologue', 'monologs': 'monologues',
+    'epilog': 'epilogue', 'epilogs': 'epilogues',
+    'prolog': 'prologue', 'prologs': 'prologues',
+
+    // -l to -ll (before suffixes)
+    'traveled': 'travelled', 'traveling': 'travelling', 'traveler': 'traveller', 'travelers': 'travellers',
     'canceled': 'cancelled', 'canceling': 'cancelling',
     'labeled': 'labelled', 'labeling': 'labelling',
-    'leveled': 'levelled', 'leveling': 'levelling',
+    'modeled': 'modelled', 'modeling': 'modelling',
     'fueled': 'fuelled', 'fueling': 'fuelling',
+    'leveled': 'levelled', 'leveling': 'levelling',
+    'jeweler': 'jeweller', 'jewelers': 'jewellers',
+    'marveled': 'marvelled', 'marveling': 'marvelling',
+    'quarreled': 'quarrelled', 'quarreling': 'quarrelling',
     'signaled': 'signalled', 'signaling': 'signalling',
-    
-    // Other common differences
-    'program': 'programme', 'programs': 'programmes', 'programed': 'programmed', 'programing': 'programming',
-    'gray': 'grey', 'grays': 'greys',
-    'acknowledgment': 'acknowledgement', 'acknowledgments': 'acknowledgements',
-    'judgment': 'judgement', 'judgments': 'judgements',
-    'fulfill': 'fulfil', 'fulfills': 'fulfils', 'fulfilled': 'fulfilled', 'fulfilling': 'fulfilling',
-    'skillful': 'skilful',
-    'enrollment': 'enrolment', 'enrollments': 'enrolments',
-    'installment': 'instalment', 'installments': 'instalments',
+    'tunneled': 'tunnelled', 'tunneling': 'tunnelling',
+    'counselor': 'counsellor', 'counselors': 'counsellors',
+    'channeled': 'channelled', 'channeling': 'channelling',
+
+    // Miscellaneous common differences
     'aging': 'ageing',
-    'artifact': 'artefact', 'artifacts': 'artefacts',
-    'esthetic': 'aesthetic', 'esthetics': 'aesthetics',
     'aluminum': 'aluminium',
+    'artifact': 'artefact', 'artifacts': 'artefacts',
+    'gray': 'grey', 'grays': 'greys',
+    'enrollment': 'enrolment', 'enrollments': 'enrolments',
+    'fulfillment': 'fulfilment',
+    'installment': 'instalment', 'installments': 'instalments',
+    'judgment': 'judgement', 'judgments': 'judgements',
+    'skillful': 'skilful',
+    'marvelous': 'marvellous',
+    'woolen': 'woollen',
     'skeptic': 'sceptic', 'skeptical': 'sceptical', 'skepticism': 'scepticism',
-    'check': 'cheque', // Only for bank cheques - handle carefully
     'maneuver': 'manoeuvre', 'maneuvered': 'manoeuvred', 'maneuvering': 'manoeuvring',
-    'draft': 'draught', // Only for certain contexts
     'plow': 'plough', 'plowed': 'ploughed', 'plowing': 'ploughing',
-    'curb': 'kerb', // Only for road context
-    'tire': 'tyre', 'tires': 'tyres', // Only for wheels
+    'acknowledgment': 'acknowledgement', 'acknowledgments': 'acknowledgements',
+    'esthetic': 'aesthetic', 'esthetics': 'aesthetics',
+    'fulfill': 'fulfil', 'fulfills': 'fulfils', 'fulfilled': 'fulfilled', 'fulfilling': 'fulfilling',
     'inquire': 'enquire', 'inquired': 'enquired', 'inquiring': 'enquiring', 'inquiry': 'enquiry',
+
+    // Medical/Scientific terms
+    'estrogen': 'oestrogen',
+    'anemia': 'anaemia',
+    'cesarean': 'caesarean',
+    'diarrhea': 'diarrhoea',
+    'feces': 'faeces',
+    'fetus': 'foetus',
+    'hemoglobin': 'haemoglobin',
+    'hemorrhage': 'haemorrhage',
+    'pediatric': 'paediatric', 'pediatrics': 'paediatrics',
+    'leukemia': 'leukaemia',
+
+    // NOTE: Context-sensitive words excluded from auto-replace to avoid false positives:
+    // 'check' (cheque only for payment), 'draft' (draught only for air/beer),
+    // 'curb' (kerb only for pavement), 'tire' (tyre only for wheels),
+    // 'program' (programme only for TV/events, NOT computing)
   };
+
+  // ============ FALLBACK REGEX PATTERNS for -ize/-ise ============
+  // Catches any remaining US -ize words not explicitly listed above
+  const IZE_PATTERN = /\b([a-z]+)iz(e[ds]?|ing|ation)\b/gi;
+  const IZE_EXCEPTIONS = new Set([
+    'size', 'sized', 'sizing', 'sizes', 'prize', 'prized', 'prizes',
+    'seize', 'seized', 'seizes', 'seizing', 'capsize', 'capsized',
+    'citizen', 'citizens', 'denizen', 'horizon', 'magazine',
+    'wizard', 'lizard', 'bizarre', 'piazza', 'pizza', 'fizz',
+    'quiz', 'whiz', 'frizz', 'jazz', 'buzz', 'fuzz',
+    'amazon', 'organization' // 'organization' handled explicitly above
+  ]);
 
   // ============ CONTENT QUALITY ENGINE ============
   const ContentQualityEngine = {
@@ -204,14 +290,14 @@
 
       let result = text;
 
-      // Step 1: Convert US to UK spelling
-      if (convertToUK) {
-        result = this.convertToUKSpelling(result);
-      }
-
-      // Step 2: Remove banned words and phrases
+      // Step 1: Remove banned words and phrases FIRST (before UK spelling, since some banned words have US spelling)
       if (removeBannedWords) {
         result = this.removeBannedContent(result);
+      }
+
+      // Step 2: Convert US to UK spelling
+      if (convertToUK) {
+        result = this.convertToUKSpelling(result);
       }
 
       // Step 3: Remove em dashes
@@ -227,6 +313,11 @@
       // Step 5: Remove personal pronouns (I, my, me, we, our)
       if (removePronouns) {
         result = this.removePronouns(result);
+      }
+
+      // Step 6: Second pass on banned content (catches anything introduced by UK conversion)
+      if (removeBannedWords) {
+        result = this.removeBannedContent(result);
       }
 
       // Final cleanup
@@ -253,18 +344,21 @@
         .trim()
         .split(/\s+/)
         .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('\\s+');
+        .join('[\\s\\n]+');
       return new RegExp(`\\b${escaped}\\b`, 'gi');
     },
 
-    // ============ SENTENCE STRUCTURE VARIATION (Bullet Verb Repetition) ============
+    // ============ SENTENCE STRUCTURE VARIATION DETECTION ============
+
+    // Detect repetitive verb starts across bullet points
     detectBulletVerbRepetition(bullets) {
       const warnings = [];
-      if (!Array.isArray(bullets) || bullets.length < 3) return { warnings, counts: {} };
+      if (!Array.isArray(bullets) || bullets.length < 2) return { warnings, counts: {}, patterns: {} };
 
       const counts = {};
+      const patternCounts = {};
       const normalise = (b) => String(b || '')
-        .replace(/^[•\-\*▪▸]+\s*/, '')
+        .replace(/^[•\-\*▪▸►]+\s*/, '')
         .trim();
 
       for (const b of bullets) {
@@ -273,8 +367,13 @@
         if (!firstWord) continue;
         const key = firstWord.toLowerCase();
         counts[key] = (counts[key] || 0) + 1;
+
+        // Detect sentence structure patterns
+        const pattern = this._classifyBulletPattern(text);
+        patternCounts[pattern] = (patternCounts[pattern] || 0) + 1;
       }
 
+      // Flag verbs used 2+ times
       const repeats = Object.entries(counts)
         .filter(([_, n]) => n >= 2)
         .sort((a, b) => b[1] - a[1]);
@@ -283,35 +382,104 @@
         warnings.push(`Multiple bullets start with "${verb}" (${n}x). Consider varying openings.`);
       });
 
-      return { warnings, counts };
+      // Flag repetitive sentence patterns (same pattern 3+ times)
+      const patternRepeats = Object.entries(patternCounts)
+        .filter(([_, n]) => n >= 3)
+        .sort((a, b) => b[1] - a[1]);
+
+      patternRepeats.forEach(([pattern, n]) => {
+        warnings.push(`Repetitive bullet structure "${pattern}" used ${n}x. Vary sentence patterns.`);
+      });
+
+      // Flag uniform bullet length (all bullets within 20% of each other)
+      const lengths = bullets.map(b => normalise(b).split(/\s+/).length).filter(l => l > 0);
+      if (lengths.length >= 4) {
+        const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+        const allSimilar = lengths.every(l => Math.abs(l - avg) / avg < 0.2);
+        if (allSimilar) {
+          warnings.push('All bullets have similar word count. Mix short punchy bullets with detailed ones.');
+        }
+      }
+
+      return { warnings, counts, patterns: patternCounts };
     },
 
-    // Extract bullets from a CV text block and run verb repetition detection.
+    // Classify bullet point into a structural pattern
+    _classifyBulletPattern(text) {
+      if (!text) return 'unknown';
+      const lower = text.toLowerCase();
+
+      // "Action + metric + outcome" pattern
+      if (/^\w+ed?\s.*\d+%?.*(?:resulting|leading|achieving|producing)/i.test(text)) {
+        return 'action-metric-outcome';
+      }
+      // "Action + using/via/through + tool" pattern
+      if (/^\w+ed?\s.*(?:using|via|through|applying|employing)\s/i.test(text)) {
+        return 'action-using-tool';
+      }
+      // "Action + by/for + purpose" pattern
+      if (/^\w+ed?\s.*(?:by|for)\s/i.test(text)) {
+        return 'action-by-purpose';
+      }
+      // Starts with number/metric
+      if (/^\d/.test(text)) {
+        return 'metric-first';
+      }
+      // Short punchy (under 10 words)
+      if (text.split(/\s+/).length <= 10) {
+        return 'short-punchy';
+      }
+      return 'standard';
+    },
+
+    // Extract bullets from a CV text block and run variation detection.
     detectBulletVerbRepetitionFromCV(cvText) {
       const bullets = String(cvText || '')
         .split(/\n/)
         .map(l => l.trim())
-        .filter(l => /^[-•*▪▸]\s+/.test(l))
-        .map(l => l.replace(/^[-•*▪▸]\s+/, '').trim());
+        .filter(l => /^[-•*▪▸►]\s+/.test(l) || /^[-•*▪▸►]\s*\S/.test(l))
+        .map(l => l.replace(/^[-•*▪▸►]\s*/, '').trim());
 
       return this.detectBulletVerbRepetition(bullets);
+    },
+
+    // Auto-fix repetitive verb starts by suggesting alternative verbs
+    suggestVerbAlternatives(verb) {
+      const alternatives = {
+        'led': ['Directed', 'Managed', 'Guided', 'Headed', 'Oversaw'],
+        'managed': ['Directed', 'Oversaw', 'Coordinated', 'Administered', 'Handled'],
+        'developed': ['Built', 'Created', 'Designed', 'Engineered', 'Constructed'],
+        'implemented': ['Deployed', 'Executed', 'Rolled out', 'Introduced', 'Delivered'],
+        'created': ['Built', 'Designed', 'Developed', 'Produced', 'Established'],
+        'improved': ['Enhanced', 'Strengthened', 'Boosted', 'Elevated', 'Refined'],
+        'built': ['Constructed', 'Developed', 'Designed', 'Assembled', 'Engineered'],
+        'designed': ['Architected', 'Crafted', 'Created', 'Planned', 'Devised'],
+        'delivered': ['Completed', 'Shipped', 'Produced', 'Achieved', 'Executed'],
+        'drove': ['Accelerated', 'Advanced', 'Propelled', 'Initiated', 'Fostered'],
+        'reduced': ['Cut', 'Decreased', 'Lowered', 'Minimised', 'Trimmed'],
+        'increased': ['Grew', 'Raised', 'Boosted', 'Expanded', 'Elevated'],
+        'established': ['Founded', 'Set up', 'Introduced', 'Initiated', 'Launched'],
+        'streamlined': ['Simplified', 'Refined', 'Optimised', 'Consolidated', 'Rationalised'],
+      };
+      const key = (verb || '').toLowerCase();
+      return alternatives[key] || ['Executed', 'Delivered', 'Achieved', 'Completed', 'Handled'];
     },
 
     // ============ CONVERT US TO UK SPELLING ============
     convertToUKSpelling(text) {
       if (!text) return text;
-      
+
       let result = text;
-      
+
       // Sort by length (longest first) to avoid partial replacements
       const sortedWords = Object.keys(US_TO_UK_SPELLING).sort((a, b) => b.length - a.length);
-      
+
       for (const usWord of sortedWords) {
         const ukWord = US_TO_UK_SPELLING[usWord];
-        
+
         // Create word-boundary regex for case-insensitive replacement
         const regex = new RegExp(`\\b${usWord}\\b`, 'gi');
-        
+
         result = result.replace(regex, (match) => {
           // Preserve original case
           if (match === match.toUpperCase()) {
@@ -323,49 +491,76 @@
           return ukWord;
         });
       }
-      
+
+      // FALLBACK: Catch remaining -ize words not in the explicit map
+      result = result.replace(IZE_PATTERN, (match, stem, suffix) => {
+        const full = match.toLowerCase();
+        if (IZE_EXCEPTIONS.has(full)) return match;
+        // Already handled by explicit map? Skip
+        if (US_TO_UK_SPELLING[full]) return match;
+        // Convert -ize to -ise
+        const ukSuffix = suffix.replace(/z/g, 's');
+        // Preserve case
+        if (match === match.toUpperCase()) {
+          return (stem + 'is' + ukSuffix.slice(1)).toUpperCase();
+        }
+        if (match[0] === match[0].toUpperCase()) {
+          const uk = stem + 'is' + ukSuffix.slice(1);
+          return uk.charAt(0).toUpperCase() + uk.slice(1);
+        }
+        return stem + 'is' + ukSuffix.slice(1);
+      });
+
       return result;
     },
 
     // ============ REMOVE BANNED WORDS AND PHRASES ============
     removeBannedContent(text) {
       if (!text) return text;
-      
+
       let result = text;
-      
-       // Replace banned phrases first (longer matches)
-       // CRITICAL: Use flexible whitespace matching so it still catches "Proven\ntrack record" etc.
-       for (const phrase of BANNED_PHRASES) {
-         const regex = this.makeFlexiblePhraseRegex(phrase);
-         const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
-         result = result.replace(regex, replacement);
-       }
-      
+
+      // Replace banned phrases first (longer matches take priority)
+      // Sort by length descending to match longer phrases first
+      const sortedPhrases = [...BANNED_PHRASES].sort((a, b) => b.length - a.length);
+      for (const phrase of sortedPhrases) {
+        const regex = this.makeFlexiblePhraseRegex(phrase);
+        const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
+        result = result.replace(regex, replacement);
+      }
+
       // Replace banned words
       for (const word of BANNED_WORDS) {
-        const regex = new RegExp(`\\b${word}\\b`, 'gi');
+        const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedWord}\\b`, 'gi');
         const replacement = WORD_REPLACEMENTS[word.toLowerCase()] || '';
         result = result.replace(regex, replacement);
       }
-      
+
       // Replace AI detection patterns
       for (const pattern of AI_PHRASE_PATTERNS) {
-        const replacement = PHRASE_REPLACEMENTS[pattern.source.replace(/\//g, '').toLowerCase()] || '';
+        const patternStr = pattern.source.toLowerCase();
+        const replacement = PHRASE_REPLACEMENTS[patternStr] || '';
         result = result.replace(pattern, replacement || ', ');
       }
-      
+
+      // Final catch-all: any remaining "proven" + noun combinations
+      result = result.replace(/\bproven\s+(ability|track\s+record|record|proficiency|expertise|experience)\b/gi, (match, noun) => {
+        return noun.replace(/^\s+/, '');
+      });
+
       return result;
     },
 
     // ============ REMOVE EM DASHES ============
     removeEmDashes(text) {
       if (!text) return text;
-      
+
       return text
         // Replace em dash (—) with comma or full stop
         .replace(/\s*—\s*/g, '. ')
-        // Replace en dash (–) with hyphen where appropriate
-        .replace(/\s*–\s*/g, ' - ')
+        // Replace en dash (–) used as em dash with comma
+        .replace(/\s+–\s+/g, ', ')
         // Clean up double punctuation
         .replace(/\.\s*\./g, '.')
         .replace(/,\s*,/g, ',')
@@ -376,7 +571,7 @@
     // ============ FIX PUNCTUATION ============
     fixPunctuation(text) {
       if (!text) return text;
-      
+
       return text
         // Remove excessive commas
         .replace(/,(\s*,)+/g, ',')
@@ -397,11 +592,11 @@
     // ============ REMOVE PERSONAL PRONOUNS ============
     removePronouns(text) {
       if (!text) return text;
-      
+
       return text
         // Remove "I " at start of sentences
         .replace(/\bI\s+/g, '')
-        // Remove "my " 
+        // Remove "my "
         .replace(/\bmy\s+/g, '')
         // Remove "me " where it makes sense
         .replace(/\b(to|with|for)\s+me\b/gi, '')
@@ -418,7 +613,7 @@
     // ============ FINAL CLEANUP ============
     finalCleanup(text) {
       if (!text) return text;
-      
+
       return text
         // Remove double spaces
         .replace(/\s{2,}/g, ' ')
@@ -435,33 +630,41 @@
     // ============ SANITISE CV BULLET POINTS ============
     sanitiseBullets(bullets) {
       if (!bullets || !Array.isArray(bullets)) return bullets;
-      
-      return bullets.map(bullet => {
-        let sanitised = this.sanitiseContent(bullet, {
+
+      const sanitised = bullets.map(bullet => {
+        let cleaned = this.sanitiseContent(bullet, {
           convertToUK: true,
           removeBannedWords: true,
           removeEmDashes: true,
           fixPunctuation: true,
           removePronouns: true
         });
-        
+
         // Ensure bullet starts with action verb (capitalised)
-        sanitised = sanitised.replace(/^[•\-*\s]+/, '').trim();
-        if (sanitised.length > 0) {
-          sanitised = sanitised.charAt(0).toUpperCase() + sanitised.slice(1);
+        cleaned = cleaned.replace(/^[•\-*\s]+/, '').trim();
+        if (cleaned.length > 0) {
+          cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
         }
-        
+
         // Remove trailing period from bullets
-        sanitised = sanitised.replace(/\.\s*$/, '');
-        
-        return sanitised;
+        cleaned = cleaned.replace(/\.\s*$/, '');
+
+        return cleaned;
       }).filter(b => b && b.length > 10); // Remove too-short bullets
+
+      // Run variation detection and log warnings
+      const variation = this.detectBulletVerbRepetition(sanitised);
+      if (variation.warnings.length > 0) {
+        console.warn('[ContentQualityEngine] Bullet variation issues:', variation.warnings);
+      }
+
+      return sanitised;
     },
 
     // ============ SANITISE SUMMARY ============
     sanitiseSummary(summary) {
       if (!summary) return summary;
-      
+
       let result = this.sanitiseContent(summary, {
         convertToUK: true,
         removeBannedWords: true,
@@ -469,58 +672,79 @@
         fixPunctuation: true,
         removePronouns: true
       });
-      
+
       // Ensure summary doesn't start with "I am" or similar
       result = result
         .replace(/^(I am|I'm|I have been)\s+/gi, '')
         .replace(/^(A|An)\s+(highly motivated|results-driven|detail-oriented|dynamic)\s+/gi, '');
-      
+
       // Capitalise first letter
       if (result.length > 0) {
         result = result.charAt(0).toUpperCase() + result.slice(1);
       }
-      
+
       return result;
     },
 
     // ============ VALIDATE CONTENT QUALITY ============
     validateContent(text) {
-      if (!text) return { valid: true, issues: [] };
-      
+      if (!text) return { valid: true, issues: [], score: 100 };
+
       const issues = [];
-      const textLower = text.toLowerCase();
-      
+
       // Check for banned words
       for (const word of BANNED_WORDS) {
-        if (new RegExp(`\\b${word}\\b`, 'i').test(text)) {
+        const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`\\b${escapedWord}\\b`, 'i').test(text)) {
           issues.push(`Contains banned word: "${word}"`);
         }
       }
-      
-      // Check for banned phrases
+
+      // Check for banned phrases (flexible whitespace matching)
       for (const phrase of BANNED_PHRASES) {
-        if (textLower.includes(phrase.toLowerCase())) {
+        const regex = this.makeFlexiblePhraseRegex(phrase);
+        if (regex.test(text)) {
           issues.push(`Contains banned phrase: "${phrase}"`);
         }
       }
-      
-      // Check for em dashes
-      if (text.includes('—')) {
-        issues.push('Contains em dash (—) - replace with full stop or comma');
+
+      // Check for "proven" + noun patterns
+      if (/\bproven\s+(ability|track\s+record|record|proficiency|expertise)\b/i.test(text)) {
+        issues.push('Contains "proven [noun]" pattern - remove "proven"');
       }
-      
+
+      // Check for em dashes
+      if (text.includes('\u2014')) {
+        issues.push('Contains em dash (\u2014) - replace with full stop or comma');
+      }
+
       // Check for US spelling
       for (const usWord of Object.keys(US_TO_UK_SPELLING)) {
         if (new RegExp(`\\b${usWord}\\b`, 'i').test(text)) {
           issues.push(`Contains US spelling: "${usWord}" - use "${US_TO_UK_SPELLING[usWord]}"`);
         }
       }
-      
+
+      // Check for remaining -ize words (fallback)
+      const izeMatches = text.match(/\b[a-z]+ize[ds]?\b/gi) || [];
+      for (const izeWord of izeMatches) {
+        if (!IZE_EXCEPTIONS.has(izeWord.toLowerCase()) && !US_TO_UK_SPELLING[izeWord.toLowerCase()]) {
+          issues.push(`Contains US spelling: "${izeWord}" - convert -ize to -ise`);
+        }
+      }
+
       // Check for personal pronouns
       if (/\bI\s+/g.test(text) || /\bmy\s+/gi.test(text)) {
         issues.push('Contains personal pronouns (I, my) - remove for professional tone');
       }
-      
+
+      // Check bullet variation
+      const bullets = text.split(/\n/).filter(l => /^[-•*▪▸►]\s/.test(l.trim()));
+      if (bullets.length >= 3) {
+        const variation = this.detectBulletVerbRepetition(bullets);
+        variation.warnings.forEach(w => issues.push(w));
+      }
+
       return {
         valid: issues.length === 0,
         issues,
@@ -531,24 +755,24 @@
     // ============ CLEAN LOCATION DATA ============
     cleanLocation(rawLocation) {
       if (!rawLocation || typeof rawLocation !== 'string') return '';
-      
+
       // Remove common prefixes
       let cleaned = rawLocation
-        .replace(/^(location[s]?|based\s*in|located\s*in|work\s*from|office\s*in)[\s:,]*/gi, '')
-        .replace(/^(remote\s*[\-–—,]?\s*)?/i, '') // Strip "Remote -" prefix but keep location
+        .replace(/^(location[s]?|based\s*in|located\s*in|work\s*from|office\s*in|job\s*location|position\s*location|role\s*location|work\s*location)[\s:,]*/gi, '')
+        .replace(/^(remote\s*[\-\u2013\u2014,]?\s*)?/i, '') // Strip "Remote -" prefix but keep location
         .trim();
-      
+
       // Validate format (should start with capital letter and ideally contain comma)
       if (cleaned && !/^[A-Z]/.test(cleaned)) {
         // Capitalise first letter
         cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
       }
-      
+
       // Warn if format looks incorrect
       if (cleaned && !/^[A-Z].*,/.test(cleaned) && cleaned.length > 3) {
         console.warn('[ContentQualityEngine] Location format may be incorrect:', cleaned);
       }
-      
+
       return cleaned;
     },
 
@@ -565,12 +789,34 @@
     // ============ GET UK SPELLING MAP ============
     getUKSpellingMap() {
       return { ...US_TO_UK_SPELLING };
+    },
+
+    // ============ RUN FULL QUALITY REPORT ============
+    generateQualityReport(text) {
+      const validation = this.validateContent(text);
+      const sanitised = this.sanitiseContent(text);
+      const postValidation = this.validateContent(sanitised);
+
+      return {
+        original: {
+          text: text,
+          issues: validation.issues,
+          score: validation.score
+        },
+        sanitised: {
+          text: sanitised,
+          issues: postValidation.issues,
+          score: postValidation.score
+        },
+        fixed: validation.issues.length - postValidation.issues.length,
+        remaining: postValidation.issues
+      };
     }
   };
 
   // Export
   global.ContentQualityEngine = ContentQualityEngine;
-  
-  console.log('[ContentQualityEngine] v1.0 loaded - Anti-AI Detection & UK Spelling Active');
+
+  console.log('[ContentQualityEngine] v2.0 loaded - Comprehensive UK Spelling, Anti-AI Detection & Sentence Variation Active');
 
 })(typeof window !== 'undefined' ? window : this);
