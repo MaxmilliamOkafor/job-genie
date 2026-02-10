@@ -3643,10 +3643,13 @@ class ATSTailor {
     try {
       console.log('[ATS Tailor] Regenerating PDF after boost (OpenResume style)...');
       
-      // Get tailored location from job data
-      let tailoredLocation = 'Open to relocation';
-      if (window.LocationTailor && this.currentJob) {
-        tailoredLocation = window.LocationTailor.extractFromJobData(this.currentJob);
+      // Get ATS-safe location in strict format: "City, ISO2" (or "City, ST, US")
+      let tailoredLocation = this._defaultLocation || 'Dublin, IE';
+      if (window.ATSLocationTailor?.normalizeJobLocationForApplication) {
+        tailoredLocation = window.ATSLocationTailor.normalizeJobLocationForApplication(
+          this.currentJob?.location || '',
+          this._defaultLocation || 'Dublin, IE'
+        );
       } else if (this.currentJob?.location) {
         tailoredLocation = this.currentJob.location;
       }

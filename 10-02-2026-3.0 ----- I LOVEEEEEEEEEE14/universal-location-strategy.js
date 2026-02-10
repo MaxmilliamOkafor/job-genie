@@ -135,6 +135,12 @@ const US_STATES_REVERSE = Object.fromEntries(
   Object.entries(US_STATES).map(([k, v]) => [v.toLowerCase(), k])
 );
 
+
+const ISO2_COUNTRY_FALLBACK = new Set([
+  'US','GB','IE','DE','FR','ES','IT','NL','BE','CH','AT','SE','NO','DK','FI','PL','CZ','PT',
+  'IN','AE','SG','JP','CN','KR','AU','CA','NZ','IL','TR','BR','MX','ZA','TZ','NG','KE','HK'
+]);
+
 const MAJOR_US_CITIES = [
   'new york', 'los angeles', 'chicago', 'houston', 'phoenix', 'philadelphia',
   'san antonio', 'san diego', 'dallas', 'san jose', 'austin', 'jacksonville',
@@ -360,6 +366,7 @@ const CITY_ABBREVIATIONS = {
   'slc': 'Salt Lake City', 'kc': 'Kansas City', 'nola': 'New Orleans',
   'lv': 'Las Vegas', 'san fran': 'San Francisco',
   'hk': 'Hong Kong', 'bkk': 'Bangkok', 'kl': 'Kuala Lumpur',
+  'secundrabad': 'Secunderabad', 'new york city': 'New York',
 };
 
 const ACCENT_MAP = {
@@ -383,6 +390,41 @@ function normalizeLocationInput(input) {
   if (CITY_ABBREVIATIONS[lower]) return CITY_ABBREVIATIONS[lower];
   if (ACCENT_MAP[lower]) return ACCENT_MAP[lower];
   return input;
+}
+
+
+function toTitleCaseCity(city) {
+  const acronyms = new Set(['AI', 'ML', 'QA', 'R&D']);
+  return String(city || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.split('-').map(token => {
+      const upper = token.toUpperCase();
+      if (acronyms.has(upper)) return upper;
+      if (/^[A-Z]{2}$/.test(upper) && US_STATES[upper]) return upper;
+      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+    }).join('-'))
+    .join(' ')
+    .trim();
+}
+
+function formatFinalLocation(location, fallbackLocation = 'Dublin, IE') {
+  const formatted = forceCityCountryFormat(location, fallbackLocation);
+  if (!formatted) return forceCityCountryFormat(fallbackLocation, 'Dublin, IE');
+
+  const usStateWithCountry = formatted.match(/^(.+?),\s*([A-Z]{2}),\s*US$/i);
+  if (usStateWithCountry && US_STATES[usStateWithCountry[2].toUpperCase()]) {
+    return `${toTitleCaseCity(usStateWithCountry[1])}, ${usStateWithCountry[2].toUpperCase()}, US`;
+  }
+
+  const parts = formatted.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const city = toTitleCaseCity(parts[0]);
+    const iso2 = _toISO2(parts[parts.length - 1]) || parts[parts.length - 1].toUpperCase();
+    return `${city}, ${iso2}`;
+  }
+
+  return forceCityCountryFormat(fallbackLocation, 'Dublin, IE');
 }
 
 function detectPlatformForLocation() {
@@ -652,11 +694,6 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
     const city = parts[0];
     const lastPart = parts.length >= 2 ? parts[parts.length - 1] : '';
 
-    // Handle "City, STATE" (US) — e.g. "Rock Hill, SC"
-    if (/^[A-Z]{2}$/i.test(lastPart) && US_STATES[lastPart.toUpperCase()]) {
-      return `${city}, ${lastPart.toUpperCase()}, US`;
-    }
-
     // Handle "City, STATE, US/USA" — already correct format, just normalise
     if (parts.length >= 3) {
       const middlePart = parts[parts.length - 2].trim();
@@ -664,6 +701,22 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
           /^(us|usa|united states)$/i.test(lastPart)) {
         return `${city}, ${middlePart.toUpperCase()}, US`;
       }
+    }
+
+    const upperLastPart = lastPart.toUpperCase();
+    const db = _getDB();
+    const isCountryCode = /^[A-Z]{2}$/i.test(lastPart) && (
+      !!db?.fromISO2?.(upperLastPart) || ISO2_COUNTRY_FALLBACK.has(upperLastPart)
+    );
+
+    // Handle "City, STATE" (US) — e.g. "Rock Hill, SC"
+    if (/^[A-Z]{2}$/i.test(lastPart) && US_STATES[upperLastPart] && upperLastPart !== 'US' && !isCountryCode) {
+      return `${city}, ${upperLastPart}, US`;
+    }
+
+    // Handle ambiguous 2-letter suffix: prefer explicit country code when recognised.
+    if (isCountryCode) {
+      return `${city}, ${upperLastPart}`;
     }
 
     // Resolve last part to ISO2
@@ -799,26 +852,15 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
 
   if (hasRemote) {
     // RULE 2: "Remote" + city → city only (e.g., "Remote - Dublin", "Remote, Barcelona")
-    const remoteCityMatch = raw.match(/remote\s*(?:[-–—,\|]\s*)?([A-Z][a-z]+(?:\s+(?:City|Town|Park|Bay|Beach|Valley|Springs|Garden\s+City))?)/i);
+    const remoteCityMatch = raw.match(/remote\s*(?:[-–—,\|]\s*)?([A-Za-z][A-Za-z\s.'-]{1,80})/i);
     if (remoteCityMatch && remoteCityMatch[1]) {
-      const city = remoteCityMatch[1].trim();
-      // Infer country from city if possible
-      const cityLower = city.toLowerCase();
-      const inferredCountry = CITY_COUNTRY_MAP[cityLower];
-      if (inferredCountry) {
-        const iso2 = _toISO2(inferredCountry) || inferredCountry;
-        return `${city}, ${iso2}`;
+      const cityCandidate = remoteCityMatch[1]
+        .replace(/\b(open\s+to\s+relocation|immediate\s+start|worldwide|global)\b/gi, '')
+        .replace(/[()]/g, '')
+        .trim();
+      if (cityCandidate) {
+        return formatFinalLocation(cityCandidate, fallback);
       }
-      // Check the city dataset
-      const cityHit = _findCity(city);
-      if (cityHit?.countryCode) {
-        return `${city}, ${cityHit.countryCode}`;
-      }
-      // Check if it's a US city
-      if (MAJOR_US_CITIES.some(c => cityLower.includes(c))) {
-        return `${city}, US`;
-      }
-      return forceCityCountryFormat(city, fallback);
     }
 
     // RULE 3: "Remote" + country → country only (normalised)
@@ -829,7 +871,7 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
       if (iso2) {
         // If it's USA without a city, default to California
         if (iso2 === 'US') {
-          return 'California, US';
+          return 'New York, US';
         }
         // Country-only should become "Capital, CC"
         return forceCityCountryFormat(countryCandidate, fallback);
@@ -842,7 +884,7 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
 
   // RULE 4: "USA"/"United States" alone (no city) → California default
   if (/^(usa|us|united\s+states)$/i.test(raw)) {
-    return 'California, US';
+    return 'New York, US';
   }
 
   // Normalize first (handles duplicates, etc.)
@@ -855,11 +897,11 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
 
   // Check again after normalization for USA-only
   if (/^(usa|us|united\s+states)$/i.test(normalized)) {
-    return 'California, US';
+    return 'New York, US';
   }
 
   // Ensure final output ALWAYS "City, Country"
-  return forceCityCountryFormat(normalized, fallback);
+  return formatFinalLocation(normalized, fallback);
 }
 
 /**

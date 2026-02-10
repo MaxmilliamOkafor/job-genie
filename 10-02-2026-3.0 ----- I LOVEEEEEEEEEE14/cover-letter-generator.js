@@ -366,7 +366,7 @@
         const kw2 = topKeywords[1] || '';
         const kw3 = topKeywords[2] || '';
         
-        let para1 = `In my role as ${title} at ${company}, I have demonstrated consistent delivery of high-impact results.`;
+        let para1 = `In my role as ${title} at ${company}, I have consistently operated at a senior level, translating strategic priorities into measurable business outcomes.`;
         if (highlightBullet) {
           para1 += ` ${highlightBullet.replace(/^[•\-*]\s*/, '')}`;
         }
@@ -397,7 +397,7 @@
           para2 += skills[0];
         }
         
-        para2 += ', which I believe will enable me to contribute effectively from day one.';
+        para2 += ', enabling me to contribute rapidly, strengthen execution quality, and raise delivery performance from day one.';
         paragraphs.push(para2);
       }
 
@@ -412,7 +412,7 @@
         if (extraSkills.length > 0) {
           const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
           paragraphs.push(
-            `Furthermore, I have hands-on experience ${phrase} ${extraSkills.join(' and ')}, enabling cross-functional collaboration and delivering measurable outcomes.`
+            `Furthermore, I bring hands-on delivery depth ${phrase} ${extraSkills.join(' and ')}, supporting executive stakeholders and delivering measurable, repeatable outcomes.`
           );
         }
       }

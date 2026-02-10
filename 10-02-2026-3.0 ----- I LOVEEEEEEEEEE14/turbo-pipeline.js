@@ -87,17 +87,10 @@
       'strong','excellent','highly','etc','also','via','across','ensure','join'
     ]);
 
-    // EXCLUDE soft skills - these look unprofessional when injected
+    // EXCLUDE only vague fluff phrases; KEEP meaningful soft skills for ATS experience matching
     const softSkillsToExclude = new Set([
-      'collaboration','communication','teamwork','leadership','initiative','proactive',
-      'ownership','responsibility','commitment','passion','dedication','motivation',
-      'self-starter','detail-oriented','problem-solving','critical thinking',
-      'time management','adaptability','flexibility','creativity','innovation',
-      'interpersonal','organizational','multitasking','prioritization','reliability',
-      'accountability','integrity','professionalism','work ethic','positive attitude',
-      'enthusiasm','driven','dynamic','results-oriented','goal-oriented','mission',
-      'continuous learning','debugging','testing','documentation','system integration',
-      'goodjob','sidekiq','canvas','salesforce'
+      'passion','dedication','motivation','positive attitude','enthusiasm','dynamic',
+      'results-oriented','goal-oriented','mission','goodjob'
     ]);
 
     // Technical/hard skills patterns (boosted)
