@@ -654,9 +654,15 @@
         lines.push('');
       }
 
-      if (experience.length > 0) {
+      // Filter out entries where company is a section header
+      const HEADER_SET_RB = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
+      const safeExpRB = experience.filter(job => {
+        const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        return !HEADER_SET_RB.has(norm) && !([...HEADER_SET_RB].some(h => norm === (h + ' ' + h)));
+      });
+      if (safeExpRB.length > 0) {
         lines.push('WORK EXPERIENCE');
-        experience.forEach(job => {
+        safeExpRB.forEach(job => {
           // Line 1: Company
           lines.push(job.company);
           // Line 2: Title – YYYY – YYYY

@@ -117,13 +117,16 @@
         data.contact.portfolio = candidateData.portfolio || '';
         
         // Extract structured data if available
-        if (candidateData.workExperience || candidateData.work_experience) {
-          data.experience = (candidateData.workExperience || candidateData.work_experience).map(exp => ({
-            company: exp.company || exp.organization || '',
-            title: exp.title || exp.position || exp.role || '',
-            dates: exp.dates || exp.duration || `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
+        // FIX: Check ALL possible field names including professionalExperience/professional_experience
+        const rawExperience = candidateData.professionalExperience || candidateData.professional_experience ||
+                              candidateData.workExperience || candidateData.work_experience || [];
+        if (Array.isArray(rawExperience) && rawExperience.length > 0) {
+          data.experience = rawExperience.map(exp => ({
+            company: exp.company || exp.organization || exp.company_name || '',
+            title: exp.title || exp.position || exp.role || exp.job_title || '',
+            dates: exp.dates || exp.duration || `${exp.startDate || exp.start_date || ''} - ${exp.endDate || exp.end_date || 'Present'}`,
             location: exp.location || '',
-            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || [])
+            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || exp.description || [])
           }));
         }
         
@@ -425,9 +428,30 @@
       const lines = text.split('\n');
       let currentJob = null;
 
+      // Section headers that must NEVER become company names
+      const SECTION_HEADERS = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held', 'career', 'roles',
+        'education', 'skills', 'certifications', 'projects', 'achievements',
+        'professional summary', 'summary', 'technical proficiencies'
+      ]);
+      const isHeaderish = (v) => {
+        const norm = v.toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        if (SECTION_HEADERS.has(norm)) return true;
+        for (const h of SECTION_HEADERS) {
+          if (norm === (h + ' ' + h)) return true;
+          if (norm.startsWith(h + ' ') && norm.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '') return true;
+        }
+        return false;
+      };
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+
+        // CRITICAL: Skip lines that are section headers
+        if (isHeaderish(trimmed)) continue;
 
         // Detect job header: Company | Title | Dates | Location
         if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) || 
@@ -448,7 +472,9 @@
       }
 
       if (currentJob) jobs.push(currentJob);
-      return jobs;
+      
+      // Final safety: filter out any jobs where company is a section header
+      return jobs.filter(job => !isHeaderish(job.company || ''));
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -960,10 +986,32 @@
       }
 
       // === WORK EXPERIENCE ===
-      if (data.experience && data.experience.length > 0) {
+      // FINAL SAFETY: Filter out any experience entries where company is a section header
+      const HEADER_BLACKLIST = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held', 'career', 'roles',
+        'education', 'skills', 'certifications', 'projects', 'achievements'
+      ]);
+      const safeExperience = (data.experience || []).filter(job => {
+        const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        if (HEADER_BLACKLIST.has(norm)) {
+          console.warn('[OpenResume] BLOCKED header-as-company in render:', job.company);
+          return false;
+        }
+        // Catch duplicated headers like "work experience work experience"
+        for (const h of HEADER_BLACKLIST) {
+          if (norm === (h + ' ' + h) || (norm.startsWith(h + ' ') && norm.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '')) {
+            console.warn('[OpenResume] BLOCKED repeated header-as-company in render:', job.company);
+            return false;
+          }
+        }
+        return true;
+      });
+      if (safeExperience.length > 0) {
         addSectionHeader('WORK EXPERIENCE');
         
-        data.experience.forEach((job, idx) => {
+        safeExperience.forEach((job, idx) => {
           // Job header: Company | Title | Dates | Location
           const header = [job.company, job.title, job.dates, job.location].filter(Boolean).join(' | ');
           addText(header, true, false, font.body);
@@ -987,7 +1035,7 @@
             });
           });
 
-          if (idx < data.experience.length - 1) y += 6;
+          if (idx < safeExperience.length - 1) y += 6;
         });
         y += 4;
       }
