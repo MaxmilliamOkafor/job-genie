@@ -246,28 +246,6 @@
         data.certifications = this.parseCertifications(tailoredContent.certifications || candidateData?.certifications);
       }
 
-      // FINAL GATE: Always sanitise summary/skills/certs at the PDF boundary
-      // This ensures banned phrases (e.g., "Proven ability") can never leak into the PDF.
-      if (typeof ContentQualityEngine !== 'undefined') {
-        if (data.summary) data.summary = ContentQualityEngine.sanitiseSummary(data.summary);
-        // Skills/certs are arrays at this point; sanitise as CV blocks for consistent casing + bans
-        if (Array.isArray(data.skills) && data.skills.length) {
-          data.skills = String(data.skills.join(', '))
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean);
-        }
-        if (Array.isArray(data.certifications) && data.certifications.length) {
-          data.certifications = data.certifications.map(c => ContentQualityEngine.sanitiseContent(String(c), {
-            convertToUK: true,
-            removeBannedWords: true,
-            removeEmDashes: true,
-            fixPunctuation: false,
-            removePronouns: true,
-          })).filter(Boolean);
-        }
-      }
-
       // FINAL FALLBACK: If still no experience, use candidateData directly
       if (data.experience.length === 0 && experienceFromCandidate.length > 0) {
         console.log('[ProfessionalPDFEngine] Using candidateData fallback for experience');
@@ -356,7 +334,6 @@
     },
 
     // ============ PARSE CV SECTIONS ============
-    // FIX v4.2.0: Handles inline headers like "SKILLS: PYTHON, JAVA, C++" by splitting them
     parseSections(text) {
       if (!text) return {};
       
@@ -367,6 +344,10 @@
         skills: '',
         certifications: ''
       };
+
+      const lines = text.split('\n');
+      let currentSection = '';
+      let currentContent = [];
 
       // FIX v3.3.2: Added TECHNICAL PROFICIENCIES mapping to skills section
       const sectionMap = {
@@ -390,42 +371,8 @@
         'LICENSES': 'certifications'
       };
 
-      /**
-       * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
-       * Returns { header, content } or null if not an inline header.
-       */
-      const parseInlineHeader = (line) => {
-        const trimmed = (line || '').trim();
-        // Pattern: HEADER: content (header is all caps, followed by colon and content)
-        const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
-        if (inlineMatch) {
-          const potentialHeader = inlineMatch[1].trim().toUpperCase();
-          if (sectionMap[potentialHeader]) {
-            return { header: potentialHeader, content: inlineMatch[2].trim() };
-          }
-        }
-        return null;
-      };
-
-      const lines = text.split('\n');
-      let currentSection = '';
-      let currentContent = [];
-
       for (const line of lines) {
         const trimmed = line.trim();
-        
-        // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
-        const inlineResult = parseInlineHeader(line);
-        if (inlineResult) {
-          // Save previous section
-          this.saveSection(sections, currentSection, currentContent);
-          // Start new section with the inline content
-          currentSection = sectionMap[inlineResult.header];
-          currentContent = [inlineResult.content]; // Content goes directly into the section
-          continue;
-        }
-        
-        // Standard header detection (header on its own line)
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
         if (sectionMap[upperTrimmed]) {
@@ -548,53 +495,36 @@
       if (!Array.isArray(experience)) return [];
       
       // Section headers and generic terms that should NOT be treated as job entries
-      const invalidEntryNames = new Set([
+      const invalidEntryNames = [
         'professional experience', 'work experience', 'experience', 
         'employment history', 'career history', 'current role',
         'previous role', 'positions held', 'work history',
         'employment', 'career', 'roles'
-      ]);
+      ];
       
-      const normaliseHeaderish = (value) => String(value || '')
-        .toLowerCase()
-        .replace(/[#:*|]/g, ' ')
-        .replace(/[^a-z\s]/g, ' ')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-
-      // Catches BOTH single headers ("work experience") AND duplicated ("work experience work experience")
-      const isHeaderish = (rawValue) => {
-        const n = normaliseHeaderish(rawValue);
-        if (invalidEntryNames.has(n)) return true;
-        for (const h of invalidEntryNames) {
-          if (n === `${h} ${h}`) return true;
-        }
-        return false;
-      };
-
       return experience
         .filter(job => {
-          const rawCompany = String(job.company || job.companyName || '').trim();
-          const rawTitle = String(job.title || job.jobTitle || job.position || '').trim();
-          const company = normaliseHeaderish(rawCompany);
-
-          // Skip if company name looks like a section header (single OR duplicated)
-          if (isHeaderish(rawCompany)) {
-            console.log(`[ProfessionalPDFEngine] Skipping header-as-company: "${rawCompany}"`);
+          // Filter out entries where company name is a section header
+          const company = (job.company || job.companyName || '').toLowerCase().trim();
+          const title = (job.title || job.jobTitle || job.position || '').toLowerCase().trim();
+          
+          // Skip if company name looks like a section header
+          if (invalidEntryNames.includes(company)) {
+            console.log(`[ProfessionalPDFEngine] Skipping invalid company entry: "${company}"`);
             return false;
           }
-
+          
           // Skip if title looks like a section header (without a real company)
-          if (isHeaderish(rawTitle) && !company) {
-            console.log(`[ProfessionalPDFEngine] Skipping header-as-title: "${rawTitle}"`);
+          if (invalidEntryNames.includes(title) && !company) {
+            console.log(`[ProfessionalPDFEngine] Skipping invalid title entry: "${title}"`);
             return false;
           }
-
+          
           // Skip if company is empty or too short
           if (!company || company.length < 2) {
             return false;
           }
-
+          
           return true;
         })
         .map(job => {

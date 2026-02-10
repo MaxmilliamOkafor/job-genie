@@ -241,7 +241,6 @@
     },
 
     // ============ PARSE CV SECTIONS ============
-    // FIX v4.2.0: Handles inline headers like "SKILLS: PYTHON, JAVA, C++" by splitting them
     parseSections(content) {
       const sections = {
         summary: '',
@@ -252,6 +251,11 @@
       };
 
       if (!content) return sections;
+
+      const lines = content.split('\n');
+      let currentSection = '';
+      let currentContent = [];
+      let currentJob = null;
 
       const sectionHeaders = {
         'PROFESSIONAL SUMMARY': 'summary',
@@ -267,47 +271,14 @@
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
         'CORE SKILLS': 'skills',
-        'TECHNICAL PROFICIENCIES': 'skills',
         'CERTIFICATIONS': 'certifications',
         'LICENSES': 'certifications',
         'CREDENTIALS': 'certifications'
       };
 
-      /**
-       * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
-       */
-      const parseInlineHeader = (line) => {
-        const trimmed = (line || '').trim();
-        const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
-        if (inlineMatch) {
-          const potentialHeader = inlineMatch[1].trim().toUpperCase();
-          if (sectionHeaders[potentialHeader]) {
-            return { header: potentialHeader, section: sectionHeaders[potentialHeader], content: inlineMatch[2].trim() };
-          }
-        }
-        return null;
-      };
-
-      const lines = content.split('\n');
-      let currentSection = '';
-      let currentContent = [];
-      let currentJob = null;
-
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-
-        // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
-        const inlineResult = parseInlineHeader(line);
-        if (inlineResult) {
-          // Save previous section
-          this.saveParsedSection(sections, currentSection, currentContent, currentJob);
-          // Start new section with the inline content
-          currentSection = inlineResult.section;
-          currentContent = [inlineResult.content];
-          currentJob = null;
-          continue;
-        }
 
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
@@ -977,15 +948,6 @@
       if (experience.length > 0) {
         lines.push('WORK EXPERIENCE');
         experience.forEach(job => {
-      // Experience — filter out entries where company is a section header
-      const HEADER_SET = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
-      const safeExp = experience.filter(job => {
-        const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-        return !HEADER_SET.has(norm) && !([...HEADER_SET].some(h => norm === (h + ' ' + h)));
-      });
-      if (safeExp.length > 0) {
-        lines.push('WORK EXPERIENCE');
-        safeExp.forEach(job => {
           // Line 1: Company
           lines.push(job.company);
           // Line 2: Title – YYYY – YYYY (use pre-formatted titleLine)

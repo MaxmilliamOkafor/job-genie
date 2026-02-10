@@ -8,9 +8,6 @@
   // ============ CONFIGURATION ============
   const CONFIG = {
     TARGET_SCORE: 95,
-    MAX_KEYWORDS_SUMMARY: 10,
-    MAX_KEYWORDS_EXPERIENCE: 40, // Increased for higher interview callback rate
-    MAX_KEYWORDS_SKILLS: 25,
     MAX_KEYWORDS_SUMMARY: 8,
     MAX_KEYWORDS_EXPERIENCE: 25, // Increased for better keyword density
     MAX_KEYWORDS_SKILLS: 15,
@@ -22,39 +19,19 @@
     MEDIUM_PRIORITY_MAX_COUNT: 3
   };
 
-  // ============ SOFT SKILLS: ROUTE TO EXPERIENCE BULLETS, NOT SKILLS SECTION ============
-  // These keywords should be WOVEN INTO work experience bullets naturally,
-  // NOT listed in the Skills section. They are excluded from Skills but INCLUDED in Experience.
-  const SOFT_SKILLS_FOR_EXPERIENCE = new Set([
+  // ============ SOFT SKILLS TO EXCLUDE ============
+  const EXCLUDED_SOFT_SKILLS = new Set([
     'collaboration', 'communication', 'teamwork', 'leadership', 'initiative',
-    'ownership', 'accountability', 'problem-solving', 'critical thinking',
-    'time management', 'adaptability', 'flexibility', 'creativity', 'innovation',
-    'interpersonal', 'prioritisation', 'empathy', 'conflict resolution',
-    'creative thinking', 'decision-making', 'roadmap planning', 'negotiation',
-    'coaching', 'mentoring', 'facilitation', 'delegation', 'strategic thinking',
-    'relationship building', 'influence', 'change management', 'risk management',
-    'process improvement', 'analytical thinking', 'attention to detail',
-    'organisational skills', 'customer focus', 'client management',
-    'vendor management', 'resource management', 'budget management',
-    'capacity planning', 'incident management', 'crisis management',
-    'quality assurance', 'continuous improvement', 'knowledge sharing',
-    'pair programming', 'code review', 'technical writing', 'documentation',
-    'cross-team collaboration', 'stakeholder engagement', 'requirements gathering',
-    'user research', 'design thinking', 'data-driven decision making',
-    'presentation', 'active listening', 'emotional intelligence',
-    'cross-functional', 'stakeholder management'
-  ]);
-
-  // ============ JUNK KEYWORDS TO FULLY EXCLUDE ============
-  // These provide zero ATS value and should never appear anywhere
-  const EXCLUDED_JUNK_KEYWORDS = new Set([
-    'passion', 'dedication', 'motivation', 'self-starter', 'enthusiasm',
-    'driven', 'dynamic', 'results-oriented', 'goal-oriented', 'mission',
-    'work ethic', 'positive attitude', 'proactive', 'goodjob', 'sidekiq',
-    'canvas', 'good learning', 'love for technology',
-    'able to withstand work pressure', 'self-motivated', 'go-getter',
-    'synergy', 'paradigm', 'robust', 'commitment', 'responsibility',
-    'reliability', 'integrity', 'professionalism', 'multitasking'
+    'ownership', 'responsibility', 'commitment', 'passion', 'dedication',
+    'motivation', 'proactive', 'self-starter', 'detail-oriented', 'problem-solving',
+    'critical thinking', 'time management', 'adaptability', 'flexibility',
+    'creativity', 'innovation', 'interpersonal', 'organizational', 'multitasking',
+    'prioritization', 'reliability', 'accountability', 'integrity', 'professionalism',
+    'work ethic', 'positive attitude', 'enthusiasm', 'driven', 'dynamic',
+    'results-oriented', 'goal-oriented', 'mission', 'continuous learning',
+    'debugging', 'testing', 'documentation', 'system integration', 'goodjob',
+    'sidekiq', 'canvas', 'salesforce', 'ai/ml', 'good learning', 'communication skills',
+    'love for technology', 'able to withstand work pressure'
   ]);
 
   // ============ KEYWORD CONTEXT MAPPING ============
@@ -106,51 +83,14 @@
     return Promise.resolve(); // Instant return - no delay needed
   }
 
-  // Filter out junk keywords (for all sections)
-  function filterJunkKeywords(keywords) {
-    return keywords.filter(kw => !EXCLUDED_JUNK_KEYWORDS.has(kw.toLowerCase()));
-  }
-
-  // Filter for Skills section only (exclude soft skills — they go in experience bullets)
   function filterTechnicalKeywords(keywords) {
-    return keywords.filter(kw => {
-      const kwLower = kw.toLowerCase();
-      return !SOFT_SKILLS_FOR_EXPERIENCE.has(kwLower) && !EXCLUDED_JUNK_KEYWORDS.has(kwLower);
-    });
-  }
-
-  // Get soft skills that should be woven into experience bullets
-  function getSoftSkillKeywords(keywords) {
-    return keywords.filter(kw => SOFT_SKILLS_FOR_EXPERIENCE.has(kw.toLowerCase()));
+    return keywords.filter(kw => !EXCLUDED_SOFT_SKILLS.has(kw.toLowerCase()));
   }
 
   // ============ CV PARSING ============
 
   function parseCV(cvText) {
     if (!cvText) return { header: '', sections: {}, sectionOrder: [] };
-
-    /**
-     * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
-     */
-    const SECTION_HEADER_MAP = {
-      'PROFESSIONAL SUMMARY': 'summary', 'SUMMARY': 'summary', 'PROFILE': 'summary', 'OBJECTIVE': 'summary',
-      'WORK EXPERIENCE': 'experience', 'EXPERIENCE': 'experience', 'EMPLOYMENT': 'experience', 'PROFESSIONAL EXPERIENCE': 'experience',
-      'EDUCATION': 'education', 'ACADEMIC': 'education', 'QUALIFICATIONS': 'education',
-      'SKILLS': 'skills', 'TECHNICAL SKILLS': 'skills', 'CORE SKILLS': 'skills', 'TECHNICAL PROFICIENCIES': 'skills',
-      'CERTIFICATIONS': 'certifications', 'LICENSES': 'certifications', 'PROJECTS': 'projects'
-    };
-
-    const parseInlineHeader = (line) => {
-      const trimmed = (line || '').trim();
-      const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
-      if (inlineMatch) {
-        const potentialHeader = inlineMatch[1].trim().toUpperCase();
-        if (SECTION_HEADER_MAP[potentialHeader]) {
-          return { header: potentialHeader, section: SECTION_HEADER_MAP[potentialHeader], content: inlineMatch[2].trim() };
-        }
-      }
-      return null;
-    };
 
     const lines = cvText.split('\n');
     const sections = {};
@@ -159,20 +99,6 @@
     let currentContent = [];
 
     lines.forEach(line => {
-      // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
-      const inlineResult = parseInlineHeader(line);
-      if (inlineResult) {
-        if (currentContent.length > 0 || currentSection !== 'header') {
-          sections[currentSection] = currentContent.join('\n').trim();
-          if (currentSection !== 'header' && !sectionOrder.includes(currentSection)) {
-            sectionOrder.push(currentSection);
-          }
-        }
-        currentSection = inlineResult.section;
-        currentContent = [inlineResult.content]; // Start with the inline content
-        return;
-      }
-
       let foundSection = false;
 
       for (const [sectionName, pattern] of Object.entries(SECTION_PATTERNS)) {
@@ -558,18 +484,10 @@
       throw new Error('CV text is required');
     }
 
-    // Get ALL keywords (junk removed) for experience injection
-    const rawKeywordList = Array.isArray(keywords) ? keywords : (keywords?.all || []);
-    const allCleanKeywords = filterJunkKeywords(rawKeywordList);
-
-    // Split: technical for skills section, soft for experience bullets
-    let keywordList = filterTechnicalKeywords(rawKeywordList); // Technical only for skills
-    const softSkillsForExperience = getSoftSkillKeywords(rawKeywordList); // Soft skills for bullets
-
-    // Combined list for experience injection = technical + soft skills
-    const experienceKeywordPool = [...keywordList, ...softSkillsForExperience];
-
-    if (allCleanKeywords.length === 0) {
+    let keywordList = Array.isArray(keywords) ? keywords : (keywords?.all || []);
+    keywordList = filterTechnicalKeywords(keywordList);
+    
+    if (keywordList.length === 0) {
       return {
         tailoredCV: cvText,
         originalCV: cvText,
@@ -610,18 +528,16 @@
     stats.summary = summaryResult.injected.length;
     allInjected.push(...summaryResult.injected);
 
-    // SMART EXPERIENCE ENHANCEMENT - technical + soft skills go to relevant bullets
+    // SMART EXPERIENCE ENHANCEMENT - keywords go to relevant bullets
     await yieldToUI();
     const experienceKeywords = [
       ...(keywords.highPriority || []).filter(k => !allInjected.includes(k)),
       ...(keywords.mediumPriority || []),
-      ...softSkillsForExperience // Include soft skills in experience bullets
     ];
     // NEW: Pass priority info for keyword repetition targeting (3-5x high, 2-3x medium)
-    // Soft skills get medium priority (appear 2-3 times naturally)
     const priorityInfo = {
       highPriority: keywords.highPriority || [],
-      mediumPriority: [...(keywords.mediumPriority || []), ...softSkillsForExperience],
+      mediumPriority: keywords.mediumPriority || [],
       lowPriority: keywords.lowPriority || []
     };
     const experienceResult = enhanceExperience(
@@ -714,10 +630,6 @@
     validateTailoring,
     categorizeKeywords,
     injectKeywordNaturally,
-    filterTechnicalKeywords,
-    filterJunkKeywords,
-    getSoftSkillKeywords,
-    SOFT_SKILLS_FOR_EXPERIENCE,
     CONFIG
   };
 

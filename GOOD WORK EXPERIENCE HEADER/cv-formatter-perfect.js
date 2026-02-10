@@ -1,5 +1,6 @@
-// CV Formatter Perfect Enhanced - 100% ATS-Compatible CV Generator with Rich-Text Support
-// Enhanced version with rich-text education fields and improved multi-page parsing
+// CV Formatter Perfect - 100% ATS-Compatible CV Generator
+// Guarantees perfect formatting for both preview and download
+// Uses HTML5 + CSS3 for rendering, then converts to PDF via browser API
 
 (function(global) {
   'use strict';
@@ -41,88 +42,13 @@
     sectionSpacing: '21pt' // 1.5 line height
   };
 
-  // ============ RICH-TEXT HELPERS ============
-  const RichTextUtils = {
-    // Convert HTML rich-text to plain text for ATS
-    htmlToPlainText(html) {
-      if (!html) return '';
-      
-      // Create temporary DOM element to parse HTML
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = html;
-      
-      // Get plain text
-      return tempDiv.textContent || tempDiv.innerText || '';
-    },
-
-    // Convert HTML to markdown-style formatting for editing
-    htmlToMarkdown(html) {
-      if (!html) return '';
-      
-      let md = html;
-      
-      // Convert <strong> and <b> to **
-      md = md.replace(/<strong[^>]*>(.+?)<\/strong>/gi, '**$1**');
-      md = md.replace(/<b[^>]*>(.+?)<\/b>/gi, '**$1**');
-      
-      // Convert <em> and <i> to *
-      md = md.replace(/<em[^>]*>(.+?)<\/em>/gi, '*$1*');
-      md = md.replace(/<i[^>]*>(.+?)<\/i>/gi, '*$1*');
-      
-      // Remove all other HTML tags
-      md = md.replace(/<[^>]+>/g, '');
-      
-      return md;
-    },
-
-    // Convert markdown-style formatting to HTML
-    markdownToHtml(markdown) {
-      if (!markdown) return '';
-      
-      let html = markdown;
-      
-      // Escape HTML special characters first
-      html = html.replace(/&/g, '&amp;')
-                 .replace(/</g, '&lt;')
-                 .replace(/>/g, '&gt;');
-      
-      // Convert **text** to <strong>
-      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      
-      // Convert *text* to <em>
-      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-      
-      // Convert newlines to <br>
-      html = html.replace(/\n/g, '<br>');
-      
-      return html;
-    },
-
-    // Extract plain text for ATS systems (removes all formatting)
-    extractPlainText(content) {
-      if (!content) return '';
-      
-      // If it's HTML, convert to plain text
-      if (content.includes('<') && content.includes('>')) {
-        return this.htmlToPlainText(content);
-      }
-      
-      // If it's markdown, convert to plain text
-      if (content.includes('**') || content.includes('*')) {
-        return content.replace(/\*\*/g, '').replace(/\*/g, '').replace(/\n/g, ' ');
-      }
-      
-      return content;
-    }
-  };
-
-  // ============ CV FORMATTER PERFECT ENHANCED ============
-  const CVFormatterPerfectEnhanced = {
+  // ============ CV FORMATTER PERFECT ============
+  const CVFormatterPerfect = {
     
     // ============ MAIN ENTRY POINT ============
     async generateCV(candidateData, tailoredContent, jobData = null) {
       const startTime = performance.now();
-      console.log('[CVFormatterPerfectEnhanced] Generating perfectly formatted CV...');
+      console.log('[CVFormatterPerfect] Generating perfectly formatted CV...');
 
       try {
         // Parse and structure the content
@@ -141,7 +67,7 @@
         }
 
         const timing = performance.now() - startTime;
-        console.log(`[CVFormatterPerfectEnhanced] CV generated in ${timing.toFixed(0)}ms`);
+        console.log(`[CVFormatterPerfect] CV generated in ${timing.toFixed(0)}ms`);
 
         return {
           html: htmlContent,
@@ -154,7 +80,7 @@
         };
 
       } catch (error) {
-        console.error('[CVFormatterPerfectEnhanced] Error generating CV:', error);
+        console.error('[CVFormatterPerfect] Error generating CV:', error);
         throw error;
       }
     },
@@ -241,7 +167,6 @@
     },
 
     // ============ PARSE CV SECTIONS ============
-    // FIX v4.2.0: Handles inline headers like "SKILLS: PYTHON, JAVA, C++" by splitting them
     parseSections(content) {
       const sections = {
         summary: '',
@@ -253,61 +178,31 @@
 
       if (!content) return sections;
 
-      const sectionHeaders = {
-        'PROFESSIONAL SUMMARY': 'summary',
-        'SUMMARY': 'summary',
-        'PROFILE': 'summary',
-        'WORK EXPERIENCE': 'experience',
-        'EXPERIENCE': 'experience',
-        'EMPLOYMENT': 'experience',
-        'PROFESSIONAL EXPERIENCE': 'experience',
-        'EDUCATION': 'education',
-        'ACADEMIC': 'education',
-        'ACADEMIC BACKGROUND': 'education',
-        'SKILLS': 'skills',
-        'TECHNICAL SKILLS': 'skills',
-        'CORE SKILLS': 'skills',
-        'TECHNICAL PROFICIENCIES': 'skills',
-        'CERTIFICATIONS': 'certifications',
-        'LICENSES': 'certifications',
-        'CREDENTIALS': 'certifications'
-      };
-
-      /**
-       * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
-       */
-      const parseInlineHeader = (line) => {
-        const trimmed = (line || '').trim();
-        const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
-        if (inlineMatch) {
-          const potentialHeader = inlineMatch[1].trim().toUpperCase();
-          if (sectionHeaders[potentialHeader]) {
-            return { header: potentialHeader, section: sectionHeaders[potentialHeader], content: inlineMatch[2].trim() };
-          }
-        }
-        return null;
-      };
-
       const lines = content.split('\n');
       let currentSection = '';
       let currentContent = [];
       let currentJob = null;
 
+      const sectionHeaders = {
+        'PROFESSIONAL SUMMARY': 'summary',
+        'SUMMARY': 'summary',
+        'PROFILE': 'summary',
+        'PROFESSIONAL EXPERIENCE': 'experience',
+        'WORK EXPERIENCE': 'experience',
+        'EXPERIENCE': 'experience',
+        'EMPLOYMENT': 'experience',
+        'EDUCATION': 'education',
+        'ACADEMIC': 'education',
+        'SKILLS': 'skills',
+        'TECHNICAL SKILLS': 'skills',
+        'CORE SKILLS': 'skills',
+        'CERTIFICATIONS': 'certifications',
+        'LICENSES': 'certifications'
+      };
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-
-        // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
-        const inlineResult = parseInlineHeader(line);
-        if (inlineResult) {
-          // Save previous section
-          this.saveParsedSection(sections, currentSection, currentContent, currentJob);
-          // Start new section with the inline content
-          currentSection = inlineResult.section;
-          currentContent = [inlineResult.content];
-          currentJob = null;
-          continue;
-        }
 
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
@@ -380,7 +275,7 @@
       /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
       /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
       /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
-      /\b(Present|Current|Now)\b/gi
+      /\b(Present|Current)\b/gi
     ],
 
     // Strip date patterns from a string
@@ -397,15 +292,9 @@
     // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
     toYearOnly(dateStr) {
       if (!dateStr) return '';
-      
-      // Check if already in correct format (contains en dash with proper spacing)
-      if (/\d{4}\s*–\s*(Present|\d{4})/.test(dateStr)) {
-        return dateStr.replace(/\s*–\s*/g, ' – '); // Just ensure spacing
-      }
-      
       // Extract all 4-digit years
       const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present|current|now/i.test(dateStr);
+      const hasPresent = /present/i.test(dateStr);
       
       if (hasPresent && years && years.length >= 1) {
         return `${years[0]} – Present`;
@@ -466,13 +355,6 @@
         return companyPatterns.some(p => p.test(text)) || containsKnownCompany;
       };
 
-      // Enhanced job title patterns for better extraction
-      const jobTitlePatterns = [
-        /^([A-Z][A-Za-z\s&.,'()-]+)\s*\|\s*([A-Z][A-Za-z\s&.,'()-]+)\s*\|\s*(.+)$/,
-        /^([A-Z][A-Za-z\s&.,'()-]+)\s+at\s+([A-Z][A-Za-z\s&.,'()-]+)$/i,
-        /^([A-Z][A-Za-z\s&.,'()-]+)\s*[-–—]\s*([A-Z][A-Za-z\s&.,'()-]+)\s*[-–—]\s*(.+)$/
-      ];
-
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -514,28 +396,19 @@
           // Clean company name: remove parentheticals like "(formerly Facebook Inc)"
           company = this.cleanCompanyName(company);
           
-          // ███ REMOVED AUTO-SWAP LOGIC ███
-          // Previously: if company looked like job title and vice versa, we swapped them
-          // This caused issues where correct data was being incorrectly swapped
-          // Now: Trust the profile data completely - company/title fields are IMMUTABLE
-          // The edge function + popup.js validation ensures these fields are correct
-          // If there's a genuine data issue, it should be fixed in the user's profile
-          
-          // Normalise dates to prevent duplication
-          const normalisedDates = dates ? String(dates)
-            .replace(/\s*[-–—]\s*/g, ' - ')
-            .replace(/\s*-\s*/g, ' – ')
-            : '';
+          // NOTE: Removed auto-swap logic - company/title should come from profile exactly as-is
+          // The AI is instructed to preserve these fields exactly, so swapping would be incorrect
+          // If parsing issues occur, the problem is in the AI output, not here
           
           // Build titleLine: Title – YYYY – YYYY (using en dash with spaces)
-          // Use the normalised dates directly, don't call toYearOnly again
+          const yearDates = this.toYearOnly(dates);
           let titleLine = '';
-          if (title && normalisedDates) {
-            titleLine = `${title} – ${normalisedDates}`;
+          if (title && yearDates) {
+            titleLine = `${title} – ${yearDates}`;
           } else if (title) {
             titleLine = title;
-          } else if (normalisedDates) {
-            titleLine = normalisedDates;
+          } else if (yearDates) {
+            titleLine = yearDates;
           }
           
           // NO location - removed to prevent recruiter bias
@@ -566,40 +439,19 @@
       const education = [];
       const lines = text.split('\n');
 
-      // Enhanced education patterns
-      const degreePatterns = [
-        /\b(Bachelor|Master|PhD|Doctorate|Associate|Diploma|Certificate|MBA|MSc|MA|BA|BS|MS|BSc|BEng|MEng|Ph\.D|MD|JD)\b/i,
-        /\b(B\.\w+\.?|M\.\w+\.?|Ph\.?D\.?|D\.\w+\.?)\b/i
-      ];
-
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
 
-        // Check for rich-text content (HTML tags)
-        const isRichText = trimmed.includes('<') && trimmed.includes('>');
-        
-        // Simple format: Institution | Degree | Date | GPA | Description
+        // Simple format: Institution | Degree | Date | GPA
         const parts = trimmed.split('|').map(p => p.trim());
         if (parts.length >= 2) {
-          const eduItem = {
+          education.push({
             institution: parts[0] || '',
             degree: parts[1] || '',
             date: parts[2] || '',
-            gpa: parts[3] || '',
-            description: '',
-            isRichText: isRichText
-          };
-
-          // Handle description field (could be rich-text)
-          if (parts.length > 4) {
-            eduItem.description = parts.slice(4).join(' | ');
-          }
-
-          // Detect if degree field contains rich-text
-          if (degreePatterns.some(p => p.test(eduItem.degree))) {
-            education.push(eduItem);
-          }
+            gpa: parts[3] || ''
+          });
         }
       }
 
@@ -676,7 +528,7 @@
 
     // ============ GENERATE HTML ============
     generateHTML(cvData) {
-      const { contact, summary, experience, projects, education, skills, certifications } = cvData;
+      const { contact, summary, experience, education, skills, certifications } = cvData;
       
       const escapeHtml = (str) => {
         if (!str) return '';
@@ -685,19 +537,6 @@
                   .replace(/>/g, '&gt;')
                   .replace(/"/g, '&quot;')
                   .replace(/'/g, '&#39;');
-      };
-
-      // Helper to render education description with rich-text support
-      const renderEducationDescription = (description, isRichText) => {
-        if (!description) return '';
-        
-        // If rich-text, render as HTML (already escaped)
-        if (isRichText) {
-          return `<div class="cv-education-description">${description}</div>`;
-        }
-        
-        // Otherwise, escape and render as plain text
-        return `<div class="cv-education-description">${escapeHtml(description)}</div>`;
       };
 
       return `
@@ -791,9 +630,8 @@
       font-size: 11pt;
     }
     
-    /* Job Title - Italic */
+    /* Job Title - Normal */
     .cv-job-title {
-      font-style: italic;
       font-size: ${ATS_CONFIG.fontSize.body};
       color: ${ATS_CONFIG.colors.text};
     }
@@ -815,28 +653,11 @@
     
     /* Education */
     .cv-education-item {
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     
     .cv-education-line {
       font-size: ${ATS_CONFIG.fontSize.body};
-    }
-    
-    .cv-education-description {
-      font-size: ${ATS_CONFIG.fontSize.small};
-      color: ${ATS_CONFIG.colors.secondary};
-      margin-top: 2px;
-      line-height: ${ATS_CONFIG.lineHeight.relaxed};
-    }
-    
-    .cv-education-description strong {
-      font-weight: bold;
-      color: ${ATS_CONFIG.colors.text};
-    }
-    
-    .cv-education-description em {
-      font-style: italic;
-      color: ${ATS_CONFIG.colors.text};
     }
     
     /* Skills */
@@ -867,10 +688,6 @@
       .cv-job {
         page-break-inside: avoid;
       }
-      
-      .cv-education-item {
-        page-break-inside: avoid;
-      }
     }
   </style>
 </head>
@@ -894,10 +711,10 @@
     </div>
     ` : ''}
     
-    <!-- Work Experience -->
+    <!-- Professional Experience -->
     ${experience.length > 0 ? `
     <div class="cv-section">
-      <div class="cv-section-title">Work Experience</div>
+      <div class="cv-section-title">Professional Experience</div>
       ${experience.map((job, index) => `
       <div class="cv-job">
         <div class="cv-job-header">
@@ -920,14 +737,7 @@
       <div class="cv-section-title">Education</div>
       ${education.map(edu => `
       <div class="cv-education-item">
-        <div class="cv-education-line">${[edu.degree, edu.institution, edu.gpa].filter(Boolean).map(f => {
-          // Handle rich-text content in degree field
-          if (edu.isRichText && f === edu.degree) {
-            return f; // Already in HTML format
-          }
-          return escapeHtml(f);
-        }).join(' | ')}</div>
-        ${edu.description ? renderEducationDescription(edu.description, edu.isRichText) : ''}
+        <div class="cv-education-line">${[edu.degree, edu.institution, edu.gpa].filter(Boolean).map(f => escapeHtml(f)).join(' | ')}</div>
       </div>
       `).join('\n      ')}
     </div>
@@ -936,7 +746,7 @@
     <!-- Skills -->
     ${skills ? `
     <div class="cv-section">
-      <div class="cv-section-title">Technical Proficiencies</div>
+      <div class="cv-section-title">Skills</div>
       <div class="cv-skills">${escapeHtml(skills)}</div>
     </div>
     ` : ''}
@@ -955,7 +765,7 @@
 
     // ============ GENERATE TEXT VERSION ============
     generateText(cvData) {
-      const { contact, summary, experience, projects, education, skills, certifications } = cvData;
+      const { contact, summary, experience, education, skills, certifications } = cvData;
       const lines = [];
 
       // Name and contact
@@ -973,19 +783,10 @@
         lines.push('');
       }
 
-      // Experience
+      // Professional Experience
       if (experience.length > 0) {
-        lines.push('WORK EXPERIENCE');
+        lines.push('PROFESSIONAL EXPERIENCE');
         experience.forEach(job => {
-      // Experience — filter out entries where company is a section header
-      const HEADER_SET = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
-      const safeExp = experience.filter(job => {
-        const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-        return !HEADER_SET.has(norm) && !([...HEADER_SET].some(h => norm === (h + ' ' + h)));
-      });
-      if (safeExp.length > 0) {
-        lines.push('WORK EXPERIENCE');
-        safeExp.forEach(job => {
           // Line 1: Company
           lines.push(job.company);
           // Line 2: Title – YYYY – YYYY (use pre-formatted titleLine)
@@ -1001,18 +802,7 @@
       if (education.length > 0) {
         lines.push('EDUCATION');
         education.forEach(edu => {
-          // Extract plain text for ATS compatibility
-          const plainDegree = RichTextUtils.extractPlainText(edu.degree);
-          const plainInstitution = RichTextUtils.extractPlainText(edu.institution);
-          const plainGpa = RichTextUtils.extractPlainText(edu.gpa);
-          const plainDescription = RichTextUtils.extractPlainText(edu.description);
-          
-          const educationLine = [plainDegree, plainInstitution, plainGpa].filter(Boolean).join(' | ');
-          lines.push(educationLine);
-          
-          if (plainDescription) {
-            lines.push(plainDescription);
-          }
+          lines.push([edu.degree, edu.institution, edu.gpa].filter(Boolean).join(' | '));
         });
         lines.push('');
       }
@@ -1051,11 +841,11 @@
           return await this.generatePDFWithJsPDF(htmlContent, cvData);
         }
 
-        console.warn('[CVFormatterPerfectEnhanced] No PDF generation method available');
+        console.warn('[CVFormatterPerfect] No PDF generation method available');
         return null;
 
       } catch (error) {
-        console.error('[CVFormatterPerfectEnhanced] PDF generation error:', error);
+        console.error('[CVFormatterPerfect] PDF generation error:', error);
         return null;
       }
     },
@@ -1202,9 +992,9 @@
         y += 8;
       }
 
-      // Experience
+      // Professional Experience
       if (experience.length > 0) {
-        addText('WORK EXPERIENCE', true, false, 12);
+        addText('PROFESSIONAL EXPERIENCE', true, false, 12);
         y += 4;
 
         experience.forEach(job => {
@@ -1230,19 +1020,7 @@
 
         // No dates (bias prevention). Also strip any embedded dates in the strings.
         education.forEach(edu => {
-          // Extract plain text for ATS compatibility in PDF
-          const plainDegree = RichTextUtils.extractPlainText(edu.degree);
-          const plainInstitution = RichTextUtils.extractPlainText(edu.institution);
-          const plainGpa = RichTextUtils.extractPlainText(edu.gpa);
-          
-          addText([plainDegree, plainInstitution, plainGpa].filter(Boolean).join(' | '), false, false, 10.5);
-          
-          if (edu.description) {
-            const plainDescription = RichTextUtils.extractPlainText(edu.description);
-            if (plainDescription) {
-              addText(plainDescription, false, false, 9);
-            }
-          }
+          addText([edu.degree, edu.institution, edu.gpa].filter(Boolean).join(' | '), false, false, 10.5);
         });
         y += 8;
       }
@@ -1294,106 +1072,6 @@
       return this.isBrowserEnvironment() && 
              typeof window.jspdf !== 'undefined' && 
              window.jspdf.jsPDF;
-    },
-
-    // ============ RICH-TEXT EDITOR INTEGRATION ============
-    
-    // Create a rich-text editor for education descriptions
-    createRichTextEditor(containerId, initialContent = '') {
-      if (!this.isBrowserEnvironment()) return null;
-      
-      const container = document.getElementById(containerId);
-      if (!container) return null;
-      
-      // Create editor HTML
-      const editorHtml = `
-        <div class="rich-text-editor-container">
-          <div class="rich-text-toolbar">
-            <button type="button" class="rte-btn rte-bold" title="Bold (Ctrl+B)">
-              <strong>B</strong>
-            </button>
-            <button type="button" class="rte-btn rte-italic" title="Italic (Ctrl+I)">
-              <em>I</em>
-            </button>
-          </div>
-          <div class="rich-text-editor" contenteditable="true"></div>
-          <div class="rich-text-preview" style="display: none;"></div>
-        </div>
-      `;
-      
-      container.innerHTML = editorHtml;
-      
-      const editor = container.querySelector('.rich-text-editor');
-      const preview = container.querySelector('.rich-text-preview');
-      
-      // Set initial content
-      if (initialContent) {
-        if (initialContent.includes('<') && initialContent.includes('>')) {
-          // HTML content
-          editor.innerHTML = initialContent;
-        } else if (initialContent.includes('**') || initialContent.includes('*')) {
-          // Markdown-style content
-          editor.innerHTML = RichTextUtils.markdownToHtml(initialContent);
-        } else {
-          // Plain text
-          editor.textContent = initialContent;
-        }
-      }
-      
-      // Add toolbar functionality
-      const boldBtn = container.querySelector('.rte-bold');
-      const italicBtn = container.querySelector('.rte-italic');
-      
-      boldBtn.addEventListener('click', () => {
-        document.execCommand('bold', false, null);
-        editor.focus();
-      });
-      
-      italicBtn.addEventListener('click', () => {
-        document.execCommand('italic', false, null);
-        editor.focus();
-      });
-      
-      // Keyboard shortcuts
-      editor.addEventListener('keydown', (e) => {
-        if (e.ctrlKey || e.metaKey) {
-          switch (e.key) {
-            case 'b':
-              e.preventDefault();
-              document.execCommand('bold', false, null);
-              break;
-            case 'i':
-              e.preventDefault();
-              document.execCommand('italic', false, null);
-              break;
-          }
-        }
-      });
-      
-      return {
-        getHTML: () => editor.innerHTML,
-        getPlainText: () => editor.textContent || '',
-        getMarkdown: () => RichTextUtils.htmlToMarkdown(editor.innerHTML),
-        setContent: (content) => {
-          if (content.includes('<') && content.includes('>')) {
-            editor.innerHTML = content;
-          } else if (content.includes('**') || content.includes('*')) {
-            editor.innerHTML = RichTextUtils.markdownToHtml(content);
-          } else {
-            editor.textContent = content;
-          }
-        },
-        previewMode: (enable) => {
-          if (enable) {
-            preview.innerHTML = editor.innerHTML;
-            editor.style.display = 'none';
-            preview.style.display = 'block';
-          } else {
-            editor.style.display = 'block';
-            preview.style.display = 'none';
-          }
-        }
-      };
     },
 
     // ============ DOWNLOAD METHODS ============
@@ -1449,15 +1127,14 @@
 
   // ============ EXPORT ============
   if (typeof window !== 'undefined') {
-    window.CVFormatterPerfectEnhanced = CVFormatterPerfectEnhanced;
-    window.RichTextUtils = RichTextUtils;
+    window.CVFormatterPerfect = CVFormatterPerfect;
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = CVFormatterPerfectEnhanced;
+    module.exports = CVFormatterPerfect;
   }
   if (typeof global !== 'undefined') {
-    global.CVFormatterPerfectEnhanced = CVFormatterPerfectEnhanced;
-    global.RichTextUtils = RichTextUtils;
+    global.CVFormatterPerfect = CVFormatterPerfect;
   }
 
-})(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);
+})(typeof window !== 'undefined' ? window : 
+   typeof global !== 'undefined' ? global : this);

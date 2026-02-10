@@ -41,24 +41,11 @@
       const startTime = performance.now();
       console.log('[OpenResume] Generating ATS Package...');
 
-      // CRITICAL: Apply dedupeSectionHeaders before parsing to prevent inline duplication
-      let cleanedCV = baseCV;
-      if (typeof window !== 'undefined' && window.quantumhireApp && typeof window.quantumhireApp.dedupeSectionHeaders === 'function') {
-        cleanedCV = window.quantumhireApp.dedupeSectionHeaders(baseCV);
-        console.log('[OpenResume] Applied dedupeSectionHeaders to input text');
-      }
-
       // Parse and structure CV data
-      const cvData = this.parseAndStructureCV(cleanedCV, candidateData);
-
-      // CRITICAL: Sanitise structured data — filter bogus experience, apply neverLeakGuard
-      this.sanitiseStructuredData(cvData);
-
+      const cvData = this.parseAndStructureCV(baseCV, candidateData);
+      
       // Tailor CV with keywords
       const tailoredData = this.tailorCVData(cvData, keywords, jobData);
-
-      // CRITICAL: Re-sanitise after tailoring (tailoring can reintroduce banned words)
-      this.sanitiseStructuredData(tailoredData);
       
       // Generate CV PDF
       const cvResult = await this.generateCVPDF(tailoredData, candidateData);
@@ -117,24 +104,13 @@
         data.contact.portfolio = candidateData.portfolio || '';
         
         // Extract structured data if available
-        const rawExp = candidateData.workExperience || candidateData.work_experience || candidateData.professionalExperience || candidateData.professional_experience;
-        if (rawExp && Array.isArray(rawExp) && rawExp.length > 0) {
-          data.experience = rawExp.map(exp => ({
+        if (candidateData.workExperience || candidateData.work_experience) {
+          data.experience = (candidateData.workExperience || candidateData.work_experience).map(exp => ({
             company: exp.company || exp.organization || '',
             title: exp.title || exp.position || exp.role || '',
             dates: exp.dates || exp.duration || `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
             location: exp.location || '',
             bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || [])
-        // FIX: Check ALL possible field names including professionalExperience/professional_experience
-        const rawExperience = candidateData.professionalExperience || candidateData.professional_experience ||
-                              candidateData.workExperience || candidateData.work_experience || [];
-        if (Array.isArray(rawExperience) && rawExperience.length > 0) {
-          data.experience = rawExperience.map(exp => ({
-            company: exp.company || exp.organization || exp.company_name || '',
-            title: exp.title || exp.position || exp.role || exp.job_title || '',
-            dates: exp.dates || exp.duration || `${exp.startDate || exp.start_date || ''} - ${exp.endDate || exp.end_date || 'Present'}`,
-            location: exp.location || '',
-            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || exp.description || [])
           }));
         }
         
@@ -163,30 +139,7 @@
       // Parse from CV text if structured data is missing
       if (cvText && data.experience.length === 0) {
         const parsed = this.parseCVText(cvText);
-        // MERGE parsed data with existing candidateData instead of overwriting
-        if (parsed.summary && !data.summary) data.summary = parsed.summary;
-        if (parsed.experience?.length) data.experience = parsed.experience;
-        if (parsed.education?.length && !data.education?.length) data.education = parsed.education;
-        // Merge skills (keep candidateData skills + add parsed skills)
-        if (parsed.skills?.length) {
-          const existingSkills = new Set((data.skills || []).map(s => s.toLowerCase()));
-          for (const skill of parsed.skills) {
-            if (!existingSkills.has(skill.toLowerCase())) {
-              data.skills.push(skill);
-              existingSkills.add(skill.toLowerCase());
-            }
-          }
-        }
-        // Merge certifications
-        if (parsed.certifications?.length) {
-          const existingCerts = new Set((data.certifications || []).map(c => c.toLowerCase()));
-          for (const cert of parsed.certifications) {
-            if (!existingCerts.has(cert.toLowerCase())) {
-              data.certifications.push(cert);
-              existingCerts.add(cert.toLowerCase());
-            }
-          }
-        }
+        Object.assign(data, parsed);
       }
 
       return data;
@@ -200,7 +153,6 @@
     },
 
     // ============ PARSE CV TEXT ============
-    // FIX v4.2.0: Handles inline headers like "SKILLS: PYTHON, JAVA, C++" by splitting them
     parseCVText(cvText) {
       const result = {
         summary: '',
@@ -209,6 +161,11 @@
         education: [],
         certifications: []
       };
+
+      const lines = cvText.split('\n');
+      let currentSection = '';
+      let currentContent = [];
+      let currentJob = null;
 
       const sectionMap = {
         'PROFESSIONAL SUMMARY': 'summary',
@@ -219,49 +176,12 @@
         'EMPLOYMENT': 'experience',
         'SKILLS': 'skills',
         'TECHNICAL SKILLS': 'skills',
-        'TECHNICAL PROFICIENCIES': 'skills',
         'EDUCATION': 'education',
         'CERTIFICATIONS': 'certifications'
       };
 
-      /**
-       * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
-       * Returns { header, content } or null if not an inline header.
-       */
-      const parseInlineHeader = (line) => {
-        const trimmed = (line || '').trim();
-        // Pattern: HEADER: content (header is all caps, followed by colon and content)
-        const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
-        if (inlineMatch) {
-          const potentialHeader = inlineMatch[1].trim().toUpperCase();
-          if (sectionMap[potentialHeader]) {
-            return { header: potentialHeader, content: inlineMatch[2].trim() };
-          }
-        }
-        return null;
-      };
-
-      const lines = cvText.split('\n');
-      let currentSection = '';
-      let currentContent = [];
-      let currentJob = null;
-
       for (const line of lines) {
         const trimmed = line.trim();
-        
-        // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
-        const inlineResult = parseInlineHeader(line);
-        if (inlineResult) {
-          // Save previous section content
-          this.saveSection(result, currentSection, currentContent, currentJob);
-          // Start new section with the inline content
-          currentSection = sectionMap[inlineResult.header];
-          currentContent = [inlineResult.content]; // Content goes directly into the section
-          currentJob = null;
-          continue;
-        }
-        
-        // Standard header detection (header on its own line)
         const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, '');
 
         if (sectionMap[upperTrimmed]) {
@@ -288,145 +208,20 @@
 
       switch (section) {
         case 'summary':
-          // Append if summary already exists (rare but possible)
-          result.summary = result.summary ? result.summary + ' ' + text : text;
+          result.summary = text;
           break;
-        case 'skills': {
-          // MERGE skills instead of overwriting — prevents loss when AI generates two SKILLS sections
-          const newSkills = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1);
-          const existingSet = new Set((result.skills || []).map(s => s.toLowerCase()));
-          const merged = [...(result.skills || [])];
-          for (const skill of newSkills) {
-            if (!existingSet.has(skill.toLowerCase())) {
-              merged.push(skill);
-              existingSet.add(skill.toLowerCase());
-            }
-          }
-          result.skills = merged;
+        case 'skills':
+          result.skills = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 1);
           break;
-        }
-        case 'experience': {
-          // MERGE experience instead of overwriting
-          const newExperience = this.parseExperienceText(text);
-          result.experience = [...(result.experience || []), ...newExperience];
+        case 'experience':
+          result.experience = this.parseExperienceText(text);
           break;
-        }
-        case 'education': {
-          // MERGE education instead of overwriting
-          const newEducation = this.parseEducationText(text);
-          result.education = [...(result.education || []), ...newEducation];
+        case 'education':
+          result.education = this.parseEducationText(text);
           break;
-        }
-        case 'certifications': {
-          // MERGE certifications instead of overwriting
-          const newCerts = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
-          const existingCerts = new Set((result.certifications || []).map(c => c.toLowerCase()));
-          const mergedCerts = [...(result.certifications || [])];
-          for (const cert of newCerts) {
-            if (!existingCerts.has(cert.toLowerCase())) {
-              mergedCerts.push(cert);
-              existingCerts.add(cert.toLowerCase());
-            }
-          }
-          result.certifications = mergedCerts;
+        case 'certifications':
+          result.certifications = text.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2);
           break;
-        }
-      }
-    },
-
-    // ============ SANITISE STRUCTURED DATA ============
-    // Filters out bogus experience entries and applies neverLeakGuard to text fields
-    sanitiseStructuredData(data) {
-      if (!data) return;
-
-      // ── Filter bogus experience entries (section headers misidentified as jobs) ──
-      const HEADER_PATTERNS = new Set([
-        'professional experience', 'work experience', 'experience',
-        'employment history', 'career history', 'employment',
-        'work history', 'positions held', 'career',
-        'education', 'skills', 'certifications', 'projects', 'achievements',
-        'professional summary', 'summary', 'technical proficiencies',
-        'technical skills', 'core skills'
-      ]);
-
-      const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-      const isDupHeader = (v) => {
-        const parts = v.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
-        if (parts.length >= 2 && parts.every(p => HEADER_PATTERNS.has(p))) return true;
-        for (const h of HEADER_PATTERNS) {
-          if (v === (h + ' ' + h)) return true;
-        }
-        return false;
-      };
-
-      if (Array.isArray(data.experience)) {
-        data.experience = data.experience.filter(job => {
-          const company = normalise(job.company || job.companyName || '');
-          const title = normalise(job.title || job.jobTitle || job.position || '');
-          if (HEADER_PATTERNS.has(company) || isDupHeader(company)) {
-            console.log('[OpenResume] Stripped bogus experience entry (company is header):', job.company);
-            return false;
-          }
-          if ((HEADER_PATTERNS.has(title) || isDupHeader(title)) && !company) {
-            console.log('[OpenResume] Stripped bogus experience entry (title is header):', job.title);
-            return false;
-          }
-          return true;
-        });
-      }
-
-      // ── Apply neverLeakGuard to all text fields ──
-      const guard = (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.neverLeakGuard)
-        ? ContentQualityEngine.neverLeakGuard.bind(ContentQualityEngine)
-        : null;
-
-      if (guard) {
-        // Summary
-        if (data.summary) {
-          data.summary = guard(data.summary);
-        }
-
-        // Experience bullets
-        if (Array.isArray(data.experience)) {
-          data.experience.forEach(job => {
-            if (Array.isArray(job.bullets)) {
-              job.bullets = job.bullets.map(b => guard(b));
-            }
-            if (job.title) job.title = guard(job.title);
-          });
-        }
-
-        // Skills (individual items)
-        if (Array.isArray(data.skills)) {
-          data.skills = data.skills.map(s => guard(s));
-        }
-
-        // Certifications
-        if (Array.isArray(data.certifications)) {
-          data.certifications = data.certifications.map(c => guard(c));
-        }
-      }
-
-      // ── Deduplicate skills ──
-      if (Array.isArray(data.skills)) {
-        const seen = new Set();
-        data.skills = data.skills.filter(s => {
-          const key = s.toLowerCase().trim();
-          if (seen.has(key) || !key) return false;
-          seen.add(key);
-          return true;
-        });
-      }
-
-      // ── Deduplicate certifications ──
-      if (Array.isArray(data.certifications)) {
-        const seen = new Set();
-        data.certifications = data.certifications.filter(c => {
-          const key = c.toLowerCase().trim();
-          if (seen.has(key) || !key) return false;
-          seen.add(key);
-          return true;
-        });
       }
     },
 
@@ -436,46 +231,9 @@
       const lines = text.split('\n');
       let currentJob = null;
 
-      // ONE regex to detect section headers — used to reject bogus company names
-      const _isHeader = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|work\s*history|positions?\s*held|education|skills|technical\s*skills|core\s*skills|certifications|professional\s*summary|summary|projects|achievements|technical\s*proficiencies|core\s*competencies|key\s*skills|additional\s*skills|licenses?)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
-      // Section headers that must NEVER become company names
-      const SECTION_HEADERS = new Set([
-        'professional experience', 'work experience', 'experience',
-        'employment history', 'career history', 'employment',
-        'work history', 'positions held', 'career', 'roles',
-        'education', 'skills', 'certifications', 'projects', 'achievements',
-        'professional summary', 'summary', 'technical proficiencies'
-      ]);
-      const isHeaderish = (v) => {
-        const norm = v.toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-        if (SECTION_HEADERS.has(norm)) return true;
-        for (const h of SECTION_HEADERS) {
-          if (norm === (h + ' ' + h)) return true;
-          if (norm.startsWith(h + ' ') && norm.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '') return true;
-        }
-        return false;
-      };
-
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-
-        // Detect job header: Company | Title | Dates | Location
-        if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) ||
-            /^(Meta|Google|Amazon|Microsoft|Apple|Solim|Accenture|Citigroup)/i.test(trimmed)) {
-
-          const parts = trimmed.split('|').map(p => p.trim());
-
-          // REJECT if company part is a section header
-          if (_isHeader(parts[0])) {
-            console.log('[OpenResume] parseExperienceText: rejected header-as-company:', parts[0]);
-            continue;
-          }
-
-          if (currentJob) jobs.push(currentJob);
-
-        // CRITICAL: Skip lines that are section headers
-        if (isHeaderish(trimmed)) continue;
 
         // Detect job header: Company | Title | Dates | Location
         if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) || 
@@ -497,9 +255,6 @@
 
       if (currentJob) jobs.push(currentJob);
       return jobs;
-      
-      // Final safety: filter out any jobs where company is a section header
-      return jobs.filter(job => !isHeaderish(job.company || ''));
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -550,59 +305,40 @@
       tailored.summary = this.enhanceSummary(cvData.summary, [...highPriority.slice(0, 5), ...mediumPriority.slice(0, 3)]);
 
       // 3. STRATEGIC KEYWORD INTEGRATION: Inject keywords into Work Experience first
-      // Soft skills go ONLY into experience bullets, NEVER into skills section
-      // Use TailorUniversal to identify soft skills if available
-      const softSkillSet = (typeof TailorUniversal !== 'undefined' && TailorUniversal.SOFT_SKILLS_FOR_EXPERIENCE)
-        ? TailorUniversal.SOFT_SKILLS_FOR_EXPERIENCE
-        : new Set(['leadership', 'communication', 'collaboration', 'teamwork', 'mentoring',
-          'problem-solving', 'critical thinking', 'adaptability', 'stakeholder management',
-          'cross-functional', 'empathy', 'prioritisation', 'time management', 'conflict resolution',
-          'creative thinking', 'decision-making', 'initiative', 'roadmap planning',
-          'negotiation', 'coaching', 'facilitation', 'delegation', 'strategic thinking',
-          'relationship building', 'change management', 'continuous improvement',
-          'knowledge sharing', 'stakeholder engagement', 'requirements gathering',
-          'analytical thinking', 'attention to detail', 'process improvement']);
-
-      const softSkillKeywords = allKeywords.filter(kw => softSkillSet.has(kw.toLowerCase()));
-      const technicalKeywords = allKeywords.filter(kw => !softSkillSet.has(kw.toLowerCase()));
-
       // Use StrategicKeywordIntegration if available (prioritises bullets over skills list)
       if (typeof StrategicKeywordIntegration !== 'undefined') {
         console.log('[OpenResume] Using Strategic Keyword Integration for Work Experience');
-        // Pass ALL keywords (technical + soft) to experience integration
         const integrationResult = StrategicKeywordIntegration.enhanceBulletPointsWithKeywords(
           cvData.experience,
-          { all: allKeywords, highPriority, mediumPriority: [...mediumPriority, ...softSkillKeywords], lowPriority }
+          { all: allKeywords, highPriority, mediumPriority, lowPriority }
         );
         tailored.experience = integrationResult.enhancedExperience;
-
+        
         // Remove integrated keywords from skills (they're now in bullets)
-        // Also remove ALL soft skills from skills list (they belong in experience only)
         const integratedKeywords = integrationResult.stats?.integratedKeywords || [];
-        const remainingKeywords = technicalKeywords.filter(kw =>
+        const remainingKeywords = allKeywords.filter(kw => 
           !integratedKeywords.some(ik => ik.toLowerCase() === kw.toLowerCase())
         );
-
-        // Only add remaining TECHNICAL keywords to skills (minimal skills list)
+        
+        // Only add remaining keywords to skills (minimal skills list)
         tailored.skills = this.mergeSkills(cvData.skills, remainingKeywords.slice(0, 10));
-
+        
         console.log('[OpenResume] Strategic Integration Stats:', {
           bulletsModified: integrationResult.stats?.bulletsModified || 0,
           keywordsIntegrated: integratedKeywords.length,
-          softSkillsIntegrated: softSkillKeywords.length,
           remainingForSkills: remainingKeywords.length
         });
       } else {
-        // Fallback to legacy injection — include soft skills in experience
+        // Fallback to legacy injection
         tailored.experience = this.injectAllKeywordsIntoExperience(cvData.experience, {
           high: highPriority,
-          medium: [...mediumPriority, ...softSkillKeywords],
+          medium: mediumPriority,
           low: lowPriority,
           all: allKeywords
         });
-
-        // Only merge TECHNICAL keywords into skills (not soft skills)
-        tailored.skills = this.mergeSkills(cvData.skills, technicalKeywords);
+        
+        // 4. Merge ALL keywords into skills
+        tailored.skills = this.mergeSkills(cvData.skills, allKeywords);
       }
 
       return tailored;
@@ -850,33 +586,15 @@
 
     // ============ MERGE SKILLS WITH KEYWORDS ============
     mergeSkills(existingSkills, keywords) {
-      // Junk keywords that must NEVER appear in the skills section
-      const SKILLS_BLOCKLIST = new Set([
-        'customer service', 'high school diploma', 'commission', 'customer-facing',
-        'lawn care', 'independent work', 'motivated', 'benefits', 'fast-paced',
-        'work environment', 'crm software', 'motivation', 'self-motivated',
-        'passion', 'passionate', 'enthusiasm', 'driven', 'dynamic', 'proactive',
-        'synergy', 'paradigm', 'robust', 'commitment', 'reliable', 'reliability',
-        'integrity', 'professionalism', 'multitasking', 'positive attitude',
-        'work ethic', 'goal-oriented', 'results-oriented', 'training', 'teams',
-        'environment', 'services', 'solutions', 'products', 'clients', 'customers',
-        'business', 'communication skills', 'team player', 'detail-oriented',
-        'hard-working', 'self-starter', 'quick learner', 'fast learner',
-        'go-getter', 'can-do attitude', 'dedication', 'go above and beyond'
-      ]);
-
       const skillSet = new Set((existingSkills || []).map(s => s.toLowerCase()));
-      const merged = [...(existingSkills || [])].filter(s =>
-        !SKILLS_BLOCKLIST.has(s.toLowerCase()) && s.trim().length >= 2
-      );
+      const merged = [...(existingSkills || [])];
 
-      // Add top keywords not already in skills (filtered)
+      // Add top keywords not already in skills
       const topKeywords = (keywords.all || keywords).slice(0, 10);
       topKeywords.forEach(kw => {
-        const kwLower = kw.toLowerCase();
-        if (!skillSet.has(kwLower) && !SKILLS_BLOCKLIST.has(kwLower) && kw.trim().length >= 2) {
+        if (!skillSet.has(kw.toLowerCase())) {
           merged.push(this.formatSkillName(kw));
-          skillSet.add(kwLower);
+          skillSet.add(kw.toLowerCase());
         }
       });
 
@@ -956,20 +674,8 @@
         });
       };
 
-      // ██ SECTION HEADER DEDUP GUARD ██
-      // Tracks which section headers have been rendered — prevents duplicate sections in PDF
-      const renderedSections = new Set();
-
-      // Helper: Add section header with line — GUARDED against duplicates
+      // Helper: Add section header with line
       const addSectionHeader = (title) => {
-        // CRITICAL: Never render the same section header twice
-        const normalised = title.toUpperCase().trim();
-        if (renderedSections.has(normalised)) {
-          console.warn(`[OpenResume] BLOCKED duplicate section header: "${title}"`);
-          return false; // Signal that section was skipped
-        }
-        renderedSections.add(normalised);
-
         if (y > page.height - margins.bottom - 50) {
           doc.addPage();
           y = margins.top;
@@ -1013,59 +719,8 @@
       // === WORK EXPERIENCE ===
       if (data.experience && data.experience.length > 0) {
         addSectionHeader('WORK EXPERIENCE');
-
-        // SIMPLE GUARD: One regex to rule them all — skip any job where company is a section header
-        const _isHeader = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|work\s*history|positions?\s*held|education|skills|technical\s*skills|core\s*skills|certifications|professional\s*summary|summary|projects|achievements|technical\s*proficiencies|core\s*competencies|key\s*skills|additional\s*skills|licenses?)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
-        const safeExperience = data.experience.filter(job => {
-          const c = (job.company || job.companyName || '').trim();
-          return c.length >= 2 && !_isHeader(c);
-        });
-
-        safeExperience.forEach((job, idx) => {
-          // Company Name (Bold) on its own line
-          doc.setFontSize(font.body);
-          doc.setFont(font.family, 'bold');
-          if (y > page.height - margins.bottom - 50) { doc.addPage(); y = margins.top; }
-          doc.text(job.company, margins.left, y);
-          y += font.body * lineHeight;
-
-          // Title | Dates | Location on separate line
-          const jobLine = [job.title, job.dates, job.location].filter(Boolean).join(' | ');
-          if (jobLine) {
-            doc.setFont(font.family, 'italic');
-            doc.setFontSize(font.body);
-            const jobLines = doc.splitTextToSize(jobLine, contentWidth);
-            jobLines.forEach(line => {
-              doc.text(line, margins.left, y);
-              y += font.body * lineHeight;
-            });
-          }
-      // FINAL SAFETY: Filter out any experience entries where company is a section header
-      const HEADER_BLACKLIST = new Set([
-        'professional experience', 'work experience', 'experience',
-        'employment history', 'career history', 'employment',
-        'work history', 'positions held', 'career', 'roles',
-        'education', 'skills', 'certifications', 'projects', 'achievements'
-      ]);
-      const safeExperience = (data.experience || []).filter(job => {
-        const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-        if (HEADER_BLACKLIST.has(norm)) {
-          console.warn('[OpenResume] BLOCKED header-as-company in render:', job.company);
-          return false;
-        }
-        // Catch duplicated headers like "work experience work experience"
-        for (const h of HEADER_BLACKLIST) {
-          if (norm === (h + ' ' + h) || (norm.startsWith(h + ' ') && norm.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '')) {
-            console.warn('[OpenResume] BLOCKED repeated header-as-company in render:', job.company);
-            return false;
-          }
-        }
-        return true;
-      });
-      if (safeExperience.length > 0) {
-        addSectionHeader('WORK EXPERIENCE');
         
-        safeExperience.forEach((job, idx) => {
+        data.experience.forEach((job, idx) => {
           // Job header: Company | Title | Dates | Location
           const header = [job.company, job.title, job.dates, job.location].filter(Boolean).join(' | ');
           addText(header, true, false, font.body);
@@ -1076,7 +731,6 @@
             const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
             doc.setFont(font.family, 'normal');
             doc.setFontSize(font.body);
-
             
             const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
             bulletLines.forEach((line, lineIdx) => {
@@ -1090,7 +744,7 @@
             });
           });
 
-          if (idx < safeExperience.length - 1) y += 6;
+          if (idx < data.experience.length - 1) y += 6;
         });
         y += 4;
       }
@@ -1107,19 +761,16 @@
       }
 
       // === SKILLS (comma-separated, single line) ===
-      // GUARDED: addSectionHeader returns false if section already rendered
       if (data.skills && data.skills.length > 0) {
-        if (addSectionHeader('TECHNICAL PROFICIENCIES') !== false) {
-          addText(data.skills.join(', '), false, false, font.body);
-          y += 4;
-        }
+        addSectionHeader('TECHNICAL PROFICIENCIES');
+        addText(data.skills.join(', '), false, false, font.body);
+        y += 4;
       }
 
       // === CERTIFICATIONS ===
       if (data.certifications && data.certifications.length > 0) {
-        if (addSectionHeader('CERTIFICATIONS') !== false) {
-          addText(data.certifications.join(', '), false, false, font.body);
-        }
+        addSectionHeader('CERTIFICATIONS');
+        addText(data.certifications.join(', '), false, false, font.body);
       }
 
       // Generate output
@@ -1148,8 +799,6 @@
 
       if (data.experience?.length > 0) {
         lines.push('WORK EXPERIENCE');
-        const _isHdr = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|education|skills|certifications|summary|projects|achievements)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
-        data.experience.filter(j => (j.company||'').trim().length >= 2 && !_isHdr(j.company)).forEach(job => {
         data.experience.forEach(job => {
           lines.push([job.company, job.title, job.dates, job.location].filter(Boolean).join(' | '));
           job.bullets.forEach(b => lines.push(`- ${b}`));

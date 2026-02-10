@@ -598,7 +598,6 @@
 
   // ============ MAIN EXTRACTION FUNCTION ============
 
-  function extractReliableKeywords(rawText, maxKeywords = 50) {
   function extractReliableKeywords(rawText, maxKeywords = 35) {
     if (!rawText || typeof rawText !== 'string') {
       return { 
