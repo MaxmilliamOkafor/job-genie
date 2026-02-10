@@ -51,13 +51,13 @@
 
   // ============ QUALIFICATION EXTRACTION PATTERNS ============
   const EXTRACTION_PATTERNS = {
-    // Experience years: \"5+ years\", \"3-5 years of experience\"
+    // Experience years: "5+ years", "3-5 years of experience"
     experienceYears: /(\d+)\+?\s*(?:-\s*\d+)?\s*years?\s*(?:of\s*)?(?:experience|background)/gi,
     
-    // Education: \"Bachelor's degree\", \"Master's in Computer Science\"
+    // Education: "Bachelor's degree", "Master's in Computer Science"
     education: /(?:bachelor[']?s?|master[']?s?|phd|doctorate|degree)\s*(?:in\s*)?([a-z\s,]+)?/gi,
     
-    // Certifications: \"AWS Certified\", \"PMP\", \"CISSP\"
+    // Certifications: "AWS Certified", "PMP", "CISSP"
     certification: /(?:certified|certification|certificate)\s*(?:in\s*)?([a-z\s]+)|(?:aws|azure|gcp|pmp|cissp|cisa|scrum|agile)\s*certif/gi,
     
     // Technical skills from common patterns
@@ -574,8 +574,7 @@
         low: '#ef4444'        // red
       };
       return colors[status] || '#6b7280';
-    }
-  };
+    },
 
     // ============ AUTO-TAILOR CV TO REACH 75% THRESHOLD ============
     // Analyses unmet qualifications and generates keyword injection plan
