@@ -585,60 +585,28 @@
 
     // ============ NORMALIZE LOCATION ============
     // HARD RULE: NEVER include "Remote" in CV location (recruiter red flag)
-    // Output format: "City, State" for US cities (e.g., "San Francisco, CA")
+    // REQUIRED OUTPUT: "City, ISO2" (or "City, ST, US" for US state precision)
+
     normalizeLocation(location) {
       if (!location) return '';
-      
-      // CRITICAL: Strip "Remote" and similar terms first
-      let normalized = location
-        .replace(/\b(remote|work\s*from\s*home|wfh|virtual|fully\s*remote|remote\s*first|remote\s*friendly)\b/gi, '')
+
+      const normalized = String(location)
+        .replace(/\b(open\s+to\s+relocation)\b/gi, '')
         .replace(/\s*[\(\[]?\s*(remote|wfh|virtual)\s*[\)\]]?\s*/gi, '')
+        .replace(/\b(remote|work\s*from\s*home|fully\s*remote|remote\s*first|remote\s*friendly)\b/gi, '')
         .replace(/\s*(\||,|\/|-)\s*(\||,|\/|-)\s*/g, ', ')
-        .replace(/\s*(\||,|\/|-)\s*$/g, '')
-        .replace(/^\s*(\||,|\/|-)\s*/g, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
-      
-      // If empty after stripping Remote, return empty for fallback
-      if (!normalized || normalized.length < 3) {
-        return '';
+
+      if (!normalized || normalized.length < 2) return '';
+
+      if (typeof window !== 'undefined' && window.ATSLocationTailor?.normalizeJobLocationForApplication) {
+        return window.ATSLocationTailor.normalizeJobLocationForApplication(normalized, 'Dublin, IE');
       }
-      
-      // US State abbreviation mapping for "City, State" format
-      const stateAbbrev = {
-        'california': 'CA', 'texas': 'TX', 'new york': 'NY', 'florida': 'FL',
-        'illinois': 'IL', 'pennsylvania': 'PA', 'ohio': 'OH', 'georgia': 'GA',
-        'north carolina': 'NC', 'michigan': 'MI', 'new jersey': 'NJ', 'virginia': 'VA',
-        'washington': 'WA', 'arizona': 'AZ', 'massachusetts': 'MA', 'tennessee': 'TN',
-        'indiana': 'IN', 'missouri': 'MO', 'maryland': 'MD', 'wisconsin': 'WI',
-        'colorado': 'CO', 'minnesota': 'MN', 'south carolina': 'SC', 'alabama': 'AL',
-        'louisiana': 'LA', 'kentucky': 'KY', 'oregon': 'OR', 'oklahoma': 'OK',
-        'connecticut': 'CT', 'utah': 'UT', 'iowa': 'IA', 'nevada': 'NV',
-        'arkansas': 'AR', 'mississippi': 'MS', 'kansas': 'KS', 'new mexico': 'NM',
-        'nebraska': 'NE', 'idaho': 'ID', 'west virginia': 'WV', 'hawaii': 'HI',
-        'new hampshire': 'NH', 'maine': 'ME', 'montana': 'MT', 'rhode island': 'RI',
-        'delaware': 'DE', 'south dakota': 'SD', 'north dakota': 'ND', 'alaska': 'AK',
-        'vermont': 'VT', 'wyoming': 'WY', 'district of columbia': 'DC'
-      };
-      
-      // Convert full state names to abbreviations (City, California -> City, CA)
-      for (const [full, abbrev] of Object.entries(stateAbbrev)) {
-        const regex = new RegExp(`,\\s*${full}\\s*$`, 'i');
-        if (regex.test(normalized)) {
-          normalized = normalized.replace(regex, `, ${abbrev}`);
-          break;
-        }
-      }
-      
-      // Remove "USA", "United States", "US" suffixes but keep state abbreviation
-      normalized = normalized
-        .replace(/,\s*(US|USA|United States)\s*$/i, '')
-        .replace(/,\s*(UK|United Kingdom)\s*$/i, '')
-        .trim();
-      
+
       return normalized;
     },
-    
+
     // ============ FORMAT PHONE FOR ATS ============
     // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
     formatPhoneForATS(phone) {
@@ -963,10 +931,10 @@
       // === CONTACT LINE ===
       // Format: "+CountryCode: Number | email | City, State | open to relocation"
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
+      const baseLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
+      const contactParts = [formattedPhone, data.contact.email, baseLocation].filter(Boolean);
       if (contactParts.length > 0) {
-        // Add "open to relocation" if location exists
-        const contactLine = contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : '');
+        const contactLine = contactParts.join(' | ') + (baseLocation ? ' | open to relocation' : '');
         addText(contactLine, false, true, font.body);
       }
 
@@ -1080,8 +1048,9 @@
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       
       lines.push(data.contact.name.toUpperCase());
-      const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
-      lines.push(contactParts.join(' | ') + (data.contact.location ? ' | open to relocation' : ''));
+      const baseLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
+      const contactParts = [formattedPhone, data.contact.email, baseLocation].filter(Boolean);
+      lines.push(contactParts.join(' | ') + (baseLocation ? ' | open to relocation' : ''));
       lines.push([data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean).join(' | '));
       lines.push('');
 

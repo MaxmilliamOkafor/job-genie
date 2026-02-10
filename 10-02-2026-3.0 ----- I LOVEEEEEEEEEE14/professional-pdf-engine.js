@@ -221,8 +221,9 @@
         data.summary = parsed.summary || '';
         data.experience = parsed.experience || [];
         data.education = parsed.education || [];
-        data.skills = this.parseSkills(parsed.skills || '');
-        data.certifications = this.parseCertifications(parsed.certifications || '');
+        const skillsSource = parsed.skills || candidateData?.skills || '';
+        data.skills = this.parseSkills(skillsSource);
+        data.certifications = this.parseCertifications(parsed.certifications || candidateData?.certifications || '');
       } else if (typeof tailoredContent === 'object' && tailoredContent !== null) {
         // Structured data from profile - check ALL possible field names
         data.summary = tailoredContent.summary || tailoredContent.professionalSummary || tailoredContent.professional_summary || '';
@@ -306,15 +307,25 @@
 
     // ============ CLEAN LOCATION (Remove "Remote" and prefixes) ============
     // UPDATED: Uses ATSLocationTailor.cleanLocation if available
+
     cleanLocation(location) {
       if (!location) return '';
-      
-      // Use ATSLocationTailor.cleanLocation if available (handles prefix removal)
+
+      let cleaned = String(location)
+        .replace(/\b(open\s+to\s+relocation)\b/gi, '')
+        .replace(/\s*\|\s*\b(open\s+to\s+relocation)\b/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      // Use ATSLocationTailor.cleanLocation + strict formatter if available
       if (typeof window !== 'undefined' && window.ATSLocationTailor?.cleanLocation) {
-        location = window.ATSLocationTailor.cleanLocation(location);
+        cleaned = window.ATSLocationTailor.cleanLocation(cleaned);
       }
-      
-      return location
+      if (typeof window !== 'undefined' && window.ATSLocationTailor?.normalizeJobLocationForApplication) {
+        cleaned = window.ATSLocationTailor.normalizeJobLocationForApplication(cleaned, 'Dublin, IE');
+      }
+
+      return cleaned
         .replace(/\b(remote|work from home|wfh|virtual|fully remote|remote first)\b/gi, '')
         .replace(/\s*[\(\[]?\s*(remote|wfh|virtual)\s*[\)\]]?\s*/gi, '')
         .replace(/\s*(\||,|\/|–|-)\s*(\||,|\/|–|-)\s*/g, ', ')

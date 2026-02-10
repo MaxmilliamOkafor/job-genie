@@ -3643,10 +3643,13 @@ class ATSTailor {
     try {
       console.log('[ATS Tailor] Regenerating PDF after boost (OpenResume style)...');
       
-      // Get tailored location from job data
-      let tailoredLocation = 'Open to relocation';
-      if (window.LocationTailor && this.currentJob) {
-        tailoredLocation = window.LocationTailor.extractFromJobData(this.currentJob);
+      // Get ATS-safe location in strict format: "City, ISO2" (or "City, ST, US")
+      let tailoredLocation = this._defaultLocation || 'Dublin, IE';
+      if (window.ATSLocationTailor?.normalizeJobLocationForApplication) {
+        tailoredLocation = window.ATSLocationTailor.normalizeJobLocationForApplication(
+          this.currentJob?.location || '',
+          this._defaultLocation || 'Dublin, IE'
+        );
       } else if (this.currentJob?.location) {
         tailoredLocation = this.currentJob.location;
       }
@@ -4243,6 +4246,59 @@ class ATSTailor {
   }
 
   /**
+   * Extract plain document text from mixed payloads.
+   * Handles accidental JSON wrappers like:
+   * {"tailoredResume":"..."} or {"coverLetter":"..."}
+   */
+  normalizeDocumentText(rawDoc, type) {
+    if (!rawDoc) return '';
+
+    const pickFromObject = (obj) => {
+      if (!obj || typeof obj !== 'object') return '';
+
+      const candidateKeys = type === 'cv'
+        ? ['tailoredResume', 'resume', 'cv', 'content', 'text', 'plainText', 'document']
+        : ['tailoredCoverLetter', 'coverLetter', 'cover', 'content', 'text', 'plainText', 'document'];
+
+      for (const key of candidateKeys) {
+        if (typeof obj[key] === 'string' && obj[key].trim()) {
+          return obj[key].trim();
+        }
+      }
+
+      return '';
+    };
+
+    if (typeof rawDoc === 'object') {
+      const fromObject = pickFromObject(rawDoc);
+      if (fromObject) return fromObject;
+      try {
+        return JSON.stringify(rawDoc, null, 2);
+      } catch (e) {
+        return '';
+      }
+    }
+
+    if (typeof rawDoc !== 'string') return '';
+
+    const trimmed = rawDoc.trim();
+    if (!trimmed) return '';
+
+    // Some pipelines return stringified JSON instead of plain text document content
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const fromParsed = pickFromObject(parsed);
+        if (fromParsed) return fromParsed;
+      } catch (_) {
+        // Not JSON - keep original text
+      }
+    }
+
+    return trimmed;
+  }
+
+  /**
    * PART 1B: Completely rewritten downloadDocument function
    * Uses structuredCv from tailoring step - NO re-parsing
    */
@@ -4256,13 +4312,14 @@ class ATSTailor {
 
     // Always enforce final UK spelling boundary on plain text passed to PDF generator
     const cqe = (typeof ContentQualityEngine !== 'undefined' ? ContentQualityEngine : globalThis.ContentQualityEngine);
+    const normalizedRawText = this.normalizeDocumentText(rawTextDoc, type);
     const textDoc = (() => {
-      if (!rawTextDoc || typeof rawTextDoc !== 'string') return rawTextDoc;
+      if (!normalizedRawText || typeof normalizedRawText !== 'string') return normalizedRawText;
       try {
-        return cqe?.sanitiseCVBlock ? cqe.sanitiseCVBlock(rawTextDoc) : rawTextDoc;
+        return cqe?.sanitiseCVBlock ? cqe.sanitiseCVBlock(normalizedRawText) : normalizedRawText;
       } catch (e) {
         console.warn('[ATS Tailor] ContentQualityEngine sanitisation failed (continuing):', e);
-        return rawTextDoc;
+        return normalizedRawText;
       }
     })();
 
@@ -4270,22 +4327,8 @@ class ATSTailor {
     const pdfSafeTextDoc = this.dedupeSectionHeaders(textDoc);
 
     try {
-      // If we already have a PDF, download it directly (SAFE: no atob on huge strings)
-      if (doc) {
-        const blob = await this.base64ToBlob(doc, 'application/pdf');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this.showToast('Downloaded!', 'success');
-        return;
-      }
-
-      // If no PDF but we have structuredCv, generate PDF using it (NOT re-parsing)
+      // Always prefer deterministic server-side generation for consistent PDF layout.
+      // Cached PDFs can come from older pipelines and may have inconsistent formatting.
       let structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
 
       // ██ FINAL GATE v3: Sanitise structuredCv via centralised method ██
@@ -4358,6 +4401,21 @@ class ATSTailor {
           this.showToast('✅ Downloaded!', 'success');
           return;
         }
+      }
+
+      // Fallback: If no deterministic generation path worked, download cached PDF if present.
+      if (doc) {
+        const blob = await this.base64ToBlob(doc, 'application/pdf');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.showToast('Downloaded!', 'success');
+        return;
       }
 
       // If no PDF but we have text, try cover letter generation
