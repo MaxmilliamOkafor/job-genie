@@ -794,8 +794,9 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const contactParts = [contact.phone, contact.email, contact.location].filter(Boolean);
-      const contactLine = contactParts.join('  |  ');
+      const cleanLoc = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
+      const contactParts = [contact.phone, contact.email, cleanLoc].filter(Boolean);
+      const contactLine = contactParts.join('  |  ') + (cleanLoc ? '  |  Open to relocation' : '');
       const contactWidth = doc.getTextWidth(contactLine);
       const contactX = (pageWidth - contactWidth) / 2;
       doc.text(contactLine, contactX, y);
@@ -1062,8 +1063,9 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const contactParts = [contact.email, contact.phone, contact.location].filter(Boolean);
-      doc.text(contactParts.join('  |  '), PDF_CONFIG.margins.left, y);
+      const cleanLoc2 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
+      const contactParts = [contact.email, contact.phone, cleanLoc2].filter(Boolean);
+      doc.text(contactParts.join('  |  ') + (cleanLoc2 ? '  |  Open to relocation' : ''), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 20;
 
       // Date
