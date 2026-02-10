@@ -882,7 +882,7 @@
     <!-- Contact -->
     <div class="cv-contact">
       ${contact.phone ? `<div class="cv-contact-line">${escapeHtml(contact.phone)}</div>` : ''}
-      <div class="cv-contact-line">${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)}` : ''}${contact.location ? ' | Open to relocation' : ''}</div>
+      <div class="cv-contact-line">${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim())}` : ''}${contact.location ? ' | Open to relocation' : ''}</div>
       ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
     </div>
     
@@ -960,7 +960,8 @@
 
       // Name and contact
       lines.push(contact.name.toUpperCase());
-      lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : ''));
+      const cleanLoc1 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
+      lines.push([contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | ') + (cleanLoc1 ? ' | Open to relocation' : ''));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -1182,7 +1183,8 @@
       y += 4;
 
       // Contact
-      const contactLine = [contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : '');
+      const cleanLocPdf = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
+      const contactLine = [contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ') + (cleanLocPdf ? ' | Open to relocation' : '');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {

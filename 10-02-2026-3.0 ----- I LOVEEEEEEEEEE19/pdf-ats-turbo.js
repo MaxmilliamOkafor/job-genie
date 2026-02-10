@@ -169,12 +169,13 @@
       const formattedPhone = this.formatPhoneForATS(phone);
 
       // Build contact parts - only include non-empty values
-      const contactParts = [formattedPhone, email, location].filter(Boolean);
+      const cleanLocation = String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const contactParts = [formattedPhone, email, cleanLocation].filter(Boolean);
       const linkParts = [linkedin, github].filter(Boolean);
 
       return {
         name,
-        contactLine: contactParts.join(' | ') + (location ? ' | open to relocation' : ''),
+        contactLine: contactParts.join(' | ') + (cleanLocation ? ' | open to relocation' : ''),
         linksLine: linkParts.join(' | ')
       };
     },
