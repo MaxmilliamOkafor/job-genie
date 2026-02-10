@@ -973,6 +973,10 @@
         lines.push('');
       }
 
+      // Experience
+      if (experience.length > 0) {
+        lines.push('WORK EXPERIENCE');
+        experience.forEach(job => {
       // Experience — filter out entries where company is a section header
       const HEADER_SET = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
       const safeExp = experience.filter(job => {

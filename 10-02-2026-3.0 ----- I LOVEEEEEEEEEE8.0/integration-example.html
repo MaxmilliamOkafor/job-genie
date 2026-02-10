@@ -565,6 +565,9 @@ CVFormatterPerfectEnhanced.downloadText(plainTextVersion, <span class="string">'
                 lines.push('');
             }
 
+            if (experience.length > 0) {
+                lines.push('WORK EXPERIENCE');
+                experience.forEach(job => {
             const HEADER_SET_IE = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
             const safeExpIE = experience.filter(job => {
                 const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();

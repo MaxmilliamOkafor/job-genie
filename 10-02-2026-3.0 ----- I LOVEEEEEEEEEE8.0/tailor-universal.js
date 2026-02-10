@@ -8,6 +8,9 @@
   // ============ CONFIGURATION ============
   const CONFIG = {
     TARGET_SCORE: 95,
+    MAX_KEYWORDS_SUMMARY: 10,
+    MAX_KEYWORDS_EXPERIENCE: 40, // Increased for higher interview callback rate
+    MAX_KEYWORDS_SKILLS: 25,
     MAX_KEYWORDS_SUMMARY: 8,
     MAX_KEYWORDS_EXPERIENCE: 25, // Increased for better keyword density
     MAX_KEYWORDS_SKILLS: 15,

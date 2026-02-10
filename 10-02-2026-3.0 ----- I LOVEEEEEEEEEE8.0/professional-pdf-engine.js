@@ -851,6 +851,21 @@
     renderExperience(doc, experience, startY) {
       if (!experience || experience.length === 0) return startY;
 
+      // SIMPLE GUARD: One regex — skip any job where company is a section header
+      const _isHeader = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|work\s*history|positions?\s*held|education|skills|technical\s*skills|core\s*skills|certifications|professional\s*summary|summary|projects|achievements|technical\s*proficiencies|core\s*competencies|key\s*skills|additional\s*skills|licenses?)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
+      const safeExperience = experience.filter(job => {
+        const c = (job.company || job.companyName || '').trim();
+        return c.length >= 2 && !_isHeader(c);
+      });
+
+      if (safeExperience.length === 0) return startY;
+
+      let y = startY;
+      y = this.renderSectionTitle(doc, 'PROFESSIONAL EXPERIENCE', y);
+
+      for (let i = 0; i < safeExperience.length; i++) {
+        const job = safeExperience[i];
+
       // FINAL SAFETY: Filter out entries where company is a section header
       const HEADER_BL = new Set([
         'professional experience', 'work experience', 'experience',
@@ -916,6 +931,7 @@
         }
 
         // Space between jobs
+        if (i < safeExperience.length - 1) {
         if (i < safeExp.length - 1) {
           y += PDF_CONFIG.spacing.betweenJobs;
         }

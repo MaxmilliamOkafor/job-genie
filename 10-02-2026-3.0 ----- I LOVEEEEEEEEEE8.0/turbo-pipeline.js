@@ -626,6 +626,7 @@
     // PARALLEL: Start keyword extraction and prepare candidate data simultaneously
     const keywordsPromise = turboExtractKeywords(jdText, {
       jobUrl: jobInfo?.url || '',
+      maxKeywords: options.maxKeywords || 50
       maxKeywords: options.maxKeywords || 35
     });
     

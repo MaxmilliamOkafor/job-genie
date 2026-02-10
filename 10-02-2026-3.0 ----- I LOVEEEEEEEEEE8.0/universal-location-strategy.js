@@ -623,6 +623,7 @@ function _findCity(cityName) {
  * - HANDLES: typos, partial inputs, country codes, city-states, US states.
  */
 function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
+  const raw = (input || '').toString().trim();
   // Normalise abbreviations and accents before processing
   const raw = normalizeLocationInput((input || '').toString().trim());
   const fb = (fallbackLocation || 'Dublin, IE').toString().trim();

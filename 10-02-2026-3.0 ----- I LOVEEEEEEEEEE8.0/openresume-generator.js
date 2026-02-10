@@ -117,6 +117,14 @@
         data.contact.portfolio = candidateData.portfolio || '';
         
         // Extract structured data if available
+        const rawExp = candidateData.workExperience || candidateData.work_experience || candidateData.professionalExperience || candidateData.professional_experience;
+        if (rawExp && Array.isArray(rawExp) && rawExp.length > 0) {
+          data.experience = rawExp.map(exp => ({
+            company: exp.company || exp.organization || '',
+            title: exp.title || exp.position || exp.role || '',
+            dates: exp.dates || exp.duration || `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
+            location: exp.location || '',
+            bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || [])
         // FIX: Check ALL possible field names including professionalExperience/professional_experience
         const rawExperience = candidateData.professionalExperience || candidateData.professional_experience ||
                               candidateData.workExperience || candidateData.work_experience || [];
@@ -428,6 +436,8 @@
       const lines = text.split('\n');
       let currentJob = null;
 
+      // ONE regex to detect section headers — used to reject bogus company names
+      const _isHeader = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|work\s*history|positions?\s*held|education|skills|technical\s*skills|core\s*skills|certifications|professional\s*summary|summary|projects|achievements|technical\s*proficiencies|core\s*competencies|key\s*skills|additional\s*skills|licenses?)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
       // Section headers that must NEVER become company names
       const SECTION_HEADERS = new Set([
         'professional experience', 'work experience', 'experience',
@@ -449,6 +459,20 @@
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+
+        // Detect job header: Company | Title | Dates | Location
+        if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) ||
+            /^(Meta|Google|Amazon|Microsoft|Apple|Solim|Accenture|Citigroup)/i.test(trimmed)) {
+
+          const parts = trimmed.split('|').map(p => p.trim());
+
+          // REJECT if company part is a section header
+          if (_isHeader(parts[0])) {
+            console.log('[OpenResume] parseExperienceText: rejected header-as-company:', parts[0]);
+            continue;
+          }
+
+          if (currentJob) jobs.push(currentJob);
 
         // CRITICAL: Skip lines that are section headers
         if (isHeaderish(trimmed)) continue;
@@ -472,6 +496,7 @@
       }
 
       if (currentJob) jobs.push(currentJob);
+      return jobs;
       
       // Final safety: filter out any jobs where company is a section header
       return jobs.filter(job => !isHeaderish(job.company || ''));
@@ -986,6 +1011,35 @@
       }
 
       // === WORK EXPERIENCE ===
+      if (data.experience && data.experience.length > 0) {
+        addSectionHeader('WORK EXPERIENCE');
+
+        // SIMPLE GUARD: One regex to rule them all — skip any job where company is a section header
+        const _isHeader = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|work\s*history|positions?\s*held|education|skills|technical\s*skills|core\s*skills|certifications|professional\s*summary|summary|projects|achievements|technical\s*proficiencies|core\s*competencies|key\s*skills|additional\s*skills|licenses?)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
+        const safeExperience = data.experience.filter(job => {
+          const c = (job.company || job.companyName || '').trim();
+          return c.length >= 2 && !_isHeader(c);
+        });
+
+        safeExperience.forEach((job, idx) => {
+          // Company Name (Bold) on its own line
+          doc.setFontSize(font.body);
+          doc.setFont(font.family, 'bold');
+          if (y > page.height - margins.bottom - 50) { doc.addPage(); y = margins.top; }
+          doc.text(job.company, margins.left, y);
+          y += font.body * lineHeight;
+
+          // Title | Dates | Location on separate line
+          const jobLine = [job.title, job.dates, job.location].filter(Boolean).join(' | ');
+          if (jobLine) {
+            doc.setFont(font.family, 'italic');
+            doc.setFontSize(font.body);
+            const jobLines = doc.splitTextToSize(jobLine, contentWidth);
+            jobLines.forEach(line => {
+              doc.text(line, margins.left, y);
+              y += font.body * lineHeight;
+            });
+          }
       // FINAL SAFETY: Filter out any experience entries where company is a section header
       const HEADER_BLACKLIST = new Set([
         'professional experience', 'work experience', 'experience',
@@ -1022,6 +1076,7 @@
             const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
             doc.setFont(font.family, 'normal');
             doc.setFontSize(font.body);
+
             
             const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
             bulletLines.forEach((line, lineIdx) => {
@@ -1093,6 +1148,8 @@
 
       if (data.experience?.length > 0) {
         lines.push('WORK EXPERIENCE');
+        const _isHdr = (s) => /^(work\s*experience|professional\s*experience|experience|employment(\s*history)?|career(\s*history)?|education|skills|certifications|summary|projects|achievements)$/i.test(String(s||'').replace(/[^a-z\s]/gi,'').replace(/\s+/g,' ').trim());
+        data.experience.filter(j => (j.company||'').trim().length >= 2 && !_isHdr(j.company)).forEach(job => {
         data.experience.forEach(job => {
           lines.push([job.company, job.title, job.dates, job.location].filter(Boolean).join(' | '));
           job.bullets.forEach(b => lines.push(`- ${b}`));
