@@ -3865,19 +3865,32 @@ class ATSTailor {
 
     const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
+    // Helper: detect single or duplicated section headers
+    const isHeaderish = (v) => {
+      if (HEADER_PATTERNS.has(v)) return true;
+      // Catch "work experience work experience" etc.
+      for (const h of HEADER_PATTERNS) {
+        if (v === (h + ' ' + h)) return true;
+        // Catch triple+ repeats
+        if (v.startsWith(h + ' ') && v.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '') return true;
+      }
+      return false;
+    };
+
     // Filter bogus experience entries
     if (Array.isArray(structuredCv.experience)) {
       structuredCv.experience = structuredCv.experience.filter(job => {
         const company = normalise(job.company || job.companyName || '');
         const title = normalise(job.title || job.jobTitle || job.position || '');
-        if (HEADER_PATTERNS.has(company)) {
+        if (isHeaderish(company)) {
           console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-company:', job.company);
           return false;
         }
-        if (HEADER_PATTERNS.has(title) && !company) {
+        if (isHeaderish(title) && !company) {
           console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-title:', job.title);
           return false;
         }
+        if (!company || company.length < 2) return false;
         return true;
       });
     }

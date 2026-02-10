@@ -351,6 +351,40 @@ const CITY_COUNTRY_MAP = {
   'suva': 'Fiji',
 };
 
+// ─── City Abbreviations & Accent Normalisation ───
+const CITY_ABBREVIATIONS = {
+  'nyc': 'New York', 'sf': 'San Francisco', 'la': 'Los Angeles',
+  'dc': 'Washington', 'philly': 'Philadelphia', 'chi': 'Chicago',
+  'atl': 'Atlanta', 'dtw': 'Detroit', 'hou': 'Houston',
+  'dfw': 'Dallas', 'msp': 'Minneapolis', 'pdx': 'Portland',
+  'slc': 'Salt Lake City', 'kc': 'Kansas City', 'nola': 'New Orleans',
+  'lv': 'Las Vegas', 'san fran': 'San Francisco',
+  'hk': 'Hong Kong', 'bkk': 'Bangkok', 'kl': 'Kuala Lumpur',
+};
+
+const ACCENT_MAP = {
+  'münchen': 'Munich', 'zürich': 'Zurich', 'genève': 'Geneva',
+  'bruxelles': 'Brussels', 'köln': 'Cologne', 'wien': 'Vienna',
+  'roma': 'Rome', 'milano': 'Milan', 'firenze': 'Florence',
+  'napoli': 'Naples', 'torino': 'Turin', 'genova': 'Genoa',
+  'venezia': 'Venice', 'lisboa': 'Lisbon', 'москва': 'Moscow',
+  'praha': 'Prague', 'warszawa': 'Warsaw', 'kraków': 'Krakow',
+  'gdańsk': 'Gdansk', 'wrocław': 'Wroclaw', 'łódź': 'Lodz',
+  'poznań': 'Poznan', 'bucureşti': 'Bucharest', 'athina': 'Athens',
+  'baile átha cliath': 'Dublin', 'corcaigh': 'Cork',
+};
+
+/**
+ * Normalise location input: resolve abbreviations and accented forms.
+ */
+function normalizeLocationInput(input) {
+  if (!input || typeof input !== 'string') return input;
+  const lower = input.toLowerCase().trim();
+  if (CITY_ABBREVIATIONS[lower]) return CITY_ABBREVIATIONS[lower];
+  if (ACCENT_MAP[lower]) return ACCENT_MAP[lower];
+  return input;
+}
+
 function detectPlatformForLocation() {
   const hostname = window.location.hostname.toLowerCase();
 
@@ -589,12 +623,26 @@ function _findCity(cityName) {
  * - HANDLES: typos, partial inputs, country codes, city-states, US states.
  */
 function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
-  const raw = (input || '').toString().trim();
+  // Normalise abbreviations and accents before processing
+  const raw = normalizeLocationInput((input || '').toString().trim());
   const fb = (fallbackLocation || 'Dublin, IE').toString().trim();
 
   const fallbackParts = fb.split(',').map(p => p.trim()).filter(Boolean);
   const fallbackCountryToken = fallbackParts.length >= 2 ? fallbackParts[fallbackParts.length - 1] : 'IE';
   const fallbackCityToken = fallbackParts[0] || 'Dublin';
+
+  // Quick country-name shortcuts (no comma, full country name → capital + ISO2)
+  const COUNTRY_DEFAULTS = {
+    'usa': 'New York, US', 'united states': 'New York, US', 'america': 'New York, US',
+    'uk': 'London, GB', 'united kingdom': 'London, GB', 'england': 'London, GB',
+    'germany': 'Berlin, DE', 'france': 'Paris, FR', 'ireland': 'Dublin, IE',
+    'canada': 'Toronto, CA', 'australia': 'Sydney, AU', 'india': 'Mumbai, IN',
+    'japan': 'Tokyo, JP', 'china': 'Beijing, CN', 'brazil': 'São Paulo, BR',
+    'netherlands': 'Amsterdam, NL', 'spain': 'Madrid, ES', 'italy': 'Rome, IT',
+    'switzerland': 'Zurich, CH', 'sweden': 'Stockholm, SE', 'singapore': 'Singapore, SG',
+  };
+  const rawLowerCheck = raw.toLowerCase();
+  if (COUNTRY_DEFAULTS[rawLowerCheck]) return COUNTRY_DEFAULTS[rawLowerCheck];
 
   // ─── Already has a comma → normalise parts ───
   if (raw.includes(',')) {
