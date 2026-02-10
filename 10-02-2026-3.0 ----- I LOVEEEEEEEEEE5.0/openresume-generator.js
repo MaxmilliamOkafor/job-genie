@@ -117,8 +117,9 @@
         data.contact.portfolio = candidateData.portfolio || '';
         
         // Extract structured data if available
-        if (candidateData.workExperience || candidateData.work_experience) {
-          data.experience = (candidateData.workExperience || candidateData.work_experience).map(exp => ({
+        const rawExp = candidateData.workExperience || candidateData.work_experience || candidateData.professionalExperience || candidateData.professional_experience;
+        if (rawExp && Array.isArray(rawExp) && rawExp.length > 0) {
+          data.experience = rawExp.map(exp => ({
             company: exp.company || exp.organization || '',
             title: exp.title || exp.position || exp.role || '',
             dates: exp.dates || exp.duration || `${exp.startDate || ''} - ${exp.endDate || 'Present'}`,
@@ -425,16 +426,44 @@
       const lines = text.split('\n');
       let currentJob = null;
 
+      // CRITICAL: Section headers that must NEVER be treated as company names
+      const SECTION_HEADERS = new Set([
+        'work experience', 'professional experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held', 'career',
+        'education', 'skills', 'certifications', 'projects', 'achievements',
+        'professional summary', 'summary', 'technical proficiencies',
+        'technical skills', 'core skills', 'core competencies',
+        'key skills', 'additional skills', 'licenses'
+      ]);
+      const headerNorm = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
 
         // Detect job header: Company | Title | Dates | Location
-        if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) || 
+        if (/^[A-Z][A-Za-z\s&.,]+\s*\|/.test(trimmed) ||
             /^(Meta|Google|Amazon|Microsoft|Apple|Solim|Accenture|Citigroup)/i.test(trimmed)) {
-          if (currentJob) jobs.push(currentJob);
-          
+
           const parts = trimmed.split('|').map(p => p.trim());
+
+          // CRITICAL FIX: Reject entries where company is a section header
+          const companyNorm = headerNorm(parts[0] || '');
+          if (SECTION_HEADERS.has(companyNorm)) {
+            console.log('[OpenResume] parseExperienceText: rejected header-as-company:', parts[0]);
+            continue;
+          }
+          // Also reject duplicated headers like "work experience work experience"
+          for (const h of SECTION_HEADERS) {
+            if (companyNorm === (h + ' ' + h) || companyNorm.startsWith(h + ' ' + h)) {
+              console.log('[OpenResume] parseExperienceText: rejected duplicated header:', parts[0]);
+              continue;
+            }
+          }
+
+          if (currentJob) jobs.push(currentJob);
+
           currentJob = {
             company: parts[0] || '',
             title: parts[1] || '',
@@ -962,8 +991,33 @@
       // === WORK EXPERIENCE ===
       if (data.experience && data.experience.length > 0) {
         addSectionHeader('WORK EXPERIENCE');
-        
-        data.experience.forEach((job, idx) => {
+
+        // ██ NUCLEAR GUARD: Absolutely prevent section headers from rendering as job entries ██
+        const _HEADER_GUARD_ = new Set([
+          'work experience', 'professional experience', 'experience',
+          'employment history', 'career history', 'employment',
+          'work history', 'positions held', 'career',
+          'education', 'skills', 'certifications', 'projects', 'achievements',
+          'professional summary', 'summary', 'technical proficiencies',
+          'technical skills', 'core skills', 'core competencies',
+          'key skills', 'additional skills', 'licenses'
+        ]);
+        const _guardNorm_ = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        const safeExperience = data.experience.filter(job => {
+          const company = _guardNorm_(job.company || job.companyName || '');
+          if (!company || company.length < 2) return false;
+          if (_HEADER_GUARD_.has(company)) {
+            console.log('[OpenResume] NUCLEAR GUARD: blocked header-as-company in render:', job.company);
+            return false;
+          }
+          // Also catch duplicated headers like "work experience work experience"
+          for (const h of _HEADER_GUARD_) {
+            if (company === h + ' ' + h || company.startsWith(h + ' ' + h)) return false;
+          }
+          return true;
+        });
+
+        safeExperience.forEach((job, idx) => {
           // Job header: Company | Title | Dates | Location
           const header = [job.company, job.title, job.dates, job.location].filter(Boolean).join(' | ');
           addText(header, true, false, font.body);
@@ -974,7 +1028,7 @@
             const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
             doc.setFont(font.family, 'normal');
             doc.setFontSize(font.body);
-            
+
             const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
             bulletLines.forEach((line, lineIdx) => {
               if (y > page.height - margins.bottom - 20) {
@@ -987,7 +1041,7 @@
             });
           });
 
-          if (idx < data.experience.length - 1) y += 6;
+          if (idx < safeExperience.length - 1) y += 6;
         });
         y += 4;
       }
@@ -1045,7 +1099,10 @@
 
       if (data.experience?.length > 0) {
         lines.push('WORK EXPERIENCE');
-        data.experience.forEach(job => {
+        // Filter bogus header-as-company entries before rendering text
+        const _headerSet = new Set(['work experience','professional experience','experience','employment history','employment','career history','career','work history','positions held','education','skills','certifications','projects','achievements','professional summary','summary','technical proficiencies','technical skills','core skills']);
+        const _norm = (s) => String(s||'').toLowerCase().replace(/[#:*|]/g,' ').replace(/[^a-z\s]/g,' ').replace(/\s{2,}/g,' ').trim();
+        data.experience.filter(job => !_headerSet.has(_norm(job.company))).forEach(job => {
           lines.push([job.company, job.title, job.dates, job.location].filter(Boolean).join(' | '));
           job.bullets.forEach(b => lines.push(`- ${b}`));
           lines.push('');

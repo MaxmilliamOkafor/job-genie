@@ -91,7 +91,7 @@
   };
 
   // ============ PHASE 1: EXTRACTION + CLASSIFICATION (125ms) ============
-  function extractAndClassifyKeywords(jobDescription, maxKeywords = 35) {
+  function extractAndClassifyKeywords(jobDescription, maxKeywords = 50) {
     const startTime = performance.now();
     
     if (!jobDescription || jobDescription.length < 50) {
