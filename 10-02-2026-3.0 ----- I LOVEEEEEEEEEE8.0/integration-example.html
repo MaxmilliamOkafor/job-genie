@@ -565,9 +565,14 @@ CVFormatterPerfectEnhanced.downloadText(plainTextVersion, <span class="string">'
                 lines.push('');
             }
 
-            if (experience.length > 0) {
+            const HEADER_SET_IE = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
+            const safeExpIE = experience.filter(job => {
+                const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+                return !HEADER_SET_IE.has(norm) && !([...HEADER_SET_IE].some(h => norm === (h + ' ' + h)));
+            });
+            if (safeExpIE.length > 0) {
                 lines.push('WORK EXPERIENCE');
-                experience.forEach(job => {
+                safeExpIE.forEach(job => {
                     lines.push(job.dates ? `${job.company}    ${job.dates}` : job.company);
                     lines.push(job.title);
                     job.bullets.forEach(bullet => {

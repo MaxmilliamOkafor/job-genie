@@ -851,11 +851,27 @@
     renderExperience(doc, experience, startY) {
       if (!experience || experience.length === 0) return startY;
 
-      let y = startY;
-      y = this.renderSectionTitle(doc, 'PROFESSIONAL EXPERIENCE', y);
+      // FINAL SAFETY: Filter out entries where company is a section header
+      const HEADER_BL = new Set([
+        'professional experience', 'work experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held', 'career', 'roles'
+      ]);
+      const safeExp = experience.filter(job => {
+        const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        if (HEADER_BL.has(norm)) { console.warn('[PDFEngine] BLOCKED header-as-company:', job.company); return false; }
+        for (const h of HEADER_BL) {
+          if (norm === (h + ' ' + h) || (norm.startsWith(h + ' ') && norm.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '')) return false;
+        }
+        return true;
+      });
+      if (safeExp.length === 0) return startY;
 
-      for (let i = 0; i < experience.length; i++) {
-        const job = experience[i];
+      let y = startY;
+      y = this.renderSectionTitle(doc, 'WORK EXPERIENCE', y);
+
+      for (let i = 0; i < safeExp.length; i++) {
+        const job = safeExp[i];
         
         // Check page break
         if (y > PDF_CONFIG.page.height - 120) {
@@ -900,7 +916,7 @@
         }
 
         // Space between jobs
-        if (i < experience.length - 1) {
+        if (i < safeExp.length - 1) {
           y += PDF_CONFIG.spacing.betweenJobs;
         }
       }
