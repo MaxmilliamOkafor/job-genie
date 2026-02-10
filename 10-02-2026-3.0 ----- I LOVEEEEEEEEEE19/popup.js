@@ -227,18 +227,49 @@ class ATSTailor {
   }
 
   async init() {
-    await this.loadSession();
-    await this.loadAIProviderSettings();
-    await this.loadWorkdayState();
-    await this.loadBaseCVFromProfile();
+    try {
+      await this.loadSession();
+    } catch (e) {
+      console.error('[ATS Tailor] loadSession error:', e);
+      this.session = null;
+    }
+
+    // Always show UI even if later steps fail
+    try {
+      await this.loadAIProviderSettings();
+    } catch (e) {
+      console.error('[ATS Tailor] loadAIProviderSettings error:', e);
+    }
+
+    try {
+      await this.loadWorkdayState();
+    } catch (e) {
+      console.error('[ATS Tailor] loadWorkdayState error:', e);
+    }
+
+    try {
+      await this.loadBaseCVFromProfile();
+    } catch (e) {
+      console.error('[ATS Tailor] loadBaseCVFromProfile error:', e);
+    }
+
     this.bindEvents();
     this.updateUI();
-    this.updateAIProviderUI();
+
+    try {
+      this.updateAIProviderUI();
+    } catch (e) {
+      console.error('[ATS Tailor] updateAIProviderUI error:', e);
+    }
 
     // Auto-detect job when popup opens (but do NOT auto-tailor)
     if (this.session) {
-      await this.refreshSessionIfNeeded();
-      await this.detectCurrentJob();
+      try {
+        await this.refreshSessionIfNeeded();
+        await this.detectCurrentJob();
+      } catch (e) {
+        console.error('[ATS Tailor] Auto-detect error:', e);
+      }
     }
   }
   
@@ -1672,9 +1703,12 @@ class ATSTailor {
       this.setStatus('Ready', 'ready');
     }
     
-    document.getElementById('todayCount').textContent = this.stats.today;
-    document.getElementById('totalCount').textContent = this.stats.total;
-    document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
+    const todayEl = document.getElementById('todayCount');
+    const totalEl = document.getElementById('totalCount');
+    const avgEl = document.getElementById('avgTime');
+    if (todayEl) todayEl.textContent = this.stats.today;
+    if (totalEl) totalEl.textContent = this.stats.total;
+    if (avgEl) avgEl.textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
     
     const autoTailorToggle = document.getElementById('autoTailorToggle');
     if (autoTailorToggle) {
