@@ -406,9 +406,9 @@
         [/\bcomprehensive\b/gi, 'thorough'],
         [/\bmeticulous\b/gi, 'detailed'],
         // Phrases that must be replaced (multi-word)
-        [/\bproven ability\b/gi, 'demonstrated ability'],
-        [/\bproven track record\b/gi, 'strong track record'],
-        [/\bproven expertise\b/gi, 'demonstrated expertise'],
+        [/\bproven ability\b/gi, 'ability'],
+        [/\bproven track record\b/gi, 'track record'],
+        [/\bproven expertise\b/gi, 'expertise'],
         [/\bresults-driven\b/gi, 'results-focused'],
         [/\bself-motivated\b/gi, 'proactive'],
         [/\bgo-getter\b/gi, 'driven professional'],
