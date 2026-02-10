@@ -574,7 +574,7 @@
 <body>
   <div class="name">${escapeHtml(contact.name)}</div>
   <div class="contact">
-    ${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)} | Open to relocation` : ''}
+    ${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim())} | Open to relocation` : ''}
     ${contact.linkedin || contact.github ? `<br>${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}` : ''}
   </div>
   
@@ -642,7 +642,8 @@
       const lines = [];
 
       lines.push(contact.name.toUpperCase());
-      lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : ''));
+      const cleanLoc1 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
+      lines.push([contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | ') + (cleanLoc1 ? ' | Open to relocation' : ''));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
