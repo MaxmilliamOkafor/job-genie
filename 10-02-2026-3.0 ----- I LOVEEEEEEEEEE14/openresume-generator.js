@@ -580,7 +580,82 @@
         tailored.skills = this.mergeSkills(cvData.skills, technicalKeywords);
       }
 
-      return tailored;
+      return this.enforceInterviewGradeExperienceDepth(tailored, {
+        allKeywords,
+        highPriority,
+        mediumPriority,
+        lowPriority,
+      });
+    },
+
+    // ============ ENFORCE INTERVIEW-GRADE EXPERIENCE DEPTH ============
+    // Ensures deeper roles (4th and 5th entries) contain at least 4 strong bullets each
+    // while naturally reinforcing important keywords across the CV.
+    enforceInterviewGradeExperienceDepth(cvData, keywordBuckets = {}) {
+      if (!cvData?.experience || !Array.isArray(cvData.experience)) return cvData;
+
+      const clone = JSON.parse(JSON.stringify(cvData));
+      const allKeywords = Array.isArray(keywordBuckets.allKeywords) ? keywordBuckets.allKeywords : [];
+      const highPriority = Array.isArray(keywordBuckets.highPriority) ? keywordBuckets.highPriority : [];
+      const mediumPriority = Array.isArray(keywordBuckets.mediumPriority) ? keywordBuckets.mediumPriority : [];
+
+      const priorityPool = [...highPriority, ...mediumPriority, ...allKeywords]
+        .filter(Boolean)
+        .map(k => String(k).trim())
+        .filter(k => k.length > 1)
+        .slice(0, 18);
+
+      const actionVerbs = ['Led', 'Architected', 'Delivered', 'Optimised', 'Scaled', 'Implemented', 'Directed'];
+      const outcomes = [
+        'improving system reliability and delivery predictability',
+        'reducing cycle time and strengthening release quality',
+        'increasing stakeholder confidence through transparent execution',
+        'accelerating roadmap delivery while maintaining technical quality',
+        'improving operational efficiency and measurable business outcomes'
+      ];
+
+      const generateRoleBullet = (role, idx, slot) => {
+        const title = role?.title || role?.position || 'engineering role';
+        const company = role?.company || role?.organization || 'the organisation';
+        const kwA = priorityPool[(idx * 3 + slot) % Math.max(priorityPool.length, 1)] || 'cross-functional collaboration';
+        const kwB = priorityPool[(idx * 3 + slot + 1) % Math.max(priorityPool.length, 1)] || 'stakeholder management';
+        const verb = actionVerbs[(idx + slot) % actionVerbs.length];
+        const outcome = outcomes[(idx + slot) % outcomes.length];
+
+        return `${verb} ${kwA} initiatives in ${title} at ${company}, applying ${kwB} to deliver high-impact programmes and ${outcome}.`;
+      };
+
+      clone.experience = clone.experience.map((role, idx) => {
+        const bullets = Array.isArray(role?.bullets)
+          ? role.bullets.filter(Boolean).map(b => String(b).replace(/^[-•*▪]\s*/, '').trim()).filter(Boolean)
+          : [];
+
+        const targetMin = idx >= 3 && idx <= 4 ? 4 : (idx <= 2 ? 5 : 3);
+        const deduped = [];
+        const seen = new Set();
+        bullets.forEach(b => {
+          const key = b.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            deduped.push(b);
+          }
+        });
+
+        while (deduped.length < targetMin) {
+          const generated = generateRoleBullet(role, idx, deduped.length);
+          const key = generated.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(generated);
+          } else {
+            break;
+          }
+        }
+
+        return { ...role, bullets: deduped };
+      });
+
+      return clone;
     },
 
     // ============ NORMALIZE LOCATION ============
@@ -680,7 +755,7 @@
       const targets = {};
       const maxMentions = {};
       
-      high.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
+      high.forEach(kw => { mentions[kw] = 0; targets[kw] = 4; maxMentions[kw] = 6; });
       medium.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
       low.forEach(kw => { mentions[kw] = 0; targets[kw] = 1; maxMentions[kw] = 2; });
       
@@ -1163,7 +1238,7 @@
       console.log(`[OpenResume] Cover letter using company: "${company}"`);
       // ROBUST: Ensure keywords is always an array before slicing
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
-      const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
+      const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 8) : [];
       const topExp = data.experience?.[0]?.company || 'my previous roles';
 
       // === HEADER ===
@@ -1189,30 +1264,38 @@
       addText('Dear Hiring Manager,', false, font.body);
       y += 8;
 
-      // === PARAGRAPH 1: Interest + Keywords ===
-      const kw1 = highPriority[0] || 'software development';
-      const kw2 = highPriority[1] || 'technical solutions';
+      // === PARAGRAPH 1: Positioning ===
+      const kw1 = highPriority[0] || 'software engineering';
+      const kw2 = highPriority[1] || 'delivery excellence';
       const years = this.extractYearsExperience(data.summary) || '7+';
-      
-      const para1 = `I am excited to apply for the ${jobTitle} position at ${company}. With ${years} years of experience leading ${kw1} and ${kw2} initiatives, I consistently deliver measurable business impact through innovative technical solutions and cross-functional collaboration.`;
-      addText(para1, false, font.body);
-      y += 18; // Proper paragraph spacing
 
-      // === PARAGRAPH 2: Proof + Keywords ===
-      const kw3 = highPriority[2] || 'project delivery';
-      const kw4 = highPriority[3] || 'team leadership';
+      const para1 = `I am excited to apply for the ${jobTitle} position at ${company}. With ${years} years of progressive experience across complex delivery environments, I bring a track record of leading ${kw1} programmes and sustaining ${kw2} at scale.`;
+      addText(para1, false, font.body);
+      y += 18;
+
+      // === PARAGRAPH 2: Evidence and impact ===
+      const kw3 = highPriority[2] || 'stakeholder management';
+      const kw4 = highPriority[3] || 'cross-functional collaboration';
       const topBullet = data.experience?.[0]?.bullets?.[0] || 'driving efficiency improvements of 30%+';
 
-      const para2 = `At ${topExp}, I led ${kw3} implementations that resulted in ${this.extractAchievement(topBullet)}. I have extensive experience mentoring cross-functional teams and applying ${kw4} methodologies to deliver complex projects on time and within budget.`;
+      const para2 = `At ${topExp}, I delivered high-value outcomes including ${this.extractAchievement(topBullet)}. I partner closely with engineering, product, and business stakeholders, combining ${kw3} with ${kw4} to convert strategic objectives into measurable execution.`;
       addText(para2, false, font.body);
-      y += 18; // Proper paragraph spacing
+      y += 18;
 
-      // === PARAGRAPH 3: Call to Action ===
+      // === PARAGRAPH 3: Skills alignment ===
       const kw5 = highPriority[4] || 'technical leadership';
-      
-      const para3 = `I would welcome the opportunity to discuss how my ${kw5} expertise can contribute to ${company}'s continued success. Thank you for considering my application. I look forward to the possibility of contributing to your team.`;
+      const kw6 = highPriority[5] || 'problem-solving';
+      const kw7 = highPriority[6] || 'communication';
+
+      const para3 = `My recent work has focused on ${kw5}, with consistent emphasis on ${kw6}, ${kw7}, and disciplined operational delivery. This combination enables me to contribute quickly, raise team performance, and strengthen quality standards from day one.`;
       addText(para3, false, font.body);
-      y += 20; // Extra spacing before closing
+      y += 18;
+
+      // === PARAGRAPH 4: Close with intent ===
+      const kw8 = highPriority[7] || 'execution excellence';
+      const para4 = `I would welcome the opportunity to discuss how I can help ${company} accelerate its goals through ${kw8}, dependable ownership, and high-quality execution. Thank you for your consideration.`;
+      addText(para4, false, font.body);
+      y += 20;
 
       // === CLOSING ===
       addText('Sincerely,', false, font.body);
@@ -1254,7 +1337,7 @@
         : 'the hiring organization';
       // ROBUST: Ensure keywords is always an array before slicing
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
-      const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 5) : [];
+      const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 8) : [];
       // Default keywords if empty
       const kw1 = highPriority[0] || 'technical solutions';
       const kw2 = highPriority[1] || 'cross-functional collaboration';
