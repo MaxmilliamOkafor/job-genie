@@ -183,34 +183,76 @@
     };
   }
 
+  // ============ BASELINE SKILLS (always include even if not in job description) ============
+  const BASELINE_SKILLS = [
+    'Python', 'JavaScript', 'SQL', 'Git', 'Agile', 'AWS', 'Docker', 'CI/CD',
+    'React', 'Node.js', 'TypeScript', 'Kubernetes', 'Terraform', 'Machine Learning'
+  ];
+
+  // ============ KEYWORD DISTRIBUTION RULE (85/10/5) ============
+  // 85% → Work Experience (keywords integrated with context + action + result)
+  // 10% → Professional Summary (high-value keywords in opening lines)
+  //  5% → Skills Section (remainder + baseline technical skills)
+  const DISTRIBUTION_RATIOS = {
+    EXPERIENCE: 0.85,
+    SUMMARY: 0.10,
+    SKILLS: 0.05
+  };
+
   // ============ PHASE 2: OPTIMAL SECTION ALLOCATION ============
   function allocateSectionsOptimally(keywords) {
-    // PROF SUMMARY: 2-3 HIGH ROI keywords (15% density)
-    const summaryKeywords = keywords.highROI.slice(0, 3);
+    const totalKeywords = keywords.all.length;
 
-    // WORK EXPERIENCE: 85% ALL keywords (technical + soft skills in context)
+    // 10% → PROFESSIONAL SUMMARY: High-impact keywords in first 2-3 lines
+    const summaryCount = Math.max(2, Math.ceil(totalKeywords * DISTRIBUTION_RATIOS.SUMMARY));
+    const summaryKeywords = keywords.highROI.slice(0, summaryCount);
+
+    // 85% → WORK EXPERIENCE: ALL keywords (technical + soft skills in context)
     // Soft skills (LOW ROI) are EXCLUSIVELY for experience bullets — never in skills section
+    const experienceCount = Math.ceil(totalKeywords * DISTRIBUTION_RATIOS.EXPERIENCE);
     const experienceKeywords = [
       ...keywords.highROI,
       ...keywords.mediumROI,
       ...(keywords.unclassified || []),
       ...keywords.lowROI  // Soft skills go into experience bullets with contextual phrases
-    ].slice(0, Math.ceil(keywords.all.length * 0.85));
+    ].slice(0, experienceCount);
 
-    // SKILLS: 15-20 CORE TECHNICAL ONLY (comma-separated, no bullets)
-    // Explicitly exclude soft skills from the skills section
-    const skillsKeywords = keywords.highROI.slice(0, 20);
+    // 5% → SKILLS SECTION: Remainder keywords not covered elsewhere + baseline skills
+    // Only technical skills go here. Soft skills NEVER in skills section.
+    const alreadyCoveredSet = new Set([
+      ...experienceKeywords.map(k => k.toLowerCase()),
+      ...summaryKeywords.map(k => k.toLowerCase())
+    ]);
+    const remainderSkills = keywords.highROI
+      .filter(kw => !alreadyCoveredSet.has(kw.toLowerCase()));
+
+    // Merge remainder with baseline skills, dedup
+    const skillsSet = new Set([
+      ...remainderSkills.map(s => s.toLowerCase()),
+      ...BASELINE_SKILLS.map(s => s.toLowerCase())
+    ]);
+    const skillsKeywords = [...skillsSet]
+      .slice(0, 15) // Keep skills section concise (max 15 items)
+      .map(s => {
+        // Restore original casing from baseline or extracted keywords
+        const original = [...BASELINE_SKILLS, ...keywords.highROI].find(
+          k => k.toLowerCase() === s
+        );
+        return original || s.charAt(0).toUpperCase() + s.slice(1);
+      });
 
     return {
       summary: summaryKeywords,
       experience: experienceKeywords,
       skills: skillsKeywords,
       softSkillsForExperience: keywords.lowROI || [],
+      distributionRule: DISTRIBUTION_RATIOS,
       allocation: {
         summaryCount: summaryKeywords.length,
         experienceCount: experienceKeywords.length,
         skillsCount: skillsKeywords.length,
-        softSkillCount: (keywords.lowROI || []).length
+        softSkillCount: (keywords.lowROI || []).length,
+        totalExtracted: totalKeywords
       }
     };
   }
@@ -489,7 +531,9 @@
     needsTailoring,
     ROI_CLASSIFICATION,
     INJECTION_TEMPLATES,
-    TIMING_TARGETS
+    TIMING_TARGETS,
+    BASELINE_SKILLS,
+    DISTRIBUTION_RATIOS
   };
 
   // Backward compatibility aliases
