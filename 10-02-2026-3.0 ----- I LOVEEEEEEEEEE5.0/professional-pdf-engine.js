@@ -851,12 +851,37 @@
     renderExperience(doc, experience, startY) {
       if (!experience || experience.length === 0) return startY;
 
+      // ██ NUCLEAR GUARD: Absolutely prevent section headers from rendering as job entries ██
+      const _HEADER_GUARD_ = new Set([
+        'work experience', 'professional experience', 'experience',
+        'employment history', 'career history', 'employment',
+        'work history', 'positions held', 'career',
+        'education', 'skills', 'certifications', 'projects', 'achievements',
+        'professional summary', 'summary', 'technical proficiencies',
+        'technical skills', 'core skills', 'core competencies'
+      ]);
+      const _guardNorm_ = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      const safeExperience = experience.filter(job => {
+        const company = _guardNorm_(job.company || job.companyName || '');
+        if (!company || company.length < 2) return false;
+        if (_HEADER_GUARD_.has(company)) {
+          console.log('[ProfessionalPDFEngine] NUCLEAR GUARD: blocked header-as-company:', job.company);
+          return false;
+        }
+        for (const h of _HEADER_GUARD_) {
+          if (company === h + ' ' + h || company.startsWith(h + ' ' + h)) return false;
+        }
+        return true;
+      });
+
+      if (safeExperience.length === 0) return startY;
+
       let y = startY;
       y = this.renderSectionTitle(doc, 'PROFESSIONAL EXPERIENCE', y);
 
-      for (let i = 0; i < experience.length; i++) {
-        const job = experience[i];
-        
+      for (let i = 0; i < safeExperience.length; i++) {
+        const job = safeExperience[i];
+
         // Check page break
         if (y > PDF_CONFIG.page.height - 120) {
           doc.addPage();
@@ -900,7 +925,7 @@
         }
 
         // Space between jobs
-        if (i < experience.length - 1) {
+        if (i < safeExperience.length - 1) {
           y += PDF_CONFIG.spacing.betweenJobs;
         }
       }

@@ -600,7 +600,7 @@
           // Extract keywords from JD (local, ~10ms)
           let keywords = [];
           if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
-            keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { jobUrl, maxKeywords: 30 });
+            keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { jobUrl, maxKeywords: 50 });
           } else if (jobInfo.description) {
             keywords = extractBasicKeywords(jobInfo.description);
           }
@@ -705,7 +705,7 @@
           } else if (typeof OpenResumeGenerator !== 'undefined' && OpenResumeGenerator.generateATSPackage) {
             pdfResult = await OpenResumeGenerator.generateATSPackage(tailoredCV, keywords, jobInfo, enrichedProfile);
           } else if (typeof TurboPipeline !== 'undefined' && TurboPipeline.executeTurboPipeline) {
-            const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, enrichedProfile, baseCV, { maxKeywords: 15 });
+            const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, enrichedProfile, baseCV, { maxKeywords: 50 });
             if (pipelineResult.success) {
               pdfResult = { cv: pipelineResult.cvPDF, cover: pipelineResult.coverPDF };
             }
@@ -1011,7 +1011,7 @@
     if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
       const keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', {
         jobUrl,
-        maxKeywords: 30, // SPEED: Optimized to 30 for balance of coverage and speed
+        maxKeywords: 50, // Increased for higher keyword density and interview rate
       });
       console.log(`[ATS Workday TOP1] ⚡ Keywords extracted in ${Math.round(performance.now() - start)}ms: ${keywords.total} keywords`);
       return keywords;
@@ -1049,7 +1049,7 @@
           candidateData,
           baseCV,
           {
-            maxKeywords: 30, // SPEED: Optimized to 30 for balance of coverage and speed
+            maxKeywords: 50, // Increased for higher keyword density and interview rate
             targetScore: 95,
             pdf: true,
           }
@@ -2644,7 +2644,7 @@
       if (typeof TurboPipeline !== 'undefined' && TurboPipeline.turboExtractKeywords) {
         keywords = await TurboPipeline.turboExtractKeywords(jobInfo.description || '', { 
           jobUrl: currentJobUrl, 
-          maxKeywords: 30 // SPEED: Optimized to 30 for balance of coverage and speed
+          maxKeywords: 50 // Increased for higher keyword density and interview rate
         });
       } else {
         keywords = extractBasicKeywords(jobInfo.description || '');
@@ -2669,7 +2669,7 @@
       if (typeof OpenResumeGenerator !== 'undefined' && OpenResumeGenerator.generateATSPackage) {
         pdfResult = await OpenResumeGenerator.generateATSPackage(tailoredCV, keywords, jobInfo);
       } else if (typeof TurboPipeline !== 'undefined' && TurboPipeline.executeTurboPipeline) {
-        const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 30 }); // SPEED: Optimized to 30
+        const pipelineResult = await TurboPipeline.executeTurboPipeline(jobInfo, profile, baseCV, { maxKeywords: 50 }); // Increased for higher keyword density
         if (pipelineResult.success) {
           pdfResult = { cv: pipelineResult.cvPDF, cover: pipelineResult.coverPDF };
         }

@@ -8,9 +8,9 @@
   // ============ CONFIGURATION ============
   const CONFIG = {
     TARGET_SCORE: 95,
-    MAX_KEYWORDS_SUMMARY: 8,
-    MAX_KEYWORDS_EXPERIENCE: 25, // Increased for better keyword density
-    MAX_KEYWORDS_SKILLS: 15,
+    MAX_KEYWORDS_SUMMARY: 10,
+    MAX_KEYWORDS_EXPERIENCE: 40, // Increased for higher interview callback rate
+    MAX_KEYWORDS_SKILLS: 25,
     YIELD_INTERVAL: 5,
     // NEW: Target keyword repetition for high/medium priority keywords
     HIGH_PRIORITY_MIN_COUNT: 3,    // Repeat high-priority keywords 3-5 times
