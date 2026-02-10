@@ -234,35 +234,15 @@ class ATSTailor {
       this.session = null;
     }
 
-    // Always show UI even if later steps fail
-    try {
-      await this.loadAIProviderSettings();
-    } catch (e) {
-      console.error('[ATS Tailor] loadAIProviderSettings error:', e);
-    }
-
-    try {
-      await this.loadWorkdayState();
-    } catch (e) {
-      console.error('[ATS Tailor] loadWorkdayState error:', e);
-    }
-
-    try {
-      await this.loadBaseCVFromProfile();
-    } catch (e) {
-      console.error('[ATS Tailor] loadBaseCVFromProfile error:', e);
-    }
+    try { await this.loadAIProviderSettings(); } catch (e) { console.error('[ATS Tailor] loadAIProviderSettings error:', e); }
+    try { await this.loadWorkdayState(); } catch (e) { console.error('[ATS Tailor] loadWorkdayState error:', e); }
+    try { await this.loadBaseCVFromProfile(); } catch (e) { console.error('[ATS Tailor] loadBaseCVFromProfile error:', e); }
 
     this.bindEvents();
     this.updateUI();
 
-    try {
-      this.updateAIProviderUI();
-    } catch (e) {
-      console.error('[ATS Tailor] updateAIProviderUI error:', e);
-    }
+    try { this.updateAIProviderUI(); } catch (e) { console.error('[ATS Tailor] updateAIProviderUI error:', e); }
 
-    // Auto-detect job when popup opens (but do NOT auto-tailor)
     if (this.session) {
       try {
         await this.refreshSessionIfNeeded();
@@ -1703,12 +1683,9 @@ class ATSTailor {
       this.setStatus('Ready', 'ready');
     }
     
-    const todayEl = document.getElementById('todayCount');
-    const totalEl = document.getElementById('totalCount');
-    const avgEl = document.getElementById('avgTime');
-    if (todayEl) todayEl.textContent = this.stats.today;
-    if (totalEl) totalEl.textContent = this.stats.total;
-    if (avgEl) avgEl.textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
+    document.getElementById('todayCount').textContent = this.stats.today;
+    document.getElementById('totalCount').textContent = this.stats.total;
+    document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
     
     const autoTailorToggle = document.getElementById('autoTailorToggle');
     if (autoTailorToggle) {
@@ -3709,7 +3686,551 @@ class ATSTailor {
         }
       } catch (e) {
         console.warn('[ATS Tailor] Could not fetch profile for PDF regeneration:', e);
-@@ -4220,94 +4223,134 @@ class ATSTailor {
+      }
+
+      // PRIORITY 1: Use OpenResume Generator for perfect ATS PDFs
+      if (window.OpenResumeGenerator) {
+        try {
+          console.log('[ATS Tailor] Using OpenResume Generator for ATS-perfect PDFs...');
+
+          const atsPackage = await window.OpenResumeGenerator.generateATSPackage(
+            this.generatedDocuments.cv,
+            this.generatedDocuments.keywords || {},
+            {
+              title: this.currentJob?.title || '',
+              company: this.currentJob?.company || '',
+              location: tailoredLocation
+            },
+            {
+              firstName: candidateData.first_name,
+              lastName: candidateData.last_name,
+              email: candidateData.email || this.session?.user?.email,
+              phone: candidateData.phone,
+              linkedin: candidateData.linkedin,
+              github: candidateData.github,
+              portfolio: candidateData.portfolio,
+              professionalExperience: candidateData.professional_experience || [],
+              relevantProjects: candidateData.relevant_projects || [],
+              education: candidateData.education,
+              skills: candidateData.skills,
+              certifications: candidateData.certifications,
+              summary: candidateData.ats_strategy,
+              city: tailoredLocation
+            }
+          );
+
+          if (atsPackage.cvBase64) {
+            this.generatedDocuments.cvPdf = atsPackage.cvBase64;
+            this.generatedDocuments.cvFileName = atsPackage.cvFilename;
+            this.generatedDocuments.tailoredLocation = tailoredLocation;
+            console.log('[ATS Tailor] OpenResume CV generated:', atsPackage.cvFilename);
+          }
+
+          if (atsPackage.coverBase64) {
+            this.generatedDocuments.coverPdf = atsPackage.coverBase64;
+            this.generatedDocuments.coverFileName = atsPackage.coverFilename;
+            console.log('[ATS Tailor] OpenResume Cover Letter generated:', atsPackage.coverFilename);
+          }
+
+          if (atsPackage.matchScore) {
+            this.generatedDocuments.matchScore = atsPackage.matchScore;
+          }
+
+          if (atsPackage.cvBase64) return; // Only return if PDF was actually generated
+        } catch (p1Error) {
+          console.warn('[ATS Tailor] OpenResume P1 failed, falling through to P2/P3:', p1Error.message);
+        }
+        console.log('[ATS Tailor] Using OpenResume Generator for ATS-perfect PDFs...');
+        
+        const atsPackage = await window.OpenResumeGenerator.generateATSPackage(
+          this.generatedDocuments.cv,
+          this.generatedDocuments.keywords || {},
+          {
+            title: this.currentJob?.title || '',
+            company: this.currentJob?.company || '',
+            location: tailoredLocation
+          },
+          {
+            firstName: candidateData.first_name,
+            lastName: candidateData.last_name,
+            email: candidateData.email || this.session?.user?.email,
+            phone: candidateData.phone,
+            linkedin: candidateData.linkedin,
+            github: candidateData.github,
+            portfolio: candidateData.portfolio,
+            professionalExperience: candidateData.professional_experience || [],
+            relevantProjects: candidateData.relevant_projects || [],
+            education: candidateData.education,
+            skills: candidateData.skills,
+            certifications: candidateData.certifications,
+            summary: candidateData.ats_strategy,
+            city: tailoredLocation
+          }
+        );
+
+        if (atsPackage.cvBase64) {
+          this.generatedDocuments.cvPdf = atsPackage.cvBase64;
+          this.generatedDocuments.cvFileName = atsPackage.cvFilename;
+          this.generatedDocuments.tailoredLocation = tailoredLocation;
+          console.log('[ATS Tailor] ✅ OpenResume CV generated:', atsPackage.cvFilename);
+        }
+
+        if (atsPackage.coverBase64) {
+          this.generatedDocuments.coverPdf = atsPackage.coverBase64;
+          this.generatedDocuments.coverFileName = atsPackage.coverFilename;
+          console.log('[ATS Tailor] ✅ OpenResume Cover Letter generated:', atsPackage.coverFilename);
+        }
+
+        if (atsPackage.matchScore) {
+          this.generatedDocuments.matchScore = atsPackage.matchScore;
+        }
+
+        return;
+      }
+
+      // PRIORITY 2: Use PDFATSPerfect if available
+      if (window.PDFATSPerfect) {
+        const pdfResult = await window.PDFATSPerfect.regenerateAfterBoost({
+          jobData: this.currentJob,
+          candidateData: {
+            firstName: candidateData.first_name,
+            lastName: candidateData.last_name,
+            email: candidateData.email || this.session?.user?.email,
+            phone: candidateData.phone,
+            linkedin: candidateData.linkedin,
+            github: candidateData.github,
+            portfolio: candidateData.portfolio
+          },
+          boostedCVText: this.generatedDocuments.cv,
+          currentLocation: tailoredLocation
+        });
+
+        if (pdfResult.pdf) {
+          this.generatedDocuments.cvPdf = pdfResult.pdf;
+          this.generatedDocuments.cvFileName = pdfResult.fileName;
+          this.generatedDocuments.tailoredLocation = pdfResult.location;
+          console.log('[ATS Tailor] PDF regenerated:', pdfResult.fileName);
+          return;
+        } else if (pdfResult.requiresBackendGeneration) {
+          await this.regeneratePDFViaBackend(pdfResult, tailoredLocation);
+          return;
+        }
+      }
+      
+      // PRIORITY 3: Fallback to backend generation
+      await this.regeneratePDFViaBackend(null, tailoredLocation);
+      
+    } catch (error) {
+      console.error('[ATS Tailor] PDF regeneration failed:', error);
+      // Don't throw - boost was successful, just PDF failed
+    }
+  }
+
+  /**
+   * Regenerate PDF via Supabase edge function
+   */
+  async regeneratePDFViaBackend(textFormat, tailoredLocation) {
+    try {
+      if (!this.session?.access_token) {
+        console.warn('[ATS Tailor] No session for backend PDF generation');
+        return;
+      }
+
+      // Get structuredCv which contains the professional summary
+      const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments.structuredCv;
+      
+      // Extract professional summary from structuredCv or stored data
+      let professionalSummary = '';
+      if (structuredCv?.summary) {
+        professionalSummary = typeof structuredCv.summary === 'string' 
+          ? structuredCv.summary 
+          : structuredCv.summary.text || structuredCv.summary.content || '';
+      }
+      
+      // Also check for stored summary from tailoring result
+      if (!professionalSummary && this.generatedDocuments.professionalSummary) {
+        professionalSummary = this.generatedDocuments.professionalSummary;
+      }
+
+      console.log('[ATS Tailor] regeneratePDFViaBackend - Summary length:', professionalSummary.length);
+
+      const pdfSafeCvContent = this.dedupeSectionHeaders(this.generatedDocuments.cv || '');
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.access_token}`,
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          content: pdfSafeCvContent,
+          type: 'cv',
+          tailoredLocation: tailoredLocation,
+          jobTitle: this.currentJob?.title,
+          company: this.currentJob?.company,
+          firstName: this.profileInfo?.firstName,
+          lastName: this.profileInfo?.lastName,
+          fileName: this.generatedDocuments.cvFileName,
+          // Pass only the summary string to avoid payload bloat
+          summary: professionalSummary
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        const isHtml = /^\s*</.test((errorText || '').trim());
+        const msg = response.status === 502
+          ? 'Service temporarily unavailable (502) during PDF generation.'
+          : (!isHtml && errorText ? errorText : `PDF generation failed (${response.status})`);
+        console.warn('[ATS Tailor] Backend PDF generation failed:', msg);
+        return;
+      }
+
+      // ROBUST JSON PARSING for PDF response
+      let result;
+      try {
+        const responseText = await response.text();
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn('[ATS Tailor] PDF response parse failed:', parseError);
+        return;
+      }
+      
+      if (result.pdf) {
+        this.generatedDocuments.cvPdf = result.pdf;
+        this.generatedDocuments.cvFileName = result.fileName || this.generatedDocuments.cvFileName;
+        console.log('[ATS Tailor] PDF regenerated via backend:', result.fileName);
+      }
+    } catch (error) {
+      console.error('[ATS Tailor] Backend PDF generation failed:', error);
+    }
+  }
+
+  /**
+   * Sanitise the global structuredCv object before ANY PDF generation path.
+   * - Filters bogus experience entries (section headers as company names)
+   * - Deduplicates skills and certifications
+   * - Applies neverLeakGuard to all text fields (summary, bullets, titles)
+   */
+  sanitizeStructuredCV() {
+    const structuredCv = window.quantumhireStructuredCv || this.generatedDocuments?.structuredCv;
+    if (!structuredCv) return;
+
+    const HEADER_PATTERNS = new Set([
+      'professional experience', 'work experience', 'experience',
+      'employment history', 'career history', 'employment',
+      'work history', 'positions held', 'career',
+      'education', 'skills', 'certifications', 'projects', 'achievements',
+      'professional summary', 'summary', 'technical proficiencies',
+      'technical skills', 'core skills'
+    ]);
+
+    const normalise = (s) => String(s || '').toLowerCase().replace(/[#:*|]/g, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
+    // Helper: detect single or duplicated section headers
+    const isHeaderish = (v) => {
+      if (HEADER_PATTERNS.has(v)) return true;
+      // Catch "work experience work experience" etc.
+      for (const h of HEADER_PATTERNS) {
+        if (v === (h + ' ' + h)) return true;
+        // Catch triple+ repeats
+        if (v.startsWith(h + ' ') && v.replace(new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim() === '') return true;
+      }
+      return false;
+    };
+
+    // Filter bogus experience entries
+    if (Array.isArray(structuredCv.experience)) {
+      structuredCv.experience = structuredCv.experience.filter(job => {
+        const company = normalise(job.company || job.companyName || '');
+        const title = normalise(job.title || job.jobTitle || job.position || '');
+        if (HEADER_PATTERNS.has(company)) {
+          console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-company:', job.company);
+          return false;
+        }
+        if (HEADER_PATTERNS.has(title) && !company) {
+          console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-title:', job.title);
+          return false;
+        }
+        if (isHeaderish(company)) {
+          console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-company:', job.company);
+          return false;
+        }
+        if (isHeaderish(title) && !company) {
+          console.log('[ATS Tailor] sanitizeStructuredCV: removed header-as-title:', job.title);
+          return false;
+        }
+        if (!company || company.length < 2) return false;
+        return true;
+      });
+    }
+
+    // Deduplicate skills
+    if (Array.isArray(structuredCv.skills)) {
+      const seen = new Set();
+      structuredCv.skills = structuredCv.skills.filter(s => {
+        const key = String(s).toLowerCase().trim();
+        if (seen.has(key) || !key) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    // Deduplicate certifications
+    if (Array.isArray(structuredCv.certifications)) {
+      const seen = new Set();
+      structuredCv.certifications = structuredCv.certifications.filter(c => {
+        const key = String(c).toLowerCase().trim();
+        if (seen.has(key) || !key) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    // Apply neverLeakGuard to all text fields
+    const guard = (typeof ContentQualityEngine !== 'undefined' && ContentQualityEngine.neverLeakGuard)
+      ? ContentQualityEngine.neverLeakGuard.bind(ContentQualityEngine)
+      : null;
+
+    if (guard) {
+      if (structuredCv.summary) structuredCv.summary = guard(structuredCv.summary);
+
+      if (Array.isArray(structuredCv.experience)) {
+        structuredCv.experience.forEach(job => {
+          if (job.title) job.title = guard(job.title);
+          if (Array.isArray(job.bullets)) {
+            job.bullets = job.bullets.map(b => guard(b));
+          }
+          if (Array.isArray(job.achievements)) {
+            job.achievements = job.achievements.map(a => guard(a));
+          }
+          if (Array.isArray(job.responsibilities)) {
+            job.responsibilities = job.responsibilities.map(r => guard(r));
+          }
+        });
+      }
+
+      if (Array.isArray(structuredCv.skills)) {
+        structuredCv.skills = structuredCv.skills.map(s => guard(s));
+      }
+      if (Array.isArray(structuredCv.certifications)) {
+        structuredCv.certifications = structuredCv.certifications.map(c => guard(c));
+      }
+    }
+
+    // Write back
+    if (window.quantumhireStructuredCv) window.quantumhireStructuredCv = structuredCv;
+    if (this.generatedDocuments?.structuredCv) this.generatedDocuments.structuredCv = structuredCv;
+    console.log('[ATS Tailor] sanitizeStructuredCV complete');
+  }
+
+  /**
+   * Dedupe repeated section headers AND split inline headers in plain-text CV/cover content.
+   * Prevents output like: "WORK EXPERIENCE\n\nWORK EXPERIENCE".
+   * ALSO FIXES: "SKILLS: PYTHON, JAVA, C++" -> splits to "SKILLS\n" + properly cased content.
+   */
+  dedupeSectionHeaders(text) {
+    if (!text || typeof text !== 'string') return text;
+
+    // CRITICAL FIX v2: Collapse inline duplicated headers on the SAME line
+    // "WORK EXPERIENCE WORK EXPERIENCE" → "WORK EXPERIENCE"
+    // "PROFESSIONAL EXPERIENCE PROFESSIONAL EXPERIENCE" → "PROFESSIONAL EXPERIENCE"
+    let fixedText = text.replace(
+      /\b(WORK EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|PROFESSIONAL SUMMARY|SUMMARY)(\s+\1)+\b/gi,
+      (match, header) => header.toUpperCase()
+    );
+
+    // CRITICAL FIX: Break apart concatenated headers (e.g., "...GOOGLE CLOCERTIFICATIONS:...")
+    // This happens when AI truncates a word and immediately starts the next section
+    fixedText = fixedText
+      .replace(/([A-Za-z])(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)(\s*:|\s+[A-Z])/g, '$1\n$2$3')
+      .replace(/(SKILLS|CERTIFICATIONS|EDUCATION|EXPERIENCE|SUMMARY|PROJECTS|ACHIEVEMENTS)\s*:\s*/gi, (match, header) => {
+        return header.toUpperCase() + ': ';
+      });
+
+    // CRITICAL FIX v4.0: Merge duplicate SEPARATE section headers
+    // When "SKILLS\ncontent1...\nCERTIFICATIONS\n...\nSKILLS\ncontent2..." exists,
+    // merge content2 into the first SKILLS section and remove the second
+    const MERGEABLE_SECTIONS = ['SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES', 'CORE SKILLS', 'KEY SKILLS', 'CERTIFICATIONS'];
+    for (const sectionName of MERGEABLE_SECTIONS) {
+      const sectionRegex = new RegExp(
+        `^${sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n`,
+        'gim'
+      );
+      const matches = [...fixedText.matchAll(sectionRegex)];
+      if (matches.length > 1) {
+        // Found duplicate section — merge second occurrence into first
+        // Find the content of the second section
+        const secondStart = matches[1].index;
+        const headerLen = matches[1][0].length;
+        const contentStart = secondStart + headerLen;
+        // Content ends at next section header or end of text
+        const nextHeaderMatch = fixedText.slice(contentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
+        const contentEnd = nextHeaderMatch ? contentStart + nextHeaderMatch.index : fixedText.length;
+        const secondContent = fixedText.slice(contentStart, contentEnd).trim();
+
+        if (secondContent) {
+          // Find end of first section's content
+          const firstStart = matches[0].index;
+          const firstHeaderLen = matches[0][0].length;
+          const firstContentStart = firstStart + firstHeaderLen;
+          const nextHeaderAfterFirst = fixedText.slice(firstContentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
+          const firstContentEnd = nextHeaderAfterFirst ? firstContentStart + nextHeaderAfterFirst.index : contentStart - 2;
+
+          // Merge: append second content to first, remove second section entirely
+          const firstContent = fixedText.slice(firstContentStart, firstContentEnd).trim();
+          const mergedContent = firstContent + ', ' + secondContent;
+          fixedText = fixedText.slice(0, firstContentStart) + mergedContent + '\n' +
+                     fixedText.slice(firstContentEnd, secondStart) +
+                     fixedText.slice(contentEnd);
+
+          console.log(`[ATS Tailor] dedupeSectionHeaders: Merged duplicate "${sectionName}" sections`);
+        }
+      }
+    }
+
+    const HEADER_KEYS = new Set([
+      'PROFESSIONAL SUMMARY',
+      'SUMMARY',
+      'PROFILE',
+      'OBJECTIVE',
+      'WORK EXPERIENCE',
+      'PROFESSIONAL EXPERIENCE',
+      'EXPERIENCE',
+      'EMPLOYMENT',
+      'EDUCATION',
+      'SKILLS',
+      'TECHNICAL SKILLS',
+      'CORE SKILLS',
+      'TECHNICAL PROFICIENCIES',
+      'CERTIFICATIONS',
+      'LICENSES',
+      'PROJECTS',
+      'ACHIEVEMENTS'
+    ]);
+
+    const normaliseHeader = (line) =>
+      (line || '')
+        .toString()
+        .trim()
+        .toUpperCase()
+        .replace(/[:\s]+$/g, '');
+
+    /**
+     * Normalise ALL CAPS content to proper casing (Title Case with acronym preservation).
+     * Example: "PYTHON, JAVA, NODE.JS, AWS" -> "Python, Java, Node.js, AWS"
+     */
+    const normaliseContent = (content) => {
+      if (!content) return '';
+      const trimmed = content.trim();
+      
+      // If content is not all uppercase, return as-is (already properly cased)
+      if (trimmed !== trimmed.toUpperCase()) return trimmed;
+      
+      // Known technical terms with correct casing
+      const KNOWN_FORMATS = {
+        'PYTHON': 'Python', 'JAVA': 'Java', 'JAVASCRIPT': 'JavaScript',
+        'TYPESCRIPT': 'TypeScript', 'NODE.JS': 'Node.js', 'REACT': 'React',
+        'ANGULAR': 'Angular', 'VUE.JS': 'Vue.js', 'MONGODB': 'MongoDB',
+        'POSTGRESQL': 'PostgreSQL', 'MYSQL': 'MySQL', 'REDIS': 'Redis',
+        'DOCKER': 'Docker', 'KUBERNETES': 'Kubernetes', 'TERRAFORM': 'Terraform',
+        'JENKINS': 'Jenkins', 'GITHUB': 'GitHub', 'GITLAB': 'GitLab',
+        'JIRA': 'Jira', 'CONFLUENCE': 'Confluence', 'SLACK': 'Slack',
+        'SALESFORCE': 'Salesforce', 'TABLEAU': 'Tableau', 'POWER BI': 'Power BI',
+        'EXCEL': 'Excel', 'POWERPOINT': 'PowerPoint', 'AZURE': 'Azure',
+        'C++': 'C++', 'C#': 'C#', 'KOTLIN': 'Kotlin', 'SWIFT': 'Swift',
+        'GRAPHQL': 'GraphQL', 'REST': 'REST', 'RESTFUL': 'RESTful',
+        'MACHINE LEARNING': 'Machine Learning', 'DEEP LEARNING': 'Deep Learning',
+        'NATURAL LANGUAGE PROCESSING': 'Natural Language Processing',
+        'DATA SCIENCE': 'Data Science', 'DATA ANALYSIS': 'Data Analysis',
+        'BUSINESS INTELLIGENCE': 'Business Intelligence',
+        'PROJECT MANAGEMENT': 'Project Management', 'AGILE': 'Agile',
+        'SCRUM': 'Scrum', 'DEVOPS': 'DevOps', 'CI/CD': 'CI/CD',
+        'GOOGLE CLOUD': 'Google Cloud', 'GOOGLE CLOUD PLATFORM': 'Google Cloud Platform'
+      };
+      
+      // Acronyms to keep uppercase (2-5 chars)
+      const ACRONYMS = new Set([
+        'AWS', 'GCP', 'SQL', 'API', 'CSS', 'HTML', 'XML', 'JSON', 'REST',
+        'CI', 'CD', 'ML', 'AI', 'UI', 'UX', 'ETL', 'LLM', 'IAC', 'SRE',
+        'PMP', 'CPA', 'CFA', 'MBA', 'PHD', 'IIBA', 'CBAP', 'ITIL'
+      ]);
+      
+      // Split by comma, normalise each term
+      return trimmed.split(',').map(term => {
+        const t = term.trim();
+        const upper = t.toUpperCase();
+        
+        // Check known formats first
+        if (KNOWN_FORMATS[upper]) return KNOWN_FORMATS[upper];
+        
+        // Check if it's a pure acronym
+        if (ACRONYMS.has(upper)) return upper;
+        
+        // Convert to Title Case, preserving acronyms within
+        return t.toLowerCase().split(/[\s\-\/]+/).map((word, idx) => {
+          const wordUpper = word.toUpperCase();
+          if (ACRONYMS.has(wordUpper)) return wordUpper;
+          // Keep version numbers (e.g., "3.9" in "python 3.9")
+          if (/^\d+\.?\d*$/.test(word)) return word;
+          return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
+      }).join(', ');
+    };
+
+    /**
+     * INLINE HEADER DETECTION: Matches "SKILLS: content" or "CERTIFICATIONS: content"
+     * Returns { header, content } or null if not an inline header.
+     */
+    const parseInlineHeader = (line) => {
+      const trimmed = (line || '').trim();
+      // Pattern: HEADER: content (header is all caps, followed by colon and content)
+      const inlineMatch = trimmed.match(/^([A-Z][A-Z\s]{2,30}):\s*(.+)$/);
+      if (inlineMatch) {
+        const potentialHeader = inlineMatch[1].trim().toUpperCase();
+        if (HEADER_KEYS.has(potentialHeader)) {
+          return { header: potentialHeader, content: inlineMatch[2].trim() };
+        }
+      }
+      return null;
+    };
+
+    const lines = fixedText.split(/\r?\n/);
+    const out = [];
+
+    let lastHeader = null;
+    let lastHeaderHadContent = true; // true so first header is always allowed
+
+    for (const line of lines) {
+      const trimmed = (line || '').trim();
+      
+      // FIRST: Check for inline header (e.g., "SKILLS: PYTHON, JAVA, C++")
+      const inlineResult = parseInlineHeader(line);
+      if (inlineResult) {
+        // Split inline header into separate header line + normalised content line
+        const { header, content } = inlineResult;
+        
+        // Skip duplicate header if same as last and no content between
+        if (lastHeader === header && !lastHeaderHadContent) {
+          // Just add the content, skip the duplicate header
+          out.push(normaliseContent(content));
+          lastHeaderHadContent = true;
+          continue;
+        }
+        
+        out.push(header); // Add header on its own line
+        out.push(normaliseContent(content)); // Add normalised content on next line
+        lastHeader = header;
+        lastHeaderHadContent = true;
+        continue;
+      }
+      
+      // Standard header detection (header on its own line)
+      const header = normaliseHeader(line);
+      const isHeader = HEADER_KEYS.has(header);
+
+      if (isHeader) {
         // If same header repeats before any content, skip it.
         if (lastHeader === header && !lastHeaderHadContent) {
           continue;
@@ -3844,7 +4365,30 @@ class ATSTailor {
             plainText: pdfSafeTextDoc,
           }),
         });
-@@ -4338,50 +4381,65 @@ class ATSTailor {
+
+        if (!response.ok) {
+          console.error('[ATS Tailor] PDF generation via structuredCv failed:', response.status);
+          this.showToast('PDF generation failed - please try again', 'error');
+          return;
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/pdf')) {
+          const arrayBuffer = await response.arrayBuffer();
+          const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          this.showToast('✅ Downloaded!', 'success');
+          return;
+        }
+
+        // JSON response with base64
         let result;
         try {
           const responseText = await response.text();
