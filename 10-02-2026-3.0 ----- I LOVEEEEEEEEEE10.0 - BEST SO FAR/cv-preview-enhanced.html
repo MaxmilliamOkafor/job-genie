@@ -762,7 +762,7 @@
             showStatus('ATS-safe plain text exported successfully!', 'success');
         }
 
-        // Generate plain text version
+        // Generate plain text version - FIXED: Removed duplicate WORK EXPERIENCE header
         function generatePlainText() {
             const { contact, summary, experience, education, skills } = cvData;
             const lines = [];
@@ -782,15 +782,16 @@
                 lines.push('');
             }
 
-            // Experience — filter out entries where company is a section header
-            const HEADER_SET2 = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
-            const safeExp2 = experience.filter(job => {
+            // Experience - Single consolidated filter
+            const HEADER_SET = new Set(['professional experience','work experience','experience','employment history','career history','employment','work history','positions held','career','roles']);
+            const safeExp = experience.filter(job => {
                 const norm = String(job.company || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-                return !HEADER_SET2.has(norm) && !([...HEADER_SET2].some(h => norm === (h + ' ' + h)));
+                return !HEADER_SET.has(norm) && !([...HEADER_SET].some(h => norm === (h + ' ' + h)));
             });
-            if (safeExp2.length > 0) {
+            
+            if (safeExp.length > 0) {
                 lines.push('WORK EXPERIENCE');
-                safeExp2.forEach(job => {
+                safeExp.forEach(job => {
                     const yearDates = job.dates || '';
                     lines.push(yearDates ? `${job.company}    ${yearDates}` : job.company);
                     lines.push(job.title);
