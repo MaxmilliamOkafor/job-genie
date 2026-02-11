@@ -1,5 +1,5 @@
 // city-dataset.js - Auto-generated from world-cities-raw.json
-// ~200k cities compressed into a lightweight lookup map for ATS location matching
+// ~199k cities compressed into a lightweight lookup map for ATS location matching
 // Format: { "city_name_lowercase": "CC" } where CC = ISO-2 country code
 // For duplicate city names, we prefer major countries (GB, US, IE, DE, etc.)
 
