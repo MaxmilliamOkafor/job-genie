@@ -141,6 +141,23 @@ const ISO2_COUNTRY_FALLBACK = new Set([
   'IN','AE','SG','JP','CN','KR','AU','CA','NZ','IL','TR','BR','MX','ZA','TZ','NG','KE','HK'
 ]);
 
+// 2-letter codes that are BOTH valid US state codes AND ISO-2 country codes.
+// When these appear after a city name ("Rock Hill, SC"), we must check context
+// to decide whether it's South Carolina (US) or Seychelles (country).
+const AMBIGUOUS_STATE_ISO2 = new Set([
+  'AL', // Alabama vs Albania
+  'DE', // Delaware vs Germany
+  'GA', // Georgia (state) vs Gabon
+  'IN', // Indiana vs India
+  'MA', // Massachusetts vs Morocco
+  'ME', // Maine vs Montenegro
+  'MN', // Minnesota vs Mongolia
+  'MT', // Montana vs Malta
+  'NC', // North Carolina vs New Caledonia
+  'PA', // Pennsylvania vs Panama
+  'SC', // South Carolina vs Seychelles
+]);
+
 const MAJOR_US_CITIES = [
   'new york', 'los angeles', 'chicago', 'houston', 'phoenix', 'philadelphia',
   'san antonio', 'san diego', 'dallas', 'san jose', 'austin', 'jacksonville',
@@ -153,6 +170,17 @@ const MAJOR_US_CITIES = [
   'menlo park', 'palo alto', 'mountain view', 'cupertino', 'redwood city', 'rock hill',
   'naples', 'orlando', 'st. louis', 'pittsburgh', 'cincinnati', 'kansas city',
   'salt lake city', 'richmond', 'norfolk', 'chapel hill', 'durham',
+  'reno', 'boise', 'spokane', 'anchorage', 'charleston', 'savannah',
+  'columbia', 'greenville', 'wilmington', 'des moines', 'little rock',
+  'madison', 'hartford', 'providence', 'jackson', 'birmingham',
+  'montgomery', 'chattanooga', 'knoxville', 'lexington', 'buffalo',
+  'rochester', 'albany', 'syracuse', 'trenton', 'newark', 'jersey city',
+  'scottsdale', 'tempe', 'chandler', 'gilbert', 'glendale', 'mesa',
+  'irvine', 'anaheim', 'santa monica', 'pasadena', 'long beach', 'plano',
+  'irving', 'frisco', 'mckinney', 'denton', 'round rock', 'pflugerville',
+  'boulder', 'fort collins', 'colorado springs', 'bellevue', 'redmond',
+  'kirkland', 'tacoma', 'olympia', 'ann arbor', 'grand rapids',
+  'stamford', 'new haven', 'dayton', 'akron', 'toledo',
 ];
 
 // ─── Comprehensive City-to-Country mapping (fallback when world-cities-raw.json not loaded) ───
@@ -179,7 +207,13 @@ const CITY_COUNTRY_MAP = {
   'sunderland': 'United Kingdom', 'derby': 'United Kingdom', 'stoke-on-trent': 'United Kingdom',
   'aberdeen': 'United Kingdom', 'dundee': 'United Kingdom', 'swansea': 'United Kingdom',
   'dublin': 'Ireland', 'cork': 'Ireland', 'galway': 'Ireland', 'limerick': 'Ireland',
-  'waterford': 'Ireland',
+  'waterford': 'Ireland', 'lucan': 'Ireland', 'swords': 'Ireland', 'drogheda': 'Ireland',
+  'dundalk': 'Ireland', 'bray': 'Ireland', 'navan': 'Ireland', 'ennis': 'Ireland',
+  'kilkenny': 'Ireland', 'tralee': 'Ireland', 'carlow': 'Ireland', 'athlone': 'Ireland',
+  'naas': 'Ireland', 'letterkenny': 'Ireland', 'celbridge': 'Ireland', 'newbridge': 'Ireland',
+  'mullingar': 'Ireland', 'wexford': 'Ireland', 'sligo': 'Ireland', 'clondalkin': 'Ireland',
+  'tallaght': 'Ireland', 'blanchardstown': 'Ireland', 'dun laoghaire': 'Ireland',
+  'maynooth': 'Ireland', 'leixlip': 'Ireland',
 
   // Western Europe
   'paris': 'France', 'lyon': 'France', 'marseille': 'France', 'toulouse': 'France',
@@ -367,6 +401,9 @@ const CITY_ABBREVIATIONS = {
   'lv': 'Las Vegas', 'san fran': 'San Francisco',
   'hk': 'Hong Kong', 'bkk': 'Bangkok', 'kl': 'Kuala Lumpur',
   'secundrabad': 'Secunderabad', 'new york city': 'New York',
+  'bengaluru': 'Bangalore', 'bombay': 'Mumbai', 'madras': 'Chennai',
+  'calcutta': 'Kolkata', 'trivandrum': 'Thiruvananthapuram',
+  'fhg': 'Frankfurt', 'ams': 'Amsterdam', 'sfo': 'San Francisco',
 };
 
 const ACCENT_MAP = {
@@ -708,13 +745,31 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
     const isCountryCode = /^[A-Z]{2}$/i.test(lastPart) && (
       !!db?.fromISO2?.(upperLastPart) || ISO2_COUNTRY_FALLBACK.has(upperLastPart)
     );
+    const isUSState = /^[A-Z]{2}$/i.test(lastPart) && US_STATES[upperLastPart] && upperLastPart !== 'US';
 
-    // Handle "City, STATE" (US) — e.g. "Rock Hill, SC"
-    if (/^[A-Z]{2}$/i.test(lastPart) && US_STATES[upperLastPart] && upperLastPart !== 'US' && !isCountryCode) {
+    // CRITICAL FIX: Disambiguate codes that are BOTH US states AND ISO2 country codes
+    // e.g. SC = South Carolina (US) or Seychelles, IN = Indiana (US) or India
+    if (isUSState && isCountryCode && AMBIGUOUS_STATE_ISO2.has(upperLastPart)) {
+      // Use city context to decide: if the city is a known US city, treat as US state
+      const cityLower = city.toLowerCase().trim();
+      const cityHitForDisambig = _findCity(city);
+      const isKnownUSCity = (
+        MAJOR_US_CITIES.some(c => cityLower === c || cityLower.includes(c)) ||
+        cityHitForDisambig?.countryCode === 'US'
+      );
+      if (isKnownUSCity) {
+        return `${city}, ${upperLastPart}, US`;
+      }
+      // Not a known US city → treat as country code
+      return `${city}, ${upperLastPart}`;
+    }
+
+    // Handle "City, STATE" (US) — e.g. "Orlando, FL" (unambiguous US state)
+    if (isUSState && !isCountryCode) {
       return `${city}, ${upperLastPart}, US`;
     }
 
-    // Handle ambiguous 2-letter suffix: prefer explicit country code when recognised.
+    // Handle explicit country code when recognised
     if (isCountryCode) {
       return `${city}, ${upperLastPart}`;
     }
@@ -737,8 +792,19 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
   // Check if it's a country name/code
   const iso2Country = _toISO2(raw);
 
-  // If it's a 2-letter code that's a US state, treat as US state
-  if (/^[A-Z]{2}$/i.test(raw) && US_STATES[raw.toUpperCase()]) {
+  // If it's a 2-letter code that's BOTH a US state and a country code (ambiguous),
+  // prefer country interpretation for standalone codes (no city context).
+  // e.g. standalone "IN" → India, not Indiana; "DE" → Germany, not Delaware
+  if (/^[A-Z]{2}$/i.test(raw) && US_STATES[raw.toUpperCase()] && AMBIGUOUS_STATE_ISO2.has(raw.toUpperCase())) {
+    if (iso2Country) {
+      const cap = _capitalFor(raw) || _capitalFor(iso2Country) || fallbackCityToken;
+      return `${cap}, ${iso2Country}`;
+    }
+  }
+
+  // If it's a 2-letter code that's a US state (unambiguous), treat as US state
+  // e.g. standalone "FL" → Florida, FL, US; "TX" → Texas, TX, US
+  if (/^[A-Z]{2}$/i.test(raw) && US_STATES[raw.toUpperCase()] && !AMBIGUOUS_STATE_ISO2.has(raw.toUpperCase())) {
     return `${US_STATES[raw.toUpperCase()]}, ${raw.toUpperCase()}, US`;
   }
 
