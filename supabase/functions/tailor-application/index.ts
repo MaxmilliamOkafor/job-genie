@@ -1877,7 +1877,8 @@ HUMANIZED TONE RULES:
 - Active voice only
 - Vary sentence structure - avoid repetitive patterns
 - Use connectors: "This enabled...", "Resulting in...", "Which led to..."
-- BANNED: "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "synergy"
+- BANNED WORDS (NEVER USE): "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "leveraging", "synergy", "proven track record", "proven ability", "proven record", "proven expertise", "orchestrated", "championed", "pioneered", "spearheaded", "helmed", "meticulous", "comprehensive", "showcasing", "demonstrating", "highly motivated", "best-in-class", "world-class", "detail-oriented", "think outside the box", "go-getter", "various", "assisted", "realm", "approximately", "the intersection of", "drive impactful outcomes", "strategic initiatives", "stakeholder environments", "robust", "seamless", "holistic"
+- APPROVED ALTERNATIVES: "led" (not championed/spearheaded), "directed" (not orchestrated), "thorough" (not comprehensive), "ability" (not proven ability), "track record" (not proven track record), "field" (not realm), "using" (not leveraging), "detailed" (not meticulous), use actual numbers with "+" (not approximately)
 - Include specific metrics (%, $, time saved, users impacted)
 
 ATS KEYWORD DENSITY TARGETS:
@@ -1955,7 +1956,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
       WRONG FIRST WORD: "${candidateName.split(" ")[0]}" (this is the name - BANNED)
       
       EXAMPLE OF CORRECT SUMMARY:
-      "Experienced Principal Cloud Architect with over 8 years of expertise in cloud computing, data analytics, and machine learning. Proven track record in designing scalable solutions..."
+      "Experienced Principal Cloud Architect with 8+ years of expertise in cloud computing, data analytics, and machine learning. Strong track record in designing scalable solutions that reduced infrastructure costs by 40% and improved system uptime to 99.9%."
       
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
