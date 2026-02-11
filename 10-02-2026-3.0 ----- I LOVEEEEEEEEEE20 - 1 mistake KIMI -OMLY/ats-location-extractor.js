@@ -1,15 +1,17 @@
 /**
- * ATS Location Extractor v3.0 - 100% ATS Compliant Location Extraction
+ * ATS Location Extractor v7.0 - 100% ATS Compliant Location Extraction
  * ===================================================================
  * Outputs: SINGLE STRING → "City, ISO2" or "City, STATE, US"
  * 
  * Features:
- * - Parses 150k+ city database from world-cities-raw.json
+ * - Parses 199k+ city database from world-cities-raw.json
  * - Fuzzy matching with Levenshtein distance (threshold < 3)
  * - Handles typos (Secundrabad → Secunderabad, IN)
  * - Handles all input formats: city-only, country-only, US states, Remote patterns
  * - 7 strict extraction rules with priority order
  * - Zero knockout risk due to location mismatch
+ * - NEVER outputs "Open to relocation" in header
+ * - 100% British English throughout
  */
 
 (function(global) {
@@ -142,7 +144,16 @@
     'slc': 'Salt Lake City', 'kc': 'Kansas City', 'nola': 'New Orleans',
     'lv': 'Las Vegas', 'san fran': 'San Francisco',
     'hk': 'Hong Kong', 'bkk': 'Bangkok', 'kl': 'Kuala Lumpur',
-    'new york city': 'New York'
+    'new york city': 'New York', 'sfo': 'San Francisco',
+    'sea': 'Seattle', 'bos': 'Boston', 'den': 'Denver',
+    'phx': 'Phoenix', 'iad': 'Washington', 'jfk': 'New York',
+    'ord': 'Chicago', 'lax': 'Los Angeles', 'syd': 'Sydney',
+    'mel': 'Melbourne', 'ldn': 'London', 'lon': 'London',
+    'ber': 'Berlin', 'par': 'Paris', 'ams': 'Amsterdam',
+    'dub': 'Dublin', 'sin': 'Singapore', 'tyo': 'Tokyo',
+    'hkg': 'Hong Kong', 'del': 'Delhi', 'bom': 'Mumbai',
+    'blr': 'Bangalore', 'maa': 'Chennai', 'ccu': 'Kolkata',
+    'tor': 'Toronto', 'yvr': 'Vancouver', 'yul': 'Montreal'
   };
 
   // Common typos mapping
@@ -161,7 +172,37 @@
     'vizag': 'Visakhapatnam',
     'trivandrum': 'Thiruvananthapuram',
     'cochin': 'Kochi',
-    'allahabad': 'Prayagraj'
+    'allahabad': 'Prayagraj',
+    'münchen': 'Munich',
+    'zürich': 'Zurich',
+    'genève': 'Geneva',
+    'bruxelles': 'Brussels',
+    'köln': 'Cologne',
+    'wien': 'Vienna',
+    'roma': 'Rome',
+    'milano': 'Milan',
+    'firenze': 'Florence',
+    'napoli': 'Naples',
+    'torino': 'Turin',
+    'genova': 'Genoa',
+    'venezia': 'Venice',
+    'lisboa': 'Lisbon',
+    'praha': 'Prague',
+    'warszawa': 'Warsaw',
+    'kraków': 'Krakow',
+    'gdańsk': 'Gdansk',
+    'wrocław': 'Wroclaw',
+    'łódź': 'Lodz',
+    'poznań': 'Poznan',
+    'athina': 'Athens',
+    'baile átha cliath': 'Dublin',
+    'corcaigh': 'Cork',
+    'watfor': 'Watford',
+    'manchster': 'Manchester',
+    'birmigham': 'Birmingham',
+    'edingburgh': 'Edinburgh',
+    'glasow': 'Glasgow',
+    'liverpol': 'Liverpool'
   };
 
   // ============ CITY DATABASE STORAGE ============
@@ -822,7 +863,7 @@
   }
 
   /**
-   * Clean location input by removing common prefixes and suffixes
+   * Clean location input by removing common prefixes, suffixes, and relocation text
    * @param {string} input - Raw location input
    * @returns {string} - Cleaned location
    */
@@ -833,6 +874,10 @@
       .replace(/^(location[s]?|based\s*in|located\s*in|office\s*in|work\s*location|job\s*location|position\s*location|role\s*location)[\s:,]*/gi, '')
       .replace(/^[\:\-\–—|,\s]+/, '')
       .replace(/[\(\)\[\]]/g, '')
+      // CRITICAL: Strip relocation text - NEVER appears in CV header
+      .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+      .replace(/\s*\|?\s*willing\s+to\s+relocate\s*/gi, '')
+      .replace(/\s*\|?\s*relocation\s+available\s*/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
   }

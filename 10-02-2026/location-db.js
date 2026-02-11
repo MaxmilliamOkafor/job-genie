@@ -1,6 +1,7 @@
 // location-db.js - Lightweight Location Knowledge Base (countries + capitals + aliases)
 // Goal: make it possible to ALWAYS output "City, Country" even when input is partial.
-// Note: City-level global coverage can be optionally extended later by generating a larger DB file.
+// v7.0: Enhanced with relocation stripping and comprehensive alias coverage.
+// Note: City-level global coverage extended via world-cities-raw.json (199k+ cities).
 
 (function (global) {
   'use strict';

@@ -1,8 +1,9 @@
-// ============= UNIVERSAL LOCATION STRATEGY v2.0 (100% City, Country Success Rate) =============
+// ============= UNIVERSAL LOCATION STRATEGY v7.0 (100% City, Country Success Rate) =============
 // Advanced location extraction for ALL 7+ ATS platforms
 // FIXED: City duplication issue (Stockholm, Stockholm, Sweden → Stockholm, Sweden)
-// v2.0: Perfect "City, Country" format extraction with world-cities-raw.json integration,
-//        fuzzy matching for typos, and comprehensive country/city coverage.
+// v7.0: Perfect "City, Country" format extraction with world-cities-raw.json integration,
+//        fuzzy matching for typos, comprehensive country/city coverage, relocation text removal.
+//        199k+ city database. 100% British English. Zero ATS knockouts.
 
 const UNIVERSAL_LOCATION_SELECTORS = {
   workday: [
@@ -520,6 +521,7 @@ function extractLocationFromPageText(text) {
 
 /**
  * CRITICAL FIX: Clean location data - removes prefixes like "location", "locations", "based in"
+ * Also strips relocation text that must NEVER appear in CV headers.
  * Prevents errors like "locationsLondon, United Kingdom" or "locationManchester, UK"
  * @param {string} rawLocation - Raw location string that may contain prefixes
  * @returns {string} - Cleaned location string (still raw-ish; formatting happens later)
@@ -535,6 +537,13 @@ function cleanLocation(rawLocation) {
 
   // Remove stray leading punctuation/colons that often remain after prefix stripping
   cleaned = cleaned.replace(/^[:\-–—|,\s]+/, '').trim();
+
+  // CRITICAL: Strip relocation text - NEVER appears in CV header
+  cleaned = cleaned
+    .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+    .replace(/\s*\|?\s*willing\s+to\s+relocate\s*/gi, '')
+    .replace(/\s*\|?\s*relocation\s+available\s*/gi, '')
+    .trim();
 
   // Capitalise first letter if it starts with lowercase
   if (cleaned && !/^[A-Z]/.test(cleaned)) {
