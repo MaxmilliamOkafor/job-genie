@@ -556,7 +556,7 @@ CVFormatterPerfectEnhanced.downloadText(plainTextVersion, <span class="string">'
             const lines = [];
 
             lines.push(contact.name.toUpperCase());
-            lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + ' | Open to relocation');
+            lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | '));
             lines.push('');
 
             if (summary) {

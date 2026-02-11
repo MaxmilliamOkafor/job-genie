@@ -783,12 +783,12 @@
       y += 2;
 
       // === CONTACT LINE ===
-      // Format: "+CountryCode: Number | email | City, State | open to relocation"
+      // Format: "+CountryCode: Number | email | City, State"
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const baseLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
       const contactParts = [formattedPhone, data.contact.email, baseLocation].filter(Boolean);
       if (contactParts.length > 0) {
-        const contactLine = contactParts.join(' | ') + (baseLocation ? ' | open to relocation' : '');
+        const contactLine = contactParts.join(' | ');
         addText(contactLine, false, true, font.body);
       }
 
@@ -842,7 +842,7 @@
       lines.push(data.contact.name.toUpperCase());
       const baseLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
       const contactParts = [formattedPhone, data.contact.email, baseLocation].filter(Boolean);
-      lines.push(contactParts.join(' | ') + (baseLocation ? ' | open to relocation' : ''));
+      lines.push(contactParts.join(' | '));
       lines.push([data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean).join(' | '));
       lines.push('');
 

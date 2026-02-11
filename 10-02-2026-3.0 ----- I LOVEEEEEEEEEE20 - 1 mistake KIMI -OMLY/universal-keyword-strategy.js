@@ -24,6 +24,9 @@
       'sql', 'nosql', 'tensorflow', 'pytorch', 'keras', 'pandas', 'numpy', 'scikit-learn', 'spark', 'hadoop', 'kafka', 'airflow',
       // Cloud/DevOps
       'aws', 'azure', 'gcp', 'kubernetes', 'docker', 'terraform', 'jenkins', 'ci/cd', 'circleci', 'github actions', 'ansible',
+      'devops', 'cloud security', 'cloud architecture', 'aws cloudwatch', 'aws cloudtrail', 'aws security hub',
+      'aws codepipeline', 'aws codedeploy', 'serverless', 'container orchestration', 'disaster recovery',
+      'hybrid cloud', 'automation', 'compliance', 'yaml', 'json', 'bash', 'powershell',
       // Databases
       'postgresql', 'mysql', 'mongodb', 'redis', 'elasticsearch', 'cassandra', 'dynamodb', 'snowflake', 'redshift', 'bigquery',
       // Frameworks
@@ -42,7 +45,7 @@
     // MEDIUM-LOW ROI: Soft skills — NOT listed in Skills section, woven into Work Experience bullets
     // These provide ATS value ONLY when demonstrated contextually in experience bullets
     LOW: new Set([
-      'communication', 'collaboration', 'teamwork', 'leadership', 'mentoring', 'problem-solving',
+      'communication', 'collaboration', 'teamwork', 'leadership', 'mentoring', 'mentorship', 'problem-solving',
       'critical thinking', 'attention to detail', 'time management', 'adaptability', 'flexibility',
       'innovative', 'empathy', 'prioritisation', 'conflict resolution', 'creative thinking',
       'decision-making', 'initiative', 'roadmap planning', 'negotiation', 'coaching',
@@ -91,7 +94,7 @@
   };
 
   // ============ PHASE 1: EXTRACTION + CLASSIFICATION (125ms) ============
-  function extractAndClassifyKeywords(jobDescription, maxKeywords = 35) {
+  function extractAndClassifyKeywords(jobDescription, maxKeywords = 50) {
     const startTime = performance.now();
     
     if (!jobDescription || jobDescription.length < 50) {
@@ -338,8 +341,8 @@
     // Merge with required keywords (no duplicates)
     const allSkills = [...new Set([...existingSkills, ...skillsKeywords])];
 
-    // Limit to 20 core technical skills
-    const coreSkills = allSkills.slice(0, 20);
+    // Limit to 30 core technical skills - ensure all keywords fit
+    const coreSkills = allSkills.slice(0, 30);
 
     // Format as comma-separated, single line (Arial 10pt format)
     const formattedSkills = `${skillsHeader}\n${coreSkills.join(', ')}`;

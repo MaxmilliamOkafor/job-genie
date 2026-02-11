@@ -175,7 +175,7 @@
 
       return {
         name,
-        contactLine: contactParts.join(' | ') + (cleanLocation ? ' | open to relocation' : ''),
+        contactLine: contactParts.join(' | '),
         linksLine: linkParts.join(' | ')
       };
     },

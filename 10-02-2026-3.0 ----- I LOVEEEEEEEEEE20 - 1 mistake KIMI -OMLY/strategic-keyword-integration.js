@@ -87,7 +87,7 @@
       'sprint', 'backlog', 'retrospective', 'standup', 'iteration'
     ]),
     soft_skill: new Set([
-      'leadership', 'communication', 'collaboration', 'teamwork', 'mentoring',
+      'leadership', 'communication', 'collaboration', 'teamwork', 'mentoring', 'mentorship',
       'problem-solving', 'critical thinking', 'adaptability', 'flexibility',
       'stakeholder management', 'cross-functional', 'interpersonal',
       'empathy', 'prioritisation', 'time management', 'conflict resolution',
@@ -462,6 +462,7 @@
         'collaboration': ['in close collaboration with', 'fostering collaboration across'],
         'teamwork': ['through cross-team collaboration', 'fostering teamwork across'],
         'mentoring': ['while mentoring junior team members', 'including mentoring and coaching'],
+        'mentorship': ['providing mentorship to team members', 'through active mentorship and guidance'],
         'problem-solving': ['applying structured problem-solving', 'through systematic problem-solving'],
         'critical thinking': ['applying critical thinking to', 'through critical analysis and'],
         'adaptability': ['demonstrating adaptability in', 'with adaptability to evolving'],
