@@ -152,11 +152,14 @@
         }
       }
 
-      // Parse from CV text if structured data is missing
-      if (cvText && data.experience.length === 0) {
+      // CRITICAL: ALWAYS parse tailored CV text for experience/summary content
+      // The cvText parameter contains the TAILORED version (keyword-injected by tailor-universal.js)
+      // while candidateData contains the ORIGINAL untailored data from the profile API.
+      // We must prefer the tailored text for experience bullets and summary.
+      if (cvText) {
         const parsed = this.parseCVText(cvText);
-        // MERGE parsed data with existing candidateData instead of overwriting
-        if (parsed.summary && !data.summary) data.summary = parsed.summary;
+        // ALWAYS use tailored CV text for summary and experience (these have keyword injection)
+        if (parsed.summary) data.summary = parsed.summary;
         if (parsed.experience?.length) data.experience = parsed.experience;
         if (parsed.education?.length && !data.education?.length) data.education = parsed.education;
         // Merge skills (keep candidateData skills + add parsed skills)

@@ -3737,55 +3737,11 @@ class ATSTailor {
           }
 
           if (atsPackage.cvBase64) return; // Only return if PDF was actually generated
+          // If no cvBase64 was returned, fall through to Priority 2/3
+          console.warn('[ATS Tailor] OpenResume returned no CV PDF, falling through to P2/P3');
         } catch (p1Error) {
           console.warn('[ATS Tailor] OpenResume P1 failed, falling through to P2/P3:', p1Error.message);
         }
-        console.log('[ATS Tailor] Using OpenResume Generator for ATS-perfect PDFs...');
-        
-        const atsPackage = await window.OpenResumeGenerator.generateATSPackage(
-          this.generatedDocuments.cv,
-          this.generatedDocuments.keywords || {},
-          {
-            title: this.currentJob?.title || '',
-            company: this.currentJob?.company || '',
-            location: tailoredLocation
-          },
-          {
-            firstName: candidateData.first_name,
-            lastName: candidateData.last_name,
-            email: candidateData.email || this.session?.user?.email,
-            phone: candidateData.phone,
-            linkedin: candidateData.linkedin,
-            github: candidateData.github,
-            portfolio: candidateData.portfolio,
-            professionalExperience: candidateData.professional_experience || [],
-            relevantProjects: candidateData.relevant_projects || [],
-            education: candidateData.education,
-            skills: candidateData.skills,
-            certifications: candidateData.certifications,
-            summary: candidateData.ats_strategy,
-            city: tailoredLocation
-          }
-        );
-
-        if (atsPackage.cvBase64) {
-          this.generatedDocuments.cvPdf = atsPackage.cvBase64;
-          this.generatedDocuments.cvFileName = atsPackage.cvFilename;
-          this.generatedDocuments.tailoredLocation = tailoredLocation;
-          console.log('[ATS Tailor] ✅ OpenResume CV generated:', atsPackage.cvFilename);
-        }
-
-        if (atsPackage.coverBase64) {
-          this.generatedDocuments.coverPdf = atsPackage.coverBase64;
-          this.generatedDocuments.coverFileName = atsPackage.coverFilename;
-          console.log('[ATS Tailor] ✅ OpenResume Cover Letter generated:', atsPackage.coverFilename);
-        }
-
-        if (atsPackage.matchScore) {
-          this.generatedDocuments.matchScore = atsPackage.matchScore;
-        }
-
-        return;
       }
 
       // PRIORITY 2: Use PDFATSPerfect if available
