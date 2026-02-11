@@ -384,8 +384,10 @@ serve(async (req) => {
       const contactParts: string[] = [];
       if (sanitizedData.personalInfo.phone) contactParts.push(sanitizedData.personalInfo.phone);
       if (sanitizedData.personalInfo.email) contactParts.push(sanitizedData.personalInfo.email);
-      if (sanitizedData.personalInfo.location) contactParts.push(sanitizedData.personalInfo.location);
-      contactParts.push("Open to relocation");
+      if (sanitizedData.personalInfo.location) {
+        const cleanLoc = sanitizedData.personalInfo.location.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+        if (cleanLoc) contactParts.push(cleanLoc);
+      }
 
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(" | ");
@@ -982,8 +984,10 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       if (pInfo.phone) contactParts.push(pInfo.phone);
       if (pInfo.email) contactParts.push(pInfo.email);
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
-      if (locationHeader) contactParts.push(locationHeader);
-      contactParts.push("Open to relocation");
+      if (locationHeader) {
+        const cleanLocHeader = locationHeader.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+        if (cleanLocHeader) contactParts.push(cleanLocHeader);
+      }
 
       if (contactParts.length > 0) {
         drawWrappedText(contactParts.join(" | "), MARGIN, 10, helvetica);
@@ -1538,18 +1542,19 @@ async function handleRawContentRequest(body: {
 
     // CONTACT LINE
     if (contactLine) {
-      const parts = contactLine.split("|").map((p) => p.trim());
+      // Strip any "open to relocation" from the contact line first
+      const cleanedContactLine = contactLine.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const parts = cleanedContactLine.split("|").map((p) => p.trim()).filter(Boolean);
       // Replace location with tailoredLocation if provided
       if (parts.length >= 3 && tailoredLocation) {
-        // Find and replace location (typically index 2)
+        const cleanTailoredLoc = tailoredLocation.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
         for (let i = 0; i < parts.length; i++) {
           if (
             !parts[i].includes("@") &&
             !parts[i].includes("+") &&
-            !/^\d/.test(parts[i]) &&
-            !/relocation/i.test(parts[i])
+            !/^\d/.test(parts[i])
           ) {
-            parts[i] = tailoredLocation;
+            parts[i] = cleanTailoredLoc || parts[i];
             break;
           }
         }
@@ -1923,7 +1928,7 @@ async function handleRawContentRequest(body: {
       JSON.stringify({
         pdf: base64Pdf,
         fileName: finalFileName,
-        location: tailoredLocation || "Open to relocation",
+        location: tailoredLocation || "",
         pages: pdfDoc.getPageCount(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

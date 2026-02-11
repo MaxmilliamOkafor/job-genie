@@ -381,7 +381,7 @@ function extractJobCity(jdLocation: string | undefined, jdDescription: string, j
   return null;
 }
 
-// Smart location logic - formats as "[CITY] | open to relocation" for CV ONLY
+// Smart location logic - formats as "[CITY]" for CV header (no relocation suffix)
 function getSmartLocation(
   jdLocation: string | undefined,
   jdDescription: string,
@@ -393,15 +393,14 @@ function getSmartLocation(
   // Priority 1: Use city pre-extracted by extension if provided
   if (preExtractedCity && preExtractedCity.trim().length > 0) {
     console.log(`Using pre-extracted city from extension: ${preExtractedCity}`);
-    return `${preExtractedCity} | open to relocation`;
+    return preExtractedCity.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
   }
 
   // Priority 2: Extract city from job listing
   const extractedCity = extractJobCity(jdLocation, jdDescription, jobUrl);
 
-  // If we found a city in the job listing, use it with relocation suffix
   if (extractedCity) {
-    return `${extractedCity} | open to relocation`;
+    return extractedCity;
   }
 
   // Check if job is remote
@@ -410,15 +409,15 @@ function getSmartLocation(
     if (profileCity && profileCountry) {
       return `${profileCity} | Remote`;
     }
-    return "Remote | open to relocation";
+    return "Remote";
   }
 
-  // Fallback to profile location with relocation suffix
+  // Fallback to profile location
   if (profileCity) {
-    return `${profileCity} | open to relocation`;
+    return profileCity;
   }
 
-  return "Remote | open to relocation";
+  return "Remote";
 }
 
 // PART 3A: Comprehensive location extraction from job data
@@ -1503,21 +1502,21 @@ function extractJobscanKeywords(
   };
 
   // Extract with higher limits for better ATS coverage
-  const hardSkills = extractMatches(hardSkillPatterns).slice(0, 25);
-  const softSkills = extractMatches(softSkillPatterns).slice(0, 8);
-  const tools = extractMatches(toolPatterns).slice(0, 10);
+  const hardSkills = extractMatches(hardSkillPatterns).slice(0, 30);
+  const softSkills = extractMatches(softSkillPatterns).slice(0, 10);
+  const tools = extractMatches(toolPatterns).slice(0, 15);
   const titles = extractMatches(titlePatterns).slice(0, 5);
   const certifications = extractMatches(certificationPatterns).slice(0, 5);
   const responsibilities = extractMatches(responsibilityPatterns).slice(0, 10);
 
-  // Combined keywords prioritized for ATS scoring
+  // Combined keywords prioritized for ATS scoring - increased cap for full coverage
   const allKeywords = [
-    ...hardSkills, // Primary skills - most important
-    ...titles, // Job title matches
-    ...certifications, // Certifications are high value
-    ...tools, // Tools/platforms
-    ...softSkills, // Soft skills for culture fit
-  ].slice(0, 35);
+    ...hardSkills,
+    ...titles,
+    ...certifications,
+    ...tools,
+    ...softSkills,
+  ].slice(0, 50);
 
   return { hardSkills, softSkills, tools, titles, certifications, responsibilities, allKeywords };
 }
@@ -1847,19 +1846,20 @@ KEYWORD INTEGRATION STRATEGY (MANDATORY):
 - MISSING KEYWORDS THAT MUST BE ADDED: ${matchResult.missing.join(", ")}
 
 HOW TO ADD MISSING KEYWORDS NATURALLY:
-1. Skills Section: Add missing hard skills if candidate has related experience
-2. Summary: Weave in 3-5 missing keywords naturally
-3. Work Experience Bullets: Integrate keywords into achievement descriptions
+1. TECHNICAL PROFICIENCIES Section: MUST contain ALL hard skills and tools from the JD as a single comma-separated list (minimum 15-25 keywords). This is the PRIMARY safety net - every JD keyword must appear here.
+2. Summary: Weave in 5-8 top missing keywords naturally
+3. Work Experience Bullets: Integrate keywords into achievement descriptions - each bullet should contain 2-3 JD keywords
 4. Cover Letter: Use missing keywords when describing qualifications
 5. If keyword is a technology: mention it as "experience with" or "proficient in"
 6. If keyword is a soft skill: demonstrate it through an achievement example
 
 ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES - Only tailor the bullet points
-2. Location in CV header MUST be: "${smartLocation}"
+2. Location in CV header MUST be: "${smartLocation}" (NO "open to relocation" suffix)
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
-5. EVERY keyword in the JD should appear at least once in the tailored resume
+5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
+6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
 
 === CRITICAL: PROFESSIONAL SUMMARY MUST NOT DUPLICATE HEADER ===
 The resume header already contains: Name, Phone, Email, Location, LinkedIn, GitHub, Portfolio URLs.
@@ -1959,10 +1959,10 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
       
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
-      ███ END DUPLICATION BAN ███
-   - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics
+   ███ END DUPLICATION BAN ███
+   - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet.
    - Education
-   - Skills: Prioritize JD keywords (list as: Python, AWS, React, etc. - NO years of experience)
+   - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
    - Certifications
 
 2) CREATE COVER LETTER:
@@ -2032,8 +2032,8 @@ ${
       }
     ],
     "skills": {
-      "primary": ${JSON.stringify(jdKeywords.hardSkills.slice(0, 10))},
-      "secondary": ${JSON.stringify(jdKeywords.tools)}
+      "primary": ${JSON.stringify([...jdKeywords.hardSkills, ...jdKeywords.tools])},
+      "secondary": ${JSON.stringify(jdKeywords.softSkills)}
     },
     "certifications": ${JSON.stringify(userProfile.certifications || [])}
   },
@@ -2081,8 +2081,8 @@ ${
         endpoint: "https://api.openai.com/v1/chat/completions",
         model: "gpt-4o-mini",
         providerName: "OpenAI",
-        temperature: 0.5,
-        maxTokens: 3000,
+        temperature: 0.4,
+        maxTokens: 3500,
         streamChunks: false,
       };
     };
