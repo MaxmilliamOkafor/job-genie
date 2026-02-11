@@ -249,7 +249,7 @@
         data.skills = this.parseSkills(tailoredContent.skills || candidateData?.skills);
         data.certifications = this.parseCertifications(tailoredContent.certifications || candidateData?.certifications);
       }
-@@ -284,59 +285,69 @@
+
     },
 
     // ============ EXTRACT CONTACT INFO ============

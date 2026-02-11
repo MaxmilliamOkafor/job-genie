@@ -707,7 +707,7 @@
     // UPDATED: UK spelling, no banned words, anti-AI detection
     enhanceSummary(summary, keywords) {
       // ROBUST: Ensure keywords is always an array
-@@ -690,51 +733,51 @@
+
       if (missing.length > 0) {
         const injection = `. Expertise includes ${missing.slice(0, 3).join(', ')}`;
         if (result.endsWith('.')) {
@@ -759,7 +759,7 @@
 
       // Natural injection phrases - UPDATED: No banned words (removed leveraging, utilizing)
       const phrases = [
-@@ -941,54 +984,54 @@
+
         const normalised = title.toUpperCase().trim();
         if (renderedSections.has(normalised)) {
           console.warn(`[OpenResume] BLOCKED duplicate section header: "${title}"`);
@@ -814,7 +814,7 @@
         'employment history', 'career history', 'employment',
         'work history', 'positions held', 'career', 'roles',
         'education', 'skills', 'certifications', 'projects', 'achievements'
-@@ -1058,52 +1101,53 @@
+
           addText(data.skills.join(', '), false, false, font.body);
           y += 4;
         }
@@ -868,7 +868,7 @@
         });
         lines.push('');
       }
-@@ -1172,142 +1216,150 @@
+
       };
 
       const addCenteredText = (text, isBold = false, size = font.body) => {
