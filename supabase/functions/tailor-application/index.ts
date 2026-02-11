@@ -1509,16 +1509,41 @@ function extractJobscanKeywords(
   const certifications = extractMatches(certificationPatterns).slice(0, 5);
   const responsibilities = extractMatches(responsibilityPatterns).slice(0, 10);
 
-  // Combined keywords prioritized for ATS scoring - increased cap for full coverage
+  // BLACKLIST: Meta/URL/nonsensical terms that should NEVER appear as skills
+  const SKILL_BLACKLIST = new Set([
+    "cv", "https", "http", "www", "html", "url", "pdf", "doc", "docx",
+    "com", "org", "net", "io", "co", "uk", "de", "fr", "ie",
+    "gmail", "email", "mailto", "tel", "fax",
+    "linkedin", "github", "website", "portfolio", "blog",
+    "click", "apply", "submit", "download", "upload", "login", "signin",
+    "job", "jobs", "career", "careers", "vacancy", "vacancies",
+    "description", "requirements", "qualifications", "responsibilities",
+    "about", "company", "team", "role", "position", "candidate",
+    "salary", "benefits", "perks", "compensation",
+    "true", "false", "null", "undefined", "nan",
+    "the", "and", "for", "with", "this", "that", "from", "are", "was",
+    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+  ]);
+
+  const filterBlacklisted = (keywords: string[]): string[] =>
+    keywords.filter(k => !SKILL_BLACKLIST.has(k.toLowerCase().trim()));
+
+  const cleanHardSkills = filterBlacklisted(hardSkills);
+  const cleanSoftSkills = filterBlacklisted(softSkills);
+  const cleanTools = filterBlacklisted(tools);
+  const cleanTitles = filterBlacklisted(titles);
+  const cleanCertifications = filterBlacklisted(certifications);
+
+  // Combined keywords prioritised for ATS scoring - increased cap for full coverage
   const allKeywords = [
-    ...hardSkills,
-    ...titles,
-    ...certifications,
-    ...tools,
-    ...softSkills,
+    ...cleanHardSkills,
+    ...cleanTitles,
+    ...cleanCertifications,
+    ...cleanTools,
+    ...cleanSoftSkills,
   ].slice(0, 50);
 
-  return { hardSkills, softSkills, tools, titles, certifications, responsibilities, allKeywords };
+  return { hardSkills: cleanHardSkills, softSkills: cleanSoftSkills, tools: cleanTools, titles: cleanTitles, certifications: cleanCertifications, responsibilities, allKeywords };
 }
 
 // Calculate accurate match score with fuzzy matching and synonym detection
