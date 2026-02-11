@@ -10,7 +10,7 @@
     TARGET_SCORE: 95,
     MAX_KEYWORDS_SUMMARY: 8,
     MAX_KEYWORDS_EXPERIENCE: 25, // Increased for better keyword density
-    MAX_KEYWORDS_SKILLS: 15,
+    MAX_KEYWORDS_SKILLS: 30,
     YIELD_INTERVAL: 5,
     // NEW: Target keyword repetition for high/medium priority keywords
     HIGH_PRIORITY_MIN_COUNT: 3,    // Repeat high-priority keywords 3-5 times
@@ -28,7 +28,7 @@
     'time management', 'adaptability', 'flexibility', 'creativity', 'innovation',
     'interpersonal', 'prioritisation', 'empathy', 'conflict resolution',
     'creative thinking', 'decision-making', 'roadmap planning', 'negotiation',
-    'coaching', 'mentoring', 'facilitation', 'delegation', 'strategic thinking',
+    'coaching', 'mentoring', 'mentorship', 'facilitation', 'delegation', 'strategic thinking',
     'relationship building', 'influence', 'change management', 'risk management',
     'process improvement', 'analytical thinking', 'attention to detail',
     'organisational skills', 'customer focus', 'client management',
@@ -607,11 +607,12 @@
     stats.summary = summaryResult.injected.length;
     allInjected.push(...summaryResult.injected);
 
-    // SMART EXPERIENCE ENHANCEMENT - technical + soft skills go to relevant bullets
+    // SMART EXPERIENCE ENHANCEMENT - ALL keywords (high + medium + low + soft skills) go to experience bullets
     await yieldToUI();
     const experienceKeywords = [
       ...(keywords.highPriority || []).filter(k => !allInjected.includes(k)),
       ...(keywords.mediumPriority || []),
+      ...(keywords.lowPriority || []),
       ...softSkillsForExperience // Include soft skills in experience bullets
     ];
     // NEW: Pass priority info for keyword repetition targeting (3-5x high, 2-3x medium)
@@ -641,10 +642,53 @@
     stats.skills = skillsResult.injected.length;
     allInjected.push(...skillsResult.injected);
 
+    // FINAL CATCH-ALL PASS: Force-inject any remaining missing keywords
+    // This guarantees 100% of extracted keywords appear in the CV
+    await yieldToUI();
+    const cvAfterFirstPass = reconstructCV(parsed, enhancedSections);
+    const cvLowerCheck = cvAfterFirstPass.toLowerCase();
+    const stillMissing = allCleanKeywords.filter(kw => {
+      const kwLower = kw.toLowerCase();
+      return !new RegExp(`\\b${escapeRegex(kw)}\\b`, 'i').test(cvLowerCheck) && !cvLowerCheck.includes(kwLower);
+    });
+
+    if (stillMissing.length > 0) {
+      console.log('[TailorUniversal] Catch-all pass: ' + stillMissing.length + ' keywords still missing, force-injecting');
+
+      // Split remaining: technical go to skills, soft go to experience
+      const missingSoft = stillMissing.filter(kw => SOFT_SKILLS_FOR_EXPERIENCE.has(kw.toLowerCase()));
+      const missingTechnical = stillMissing.filter(kw => !SOFT_SKILLS_FOR_EXPERIENCE.has(kw.toLowerCase()));
+
+      // Append missing technical keywords to skills section
+      if (missingTechnical.length > 0) {
+        const currentSkills = enhancedSections.skills || parsed.sections.skills || '';
+        const formattedNew = missingTechnical.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ');
+        if (currentSkills.trim().length > 0) {
+          enhancedSections.skills = currentSkills.trim() + ', ' + formattedNew;
+        } else {
+          enhancedSections.skills = 'SKILLS\n' + formattedNew;
+        }
+        allInjected.push(...missingTechnical);
+        stats.skills += missingTechnical.length;
+      }
+
+      // Force-inject missing soft skills into experience bullets
+      if (missingSoft.length > 0 && enhancedSections.experience) {
+        const softResult = enhanceExperience(
+          enhancedSections.experience,
+          missingSoft,
+          { highPriority: [], mediumPriority: missingSoft, lowPriority: [] }
+        );
+        enhancedSections.experience = softResult.enhanced;
+        allInjected.push(...softResult.injected);
+        stats.experience += softResult.injected.length;
+      }
+    }
+
     const tailoredCV = reconstructCV(parsed, enhancedSections);
 
-    const finalMatch = global.ReliableExtractor 
-      ? global.ReliableExtractor.matchKeywords(tailoredCV, keywordList)
+    const finalMatch = global.ReliableExtractor
+      ? global.ReliableExtractor.matchKeywords(tailoredCV, allCleanKeywords)
       : { matchScore: Math.min(98, initialMatch.matchScore + (allInjected.length * 3)) };
 
     stats.total = allInjected.length;

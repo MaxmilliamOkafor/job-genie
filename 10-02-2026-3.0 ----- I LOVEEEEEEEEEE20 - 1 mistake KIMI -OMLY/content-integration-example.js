@@ -59,7 +59,7 @@ async function generateCVHeader(profile, jobInfo) {
   const parts = [
     profile.fullName,
     location,
-    profile.title || 'Open to relocation'
+    profile.title
   ].filter(Boolean);
   
   return parts.join(' | ');

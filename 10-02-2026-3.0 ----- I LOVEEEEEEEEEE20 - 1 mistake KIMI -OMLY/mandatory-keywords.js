@@ -10,11 +10,11 @@
   const MANDATORY_KEYWORDS = {
     // Programming Languages and Frameworks
     programmingLanguages: new Set([
-      'java', 'python', 'javascript', 'typescript', 'c#', 'c++', 'c', 'go', 'golang', 
-      'rust', 'swift', 'kotlin', 'dart', 'ruby', 'php', 'perl', 'scala', 'r', 'matlab', 
-      'lua', 'elixir', 'haskell', 'fortran', 'assembly', 'solidity', 'sql', 'pl/sql', 
-      't-sql', 'nosql', 'cypher', 'gremlin', 'html5', 'xml', 'xhtml', 'css3', 'scss', 
-      'sass', 'less', 'stylus', 'postcss'
+      'java', 'python', 'javascript', 'typescript', 'c#', 'c++', 'c', 'go', 'golang',
+      'rust', 'swift', 'kotlin', 'dart', 'ruby', 'php', 'perl', 'scala', 'r', 'matlab',
+      'lua', 'elixir', 'haskell', 'fortran', 'assembly', 'solidity', 'sql', 'pl/sql',
+      't-sql', 'nosql', 'cypher', 'gremlin', 'html5', 'xml', 'xhtml', 'css3', 'scss',
+      'sass', 'less', 'stylus', 'postcss', 'yaml', 'json', 'bash', 'powershell'
     ]),
     
     frontendFrameworks: new Set([
@@ -36,13 +36,18 @@
     
     // Cloud, DevOps, and Infrastructure
     cloudPlatforms: new Set([
-      'aws', 'amazon web services', 'ec2', 'ecs', 'eks', 'lambda', 's3', 'glacier', 
-      'rds', 'dynamodb', 'elasticache', 'redshift', 'emr', 'sagemaker', 'step functions', 
-      'api gateway', 'cloudformation', 'cloudwatch', 'x-ray', 'guardduty', 'macie', 
-      'aws cdk', 'azure', 'azure ad', 'app service', 'azure functions', 'aks', 
-      'cosmos db', 'cosmosdb', 'blob storage', 'key vault', 'logic apps', 'service bus', 
-      'azure devops', 'gcp', 'google cloud platform', 'google cloud', 'gce', 'gke', 
-      'cloud run', 'cloud sql', 'firestore', 'pub/sub', 'pubsub', 'dataflow', 
+      'aws', 'amazon web services', 'ec2', 'ecs', 'eks', 'lambda', 's3', 'glacier',
+      'rds', 'dynamodb', 'elasticache', 'redshift', 'emr', 'sagemaker', 'step functions',
+      'api gateway', 'cloudformation', 'cloudwatch', 'aws cloudwatch', 'x-ray', 'guardduty', 'macie',
+      'aws cdk', 'aws cloudtrail', 'aws security hub', 'aws codepipeline', 'aws codedeploy',
+      'aws codebuild', 'aws config', 'aws ai/ml services', 'aws certified solutions architect',
+      'cloud security', 'cloud architecture', 'disaster recovery', 'serverless',
+      'serverless architectures', 'container orchestration', 'cloud cost optimization',
+      'performance tuning',
+      'azure', 'azure ad', 'app service', 'azure functions', 'aks',
+      'cosmos db', 'cosmosdb', 'blob storage', 'key vault', 'logic apps', 'service bus',
+      'azure devops', 'gcp', 'google cloud platform', 'google cloud', 'gce', 'gke',
+      'cloud run', 'cloud sql', 'firestore', 'pub/sub', 'pubsub', 'dataflow',
       'composer', 'artifact registry', 'secret manager', 'cloud build'
     ]),
     
@@ -57,11 +62,11 @@
     ]),
     
     cicd: new Set([
-      'jenkins', 'github actions', 'gitlab ci/cd', 'gitlab ci', 'circleci', 'travis ci', 
-      'concourse', 'tekton', 'buildkite', 'spinnaker', 'argo workflows', 'ci/cd', 
-      'ci/cd pipeline', 'continuous integration', 'continuous deployment', 'gitops', 
-      'blue-green deployment', 'canary releases', 'feature flags', 'launchdarkly', 
-      'split.io', 'chaos engineering', 'gremlin', 'litmus'
+      'jenkins', 'github actions', 'gitlab ci/cd', 'gitlab ci', 'circleci', 'travis ci',
+      'concourse', 'tekton', 'buildkite', 'spinnaker', 'argo workflows', 'ci/cd',
+      'ci/cd pipeline', 'continuous integration', 'continuous deployment', 'gitops',
+      'blue-green deployment', 'canary releases', 'feature flags', 'launchdarkly',
+      'split.io', 'chaos engineering', 'gremlin', 'litmus', 'devops', 'automation'
     ]),
     
     versionControl: new Set([
@@ -189,8 +194,8 @@
     ]),
     
     compliance: new Set([
-      'soc 2', 'soc 2 type ii', 'iso 27001', 'pci dss', 'hipaa', 'fedramp', 
-      'csa star', 'gdpr', 'ccpa', 'lgpd', 'pipeda', 'compliance frameworks'
+      'soc 2', 'soc 2 type ii', 'iso 27001', 'pci dss', 'hipaa', 'fedramp',
+      'csa star', 'gdpr', 'ccpa', 'lgpd', 'pipeda', 'compliance frameworks', 'compliance'
     ]),
     
     // Frontend, Mobile, and UI/UX
@@ -262,8 +267,8 @@
     ]),
     
     leadership: new Set([
-      'cross-functional', 'cross functional', 'cross-functional team', 
-      'servant leadership', 'coaching', 'mentoring', 'stakeholder alignment', 
+      'cross-functional', 'cross functional', 'cross-functional team',
+      'servant leadership', 'coaching', 'mentoring', 'mentorship', 'stakeholder alignment',
       'requirements engineering', 'user stories', 'acceptance criteria', 
       'bdd', 'given-when-then', 'technical debt', 'refactoring', 'legacy code', 
       'innovation', 'hackathons', 'design thinking', 'lean startup', 'mvp', 
@@ -372,7 +377,7 @@
     
     // Prepend mandatory keywords to high priority
     const highPriority = [
-      ...newMandatory.slice(0, 10), // Up to 10 mandatory keywords
+      ...newMandatory.slice(0, 20), // Up to 20 mandatory keywords
       ...(extractedKeywords.highPriority || [])
     ];
     
@@ -380,12 +385,12 @@
     const all = [
       ...mandatoryFromJD,
       ...(extractedKeywords.all || []).filter(kw => !mandatorySet.has(kw.toLowerCase()))
-    ].slice(0, 35); // Keep max 35
+    ].slice(0, 50); // Keep max 50 - ensure ALL extracted keywords can be included
     
     return {
       ...extractedKeywords,
       all,
-      highPriority: highPriority.slice(0, 15),
+      highPriority: highPriority.slice(0, 25),
       mediumPriority: extractedKeywords.mediumPriority || [],
       lowPriority: extractedKeywords.lowPriority || [],
       mandatoryFound: mandatoryFromJD.length,

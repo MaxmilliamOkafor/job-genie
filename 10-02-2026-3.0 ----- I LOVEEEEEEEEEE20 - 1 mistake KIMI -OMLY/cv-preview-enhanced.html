@@ -459,7 +459,7 @@
                     <div class="cv-preview-container">
                         <div class="cv-name">JOHN DOE</div>
                         <div class="cv-contact">
-                            <div>john.doe@email.com | New York, NY | Open to relocation</div>
+                            <div>john.doe@email.com | New York, NY</div>
                             <div>linkedin.com/in/johndoe | github.com/johndoe</div>
                         </div>
 
@@ -680,7 +680,7 @@
                 <div class="cv-preview-container">
                     <div class="cv-name">${escapeHtml(contact.name.toUpperCase())}</div>
                     <div class="cv-contact">
-                        <div>${escapeHtml(contact.email)} | ${escapeHtml(String(contact.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim())} | Open to relocation</div>
+                        <div>${escapeHtml(contact.email)} | ${escapeHtml(String(contact.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim())}</div>
                         ${contact.linkedin ? `<div>${escapeHtml(contact.linkedin)}${contact.github ? ` | ${escapeHtml(contact.github)}` : ''}</div>` : ''}
                     </div>
                     
@@ -770,7 +770,7 @@
             // Name and contact
             lines.push(contact.name.toUpperCase());
             const cleanLocTxt = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-            lines.push([contact.phone, contact.email, cleanLocTxt].filter(Boolean).join(' | ') + (cleanLocTxt ? ' | Open to relocation' : ''));
+            lines.push([contact.phone, contact.email, cleanLocTxt].filter(Boolean).join(' | '));
             if (contact.linkedin || contact.github) {
                 lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
             }
