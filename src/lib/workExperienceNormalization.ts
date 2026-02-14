@@ -148,8 +148,7 @@ export const extractDatesFromTitle = (title: string): { cleanTitle: string; star
 };
 
 /**
- * Format extracted dates into a clean "MM/YYYY – MM/YYYY" or "MM/YYYY – Present" string.
- * ATS-preferred format: MM/YYYY (e.g. 01/2023 – Present).
+ * Format extracted dates into a clean "YYYY – YYYY" or "YYYY – Present" string
  */
 export const formatDateRange = (startDate?: string, endDate?: string, title?: string): string => {
   // First try to extract from title if no explicit dates
@@ -167,43 +166,20 @@ export const formatDateRange = (startDate?: string, endDate?: string, title?: st
     return seg;
   };
 
-  /**
-   * Convert a raw date string to MM/YYYY format.
-   * Handles: "2023-01", "01/2023", "Jan 2023", "January 2023", "2023", "Present".
-   */
-  const toMMYYYY = (raw?: string): string => {
+  const extractYear = (raw?: string) => {
     const date = normalise(raw);
     if (!date) return '';
-    if (/present|current/i.test(date)) return 'Present';
-
-    // Already MM/YYYY
-    const mmyyyyMatch = date.match(/^(\d{1,2})\/(\d{4})$/);
-    if (mmyyyyMatch) {
-      return `${mmyyyyMatch[1].padStart(2, '0')}/${mmyyyyMatch[2]}`;
-    }
-
-    // YYYY-MM
-    const yymm = date.match(/^((?:19|20)\d{2})[-\/](\d{1,2})$/);
-    if (yymm) return `${yymm[2].padStart(2, '0')}/${yymm[1]}`;
-
-    // Month name YYYY  (e.g. "Jan 2023" or "January 2023")
-    const months: Record<string, string> = {
-      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
-    };
-    const monthName = date.match(/^([A-Za-z]+)\s*(\d{4})$/);
-    if (monthName) {
-      const m = months[monthName[1].slice(0, 3).toLowerCase()];
-      if (m) return `${m}/${monthName[2]}`;
-    }
-
-    // Bare year – fall back to just the year
-    const yearOnly = date.match(/\b(19|20)\d{2}\b/);
-    return yearOnly ? yearOnly[0] : date;
+    if (/present/i.test(date)) return 'Present';
+    const yearMatch = date.match(/\b(19|20)\d{2}\b/);
+    return yearMatch ? yearMatch[0] : date;
   };
 
-  const start = toMMYYYY(startDate);
-  const end = toMMYYYY(endDate);
+  const startRaw = normalise(startDate);
+  const endRaw = normalise(endDate);
+  const startHasPresent = /present/i.test(startRaw);
+
+  const start = extractYear(startRaw);
+  const end = endRaw ? extractYear(endRaw) : (startHasPresent ? 'Present' : '');
 
   if (!start && !end) return '';
   if (!end || start === end) return start;

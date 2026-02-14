@@ -109,7 +109,7 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
         </div>
         
         <p className="text-xs text-muted-foreground mt-3 text-center">
-          Format: <span className="font-semibold">Company</span> (bold, Line 1) + Title with dates MM/YYYY (Line 2)
+          Format: <span className="font-semibold">Company</span> (bold, Line 1) + Title with dates (Line 2)
         </p>
       </CardContent>
     </Card>
