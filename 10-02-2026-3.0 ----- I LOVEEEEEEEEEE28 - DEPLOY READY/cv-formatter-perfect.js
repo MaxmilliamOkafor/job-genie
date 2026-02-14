@@ -250,12 +250,12 @@
     },
 
     // ============ DATE NORMALISATION HELPERS ============
-    // Normalise dates to "YYYY – YYYY" format with en dash and spaces
+    // Normalise dates to "MM/YYYY – MM/YYYY" ATS-preferred format
     normaliseDates(dateStr) {
       if (!dateStr) return '';
       return String(dateStr)
         .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
+        .replace(/(?<!\d)-(?!\d)/g, '–')  // hyphen to en dash (avoid date hyphens)
         .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
     },
 
@@ -264,46 +264,56 @@
     cleanCompanyName(name) {
       if (!name) return '';
       return name
-        .replace(/\s*\([^)]*\)\s*/g, ' ')  // Remove parenthetical expressions
-        .replace(/\s+/g, ' ')               // Collapse whitespace
+        .replace(/\s*\([^)]*\)\s*/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
     },
 
     // ============ DATE PATTERN FOR CLEANING ============
-    // Matches date patterns like: 2023-01 - Present, Jan 2023 - Dec 2024, 2021-2023, etc.
     DATE_PATTERNS: [
       /\d{4}[-\/]\d{1,2}\s*[-–—]\s*(Present|\d{4}[-\/]\d{1,2}|\d{4})/gi,
+      /\d{1,2}\/\d{4}\s*[-–—]\s*(Present|\d{1,2}\/\d{4})/gi,
       /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s*\d{4}\s*[-–—]\s*(Present|\w+\.?\s*\d{4})/gi,
       /\b\d{4}\s*[-–—]\s*(Present|\d{4})\b/gi,
       /\b(Present|Current)\b/gi
     ],
 
-    // Strip date patterns from a string
     stripDatesFromField(fieldValue) {
       if (!fieldValue) return '';
       let cleaned = fieldValue;
       for (const pattern of this.DATE_PATTERNS) {
         cleaned = cleaned.replace(pattern, '');
       }
-      // Clean up leftover separators and whitespace
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
-    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
-    toYearOnly(dateStr) {
+    // Convert date to MM/YYYY format (ATS-preferred)
+    toMMYYYY(dateStr) {
       if (!dateStr) return '';
-      // Extract all 4-digit years
-      const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present/i.test(dateStr);
-      
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
-      }
-      return this.normaliseDates(dateStr); // Return normalised if no years found
+      const s = String(dateStr).trim();
+      if (/present|current/i.test(s)) return 'Present';
+      // Already MM/YYYY
+      const mmyyyy = s.match(/^(\d{1,2})\/(\d{4})$/);
+      if (mmyyyy) return mmyyyy[1].padStart(2, '0') + '/' + mmyyyy[2];
+      // YYYY-MM
+      const yymm = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+      if (yymm) return yymm[2].padStart(2, '0') + '/' + yymm[1];
+      // Month name
+      const months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+      const mn = s.match(/^([A-Za-z]+)\s*(\d{4})$/);
+      if (mn) { const m = months[mn[1].slice(0,3).toLowerCase()]; if (m) return m + '/' + mn[2]; }
+      // Bare year
+      const yr = s.match(/\b((?:19|20)\d{2})\b/);
+      return yr ? yr[1] : s;
+    },
+
+    // Format a date range as "MM/YYYY – MM/YYYY" or "MM/YYYY – Present"
+    formatDateRange(startStr, endStr) {
+      const start = this.toMMYYYY(startStr);
+      const end = this.toMMYYYY(endStr);
+      if (!start && !end) return '';
+      if (!end || start === end) return start;
+      return start + ' – ' + end;
     },
 
     // ============ PARSE EXPERIENCE ============

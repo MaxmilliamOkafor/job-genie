@@ -180,7 +180,7 @@
         const company = (job.company || '').trim();
         const title = (job.title || '').trim();
         
-        // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
+        // Build dates - normalise to "MM/YYYY – MM/YYYY" ATS-preferred format
         let dates = job.dates || '';
         if (!dates && (job.startDate || job.endDate)) {
           const start = job.startDate || '';
@@ -188,12 +188,32 @@
           dates = start ? `${start} - ${end}` : end;
         }
         
-        // Normalise date format: replace hyphens with en dash, ensure spaces around it
-        const normalisedDates = dates ? String(dates)
-          .replace(/--/g, '–')           // double hyphen to en dash
-          .replace(/-/g, '–')            // single hyphen to en dash  
-          .replace(/\s*–\s*/g, ' – ')    // ensure spaces around en dash
-          : '';
+        // Convert to MM/YYYY format
+        const toMMYYYY = (s) => {
+          if (!s) return '';
+          s = String(s).trim();
+          if (/present|current/i.test(s)) return 'Present';
+          const mmyyyy = s.match(/^(\d{1,2})\/(\d{4})$/);
+          if (mmyyyy) return mmyyyy[1].padStart(2, '0') + '/' + mmyyyy[2];
+          const yymm = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+          if (yymm) return yymm[2].padStart(2, '0') + '/' + yymm[1];
+          const months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+          const mn = s.match(/^([A-Za-z]+)\s*(\d{4})$/);
+          if (mn) { const m = months[mn[1].slice(0,3).toLowerCase()]; if (m) return m + '/' + mn[2]; }
+          const yr = s.match(/\b((?:19|20)\d{2})\b/);
+          return yr ? yr[1] : s;
+        };
+        
+        // Parse and reformat the date range
+        let normalisedDates = '';
+        if (dates) {
+          const parts = String(dates).split(/\s*[-–—]\s*/);
+          if (parts.length >= 2) {
+            normalisedDates = toMMYYYY(parts[0]) + ' – ' + toMMYYYY(parts[parts.length - 1]);
+          } else {
+            normalisedDates = toMMYYYY(parts[0]);
+          }
+        }
         
         const location = job.location || '';
         
