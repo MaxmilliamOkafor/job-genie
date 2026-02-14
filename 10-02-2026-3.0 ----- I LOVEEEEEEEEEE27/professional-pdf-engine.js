@@ -250,18 +250,25 @@
         data.certifications = this.parseCertifications(tailoredContent.certifications || candidateData?.certifications);
       }
 
+      return data;
     },
 
     // ============ EXTRACT CONTACT INFO ============
     extractContact(data) {
-      if (!data) return { name: 'Applicant', email: '', phone: '', location: '', linkedin: '', github: '' };
+      if (!data) return { name: 'Applicant', email: '', phone: '', location: '', linkedin: '', github: '', portfolio: '' };
 
       const firstName = data.firstName || data.first_name || '';
       const lastName = data.lastName || data.last_name || '';
       const name = `${firstName} ${lastName}`.trim() || 'Applicant';
-      
+
       let location = data.city || data.location || '';
       location = this.cleanLocation(location);
+
+      // Portfolio: strip protocol prefix for cleaner display
+      let portfolio = data.portfolio || '';
+      if (portfolio) {
+        portfolio = portfolio.replace(/^https?:\/\//i, '').replace(/\/$/,'');
+      }
 
       return {
         name,
@@ -269,7 +276,8 @@
         phone: this.formatPhone(data.phone || ''),
         location,
         linkedin: this.formatLinkedIn(data.linkedin || ''),
-        github: this.formatGitHub(data.github || '')
+        github: this.formatGitHub(data.github || ''),
+        portfolio
       };
     },
 
@@ -1066,7 +1074,18 @@
       const cleanLoc2 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
       const contactParts = [contact.email, contact.phone, cleanLoc2].filter(Boolean);
       doc.text(contactParts.join('  |  '), PDF_CONFIG.margins.left, y);
-      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 20;
+      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 4;
+
+      // Portfolio link line (prominent placement for cover letter header)
+      if (contact.portfolio) {
+        doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+        doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
+        doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+        doc.text(contact.portfolio, PDF_CONFIG.margins.left, y);
+        y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 16;
+      } else {
+        y += 16;
+      }
 
       // Date
       doc.setTextColor(...PDF_CONFIG.colors.black);
