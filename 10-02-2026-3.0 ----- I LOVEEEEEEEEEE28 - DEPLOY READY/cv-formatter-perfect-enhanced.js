@@ -519,14 +519,12 @@
           // The edge function + popup.js validation ensures these fields are correct
           // If there's a genuine data issue, it should be fixed in the user's profile
           
-          // Normalise dates to prevent duplication
-          const normalisedDates = dates ? String(dates)
-            .replace(/\s*[-–—]\s*/g, ' - ')
-            .replace(/\s*-\s*/g, ' – ')
-            : '';
+          // Normalise dates to MM/YYYY format
+          const normalisedDates = dates ? this.formatDateRange(
+            ...String(dates).split(/\s*[-–—]\s*/).slice(0, 2)
+          ) : '';
           
-          // Build titleLine: Title – YYYY – YYYY (using en dash with spaces)
-          // Use the normalised dates directly, don't call toYearOnly again
+          // Build titleLine: Title – MM/YYYY – MM/YYYY (ATS-preferred format)
           let titleLine = '';
           if (title && normalisedDates) {
             titleLine = `${title} – ${normalisedDates}`;
@@ -540,7 +538,7 @@
           currentJob = {
             company: company,
             title: title,
-            titleLine: titleLine, // New: formatted "Title – YYYY – YYYY"
+            titleLine: titleLine, // Formatted "Title – MM/YYYY – MM/YYYY"
             dates: dates,
             bullets: []
           };
@@ -983,7 +981,7 @@
         safeExp.forEach(job => {
           // Line 1: Company
           lines.push(job.company);
-          // Line 2: Title – YYYY – YYYY (use pre-formatted titleLine)
+          // Line 2: Title – MM/YYYY – MM/YYYY (use pre-formatted titleLine)
           lines.push(job.titleLine || job.title);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);

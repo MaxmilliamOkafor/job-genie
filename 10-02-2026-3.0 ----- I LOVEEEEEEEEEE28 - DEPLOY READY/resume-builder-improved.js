@@ -437,7 +437,7 @@
     // ============ GENERATE TAILORED CONTENT STRING ============
     // LAYOUT: 
     //   Line 1: Company
-    //   Line 2: Title | YYYY – YYYY
+    //   Line 2: Title | MM/YYYY – MM/YYYY
     // Used for parsing by cv-formatter-perfect
     generateTailoredContent(resumeData) {
       const sections = [];
@@ -453,7 +453,7 @@
 
       // Experience - Two-line header format:
       //   Line 1: Company
-      //   Line 2: Title | YYYY – YYYY
+      //   Line 2: Title | MM/YYYY – MM/YYYY
       // Bullets with proper • character
       if (resumeData.experience.length > 0) {
         sections.push('WORK EXPERIENCE');
@@ -474,7 +474,7 @@
 
       // Projects - Two-line header format:
       //   Line 1: Project Name
-      //   Line 2: Role | YYYY – YYYY (dates optional)
+      //   Line 2: Role | MM/YYYY – MM/YYYY (dates optional)
       // Bullets with proper • character
       if (resumeData.projects && resumeData.projects.length > 0) {
         sections.push('TECHNICAL PROJECTS');
@@ -686,7 +686,7 @@
         safeExpRB.forEach(job => {
           // Line 1: Company
           lines.push(job.company);
-          // Line 2: Title – YYYY – YYYY
+          // Line 2: Title – MM/YYYY – MM/YYYY
           lines.push(job.titleLine || job.title);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
