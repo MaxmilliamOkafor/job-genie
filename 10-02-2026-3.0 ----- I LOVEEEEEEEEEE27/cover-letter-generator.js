@@ -11,56 +11,56 @@
     professional: {
       name: 'Professional',
       opening: [
-        'I am writing to express my strong interest in the {jobTitle} position at {company}.',
-        'I am excited to apply for the {jobTitle} role at {company}, as advertised.',
-        'I am eager to bring my expertise to {company} as a {jobTitle}.',
-        'With enthusiasm, I submit my application for the {jobTitle} position at {company}.'
+        'I am writing to express my interest in the {jobTitle} position at {company}, where I believe my track record of delivering measurable results would be a strong fit.',
+        'I am applying for the {jobTitle} role at {company}. My career has been defined by consistent delivery in high-impact environments, and I am confident this experience translates directly to your team.',
+        'I am keen to bring my {domain} expertise to {company} as a {jobTitle}, building on a track record of driving both technical and commercial outcomes.',
+        'I am submitting my application for the {jobTitle} position at {company}, where my background in scaling solutions and leading cross-functional delivery aligns closely with what you are looking for.'
       ],
       bridge: [
-        'With {yearsExp} years of experience in {domain}, I am confident in my ability to contribute meaningfully to your team.',
-        'My background in {domain}, spanning {yearsExp} years, has prepared me exceptionally well for this opportunity.',
-        'Having dedicated {yearsExp} years to {domain}, I have developed a robust skill set that aligns perfectly with your requirements.'
+        'With {yearsExp} years of progressive experience in {domain}, I have built a career around translating strategic objectives into tangible business outcomes.',
+        'My background spans {yearsExp} years in {domain}, during which I have consistently taken on increasing scope and delivered results that exceeded expectations.',
+        'Over {yearsExp} years in {domain}, I have developed deep technical fluency alongside the stakeholder management skills needed to operate effectively at a senior level.'
       ],
       closing: [
-        'I am eager to discuss how my experience and skills can benefit {company}. Thank you for considering my application.',
-        'I would welcome the opportunity to discuss how I can contribute to {company}\'s continued success.',
-        'Thank you for your time and consideration. I look forward to the possibility of joining the {company} team.'
+        'I would welcome the opportunity to discuss how my experience can contribute to {company}\'s goals. Thank you for your time and consideration.',
+        'I look forward to exploring how my skills and delivery record can add value to {company}. Thank you for considering my application.',
+        'Thank you for your consideration. I am available at your convenience to discuss how I can contribute to {company}\'s continued growth.'
       ]
     },
     enthusiastic: {
       name: 'Enthusiastic',
       opening: [
-        'I am thrilled at the opportunity to apply for the {jobTitle} position at {company}!',
-        'The {jobTitle} role at {company} immediately caught my attention, and I am excited to submit my application.',
-        'I was delighted to discover the {jobTitle} opening at {company}, and I am eager to apply.'
+        'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role and the calibre of the team make this an outstanding opportunity.',
+        'The {jobTitle} role at {company} aligns perfectly with the direction I have been building towards throughout my career, and I am excited to apply.',
+        'I was pleased to discover the {jobTitle} opening at {company}, as it sits at the intersection of my strongest skills and deepest professional interests.'
       ],
       bridge: [
-        'My {yearsExp} years of hands-on experience in {domain} have fueled my passion for this field and prepared me for this exciting opportunity.',
-        'Throughout my {yearsExp}-year career in {domain}, I have developed a deep enthusiasm for solving complex challenges, exactly what this role requires.',
-        'Having spent {yearsExp} years in {domain}, I have cultivated both the technical expertise and the drive to excel in this position.'
+        'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges.',
+        'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems and building systems that perform at scale.',
+        'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced environments.'
       ],
       closing: [
-        'I am genuinely excited about the prospect of joining {company} and would love to discuss how I can contribute to your team.',
-        'Thank you for considering my application. I cannot wait to explore how my skills can help {company} achieve its goals!',
-        'I am looking forward to the opportunity to bring my enthusiasm and expertise to {company}.'
+        'I would be glad to discuss how I can contribute to {company}\'s mission. Thank you for your time.',
+        'Thank you for considering my application. I look forward to the chance to discuss how my skills can support {company}\'s objectives.',
+        'I am looking forward to the possibility of contributing my expertise and energy to {company}.'
       ]
     },
     concise: {
       name: 'Concise',
       opening: [
         'Please accept my application for the {jobTitle} position at {company}.',
-        'I am applying for the {jobTitle} role at {company}.',
+        'I am applying for the {jobTitle} role at {company}, where my experience is directly relevant.',
         'I wish to be considered for the {jobTitle} position at {company}.'
       ],
       bridge: [
-        'I bring {yearsExp} years of {domain} experience directly relevant to this role.',
-        'My {yearsExp}-year background in {domain} aligns well with your requirements.',
-        'With {yearsExp} years in {domain}, I am well-qualified for this position.'
+        'I bring {yearsExp} years of {domain} experience with a consistent record of delivery.',
+        'My {yearsExp}-year background in {domain} has equipped me with the skills this role demands.',
+        'With {yearsExp} years in {domain}, I offer both technical depth and operational maturity.'
       ],
       closing: [
-        'I look forward to discussing this opportunity. Thank you.',
-        'Please contact me at your convenience. Thank you for your consideration.',
-        'I would appreciate the opportunity to interview. Thank you.'
+        'I look forward to discussing this opportunity further. Thank you for your consideration.',
+        'Please contact me at your convenience. Thank you for your time.',
+        'I would appreciate the opportunity to discuss this role. Thank you.'
       ]
     }
   };
@@ -366,14 +366,14 @@
         const kw2 = topKeywords[1] || '';
         const kw3 = topKeywords[2] || '';
         
-        let para1 = `In my role as ${title} at ${company}, I have consistently operated at a senior level, translating strategic priorities into measurable business outcomes.`;
+        let para1 = `As ${title} at ${company}, I have led delivery across complex technical programmes, converting strategic priorities into measurable outcomes.`;
         if (highlightBullet) {
-          para1 += ` ${highlightBullet.replace(/^[•\-*]\s*/, '')}`;
+          para1 += ` A recent example: ${highlightBullet.replace(/^[•\-*]\s*/, '')}`;
         }
         if (kw1 && kw2 && kw3) {
-          para1 += ` My expertise in ${kw1}, ${kw2}, and ${kw3} directly aligns with the requirements outlined in your job description.`;
+          para1 += ` My depth in ${kw1}, ${kw2}, and ${kw3} maps directly to the capabilities outlined in your job description.`;
         } else if (kw1 && kw2) {
-          para1 += ` My expertise in ${kw1} and ${kw2} directly aligns with your requirements.`;
+          para1 += ` My depth in ${kw1} and ${kw2} maps directly to your requirements.`;
         }
         
         paragraphs.push(para1);
@@ -397,7 +397,7 @@
           para2 += skills[0];
         }
         
-        para2 += ', enabling me to contribute rapidly, strengthen execution quality, and raise delivery performance from day one.';
+        para2 += ', which I apply consistently to accelerate delivery timelines, strengthen execution quality, and raise performance standards from day one.';
         paragraphs.push(para2);
       }
 
@@ -412,7 +412,7 @@
         if (extraSkills.length > 0) {
           const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
           paragraphs.push(
-                `Furthermore, I bring hands-on delivery depth ${phrase} ${extraSkills.join(' and ')}, supporting executive stakeholders and delivering measurable, repeatable outcomes.` 
+                `I also bring hands-on depth ${phrase} ${extraSkills.join(' and ')}, consistently supporting senior stakeholders and delivering measurable, repeatable outcomes.`
 			);
         }
       }

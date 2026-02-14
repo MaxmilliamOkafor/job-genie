@@ -900,11 +900,18 @@
       // === HEADER ===
       addCenteredText(name.toUpperCase(), true, font.name);
       y += 2;
-      
+
       // Phone | Email format (no location in cover letter header)
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const contactLine = [formattedPhone, data.contact.email].filter(Boolean).join(' | ');
       addCenteredText(contactLine, false, font.body);
+
+      // Portfolio link (prominent placement replacing company name in header)
+      const portfolio = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
+      if (portfolio) {
+        y += 2;
+        addCenteredText(portfolio, false, font.small);
+      }
       y += 16;
 
       // === DATE ===
@@ -925,7 +932,7 @@
       const kw2 = highPriority[1] || 'delivery excellence';
       const years = this.extractYearsExperience(data.summary) || '7+';
 
-      const para1 = `I am excited to apply for the ${jobTitle} position at ${company}. With ${years} years of progressive experience across complex delivery environments, I bring a track record of leading ${kw1} programmes and sustaining ${kw2} at scale.`;
+      const para1 = `I am writing to express my interest in the ${jobTitle} position at ${company}. With ${years} years of progressive experience across complex delivery environments, I bring a track record of leading ${kw1} initiatives and sustaining ${kw2} at scale.`;
       addText(para1, false, font.body);
       y += 18;
 
@@ -934,7 +941,7 @@
       const kw4 = highPriority[3] || 'cross-functional collaboration';
       const topBullet = data.experience?.[0]?.bullets?.[0] || 'driving efficiency improvements of 30%+';
 
-      const para2 = `At ${topExp}, I delivered high-value outcomes including ${this.extractAchievement(topBullet)}. I partner closely with engineering, product, and business stakeholders, combining ${kw3} with ${kw4} to convert strategic objectives into measurable execution.`;
+      const para2 = `At ${topExp}, I delivered high-impact outcomes including ${this.extractAchievement(topBullet)}. I work closely with engineering, product, and business stakeholders, combining ${kw3} with ${kw4} to translate strategic objectives into measurable results.`;
       addText(para2, false, font.body);
       y += 18;
 
@@ -943,13 +950,13 @@
       const kw6 = highPriority[5] || 'problem-solving';
       const kw7 = highPriority[6] || 'communication';
 
-      const para3 = `My recent work has focused on ${kw5}, with consistent emphasis on ${kw6}, ${kw7}, and disciplined operational delivery. This combination enables me to contribute quickly, raise team performance, and strengthen quality standards from day one.`;
+      const para3 = `My recent work has centred on ${kw5}, with sustained focus on ${kw6}, ${kw7}, and disciplined operational delivery. This combination allows me to contribute from day one, raise team performance, and strengthen quality standards across the organisation.`;
       addText(para3, false, font.body);
       y += 18;
 
       // === PARAGRAPH 4: Close with intent ===
       const kw8 = highPriority[7] || 'execution excellence';
-      const para4 = `I would welcome the opportunity to discuss how I can help ${company} accelerate its goals through ${kw8}, dependable ownership, and high-quality execution. Thank you for your consideration.`;
+      const para4 = `I would welcome the opportunity to discuss how I can support ${company} in achieving its goals through ${kw8}, dependable ownership, and consistent delivery. Thank you for your time and consideration.`;
       addText(para4, false, font.body);
       y += 20;
 
@@ -1010,11 +1017,11 @@
         '',
         'Dear Hiring Manager,',
         '',
-        `I am excited to apply for the ${jobTitle} position at ${company}. With experience in ${kw1} and ${kw2}, I deliver measurable business impact through innovative solutions.`,
+        `I am writing to express my interest in the ${jobTitle} position at ${company}. With experience in ${kw1} and ${kw2}, I consistently deliver measurable business impact across complex delivery environments.`,
         '',
-        `In my previous roles, I have successfully implemented ${highPriority[2] || 'technical'} solutions and led ${highPriority[3] || 'cross-functional'} initiatives resulting in significant improvements.`,
+        `In my previous roles, I have implemented ${highPriority[2] || 'technical'} solutions and led ${highPriority[3] || 'cross-functional'} initiatives that drove significant performance improvements.`,
         '',
-        `I would welcome the opportunity to discuss how my ${highPriority[4] || 'expertise'} can contribute to ${company}'s success. Thank you for your consideration.`,
+        `I would welcome the opportunity to discuss how my ${highPriority[4] || 'expertise'} can contribute to ${company}'s continued growth. Thank you for your time and consideration.`,
         '',
         'Sincerely,',
         name

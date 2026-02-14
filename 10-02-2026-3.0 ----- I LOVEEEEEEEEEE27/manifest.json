@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ATS PERFECTION v3.0.2 - Ultimate CV Tailor",
-  "version": "3.0.2",
-  "description": "PERFECTION v3.0.2: Anti-AI detection engine, UK spelling enforcement, banned words filter, location data cleaning. Ultimate ATS extension with auto-trigger, enterprise PDF engine, smart CV parser, cover letter generator, location extraction, immutable field protection, and 100% keyword match.",
+  "name": "Job Genie — Smart CV & Cover Letter Tailor",
+  "version": "3.1.0",
+  "description": "Automatically tailor your CV and cover letter to every job posting. Intelligent keyword matching, ATS-optimised PDF generation, cover letter builder, and one-click application across 130+ hiring platforms including Greenhouse, Workday, SmartRecruiters, and major company career sites.",
   "permissions": [
     "storage",
     "activeTab",

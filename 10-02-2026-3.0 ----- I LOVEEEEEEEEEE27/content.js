@@ -10,8 +10,8 @@
 (function() {
   'use strict';
 
-  console.log('[ATS PERFECTION] v3.0 ULTRA BLAZING loaded on:', window.location.hostname);
-  console.log('[ATS PERFECTION] Features: Auto-Trigger | Professional PDF | Smart Parser | Cover Letter | Location Strategy');
+  console.log('[Job Genie] v3.1.0 loaded on:', window.location.hostname);
+  console.log('[Job Genie] Features: Auto-Trigger | Professional PDF | Smart Parser | Cover Letter | Location Strategy');
 
   // ============ CONFIGURATION ============
   const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
@@ -294,7 +294,7 @@
     
     // Clear any cached data for this session
     if (typeof CacheManager !== 'undefined') {
-      CacheManager.clearJDCache && CacheManager.clearJDCache();
+      CacheManager.clearAllCaches && CacheManager.clearAllCaches();
     }
   }
   
@@ -2024,6 +2024,14 @@
         company = logoEl.alt.replace(/\s*logo\s*/i, '').trim();
       }
     }
+    // STRATEGY: Use TIER1_COMPANY_DOMAINS map as definitive fallback
+    if (!company || company.length < 2) {
+      const tier1Match = matchTier1Domain(hostname);
+      if (tier1Match) {
+        company = tier1Match.company;
+        console.log(`[extractJobInfo] ✅ Resolved company from Tier 1 map: "${company}"`);
+      }
+    }
     // Sanitize: remove common suffixes and clean up
     if (company) {
       company = company.replace(/\s*(careers|jobs|hiring|apply|work|join)\s*$/i, '').trim();
@@ -2031,9 +2039,15 @@
     // FIX 02-02-26: Extended validation - NEVER return "Company" or similar placeholders
     const invalidCompanyNames = ['company', 'your company', 'the company', 'n/a', 'unknown', 'employer', 'organization'];
     if (!company || invalidCompanyNames.includes(company.toLowerCase().trim()) || company.length < 2) {
-      // Return empty string - let downstream handlers use their own fallback
-      company = '';
-      console.warn('[extractJobInfo] ⚠️ Could not extract company name');
+      // Last resort: try TIER1_COMPANY_DOMAINS again post-sanitization
+      const tier1Fallback = matchTier1Domain(hostname);
+      if (tier1Fallback) {
+        company = tier1Fallback.company;
+        console.log(`[extractJobInfo] ✅ Tier 1 fallback resolved company: "${company}"`);
+      } else {
+        company = '';
+        console.warn('[extractJobInfo] ⚠️ Could not extract company name');
+      }
     }
 
     const rawLocation = selectors ? getText(selectors.location) : '';
@@ -2636,6 +2650,11 @@
       
       // Extract job info from page
       const jobInfo = extractJobInfo();
+      // CRITICAL: If extractJobInfo couldn't resolve company, use the Tier 1 detection result
+      if (!jobInfo.company && tier1Detection.company) {
+        jobInfo.company = tier1Detection.company;
+        console.log(`[ATS Tailor] ✅ Used Tier 1 company name for jobInfo: "${tier1Detection.company}"`);
+      }
       const jobTitle = jobInfo.title || 'Role';
       updateBanner(`🏆 ${tier1Detection.company}: Extracting keywords...`, 'working');
       
