@@ -410,22 +410,24 @@
           // The AI is instructed to preserve these fields exactly, so swapping would be incorrect
           // If parsing issues occur, the problem is in the AI output, not here
           
-          // Build titleLine: Title – YYYY – YYYY (using en dash with spaces)
-          const yearDates = this.toYearOnly(dates);
+          // Build titleLine: Title – MM/YYYY – MM/YYYY (ATS-preferred format)
+          const formattedDates = dates ? this.formatDateRange(
+            ...String(dates).split(/\s*[-–—]\s*/).slice(0, 2)
+          ) : '';
           let titleLine = '';
-          if (title && yearDates) {
-            titleLine = `${title} – ${yearDates}`;
+          if (title && formattedDates) {
+            titleLine = `${title} – ${formattedDates}`;
           } else if (title) {
             titleLine = title;
-          } else if (yearDates) {
-            titleLine = yearDates;
+          } else if (formattedDates) {
+            titleLine = formattedDates;
           }
           
           // NO location - removed to prevent recruiter bias
           currentJob = {
             company: company,
             title: title,
-            titleLine: titleLine, // New: formatted "Title – YYYY – YYYY"
+            titleLine: titleLine, // Formatted "Title – MM/YYYY – MM/YYYY"
             dates: dates,
             bullets: []
           };
@@ -800,7 +802,7 @@
         experience.forEach(job => {
           // Line 1: Company
           lines.push(job.company);
-          // Line 2: Title – YYYY – YYYY (use pre-formatted titleLine)
+          // Line 2: Title – MM/YYYY – MM/YYYY (use pre-formatted titleLine)
           lines.push(job.titleLine || job.title);
           job.bullets.forEach(bullet => {
             lines.push(`• ${bullet}`);
