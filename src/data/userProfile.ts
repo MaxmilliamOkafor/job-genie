@@ -134,7 +134,7 @@ Maxmilliam Okafor`,
     },
     {
       id: "3",
-      title: "Senior Solutions Architect",
+      title: "Solutions Architect",
       company: "Accenture",
       location: "Dublin, Ireland",
       startDate: "2021-04",
