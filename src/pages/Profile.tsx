@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { normalizeWorkExperience } from '@/lib/workExperienceNormalization';
+import { normalizeWorkExperience, formatDateRange } from '@/lib/workExperienceNormalization';
 
 
 
@@ -1550,7 +1550,7 @@ const Profile = () => {
                     )}
                   </div>
                   {!editMode && (project.startDate || project.endDate) && (
-                    <Badge variant="outline">{project.startDate}{project.startDate && project.endDate ? ' - ' : ''}{project.endDate}</Badge>
+                    <Badge variant="outline">{formatDateRange(project.startDate, project.endDate)}</Badge>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-1 mt-2">

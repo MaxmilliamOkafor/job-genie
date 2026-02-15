@@ -1,4 +1,21 @@
 import { useState, useRef } from 'react';
+import { formatDateRange } from '@/lib/workExperienceNormalization';
+
+// Helper: convert raw date string to MM/YYYY display
+const formatMMYYYY = (raw?: string): string => {
+  if (!raw) return '';
+  if (/present/i.test(raw)) return 'Present';
+  // Already MM/YYYY
+  const mmyyyy = raw.match(/^(\d{1,2})\/((?:19|20)\d{2})$/);
+  if (mmyyyy) return `${mmyyyy[1].padStart(2, '0')}/${mmyyyy[2]}`;
+  // YYYY-MM
+  const isoMatch = raw.match(/^((?:19|20)\d{2})[-/](\d{1,2})/);
+  if (isoMatch) return `${isoMatch[2].padStart(2, '0')}/${isoMatch[1]}`;
+  // Just year
+  const yearMatch = raw.match(/^((?:19|20)\d{2})$/);
+  if (yearMatch) return yearMatch[0];
+  return raw;
+};
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
@@ -452,7 +469,7 @@ export function CVUpload({ cvFileName, cvFilePath, cvUploadedAt, onUploadComplet
                         <p className="text-sm italic text-muted-foreground">{exp.title || 'Unknown Title'}</p>
                       </div>
                       <p className="text-xs text-muted-foreground whitespace-nowrap">
-                        {exp.startDate || '?'} – {exp.endDate || 'Present'}
+                        {formatMMYYYY(exp.startDate) || '?'} – {formatMMYYYY(exp.endDate) || 'Present'}
                       </p>
                     </div>
                     {exp.bullets && exp.bullets.length > 0 ? (
