@@ -123,7 +123,7 @@ Maxmilliam Okafor`,
       company: "SolimHealth AI Startup",
       location: "Dallas, TX",
       startDate: "2024-01",
-      endDate: "2025-09",
+      endDate: "2025-07",
       description: "",
       skills: ["AWS Transcribe", "NLTK", "MongoDB", "React", "TypeScript", "Django", "TensorFlow.js", "NLP"],
       bullets: [

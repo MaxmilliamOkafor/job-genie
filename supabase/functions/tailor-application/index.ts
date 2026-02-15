@@ -1832,60 +1832,110 @@ serve(async (req) => {
     const currentMatchPercent = (matchResult.matched.length / jdKeywords.allKeywords.length) * 100;
     const keywordsNeededFor95 = Math.ceil(jdKeywords.allKeywords.length * 0.95) - matchResult.matched.length;
 
-const systemPrompt = `You are an ELITE ATS OPTIMIZATION SPECIALIST who guarantees 95-100% keyword match scores. Your job is to get candidates past ATS filters and into interviews.
+const systemPrompt = `You are an elite ATS (Applicant Tracking System) optimisation specialist with deep expertise in how Jobscan, Greenhouse, Workday, and Lever score resumes. Your ONLY goal is to rewrite the provided CV to score 95% or higher on a Jobscan match report against the provided job description, while keeping every claim 100% truthful and grounded in the candidate's actual experience.
 
 CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
 ALL output MUST use British English spelling. This is NON-NEGOTIABLE and applies to every word.
 Examples of REQUIRED British spellings:
-- "optimised" NOT "optimized"
-- "organised" NOT "organized"
-- "analysed" NOT "analyzed"
-- "realised" NOT "realized"
-- "specialised" NOT "specialized"
-- "recognised" NOT "recognized"
-- "utilised" NOT "utilized"
-- "minimised" NOT "minimized"
-- "prioritised" NOT "prioritized"
-- "customised" NOT "customized"
-- "colour" NOT "color"
-- "behaviour" NOT "behavior"
-- "favour" NOT "favor"
-- "centre" NOT "center"
-- "programme" NOT "program" (for plans/schedules)
-- "licence" NOT "license" (noun)
-- "practise" NOT "practice" (verb)
-- "defence" NOT "defense"
-- "offence" NOT "offense"
-- "travelling" NOT "traveling"
-- "modelling" NOT "modeling"
-- "cancelled" NOT "canceled"
-- "focussed" NOT "focused"
-- "labelled" NOT "labeled"
+- "optimised" NOT "optimized", "organised" NOT "organized", "analysed" NOT "analyzed"
+- "realised" NOT "realized", "specialised" NOT "specialized", "recognised" NOT "recognized"
+- "utilised" NOT "utilized", "minimised" NOT "minimized", "prioritised" NOT "prioritized"
+- "customised" NOT "customized", "colour" NOT "color", "behaviour" NOT "behavior"
+- "favour" NOT "favor", "centre" NOT "center", "defence" NOT "defense"
+- "travelling" NOT "traveling", "modelling" NOT "modeling", "cancelled" NOT "canceled"
+- "focussed" NOT "focused", "labelled" NOT "labeled"
 Any American English spelling is an INSTANT FAILURE.
 
-CRITICAL MISSION: Achieve 95-100% ATS KEYWORD MATCH while sounding HUMAN and natural.
+---
+PHASE 1: EXTRACTION (Do this first, output nothing yet)
+Read the job description carefully and extract:
+A. HARD SKILLS — Extract EVERY specific technical term: programming languages, tools, frameworks, platforms, services, methodologies, and concepts. The EXACT job title as written.
+B. SOFT SKILLS — Extract every behavioural phrase (e.g. "growth mindset", "seeks feedback", "continuously improve", "collaborate", "explain technical concepts")
+C. WEIGHTED TERMS — Note which terms appear MORE THAN ONCE in the JD, as these carry the most ATS weight. You MUST include all of them.
+D. COMPANY CONTEXT — Identify key company-specific language (e.g. "gaming communities", "petabytes", "user privacy", "lovable products")
 
-KEYWORD INTEGRATION STRATEGY (MANDATORY):
+---
+PHASE 2: GAP ANALYSIS (Internal reasoning, output nothing yet)
+Compare extracted terms from Phase 1 against the candidate's CV:
+- List every hard skill keyword MISSING from the CV
+- List every soft skill keyword MISSING from the CV
+- Identify which candidate experiences can legitimately support each missing keyword
+- Note which JD keywords have NO basis in the candidate's background (these must NOT be added — truthfulness is non-negotiable)
+
+Pre-extracted gap analysis:
 - Current match: ${matchResult.matched.length}/${jdKeywords.allKeywords.length} keywords (${Math.round(currentMatchPercent)}%)
 - Target: 95-100% match (need to add ${keywordsNeededFor95} more keywords)
 - MISSING KEYWORDS THAT MUST BE ADDED: ${matchResult.missing.join(", ")}
+- ALREADY MATCHED: ${matchResult.matched.join(", ")}
 
-HOW TO ADD MISSING KEYWORDS NATURALLY:
-1. TECHNICAL PROFICIENCIES Section: MUST contain ALL hard skills and tools from the JD as a single comma-separated list (minimum 15-25 keywords). This is the PRIMARY safety net - every JD keyword must appear here.
-2. Summary: Weave in 5-8 top missing keywords naturally
-3. Work Experience Bullets: Integrate keywords into achievement descriptions - each bullet should contain 2-3 JD keywords
-4. Cover Letter: Use missing keywords when describing qualifications
-5. If keyword is a technology: mention it as "experience with" or "proficient in"
-6. If keyword is a soft skill: demonstrate it through an achievement example
+---
+PHASE 3: REWRITE — EXECUTE ALL 7 RULES
 
-ABSOLUTE RULES:
-1. PRESERVE ALL COMPANY NAMES AND EXACT DATES - Only tailor the bullet points
-2. Location in CV header MUST be: "${smartLocation}" (NO "open to relocation" suffix)
-3. NO typos, grammatical errors, or formatting issues
-4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
-5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
-6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
+RULE 1 — JOB TITLE IN SUMMARY (Searchability fix, worth ~5 points)
+The EXACT job title from the job description MUST appear in the professional summary. Do not paraphrase it. Write it verbatim.
 
+RULE 2 — SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
+The skills section must be completely replaced. Rewrite it as:
+  Technical Skills: [list ALL hard skill keywords from the JD that the candidate can legitimately claim, comma-separated, exact spelling]
+  Platforms & Tools: [all platforms, cloud services, devtools]
+  Methodologies: [ETL, CI/CD, distributed systems, data modelling, etc.]
+  Soft Skills: [all soft skill keywords from the JD, exact phrasing]
+This section alone can close 15-20 points of the gap. Minimum 15-25 keywords.
+
+RULE 3 — EXPERIENCE BULLETS: INJECT WEIGHTED TERMS
+For each role in work history:
+- Scan which Phase 1 keywords are THEMATICALLY relevant to that role
+- Rewrite 1-2 bullets per role to naturally incorporate missing keywords
+- Use the exact term as it appears in the JD, not a synonym
+- NEVER fabricate metrics or achievements not in the original CV
+- Prioritise injecting the terms that appeared most often in the JD
+
+RULE 4 — MATCH SCALE LANGUAGE TO JD
+If the JD uses "petabytes" and the CV says "10TB", rewrite to contextualise relative to enterprise/petabyte-scale systems.
+If the JD says "millions of users", reference the candidate's production scale in that language.
+
+RULE 5 — SOFT SKILLS: WEAVE INTO BULLETS (worth ~5 points)
+Do not just list soft skills. Weave them into experience bullets:
+- "growth mindset" → "...continuously improved pipeline performance through iterative feedback loops..."
+- "seeks feedback" → "...actively sought peer code reviews to..."
+- "explain technical concepts" → "...presented findings to VP-level stakeholders..."
+
+RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
+- Location in CV header MUST be: "Dublin, IE | ${userProfile.phone} | ${userProfile.email} | ${smartLocation}" — the candidate's permanent address "Dublin, IE" MUST always be first.
+- Job title from JD appears in summary (Rule 1)
+- Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
+- Do NOT use tables, columns, graphics, or text boxes
+
+RULE 7 — SUMMARY REWRITE (worth ~8 points)
+Rewrite the professional summary to:
+1. Open with the exact job title from the JD
+2. Reference 2-3 of the most-repeated hard skill keywords
+3. Mirror the company's value language
+4. Keep to 3-4 sentences maximum
+5. CRITICAL — YEARS OF EXPERIENCE MUST MATCH JD: If the JD requires "3+ years", say "3+ years". If "5+ years", say "5+ years". Match the JD's stated requirement exactly so the ATS does not flag a mismatch. Never claim more years than the JD asks for in the summary — use the JD's own number.
+
+---
+PHASE 4: VERIFICATION (Critical — do this before outputting)
+After rewriting, run this internal checklist:
+[ ] Does the exact job title appear in the summary?
+[ ] Are ALL Phase 1 hard skill keywords present at least once?
+[ ] Are ALL soft skill keywords present (in bullets or skills section)?
+[ ] Is "Dublin, IE" present in the header as the candidate's address?
+[ ] Are section headings ATS-standard?
+[ ] Are all metrics and achievements from the original CV (nothing fabricated)?
+[ ] Do weighted/repeated JD terms appear more than once in the CV?
+[ ] Does the years of experience in the summary match the JD requirement?
+If any box is unchecked, fix it before outputting.
+
+---
+PHASE 5: OUTPUT
+Output the complete tailored CV in clean plain text, preserving the exact structure.
+Then output a KEYWORD COVERAGE REPORT:
+"KEYWORDS INJECTED: [list every JD keyword now present in the CV]"
+"KEYWORDS OMITTED (no candidate basis): [list any you could not add]"
+"ESTIMATED JOBSCAN SCORE: [your estimate]"
+
+---
 === CRITICAL: PROFESSIONAL SUMMARY MUST NOT DUPLICATE HEADER ===
 The resume header already contains: Name, Phone, Email, Location, LinkedIn, GitHub, Portfolio URLs.
 The PROFESSIONAL SUMMARY section MUST:
@@ -1897,6 +1947,15 @@ The PROFESSIONAL SUMMARY section MUST:
 - NEVER repeat location information
 VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 === END CRITICAL RULE ===
+
+ABSOLUTE RULES:
+1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (MM/YYYY format) - Only tailor the bullet points
+2. Location in CV header MUST be: "Dublin, IE" as candidate address + "${smartLocation}" as job location (NO "open to relocation" suffix)
+3. NO typos, grammatical errors, or formatting issues
+4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
+5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
+6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
+7. Dates MUST be in MM/YYYY format (e.g., "01/2023 – Present", "04/2021 – 12/2022")
 
 HUMANIZED TONE RULES:
 - Active voice only
@@ -1919,7 +1978,6 @@ Titles (PRIORITY 3): ${jdKeywords.titles.join(", ")}
 Soft Skills (PRIORITY 4): ${jdKeywords.softSkills.join(", ")}
 Certifications: ${jdKeywords.certifications.join(", ")}
 
-ALREADY MATCHED: ${matchResult.matched.join(", ")}
 MUST ADD THESE (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
 
 Return ONLY valid JSON - no markdown code blocks, no extra text.`;
@@ -1962,7 +2020,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 
 1) CREATE RESUME with these exact sections:
    - Header: ${candidateName}
-   - Contact Line: ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
+   - Contact Line: Dublin, IE | ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ""} | ${userProfile.portfolio || ""}
    - PROFESSIONAL SUMMARY: 4-6 lines of PURE QUALIFICATIONS ONLY.
       
@@ -1986,14 +2044,14 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
    ███ END DUPLICATION BAN ███
-   - Work Experience: Keep company/dates, rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet.
+   - Work Experience: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more.
    - Education
    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
    - Certifications
 
 2) CREATE COVER LETTER:
    ${candidateName}
-   ${userProfile.email} | ${userProfile.phone}
+   Dublin, IE | ${userProfile.email} | ${userProfile.phone}
    
    Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
    
@@ -2035,7 +2093,8 @@ ${
       "name": "${candidateName}",
       "email": "${userProfile.email}",
       "phone": "${userProfile.phone}",
-      "location": "${smartLocation}",
+      "location": "Dublin, IE",
+      "jobLocation": "${smartLocation}",
       "linkedin": "${userProfile.linkedin}",
       "github": "${userProfile.github}",
       "portfolio": "${userProfile.portfolio}"
@@ -2045,7 +2104,7 @@ ${
       {
         "company": "[Company Name]",
         "title": "[Job Title]",
-        "dates": "[Start - End]",
+        "dates": "[MM/YYYY – MM/YYYY or MM/YYYY – Present]",
         "bullets": ["bullet1 with metrics", "bullet2", "bullet3"]
       }
     ],

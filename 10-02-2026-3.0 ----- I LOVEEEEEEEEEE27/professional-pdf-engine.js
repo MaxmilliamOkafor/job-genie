@@ -157,8 +157,8 @@
         // Render cover letter header
         currentY = this.renderCoverHeader(doc, candidateData, currentY);
         
-        // Render recipient info
-        currentY = this.renderRecipientInfo(doc, jobData, currentY);
+        // Render recipient info (portfolio URL replaces company name)
+        currentY = this.renderRecipientInfo(doc, jobData, candidateData, currentY);
         
         // Render cover letter body
         currentY = this.renderCoverBody(doc, coverContent, currentY);
@@ -661,21 +661,45 @@
     },
 
     // ============ NORMALIZE DATES ============
+    // Normalize dates to MM/YYYY format for ATS compliance
     normalizeDates(dateStr) {
       if (!dateStr) return '';
-      // Extract years
-      const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present/i.test(dateStr);
-      
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
+      const hasPresent = /present|current|now/i.test(dateStr);
+
+      // Try YYYY-MM format (e.g., "2023-01")
+      const isoMatches = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
+      if (isoMatches && isoMatches.length >= 1) {
+        const parts = isoMatches.map(m => {
+          const [y, mo] = m.split(/[-/]/);
+          return `${mo.padStart(2, '0')}/${y}`;
+        });
+        if (hasPresent) return `${parts[0]} – Present`;
+        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
+        return parts[0];
       }
-      
-      // Normalize dashes to en-dash
+
+      // Try MM/YYYY format already
+      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
+      if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
+        const parts = mmyyyyMatches.map(m => {
+          const [mo, y] = m.split('/');
+          return `${mo.padStart(2, '0')}/${y}`;
+        });
+        if (hasPresent) return `${parts[0]} – Present`;
+        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
+        return parts[0];
+      }
+
+      // Fallback: extract years and prefix with 01/
+      const years = dateStr.match(/\d{4}/g);
+      if (hasPresent && years && years.length >= 1) {
+        return `01/${years[0]} – Present`;
+      } else if (years && years.length >= 2) {
+        return `01/${years[0]} – 01/${years[1]}`;
+      } else if (years && years.length === 1) {
+        return `01/${years[0]}`;
+      }
+
       return dateStr.replace(/-/g, '–').replace(/\s*–\s*/g, ' – ');
     },
 
@@ -802,8 +826,12 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
+      const candidateLocation = 'Dublin, IE';
       const cleanLoc = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactParts = [contact.phone, contact.email, cleanLoc].filter(Boolean);
+      const contactParts = [candidateLocation, contact.phone, contact.email].filter(Boolean);
+      if (cleanLoc && cleanLoc.toLowerCase() !== candidateLocation.toLowerCase()) {
+        contactParts.push(cleanLoc);
+      }
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
       const contactX = (pageWidth - contactWidth) / 2;
@@ -1071,9 +1099,8 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const cleanLoc2 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactParts = [contact.email, contact.phone, cleanLoc2].filter(Boolean);
-      doc.text(contactParts.join('  |  '), PDF_CONFIG.margins.left, y);
+      const contactParts2 = ['Dublin, IE', contact.email, contact.phone].filter(Boolean);
+      doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 4;
 
       // Portfolio link line (prominent placement for cover letter header)
@@ -1185,16 +1212,25 @@
       return company;
     },
 
-    renderRecipientInfo(doc, jobData, y) {
+    renderRecipientInfo(doc, jobData, candidateData, y) {
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
       doc.setTextColor(...PDF_CONFIG.colors.black);
 
-      // FIX 27-01-26: Removed "Company" line per user preference - keep blank spacing
-      // Only add "Re: Job Title" line, skip company name entirely
-      
-      // Add spacing where company line would have been (maintains layout)
-      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 20;
+      // Portfolio URL replaces company name line
+      const portfolio = candidateData?.portfolio || '';
+      if (portfolio) {
+        const displayUrl = portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+        doc.text(displayUrl, PDF_CONFIG.margins.left, y);
+        y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 6;
+      }
+
+      // Re: Job Title
+      const jobTitle = jobData?.title || 'the open position';
+      doc.setFont(PDF_CONFIG.fonts.body, 'bold');
+      doc.text(`Re: ${jobTitle}`, PDF_CONFIG.margins.left, y);
+      doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 12;
 
       return y;
     },
