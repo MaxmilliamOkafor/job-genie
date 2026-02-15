@@ -3523,6 +3523,67 @@ class ATSTailor {
         }
       }
 
+      // CRITICAL: Fix CV text header to always include "Dublin, IE" as candidate address
+      if (this.generatedDocuments.cv) {
+        let cvText = this.generatedDocuments.cv;
+        // If header line has phone/email but no "Dublin, IE", prepend it
+        const headerLines = cvText.split('\n').slice(0, 5);
+        const hasLocationLine = headerLines.some(l => /Dublin,?\s*IE/i.test(l));
+        if (!hasLocationLine) {
+          // Find the contact line (contains phone or email) and prepend Dublin, IE
+          cvText = cvText.replace(
+            /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
+            '$1Dublin, IE | $2'
+          );
+          this.generatedDocuments.cv = cvText;
+          console.log('[ATS Tailor] Prepended Dublin, IE to CV header');
+        }
+      }
+
+      // CRITICAL: Fix experience dates from "YYYY – YYYY" to "MM/YYYY – MM/YYYY"
+      if (this.generatedDocuments.cv) {
+        const dateMap = {
+          '2023': '01/2023', '2024': '01/2024', '2025': '07/2025',
+          '2021': '04/2021', '2022': '12/2022', '2017': '08/2017'
+        };
+        let cvText = this.generatedDocuments.cv;
+        // Replace year-only date ranges with MM/YYYY using known profile dates
+        cvText = cvText.replace(/\b(20\d{2})\s*[–—-]\s*Present\b/gi, (match, year) => {
+          return (dateMap[year] || ('01/' + year)) + ' – Present';
+        });
+        cvText = cvText.replace(/\b(20\d{2})\s*[–—-]\s*(20\d{2})\b/g, (match, startYear, endYear) => {
+          return (dateMap[startYear] || ('01/' + startYear)) + ' – ' + (dateMap[endYear] || ('01/' + endYear));
+        });
+        this.generatedDocuments.cv = cvText;
+        console.log('[ATS Tailor] Converted dates to MM/YYYY format');
+      }
+
+      // CRITICAL: Sanitise cover letter text to remove standalone "Company" line
+      if (this.generatedDocuments.coverLetter) {
+        let coverText = this.generatedDocuments.coverLetter;
+        // Remove standalone "Company" lines (case insensitive)
+        coverText = coverText
+          .replace(/^\s*Company\s*$/gm, '')
+          .replace(/\n\s*Company\s*\n/gi, '\n')
+          .replace(/\n\n\n+/g, '\n\n');
+        // Add portfolio URL after date line if not present
+        if (!/maxmilliamlabs-ai\.web\.app|maxmilliam/i.test(coverText.split('Dear')[0] || '')) {
+          coverText = coverText.replace(
+            /((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})\n/i,
+            '$1\nmaxmilliamlabs-ai.web.app\n'
+          );
+        }
+        // Add Dublin, IE to cover letter header if missing
+        if (!/Dublin,?\s*IE/i.test(coverText.split('Dear')[0] || '')) {
+          coverText = coverText.replace(
+            /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
+            '$1Dublin, IE | $2'
+          );
+        }
+        this.generatedDocuments.coverLetter = coverText;
+        console.log('[ATS Tailor] Sanitised cover letter text');
+      }
+
       // CRITICAL: Apply dedupeSectionHeaders to CV text BEFORE passing to PDF generator
       // This ensures the OpenResumeGenerator receives clean text without duplicated headers
       if (this.generatedDocuments.cv) {
@@ -3740,52 +3801,57 @@ class ATSTailor {
         } catch (p1Error) {
           console.warn('[ATS Tailor] OpenResume P1 failed, falling through to P2/P3:', p1Error.message);
         }
-        console.log('[ATS Tailor] Using OpenResume Generator for ATS-perfect PDFs...');
-        
-        const atsPackage = await window.OpenResumeGenerator.generateATSPackage(
-          this.generatedDocuments.cv,
-          this.generatedDocuments.keywords || {},
-          {
-            title: this.currentJob?.title || '',
-            company: this.currentJob?.company || '',
-            location: tailoredLocation
-          },
-          {
+      }
+
+      // PRIORITY 1.5: Use ProfessionalPDFEngine for CV and Cover Letter PDFs
+      if (typeof ProfessionalPDFEngine !== 'undefined') {
+        try {
+          console.log('[ATS Tailor] Using ProfessionalPDFEngine for PDF generation...');
+
+          const pdfCandidateData = {
             firstName: candidateData.first_name,
+            first_name: candidateData.first_name,
             lastName: candidateData.last_name,
+            last_name: candidateData.last_name,
             email: candidateData.email || this.session?.user?.email,
             phone: candidateData.phone,
             linkedin: candidateData.linkedin,
             github: candidateData.github,
             portfolio: candidateData.portfolio,
-            professionalExperience: candidateData.professional_experience || [],
-            relevantProjects: candidateData.relevant_projects || [],
-            education: candidateData.education,
-            skills: candidateData.skills,
-            certifications: candidateData.certifications,
-            summary: candidateData.ats_strategy,
-            city: tailoredLocation
+            city: 'Dublin, IE',
+            location: tailoredLocation,
+            professional_experience: candidateData.professional_experience || []
+          };
+
+          // Generate CV PDF
+          const cvResult = await ProfessionalPDFEngine.generateCV(
+            pdfCandidateData,
+            this.generatedDocuments.cv,
+            { location: tailoredLocation }
+          );
+          if (cvResult?.success && cvResult.pdf) {
+            this.generatedDocuments.cvPdf = cvResult.pdf;
+            this.generatedDocuments.cvFileName = cvResult.filename || this.generatedDocuments.cvFileName;
+            this.generatedDocuments.tailoredLocation = tailoredLocation;
+            console.log('[ATS Tailor] ProfessionalPDFEngine CV generated:', this.generatedDocuments.cvFileName);
           }
-        );
 
-        if (atsPackage.cvBase64) {
-          this.generatedDocuments.cvPdf = atsPackage.cvBase64;
-          this.generatedDocuments.cvFileName = atsPackage.cvFilename;
-          this.generatedDocuments.tailoredLocation = tailoredLocation;
-          console.log('[ATS Tailor] ✅ OpenResume CV generated:', atsPackage.cvFilename);
+          // Generate Cover Letter PDF
+          const coverResult = await ProfessionalPDFEngine.generateCoverLetter(
+            pdfCandidateData,
+            this.generatedDocuments.coverLetter,
+            { title: this.currentJob?.title || '', company: this.currentJob?.company || '' }
+          );
+          if (coverResult?.success && coverResult.pdf) {
+            this.generatedDocuments.coverPdf = coverResult.pdf;
+            this.generatedDocuments.coverFileName = coverResult.filename || this.generatedDocuments.coverFileName;
+            console.log('[ATS Tailor] ProfessionalPDFEngine Cover Letter generated:', this.generatedDocuments.coverFileName);
+          }
+
+          if (this.generatedDocuments.cvPdf) return;
+        } catch (pdfEngineError) {
+          console.warn('[ATS Tailor] ProfessionalPDFEngine failed, falling through:', pdfEngineError.message);
         }
-
-        if (atsPackage.coverBase64) {
-          this.generatedDocuments.coverPdf = atsPackage.coverBase64;
-          this.generatedDocuments.coverFileName = atsPackage.coverFilename;
-          console.log('[ATS Tailor] ✅ OpenResume Cover Letter generated:', atsPackage.coverFilename);
-        }
-
-        if (atsPackage.matchScore) {
-          this.generatedDocuments.matchScore = atsPackage.matchScore;
-        }
-
-        return;
       }
 
       // PRIORITY 2: Use PDFATSPerfect if available
