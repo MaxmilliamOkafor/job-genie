@@ -170,7 +170,8 @@
 
       // Build contact parts - only include non-empty values
       const cleanLocation = String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
-      const contactParts = [formattedPhone, email, cleanLocation].filter(Boolean);
+      const extractedLoc = (cleanLocation && !/^Dublin,?\s*IE$/i.test(cleanLocation)) ? cleanLocation : '';
+      const contactParts = ['Dublin, IE', formattedPhone, email, extractedLoc].filter(Boolean);
       const linkParts = [linkedin, github].filter(Boolean);
 
       return {
