@@ -78,9 +78,10 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                   {company}
                 </div>
                 
-                {/* Line 2: Job Title with Dates right-aligned */}
-                <div className="text-sm" style={{ fontSize: '10.5pt' }}>
-                  {title}
+                {/* Line 2: Job Title with Dates right-aligned (MM/YYYY format) */}
+                <div className="flex justify-between text-sm" style={{ fontSize: '10.5pt' }}>
+                  <span>{title}</span>
+                  {dateRange && <span className="text-gray-600">{dateRange}</span>}
                 </div>
                 
                 {/* Bullets with proper ATS bullet points */}

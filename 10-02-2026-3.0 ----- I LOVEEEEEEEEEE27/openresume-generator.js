@@ -124,7 +124,7 @@
           data.experience = rawExperience.map(exp => ({
             company: exp.company || exp.organization || exp.company_name || '',
             title: exp.title || exp.position || exp.role || exp.job_title || '',
-            dates: exp.dates || exp.duration || `${exp.startDate || exp.start_date || ''} - ${exp.endDate || exp.end_date || 'Present'}`,
+            dates: this.formatDateMMYYYY(exp.dates || exp.duration || `${exp.startDate || exp.start_date || ''} - ${exp.endDate || exp.end_date || 'Present'}`),
             location: exp.location || '',
             bullets: this.normalizeBullets(exp.bullets || exp.achievements || exp.responsibilities || exp.description || [])
           }));
@@ -682,6 +682,48 @@
       return normalized;
     },
 
+    // ============ FORMAT DATE TO MM/YYYY ============
+    // ATS-compliant: "01/2023 – Present" or "04/2021 – 12/2022"
+    formatDateMMYYYY(dateStr) {
+      if (!dateStr) return '';
+      const hasPresent = /present|current|now/i.test(dateStr);
+
+      // Try YYYY-MM format (e.g., "2023-01")
+      const isoMatches = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
+      if (isoMatches && isoMatches.length >= 1) {
+        const parts = isoMatches.map(m => {
+          const [y, mo] = m.split(/[-/]/);
+          return `${mo.padStart(2, '0')}/${y}`;
+        });
+        if (hasPresent) return `${parts[0]} – Present`;
+        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
+        return parts[0];
+      }
+
+      // Try MM/YYYY format already
+      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
+      if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
+        const parts = mmyyyyMatches.map(m => {
+          const [mo, y] = m.split('/');
+          return `${mo.padStart(2, '0')}/${y}`;
+        });
+        if (hasPresent) return `${parts[0]} – Present`;
+        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
+        return parts[0];
+      }
+
+      // Fallback: extract years, prefix with 01/
+      const years = dateStr.match(/\d{4}/g);
+      if (hasPresent && years && years.length >= 1) {
+        return `01/${years[0]} – Present`;
+      } else if (years && years.length >= 2) {
+        return `01/${years[0]} – 01/${years[1]}`;
+      } else if (years && years.length === 1) {
+        return `01/${years[0]}`;
+      }
+      return dateStr;
+    },
+
     // ============ FORMAT PHONE FOR ATS ============
     // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
     formatPhoneForATS(phone) {
@@ -783,10 +825,15 @@
       y += 2;
 
       // === CONTACT LINE ===
-      // Format: "+CountryCode: Number | email | City, State"
+      // Format: "Dublin, IE | +CountryCode: Number | email | Extracted Location"
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const baseLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
-      const contactParts = [formattedPhone, data.contact.email, baseLocation].filter(Boolean);
+      const candidateLocation = 'Dublin, IE';
+      const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
+      // Build contact parts: permanent location first, then phone, email, then extracted job location (if different)
+      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
+      if (extractedLocation && extractedLocation.toLowerCase() !== candidateLocation.toLowerCase()) {
+        contactParts.push(extractedLocation);
+      }
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(' | ');
         addText(contactLine, false, true, font.body);
@@ -840,8 +887,12 @@
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       
       lines.push(data.contact.name.toUpperCase());
-      const baseLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
-      const contactParts = [formattedPhone, data.contact.email, baseLocation].filter(Boolean);
+      const candidateLocation = 'Dublin, IE';
+      const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
+      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
+      if (extractedLocation && extractedLocation.toLowerCase() !== candidateLocation.toLowerCase()) {
+        contactParts.push(extractedLocation);
+      }
       lines.push(contactParts.join(' | '));
       lines.push([data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean).join(' | '));
       lines.push('');
@@ -901,9 +952,9 @@
       addCenteredText(name.toUpperCase(), true, font.name);
       y += 2;
 
-      // Phone | Email format (no location in cover letter header)
+      // Dublin, IE | Phone | Email format
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const contactLine = [formattedPhone, data.contact.email].filter(Boolean).join(' | ');
+      const contactLine = ['Dublin, IE', formattedPhone, data.contact.email].filter(Boolean).join(' | ');
       addCenteredText(contactLine, false, font.body);
 
       // Portfolio link (prominent placement replacing company name in header)
@@ -1017,7 +1068,7 @@
       const portfolioDisplay = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
       const lines = [
         name.toUpperCase(),
-        [formattedPhone, data.contact.email].filter(Boolean).join(' | '),
+        ['Dublin, IE', formattedPhone, data.contact.email].filter(Boolean).join(' | '),
         '',
         new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         portfolioDisplay || '',

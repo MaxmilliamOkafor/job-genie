@@ -289,21 +289,51 @@
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
-    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
-    toYearOnly(dateStr) {
+    // Convert dates to MM/YYYY format (e.g., "2023-01 - 2025-07" -> "01/2023 – 07/2025")
+    // ATS and recruiters prefer MM/YYYY format
+    toMMYYYY(dateStr) {
       if (!dateStr) return '';
-      // Extract all 4-digit years
-      const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present/i.test(dateStr);
-      
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
+      const hasPresent = /present|current|now/i.test(dateStr);
+
+      // Try to extract YYYY-MM pairs first
+      const isoMatches = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
+      if (isoMatches && isoMatches.length >= 1) {
+        const parts = isoMatches.map(m => {
+          const [y, mo] = m.split(/[-/]/);
+          return `${mo.padStart(2, '0')}/${y}`;
+        });
+        if (hasPresent) return `${parts[0]} – Present`;
+        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
+        return parts[0];
       }
-      return this.normaliseDates(dateStr); // Return normalised if no years found
+
+      // Try MM/YYYY pairs already in that format
+      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
+      if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
+        const parts = mmyyyyMatches.map(m => {
+          const [mo, y] = m.split('/');
+          return `${mo.padStart(2, '0')}/${y}`;
+        });
+        if (hasPresent) return `${parts[0]} – Present`;
+        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
+        return parts[0];
+      }
+
+      // Fallback: extract years and prefix with 01/
+      const years = dateStr.match(/\d{4}/g);
+      if (hasPresent && years && years.length >= 1) {
+        return `01/${years[0]} – Present`;
+      } else if (years && years.length >= 2) {
+        return `01/${years[0]} – 01/${years[1]}`;
+      } else if (years && years.length === 1) {
+        return `01/${years[0]}`;
+      }
+      return this.normaliseDates(dateStr);
+    },
+
+    // Legacy alias
+    toYearOnly(dateStr) {
+      return this.toMMYYYY(dateStr);
     },
 
     // ============ PARSE EXPERIENCE ============
