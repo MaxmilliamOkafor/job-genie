@@ -917,9 +917,16 @@
       // === DATE ===
       const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       addText(today, false, font.body);
-      y += 12;
+      y += 6;
 
-      // === SUBJECT LINE (NO COMPANY NAME LINE) ===
+      // === PORTFOLIO URL (replaces company name line) ===
+      const portfolioUrl = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
+      if (portfolioUrl) {
+        addText(portfolioUrl, false, font.body);
+        y += 6;
+      }
+
+      // === SUBJECT LINE ===
       addText(`Re: ${jobTitle}`, true, font.body);
       y += 8;
 
@@ -1005,13 +1012,15 @@
       const kw1 = highPriority[0] || 'technical solutions';
       const kw2 = highPriority[1] || 'cross-functional collaboration';
 
-      // Format: Name, Phone | Email, Date, Re: Title, Dear Hiring Manager (NO company name line)
+      // Format: Name, Phone | Email, Portfolio, Date, Re: Title, Dear Hiring Manager
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
+      const portfolioDisplay = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
       const lines = [
         name.toUpperCase(),
         [formattedPhone, data.contact.email].filter(Boolean).join(' | '),
         '',
         new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        portfolioDisplay || '',
         '',
         `Re: ${jobTitle}`,
         '',
