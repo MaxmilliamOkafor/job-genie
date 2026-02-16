@@ -1496,7 +1496,7 @@ async function downloadAsPDF(type) {
     } else {
       const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 20);
       requestBody.coverLetter = {
-        recipientCompany: currentJob?.company || 'Company',
+        recipientCompany: userProfile?.portfolio || currentJob?.company || 'Company',
         jobTitle: currentJob?.title || 'Position',
         jobId: currentJob?.jobId || '',
         paragraphs: paragraphs.length > 0 ? paragraphs : [content.trim()]

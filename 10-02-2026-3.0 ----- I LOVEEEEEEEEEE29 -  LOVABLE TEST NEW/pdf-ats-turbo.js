@@ -168,9 +168,10 @@
       // Format phone for ATS: "+CountryCode: Number"
       const formattedPhone = this.formatPhoneForATS(phone);
 
-      // Build contact parts - only include non-empty values
-      const cleanLocation = String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
-      const contactParts = [formattedPhone, email, cleanLocation].filter(Boolean);
+      // Build contact parts - "Dublin, IE" MUST always be first
+      const cleanLocation = String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/Dublin,?\s*IE/gi, '').trim();
+      const contactParts = ['Dublin, IE', formattedPhone, email].filter(Boolean);
+      if (cleanLocation) contactParts.push(cleanLocation);
       const linkParts = [linkedin, github].filter(Boolean);
 
       return {

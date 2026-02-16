@@ -1942,7 +1942,7 @@ async function generatePDF(type, profileData, jobData, tailoredData) {
         ];
       }
       requestBody.coverLetter = {
-        recipientCompany: jobData?.company || 'Company',
+        recipientCompany: profileData.portfolio || jobData?.company || 'Company',
         jobTitle: jobData?.title || 'Position',
         jobId: jobData?.jobId || '',
         paragraphs: paragraphs
