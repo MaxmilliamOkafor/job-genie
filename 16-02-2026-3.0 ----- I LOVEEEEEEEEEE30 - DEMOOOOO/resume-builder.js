@@ -104,9 +104,11 @@
       // Format phone for ATS: "+CountryCode: Number"
       const formattedPhone = this.formatPhoneForATS(phone);
 
+      const cleanLoc = String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const dedupedLoc = (cleanLoc && !/^Dublin,?\s*IE$/i.test(cleanLoc)) ? cleanLoc : '';
       return {
         name: name || 'Applicant',
-        contactLine: [formattedPhone, email, String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim()].filter(Boolean).join(' | '),
+        contactLine: ['Dublin, IE', formattedPhone, email, dedupedLoc].filter(Boolean).join(' | '),
         linksLine: [linkedin, github, portfolio].filter(Boolean).join(' | ')
       };
     },
