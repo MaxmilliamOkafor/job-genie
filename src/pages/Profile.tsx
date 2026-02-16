@@ -1287,7 +1287,7 @@ const Profile = () => {
                                 exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
                                 updateLocalField('professional_experience', exps);
                               }}
-                              placeholder="YYYY-MM"
+                              placeholder="MM-YYYY"
                             />
                           </div>
                           <div className="flex-1">

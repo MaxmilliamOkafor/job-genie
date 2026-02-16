@@ -181,8 +181,8 @@ export const extractDatesFromTitle = (title: string): { cleanTitle: string; star
 };
 
 /**
- * Format extracted dates into a clean "MM/YYYY – MM/YYYY" or "MM/YYYY – Present" string
- * ATS and recruiters prefer MM/YYYY format (e.g., 01/2023 – Present)
+ * Format extracted dates into a clean "MM-YYYY – MM-YYYY" or "MM-YYYY – Present" string
+ * ATS and recruiters prefer MM-YYYY format (e.g., 01-2023 – Present)
  */
 export const formatDateRange = (startDate?: string, endDate?: string, title?: string): string => {
   // First try to extract from title if no explicit dates
@@ -200,7 +200,7 @@ export const formatDateRange = (startDate?: string, endDate?: string, title?: st
     return seg;
   };
 
-  // Extract MM/YYYY from various date formats (YYYY-MM, MM/YYYY, YYYY, etc.)
+  // Extract MM-YYYY from various date formats (YYYY-MM, MM/YYYY, MM-YYYY, YYYY, etc.)
   const extractMMYYYY = (raw?: string) => {
     const date = normalise(raw);
     if (!date) return '';
@@ -209,13 +209,13 @@ export const formatDateRange = (startDate?: string, endDate?: string, title?: st
     // Match YYYY-MM format (e.g., "2023-01")
     const isoMatch = date.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
     if (isoMatch) {
-      return `${isoMatch[2].padStart(2, '0')}/${isoMatch[1]}`;
+      return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
     }
 
-    // Match MM/YYYY format already (e.g., "01/2023")
-    const mmyyyyMatch = date.match(/\b(\d{1,2})\/((?:19|20)\d{2})\b/);
+    // Match MM/YYYY or MM-YYYY format already (e.g., "01/2023" or "01-2023")
+    const mmyyyyMatch = date.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
     if (mmyyyyMatch) {
-      return `${mmyyyyMatch[1].padStart(2, '0')}/${mmyyyyMatch[2]}`;
+      return `${mmyyyyMatch[1].padStart(2, '0')}-${mmyyyyMatch[2]}`;
     }
 
     // Fallback: extract just the year

@@ -180,20 +180,34 @@
         const company = (job.company || '').trim();
         const title = (job.title || '').trim();
         
-        // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
+        // Build dates - normalise to "MM-YYYY – MM-YYYY" format
         let dates = job.dates || '';
         if (!dates && (job.startDate || job.endDate)) {
           const start = job.startDate || '';
           const end = job.endDate || 'Present';
           dates = start ? `${start} - ${end}` : end;
         }
-        
-        // Normalise date format: replace hyphens with en dash, ensure spaces around it
-        const normalisedDates = dates ? String(dates)
-          .replace(/--/g, '–')           // double hyphen to en dash
-          .replace(/-/g, '–')            // single hyphen to en dash  
-          .replace(/\s*–\s*/g, ' – ')    // ensure spaces around en dash
-          : '';
+
+        // Normalise date format to MM-YYYY
+        const toMMYYYY = (token) => {
+          if (!token) return '';
+          if (/present/i.test(token.trim())) return 'Present';
+          const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+          if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+          const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+          if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+          const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
+          return yrMatch ? yrMatch[1] : token.trim();
+        };
+        let normalisedDates = '';
+        if (dates) {
+          const dateParts = dates.split(/\s*[-–—]\s*/);
+          if (dateParts.length >= 2) {
+            normalisedDates = `${toMMYYYY(dateParts[0])} – ${toMMYYYY(dateParts[dateParts.length - 1])}`;
+          } else {
+            normalisedDates = toMMYYYY(dates);
+          }
+        }
         
         const location = job.location || '';
         
@@ -573,7 +587,7 @@
 <body>
   <div class="name">${escapeHtml(contact.name)}</div>
   <div class="contact">
-    ${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(contact.location)} | Open to relocation` : ''}
+    ${contact.location ? `${escapeHtml(contact.location)} | ` : ''}${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.extractedJobLocation && contact.extractedJobLocation !== contact.location ? ` | ${escapeHtml(contact.extractedJobLocation)}` : ''}
     ${contact.linkedin || contact.github ? `<br>${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}` : ''}
   </div>
   
@@ -641,7 +655,9 @@
       const lines = [];
 
       lines.push(contact.name.toUpperCase());
-      lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | ') + (contact.location ? ' | Open to relocation' : ''));
+      const legacyContactParts = [contact.location, contact.phone, contact.email].filter(Boolean);
+      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) legacyContactParts.push(contact.extractedJobLocation);
+      lines.push(legacyContactParts.join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }

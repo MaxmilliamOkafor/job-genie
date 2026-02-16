@@ -67,7 +67,7 @@
   const ProfessionalPDFEngine = {
 
     // ============ MAIN ENTRY: GENERATE CV PDF ============
-    async generateCV(candidateData, tailoredContent, options = {}) {
+    async generateCV(candidateData, tailoredContent, options = {}, jobData = null) {
       const startTime = performance.now();
       console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV (SPEED OPTIMIZED)...');
 
@@ -78,7 +78,7 @@
         }
 
         // Parse and structure CV data ONCE
-        const cvData = this.structureCVData(candidateData, tailoredContent);
+        const cvData = this.structureCVData(candidateData, tailoredContent, jobData);
         
         // Create PDF document with maximum compression for speed
         const doc = new jspdf.jsPDF({
@@ -151,8 +151,8 @@
 
         let currentY = PDF_CONFIG.margins.top;
 
-        // Render cover letter header
-        currentY = this.renderCoverHeader(doc, candidateData, currentY);
+        // Render cover letter header (pass jobData for extracted location)
+        currentY = this.renderCoverHeader(doc, candidateData, currentY, jobData);
         
         // Render recipient info
         currentY = this.renderRecipientInfo(doc, jobData, currentY);
@@ -191,9 +191,9 @@
     },
 
     // ============ STRUCTURE CV DATA ============
-    structureCVData(candidateData, tailoredContent) {
+    structureCVData(candidateData, tailoredContent, jobData = null) {
       const data = {
-        contact: this.extractContact(candidateData),
+        contact: this.extractContact(candidateData, jobData),
         summary: '',
         experience: [],
         education: [],
@@ -222,15 +222,26 @@
     },
 
     // ============ EXTRACT CONTACT INFO ============
-    extractContact(data) {
-      if (!data) return { name: 'Applicant', email: '', phone: '', location: '', linkedin: '', github: '' };
+    extractContact(data, jobData = null) {
+      if (!data) return { name: 'Applicant', email: '', phone: '', location: '', linkedin: '', github: '', extractedJobLocation: '' };
 
       const firstName = data.firstName || data.first_name || '';
       const lastName = data.lastName || data.last_name || '';
       const name = `${firstName} ${lastName}`.trim() || 'Applicant';
-      
+
       let location = data.city || data.location || '';
       location = this.cleanLocation(location);
+      // Dublin, IE ALWAYS present as home base
+      if (!location || location.length < 3) {
+        location = 'Dublin, IE';
+      }
+
+      // Extract job location from job data
+      let extractedJobLocation = '';
+      if (jobData) {
+        extractedJobLocation = jobData.location || jobData.jobLocation || jobData.extractedLocation || '';
+        extractedJobLocation = this.cleanLocation(extractedJobLocation);
+      }
 
       return {
         name,
@@ -238,7 +249,8 @@
         phone: this.formatPhone(data.phone || ''),
         location,
         linkedin: this.formatLinkedIn(data.linkedin || ''),
-        github: this.formatGitHub(data.github || '')
+        github: this.formatGitHub(data.github || ''),
+        extractedJobLocation
       };
     },
 
@@ -472,23 +484,38 @@
         .trim();
     },
 
-    // ============ NORMALIZE DATES ============
+    // ============ NORMALIZE DATES (MM-YYYY format) ============
     normalizeDates(dateStr) {
       if (!dateStr) return '';
-      // Extract years
-      const years = dateStr.match(/\d{4}/g);
       const hasPresent = /present/i.test(dateStr);
-      
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
+
+      // Helper: convert a date token to MM-YYYY if possible
+      const toMMYYYY = (token) => {
+        if (!token) return '';
+        if (/present/i.test(token)) return 'Present';
+        // YYYY-MM → MM-YYYY
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        // MM/YYYY or MM-YYYY → MM-YYYY
+        const mmyyyyMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        if (mmyyyyMatch) return `${mmyyyyMatch[1].padStart(2, '0')}-${mmyyyyMatch[2]}`;
+        // Year only
+        const yearMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        if (yearMatch) return yearMatch[1];
+        return token;
+      };
+
+      // Try to split on range separators
+      const parts = dateStr.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) {
+        const start = toMMYYYY(parts[0]);
+        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        if (start && end) return `${start} – ${end}`;
+        if (start) return start;
       }
-      
-      // Normalize dashes to en-dash
-      return dateStr.replace(/-/g, '–').replace(/\s*–\s*/g, ' – ');
+
+      // Single date
+      return toMMYYYY(dateStr);
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -564,7 +591,11 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const contactParts = [contact.phone, contact.email, contact.location].filter(Boolean);
+      // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
+      const contactParts = [contact.location, contact.phone, contact.email].filter(Boolean);
+      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) {
+        contactParts.push(contact.extractedJobLocation);
+      }
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
       const contactX = (pageWidth - contactWidth) / 2;
@@ -789,11 +820,11 @@
     },
 
     // ============ COVER LETTER RENDERING ============
-    renderCoverHeader(doc, candidateData, startY) {
+    renderCoverHeader(doc, candidateData, startY, jobData = null) {
       const pageWidth = PDF_CONFIG.page.width;
       let y = startY;
 
-      const contact = this.extractContact(candidateData);
+      const contact = this.extractContact(candidateData, jobData);
 
       // Name
       doc.setFont(PDF_CONFIG.fonts.heading, 'bold');
@@ -802,12 +833,15 @@
       doc.text(contact.name, PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.name * 0.8 + 4;
 
-      // Contact info
+      // Contact info - REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const contactParts = [contact.email, contact.phone, contact.location].filter(Boolean);
+      const contactParts = [contact.location, contact.phone, contact.email].filter(Boolean);
+      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) {
+        contactParts.push(contact.extractedJobLocation);
+      }
       doc.text(contactParts.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 20;
 
