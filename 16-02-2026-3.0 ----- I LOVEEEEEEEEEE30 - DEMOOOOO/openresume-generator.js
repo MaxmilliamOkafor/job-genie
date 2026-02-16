@@ -682,8 +682,8 @@
       return normalized;
     },
 
-    // ============ FORMAT DATE TO MM/YYYY ============
-    // ATS-compliant: "01/2023 – Present" or "04/2021 – 12/2022"
+    // ============ FORMAT DATE TO MM-YYYY ============
+    // ATS-compliant: "01-2023 – Present" or "04-2021 – 12-2022"
     formatDateMMYYYY(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
@@ -693,33 +693,33 @@
       if (isoMatches && isoMatches.length >= 1) {
         const parts = isoMatches.map(m => {
           const [y, mo] = m.split(/[-/]/);
-          return `${mo.padStart(2, '0')}/${y}`;
+          return `${mo.padStart(2, '0')}-${y}`;
         });
         if (hasPresent) return `${parts[0]} – Present`;
         if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
         return parts[0];
       }
 
-      // Try MM/YYYY format already
-      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
+      // Try MM/YYYY or MM-YYYY format already
+      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})[\/\-](\d{4})\b/g);
       if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
         const parts = mmyyyyMatches.map(m => {
-          const [mo, y] = m.split('/');
-          return `${mo.padStart(2, '0')}/${y}`;
+          const [mo, y] = m.split(/[\/\-]/);
+          return `${mo.padStart(2, '0')}-${y}`;
         });
         if (hasPresent) return `${parts[0]} – Present`;
         if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
         return parts[0];
       }
 
-      // Fallback: extract years, prefix with 01/
+      // Fallback: extract years, prefix with 01-
       const years = dateStr.match(/\d{4}/g);
       if (hasPresent && years && years.length >= 1) {
-        return `01/${years[0]} – Present`;
+        return `01-${years[0]} – Present`;
       } else if (years && years.length >= 2) {
-        return `01/${years[0]} – 01/${years[1]}`;
+        return `01-${years[0]} – 01-${years[1]}`;
       } else if (years && years.length === 1) {
-        return `01/${years[0]}`;
+        return `01-${years[0]}`;
       }
       return dateStr;
     },
@@ -830,10 +830,7 @@
       const candidateLocation = 'Dublin, IE';
       const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
       // Build contact parts: permanent location first, then phone, email, then extracted job location (if different)
-      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
-      if (extractedLocation && extractedLocation.toLowerCase() !== candidateLocation.toLowerCase()) {
-        contactParts.push(extractedLocation);
-      }
+      const contactParts = [candidateLocation, formattedPhone, data.contact.email, extractedLocation].filter(Boolean);
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(' | ');
         addText(contactLine, false, true, font.body);
@@ -889,11 +886,7 @@
       lines.push(data.contact.name.toUpperCase());
       const candidateLocation = 'Dublin, IE';
       const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
-      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
-      if (extractedLocation && extractedLocation.toLowerCase() !== candidateLocation.toLowerCase()) {
-        contactParts.push(extractedLocation);
-      }
-      lines.push(contactParts.join(' | '));
+      lines.push([candidateLocation, formattedPhone, data.contact.email, extractedLocation].filter(Boolean).join(' | '));
       lines.push([data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean).join(' | '));
       lines.push('');
 

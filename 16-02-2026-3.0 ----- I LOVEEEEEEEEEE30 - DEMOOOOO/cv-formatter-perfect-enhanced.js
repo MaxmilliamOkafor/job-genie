@@ -881,8 +881,10 @@
     
     <!-- Contact -->
     <div class="cv-contact">
-      ${contact.phone ? `<div class="cv-contact-line">${escapeHtml(contact.phone)}</div>` : ''}
-      <div class="cv-contact-line">${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim())}` : ''}</div>
+      <div class="cv-contact-line">${(() => {
+        const extractedLoc = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
+        return ['Dublin, IE', contact.phone, contact.email, extractedLoc].filter(Boolean).map(s => escapeHtml(s)).join(' | ');
+      })()}</div>
       ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
     </div>
     
@@ -961,7 +963,7 @@
       // Name and contact
       lines.push(contact.name.toUpperCase());
       const cleanLoc1 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      lines.push([contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | '));
+      lines.push(['Dublin, IE', contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -1184,7 +1186,8 @@
 
       // Contact
       const cleanLocPdf = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactLine = [contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ');
+      const dedupedLocPdf = (cleanLocPdf && !/^Dublin,?\s*IE$/i.test(cleanLocPdf)) ? cleanLocPdf : '';
+      const contactLine = ['Dublin, IE', contact.phone, contact.email, dedupedLocPdf].filter(Boolean).join(' | ');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {
