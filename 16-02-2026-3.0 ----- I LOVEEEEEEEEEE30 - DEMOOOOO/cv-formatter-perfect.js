@@ -730,8 +730,7 @@
     <div class="cv-contact">
       <div class="cv-contact-line">${(() => {
         const extractedLoc = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-        const dedupedLoc = (extractedLoc && !/^Dublin,?\s*IE$/i.test(extractedLoc)) ? extractedLoc : '';
-        return ['Dublin, IE', contact.phone, contact.email, dedupedLoc].filter(Boolean).map(s => escapeHtml(s)).join(' | ');
+        return ['Dublin, IE', contact.phone, contact.email, extractedLoc].filter(Boolean).map(s => escapeHtml(s)).join(' | ');
       })()}</div>
       ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
     </div>
@@ -804,8 +803,7 @@
       // Name and contact
       lines.push(contact.name.toUpperCase());
       const cleanLoc1 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const dedupedLoc1 = (cleanLoc1 && !/^Dublin,?\s*IE$/i.test(cleanLoc1)) ? cleanLoc1 : '';
-      lines.push(['Dublin, IE', contact.phone, contact.email, dedupedLoc1].filter(Boolean).join(' | '));
+      lines.push(['Dublin, IE', contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -1012,8 +1010,7 @@
 
       // Contact
       const cleanLocPdf = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const dedupedLocPdf = (cleanLocPdf && !/^Dublin,?\s*IE$/i.test(cleanLocPdf)) ? cleanLocPdf : '';
-      const contactLine = ['Dublin, IE', contact.phone, contact.email, dedupedLocPdf].filter(Boolean).join(' | ');
+      const contactLine = ['Dublin, IE', contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {
