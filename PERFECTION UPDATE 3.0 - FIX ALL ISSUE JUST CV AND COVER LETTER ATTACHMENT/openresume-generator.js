@@ -563,13 +563,10 @@
       }
       y += 2;
       
-      // === CONTACT LINE (Location | Phone | Email | [Extracted Job Location]) ===
-      const contactParts = [data.contact.location, data.contact.phone, data.contact.email].filter(Boolean);
-      if (data.contact.extractedJobLocation && data.contact.extractedJobLocation !== data.contact.location) {
-        contactParts.push(data.contact.extractedJobLocation);
-      }
+      // === CONTACT LINE (Phone | Email | Location | Open to relocation) ===
+      const contactParts = [data.contact.phone, data.contact.email, data.contact.location].filter(Boolean);
       if (contactParts.length > 0) {
-        const contactLine = contactParts.join(' | ');
+        const contactLine = contactParts.join(' | ') + ' | open to relocation';
         addText(contactLine, false, font.contact, true);
       }
 
@@ -716,9 +713,7 @@
       
       lines.push(data.contact.name.toUpperCase());
       if (data.contact.tagline) lines.push(data.contact.tagline);
-      const cvTextContactParts = [data.contact.location, data.contact.phone, data.contact.email].filter(Boolean);
-      if (data.contact.extractedJobLocation && data.contact.extractedJobLocation !== data.contact.location) cvTextContactParts.push(data.contact.extractedJobLocation);
-      lines.push(cvTextContactParts.join(' | '));
+      lines.push([data.contact.phone, data.contact.email, data.contact.location].filter(Boolean).join(' | ') + ' | open to relocation');
       lines.push(['LinkedIn', 'GitHub', 'Portfolio'].filter((_, i) => [data.contact.linkedin, data.contact.github, data.contact.portfolio][i]).join(' | '));
       lines.push('');
 
@@ -844,10 +839,8 @@
       // === HEADER (Centered) ===
       addCenteredText(name.toUpperCase(), true, font.name);
       
-      // Location | Phone | Email | [Extracted Job Location]
-      const clContactParts = [data.contact.location, data.contact.phone, data.contact.email].filter(Boolean);
-      if (data.contact.extractedJobLocation && data.contact.extractedJobLocation !== data.contact.location) clContactParts.push(data.contact.extractedJobLocation);
-      const contactLine = clContactParts.join(' | ');
+      // Phone | Email (NO location in cover letter header)
+      const contactLine = [data.contact.phone, data.contact.email].filter(Boolean).join(' | ');
       addCenteredText(contactLine, false, font.body);
       y += 20;
 
@@ -924,7 +917,7 @@
       // Format: Name, Phone | Email, Date, Re: Title, Dear Hiring Manager (NO company name line)
       const lines = [
         name.toUpperCase(),
-        [data.contact.location, data.contact.phone, data.contact.email].filter(Boolean).join(' | '),
+        [data.contact.phone, data.contact.email].filter(Boolean).join(' | '),
         '',
         new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         '',

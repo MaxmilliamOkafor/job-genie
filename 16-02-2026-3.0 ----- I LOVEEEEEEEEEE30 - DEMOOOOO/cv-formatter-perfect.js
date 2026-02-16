@@ -295,39 +295,29 @@
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
 
-      // Try to extract YYYY-MM pairs first
-      const isoMatches = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
-      if (isoMatches && isoMatches.length >= 1) {
-        const parts = isoMatches.map(m => {
-          const [y, mo] = m.split(/[-/]/);
-          return `${mo.padStart(2, '0')}/${y}`;
-        });
-        if (hasPresent) return `${parts[0]} – Present`;
-        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
-        return parts[0];
+      const convertToken = (token) => {
+        if (!token) return '';
+        if (/present|current|now/i.test(token)) return 'Present';
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+        const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        return yrMatch ? yrMatch[1] : token;
+      };
+
+      const parts = dateStr.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) {
+        const start = convertToken(parts[0]);
+        const end = hasPresent ? 'Present' : convertToken(parts[parts.length - 1]);
+        if (start && end) return `${start} – ${end}`;
+        if (start) return start;
       }
 
-      // Try MM/YYYY pairs already in that format
-      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
-      if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
-        const parts = mmyyyyMatches.map(m => {
-          const [mo, y] = m.split('/');
-          return `${mo.padStart(2, '0')}/${y}`;
-        });
-        if (hasPresent) return `${parts[0]} – Present`;
-        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
-        return parts[0];
-      }
-
-      // Fallback: extract years and prefix with 01/
       const years = dateStr.match(/\d{4}/g);
-      if (hasPresent && years && years.length >= 1) {
-        return `01/${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `01/${years[0]} – 01/${years[1]}`;
-      } else if (years && years.length === 1) {
-        return `01/${years[0]}`;
-      }
+      if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
+      if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
+      if (years && years.length === 1) return years[0];
       return this.normaliseDates(dateStr);
     },
 
@@ -800,8 +790,7 @@
 
       // Name and contact
       lines.push(contact.name.toUpperCase());
-      const cleanLoc1 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      lines.push([contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | '));
+      lines.push([contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -1007,8 +996,7 @@
       y += 4;
 
       // Contact
-      const cleanLocPdf = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactLine = [contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ');
+      const contactLine = [contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | ');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {

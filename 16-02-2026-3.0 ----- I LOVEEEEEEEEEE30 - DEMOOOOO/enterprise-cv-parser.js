@@ -12,7 +12,7 @@
     variableFields: ['achievements', 'skills', 'location', 'employment_type'],
     confidenceThreshold: 0.85,
     dateFormats: {
-      standard: 'YYYY-MM',
+      standard: 'MM-YYYY',
       present: 'Present'
     }
   };
@@ -340,9 +340,9 @@
     parseDates(dateStr) {
       const result = {
         start: '',
-        startFormat: 'YYYY-MM',
+        startFormat: 'MM-YYYY',
         end: '',
-        endFormat: 'YYYY-MM',
+        endFormat: 'MM-YYYY',
         isCurrent: false,
         durationMonths: 0
       };

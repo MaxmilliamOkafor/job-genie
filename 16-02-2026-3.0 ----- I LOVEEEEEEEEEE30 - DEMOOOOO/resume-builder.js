@@ -106,7 +106,7 @@
 
       return {
         name: name || 'Applicant',
-        contactLine: [formattedPhone, email, String(location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim()].filter(Boolean).join(' | '),
+        contactLine: [location || 'Dublin, IE', formattedPhone, email].filter(Boolean).join(' | '),
         linksLine: [linkedin, github, portfolio].filter(Boolean).join(' | ')
       };
     },

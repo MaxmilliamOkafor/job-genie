@@ -397,24 +397,32 @@
     // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
     toYearOnly(dateStr) {
       if (!dateStr) return '';
-      
-      // Check if already in correct format (contains en dash with proper spacing)
-      if (/\d{4}\s*–\s*(Present|\d{4})/.test(dateStr)) {
-        return dateStr.replace(/\s*–\s*/g, ' – '); // Just ensure spacing
-      }
-      
-      // Extract all 4-digit years
-      const years = dateStr.match(/\d{4}/g);
       const hasPresent = /present|current|now/i.test(dateStr);
-      
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
+
+      const toMMYYYY = (token) => {
+        if (!token) return '';
+        if (/present|current|now/i.test(token)) return 'Present';
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+        const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        return yrMatch ? yrMatch[1] : token;
+      };
+
+      const parts = dateStr.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) {
+        const start = toMMYYYY(parts[0]);
+        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        if (start && end) return `${start} – ${end}`;
+        if (start) return start;
       }
-      return this.normaliseDates(dateStr); // Return normalised if no years found
+
+      const years = dateStr.match(/\d{4}/g);
+      if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
+      if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
+      if (years && years.length === 1) return years[0];
+      return this.normaliseDates(dateStr);
     },
 
     // ============ PARSE EXPERIENCE ============
@@ -960,8 +968,7 @@
 
       // Name and contact
       lines.push(contact.name.toUpperCase());
-      const cleanLoc1 = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      lines.push([contact.phone, contact.email, cleanLoc1].filter(Boolean).join(' | '));
+      lines.push([contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -1183,8 +1190,7 @@
       y += 4;
 
       // Contact
-      const cleanLocPdf = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactLine = [contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ');
+      const contactLine = [contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | ');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {

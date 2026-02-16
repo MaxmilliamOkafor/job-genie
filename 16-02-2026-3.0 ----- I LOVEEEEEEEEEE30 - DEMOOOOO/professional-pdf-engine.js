@@ -67,7 +67,7 @@
   const ProfessionalPDFEngine = {
 
     // ============ MAIN ENTRY: GENERATE CV PDF ============
-    async generateCV(candidateData, tailoredContent, options = {}) {
+    async generateCV(candidateData, tailoredContent, options = {}, jobData = null) {
       const startTime = performance.now();
       console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV (SPEED OPTIMIZED)...');
 
@@ -78,7 +78,7 @@
         }
 
         // Parse and structure CV data ONCE
-        const cvData = this.structureCVData(candidateData, tailoredContent);
+        const cvData = this.structureCVData(candidateData, tailoredContent, jobData);
         
         // Create PDF document with maximum compression for speed
         const doc = new jspdf.jsPDF({
@@ -154,8 +154,8 @@
 
         let currentY = PDF_CONFIG.margins.top;
 
-        // Render cover letter header
-        currentY = this.renderCoverHeader(doc, candidateData, currentY);
+        // Render cover letter header (pass jobData for extracted location)
+        currentY = this.renderCoverHeader(doc, candidateData, currentY, jobData);
         
         // Render recipient info (portfolio URL replaces company name)
         currentY = this.renderRecipientInfo(doc, jobData, candidateData, currentY);
@@ -195,9 +195,9 @@
 
     // ============ STRUCTURE CV DATA ============
     // FIX 27-01-26: Added robust data extraction with multiple fallbacks for OpenAI speed
-    structureCVData(candidateData, tailoredContent) {
+    structureCVData(candidateData, tailoredContent, jobData = null) {
       const data = {
-        contact: this.extractContact(candidateData),
+        contact: this.extractContact(candidateData, jobData),
         summary: '',
         experience: [],
         education: [],
@@ -254,8 +254,8 @@
     },
 
     // ============ EXTRACT CONTACT INFO ============
-    extractContact(data) {
-      if (!data) return { name: 'Applicant', email: '', phone: '', location: '', linkedin: '', github: '', portfolio: '' };
+    extractContact(data, jobData = null) {
+      if (!data) return { name: 'Applicant', email: '', phone: '', location: '', linkedin: '', github: '', portfolio: '', extractedJobLocation: '' };
 
       const firstName = data.firstName || data.first_name || '';
       const lastName = data.lastName || data.last_name || '';
@@ -263,11 +263,22 @@
 
       let location = data.city || data.location || '';
       location = this.cleanLocation(location);
+      // Dublin, IE ALWAYS present as home base
+      if (!location || location.length < 3) {
+        location = 'Dublin, IE';
+      }
 
       // Portfolio: strip protocol prefix for cleaner display
       let portfolio = data.portfolio || '';
       if (portfolio) {
         portfolio = portfolio.replace(/^https?:\/\//i, '').replace(/\/$/,'');
+      }
+
+      // Extract job location from job data
+      let extractedJobLocation = '';
+      if (jobData) {
+        extractedJobLocation = jobData.location || jobData.jobLocation || jobData.extractedLocation || '';
+        extractedJobLocation = this.cleanLocation(extractedJobLocation);
       }
 
       return {
@@ -277,7 +288,8 @@
         location,
         linkedin: this.formatLinkedIn(data.linkedin || ''),
         github: this.formatGitHub(data.github || ''),
-        portfolio
+        portfolio,
+        extractedJobLocation
       };
     },
 
@@ -660,47 +672,38 @@
         .trim();
     },
 
-    // ============ NORMALIZE DATES ============
-    // Normalize dates to MM/YYYY format for ATS compliance
+    // ============ NORMALIZE DATES (MM-YYYY format) ============
     normalizeDates(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
 
-      // Try YYYY-MM format (e.g., "2023-01")
-      const isoMatches = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
-      if (isoMatches && isoMatches.length >= 1) {
-        const parts = isoMatches.map(m => {
-          const [y, mo] = m.split(/[-/]/);
-          return `${mo.padStart(2, '0')}/${y}`;
-        });
-        if (hasPresent) return `${parts[0]} – Present`;
-        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
-        return parts[0];
+      // Helper: convert a date token to MM-YYYY if possible
+      const toMMYYYY = (token) => {
+        if (!token) return '';
+        if (/present|current|now/i.test(token)) return 'Present';
+        // YYYY-MM → MM-YYYY
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        // MM/YYYY or MM-YYYY → MM-YYYY
+        const mmyyyyMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        if (mmyyyyMatch) return `${mmyyyyMatch[1].padStart(2, '0')}-${mmyyyyMatch[2]}`;
+        // Year only
+        const yearMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        if (yearMatch) return yearMatch[1];
+        return token;
+      };
+
+      // Try to split on range separators
+      const parts = dateStr.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) {
+        const start = toMMYYYY(parts[0]);
+        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        if (start && end) return `${start} – ${end}`;
+        if (start) return start;
       }
 
-      // Try MM/YYYY format already
-      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
-      if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
-        const parts = mmyyyyMatches.map(m => {
-          const [mo, y] = m.split('/');
-          return `${mo.padStart(2, '0')}/${y}`;
-        });
-        if (hasPresent) return `${parts[0]} – Present`;
-        if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
-        return parts[0];
-      }
-
-      // Fallback: extract years and prefix with 01/
-      const years = dateStr.match(/\d{4}/g);
-      if (hasPresent && years && years.length >= 1) {
-        return `01/${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `01/${years[0]} – 01/${years[1]}`;
-      } else if (years && years.length === 1) {
-        return `01/${years[0]}`;
-      }
-
-      return dateStr.replace(/-/g, '–').replace(/\s*–\s*/g, ' – ');
+      // Single date
+      return toMMYYYY(dateStr);
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -826,11 +829,10 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const candidateLocation = 'Dublin, IE';
-      const cleanLoc = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactParts = [candidateLocation, contact.phone, contact.email].filter(Boolean);
-      if (cleanLoc && cleanLoc.toLowerCase() !== candidateLocation.toLowerCase()) {
-        contactParts.push(cleanLoc);
+      // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
+      const contactParts = [contact.location, contact.phone, contact.email].filter(Boolean);
+      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) {
+        contactParts.push(contact.extractedJobLocation);
       }
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
@@ -1081,11 +1083,11 @@
     },
 
     // ============ COVER LETTER RENDERING ============
-    renderCoverHeader(doc, candidateData, startY) {
+    renderCoverHeader(doc, candidateData, startY, jobData = null) {
       const pageWidth = PDF_CONFIG.page.width;
       let y = startY;
 
-      const contact = this.extractContact(candidateData);
+      const contact = this.extractContact(candidateData, jobData);
 
       // Name
       doc.setFont(PDF_CONFIG.fonts.heading, 'bold');
@@ -1094,12 +1096,15 @@
       doc.text(contact.name, PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.name * 0.8 + 4;
 
-      // Contact info
+      // Contact info - REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const contactParts2 = ['Dublin, IE', contact.email, contact.phone].filter(Boolean);
+      const contactParts2 = [contact.location, contact.phone, contact.email].filter(Boolean);
+      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) {
+        contactParts2.push(contact.extractedJobLocation);
+      }
       doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 4;
 
