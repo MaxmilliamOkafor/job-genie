@@ -25,6 +25,31 @@ window.addEventListener('error', (event) => {
   // Don't prevent default for these - let them be logged
 });
 
+// ============ GLOBAL DATE NORMALISATION: YYYY-MM → MM-YYYY ============
+// Converts ISO dates like "2023-01" to "01-2023" for ATS compliance
+function _toMMYYYY(token) {
+  if (!token) return '';
+  const t = String(token).trim();
+  if (/^present$/i.test(t)) return 'Present';
+  if (/current|now/i.test(t)) return 'Present';
+  // YYYY-MM → MM-YYYY
+  const iso = t.match(/^((?:19|20)\d{2})[-/](\d{1,2})$/);
+  if (iso) return `${iso[2].padStart(2, '0')}-${iso[1]}`;
+  // Already MM-YYYY or MM/YYYY → normalise to MM-YYYY
+  const mmyyyy = t.match(/^(\d{1,2})[-/]((?:19|20)\d{2})$/);
+  if (mmyyyy) return `${mmyyyy[1].padStart(2, '0')}-${mmyyyy[2]}`;
+  // Year only → return as-is
+  return t;
+}
+function _buildMMYYYYRange(startDate, endDate) {
+  const s = _toMMYYYY(startDate);
+  const e = _toMMYYYY(endDate || 'Present');
+  if (!s && !e) return '';
+  if (!s) return e;
+  if (!e || s === e) return s;
+  return `${s} – ${e}`;
+}
+
 // ============ PERFECTION v3.0: IMMUTABILITY VALIDATION ============
 // Ensures company names, job titles, and dates are NEVER modified by AI
 function validateWorkExperienceImmutability(originalExperience, tailoredExperience) {
@@ -41,7 +66,7 @@ function validateWorkExperienceImmutability(originalExperience, tailoredExperien
     const origCompany = originalExp.company || originalExp.companyName || '';
     const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
     const origDates = originalExp.dates || originalExp.date || 
-                      `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`;
+                      _buildMMYYYYRange(originalExp.startDate, originalExp.endDate);
 
     const result = {
       ...tailoredExp,
@@ -143,9 +168,9 @@ function validateWorkExperienceImmutability(originalExperience, tailoredExperien
     // Extract original immutable values with fallbacks for different field naming conventions
     const origCompany = originalExp.company || originalExp.companyName || '';
     const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
-    const origDates = originalExp.dates || `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`.trim();
-    const origStartDate = originalExp.startDate || '';
-    const origEndDate = originalExp.endDate || '';
+    const origDates = originalExp.dates || _buildMMYYYYRange(originalExp.startDate, originalExp.endDate);
+    const origStartDate = _toMMYYYY(originalExp.startDate) || '';
+    const origEndDate = _toMMYYYY(originalExp.endDate) || '';
     
     // Return validated object with original immutable fields + tailored bullets
     return {
@@ -3254,9 +3279,9 @@ class ATSTailor {
               ...aiExp,
               company: origCompany,  // ← LOCKED FROM ORIGINAL PROFILE
               title: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
-              dates: originalExp.dates || `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`.trim(),  // ← LOCKED
-              startDate: originalExp.startDate,  // ← LOCKED
-              endDate: originalExp.endDate,      // ← LOCKED
+              dates: originalExp.dates || _buildMMYYYYRange(originalExp.startDate, originalExp.endDate),  // ← LOCKED (MM-YYYY)
+              startDate: _toMMYYYY(originalExp.startDate),  // ← LOCKED (MM-YYYY)
+              endDate: _toMMYYYY(originalExp.endDate),      // ← LOCKED (MM-YYYY)
               // bullets/description CAN be tailored by AI
               bullets: aiExp.bullets || aiExp.description || originalExp.bullets || originalExp.description || [],
             };
@@ -3540,22 +3565,27 @@ class ATSTailor {
         }
       }
 
-      // CRITICAL: Fix experience dates from "YYYY – YYYY" to "MM/YYYY – MM/YYYY"
+      // CRITICAL: Normalise all experience dates to MM-YYYY format in generated CV text
       if (this.generatedDocuments.cv) {
-        const dateMap = {
-          '2023': '01/2023', '2024': '01/2024', '2025': '07/2025',
-          '2021': '04/2021', '2022': '12/2022', '2017': '08/2017'
-        };
         let cvText = this.generatedDocuments.cv;
-        // Replace year-only date ranges with MM/YYYY using known profile dates
-        cvText = cvText.replace(/\b(20\d{2})\s*[–—-]\s*Present\b/gi, (match, year) => {
-          return (dateMap[year] || ('01/' + year)) + ' – Present';
+        // Convert YYYY-MM → MM-YYYY in text (e.g., "2023-01" → "01-2023")
+        cvText = cvText.replace(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/g, (match, year, month) => {
+          return `${month.padStart(2, '0')}-${year}`;
         });
-        cvText = cvText.replace(/\b(20\d{2})\s*[–—-]\s*(20\d{2})\b/g, (match, startYear, endYear) => {
-          return (dateMap[startYear] || ('01/' + startYear)) + ' – ' + (dateMap[endYear] || ('01/' + endYear));
+        // Convert MM/YYYY → MM-YYYY (slash to hyphen)
+        cvText = cvText.replace(/\b(\d{1,2})\/((?:19|20)\d{2})\b/g, (match, month, year) => {
+          return `${month.padStart(2, '0')}-${year}`;
+        });
+        // Convert standalone year ranges "YYYY – Present" → "01-YYYY – Present"
+        cvText = cvText.replace(/\b((?:19|20)\d{2})\s*[–—-]\s*Present\b/gi, (match, year) => {
+          return `01-${year} – Present`;
+        });
+        // Convert standalone year ranges "YYYY – YYYY" → "01-YYYY – 01-YYYY"
+        cvText = cvText.replace(/\b((?:19|20)\d{2})\s*[–—-]\s*((?:19|20)\d{2})\b/g, (match, startYear, endYear) => {
+          return `01-${startYear} – 01-${endYear}`;
         });
         this.generatedDocuments.cv = cvText;
-        console.log('[ATS Tailor] Converted dates to MM/YYYY format');
+        console.log('[ATS Tailor] Converted dates to MM-YYYY format');
       }
 
       // CRITICAL: Sanitise cover letter text to remove standalone "Company" line
