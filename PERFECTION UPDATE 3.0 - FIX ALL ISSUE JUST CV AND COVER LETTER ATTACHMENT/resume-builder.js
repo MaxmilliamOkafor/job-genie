@@ -107,7 +107,7 @@
 
       return {
         name: name || 'Applicant',
-        contactLine: [formattedPhone, email, location].filter(Boolean).join(' | ') + (location ? ' | open to relocation' : ''),
+        contactLine: [location || 'Dublin, IE', formattedPhone, email].filter(Boolean).join(' | '),
         linksLine: [linkedin, github, portfolio].filter(Boolean).join(' | ')
       };
     },
@@ -181,16 +181,16 @@
           const company = (job.company || '').trim();
           const title = (job.title || '').trim();
           
-          // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
+          // Build dates - normalise to "MM-YYYY – MM-YYYY" format
           let dates = job.dates || '';
           if (!dates && (job.startDate || job.endDate)) {
             const start = job.startDate || '';
             const end = job.endDate || 'Present';
             dates = start ? `${start} - ${end}` : end;
           }
-          
-          // Normalise date format: replace hyphens with en dash, ensure spaces around it
-          const normalisedDates = this.normaliseDates(dates);
+
+          // Normalise date format to MM-YYYY
+          const normalisedDates = this.normaliseDatesToMMYYYY(dates);
           
           // Build two-line header:
           // Line 1: Company (bold in HTML, plain in text)
@@ -357,13 +357,33 @@
     },
 
     // ============ NORMALISE DATES ============
-    // Convert date strings to "YYYY – YYYY" format with en dash and spaces
+    // Convert date strings to en dash format
     normaliseDates(dateStr) {
       if (!dateStr) return '';
       return String(dateStr)
         .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
+        .replace(/-/g, '–')            // single hyphen to en dash
         .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
+    },
+
+    // ============ NORMALISE DATES TO MM-YYYY ============
+    normaliseDatesToMMYYYY(dateStr) {
+      if (!dateStr) return '';
+      const toMMYYYY = (token) => {
+        if (!token) return '';
+        if (/present/i.test(token.trim())) return 'Present';
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+        const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        return yrMatch ? yrMatch[1] : token.trim();
+      };
+      const parts = dateStr.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) {
+        return `${toMMYYYY(parts[0])} – ${toMMYYYY(parts[parts.length - 1])}`;
+      }
+      return toMMYYYY(dateStr);
     },
 
     // ============ RIGHT ALIGN TITLE + DATES ============
