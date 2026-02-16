@@ -682,8 +682,8 @@
       return normalized;
     },
 
-    // ============ FORMAT DATE TO MM/YYYY ============
-    // ATS-compliant: "01/2023 – Present" or "04/2021 – 12/2022"
+    // ============ FORMAT DATE TO MM-YYYY ============
+    // ATS-compliant: "01-2023 – Present" or "04-2021 – 12-2022"
     formatDateMMYYYY(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
@@ -693,33 +693,33 @@
       if (isoMatches && isoMatches.length >= 1) {
         const parts = isoMatches.map(m => {
           const [y, mo] = m.split(/[-/]/);
-          return `${mo.padStart(2, '0')}/${y}`;
+          return `${mo.padStart(2, '0')}-${y}`;
         });
         if (hasPresent) return `${parts[0]} – Present`;
         if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
         return parts[0];
       }
 
-      // Try MM/YYYY format already
-      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})\/(\d{4})\b/g);
+      // Try MM/YYYY or MM-YYYY format already
+      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})[\/\-](\d{4})\b/g);
       if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
         const parts = mmyyyyMatches.map(m => {
-          const [mo, y] = m.split('/');
-          return `${mo.padStart(2, '0')}/${y}`;
+          const [mo, y] = m.split(/[\/\-]/);
+          return `${mo.padStart(2, '0')}-${y}`;
         });
         if (hasPresent) return `${parts[0]} – Present`;
         if (parts.length >= 2) return `${parts[0]} – ${parts[1]}`;
         return parts[0];
       }
 
-      // Fallback: extract years, prefix with 01/
+      // Fallback: extract years, prefix with 01-
       const years = dateStr.match(/\d{4}/g);
       if (hasPresent && years && years.length >= 1) {
-        return `01/${years[0]} – Present`;
+        return `01-${years[0]} – Present`;
       } else if (years && years.length >= 2) {
-        return `01/${years[0]} – 01/${years[1]}`;
+        return `01-${years[0]} – 01-${years[1]}`;
       } else if (years && years.length === 1) {
-        return `01/${years[0]}`;
+        return `01-${years[0]}`;
       }
       return dateStr;
     },
