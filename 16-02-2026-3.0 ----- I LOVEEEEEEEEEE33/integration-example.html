@@ -556,6 +556,7 @@ CVFormatterPerfectEnhanced.downloadText(plainTextVersion, <span class="string">'
             const lines = [];
 
             lines.push(contact.name.toUpperCase());
+            lines.push(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : ''].filter(Boolean).join(' | '));
             lines.push([contact.phone, contact.email, contact.location].filter(Boolean).join(' | '));
             lines.push('');
 

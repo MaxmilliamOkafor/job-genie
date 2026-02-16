@@ -594,6 +594,7 @@
 <body>
   <div class="name">${escapeHtml(contact.name)}</div>
   <div class="contact">
+    Dublin, IE | ${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}${contact.location && !/^Dublin,?\s*IE$/i.test(String(contact.location).replace(/open\s+to\s+relocation/gi, '').trim()) ? ` | ${escapeHtml(String(contact.location).replace(/open\s+to\s+relocation/gi, '').trim())}` : ''}
     ${contact.location ? `${escapeHtml(contact.location)} | ` : 'Dublin, IE | '}${contact.phone ? `${escapeHtml(contact.phone)} | ` : ''}${escapeHtml(contact.email)}
     ${contact.linkedin || contact.github ? `<br>${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}` : ''}
   </div>
@@ -662,6 +663,8 @@
       const lines = [];
 
       lines.push(contact.name.toUpperCase());
+      const cleanLocTxt = contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
+      lines.push(['Dublin, IE', contact.phone, contact.email, cleanLocTxt].filter(Boolean).join(' | '));
       lines.push([contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
