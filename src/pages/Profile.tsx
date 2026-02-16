@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { normalizeWorkExperience } from '@/lib/workExperienceNormalization';
+import { normalizeWorkExperience, formatDateRange } from '@/lib/workExperienceNormalization';
 
 
 
@@ -1257,18 +1257,18 @@ const Profile = () => {
                   <div className="flex-1 mr-8">
                     {editMode ? (
                       <div className="space-y-2">
-                        <Input 
-                          value={exp.title || ''} 
+                        <Input
+                          value={exp.title || ''}
                           onChange={(e) => {
                             const exps = [...(localProfile.professional_experience || [])];
                             exps[expIndex] = { ...exps[expIndex], title: e.target.value };
                             updateLocalField('professional_experience', exps);
                           }}
-                          placeholder="Job Title (e.g., Senior Software Engineer - 2023 - Present)"
+                          placeholder="Job Title (e.g., Senior Software Engineer)"
                           className="font-semibold"
                         />
-                        <Input 
-                          value={exp.company || ''} 
+                        <Input
+                          value={exp.company || ''}
                           onChange={(e) => {
                             const exps = [...(localProfile.professional_experience || [])];
                             exps[expIndex] = { ...exps[expIndex], company: e.target.value };
@@ -1276,9 +1276,37 @@ const Profile = () => {
                           }}
                           placeholder="Company"
                         />
-                        <p className="text-sm text-muted-foreground italic">
-                          💡 Include dates in the job title above (e.g., "Senior Engineer - 2023 - Present")
-                        </p>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <Label className="text-xs text-muted-foreground">Start Date</Label>
+                            <Input
+                              type="month"
+                              value={exp.startDate || ''}
+                              onChange={(e) => {
+                                const exps = [...(localProfile.professional_experience || [])];
+                                exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
+                                updateLocalField('professional_experience', exps);
+                              }}
+                              placeholder="YYYY-MM"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <Label className="text-xs text-muted-foreground">End Date</Label>
+                            <Input
+                              type="month"
+                              value={exp.endDate === 'Present' ? '' : (exp.endDate || '')}
+                              onChange={(e) => {
+                                const exps = [...(localProfile.professional_experience || [])];
+                                exps[expIndex] = { ...exps[expIndex], endDate: e.target.value || 'Present' };
+                                updateLocalField('professional_experience', exps);
+                              }}
+                              placeholder="Leave empty for Present"
+                            />
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {(!exp.endDate || exp.endDate === 'Present') ? 'Current role (Present)' : ''}
+                            </p>
+                          </div>
+                        </div>
                         
                         {/* Bullet Points / Achievements Section */}
                         <div className="mt-4 pt-4 border-t border-border">
@@ -1345,7 +1373,13 @@ const Profile = () => {
                       </div>
                     ) : (
                       <>
-                        <h3 className="font-bold">{exp.company}</h3>
+                        <div className="flex justify-between items-baseline">
+                          <h3 className="font-bold">{exp.company}</h3>
+                          {(() => {
+                            const dr = formatDateRange(exp.startDate, exp.endDate, exp.title);
+                            return dr ? <span className="text-sm text-muted-foreground whitespace-nowrap ml-4">{dr}</span> : null;
+                          })()}
+                        </div>
                         <p className="text-muted-foreground">{exp.title}</p>
                         {/* Display bullets in view mode */}
                         {exp.bullets && exp.bullets.length > 0 && (

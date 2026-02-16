@@ -653,13 +653,27 @@ serve(async (req) => {
       });
       yPosition -= 20;
 
-      // Contact info
-      const contactLine = [sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
+      // Contact info — "Dublin, IE" MUST always be first
+      const clContactLine = ['Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
         .filter(Boolean)
         .join(" | ");
 
-      if (contactLine) {
-        currentPage.drawText(contactLine, {
+      if (clContactLine) {
+        currentPage.drawText(clContactLine, {
+          x: MARGIN,
+          y: yPosition,
+          size: 10,
+          font: helvetica,
+          color: colors.black,
+        });
+        yPosition -= LINE_HEIGHT * 2;
+      }
+
+      // Portfolio URL (replaces the old "Company" / recipientCompany line)
+      const clPortfolio = sanitizedData.personalInfo.portfolio || '';
+      if (clPortfolio) {
+        const displayPortfolio = clPortfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+        currentPage.drawText(displayPortfolio, {
           x: MARGIN,
           y: yPosition,
           size: 10,
@@ -683,18 +697,6 @@ serve(async (req) => {
         color: colors.black,
       });
       yPosition -= LINE_HEIGHT * 2;
-
-      // Recipient company
-      if (sanitizedData.coverLetter.recipientCompany) {
-        currentPage.drawText(sanitizedData.coverLetter.recipientCompany, {
-          x: MARGIN,
-          y: yPosition,
-          size: 10,
-          font: helvetica,
-          color: colors.black,
-        });
-        yPosition -= LINE_HEIGHT * 2;
-      }
 
       // Subject line - job title only
       const subject = `Re: ${sanitizedData.coverLetter.jobTitle}`;
@@ -979,13 +981,13 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 26;
 
-      // Contact line
-      const contactParts: string[] = [];
+      // Contact line — "Dublin, IE" MUST always be first (candidate permanent address)
+      const contactParts: string[] = ['Dublin, IE'];
       if (pInfo.phone) contactParts.push(pInfo.phone);
       if (pInfo.email) contactParts.push(pInfo.email);
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
       if (locationHeader) {
-        const cleanLocHeader = locationHeader.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+        const cleanLocHeader = locationHeader.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/Dublin,?\s*IE/gi, '').trim();
         if (cleanLocHeader) contactParts.push(cleanLocHeader);
       }
 
@@ -1228,9 +1230,10 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 20;
 
-      // Contact
-      if (pInfo.email) {
-        currentPage.drawText(pInfo.email, {
+      // Contact line — "Dublin, IE" MUST always be first
+      const cl2ContactLine = ['Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
+      if (cl2ContactLine) {
+        currentPage.drawText(cl2ContactLine, {
           x: MARGIN,
           y: yPosition,
           size: 10,
@@ -1240,8 +1243,11 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         yPosition -= LINE_HEIGHT;
       }
 
-      if (pInfo.phone) {
-        currentPage.drawText(pInfo.phone, {
+      // Portfolio URL (replaces Company line)
+      const cl2Portfolio = pInfo.portfolio || '';
+      if (cl2Portfolio) {
+        const cl2DisplayUrl = cl2Portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+        currentPage.drawText(cl2DisplayUrl, {
           x: MARGIN,
           y: yPosition,
           size: 10,
@@ -1254,12 +1260,12 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       yPosition -= LINE_HEIGHT;
 
       // Date
-      const today = new Date().toLocaleDateString("en-US", {
+      const clToday = new Date().toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
         day: "numeric",
       });
-      currentPage.drawText(today, {
+      currentPage.drawText(clToday, {
         x: MARGIN,
         y: yPosition,
         size: 10,

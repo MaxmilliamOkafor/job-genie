@@ -2617,7 +2617,7 @@ ${
           portfolio: userProfile.portfolio,
         },
         coverLetter: {
-          recipientCompany: company || "Company",
+          recipientCompany: company || "",
           jobTitle: jobTitle || "Position",
           jobId: jobId || "",
           paragraphs: paragraphs.length ? paragraphs : [coverText.trim()],
