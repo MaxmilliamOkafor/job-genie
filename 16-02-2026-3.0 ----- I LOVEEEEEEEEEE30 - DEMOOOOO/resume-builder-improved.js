@@ -6,6 +6,34 @@
 
   const ResumeBuilderImproved = {
     
+    // ============ FORMAT DATE TO MM-YYYY ============
+    formatDateMMYYYY(dateStr) {
+      if (!dateStr) return '';
+      const hasPresent = /present|current|now/i.test(dateStr);
+      const convertToken = (token) => {
+        if (!token) return '';
+        if (/present|current|now/i.test(token)) return 'Present';
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        const mmMatch = token.match(/\b(\d{1,2})[/-]((?:19|20)\d{2})\b/);
+        if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+        const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        return yrMatch ? yrMatch[1] : token;
+      };
+      const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
+      if (parts.length >= 2) {
+        const start = convertToken(parts[0].trim());
+        const end = hasPresent ? 'Present' : convertToken(parts[parts.length - 1].trim());
+        if (start && end) return `${start} – ${end}`;
+        if (start) return start;
+      }
+      const years = dateStr.match(/\d{4}/g);
+      if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
+      if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
+      if (years && years.length === 1) return years[0];
+      return dateStr;
+    },
+
     // ============ MAIN BUILD METHOD ============
     async buildResume(candidateData, keywords, options = {}) {
       const startTime = performance.now();
@@ -180,7 +208,7 @@
         const company = (job.company || '').trim();
         const title = (job.title || '').trim();
         
-        // Build dates - normalise to "YYYY – YYYY" format with en dash and spaces
+        // Build dates - normalise to MM-YYYY format
         let dates = job.dates || '';
         if (!dates && (job.startDate || job.endDate)) {
           const start = job.startDate || '';
@@ -188,12 +216,8 @@
           dates = start ? `${start} - ${end}` : end;
         }
         
-        // Normalise date format: replace hyphens with en dash, ensure spaces around it
-        const normalisedDates = dates ? String(dates)
-          .replace(/--/g, '–')           // double hyphen to en dash
-          .replace(/-/g, '–')            // single hyphen to en dash  
-          .replace(/\s*–\s*/g, ' – ')    // ensure spaces around en dash
-          : '';
+        // Normalise date format to MM-YYYY (e.g., "01-2023 – Present")
+        const normalisedDates = dates ? this.formatDateMMYYYY(dates) : '';
         
         const location = job.location || '';
         
@@ -282,11 +306,7 @@
           }
         }
         
-        const normalisedDates = dates ? String(dates)
-          .replace(/--/g, '–')
-          .replace(/-/g, '–')
-          .replace(/\s*–\s*/g, ' – ')
-          : '';
+        const normalisedDates = dates ? this.formatDateMMYYYY(dates) : '';
 
         let bullets = project.bullets || project.achievements || project.description || [];
         if (typeof bullets === 'string') bullets = bullets.split('\n').filter(b => b.trim());

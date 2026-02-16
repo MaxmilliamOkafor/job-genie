@@ -694,7 +694,7 @@
       };
 
       // Try to split on range separators
-      const parts = dateStr.split(/\s*[-–—]\s*/);
+      const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
       if (parts.length >= 2) {
         const start = toMMYYYY(parts[0]);
         const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);

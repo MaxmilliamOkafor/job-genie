@@ -506,10 +506,10 @@
         return yrMatch ? yrMatch[1] : token;
       };
 
-      const parts = dateStr.split(/\s*[-–—]\s*/);
+      const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
       if (parts.length >= 2) {
-        const start = toMMYYYY(parts[0]);
-        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        const start = toMMYYYY(parts[0].trim());
+        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1].trim());
         if (start && end) return `${start} – ${end}`;
         if (start) return start;
       }
@@ -518,7 +518,7 @@
       if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
       if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
       if (years && years.length === 1) return years[0];
-      return dateStr.replace(/-/g, '–').replace(/\s*–\s*/g, ' – ');
+      return dateStr;
     },
 
     titleCase(str) {

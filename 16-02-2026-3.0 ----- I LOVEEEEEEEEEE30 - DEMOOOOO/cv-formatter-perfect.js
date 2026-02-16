@@ -250,13 +250,10 @@
     },
 
     // ============ DATE NORMALISATION HELPERS ============
-    // Normalise dates to "YYYY – YYYY" format with en dash and spaces
+    // Normalise dates to MM-YYYY format (e.g., "01-2023 – Present")
     normaliseDates(dateStr) {
       if (!dateStr) return '';
-      return String(dateStr)
-        .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
-        .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
+      return this.toMMYYYY(dateStr);
     },
 
     // ============ CLEAN COMPANY NAME ============
@@ -289,8 +286,8 @@
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
-    // Convert dates to MM/YYYY format (e.g., "2023-01 - 2025-07" -> "01/2023 – 07/2025")
-    // ATS and recruiters prefer MM/YYYY format
+    // Convert dates to MM-YYYY format (e.g., "2023-01 - 2025-07" -> "01-2023 – 07-2025")
+    // ATS and recruiters prefer MM-YYYY format
     toMMYYYY(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
@@ -298,27 +295,31 @@
       const convertToken = (token) => {
         if (!token) return '';
         if (/present|current|now/i.test(token)) return 'Present';
+        // YYYY-MM → MM-YYYY
         const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
         if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
-        const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        // MM/YYYY or MM-YYYY → MM-YYYY (normalise separator)
+        const mmMatch = token.match(/\b(\d{1,2})[/-]((?:19|20)\d{2})\b/);
         if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+        // Year only
         const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
         return yrMatch ? yrMatch[1] : token;
       };
 
-      const parts = dateStr.split(/\s*[-–—]\s*/);
+      // Split on range separators (hyphens surrounded by spaces, en/em dashes)
+      const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
       if (parts.length >= 2) {
-        const start = convertToken(parts[0]);
-        const end = hasPresent ? 'Present' : convertToken(parts[parts.length - 1]);
+        const start = convertToken(parts[0].trim());
+        const end = hasPresent ? 'Present' : convertToken(parts[parts.length - 1].trim());
         if (start && end) return `${start} – ${end}`;
         if (start) return start;
       }
 
       const years = dateStr.match(/\d{4}/g);
-      if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
+      if (hasPresent && years && years.length >= 1) return `${convertToken(dateStr.split(/present|current|now/i)[0])} – Present`.replace(/^\s*–\s*/, '').trim() || `${years[0]} – Present`;
       if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
       if (years && years.length === 1) return years[0];
-      return this.normaliseDates(dateStr);
+      return dateStr;
     },
 
     // Legacy alias
