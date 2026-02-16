@@ -829,6 +829,7 @@
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const candidateLocation = 'Dublin, IE';
       const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim();
+      const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
       // Build contact parts: permanent location first, then phone, email, then extracted job location (if different)
       const contactParts = [candidateLocation, formattedPhone, data.contact.email, extractedLocation].filter(Boolean);
       if (contactParts.length > 0) {
@@ -949,6 +950,7 @@
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const extractedLocCL = data.contact.location ? String(data.contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
       const contactLine = ['Dublin, IE', formattedPhone, data.contact.email, extractedLocCL].filter(Boolean).join(' | ');
+      const contactLine = ['Dublin, IE', formattedPhone, data.contact.email].filter(Boolean).join(' | ');
       addCenteredText(contactLine, false, font.body);
 
       // Portfolio link (prominent placement replacing company name in header)

@@ -832,6 +832,7 @@
       // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location] (ALWAYS both locations)
       const candidateLocation = 'Dublin, IE';
       const cleanLoc = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
+      const cleanLoc = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').trim() : '';
       const contactParts = [candidateLocation, contact.phone, contact.email, cleanLoc].filter(Boolean);
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
@@ -1102,6 +1103,10 @@
 
       const cleanLocCL = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
       const contactParts2 = ['Dublin, IE', contact.phone, contact.email, cleanLocCL].filter(Boolean);
+      const contactParts2 = [contact.location, contact.phone, contact.email].filter(Boolean);
+      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) {
+        contactParts2.push(contact.extractedJobLocation);
+      }
       doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 4;
 

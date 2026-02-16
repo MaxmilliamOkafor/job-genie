@@ -135,6 +135,7 @@
       return {
         name: name || 'Applicant',
         contactLine: ['Dublin, IE', formattedPhone, email, String(location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim()].filter(Boolean).join(' | '),
+        contactLine: ['Dublin, IE', formattedPhone, email, location].filter(Boolean).join(' | '),
         linksLine: [linkedin, github, portfolio].filter(Boolean).join(' | ')
       };
     },
