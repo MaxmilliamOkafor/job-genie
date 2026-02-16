@@ -6,6 +6,25 @@
 const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
+// ============ DATE FORMAT HELPER: Convert any date to MM-YYYY ============
+function toMMYYYY(token) {
+  if (!token) return '';
+  const t = token.trim();
+  if (/present|current|now/i.test(t)) return 'Present';
+  const iso = t.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+  if (iso) return `${iso[2].padStart(2, '0')}-${iso[1]}`;
+  const mm = t.match(/\b(\d{1,2})[/-]((?:19|20)\d{2})\b/);
+  if (mm) return `${mm[1].padStart(2, '0')}-${mm[2]}`;
+  const yr = t.match(/\b((?:19|20)\d{2})\b/);
+  return yr ? yr[1] : t;
+}
+function buildMMYYYYRange(startDate, endDate) {
+  const s = toMMYYYY(startDate);
+  const e = toMMYYYY(endDate || 'Present');
+  if (s && e) return `${s} – ${e}`;
+  return s || e || '';
+}
+
 // ============ GLOBAL ERROR HANDLER: Prevent extension crashes ============
 // Catches unhandled promise rejections that would otherwise crash the extension
 window.addEventListener('unhandledrejection', (event) => {
@@ -40,8 +59,8 @@ function validateWorkExperienceImmutability(originalExperience, tailoredExperien
     // Force original values for IMMUTABLE fields
     const origCompany = originalExp.company || originalExp.companyName || '';
     const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
-    const origDates = originalExp.dates || originalExp.date || 
-                      `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`;
+    const origDates = buildMMYYYYRange(originalExp.startDate, originalExp.endDate)
+                      || originalExp.dates || originalExp.date || '';
 
     const result = {
       ...tailoredExp,
@@ -143,7 +162,8 @@ function validateWorkExperienceImmutability(originalExperience, tailoredExperien
     // Extract original immutable values with fallbacks for different field naming conventions
     const origCompany = originalExp.company || originalExp.companyName || '';
     const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
-    const origDates = originalExp.dates || `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`.trim();
+    const origDates = buildMMYYYYRange(originalExp.startDate, originalExp.endDate)
+                      || originalExp.dates || '';
     const origStartDate = originalExp.startDate || '';
     const origEndDate = originalExp.endDate || '';
     
@@ -3254,7 +3274,7 @@ class ATSTailor {
               ...aiExp,
               company: origCompany,  // ← LOCKED FROM ORIGINAL PROFILE
               title: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
-              dates: originalExp.dates || `${originalExp.startDate || ''} – ${originalExp.endDate || 'Present'}`.trim(),  // ← LOCKED
+              dates: buildMMYYYYRange(originalExp.startDate, originalExp.endDate) || originalExp.dates || '',  // ← LOCKED (MM-YYYY)
               startDate: originalExp.startDate,  // ← LOCKED
               endDate: originalExp.endDate,      // ← LOCKED
               // bullets/description CAN be tailored by AI
@@ -4725,7 +4745,6 @@ class ATSTailor {
     
     console.log('[ATS Tailor] 📡 Completion signal sent - extension ready for next job');
   }
-
 
   async attachDocument(type) {
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
