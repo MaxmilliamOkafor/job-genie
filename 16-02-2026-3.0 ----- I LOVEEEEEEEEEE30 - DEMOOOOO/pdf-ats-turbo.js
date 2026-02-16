@@ -176,11 +176,8 @@
         extractedJobLocation = this.normalizeLocationFormat(extractedJobLocation);
       }
 
-      // Build contact parts - REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
-      const contactParts = [location, formattedPhone, email].filter(Boolean);
-      if (extractedJobLocation && extractedJobLocation !== location) {
-        contactParts.push(extractedJobLocation);
-      }
+      // Build contact parts - REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location] (ALWAYS both)
+      const contactParts = [location, formattedPhone, email, extractedJobLocation].filter(Boolean);
       const linkParts = [linkedin, github].filter(Boolean);
 
       return {

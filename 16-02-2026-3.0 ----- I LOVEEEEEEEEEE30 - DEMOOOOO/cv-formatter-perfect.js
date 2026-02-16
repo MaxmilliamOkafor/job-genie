@@ -716,10 +716,9 @@
     <!-- Name - Bold, Uppercase, 20pt -->
     <div class="cv-name">${escapeHtml(contact.name.toUpperCase())}</div>
     
-    <!-- Contact -->
+    <!-- Contact - Dublin, IE | Phone | Email | [Extracted location] -->
     <div class="cv-contact">
-      ${contact.phone ? `<div class="cv-contact-line">${escapeHtml(contact.phone)}</div>` : ''}
-      <div class="cv-contact-line">${escapeHtml(contact.email)}${contact.location ? ` | ${escapeHtml(String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim())}` : ''}</div>
+      <div class="cv-contact-line">${escapeHtml(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').trim() : ''].filter(Boolean).join(' | '))}</div>
       ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
     </div>
     
@@ -790,7 +789,7 @@
 
       // Name and contact
       lines.push(contact.name.toUpperCase());
-      lines.push([contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | '));
+      lines.push(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').trim() : ''].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }

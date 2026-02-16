@@ -106,7 +106,7 @@
 
       return {
         name: name || 'Applicant',
-        contactLine: [location || 'Dublin, IE', formattedPhone, email].filter(Boolean).join(' | '),
+        contactLine: ['Dublin, IE', formattedPhone, email, location].filter(Boolean).join(' | '),
         linksLine: [linkedin, github, portfolio].filter(Boolean).join(' | ')
       };
     },
