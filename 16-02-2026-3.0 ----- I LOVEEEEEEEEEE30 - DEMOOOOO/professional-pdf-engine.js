@@ -828,11 +828,7 @@
 
       const candidateLocation = 'Dublin, IE';
       const cleanLoc = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-      const contactParts = [candidateLocation, contact.phone, contact.email].filter(Boolean);
-      if (cleanLoc && cleanLoc.toLowerCase() !== candidateLocation.toLowerCase()) {
-        contactParts.push(cleanLoc);
-      }
-      const contactLine = contactParts.join('  |  ');
+      const contactLine = [candidateLocation, contact.phone, contact.email, cleanLoc].filter(Boolean).join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
       const contactX = (pageWidth - contactWidth) / 2;
       doc.text(contactLine, contactX, y);

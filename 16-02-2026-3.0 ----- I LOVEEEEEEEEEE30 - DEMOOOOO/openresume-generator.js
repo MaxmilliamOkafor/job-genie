@@ -830,10 +830,7 @@
       const candidateLocation = 'Dublin, IE';
       const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
       // Build contact parts: permanent location first, then phone, email, then extracted job location (if different)
-      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
-      if (extractedLocation && extractedLocation.toLowerCase() !== candidateLocation.toLowerCase()) {
-        contactParts.push(extractedLocation);
-      }
+      const contactParts = [candidateLocation, formattedPhone, data.contact.email, extractedLocation].filter(Boolean);
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(' | ');
         addText(contactLine, false, true, font.body);
@@ -889,11 +886,7 @@
       lines.push(data.contact.name.toUpperCase());
       const candidateLocation = 'Dublin, IE';
       const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim();
-      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
-      if (extractedLocation && extractedLocation.toLowerCase() !== candidateLocation.toLowerCase()) {
-        contactParts.push(extractedLocation);
-      }
-      lines.push(contactParts.join(' | '));
+      lines.push([candidateLocation, formattedPhone, data.contact.email, extractedLocation].filter(Boolean).join(' | '));
       lines.push([data.contact.linkedin, data.contact.github, data.contact.portfolio].filter(Boolean).join(' | '));
       lines.push('');
 
