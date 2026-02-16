@@ -214,6 +214,7 @@ export const formatDateRange = (startDate?: string, endDate?: string, title?: st
 
     // Match MM/YYYY or MM-YYYY format already (e.g., "01/2023" or "01-2023")
     const mmyyyyMatch = date.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+    const mmyyyyMatch = date.match(/\b(\d{1,2})[/-]((?:19|20)\d{2})\b/);
     if (mmyyyyMatch) {
       return `${mmyyyyMatch[1].padStart(2, '0')}-${mmyyyyMatch[2]}`;
     }
