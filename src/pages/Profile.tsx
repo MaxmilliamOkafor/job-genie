@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { normalizeWorkExperience, formatDateRange } from '@/lib/workExperienceNormalization';
+import { normalizeWorkExperience, formatDateRange, extractDatesFromTitle } from '@/lib/workExperienceNormalization';
 
 
 
@@ -1373,14 +1373,18 @@ const Profile = () => {
                       </div>
                     ) : (
                       <>
+                        <h3 className="font-bold">{exp.company}</h3>
                         <div className="flex justify-between items-baseline">
-                          <h3 className="font-bold">{exp.company}</h3>
+                          {(() => {
+                            const extracted = extractDatesFromTitle(exp.title || '');
+                            const cleanTitle = extracted.cleanTitle || exp.title;
+                            return <p className="text-muted-foreground">{cleanTitle}</p>;
+                          })()}
                           {(() => {
                             const dr = formatDateRange(exp.startDate, exp.endDate, exp.title);
                             return dr ? <span className="text-sm text-muted-foreground whitespace-nowrap ml-4">{dr}</span> : null;
                           })()}
                         </div>
-                        <p className="text-muted-foreground">{exp.title}</p>
                         {/* Display bullets in view mode */}
                         {exp.bullets && exp.bullets.length > 0 && (
                           <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
