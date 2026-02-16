@@ -355,13 +355,10 @@
     },
 
     // ============ DATE NORMALISATION HELPERS ============
-    // Normalise dates to "YYYY – YYYY" format with en dash and spaces
+    // Normalise dates to MM-YYYY format (e.g., "01-2023 – Present")
     normaliseDates(dateStr) {
       if (!dateStr) return '';
-      return String(dateStr)
-        .replace(/--/g, '–')           // double hyphen to en dash
-        .replace(/-/g, '–')            // single hyphen to en dash  
-        .replace(/\s*–\s*/g, ' – ');   // ensure spaces around en dash
+      return this.toYearOnly(dateStr);
     },
 
     // ============ CLEAN COMPANY NAME ============
@@ -394,26 +391,26 @@
       return cleaned.replace(/\s*\|\s*$/, '').replace(/^\s*\|\s*/, '').replace(/\s{2,}/g, ' ').trim();
     },
 
-    // Convert dates to year-only format (e.g., "Jan 2020 - Dec 2023" -> "2020 – 2023")
+    // Convert dates to MM-YYYY format (e.g., "2023-01 - 2025-07" -> "01-2023 – 07-2025")
     toYearOnly(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
 
-      const toMMYYYY = (token) => {
+      const convertToken = (token) => {
         if (!token) return '';
         if (/present|current|now/i.test(token)) return 'Present';
         const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
         if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
-        const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        const mmMatch = token.match(/\b(\d{1,2})[/-]((?:19|20)\d{2})\b/);
         if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
         const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
         return yrMatch ? yrMatch[1] : token;
       };
 
-      const parts = dateStr.split(/\s*[-–—]\s*/);
+      const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
       if (parts.length >= 2) {
-        const start = toMMYYYY(parts[0]);
-        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        const start = convertToken(parts[0].trim());
+        const end = hasPresent ? 'Present' : convertToken(parts[parts.length - 1].trim());
         if (start && end) return `${start} – ${end}`;
         if (start) return start;
       }
@@ -422,7 +419,7 @@
       if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
       if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
       if (years && years.length === 1) return years[0];
-      return this.normaliseDates(dateStr);
+      return dateStr;
     },
 
     // ============ PARSE EXPERIENCE ============
@@ -529,14 +526,10 @@
           // The edge function + popup.js validation ensures these fields are correct
           // If there's a genuine data issue, it should be fixed in the user's profile
           
-          // Normalise dates to prevent duplication
-          const normalisedDates = dates ? String(dates)
-            .replace(/\s*[-–—]\s*/g, ' - ')
-            .replace(/\s*-\s*/g, ' – ')
-            : '';
+          // Normalise dates to MM-YYYY format
+          const normalisedDates = dates ? this.toYearOnly(dates) : '';
           
-          // Build titleLine: Title – YYYY – YYYY (using en dash with spaces)
-          // Use the normalised dates directly, don't call toYearOnly again
+          // Build titleLine: Title – MM-YYYY – MM-YYYY (using en dash with spaces)
           let titleLine = '';
           if (title && normalisedDates) {
             titleLine = `${title} – ${normalisedDates}`;
