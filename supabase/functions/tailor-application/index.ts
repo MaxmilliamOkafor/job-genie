@@ -2058,7 +2058,8 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 2) CREATE COVER LETTER:
    ${candidateName}
    Dublin, IE | ${userProfile.email} | ${userProfile.phone}
-   
+   ${userProfile.portfolio || ""}
+
    Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
    
    Re: Application for ${jobTitle}
@@ -2129,7 +2130,7 @@ ${
     "certifications": ${JSON.stringify(userProfile.certifications || [])}
   },
   "coverLetterStructured": {
-    "recipientCompany": "${company}",
+    "recipientCompany": "${userProfile.portfolio || company}",
     "jobTitle": "${jobTitle}",
     "jobId": "${jobId || ""}",
     "paragraphs": ["para1", "para2", "para3", "para4"]
