@@ -1278,29 +1278,33 @@ const Profile = () => {
                         />
                         <div className="flex gap-2">
                           <div className="flex-1">
-                            <Label className="text-xs text-muted-foreground">Start Date</Label>
+                            <Label className="text-xs text-muted-foreground">Start Date (MM-YYYY)</Label>
                             <Input
-                              type="month"
+                              type="text"
                               value={exp.startDate || ''}
                               onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9-/]/g, '');
                                 const exps = [...(localProfile.professional_experience || [])];
-                                exps[expIndex] = { ...exps[expIndex], startDate: e.target.value };
+                                exps[expIndex] = { ...exps[expIndex], startDate: raw };
                                 updateLocalField('professional_experience', exps);
                               }}
-                              placeholder="MM-YYYY"
+                              placeholder="e.g. 01-2023"
+                              maxLength={7}
                             />
                           </div>
                           <div className="flex-1">
-                            <Label className="text-xs text-muted-foreground">End Date</Label>
+                            <Label className="text-xs text-muted-foreground">End Date (MM-YYYY)</Label>
                             <Input
-                              type="month"
+                              type="text"
                               value={exp.endDate === 'Present' ? '' : (exp.endDate || '')}
                               onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9-/]/g, '');
                                 const exps = [...(localProfile.professional_experience || [])];
-                                exps[expIndex] = { ...exps[expIndex], endDate: e.target.value || 'Present' };
+                                exps[expIndex] = { ...exps[expIndex], endDate: raw || 'Present' };
                                 updateLocalField('professional_experience', exps);
                               }}
-                              placeholder="Leave empty for Present"
+                              placeholder="Empty = Present"
+                              maxLength={7}
                             />
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {(!exp.endDate || exp.endDate === 'Present') ? 'Current role (Present)' : ''}
