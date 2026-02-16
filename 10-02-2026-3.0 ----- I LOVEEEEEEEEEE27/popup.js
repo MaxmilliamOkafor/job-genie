@@ -3523,20 +3523,37 @@ class ATSTailor {
         }
       }
 
-      // CRITICAL: Fix CV text header to always include "Dublin, IE" as candidate address
+      // CRITICAL: Fix CV text header to always include "Dublin, IE" as candidate address (FIRST)
       if (this.generatedDocuments.cv) {
         let cvText = this.generatedDocuments.cv;
-        // If header line has phone/email but no "Dublin, IE", prepend it
-        const headerLines = cvText.split('\n').slice(0, 5);
-        const hasLocationLine = headerLines.some(l => /Dublin,?\s*IE/i.test(l));
-        if (!hasLocationLine) {
-          // Find the contact line (contains phone or email) and prepend Dublin, IE
-          cvText = cvText.replace(
-            /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
-            '$1Dublin, IE | $2'
-          );
+        const lines = cvText.split('\n');
+        // Find the contact line in the first 6 lines (contains phone or email)
+        let contactIdx = -1;
+        for (let i = 0; i < Math.min(6, lines.length); i++) {
+          if (/[@]|(\+?\d[\d\s:()-]{6,})/.test(lines[i])) {
+            contactIdx = i;
+            break;
+          }
+        }
+        if (contactIdx >= 0) {
+          const contactLine = lines[contactIdx];
+          if (!/Dublin,?\s*IE/i.test(contactLine)) {
+            // Prepend "Dublin, IE | " to the contact line
+            lines[contactIdx] = 'Dublin, IE | ' + contactLine.replace(/^\s*/, '');
+            cvText = lines.join('\n');
+            console.log('[ATS Tailor] Prepended Dublin, IE to CV header contact line');
+          } else if (!/^Dublin/i.test(contactLine.trim())) {
+            // Dublin, IE exists but not at start — move it to front
+            const cleaned = contactLine
+              .replace(/\|?\s*Dublin,?\s*IE\s*\|?/gi, '')
+              .replace(/^\s*\|\s*/, '')
+              .replace(/\s*\|\s*$/, '')
+              .trim();
+            lines[contactIdx] = 'Dublin, IE | ' + cleaned;
+            cvText = lines.join('\n');
+            console.log('[ATS Tailor] Moved Dublin, IE to start of CV header');
+          }
           this.generatedDocuments.cv = cvText;
-          console.log('[ATS Tailor] Prepended Dublin, IE to CV header');
         }
       }
 
@@ -3558,30 +3575,64 @@ class ATSTailor {
         console.log('[ATS Tailor] Converted dates to MM/YYYY format');
       }
 
-      // CRITICAL: Sanitise cover letter text to remove standalone "Company" line
+      // CRITICAL: Sanitise cover letter text — remove "Company", add portfolio URL, fix header
       if (this.generatedDocuments.coverLetter) {
         let coverText = this.generatedDocuments.coverLetter;
-        // Remove standalone "Company" lines (case insensitive)
-        coverText = coverText
-          .replace(/^\s*Company\s*$/gm, '')
-          .replace(/\n\s*Company\s*\n/gi, '\n')
-          .replace(/\n\n\n+/g, '\n\n');
-        // Add portfolio URL after date line if not present
-        if (!/maxmilliamlabs-ai\.web\.app|maxmilliam/i.test(coverText.split('Dear')[0] || '')) {
-          coverText = coverText.replace(
-            /((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})\n/i,
-            '$1\nmaxmilliamlabs-ai.web.app\n'
-          );
+        const coverLines = coverText.split('\n');
+
+        // Pass 1: Remove standalone "Company" lines (case insensitive, with/without whitespace)
+        const filteredLines = coverLines.filter(line => {
+          const trimmed = line.trim().toLowerCase();
+          return trimmed !== 'company' && trimmed !== 'company.' && trimmed !== '[company]' && trimmed !== '{company}';
+        });
+        coverText = filteredLines.join('\n').replace(/\n\n\n+/g, '\n\n');
+
+        // Pass 2: Replace "Company" in the header region (before "Dear") with portfolio URL
+        const dearIdx = coverText.indexOf('Dear');
+        if (dearIdx > 0) {
+          let headerPart = coverText.substring(0, dearIdx);
+          const bodyPart = coverText.substring(dearIdx);
+
+          // Remove any remaining "Company" text from header
+          headerPart = headerPart.replace(/^\s*Company\s*$/gm, '');
+
+          // Add portfolio URL after date line if not already present
+          const portfolioUrl = 'maxmilliamlabs-ai.web.app';
+          if (!/maxmilliamlabs-ai\.web\.app|maxmilliam.*\.web\.app/i.test(headerPart)) {
+            // Try to insert after date line (e.g., "February 16, 2026")
+            const dateLineReplaced = headerPart.replace(
+              /((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})\s*\n/i,
+              '$1\n' + portfolioUrl + '\n'
+            );
+            if (dateLineReplaced !== headerPart) {
+              headerPart = dateLineReplaced;
+            } else {
+              // Try UK date format (e.g., "16 February 2026")
+              const ukDateReplaced = headerPart.replace(
+                /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})\s*\n/i,
+                '$1\n' + portfolioUrl + '\n'
+              );
+              headerPart = ukDateReplaced;
+            }
+          }
+
+          // Add Dublin, IE to cover letter contact line if missing
+          const clLines = headerPart.split('\n');
+          for (let i = 0; i < Math.min(5, clLines.length); i++) {
+            if (/[@]|(\+?\d[\d\s:()-]{6,})/.test(clLines[i]) && !/Dublin,?\s*IE/i.test(clLines[i])) {
+              clLines[i] = 'Dublin, IE | ' + clLines[i].replace(/^\s*/, '');
+              break;
+            }
+          }
+          headerPart = clLines.join('\n');
+
+          coverText = headerPart + bodyPart;
         }
-        // Add Dublin, IE to cover letter header if missing
-        if (!/Dublin,?\s*IE/i.test(coverText.split('Dear')[0] || '')) {
-          coverText = coverText.replace(
-            /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
-            '$1Dublin, IE | $2'
-          );
-        }
+
+        // Clean up triple+ newlines
+        coverText = coverText.replace(/\n\n\n+/g, '\n\n');
         this.generatedDocuments.coverLetter = coverText;
-        console.log('[ATS Tailor] Sanitised cover letter text');
+        console.log('[ATS Tailor] Sanitised cover letter text (Company removed, portfolio added)');
       }
 
       // CRITICAL: Apply dedupeSectionHeaders to CV text BEFORE passing to PDF generator

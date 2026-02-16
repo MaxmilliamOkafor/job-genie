@@ -111,19 +111,24 @@ const splitCompanyAndTitle = (value: string) => {
 export const extractDatesFromTitle = (title: string): { cleanTitle: string; startDate: string; endDate: string } => {
   if (!title) return { cleanTitle: '', startDate: '', endDate: '' };
 
-  // Pattern: "Title - YYYY - YYYY/Present" or "Title - YYYY-YYYY"
-  const datePatterns = [
-    // "Senior Engineer - 2023 - Present" or "Senior Engineer - 2023 - 2024"
-    /^(.+?)\s*[-–—]\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
-    // "Senior Engineer (2023 - Present)"
-    /^(.+?)\s*\(\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})\s*\)$/i,
-    // "Senior Engineer, 2023 - Present"
-    /^(.+?)\s*,\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
-    // "Senior Engineer | 2023 - Present"
-    /^(.+?)\s*\|\s*((?:19|20)\d{2})\s*[-–—]\s*(Present|(?:19|20)\d{2})$/i,
+  // MM/YYYY date token pattern (e.g., "01/2023", "12/2025")
+  const mmyyyyToken = '\\d{1,2}\\/(?:19|20)\\d{2}';
+  // YYYY date token pattern (e.g., "2023")
+  const yyyyToken = '(?:19|20)\\d{2}';
+
+  // --- Priority 1: MM/YYYY patterns (e.g., "Title | 01/2023 – Present") ---
+  const mmyyyyPatterns = [
+    // "Title - 01/2023 - Present" or "Title – 01/2023 – 07/2025"
+    new RegExp(`^(.+?)\\s*[-–—]\\s*(${mmyyyyToken})\\s*[-–—]\\s*(Present|${mmyyyyToken})$`, 'i'),
+    // "Title (01/2023 - Present)"
+    new RegExp(`^(.+?)\\s*\\(\\s*(${mmyyyyToken})\\s*[-–—]\\s*(Present|${mmyyyyToken})\\s*\\)$`, 'i'),
+    // "Title, 01/2023 - Present"
+    new RegExp(`^(.+?)\\s*,\\s*(${mmyyyyToken})\\s*[-–—]\\s*(Present|${mmyyyyToken})$`, 'i'),
+    // "Title | 01/2023 - Present"
+    new RegExp(`^(.+?)\\s*\\|\\s*(${mmyyyyToken})\\s*[-–—]\\s*(Present|${mmyyyyToken})$`, 'i'),
   ];
 
-  for (const pattern of datePatterns) {
+  for (const pattern of mmyyyyPatterns) {
     const match = title.match(pattern);
     if (match) {
       return {
@@ -134,13 +139,41 @@ export const extractDatesFromTitle = (title: string): { cleanTitle: string; star
     }
   }
 
-  // Fallback: Extract any year range from end of title
-  const fallbackMatch = title.match(/^(.+?)\s*[-–—,|]\s*((?:19|20)\d{2})(?:\s*[-–—]\s*(Present|(?:19|20)\d{2}))?$/i);
-  if (fallbackMatch) {
+  // --- Priority 2: YYYY-only patterns (e.g., "Title - 2023 - Present") ---
+  const yyyyPatterns = [
+    new RegExp(`^(.+?)\\s*[-–—]\\s*(${yyyyToken})\\s*[-–—]\\s*(Present|${yyyyToken})$`, 'i'),
+    new RegExp(`^(.+?)\\s*\\(\\s*(${yyyyToken})\\s*[-–—]\\s*(Present|${yyyyToken})\\s*\\)$`, 'i'),
+    new RegExp(`^(.+?)\\s*,\\s*(${yyyyToken})\\s*[-–—]\\s*(Present|${yyyyToken})$`, 'i'),
+    new RegExp(`^(.+?)\\s*\\|\\s*(${yyyyToken})\\s*[-–—]\\s*(Present|${yyyyToken})$`, 'i'),
+  ];
+
+  for (const pattern of yyyyPatterns) {
+    const match = title.match(pattern);
+    if (match) {
+      return {
+        cleanTitle: cleanText(match[1]),
+        startDate: match[2],
+        endDate: match[3],
+      };
+    }
+  }
+
+  // Fallback: Extract any MM/YYYY or YYYY range from end of title
+  const fallbackMM = title.match(new RegExp(`^(.+?)\\s*[-–—,|]\\s*(${mmyyyyToken})(?:\\s*[-–—]\\s*(Present|${mmyyyyToken}))?$`, 'i'));
+  if (fallbackMM) {
     return {
-      cleanTitle: cleanText(fallbackMatch[1]),
-      startDate: fallbackMatch[2],
-      endDate: fallbackMatch[3] || 'Present',
+      cleanTitle: cleanText(fallbackMM[1]),
+      startDate: fallbackMM[2],
+      endDate: fallbackMM[3] || 'Present',
+    };
+  }
+
+  const fallbackYY = title.match(new RegExp(`^(.+?)\\s*[-–—,|]\\s*(${yyyyToken})(?:\\s*[-–—]\\s*(Present|${yyyyToken}))?$`, 'i'));
+  if (fallbackYY) {
+    return {
+      cleanTitle: cleanText(fallbackYY[1]),
+      startDate: fallbackYY[2],
+      endDate: fallbackYY[3] || 'Present',
     };
   }
 
