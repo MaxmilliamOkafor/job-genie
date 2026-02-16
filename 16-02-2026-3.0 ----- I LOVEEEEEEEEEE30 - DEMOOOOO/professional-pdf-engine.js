@@ -829,11 +829,10 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
-      const contactParts = [contact.location, contact.phone, contact.email].filter(Boolean);
-      if (contact.extractedJobLocation && contact.extractedJobLocation !== contact.location) {
-        contactParts.push(contact.extractedJobLocation);
-      }
+      // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location] (ALWAYS both locations)
+      const candidateLocation = 'Dublin, IE';
+      const cleanLoc = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').trim() : '';
+      const contactParts = [candidateLocation, contact.phone, contact.email, cleanLoc].filter(Boolean);
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
       const contactX = (pageWidth - contactWidth) / 2;
