@@ -974,12 +974,6 @@
       doc.text(contactParts.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 20;
 
-      // Date
-      doc.setTextColor(...PDF_CONFIG.colors.black);
-      const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-      doc.text(today, PDF_CONFIG.margins.left, y);
-      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 10;
-
       return y;
     },
 
@@ -1073,16 +1067,8 @@
     },
 
     renderRecipientInfo(doc, jobData, y) {
-      doc.setFont(PDF_CONFIG.fonts.body, 'normal');
-      doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
-      doc.setTextColor(...PDF_CONFIG.colors.black);
-
-      // FIX 27-01-26: Removed "Company" line per user preference - keep blank spacing
-      // Only add "Re: Job Title" line, skip company name entirely
-      
-      // Add spacing where company line would have been (maintains layout)
-      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 20;
-
+      // FIX: Removed date, company name, and "Re:" line entirely per user preference
+      // Cover letter goes straight from header to salutation/body
       return y;
     },
 

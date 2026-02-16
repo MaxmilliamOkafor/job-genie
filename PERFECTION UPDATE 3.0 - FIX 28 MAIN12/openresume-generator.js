@@ -401,22 +401,22 @@
     },
     
     // ============ FORMAT PHONE FOR ATS ============
-    // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
+    // Format: "+CountryCode LocalNumber" (e.g., "+353 0874261508")
     formatPhoneForATS(phone) {
       if (!phone) return '';
-      
+
       // Remove all non-digit and non-plus characters
       let cleaned = phone.replace(/[^\d+]/g, '');
-      
-      // If starts with +, format as "+XXX: rest"
+
+      // If starts with +, format as "+XXX rest"
       if (cleaned.startsWith('+')) {
         // Match country code (1-3 digits after +)
         const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
         if (match) {
-          return `+${match[1]}: ${match[2]}`;
+          return `+${match[1]} ${match[2]}`;
         }
       }
-      
+
       // Return original if no country code detected
       return phone;
     },
@@ -692,7 +692,7 @@
       y += 2;
 
       // === CONTACT LINE ===
-      // Format: "+CountryCode: Number | email | City, State | open to relocation"
+      // Format: "+CountryCode Number | email | City, State | open to relocation"
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
       if (contactParts.length > 0) {
@@ -913,15 +913,6 @@
       addCenteredText(contactLine, false, font.body);
       y += 16;
 
-      // === DATE ===
-      const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      addText(today, false, font.body);
-      y += 12;
-
-      // === SUBJECT LINE (NO COMPANY NAME LINE) ===
-      addText(`Re: ${jobTitle}`, true, font.body);
-      y += 8;
-
       // === SALUTATION ===
       addText('Dear Hiring Manager,', false, font.body);
       y += 8;
@@ -1001,10 +992,6 @@
       const lines = [
         name.toUpperCase(),
         [formattedPhone, data.contact.email].filter(Boolean).join(' | '),
-        '',
-        new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-        '',
-        `Re: ${jobTitle}`,
         '',
         'Dear Hiring Manager,',
         '',

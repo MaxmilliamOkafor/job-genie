@@ -165,7 +165,7 @@
         location = 'Dublin, IE';
       }
 
-      // Format phone for ATS: "+CountryCode: Number"
+      // Format phone for ATS: "+CountryCode Number"
       const formattedPhone = this.formatPhoneForATS(phone);
 
       // Build contact parts - only include non-empty values
@@ -180,19 +180,19 @@
     },
     
     // ============ FORMAT PHONE FOR ATS ============
-    // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
+    // Format: "+CountryCode LocalNumber" (e.g., "+353 0874261508")
     formatPhoneForATS(phone) {
       if (!phone) return '';
-      
+
       let cleaned = phone.replace(/[^\d+]/g, '');
-      
+
       if (cleaned.startsWith('+')) {
         const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
         if (match) {
-          return `+${match[1]}: ${match[2]}`;
+          return `+${match[1]} ${match[2]}`;
         }
       }
-      
+
       return phone;
     },
     
