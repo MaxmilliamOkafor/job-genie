@@ -50,7 +50,7 @@
       console.log('[PDFATSTurbo] Generating ATS-perfect CV (Professional Template)...');
 
       // Parse and format CV content
-      const formattedContent = this.formatCVForATS(tailoredCV, candidateData, workExperienceKeywords, jobData);
+      const formattedContent = this.formatCVForATS(tailoredCV, candidateData, workExperienceKeywords);
       
       // Build PDF text (UTF-8 text-only binary)
       const pdfText = this.buildPDFText(formattedContent);
@@ -87,11 +87,11 @@
     },
 
     // ============ FORMAT CV FOR ATS ============
-    formatCVForATS(cvText, candidateData, workExperienceKeywords = [], jobData = null) {
+    formatCVForATS(cvText, candidateData, workExperienceKeywords = []) {
       const sections = {};
-
+      
       // CONTACT INFORMATION
-      sections.contact = this.buildContactSection(candidateData, jobData);
+      sections.contact = this.buildContactSection(candidateData);
       
       // Parse existing CV sections
       const parsed = this.parseCVSections(cvText);
@@ -127,8 +127,7 @@
 
     // ============ BUILD CONTACT SECTION ============
     // HARD RULE: NEVER include "Remote" in CV location header (recruiter red flag)
-    // FORMAT: Dublin, IE | Phone | Email | [Extracted Job Location]
-    buildContactSection(candidateData, jobData = null) {
+    buildContactSection(candidateData) {
       const firstName = candidateData?.firstName || candidateData?.first_name || '';
       const lastName = candidateData?.lastName || candidateData?.last_name || '';
       const name = `${firstName} ${lastName}`.trim();
@@ -136,22 +135,23 @@
       const email = candidateData?.email || '';
       const linkedin = candidateData?.linkedin || '';
       const github = candidateData?.github || '';
-
-      // Get raw location (candidate's home base)
+      
+      // Get raw location
       let location = candidateData?.city || candidateData?.location || '';
-
+      
       // First, use location tailor if available
       if (typeof window !== 'undefined' && window.ATSLocationTailor) {
         location = window.ATSLocationTailor.normalizeLocationForCV(location);
       }
-
+      
       // CRITICAL HARD RULE: ALWAYS strip Remote from location (recruiter red flag)
+      // This applies even if it exists in the stored profile or uploaded base CV
       location = this.stripRemoteFromLocation(location);
-
+      
       // Normalize location to "City, State" format for US locations
       location = this.normalizeLocationFormat(location);
-
-      // Dublin, IE ALWAYS present as home base
+      
+      // If location becomes empty after stripping, use default Dublin, IE
       if (!location || location.length < 3) {
         location = 'Dublin, IE';
       }
@@ -159,24 +159,13 @@
       // Format phone for ATS: "+CountryCode: Number"
       const formattedPhone = this.formatPhoneForATS(phone);
 
-      // Extract job location from job data (always present if available)
-      let extractedJobLocation = '';
-      if (jobData) {
-        extractedJobLocation = jobData.location || jobData.jobLocation || jobData.extractedLocation || '';
-        extractedJobLocation = this.stripRemoteFromLocation(extractedJobLocation);
-        extractedJobLocation = this.normalizeLocationFormat(extractedJobLocation);
-      }
-
-      // Build contact parts - REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location]
-      const contactParts = [location, formattedPhone, email].filter(Boolean);
-      if (extractedJobLocation && extractedJobLocation !== location) {
-        contactParts.push(extractedJobLocation);
-      }
+      // Build contact parts - only include non-empty values
+      const contactParts = [formattedPhone, email, location].filter(Boolean);
       const linkParts = [linkedin, github].filter(Boolean);
 
       return {
         name,
-        contactLine: contactParts.join(' | '),
+        contactLine: contactParts.join(' | ') + (location ? ' | open to relocation' : ''),
         linksLine: linkParts.join(' | ')
       };
     },

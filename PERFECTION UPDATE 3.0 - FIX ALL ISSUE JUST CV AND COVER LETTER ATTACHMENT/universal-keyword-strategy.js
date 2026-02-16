@@ -47,91 +47,6 @@
     ])
   };
 
-  // ============ HARD SKILLS (HIGH SCORE IMPACT) ============
-  // Job-specific skills: tools, equipment, software, programming languages, technical knowledge
-  const HARD_SKILLS = new Set([
-    // Programming & Development
-    'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust', 'kotlin', 'swift',
-    'scala', 'ruby', 'php', 'r', 'matlab', 'perl', 'shell scripting', 'bash', 'powershell',
-    // Web Development
-    'html', 'css', 'sass', 'less', 'webpack', 'vite', 'next.js', 'nuxt.js', 'gatsby',
-    'tailwind', 'bootstrap', 'material ui', 'svelte',
-    // Frameworks & Libraries
-    'react', 'angular', 'vue', 'node.js', 'django', 'flask', 'spring', 'express', 'fastapi',
-    'graphql', 'rest api', '.net', 'rails', 'laravel', 'symfony',
-    // Cloud & Infrastructure
-    'aws', 'azure', 'gcp', 'kubernetes', 'docker', 'terraform', 'ansible', 'puppet', 'chef',
-    'cloudformation', 'serverless', 'lambda', 'ec2', 's3', 'ecs', 'eks',
-    // Databases & Data
-    'sql', 'nosql', 'postgresql', 'mysql', 'mongodb', 'redis', 'elasticsearch', 'cassandra',
-    'dynamodb', 'snowflake', 'redshift', 'bigquery', 'oracle', 'sqlite', 'mariadb',
-    // Data Science & ML
-    'machine learning', 'deep learning', 'nlp', 'computer vision', 'tensorflow', 'pytorch',
-    'keras', 'pandas', 'numpy', 'scikit-learn', 'spark', 'hadoop', 'kafka', 'airflow',
-    'etl', 'data pipeline', 'data warehouse', 'data modeling', 'data visualization',
-    'power bi', 'tableau', 'looker', 'dbt', 'databricks',
-    // DevOps & CI/CD
-    'ci/cd', 'jenkins', 'circleci', 'github actions', 'gitlab ci', 'travis ci', 'argocd',
-    'prometheus', 'grafana', 'datadog', 'splunk', 'new relic', 'elk stack',
-    // Security
-    'cybersecurity', 'penetration testing', 'siem', 'firewall', 'encryption', 'oauth',
-    'jwt', 'ssl', 'tls', 'sso', 'rbac', 'iam',
-    // Project Management Tools
-    'jira', 'confluence', 'asana', 'trello', 'monday.com', 'notion', 'linear',
-    // Design & UX Tools
-    'figma', 'sketch', 'adobe xd', 'invision', 'zeplin', 'photoshop', 'illustrator',
-    // Business & Analytics Tools
-    'salesforce', 'hubspot', 'google analytics', 'mixpanel', 'amplitude', 'segment',
-    'excel', 'google sheets', 'sap', 'oracle erp',
-    // Recruiting & HR (for HR roles)
-    'applicant tracking system', 'ats', 'workday', 'greenhouse', 'lever', 'icims',
-    'linkedin recruiter', 'boolean search', 'sourcing', 'talent acquisition',
-    'hris', 'bamboohr', 'adp', 'payroll systems',
-    // Finance & Accounting
-    'financial modeling', 'bloomberg terminal', 'quickbooks', 'xero', 'netsuite',
-    // Communication & Collaboration
-    'slack', 'teams', 'zoom', 'webex',
-    // Methodologies
-    'agile', 'scrum', 'kanban', 'waterfall', 'lean', 'six sigma', 'devops',
-    'microservices', 'event-driven architecture', 'domain-driven design'
-  ]);
-
-  // ============ SOFT SKILLS (MEDIUM SCORE IMPACT) ============
-  // Personality traits: time management, communication, teamwork, etc.
-  const SOFT_SKILLS = new Set([
-    // Communication
-    'communication', 'written communication', 'verbal communication', 'public speaking',
-    'presentation skills', 'active listening', 'storytelling', 'negotiation',
-    // Leadership & Management
-    'leadership', 'mentoring', 'coaching', 'team management', 'people management',
-    'delegation', 'conflict resolution', 'decision making', 'strategic thinking',
-    'change management', 'performance management',
-    // Teamwork & Collaboration
-    'teamwork', 'collaboration', 'cross-functional collaboration', 'stakeholder management',
-    'relationship building', 'interpersonal skills', 'networking',
-    // Problem Solving & Critical Thinking
-    'problem-solving', 'critical thinking', 'analytical thinking', 'creative thinking',
-    'troubleshooting', 'root cause analysis', 'innovation', 'resourcefulness',
-    // Time Management & Organisation
-    'time management', 'prioritization', 'multitasking', 'organizational skills',
-    'deadline management', 'planning', 'scheduling', 'project coordination',
-    // Adaptability & Growth
-    'adaptability', 'flexibility', 'resilience', 'growth mindset', 'continuous learning',
-    'self-motivated', 'proactive', 'initiative', 'self-starter',
-    // Work Ethic & Professionalism
-    'attention to detail', 'accountability', 'reliability', 'integrity', 'professionalism',
-    'work ethic', 'dependability', 'punctuality',
-    // Emotional Intelligence
-    'empathy', 'emotional intelligence', 'patience', 'cultural awareness',
-    'diversity', 'inclusion', 'sensitivity',
-    // Customer & Client Focus
-    'customer service', 'client relations', 'customer focus', 'client management',
-    'customer success', 'account management',
-    // Other
-    'innovative', 'results-oriented', 'goal-oriented', 'detail-oriented',
-    'self-directed', 'entrepreneurial', 'strategic', 'analytical'
-  ]);
-
   // ============ INJECTION TEMPLATES (UK SPELLING) ============
   const INJECTION_TEMPLATES = {
     // Technical keyword templates
@@ -165,16 +80,14 @@
   // ============ PHASE 1: EXTRACTION + CLASSIFICATION (125ms) ============
   function extractAndClassifyKeywords(jobDescription, maxKeywords = 35) {
     const startTime = performance.now();
-
+    
     if (!jobDescription || jobDescription.length < 50) {
-      return {
-        highROI: [],
-        mediumROI: [],
-        lowROI: [],
-        hardSkills: [],
-        softSkills: [],
-        all: [],
-        timing: 0
+      return { 
+        highROI: [], 
+        mediumROI: [], 
+        lowROI: [], 
+        all: [], 
+        timing: 0 
       };
     }
 
@@ -199,24 +112,6 @@
     ROI_CLASSIFICATION.LOW.forEach(kw => {
       if (jdLower.includes(kw.toLowerCase())) {
         foundKeywords.low.push(kw);
-      }
-    });
-
-    // ============ HARD SKILLS EXTRACTION (HIGH SCORE IMPACT) ============
-    // Job-specific: tools, equipment, software, programming languages, technical knowledge
-    const extractedHardSkills = [];
-    HARD_SKILLS.forEach(skill => {
-      if (jdLower.includes(skill.toLowerCase())) {
-        extractedHardSkills.push(skill);
-      }
-    });
-
-    // ============ SOFT SKILLS EXTRACTION (MEDIUM SCORE IMPACT) ============
-    // Personality traits: time management, communication, teamwork, etc.
-    const extractedSoftSkills = [];
-    SOFT_SKILLS.forEach(skill => {
-      if (jdLower.includes(skill.toLowerCase())) {
-        extractedSoftSkills.push(skill);
       }
     });
 
@@ -247,10 +142,10 @@
       .sort((a, b) => b[1] - a[1])
       .slice(0, 15)
       .map(([word]) => word);
-
+    
     foundKeywords.unclassified = unclassified;
 
-    // Combine all keywords (prioritized: hard skills first, then process, then soft)
+    // Combine all keywords (prioritized)
     const allKeywords = [
       ...foundKeywords.high,
       ...foundKeywords.medium,
@@ -260,15 +155,11 @@
 
     const timing = performance.now() - startTime;
     console.log(`[UniversalStrategy] Phase 1 complete in ${timing.toFixed(0)}ms (target: ${TIMING_TARGETS.EXTRACT_CLASSIFY}ms)`);
-    console.log(`[UniversalStrategy] Hard skills: ${extractedHardSkills.length}, Soft skills: ${extractedSoftSkills.length}`);
 
     return {
       highROI: foundKeywords.high,
       mediumROI: foundKeywords.medium,
       lowROI: foundKeywords.low,
-      // NEW: Explicit hard/soft skills categorisation (Jobscan ATS scoring)
-      hardSkills: extractedHardSkills,   // HIGH SCORE IMPACT
-      softSkills: extractedSoftSkills,   // MEDIUM SCORE IMPACT
       unclassified: foundKeywords.unclassified,
       all: allKeywords,
       timing,
@@ -548,17 +439,12 @@
       highPriority: keywords.highROI || keywords.highPriority || [],
       mediumPriority: keywords.mediumROI || keywords.mediumPriority || [],
       lowPriority: keywords.lowROI || keywords.lowPriority || [],
-      // NEW: Explicit hard/soft skills for Jobscan ATS scoring
-      hardSkills: keywords.hardSkills || [],   // HIGH SCORE IMPACT
-      softSkills: keywords.softSkills || [],   // MEDIUM SCORE IMPACT
       all: keywords.all || [],
       total: (keywords.all || []).length,
       structured: {
         technical: keywords.highROI || [],
         process: keywords.mediumROI || [],
-        soft: keywords.lowROI || [],
-        hardSkills: keywords.hardSkills || [],
-        softSkills: keywords.softSkills || []
+        soft: keywords.lowROI || []
       }
     };
   }
@@ -584,8 +470,6 @@
     formatForJobGenieUI,
     needsTailoring,
     ROI_CLASSIFICATION,
-    HARD_SKILLS,
-    SOFT_SKILLS,
     INJECTION_TEMPLATES,
     TIMING_TARGETS
   };

@@ -493,20 +493,31 @@
 
     normalizeDates(dateStr) {
       if (!dateStr) return '';
-      
-      // Extract years
-      const years = dateStr.match(/\d{4}/g);
       const hasPresent = /present/i.test(dateStr);
-      
-      if (hasPresent && years && years.length >= 1) {
-        return `${years[0]} – Present`;
-      } else if (years && years.length >= 2) {
-        return `${years[0]} – ${years[1]}`;
-      } else if (years && years.length === 1) {
-        return years[0];
+
+      const toMMYYYY = (token) => {
+        if (!token) return '';
+        if (/present/i.test(token)) return 'Present';
+        const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
+        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
+        const mmMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
+        if (mmMatch) return `${mmMatch[1].padStart(2, '0')}-${mmMatch[2]}`;
+        const yrMatch = token.match(/\b((?:19|20)\d{2})\b/);
+        return yrMatch ? yrMatch[1] : token;
+      };
+
+      const parts = dateStr.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) {
+        const start = toMMYYYY(parts[0]);
+        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        if (start && end) return `${start} – ${end}`;
+        if (start) return start;
       }
-      
-      // Normalize dashes
+
+      const years = dateStr.match(/\d{4}/g);
+      if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
+      if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
+      if (years && years.length === 1) return years[0];
       return dateStr.replace(/-/g, '–').replace(/\s*–\s*/g, ' – ');
     },
 
