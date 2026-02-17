@@ -131,12 +131,12 @@
         }
         
         if (candidateData.skills) {
-          data.skills = Array.isArray(candidateData.skills) 
-            ? candidateData.skills 
-            : candidateData.skills.split(',').map(s => s.trim());
+          data.skills = Array.isArray(candidateData.skills)
+            ? candidateData.skills
+            : (typeof candidateData.skills === 'string' ? candidateData.skills.split(',').map(s => s.trim()) : []);
         }
-        
-        if (candidateData.education) {
+
+        if (candidateData.education && Array.isArray(candidateData.education)) {
           data.education = candidateData.education.map(edu => ({
             institution: edu.institution || edu.school || edu.university || '',
             degree: edu.degree || '',
@@ -144,11 +144,11 @@
             gpa: edu.gpa || ''
           }));
         }
-        
+
         if (candidateData.certifications) {
-          data.certifications = Array.isArray(candidateData.certifications) 
-            ? candidateData.certifications 
-            : [candidateData.certifications];
+          data.certifications = Array.isArray(candidateData.certifications)
+            ? candidateData.certifications
+            : (typeof candidateData.certifications === 'string' ? [candidateData.certifications] : []);
         }
       }
 
@@ -810,7 +810,7 @@
 
       // Count existing mentions
       experience.forEach(job => {
-        job.bullets.forEach(bullet => {
+        (Array.isArray(job.bullets) ? job.bullets : []).forEach(bullet => {
           allKeywords.forEach(kw => {
             if (bullet.toLowerCase().includes(kw.toLowerCase())) {
               mentions[kw]++;
@@ -830,7 +830,8 @@
       return experience.map((job, jobIndex) => {
         const maxKeywordsPerBullet = Math.max(2, 4 - jobIndex);
 
-        const enhancedBullets = job.bullets.map((bullet) => {
+        const safeBullets = Array.isArray(job.bullets) ? job.bullets : [];
+        const enhancedBullets = safeBullets.map((bullet) => {
           const needsMore = allKeywords.filter(kw => {
             const current = mentions[kw];
             const target = targets[kw] || 2;
@@ -1059,7 +1060,7 @@
             addText(header, true, false, font.body);
             y += 2;
 
-            job.bullets.forEach(bullet => {
+            (Array.isArray(job.bullets) ? job.bullets : []).forEach(bullet => {
               const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
               const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
               bulletLines.forEach((line, lineIdx) => {
@@ -1134,7 +1135,7 @@
         lines.push('WORK EXPERIENCE');
         data.experience.forEach(job => {
           lines.push([job.company, job.title, job.dates, job.location].filter(Boolean).join(' | '));
-          job.bullets.forEach(b => lines.push(`- ${b}`));
+          (Array.isArray(job.bullets) ? job.bullets : []).forEach(b => lines.push(`- ${b}`));
           lines.push('');
         });
       }
