@@ -1237,21 +1237,32 @@
       return y;
     },
 
-    // FIX 02-02-26: Sanitize cover letter content to remove any standalone "Company" placeholder
+    // FIX 17-02-26: Sanitize cover letter content to remove company name lines and placeholders
     sanitizeCoverLetterContent(content) {
       if (!content || typeof content !== 'string') return content;
       
       // Remove standalone "Company" lines (case insensitive)
       let sanitized = content
-        .replace(/^Company$/gm, '')           // Exact "Company" on its own line
-        .replace(/^\s*Company\s*$/gm, '')     // "Company" with whitespace
-        .replace(/\nCompany\n/gi, '\n')       // "Company" between newlines
-        .replace(/\n\s*Company\s*\n/gi, '\n') // "Company" with whitespace between newlines
-        .replace(/^Company\s*\n/gi, '')       // "Company" at start
-        .replace(/\n\s*Company\s*$/gi, '')    // "Company" at end
-        .replace(/\n\n\n+/g, '\n\n');         // Collapse multiple empty lines
+        .replace(/^Company$/gm, '')
+        .replace(/^\s*Company\s*$/gm, '')
+        .replace(/\nCompany\n/gi, '\n')
+        .replace(/\n\s*Company\s*\n/gi, '\n');
       
-      // Also replace placeholder patterns like [Company], {Company}, etc.
+      // CRITICAL FIX: Remove any standalone company name line that appears before "Re:" or "Dear"
+      // This catches actual company names like "Formic", "Google", etc. that appear as their own line
+      // Pattern: A short line (1-50 chars, no punctuation endings) right before a "Re:" line
+      sanitized = sanitized.replace(/\n([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Re:)/gi, '\n$2');
+      // Also catch at the very start of the content
+      sanitized = sanitized.replace(/^([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Re:)/i, '$2');
+      
+      // Remove standalone short lines before "Dear Hiring Manager" that look like company names
+      sanitized = sanitized.replace(/\n([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Dear\s)/gi, '\n$2');
+      sanitized = sanitized.replace(/^([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Dear\s)/i, '$2');
+      
+      // Collapse multiple empty lines
+      sanitized = sanitized.replace(/\n\n\n+/g, '\n\n');
+      
+      // Replace placeholder patterns
       sanitized = sanitized
         .replace(/\[Company\]/gi, 'the hiring organization')
         .replace(/\{Company\}/gi, 'the hiring organization')
