@@ -259,9 +259,9 @@ class ATSTailor {
       this.session = null;
     }
 
-    try { await this.loadAIProviderSettings(); } catch (e) { console.error('[ATS Tailor] loadAIProviderSettings error:', e); }
-    try { await this.loadWorkdayState(); } catch (e) { console.error('[ATS Tailor] loadWorkdayState error:', e); }
-    try { await this.loadBaseCVFromProfile(); } catch (e) { console.error('[ATS Tailor] loadBaseCVFromProfile error:', e); }
+    try { await this.loadAIProviderSettings(); } catch (e) { console.error('[ATS Tailor] loadAIProviderSettings error:', e); this.showToast('Failed to load AI settings', 'error'); }
+    try { await this.loadWorkdayState(); } catch (e) { console.error('[ATS Tailor] loadWorkdayState error:', e); this.showToast('Failed to load Workday state', 'error'); }
+    try { await this.loadBaseCVFromProfile(); } catch (e) { console.error('[ATS Tailor] loadBaseCVFromProfile error:', e); this.showToast('Failed to load base CV', 'error'); }
 
     this.bindEvents();
     this.updateUI();
@@ -799,12 +799,16 @@ class ATSTailor {
     document.getElementById('captureSnapshotBtn')?.addEventListener('click', () => this.captureWorkdaySnapshot());
     document.getElementById('forceWorkdayApplyBtn')?.addEventListener('click', () => this.forceWorkdayApply());
     
-    // NEW: Automatic Autofill Toggle
+    // NEW: Automatic Autofill Toggle (Settings panel)
     document.getElementById('autofillEnabledToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
       chrome.storage.local.set({ autofill_enabled: enabled });
       this.showToast(enabled ? '🤖 AI Autofill enabled' : 'AI Autofill disabled', 'success');
-      
+
+      // Sync Workday panel toggle
+      const workdayToggle = document.getElementById('workdayAutofillToggle');
+      if (workdayToggle) workdayToggle.checked = enabled;
+
       // Notify content script
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
@@ -815,9 +819,33 @@ class ATSTailor {
         }
       });
     });
-    
-    // NEW: Manual Autofill Button
+
+    // NEW: Automatic Autofill Toggle (Workday panel)
+    document.getElementById('workdayAutofillToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ autofill_enabled: enabled });
+      this.showToast(enabled ? '🤖 AI Autofill enabled' : 'AI Autofill disabled', 'success');
+
+      // Sync Settings panel toggle
+      const settingsToggle = document.getElementById('autofillEnabledToggle');
+      if (settingsToggle) settingsToggle.checked = enabled;
+
+      // Notify content script
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'TOGGLE_AUTOFILL',
+            enabled: enabled
+          }).catch(() => {});
+        }
+      });
+    });
+
+    // NEW: Manual Autofill Button (Settings panel)
     document.getElementById('manualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
+
+    // NEW: Manual Autofill Button (Workday panel)
+    document.getElementById('workdayManualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
     
     // NEW: Saved Responses Panel
     document.getElementById('viewSavedResponsesBtn')?.addEventListener('click', () => this.viewSavedResponses());
@@ -1166,31 +1194,36 @@ class ATSTailor {
       chrome.storage.local.get(['autofill_enabled'], resolve);
     });
     
+    const enabled = result.autofill_enabled !== false; // Default to enabled
     const toggle = document.getElementById('autofillEnabledToggle');
-    if (toggle) {
-      toggle.checked = result.autofill_enabled !== false; // Default to enabled
-    }
+    if (toggle) toggle.checked = enabled;
+    const workdayToggle = document.getElementById('workdayAutofillToggle');
+    if (workdayToggle) workdayToggle.checked = enabled;
   }
   
   async runManualAutofill() {
-    const btn = document.getElementById('manualAutofillBtn');
-    if (btn) {
+    const btns = [
+      document.getElementById('manualAutofillBtn'),
+      document.getElementById('workdayManualAutofillBtn')
+    ].filter(Boolean);
+
+    btns.forEach(btn => {
       btn.disabled = true;
-      btn.querySelector('.btn-text').textContent = 'Running...';
-    }
-    
+      const textEl = btn.querySelector('.btn-text');
+      if (textEl) textEl.textContent = 'Running...';
+    });
+
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) {
         this.showToast('No active tab found', 'error');
         return;
       }
-      
-      // Send manual autofill command to content script
+
       const response = await chrome.tabs.sendMessage(tab.id, {
         action: 'RUN_MANUAL_AUTOFILL'
       });
-      
+
       if (response?.success) {
         this.showToast(`✅ Autofill complete! Filled ${response.filledCount || 0} fields`, 'success');
       } else {
@@ -1200,10 +1233,11 @@ class ATSTailor {
       console.error('[Popup] Manual autofill error:', e);
       this.showToast('Autofill failed - check console', 'error');
     } finally {
-      if (btn) {
+      btns.forEach(btn => {
         btn.disabled = false;
-        btn.querySelector('.btn-text').textContent = 'Run Manual Autofill';
-      }
+        const textEl = btn.querySelector('.btn-text');
+        if (textEl) textEl.textContent = btn.id === 'manualAutofillBtn' ? 'Run Now' : 'Run Manual Autofill';
+      });
     }
   }
   
