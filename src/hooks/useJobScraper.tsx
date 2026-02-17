@@ -111,6 +111,21 @@ export function useJobScraper() {
           applied_at: job.applied_at,
           url_status: (job as any).url_status,
           report_count: (job as any).report_count,
+          // HiringCafe structured fields
+          category: (job as any).category,
+          employment_type: (job as any).employment_type,
+          workplace_type: (job as any).workplace_type,
+          skills: (job as any).skills || [],
+          experience_min_years: (job as any).experience_min_years,
+          salary_min: (job as any).salary_min,
+          salary_max: (job as any).salary_max,
+          salary_currency: (job as any).salary_currency,
+          salary_frequency: (job as any).salary_frequency,
+          requirements_summary: (job as any).requirements_summary,
+          source_name: (job as any).source_name,
+          employer_type: (job as any).employer_type,
+          ai_extracted: (job as any).ai_extracted,
+          created_at: job.created_at,
         }));
 
       if (append) {

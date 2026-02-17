@@ -20,6 +20,20 @@ export interface Job {
   applied_at: string | null;
   url_status?: string;
   report_count?: number;
+  // HiringCafe structured fields
+  category?: string | null;
+  employment_type?: string | null;
+  workplace_type?: string | null;
+  skills?: string[] | null;
+  experience_min_years?: number | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  salary_frequency?: string | null;
+  requirements_summary?: string | null;
+  source_name?: string | null;
+  employer_type?: string | null;
+  ai_extracted?: boolean;
 }
 
 const JOBS_PER_PAGE = 20;
