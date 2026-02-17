@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { 
   Briefcase, MapPin, Clock, Home, DollarSign, GraduationCap, 
-  Building2, Globe, X, ChevronDown, Layers
+  Building2, Globe, X, ChevronDown, Layers, Search
 } from 'lucide-react';
 import { Job } from '@/hooks/useJobs';
 import {
@@ -198,6 +199,27 @@ export function HiringCafeFilters({ jobs, onFiltersChange, onLocationChange, tot
 
   return (
     <div className="space-y-3">
+      {/* Search bar */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by job title, company, or location..."
+            value={quickSearch}
+            onChange={(e) => setQuickSearch(e.target.value)}
+            className="pl-9 h-10"
+          />
+          {quickSearch && (
+            <button
+              onClick={() => setQuickSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Filter chips row */}
       <div className="flex flex-wrap gap-2 items-center">
         {/* Department/Category */}
