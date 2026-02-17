@@ -1186,7 +1186,6 @@
       // Contact
       const cleanLocPdf = contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
       const contactLine = ['Dublin, IE', contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ');
-      const contactLine = [contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | ');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {
