@@ -131,6 +131,12 @@
         }
         
         if (candidateData.skills) {
+          data.skills = Array.isArray(candidateData.skills)
+            ? candidateData.skills
+            : (typeof candidateData.skills === 'string' ? candidateData.skills.split(',').map(s => s.trim()) : []);
+        }
+
+        if (candidateData.education && Array.isArray(candidateData.education)) {
           data.skills = Array.isArray(candidateData.skills) 
             ? candidateData.skills 
             : candidateData.skills.split(',').map(s => s.trim());
@@ -144,6 +150,11 @@
             gpa: edu.gpa || ''
           }));
         }
+
+        if (candidateData.certifications) {
+          data.certifications = Array.isArray(candidateData.certifications)
+            ? candidateData.certifications
+            : (typeof candidateData.certifications === 'string' ? [candidateData.certifications] : []);
         
         if (candidateData.certifications) {
           data.certifications = Array.isArray(candidateData.certifications) 
@@ -589,6 +600,8 @@
     },
 
     // ============ ENFORCE INTERVIEW-GRADE EXPERIENCE DEPTH ============
+    // HARD RULE: Every role gets minimum 5 detailed, keyword-rich bullets.
+    // Synthetic bullets use diverse templates so they never repeat the same pattern.
     // Ensures deeper roles (4th and 5th entries) contain at least 4 strong bullets each
     // while naturally reinforcing important keywords across the CV.
     enforceInterviewGradeExperienceDepth(cvData, keywordBuckets = {}) {
@@ -602,6 +615,82 @@
       const priorityPool = [...highPriority, ...mediumPriority, ...allKeywords]
         .filter(Boolean)
         .map(k => String(k).trim())
+        .filter(k => k.length > 1);
+      // Keep up to 30 keywords for variety across all roles
+      const kwPool = [...new Set(priorityPool)].slice(0, 30);
+
+      // 12 diverse action verbs to avoid repetition
+      const actionVerbs = [
+        'Led', 'Architected', 'Delivered', 'Optimised', 'Implemented',
+        'Directed', 'Spearheaded', 'Established', 'Drove', 'Streamlined',
+        'Orchestrated', 'Transformed'
+      ];
+
+      // 10 diverse bullet templates - each produces a structurally different sentence
+      // Placeholders: {verb}, {kwA}, {kwB}, {kwC}, {title}, {company}, {outcome}
+      const bulletTemplates = [
+        '{verb} end-to-end {kwA} strategy across multiple workstreams, integrating {kwB} to achieve {outcome}.',
+        'Owned {kwA} delivery pipeline from planning through release, applying {kwB} and {kwC} to consistently exceed sprint targets and quality benchmarks.',
+        'Built and scaled a {kwA} framework that reduced turnaround time by 30%+, while embedding {kwB} best practices across the team.',
+        '{verb} cross-functional initiatives spanning {kwA} and {kwB}, partnering with senior stakeholders to deliver measurable improvements in {outcome}.',
+        'Designed and executed {kwA} solutions in collaboration with engineering and product teams, resulting in strengthened {kwB} capabilities and {outcome}.',
+        '{verb} adoption of {kwA} tooling and processes, mentoring junior team members on {kwB} while driving {outcome} across the department.',
+        'Introduced data-driven {kwA} workflows that improved reporting accuracy, using {kwB} to inform decision-making and achieve {outcome}.',
+        'Managed competing priorities across {kwA} and {kwB} programmes, maintaining delivery velocity and {outcome} under tight deadlines.',
+        '{verb} migration and modernisation of legacy {kwA} systems, applying {kwB} principles to improve maintainability and reduce operational overhead by 25%+.',
+        'Championed continuous improvement through {kwA} initiatives, aligning {kwB} and {kwC} capabilities with organisational goals and {outcome}.'
+      ];
+
+      // 8 diverse outcome phrases
+      const outcomes = [
+        'improved system reliability and delivery predictability',
+        'reduced cycle time and strengthened release quality',
+        'increased stakeholder confidence and transparent execution',
+        'accelerated roadmap delivery while maintaining technical rigour',
+        'measurable gains in operational efficiency and business outcomes',
+        'enhanced team productivity and cross-functional alignment',
+        'consistent on-time delivery and reduced production incidents',
+        'higher customer satisfaction scores and stronger SLA adherence'
+      ];
+
+      // Keyword picker that cycles through pool without immediate repeats
+      let kwIndex = 0;
+      const pickKeyword = (offset = 0) => {
+        if (kwPool.length === 0) return 'cross-functional collaboration';
+        const idx = (kwIndex + offset) % kwPool.length;
+        return kwPool[idx];
+      };
+
+      const generateRoleBullet = (role, roleIdx, slot) => {
+        const title = role?.title || role?.position || 'engineering role';
+        const company = role?.company || role?.organization || 'the organisation';
+
+        // Rotate through templates so consecutive bullets use different structures
+        const templateIdx = (roleIdx * 5 + slot) % bulletTemplates.length;
+        const template = bulletTemplates[templateIdx];
+
+        const verb = actionVerbs[(roleIdx * 3 + slot) % actionVerbs.length];
+        const kwA = pickKeyword(roleIdx * 5 + slot);
+        const kwB = pickKeyword(roleIdx * 5 + slot + 1);
+        const kwC = pickKeyword(roleIdx * 5 + slot + 2);
+        const outcome = outcomes[(roleIdx * 2 + slot) % outcomes.length];
+
+        // Advance keyword index so the next role/slot picks different keywords
+        kwIndex = (kwIndex + 3) % Math.max(kwPool.length, 1);
+
+        return template
+          .replace('{verb}', verb)
+          .replace('{kwA}', kwA)
+          .replace('{kwB}', kwB)
+          .replace('{kwC}', kwC)
+          .replace('{title}', title)
+          .replace('{company}', company)
+          .replace('{outcome}', outcome);
+      };
+
+      // HARD RULE: minimum 5 bullets per role, no exceptions
+      const TARGET_MIN = 5;
+
         .filter(k => k.length > 1)
         .slice(0, 18);
 
@@ -641,12 +730,34 @@
           }
         });
 
+        // Inject keywords into existing bullets that lack them
+        if (kwPool.length > 0) {
+          deduped.forEach((bullet, bIdx) => {
+            const lower = bullet.toLowerCase();
+            const hasKeyword = kwPool.some(kw => lower.includes(kw.toLowerCase()));
+            if (!hasKeyword && bullet.length > 20) {
+              const kw = pickKeyword(idx * 5 + bIdx);
+              // Append keyword phrase naturally at the end
+              if (bullet.endsWith('.')) {
+                deduped[bIdx] = bullet.slice(0, -1) + `, incorporating ${kw} best practices.`;
+              } else {
+                deduped[bIdx] = bullet + `, incorporating ${kw} best practices.`;
+              }
+            }
+          });
+        }
+
+        // Generate synthetic bullets to reach TARGET_MIN
+        let attempts = 0;
+        while (deduped.length < TARGET_MIN && attempts < 10) {
         while (deduped.length < targetMin) {
           const generated = generateRoleBullet(role, idx, deduped.length);
           const key = generated.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
           if (!seen.has(key)) {
             seen.add(key);
             deduped.push(generated);
+          }
+          attempts++;
           } else {
             break;
           }
@@ -810,6 +921,7 @@
 
       // Count existing mentions
       experience.forEach(job => {
+        (Array.isArray(job.bullets) ? job.bullets : []).forEach(bullet => {
         job.bullets.forEach(bullet => {
           allKeywords.forEach(kw => {
             if (bullet.toLowerCase().includes(kw.toLowerCase())) {
@@ -830,6 +942,8 @@
       return experience.map((job, jobIndex) => {
         const maxKeywordsPerBullet = Math.max(2, 4 - jobIndex);
 
+        const safeBullets = Array.isArray(job.bullets) ? job.bullets : [];
+        const enhancedBullets = safeBullets.map((bullet) => {
         const enhancedBullets = job.bullets.map((bullet) => {
           const needsMore = allKeywords.filter(kw => {
             const current = mentions[kw];
@@ -1059,6 +1173,7 @@
             addText(header, true, false, font.body);
             y += 2;
 
+            (Array.isArray(job.bullets) ? job.bullets : []).forEach(bullet => {
             job.bullets.forEach(bullet => {
               const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
               const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
@@ -1134,6 +1249,7 @@
         lines.push('WORK EXPERIENCE');
         data.experience.forEach(job => {
           lines.push([job.company, job.title, job.dates, job.location].filter(Boolean).join(' | '));
+          (Array.isArray(job.bullets) ? job.bullets : []).forEach(b => lines.push(`- ${b}`));
           job.bullets.forEach(b => lines.push(`- ${b}`));
           lines.push('');
         });
@@ -1265,6 +1381,47 @@
       addText('Dear Hiring Manager,', false, font.body);
       y += 8;
 
+      // === PARAGRAPH 1: Confident opener — why this role, why you ===
+      const kw1 = highPriority[0] || 'software engineering';
+      const kw2 = highPriority[1] || 'delivery excellence';
+      const years = this.extractYearsExperience(data.summary) || '7+';
+      const recentTitle = data.experience?.[0]?.title || 'Senior Professional';
+
+      const para1 = `I am applying for the ${jobTitle} position at ${company} because the role sits squarely at the intersection of my strongest capabilities and career ambitions. As a ${recentTitle} with ${years} years of hands-on experience, I have built my career around ${kw1} and ${kw2} — consistently converting complex challenges into delivered outcomes that move the business forward.`;
+      addText(para1, false, font.body);
+      y += 14;
+
+      // === PARAGRAPH 2: Concrete evidence — show, don't tell ===
+      const kw3 = highPriority[2] || 'stakeholder management';
+      const kw4 = highPriority[3] || 'cross-functional collaboration';
+      const topBullet = data.experience?.[0]?.bullets?.[0] || '';
+      const secondBullet = data.experience?.[0]?.bullets?.[1] || '';
+
+      let para2 = `In my most recent role at ${topExp}, I was entrusted with high-visibility programmes that demanded both technical depth and commercial awareness.`;
+      if (topBullet) {
+        para2 += ` Notably, I ${topBullet.replace(/^[A-Z][a-z]+ed\s/, '').replace(/^[-•*▪]\s*/, '').charAt(0).toLowerCase() + topBullet.replace(/^[A-Z][a-z]+ed\s/, '').replace(/^[-•*▪]\s*/, '').slice(1)}`;
+        if (!para2.endsWith('.')) para2 += '.';
+      }
+      if (secondBullet) {
+        para2 += ` I also ${secondBullet.replace(/^[A-Z][a-z]+ed\s/, '').replace(/^[-•*▪]\s*/, '').charAt(0).toLowerCase() + secondBullet.replace(/^[A-Z][a-z]+ed\s/, '').replace(/^[-•*▪]\s*/, '').slice(1)}`;
+        if (!para2.endsWith('.')) para2 += '.';
+      }
+      para2 += ` These results reflect my commitment to ${kw3} and ${kw4} — skills I would bring directly to your team.`;
+      addText(para2, false, font.body);
+      y += 14;
+
+      // === PARAGRAPH 3: Skills alignment — map to job requirements ===
+      const kw5 = highPriority[4] || 'technical leadership';
+      const kw6 = highPriority[5] || 'problem-solving';
+      const kw7 = highPriority[6] || 'communication';
+      const kw8 = highPriority[7] || 'continuous improvement';
+
+      const para3 = `Beyond day-to-day execution, I bring depth in ${kw5}, ${kw6}, and ${kw7} that enables me to operate effectively at both strategic and operational levels. Whether it is mentoring junior colleagues, negotiating with senior stakeholders, or driving ${kw8} across delivery teams, I consistently raise the bar and create repeatable frameworks that outlast any single project.`;
+      addText(para3, false, font.body);
+      y += 14;
+
+      // === PARAGRAPH 4: Compelling close — confident, not passive ===
+      const para4 = `I am confident that my combination of technical capability, leadership instinct, and track record of delivery would make a meaningful contribution to ${company}. I would welcome the opportunity to discuss how my background aligns with your goals — and how I can add value from day one. Thank you for your time and consideration.`;
       // === PARAGRAPH 1: Positioning ===
       const kw1 = highPriority[0] || 'software engineering';
       const kw2 = highPriority[1] || 'delivery excellence';
@@ -1299,6 +1456,7 @@
       y += 20;
 
       // === CLOSING ===
+      addText('Yours sincerely,', false, font.body);
       addText('Sincerely,', false, font.body);
       y += 16;
       addText(name, true, font.body);
@@ -1331,6 +1489,10 @@
       const jobTitle = jobData?.title || 'the open position';
       // FIX 02-02-26: ROBUST company extraction with CRITICAL validation
       let rawCompany = this.extractCompanyName(jobData);
+      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization',
+                                   'organization', 'n/a', 'unknown', '', 'employer'];
+      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim()))
+        ? rawCompany
       const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization', 
                                    'organization', 'n/a', 'unknown', '', 'employer'];
       const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim())) 
@@ -1342,10 +1504,36 @@
       // Default keywords if empty
       const kw1 = highPriority[0] || 'technical solutions';
       const kw2 = highPriority[1] || 'cross-functional collaboration';
+      const kw3 = highPriority[2] || 'stakeholder management';
+      const kw4 = highPriority[3] || 'cross-functional delivery';
+      const kw5 = highPriority[4] || 'technical leadership';
+      const kw6 = highPriority[5] || 'problem-solving';
+      const kw7 = highPriority[6] || 'communication';
+      const kw8 = highPriority[7] || 'continuous improvement';
+      const recentTitle = data.experience?.[0]?.title || 'Senior Professional';
+      const topExp = data.experience?.[0]?.company || 'my previous roles';
+      const years = this.extractYearsExperience(data.summary) || '7+';
+      const topBullet = data.experience?.[0]?.bullets?.[0] || '';
 
       // Format: Name, Phone | Email, Portfolio, Date, Re: Title, Dear Hiring Manager
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const portfolioDisplay = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
+
+      // Build persuasive body paragraphs
+      let p1 = `I am applying for the ${jobTitle} position at ${company} because the role aligns directly with my strongest capabilities and career trajectory. As a ${recentTitle} with ${years} years of hands-on experience, I have built my career around ${kw1} and ${kw2} — consistently turning complex challenges into delivered outcomes.`;
+
+      let p2 = `At ${topExp}, I was responsible for high-visibility programmes demanding both technical depth and commercial awareness.`;
+      if (topBullet) {
+        const cleaned = topBullet.replace(/^[-•*▪]\s*/, '').trim();
+        p2 += ` For example, I ${cleaned.charAt(0).toLowerCase() + cleaned.slice(1)}`;
+        if (!p2.endsWith('.')) p2 += '.';
+      }
+      p2 += ` This experience sharpened my ${kw3} and ${kw4} skills — both of which I would bring directly to your team.`;
+
+      const p3 = `Beyond execution, I bring depth in ${kw5}, ${kw6}, and ${kw7} that enables me to operate at both strategic and operational levels. I consistently drive ${kw8} across delivery teams, creating repeatable frameworks that outlast any single project.`;
+
+      const p4 = `I am confident my combination of technical capability, leadership instinct, and delivery track record would make a meaningful contribution to ${company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.`;
+
       const lines = [
         name.toUpperCase(),
         ['Dublin, IE', formattedPhone, data.contact.email].filter(Boolean).join(' | '),
@@ -1357,6 +1545,15 @@
         '',
         'Dear Hiring Manager,',
         '',
+        p1,
+        '',
+        p2,
+        '',
+        p3,
+        '',
+        p4,
+        '',
+        'Yours sincerely,',
         `I am writing to express my interest in the ${jobTitle} position at ${company}. With experience in ${kw1} and ${kw2}, I consistently deliver measurable business impact across complex delivery environments.`,
         '',
         `In my previous roles, I have implemented ${highPriority[2] || 'technical'} solutions and led ${highPriority[3] || 'cross-functional'} initiatives that drove significant performance improvements.`,

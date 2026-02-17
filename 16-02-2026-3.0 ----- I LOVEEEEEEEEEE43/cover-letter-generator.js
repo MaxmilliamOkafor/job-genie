@@ -11,6 +11,20 @@
     professional: {
       name: 'Professional',
       opening: [
+        'I am applying for the {jobTitle} position at {company} because the role aligns directly with my strongest capabilities and career trajectory. My track record of delivering measurable results in high-stakes environments makes me confident I can contribute from day one.',
+        'I am writing with genuine interest in the {jobTitle} role at {company}. My career has been defined by converting complex challenges into delivered outcomes, and the scope of this position is exactly where I can make the greatest impact.',
+        'The {jobTitle} opportunity at {company} is a compelling match for my {domain} expertise and my ambition to work on problems that matter. I bring both the technical depth and the leadership instincts this role demands.',
+        'I am submitting my application for the {jobTitle} position at {company}, where my proven ability to scale solutions, lead cross-functional delivery, and drive measurable business outcomes aligns closely with your requirements.'
+      ],
+      bridge: [
+        'Over {yearsExp} years in {domain}, I have built a career around translating strategic priorities into tangible business results — repeatedly taking on increasing scope and exceeding expectations.',
+        'My {yearsExp}-year background in {domain} has given me deep technical fluency alongside the stakeholder management and commercial awareness needed to operate effectively at a senior level.',
+        'With {yearsExp} years of progressive experience in {domain}, I have developed the rare combination of hands-on technical capability and strategic thinking that high-performing teams need.'
+      ],
+      closing: [
+        'I am confident my combination of technical capability, leadership instinct, and delivery track record would make a meaningful contribution to {company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.',
+        'I would welcome the opportunity to show how my skills and delivery record translate directly into value for {company}. Thank you for considering my application — I look forward to discussing this further.',
+        'Thank you for your consideration. I am available at your convenience and eager to discuss how my background can accelerate {company}\'s goals.'
         'I am writing to express my interest in the {jobTitle} position at {company}, where I believe my track record of delivering measurable results would be a strong fit.',
         'I am applying for the {jobTitle} role at {company}. My career has been defined by consistent delivery in high-impact environments, and I am confident this experience translates directly to your team.',
         'I am keen to bring my {domain} expertise to {company} as a {jobTitle}, building on a track record of driving both technical and commercial outcomes.',
@@ -30,6 +44,19 @@
     enthusiastic: {
       name: 'Enthusiastic',
       opening: [
+        'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role, the calibre of the team, and the impact of the work make this an outstanding opportunity I am determined to pursue.',
+        'The {jobTitle} role at {company} sits at the intersection of my strongest skills and deepest professional ambitions. I have been building towards exactly this kind of opportunity throughout my career.',
+        'I was pleased to discover the {jobTitle} opening at {company}. It represents the kind of high-impact, technically challenging work that has driven every career decision I have made.'
+      ],
+      bridge: [
+        'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges where the outcome genuinely matters.',
+        'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems, building systems that perform at scale, and leaving every team stronger than I found it.',
+        'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced, results-driven environments.'
+      ],
+      closing: [
+        'I am confident that my energy, expertise, and delivery record would make a real difference at {company}. I would be glad to discuss how I can contribute — thank you for your time.',
+        'Thank you for considering my application. I am genuinely excited about this opportunity and look forward to discussing how my skills can drive results for {company}.',
+        'I look forward to the possibility of contributing my expertise and energy to {company}\'s mission. Thank you for your time and consideration.'
         'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role and the calibre of the team make this an outstanding opportunity.',
         'The {jobTitle} role at {company} aligns perfectly with the direction I have been building towards throughout my career, and I am excited to apply.',
         'I was pleased to discover the {jobTitle} opening at {company}, as it sits at the intersection of my strongest skills and deepest professional interests.'
@@ -48,6 +75,19 @@
     concise: {
       name: 'Concise',
       opening: [
+        'I am applying for the {jobTitle} position at {company}. My {domain} experience and delivery track record are directly relevant to this role.',
+        'Please consider my application for the {jobTitle} role at {company}, where my background maps closely to your requirements.',
+        'I wish to be considered for the {jobTitle} position at {company}. I bring the technical depth and execution discipline this role demands.'
+      ],
+      bridge: [
+        'I bring {yearsExp} years of {domain} experience with a consistent record of delivery, stakeholder trust, and measurable outcomes.',
+        'My {yearsExp}-year background in {domain} has equipped me with the technical skills, leadership capability, and commercial awareness this role requires.',
+        'With {yearsExp} years in {domain}, I offer both technical depth and the operational maturity to contribute from day one.'
+      ],
+      closing: [
+        'I look forward to discussing this opportunity and how my background translates into value for {company}. Thank you for your consideration.',
+        'I welcome the chance to discuss this role further. Thank you for your time.',
+        'I would appreciate the opportunity to explore how I can contribute. Thank you for your consideration.'
         'Please accept my application for the {jobTitle} position at {company}.',
         'I am applying for the {jobTitle} role at {company}, where my experience is directly relevant.',
         'I wish to be considered for the {jobTitle} position at {company}.'
@@ -212,6 +252,45 @@
       return result;
     },
 
+    // ============ BUILD BRIDGE WITH KEYWORDS (2-3 keywords woven in) ============
+    buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
+      let bridge = this.selectRandom(bridgeTemplates, replacements);
+
+      // Weave 2-3 keywords naturally into the bridge paragraph
+      if (keywords.length >= 3) {
+        const kw1 = keywords[0];
+        const kw2 = keywords[1];
+        const kw3 = keywords[2];
+        const phrases = [
+          `This includes deep hands-on work in ${kw1}, ${kw2}, and ${kw3} — skills I have applied consistently to drive measurable outcomes.`,
+          `Core to my approach has been ${kw1} and ${kw2}, alongside ${kw3}, which together form the foundation of how I deliver results.`,
+          `My strengths in ${kw1}, ${kw2}, and ${kw3} have been central to every major initiative I have led.`
+        ];
+        bridge += ' ' + phrases[Math.floor(Math.random() * phrases.length)];
+      } else if (keywords.length >= 2) {
+        const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
+        if (bridge.endsWith('.')) {
+          bridge = bridge.slice(0, -1) + `, ${phrase} ${keywords[0]} and ${keywords[1]}.`;
+        }
+      }
+
+      return bridge;
+    },
+
+    // ============ BUILD CLOSING WITH KEYWORDS (1-2 keywords, confident tone) ============
+    buildClosingWithKeywords(closingTemplates, replacements, keywords) {
+      let closing = this.selectRandom(closingTemplates, replacements);
+
+      // The closing templates are already strong. Optionally reinforce with a keyword
+      // if the template doesn't already contain one.
+      if (keywords.length >= 5) {
+        const kw = keywords[4] || keywords[0];
+        const hasKeyword = keywords.some(k => closing.toLowerCase().includes(k.toLowerCase()));
+        if (!hasKeyword && closing.includes('Thank you')) {
+          closing = closing.replace('Thank you', `My ${kw} capabilities would complement your team well. Thank you`);
+        }
+      }
+
     // ============ BUILD BRIDGE WITH KEYWORDS (1-2 keywords) ============
     buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
       let bridge = this.selectRandom(bridgeTemplates, replacements);
@@ -341,6 +420,8 @@
       const paragraphs = [];
 
       // Highlight relevant experience
+      const experience = candidateData?.professional_experience ||
+                        candidateData?.professionalExperience ||
       const experience = candidateData?.professional_experience || 
                         candidateData?.professionalExperience || 
                         candidateData?.workExperience || [];
@@ -349,6 +430,71 @@
         const recentJob = experience[0];
         const company = recentJob.company || 'my current organisation';
         const title = recentJob.title || 'my role';
+
+        // Find compelling achievements (prefer bullets with metrics)
+        const bullets = recentJob.bullets || recentJob.achievements || [];
+        const metricsPattern = /\d+%|\$[\d,]+|\d+x|[0-9]+\+?\s*(users|customers|clients|projects|teams)/i;
+        const withMetrics = bullets.filter(b => metricsPattern.test(b));
+        const topBullet = withMetrics[0] || bullets[0] || '';
+        const secondBullet = withMetrics[1] || bullets[1] || '';
+
+        // PARAGRAPH 1: Concrete evidence — show, don't tell (Keywords 1-3)
+        const kw1 = topKeywords[0] || '';
+        const kw2 = topKeywords[1] || '';
+        const kw3 = topKeywords[2] || '';
+
+        let para1 = `In my most recent role as ${title} at ${company}, I was entrusted with high-visibility programmes that demanded both technical depth and commercial awareness.`;
+        if (topBullet) {
+          const cleaned = topBullet.replace(/^[•\-*▪]\s*/, '').trim();
+          para1 += ` Notably, I ${cleaned.charAt(0).toLowerCase() + cleaned.slice(1)}`;
+          if (!para1.endsWith('.')) para1 += '.';
+        }
+        if (secondBullet) {
+          const cleaned2 = secondBullet.replace(/^[•\-*▪]\s*/, '').trim();
+          para1 += ` I also ${cleaned2.charAt(0).toLowerCase() + cleaned2.slice(1)}`;
+          if (!para1.endsWith('.')) para1 += '.';
+        }
+        if (kw1 && kw2 && kw3) {
+          para1 += ` These results are rooted in my ${kw1}, ${kw2}, and ${kw3} capabilities — skills I would bring directly to your team.`;
+        } else if (kw1 && kw2) {
+          para1 += ` My depth in ${kw1} and ${kw2} maps directly to your requirements.`;
+        }
+
+        paragraphs.push(para1);
+      }
+
+      // PARAGRAPH 2: Strategic skills alignment (Keywords 4-7)
+      if (topKeywords.length > 3) {
+        const skills = [topKeywords[3], topKeywords[4], topKeywords[5], topKeywords[6]].filter(Boolean);
+        let skillsList = '';
+        if (skills.length >= 3) {
+          skillsList = `${skills.slice(0, -1).join(', ')}, and ${skills[skills.length - 1]}`;
+        } else if (skills.length === 2) {
+          skillsList = `${skills[0]} and ${skills[1]}`;
+        } else if (skills.length === 1) {
+          skillsList = skills[0];
+        }
+
+        const para2Variants = [
+          `Beyond day-to-day execution, I bring depth in ${skillsList} that enables me to operate effectively at both strategic and operational levels. Whether mentoring junior colleagues, negotiating with senior stakeholders, or driving continuous improvement across delivery teams, I consistently raise the bar and create repeatable frameworks that outlast any single project.`,
+          `I also bring strong capabilities in ${skillsList}, which I apply to accelerate delivery timelines, strengthen execution quality, and raise performance standards. My approach is to build sustainable processes — not just hit targets, but create the conditions for teams to consistently exceed them.`,
+          `My work extends beyond individual delivery into ${skillsList}, where I focus on building organisational capability. I believe the best outcomes come from empowering teams with clear direction, strong processes, and the right technical foundations — an approach that has delivered results in every role I have held.`
+        ];
+        paragraphs.push(para2Variants[Math.floor(Math.random() * para2Variants.length)]);
+      }
+
+      // PARAGRAPH 3: Extra depth with Keywords 8-10 (only if enough keywords)
+      if (topKeywords.length > 7) {
+        const extraSkills = [topKeywords[7], topKeywords[8], topKeywords[9]].filter(Boolean);
+        if (extraSkills.length > 0) {
+          const skillsStr = extraSkills.length > 1
+            ? extraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
+            : extraSkills[0];
+          const para3Variants = [
+            `I further complement this with hands-on experience in ${skillsStr}, consistently partnering with senior stakeholders to deliver measurable, repeatable outcomes that strengthen the organisation as a whole.`,
+            `My toolkit also includes ${skillsStr} — capabilities I have applied in production environments to drive efficiency gains, reduce risk, and maintain the high standards that senior leadership expects.`
+          ];
+          paragraphs.push(para3Variants[Math.floor(Math.random() * para3Variants.length)]);
         
         // Find a compelling achievement
         const bullets = recentJob.bullets || recentJob.achievements || [];
