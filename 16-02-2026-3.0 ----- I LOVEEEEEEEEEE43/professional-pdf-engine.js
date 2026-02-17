@@ -1109,9 +1109,17 @@
       if (contact.portfolio) {
         doc.setFont(PDF_CONFIG.fonts.body, 'normal');
         doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
-        doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+        doc.setTextColor(0, 0, 180);
         const portfolioUrl = contact.portfolio.startsWith('http') ? contact.portfolio : 'https://' + contact.portfolio;
-        doc.textWithLink(contact.portfolio, PDF_CONFIG.margins.left, y, { url: portfolioUrl });
+        const portfolioText = contact.portfolio;
+        doc.text(portfolioText, PDF_CONFIG.margins.left, y);
+        const textWidth = doc.getTextWidth(portfolioText);
+        const fontSize = PDF_CONFIG.fonts.sizes.contact;
+        doc.link(PDF_CONFIG.margins.left, y - fontSize * 0.8, textWidth, fontSize, { url: portfolioUrl });
+        doc.setDrawColor(0, 0, 180);
+        doc.setLineWidth(0.3);
+        doc.line(PDF_CONFIG.margins.left, y + 0.5, PDF_CONFIG.margins.left + textWidth, y + 0.5);
+        doc.setTextColor(...PDF_CONFIG.colors.darkGray);
         y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 2;
       } else {
         y += 2;
