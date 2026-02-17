@@ -259,9 +259,9 @@ class ATSTailor {
       this.session = null;
     }
 
-    try { await this.loadAIProviderSettings(); } catch (e) { console.error('[ATS Tailor] loadAIProviderSettings error:', e); this.showToast('Failed to load AI settings', 'error'); }
-    try { await this.loadWorkdayState(); } catch (e) { console.error('[ATS Tailor] loadWorkdayState error:', e); this.showToast('Failed to load Workday state', 'error'); }
-    try { await this.loadBaseCVFromProfile(); } catch (e) { console.error('[ATS Tailor] loadBaseCVFromProfile error:', e); this.showToast('Failed to load base CV', 'error'); }
+    try { await this.loadAIProviderSettings(); } catch (e) { console.error('[ATS Tailor] loadAIProviderSettings error:', e); }
+    try { await this.loadWorkdayState(); } catch (e) { console.error('[ATS Tailor] loadWorkdayState error:', e); }
+    try { await this.loadBaseCVFromProfile(); } catch (e) { console.error('[ATS Tailor] loadBaseCVFromProfile error:', e); }
 
     this.bindEvents();
     this.updateUI();
@@ -799,16 +799,12 @@ class ATSTailor {
     document.getElementById('captureSnapshotBtn')?.addEventListener('click', () => this.captureWorkdaySnapshot());
     document.getElementById('forceWorkdayApplyBtn')?.addEventListener('click', () => this.forceWorkdayApply());
     
-    // NEW: Automatic Autofill Toggle (Settings panel)
+    // NEW: Automatic Autofill Toggle
     document.getElementById('autofillEnabledToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
       chrome.storage.local.set({ autofill_enabled: enabled });
       this.showToast(enabled ? '🤖 AI Autofill enabled' : 'AI Autofill disabled', 'success');
-
-      // Sync Workday panel toggle
-      const workdayToggle = document.getElementById('workdayAutofillToggle');
-      if (workdayToggle) workdayToggle.checked = enabled;
-
+      
       // Notify content script
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
@@ -819,33 +815,9 @@ class ATSTailor {
         }
       });
     });
-
-    // NEW: Automatic Autofill Toggle (Workday panel)
-    document.getElementById('workdayAutofillToggle')?.addEventListener('change', (e) => {
-      const enabled = !!e.target?.checked;
-      chrome.storage.local.set({ autofill_enabled: enabled });
-      this.showToast(enabled ? '🤖 AI Autofill enabled' : 'AI Autofill disabled', 'success');
-
-      // Sync Settings panel toggle
-      const settingsToggle = document.getElementById('autofillEnabledToggle');
-      if (settingsToggle) settingsToggle.checked = enabled;
-
-      // Notify content script
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: 'TOGGLE_AUTOFILL',
-            enabled: enabled
-          }).catch(() => {});
-        }
-      });
-    });
-
-    // NEW: Manual Autofill Button (Settings panel)
+    
+    // NEW: Manual Autofill Button
     document.getElementById('manualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
-
-    // NEW: Manual Autofill Button (Workday panel)
-    document.getElementById('workdayManualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
     
     // NEW: Saved Responses Panel
     document.getElementById('viewSavedResponsesBtn')?.addEventListener('click', () => this.viewSavedResponses());
@@ -1194,36 +1166,31 @@ class ATSTailor {
       chrome.storage.local.get(['autofill_enabled'], resolve);
     });
     
-    const enabled = result.autofill_enabled !== false; // Default to enabled
     const toggle = document.getElementById('autofillEnabledToggle');
-    if (toggle) toggle.checked = enabled;
-    const workdayToggle = document.getElementById('workdayAutofillToggle');
-    if (workdayToggle) workdayToggle.checked = enabled;
+    if (toggle) {
+      toggle.checked = result.autofill_enabled !== false; // Default to enabled
+    }
   }
   
   async runManualAutofill() {
-    const btns = [
-      document.getElementById('manualAutofillBtn'),
-      document.getElementById('workdayManualAutofillBtn')
-    ].filter(Boolean);
-
-    btns.forEach(btn => {
+    const btn = document.getElementById('manualAutofillBtn');
+    if (btn) {
       btn.disabled = true;
-      const textEl = btn.querySelector('.btn-text');
-      if (textEl) textEl.textContent = 'Running...';
-    });
-
+      btn.querySelector('.btn-text').textContent = 'Running...';
+    }
+    
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) {
         this.showToast('No active tab found', 'error');
         return;
       }
-
+      
+      // Send manual autofill command to content script
       const response = await chrome.tabs.sendMessage(tab.id, {
         action: 'RUN_MANUAL_AUTOFILL'
       });
-
+      
       if (response?.success) {
         this.showToast(`✅ Autofill complete! Filled ${response.filledCount || 0} fields`, 'success');
       } else {
@@ -1233,11 +1200,10 @@ class ATSTailor {
       console.error('[Popup] Manual autofill error:', e);
       this.showToast('Autofill failed - check console', 'error');
     } finally {
-      btns.forEach(btn => {
+      if (btn) {
         btn.disabled = false;
-        const textEl = btn.querySelector('.btn-text');
-        if (textEl) textEl.textContent = btn.id === 'manualAutofillBtn' ? 'Run Now' : 'Run Manual Autofill';
-      });
+        btn.querySelector('.btn-text').textContent = 'Run Manual Autofill';
+      }
     }
   }
   
@@ -2723,13 +2689,12 @@ class ATSTailor {
     
     // Try optimized tailoring modules
     if (window.TailorUniversal) {
-      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords, { targetScore: 95 });
+      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords.all, { targetScore: 95 });
     } else if (window.AutoTailor95) {
       const tailor = new window.AutoTailor95({
         onProgress: updateProgress,
         onScoreUpdate: (score) => {
-          const interim = this.calculateMatchScore(cvText, keywords);
-          this.updateMatchGauge(score, interim.matchedKeywords.length, keywords.all.length);
+          this.updateMatchGauge(score, 0, keywords.all.length);
         }
       });
       tailorResult = await tailor.autoTailorTo95Plus(this.currentJob?.description || '', cvText);
@@ -3220,12 +3185,6 @@ class ATSTailor {
         }),
       }).finally(() => clearTimeout(tailorTimeoutId));
 
-      updateProgress(40, 'Step 2/3: Processing API response...');
-
-      // OPENAI THROTTLE: Post-call delay to reduce API usage
-      if (this.aiProvider !== 'kimi') {
-        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
-        updateProgress(42, 'Processing tailored documents...');
       // OPENAI THROTTLE: Post-call delay to reduce API usage
       if (this.aiProvider !== 'kimi') {
         console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
@@ -3289,10 +3248,6 @@ class ATSTailor {
       }
       
       if (result.error) throw new Error(result.error);
-
-      updateProgress(50, 'Step 2/3: Validating tailored documents...');
-      console.log('[ATS Tailor] API response keys:', Object.keys(result).join(', '));
-      console.log('[ATS Tailor] tailoredResume length:', (result.tailoredResume || '').length);
 
       // ███ CRITICAL: VALIDATE & FIX WORK EXPERIENCE IMMUTABILITY ███
       // AI may have changed job titles/company names - force them back to profile values
@@ -3746,23 +3701,6 @@ class ATSTailor {
 
     } catch (error) {
       console.error('Tailoring error:', error);
-      const errMsg = error.message || 'Unknown error';
-      this.showToast(`Tailoring failed: ${errMsg}`, 'error');
-      this.setStatus('Error', 'error');
-      // Show error in progress text so it persists visually
-      if (progressText) progressText.textContent = `Error: ${errMsg}`;
-      if (progressContainer) progressContainer.classList.remove('hidden');
-
-      // Signal failure to external automation (guarded to prevent double-crash)
-      try {
-        await this.signalAutomationComplete({
-          success: false,
-          error: error.message,
-          jobUrl: this.currentJob?.url || window.location?.href
-        });
-      } catch (signalError) {
-        console.warn('[ATS Tailor] signalAutomationComplete failed:', signalError);
-      }
       this.showToast(error.message || 'Failed', 'error');
       this.setStatus('Error', 'error');
       
@@ -3777,11 +3715,6 @@ class ATSTailor {
       const btnIconLeft = btn.querySelector('.btn-icon-left');
       const btnText = btn.querySelector('.btn-text');
       const btnTime = btn.querySelector('.btn-time');
-
-      btn.disabled = false;
-      btn.classList.remove('btn-tailoring');
-      btn.classList.add('btn-gradient');
-
       
       btn.disabled = false;
       btn.classList.remove('btn-tailoring');
@@ -3791,12 +3724,6 @@ class ATSTailor {
       if (btnIconLeft) btnIconLeft.textContent = '⚡';
       if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
       if (btnTime) btnTime.textContent = '~5s';
-
-      // Only hide progress UI on success; on error keep it visible so user sees the message
-      const hadError = progressText && progressText.textContent.startsWith('Error:');
-      if (!hadError) {
-        progressContainer?.classList.add('hidden');
-      }
       
       // Immediately reset progress UI
       progressContainer?.classList.add('hidden');
@@ -3805,7 +3732,6 @@ class ATSTailor {
         if (step) {
           step.classList.remove('active', 'complete');
           const icon = step.querySelector('.step-icon');
-          if (icon) icon.textContent = hadError ? '❌' : '⏳';
           if (icon) icon.textContent = '⏳';
         }
       });
@@ -4914,13 +4840,10 @@ class ATSTailor {
     toast.textContent = message;
     document.body.appendChild(toast);
 
-    // Error toasts stay visible longer so users can read the message
-    const duration = type === 'error' ? 8000 : 3000;
     setTimeout(() => toast.classList.add('show'), 10);
     setTimeout(() => {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
-    }, duration);
     }, 3000);
   }
 
