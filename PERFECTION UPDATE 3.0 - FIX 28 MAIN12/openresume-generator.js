@@ -404,10 +404,10 @@
     // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
     formatPhoneForATS(phone) {
       if (!phone) return '';
-
+      
       // Remove all non-digit and non-plus characters
       let cleaned = phone.replace(/[^\d+]/g, '');
-
+      
       // If starts with +, format as "+XXX: rest"
       if (cleaned.startsWith('+')) {
         // Match country code (1-3 digits after +)
@@ -416,7 +416,7 @@
           return `+${match[1]}: ${match[2]}`;
         }
       }
-
+      
       // Return original if no country code detected
       return phone;
     },

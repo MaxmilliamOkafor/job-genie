@@ -156,7 +156,10 @@
 
         // Render cover letter header (pass jobData for extracted location)
         currentY = this.renderCoverHeader(doc, candidateData, currentY, jobData);
-        
+
+        // Render recipient info (Re: Job Title)
+        currentY = this.renderRecipientInfo(doc, jobData, candidateData, currentY);
+
         // Render cover letter body
         currentY = this.renderCoverBody(doc, coverContent, currentY);
         
