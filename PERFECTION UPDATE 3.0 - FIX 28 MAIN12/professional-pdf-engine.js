@@ -1077,11 +1077,10 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
       doc.setTextColor(...PDF_CONFIG.colors.black);
 
-      // FIX 27-01-26: Removed "Company" line per user preference - keep blank spacing
-      // Only add "Re: Job Title" line, skip company name entirely
-      
-      // Add spacing where company line would have been (maintains layout)
-      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 20;
+      // Render "Re: Job Title" line (no company name)
+      const jobTitle = jobData?.title || 'the position';
+      doc.text(`Re: ${jobTitle}`, PDF_CONFIG.margins.left, y);
+      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 10;
 
       return y;
     },

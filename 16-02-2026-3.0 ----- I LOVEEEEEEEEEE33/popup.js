@@ -3857,7 +3857,8 @@ class ATSTailor {
           const cvResult = await ProfessionalPDFEngine.generateCV(
             pdfCandidateData,
             this.generatedDocuments.cv,
-            { location: tailoredLocation }
+            { location: tailoredLocation },
+            { location: tailoredLocation, title: this.currentJob?.title || '', company: this.currentJob?.company || '' }
           );
           if (cvResult?.success && cvResult.pdf) {
             this.generatedDocuments.cvPdf = cvResult.pdf;
@@ -3870,7 +3871,7 @@ class ATSTailor {
           const coverResult = await ProfessionalPDFEngine.generateCoverLetter(
             pdfCandidateData,
             this.generatedDocuments.coverLetter,
-            { title: this.currentJob?.title || '', company: this.currentJob?.company || '' }
+            { title: this.currentJob?.title || '', company: this.currentJob?.company || '', location: tailoredLocation }
           );
           if (coverResult?.success && coverResult.pdf) {
             this.generatedDocuments.coverPdf = coverResult.pdf;
