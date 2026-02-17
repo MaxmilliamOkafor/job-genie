@@ -401,19 +401,19 @@
     },
     
     // ============ FORMAT PHONE FOR ATS ============
-    // Format: "+CountryCode LocalNumber" (e.g., "+353 0874261508")
+    // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
     formatPhoneForATS(phone) {
       if (!phone) return '';
 
       // Remove all non-digit and non-plus characters
       let cleaned = phone.replace(/[^\d+]/g, '');
 
-      // If starts with +, format as "+XXX rest"
+      // If starts with +, format as "+XXX: rest"
       if (cleaned.startsWith('+')) {
         // Match country code (1-3 digits after +)
         const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
         if (match) {
-          return `+${match[1]} ${match[2]}`;
+          return `+${match[1]}: ${match[2]}`;
         }
       }
 
@@ -692,7 +692,7 @@
       y += 2;
 
       // === CONTACT LINE ===
-      // Format: "+CountryCode Number | email | City, State | open to relocation"
+      // Format: "+CountryCode: Number | email | City, State | open to relocation"
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
       const contactParts = [formattedPhone, data.contact.email, data.contact.location].filter(Boolean);
       if (contactParts.length > 0) {
