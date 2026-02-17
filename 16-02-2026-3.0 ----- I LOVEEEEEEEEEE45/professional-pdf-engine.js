@@ -1103,7 +1103,7 @@
       const cleanLocCL = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
       const contactParts2 = [contact.phone, contact.email, cleanLocCL].filter(Boolean);
       doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
-      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 4;
+      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 2;
 
       // Portfolio link line (prominent placement for cover letter header) - WITH HYPERLINK
       if (contact.portfolio) {
@@ -1112,9 +1112,9 @@
         doc.setTextColor(...PDF_CONFIG.colors.darkGray);
         const portfolioUrl = contact.portfolio.startsWith('http') ? contact.portfolio : 'https://' + contact.portfolio;
         doc.textWithLink(contact.portfolio, PDF_CONFIG.margins.left, y, { url: portfolioUrl });
-        y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 16;
+        y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 2;
       } else {
-        y += 16;
+        y += 2;
       }
 
       // Date
