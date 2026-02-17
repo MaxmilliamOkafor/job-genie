@@ -1120,7 +1120,7 @@
       doc.setTextColor(...PDF_CONFIG.colors.black);
       const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
       doc.text(today, PDF_CONFIG.margins.left, y);
-      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 10;
+      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 34;
 
       return y;
     },
