@@ -4933,7 +4933,6 @@ class ATSTailor {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
     }, duration);
-    }, 3000);
   }
 
   // ============ KEYWORD HISTORY & COMPARISON FEATURE ============
