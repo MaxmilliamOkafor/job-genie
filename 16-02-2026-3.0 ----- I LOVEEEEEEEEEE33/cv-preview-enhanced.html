@@ -771,8 +771,6 @@
             lines.push(contact.name.toUpperCase());
             const cleanLocTxt = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
             lines.push(['Dublin, IE', contact.phone, contact.email, cleanLocTxt].filter(Boolean).join(' | '));
-            const cleanLocTxt = contact.location ? String(contact.location).replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim() : '';
-            lines.push([contact.phone, contact.email, cleanLocTxt].filter(Boolean).join(' | '));
             if (contact.linkedin || contact.github) {
                 lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
             }
