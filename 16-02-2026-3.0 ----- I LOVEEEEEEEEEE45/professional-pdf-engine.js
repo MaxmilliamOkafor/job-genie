@@ -1101,16 +1101,17 @@
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
       const cleanLocCL = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
-      const contactParts2 = ['Dublin, IE', contact.phone, contact.email, cleanLocCL].filter(Boolean);
+      const contactParts2 = [contact.phone, contact.email, cleanLocCL].filter(Boolean);
       doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 4;
 
-      // Portfolio link line (prominent placement for cover letter header)
+      // Portfolio link line (prominent placement for cover letter header) - WITH HYPERLINK
       if (contact.portfolio) {
         doc.setFont(PDF_CONFIG.fonts.body, 'normal');
         doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
         doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-        doc.text(contact.portfolio, PDF_CONFIG.margins.left, y);
+        const portfolioUrl = contact.portfolio.startsWith('http') ? contact.portfolio : 'https://' + contact.portfolio;
+        doc.textWithLink(contact.portfolio, PDF_CONFIG.margins.left, y, { url: portfolioUrl });
         y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 16;
       } else {
         y += 16;
