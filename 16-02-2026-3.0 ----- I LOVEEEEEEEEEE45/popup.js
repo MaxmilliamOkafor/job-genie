@@ -263,8 +263,21 @@ class ATSTailor {
     try { await this.loadWorkdayState(); } catch (e) { console.error('[ATS Tailor] loadWorkdayState error:', e); this.showToast('Failed to load Workday state', 'error'); }
     try { await this.loadBaseCVFromProfile(); } catch (e) { console.error('[ATS Tailor] loadBaseCVFromProfile error:', e); this.showToast('Failed to load base CV', 'error'); }
 
-    this.bindEvents();
-    this.updateUI();
+    try { this.bindEvents(); } catch (e) { console.error('[ATS Tailor] bindEvents error:', e); }
+    try { this.updateUI(); } catch (e) { console.error('[ATS Tailor] updateUI error:', e); }
+    
+    // Fallback: ensure login or main section is visible even if updateUI failed
+    try {
+      const loginEl = document.getElementById('loginSection');
+      const mainEl = document.getElementById('mainSection');
+      if (loginEl?.classList.contains('hidden') && mainEl?.classList.contains('hidden')) {
+        if (this.session) {
+          mainEl?.classList.remove('hidden');
+        } else {
+          loginEl?.classList.remove('hidden');
+        }
+      }
+    } catch (e) { console.error('[ATS Tailor] Fallback UI error:', e); }
 
     try { this.updateAIProviderUI(); } catch (e) { console.error('[ATS Tailor] updateAIProviderUI error:', e); }
 
@@ -1742,9 +1755,12 @@ class ATSTailor {
       this.setStatus('Ready', 'ready');
     }
     
-    document.getElementById('todayCount').textContent = this.stats.today;
-    document.getElementById('totalCount').textContent = this.stats.total;
-    document.getElementById('avgTime').textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
+    const todayEl = document.getElementById('todayCount');
+    const totalEl = document.getElementById('totalCount');
+    const avgEl = document.getElementById('avgTime');
+    if (todayEl) todayEl.textContent = this.stats.today;
+    if (totalEl) totalEl.textContent = this.stats.total;
+    if (avgEl) avgEl.textContent = this.stats.avgTime > 0 ? `${Math.round(this.stats.avgTime)}s` : '0s';
     
     const autoTailorToggle = document.getElementById('autoTailorToggle');
     if (autoTailorToggle) {

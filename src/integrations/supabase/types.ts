@@ -271,18 +271,33 @@ export type Database = {
       }
       jobs: {
         Row: {
+          ai_extracted: boolean | null
           applied_at: string | null
+          category: string | null
           company: string
+          company_logo_url: string | null
+          company_website: string | null
           created_at: string | null
           description: string | null
+          employer_type: string | null
+          employment_type: string | null
+          experience_min_years: number | null
           id: string
+          language: string | null
           location: string
           match_score: number | null
           platform: string | null
           posted_date: string | null
           report_count: number | null
           requirements: string[] | null
+          requirements_summary: string | null
           salary: string | null
+          salary_currency: string | null
+          salary_frequency: string | null
+          salary_max: number | null
+          salary_min: number | null
+          skills: string[] | null
+          source_name: string | null
           status: Database["public"]["Enums"]["application_status"] | null
           title: string
           updated_at: string | null
@@ -290,20 +305,36 @@ export type Database = {
           url_last_checked: string | null
           url_status: string | null
           user_id: string
+          workplace_type: string | null
         }
         Insert: {
+          ai_extracted?: boolean | null
           applied_at?: string | null
+          category?: string | null
           company: string
+          company_logo_url?: string | null
+          company_website?: string | null
           created_at?: string | null
           description?: string | null
+          employer_type?: string | null
+          employment_type?: string | null
+          experience_min_years?: number | null
           id?: string
+          language?: string | null
           location: string
           match_score?: number | null
           platform?: string | null
           posted_date?: string | null
           report_count?: number | null
           requirements?: string[] | null
+          requirements_summary?: string | null
           salary?: string | null
+          salary_currency?: string | null
+          salary_frequency?: string | null
+          salary_max?: number | null
+          salary_min?: number | null
+          skills?: string[] | null
+          source_name?: string | null
           status?: Database["public"]["Enums"]["application_status"] | null
           title: string
           updated_at?: string | null
@@ -311,20 +342,36 @@ export type Database = {
           url_last_checked?: string | null
           url_status?: string | null
           user_id: string
+          workplace_type?: string | null
         }
         Update: {
+          ai_extracted?: boolean | null
           applied_at?: string | null
+          category?: string | null
           company?: string
+          company_logo_url?: string | null
+          company_website?: string | null
           created_at?: string | null
           description?: string | null
+          employer_type?: string | null
+          employment_type?: string | null
+          experience_min_years?: number | null
           id?: string
+          language?: string | null
           location?: string
           match_score?: number | null
           platform?: string | null
           posted_date?: string | null
           report_count?: number | null
           requirements?: string[] | null
+          requirements_summary?: string | null
           salary?: string | null
+          salary_currency?: string | null
+          salary_frequency?: string | null
+          salary_max?: number | null
+          salary_min?: number | null
+          skills?: string[] | null
+          source_name?: string | null
           status?: Database["public"]["Enums"]["application_status"] | null
           title?: string
           updated_at?: string | null
@@ -332,6 +379,7 @@ export type Database = {
           url_last_checked?: string | null
           url_status?: string | null
           user_id?: string
+          workplace_type?: string | null
         }
         Relationships: []
       }
