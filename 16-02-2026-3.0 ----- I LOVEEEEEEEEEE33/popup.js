@@ -2723,12 +2723,13 @@ class ATSTailor {
     
     // Try optimized tailoring modules
     if (window.TailorUniversal) {
-      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords.all, { targetScore: 95 });
+      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords, { targetScore: 95 });
     } else if (window.AutoTailor95) {
       const tailor = new window.AutoTailor95({
         onProgress: updateProgress,
         onScoreUpdate: (score) => {
-          this.updateMatchGauge(score, 0, keywords.all.length);
+          const interim = this.calculateMatchScore(cvText, keywords);
+          this.updateMatchGauge(score, interim.matchedKeywords.length, keywords.all.length);
         }
       });
       tailorResult = await tailor.autoTailorTo95Plus(this.currentJob?.description || '', cvText);
@@ -3219,10 +3220,12 @@ class ATSTailor {
         }),
       }).finally(() => clearTimeout(tailorTimeoutId));
 
+      updateProgress(40, 'Step 2/3: Processing API response...');
+
       // OPENAI THROTTLE: Post-call delay to reduce API usage
       if (this.aiProvider !== 'kimi') {
         console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
-        updateProgress(70, 'Processing tailored documents...');
+        updateProgress(42, 'Processing tailored documents...');
         await new Promise(resolve => setTimeout(resolve, 2500));
       }
 
@@ -3282,6 +3285,10 @@ class ATSTailor {
       }
       
       if (result.error) throw new Error(result.error);
+
+      updateProgress(50, 'Step 2/3: Validating tailored documents...');
+      console.log('[ATS Tailor] API response keys:', Object.keys(result).join(', '));
+      console.log('[ATS Tailor] tailoredResume length:', (result.tailoredResume || '').length);
 
       // ███ CRITICAL: VALIDATE & FIX WORK EXPERIENCE IMMUTABILITY ███
       // AI may have changed job titles/company names - force them back to profile values
@@ -3735,38 +3742,49 @@ class ATSTailor {
 
     } catch (error) {
       console.error('Tailoring error:', error);
-      this.showToast(error.message || 'Failed', 'error');
+      const errMsg = error.message || 'Unknown error';
+      this.showToast(`Tailoring failed: ${errMsg}`, 'error');
       this.setStatus('Error', 'error');
-      
-      // Signal failure to external automation
-      await this.signalAutomationComplete({
-        success: false,
-        error: error.message,
-        jobUrl: this.currentJob?.url || window.location?.href
-      });
+      // Show error in progress text so it persists visually
+      if (progressText) progressText.textContent = `Error: ${errMsg}`;
+      if (progressContainer) progressContainer.classList.remove('hidden');
+
+      // Signal failure to external automation (guarded to prevent double-crash)
+      try {
+        await this.signalAutomationComplete({
+          success: false,
+          error: error.message,
+          jobUrl: this.currentJob?.url || window.location?.href
+        });
+      } catch (signalError) {
+        console.warn('[ATS Tailor] signalAutomationComplete failed:', signalError);
+      }
     } finally {
       // INSTANT RESET TO BLUE READY STATE: No delays, always ready for next URL
       const btnIconLeft = btn.querySelector('.btn-icon-left');
       const btnText = btn.querySelector('.btn-text');
       const btnTime = btn.querySelector('.btn-time');
-      
+
       btn.disabled = false;
       btn.classList.remove('btn-tailoring');
       btn.classList.add('btn-gradient');
-      
+
       // Set BLUE READY state
       if (btnIconLeft) btnIconLeft.textContent = '⚡';
       if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
       if (btnTime) btnTime.textContent = '~5s';
-      
-      // Immediately reset progress UI
-      progressContainer?.classList.add('hidden');
+
+      // Only hide progress UI on success; on error keep it visible so user sees the message
+      const hadError = progressText && progressText.textContent.startsWith('Error:');
+      if (!hadError) {
+        progressContainer?.classList.add('hidden');
+      }
       [1, 2, 3].forEach(n => {
         const step = document.getElementById(`step${n}`);
         if (step) {
           step.classList.remove('active', 'complete');
           const icon = step.querySelector('.step-icon');
-          if (icon) icon.textContent = '⏳';
+          if (icon) icon.textContent = hadError ? '❌' : '⏳';
         }
       });
     }
@@ -4874,11 +4892,13 @@ class ATSTailor {
     toast.textContent = message;
     document.body.appendChild(toast);
 
+    // Error toasts stay visible longer so users can read the message
+    const duration = type === 'error' ? 8000 : 3000;
     setTimeout(() => toast.classList.add('show'), 10);
     setTimeout(() => {
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, duration);
   }
 
   // ============ KEYWORD HISTORY & COMPARISON FEATURE ============
