@@ -3225,10 +3225,6 @@ class ATSTailor {
       // OPENAI THROTTLE: Post-call delay to reduce API usage
       if (this.aiProvider !== 'kimi') {
         console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
-        updateProgress(42, 'Processing tailored documents...');
-      // OPENAI THROTTLE: Post-call delay to reduce API usage
-      if (this.aiProvider !== 'kimi') {
-        console.log('[ATS Tailor] ⏱️ OpenAI throttle: 2.5s post-tailoring delay...');
         updateProgress(70, 'Processing tailored documents...');
         await new Promise(resolve => setTimeout(resolve, 2500));
       }
