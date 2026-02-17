@@ -189,6 +189,18 @@ export function useJobScraper() {
         // Refresh from database
         await fetchExistingJobs(append, searchQuery);
         
+        // Auto-enrich newly scraped jobs with AI
+        if (data.jobs?.length > 0) {
+          try {
+            await supabase.functions.invoke('extract-job-structured', {
+              body: { user_id: user.id, batch_size: data.jobs.length },
+            });
+            await fetchExistingJobs(false, searchQuery);
+          } catch (e) {
+            console.error('Auto-enrich failed:', e);
+          }
+        }
+        
         if (!append) {
           toast.success(`Found ${data.jobs?.length || 0} new jobs`);
         }
