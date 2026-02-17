@@ -3596,12 +3596,6 @@ class ATSTailor {
           .replace(/^\s*Company\s*$/gm, '')
           .replace(/\n\s*Company\s*\n/gi, '\n')
           .replace(/\n\n\n+/g, '\n\n');
-        // CRITICAL FIX 17-02-26: Remove standalone company name line before "Re:" or "Dear"
-        // This catches actual company names like "Formic", "Google" that AI puts as standalone lines
-        coverText = coverText.replace(/\n([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Re:)/gi, '\n$2');
-        coverText = coverText.replace(/^([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Re:)/i, '$2');
-        coverText = coverText.replace(/\n([A-Z][A-Za-z0-9\s&.\-]{0,48})\s*\n+(Dear\s)/gi, '\n$2');
-        coverText = coverText.replace(/\n\n\n+/g, '\n\n');
         // Add portfolio URL after date line if not present
         if (!/maxmilliamlabs-ai\.web\.app|maxmilliam/i.test(coverText.split('Dear')[0] || '')) {
           coverText = coverText.replace(

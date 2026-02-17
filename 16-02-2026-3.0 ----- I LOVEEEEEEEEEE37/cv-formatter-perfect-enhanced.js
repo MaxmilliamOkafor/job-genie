@@ -883,6 +883,7 @@
     <!-- Contact - Dublin, IE | Phone | Email | [Extracted location] -->
     <div class="cv-contact">
       <div class="cv-contact-line">${escapeHtml(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : ''].filter(Boolean).join(' | '))}</div>
+      <div class="cv-contact-line">${escapeHtml(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').trim() : ''].filter(Boolean).join(' | '))}</div>
       ${contact.linkedin || contact.github ? `<div class="cv-contact-line">${[contact.linkedin, contact.github].filter(Boolean).map(l => escapeHtml(l)).join(' | ')}</div>` : ''}
     </div>
     
@@ -961,6 +962,7 @@
       // Name and contact
       lines.push(contact.name.toUpperCase());
       lines.push(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : ''].filter(Boolean).join(' | '));
+      lines.push(['Dublin, IE', contact.phone, contact.email, contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').trim() : ''].filter(Boolean).join(' | '));
       if (contact.linkedin || contact.github) {
         lines.push([contact.linkedin, contact.github].filter(Boolean).join(' | '));
       }
@@ -1184,6 +1186,7 @@
       // Contact
       const cleanLocPdf = contact.location ? String(contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
       const contactLine = ['Dublin, IE', contact.phone, contact.email, cleanLocPdf].filter(Boolean).join(' | ');
+      const contactLine = [contact.location || 'Dublin, IE', contact.phone, contact.email].filter(Boolean).join(' | ');
       addText(contactLine, false, true, 10.5);
       
       if (contact.linkedin || contact.github) {
