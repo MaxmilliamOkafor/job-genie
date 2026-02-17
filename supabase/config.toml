@@ -50,6 +50,3 @@ verify_jwt = false
 
 [functions.validate-kimi-key]
 verify_jwt = false
-
-[functions.extract-job-structured]
-verify_jwt = false

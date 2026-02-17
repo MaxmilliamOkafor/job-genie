@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
-import { HiringCafeFilters } from '@/components/jobs/HiringCafeFilters';
-import { HiringCafeGrid } from '@/components/jobs/HiringCafeGrid';
+import { JobFiltersBar } from '@/components/jobs/JobFiltersBar';
+import { VirtualJobList } from '@/components/jobs/VirtualJobList';
 import { LiveJobsPanel } from '@/components/jobs/LiveJobsPanel';
 import { LiveJobFeed } from '@/components/jobs/LiveJobFeed';
 import { supabase } from '@/integrations/supabase/client';
@@ -40,7 +40,6 @@ import {
   Wifi,
   Play,
   Download,
-  Sparkles,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -97,29 +96,6 @@ const Jobs = () => {
   const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
   const postedWithinFilterRef = useRef<string>('all');
   const [isFetchingNew, setIsFetchingNew] = useState(false);
-  const [isEnriching, setIsEnriching] = useState(false);
-
-  // AI Enrich jobs
-  const handleEnrichJobs = useCallback(async () => {
-    if (!user || isEnriching) return;
-    setIsEnriching(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('extract-job-structured', {
-        body: { user_id: user.id, batch_size: 20 },
-      });
-      if (error) throw error;
-      if (data?.processed > 0) {
-        await refetch();
-        toast.success(`Enriched ${data.processed} jobs with AI`);
-      } else {
-        toast.info('All jobs already enriched');
-      }
-    } catch (e) {
-      toast.error('Failed to enrich jobs');
-    } finally {
-      setIsEnriching(false);
-    }
-  }, [user, isEnriching, refetch]);
 
   // Bulk selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -594,19 +570,6 @@ const Jobs = () => {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={handleEnrichJobs}
-                  disabled={isEnriching}
-                >
-                  {isEnriching ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
-                  )}
-                  Enrich with AI
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
                   onClick={handleValidateLinks}
                   disabled={isValidatingLinks}
                 >
@@ -674,15 +637,68 @@ const Jobs = () => {
           <LiveJobsPanel onJobsFetched={refetch} />
         )}
 
-        {/* HiringCafe-style Filters */}
+        {/* Filters Bar */}
         {jobs.length > 0 && (
-          <HiringCafeFilters 
+          <JobFiltersBar 
             jobs={jobs} 
             onFiltersChange={handleFiltersChange}
             onLocationChange={async (locations) => {
               await filterByLocation(locations);
             }}
-            totalCount={totalCount}
+            onSearch={async (keywords, locations, filters) => {
+              if (!user) return;
+              setIsSearching(true);
+              setActiveSearchQuery(keywords);
+              try {
+                const { data, error } = await supabase.functions.invoke('search-jobs-google', {
+                  body: {
+                    keywords,
+                    location: locations || '',
+                    timeFilter: filters?.timeFilter || 'all',
+                    jobType: filters?.jobType || 'all',
+                    workType: filters?.workType || 'all',
+                    experienceLevel: filters?.experienceLevel || 'all',
+                  },
+                });
+                
+                if (error) throw error;
+                
+                if (data?.success) {
+                  await refetch();
+                  setLastSearchResultCount(data.totalFound || 0);
+                  const keywordPreview = keywords.split(',').slice(0, 3).map((k: string) => k.trim()).join(', ');
+                  
+                  let platformInfo = '';
+                  if (data.platforms && Object.keys(data.platforms).length > 0) {
+                    const topPlatforms = Object.entries(data.platforms)
+                      .sort((a, b) => (b[1] as number) - (a[1] as number))
+                      .slice(0, 4)
+                      .map(([name, count]) => `${name}: ${count}`)
+                      .join(', ');
+                    platformInfo = topPlatforms;
+                  }
+                  
+                  toast.success(`Found ${data.totalFound || 0} jobs across ${Object.keys(data.platforms || {}).length} platforms`, {
+                    description: platformInfo || `Searched: ${keywordPreview}`,
+                    duration: 5000,
+                  });
+                } else {
+                  setLastSearchResultCount(0);
+                  toast.error('Search returned no results', {
+                    description: 'Try different keywords or locations',
+                  });
+                }
+              } catch (error) {
+                console.error('Search error:', error);
+                setActiveSearchQuery('');
+                toast.error('Failed to search jobs', {
+                  description: error instanceof Error ? error.message : 'Unknown error',
+                });
+              } finally {
+                setIsSearching(false);
+              }
+            }}
+            isSearching={isSearching}
           />
         )}
 
@@ -1010,7 +1026,7 @@ const Jobs = () => {
 
 
         {sortedJobs.length > 0 && (
-          <HiringCafeGrid
+          <VirtualJobList
             jobs={sortedJobs}
             hasMore={hasMore}
             isLoading={isLoading}
