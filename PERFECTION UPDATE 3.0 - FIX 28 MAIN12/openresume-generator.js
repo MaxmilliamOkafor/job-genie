@@ -913,6 +913,15 @@
       addCenteredText(contactLine, false, font.body);
       y += 16;
 
+      // === DATE ===
+      const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      addText(today, false, font.body);
+      y += 12;
+
+      // === SUBJECT LINE (NO COMPANY NAME LINE) ===
+      addText(`Re: ${jobTitle}`, true, font.body);
+      y += 8;
+
       // === SALUTATION ===
       addText('Dear Hiring Manager,', false, font.body);
       y += 8;
@@ -992,6 +1001,10 @@
       const lines = [
         name.toUpperCase(),
         [formattedPhone, data.contact.email].filter(Boolean).join(' | '),
+        '',
+        new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        '',
+        `Re: ${jobTitle}`,
         '',
         'Dear Hiring Manager,',
         '',

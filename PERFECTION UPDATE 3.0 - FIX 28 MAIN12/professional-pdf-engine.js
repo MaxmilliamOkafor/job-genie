@@ -974,6 +974,12 @@
       doc.text(contactParts.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 20;
 
+      // Date
+      doc.setTextColor(...PDF_CONFIG.colors.black);
+      const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      doc.text(today, PDF_CONFIG.margins.left, y);
+      y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 10;
+
       return y;
     },
 
@@ -1067,8 +1073,15 @@
     },
 
     renderRecipientInfo(doc, jobData, y) {
-      // FIX: Removed date, company name, and "Re:" line entirely per user preference
-      // Cover letter goes straight from header to salutation/body
+      doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+      doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
+      doc.setTextColor(...PDF_CONFIG.colors.black);
+
+      // Render "Re: Job Title" line (no company name)
+      const jobTitle = jobData?.title || 'the position';
+      doc.text(`Re: ${jobTitle}`, PDF_CONFIG.margins.left, y);
+      y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.normal + 10;
+
       return y;
     },
 
