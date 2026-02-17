@@ -2723,12 +2723,13 @@ class ATSTailor {
     
     // Try optimized tailoring modules
     if (window.TailorUniversal) {
-      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords.all, { targetScore: 95 });
+      tailorResult = await window.TailorUniversal.tailorCV(cvText, keywords, { targetScore: 95 });
     } else if (window.AutoTailor95) {
       const tailor = new window.AutoTailor95({
         onProgress: updateProgress,
         onScoreUpdate: (score) => {
-          this.updateMatchGauge(score, 0, keywords.all.length);
+          const interim = this.calculateMatchScore(cvText, keywords);
+          this.updateMatchGauge(score, interim.matchedKeywords.length, keywords.all.length);
         }
       });
       tailorResult = await tailor.autoTailorTo95Plus(this.currentJob?.description || '', cvText);
