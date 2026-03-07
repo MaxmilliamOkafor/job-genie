@@ -20,7 +20,11 @@
     'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
     'utilise', 'utilization', 'utilisation',
     // Additional banned terms from spec
-    'measurable' // Replace with actual metrics/numbers
+    'measurable', // Replace with actual metrics/numbers
+    // Roast-flagged buzzwords
+    'proactively', 'proactive', 'passionate', 'passion',
+    'extensive experience', 'strong background',
+    'highly skilled', 'well-versed', 'adept'
   ];
 
   const BANNED_PHRASES = [
@@ -95,7 +99,15 @@
     'utilization': 'usage',
     'utilisation': 'usage',
     // Additional
-    'measurable': 'quantified'
+    'measurable': 'quantified',
+    // Roast-flagged replacements
+    'proactively': '',
+    'proactive': 'anticipatory',
+    'passionate': 'committed',
+    'passion': 'commitment',
+    'highly skilled': 'skilled',
+    'well-versed': 'experienced',
+    'adept': 'skilled'
   };
 
   const PHRASE_REPLACEMENTS = {
@@ -896,8 +908,23 @@
         // Remove trailing period from bullets
         cleaned = cleaned.replace(/\.\s*$/, '');
 
+        // MONSTER SENTENCE GUARD: Truncate bullets over 30 words
+        const words = cleaned.split(/\s+/);
+        if (words.length > 30) {
+          const truncated = words.slice(0, 30).join(' ');
+          const lastComma = truncated.lastIndexOf(',');
+          const lastSemicolon = truncated.lastIndexOf(';');
+          const breakPoint = Math.max(lastComma, lastSemicolon);
+          if (breakPoint > truncated.length * 0.6) {
+            cleaned = truncated.slice(0, breakPoint).trim();
+          } else {
+            cleaned = truncated.trim();
+          }
+          console.warn(`[ContentQualityEngine] Trimmed monster bullet (${words.length} words → ~30)`);
+        }
+
         return cleaned;
-      }).filter(b => b && b.length > 10); // Remove too-short bullets
+      }).filter(b => b && b.length > 10);
 
       // Run variation detection and log warnings
       const variation = this.detectBulletVerbRepetition(sanitised);
