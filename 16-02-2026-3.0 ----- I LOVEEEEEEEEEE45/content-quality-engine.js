@@ -20,7 +20,11 @@
     'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
     'utilise', 'utilization', 'utilisation',
     // Additional banned terms from spec
-    'measurable' // Replace with actual metrics/numbers
+    'measurable', // Replace with actual metrics/numbers
+    // Roast-flagged buzzwords
+    'proactively', 'proactive', 'passionate', 'passion',
+    'extensive experience', 'strong background',
+    'highly skilled', 'well-versed', 'adept'
   ];
 
   const BANNED_PHRASES = [
@@ -95,7 +99,15 @@
     'utilization': 'usage',
     'utilisation': 'usage',
     // Additional
-    'measurable': 'quantified'
+    'measurable': 'quantified',
+    // Roast-flagged replacements
+    'proactively': '',          // Remove - just state the action
+    'proactive': 'anticipatory',
+    'passionate': 'committed',
+    'passion': 'commitment',
+    'highly skilled': 'skilled',
+    'well-versed': 'experienced',
+    'adept': 'skilled'
   };
 
   const PHRASE_REPLACEMENTS = {
