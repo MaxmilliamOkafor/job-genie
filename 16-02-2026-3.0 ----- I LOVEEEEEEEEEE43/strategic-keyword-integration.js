@@ -229,7 +229,7 @@
 
       // Methodology keywords compatible with process bullets
       if (categorizedKeywords.methodology.includes(keyword)) {
-        return /(?:led|managed|drove|spearheaded|coordinated|organized|planned)/i.test(bulletLower);
+        return /(?:led|managed|drove|directed|coordinated|organised|planned)/i.test(bulletLower);
       }
 
       // Domain keywords compatible with outcome bullets
@@ -257,7 +257,7 @@
       const bulletLower = bullet.toLowerCase();
 
       // Check for action verb at start
-      if (/^(led|managed|developed|built|created|implemented|designed|engineered|delivered|drove|spearheaded)/i.test(bullet)) {
+      if (/^(led|managed|developed|built|created|implemented|designed|engineered|delivered|drove|directed)/i.test(bullet)) {
         strategies.push(INJECTION_STRATEGIES.TECH_STACK);
       }
 
@@ -397,7 +397,7 @@
     // ============ TECH STACK INTEGRATION ============
     integrateWithTechStack(bullet, keywords) {
       // Pattern: "Led [keyword]-focused..." or "...using [keyword1] and [keyword2]"
-      const verbMatch = bullet.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Drove|Spearheaded)\s+/i);
+      const verbMatch = bullet.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Drove|Directed)\s+/i);
       
       if (verbMatch) {
         // Insert after verb
