@@ -785,6 +785,11 @@
     
     // ============ ATTACH DOCUMENT (CV/COVER) FROM POPUP ============
     if (message.action === 'attachDocument') {
+      if (isGreenhouseDashboard()) {
+        console.log('[ATS Tailor] ⛔ Blocked attachDocument on Greenhouse dashboard');
+        sendResponse({ success: false, message: 'Cannot attach on dashboard pages' });
+        return true;
+      }
       console.log('[ATS Tailor] attachDocument triggered for:', message.type);
       
       (async () => {
