@@ -2493,7 +2493,42 @@
     }
   }
   
+  // ============ GREENHOUSE DASHBOARD GUARD ============
+  // Pages like my.greenhouse.io/jobs, my.greenhouse.io/applications, etc.
+  // are INTERNAL recruiter dashboard pages — NOT job application pages.
+  // The extension must NEVER run file attachment or auto-tailor on these.
+  function isGreenhouseDashboard() {
+    const hostname = window.location.hostname.toLowerCase();
+    const pathname = window.location.pathname.toLowerCase();
+    
+    // my.greenhouse.io is the recruiter/admin dashboard
+    if (hostname === 'my.greenhouse.io') return true;
+    
+    // app.greenhouse.io is also internal
+    if (hostname === 'app.greenhouse.io') return true;
+    
+    // Greenhouse boards listing page (not a specific job)
+    // e.g. boards.greenhouse.io/company (no specific job ID)
+    // But boards.greenhouse.io/company/jobs/12345 IS a job page
+    if (hostname.includes('greenhouse.io')) {
+      // Pure /jobs or /jobs/ with no job ID after it = browse page
+      if (pathname === '/jobs' || pathname === '/jobs/') return true;
+      // Dashboard-style routes
+      if (pathname.startsWith('/dashboard') || pathname.startsWith('/applications') || 
+          pathname.startsWith('/candidates') || pathname.startsWith('/reports') ||
+          pathname.startsWith('/settings') || pathname.startsWith('/account')) return true;
+    }
+    
+    return false;
+  }
+
   function initAutoTailor() {
+    // ============ GREENHOUSE DASHBOARD GUARD ============
+    if (isGreenhouseDashboard()) {
+      console.log('[Job Genie] ⛔ Greenhouse dashboard/browse page detected - skipping auto-tailor');
+      return; // Do NOT run any attachment or tailor logic
+    }
+    
     // Immediately show banner on ATS detection
     createStatusBanner();
     updateBanner('ATS detected! Preparing...', 'working');
