@@ -785,6 +785,11 @@
     
     // ============ ATTACH DOCUMENT (CV/COVER) FROM POPUP ============
     if (message.action === 'attachDocument') {
+      if (isGreenhouseDashboard()) {
+        console.log('[ATS Tailor] ⛔ Blocked attachDocument on Greenhouse dashboard');
+        sendResponse({ success: false, message: 'Cannot attach on dashboard pages' });
+        return true;
+      }
       console.log('[ATS Tailor] attachDocument triggered for:', message.type);
       
       (async () => {
@@ -2493,7 +2498,30 @@
     }
   }
   
+  // ============ GREENHOUSE DASHBOARD GUARD ============
+  function isGreenhouseDashboard() {
+    const hostname = window.location.hostname.toLowerCase();
+    const pathname = window.location.pathname.toLowerCase();
+    
+    if (hostname === 'my.greenhouse.io') return true;
+    if (hostname === 'app.greenhouse.io') return true;
+    
+    if (hostname.includes('greenhouse.io')) {
+      if (pathname === '/jobs' || pathname === '/jobs/') return true;
+      if (pathname.startsWith('/dashboard') || pathname.startsWith('/applications') || 
+          pathname.startsWith('/candidates') || pathname.startsWith('/reports') ||
+          pathname.startsWith('/settings') || pathname.startsWith('/account')) return true;
+    }
+    
+    return false;
+  }
+
   function initAutoTailor() {
+    if (isGreenhouseDashboard()) {
+      console.log('[Job Genie] ⛔ Greenhouse dashboard/browse page detected - skipping auto-tailor');
+      return;
+    }
+    
     // Immediately show banner on ATS detection
     createStatusBanner();
     updateBanner('ATS detected! Preparing...', 'working');
