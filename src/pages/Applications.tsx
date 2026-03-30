@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { ATSScoreAnimator } from '@/components/dashboard/ATSScoreAnimator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ import {
   CheckCircle,
   XCircle,
   MessageSquare,
+  Target,
 } from 'lucide-react';
 import { useApplications } from '@/hooks/useApplications';
 import { toast } from 'sonner';
@@ -252,6 +254,7 @@ const Applications = () => {
                     </TableHead>
                     <TableHead>Job</TableHead>
                     <TableHead>Company</TableHead>
+                    <TableHead>ATS Score</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Applied</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -270,6 +273,13 @@ const Applications = () => {
                         {app.job?.title || 'Unknown Job'}
                       </TableCell>
                       <TableCell>{app.job?.company || 'Unknown'}</TableCell>
+                      <TableCell>
+                        {(app.job?.match_score || app.match_score) ? (
+                          <ATSScoreAnimator score={app.job.match_score} size="sm" />
+                        ) : (
+                          <span className="text-muted-foreground text-sm">--</span>
+                        )}
+                      </TableCell>
                       <TableCell>{getStatusBadge(app.status || 'pending')}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -293,9 +303,19 @@ const Applications = () => {
                             </DialogTrigger>
                             <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden">
                               <DialogHeader>
-                                <DialogTitle>
-                                  {app.job?.title} at {app.job?.company}
-                                </DialogTitle>
+                                <div className="flex items-center gap-4">
+                                  <div className="flex-1">
+                                    <DialogTitle>
+                                      {app.job?.title} at {app.job?.company}
+                                    </DialogTitle>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      {app.applied_at ? `Applied ${format(new Date(app.applied_at), 'MMM d, yyyy')}` : 'Pending'}
+                                    </p>
+                                  </div>
+                                  {(app.job?.match_score || app.match_score) && (
+                                    <ATSScoreAnimator score={app.job.match_score} size="sm" label="ATS Match" />
+                                  )}
+                                </div>
                               </DialogHeader>
                               <Tabs defaultValue="resume" className="mt-4">
                                 <TabsList className="grid w-full grid-cols-2">

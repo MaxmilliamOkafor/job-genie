@@ -258,7 +258,9 @@ serve(async (req) => {
     );
     pdfDoc.setAuthor(sanitizedData.personalInfo.name);
     pdfDoc.setSubject(sanitizedData.type === "resume" ? "Professional Resume" : "Cover Letter");
-    pdfDoc.setKeywords(["resume", "cv", "professional"]);
+    // Include skills as PDF keywords for enhanced ATS metadata parsing
+    const skillKeywords = sanitizedData.skills?.primary?.slice(0, 20) || [];
+    pdfDoc.setKeywords(["resume", "cv", "professional", ...skillKeywords]);
     pdfDoc.setCreator("QuantumHire ATS Optimizer");
     pdfDoc.setProducer("QuantumHire");
 
@@ -270,9 +272,10 @@ serve(async (req) => {
     // Standard Letter size
     const PAGE_WIDTH = 612;
     const PAGE_HEIGHT = 792;
-    const MARGIN = 54; // 0.75 inch margins - standard
-    const LINE_HEIGHT = 14;
-    const SECTION_SPACING = 21; // 1.5 lines spacing
+    const MARGIN = 54; // 0.75 inch margins - standard ATS-safe
+    const LINE_HEIGHT = 13; // Tighter line height (1.15x) for more content per page
+    const SECTION_SPACING = 18; // Optimised section spacing
+    const BULLET_SPACING = 2; // Minimal gap between bullets for density
 
     // ULTRA ATS: Only black and dark gray - no colors
     const colors = {
@@ -481,8 +484,9 @@ serve(async (req) => {
           // Bullet points - use standard bullet character for ATS compatibility
           for (const bullet of exp.bullets) {
             ensureSpace(LINE_HEIGHT * 2);
-            const bulletText = `• ${bullet}`;
-            drawWrappedText(bulletText, MARGIN, 10, helvetica, PAGE_WIDTH - MARGIN * 2);
+            const bulletText = `- ${bullet}`;
+            drawWrappedText(bulletText, MARGIN + 8, 10, helvetica, PAGE_WIDTH - MARGIN * 2 - 8);
+            yPosition -= BULLET_SPACING; // Tight spacing between bullets
           }
 
           // 1.5 line spacing between companies (except after last)

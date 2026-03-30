@@ -67,6 +67,7 @@ interface TailorRequest {
     zipCode?: string;
   };
   includeReferral?: boolean;
+  coverLetterTone?: "professional" | "enthusiastic" | "concise";
 }
 
 async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any }> {
@@ -211,6 +212,10 @@ function validateRequest(data: any): TailorRequest {
     zipCode: profile.zipCode ? validateString(profile.zipCode, MAX_STRING_SHORT, "zipCode") : undefined,
   };
 
+  // Cover letter tone selection
+  const validTones = ["professional", "enthusiastic", "concise"];
+  const coverLetterTone = validTones.includes(data.coverLetterTone) ? data.coverLetterTone : "professional";
+
   return {
     jobTitle,
     company,
@@ -221,6 +226,7 @@ function validateRequest(data: any): TailorRequest {
     jobId,
     userProfile,
     includeReferral: !!data.includeReferral,
+    coverLetterTone: coverLetterTone as "professional" | "enthusiastic" | "concise",
   };
 }
 
@@ -1676,6 +1682,174 @@ function calculateMatchScore(
   };
 }
 
+// ==========================================
+// CONTENT QUALITY ENGINE (inspired by JobOwl)
+// ==========================================
+
+// Banned buzzwords that AI tends to overuse - makes resumes sound generic
+const BANNED_WORDS_MAP: Record<string, string> = {
+  "orchestrated": "directed",
+  "championed": "led",
+  "pioneered": "introduced",
+  "spearheaded": "led",
+  "helmed": "managed",
+  "leveraging": "using",
+  "leveraged": "used",
+  "leverage": "use",
+  "utilising": "using",
+  "utilised": "used",
+  "utilise": "use",
+  "utilizing": "using",
+  "utilized": "used",
+  "utilize": "use",
+  "synergy": "collaboration",
+  "synergies": "efficiencies",
+  "comprehensive": "thorough",
+  "dynamic": "adaptable",
+  "robust": "reliable",
+  "seamless": "smooth",
+  "holistic": "complete",
+  "cutting-edge": "modern",
+  "best-in-class": "leading",
+  "world-class": "top-tier",
+  "results-driven": "effective",
+  "detail-oriented": "precise",
+  "passionate": "committed",
+  "showcasing": "showing",
+  "demonstrating": "showing",
+  "meticulous": "thorough",
+  "highly motivated": "motivated",
+  "go-getter": "proactive",
+};
+
+// Phrase-level replacements for more natural language
+const BANNED_PHRASES_MAP: Record<string, string> = {
+  "proven ability": "ability",
+  "proven track record": "track record",
+  "proven record": "track record",
+  "proven expertise": "expertise",
+  "the intersection of": "across",
+  "drive impactful outcomes": "deliver results",
+  "strategic initiatives": "projects",
+  "stakeholder environments": "teams",
+  "think outside the box": "solve problems creatively",
+  "resulting in": "achieving",
+  "in order to": "to",
+  "as well as": "and",
+  "a wide range of": "various",
+  "state-of-the-art": "modern",
+  "paradigm shift": "change",
+};
+
+function applyContentQuality(text: string): string {
+  if (!text) return text;
+  let cleaned = text;
+
+  // Phase 1: Replace banned phrases (longer phrases first to avoid partial matches)
+  const sortedPhrases = Object.entries(BANNED_PHRASES_MAP).sort((a, b) => b[0].length - a[0].length);
+  for (const [phrase, replacement] of sortedPhrases) {
+    const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    cleaned = cleaned.replace(regex, replacement);
+  }
+
+  // Phase 2: Replace banned words
+  for (const [word, replacement] of Object.entries(BANNED_WORDS_MAP)) {
+    const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    cleaned = cleaned.replace(regex, (match) => {
+      // Preserve capitalisation
+      if (match[0] === match[0].toUpperCase()) {
+        return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+      }
+      return replacement;
+    });
+  }
+
+  // Phase 3: Remove em dashes (AI detection signal) - replace with regular hyphens
+  cleaned = cleaned.replace(/[\u2013\u2014\u2015]/g, "-");
+
+  return cleaned;
+}
+
+// ==========================================
+// COVER LETTER TONE TEMPLATES (inspired by JobOwl)
+// ==========================================
+
+type CoverLetterTone = "professional" | "enthusiastic" | "concise";
+
+function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
+  switch (tone) {
+    case "enthusiastic":
+      return `COVER LETTER TONE: ENTHUSIASTIC
+- Open with genuine excitement about the company's mission or recent achievements
+- Use energetic but professional language ("thrilled", "excited", "eager")
+- Show personality while maintaining professionalism
+- Emphasise cultural fit and passion for the industry
+- Close with strong forward-looking enthusiasm about contributing`;
+
+    case "concise":
+      return `COVER LETTER TONE: CONCISE
+- Maximum 3 short paragraphs (no more than 250 words total)
+- Lead with your strongest qualification match immediately
+- No filler phrases or unnecessary context
+- Every sentence must add value - cut anything redundant
+- Close with a single clear call to action`;
+
+    case "professional":
+    default:
+      return `COVER LETTER TONE: PROFESSIONAL
+- Formal but approachable tone throughout
+- Open with a clear statement of interest and top qualification
+- Structured body: qualification match, specific achievements, cultural alignment
+- Use measured, confident language without being boastful
+- Close with professional availability and next steps`;
+  }
+}
+
+// ==========================================
+// KEYWORD PRIORITY WEIGHTING (inspired by JobOwl)
+// ==========================================
+
+interface WeightedKeywords {
+  high: string[];    // 40% - most important, need 3-5 mentions each
+  medium: string[];  // 35% - important, need 2-4 mentions each
+  low: string[];     // 25% - nice to have, need 1-2 mentions each
+}
+
+function categoriseKeywordsByPriority(
+  hardSkills: string[],
+  tools: string[],
+  softSkills: string[],
+  titles: string[],
+  certifications: string[],
+  description: string,
+): WeightedKeywords {
+  const descLower = description.toLowerCase();
+
+  // Count frequency of each keyword in the JD - higher frequency = higher priority
+  const allKeywords = [...hardSkills, ...tools, ...softSkills, ...titles, ...certifications];
+  const frequencyMap = new Map<string, number>();
+
+  for (const kw of allKeywords) {
+    const kwLower = kw.toLowerCase();
+    const regex = new RegExp(`\\b${kwLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    const matches = descLower.match(regex);
+    frequencyMap.set(kw, matches ? matches.length : 0);
+  }
+
+  // Sort by frequency descending
+  const sorted = [...frequencyMap.entries()].sort((a, b) => b[1] - a[1]);
+  const total = sorted.length;
+
+  const highCount = Math.ceil(total * 0.40);
+  const medCount = Math.ceil(total * 0.35);
+
+  return {
+    high: sorted.slice(0, highCount).map(([kw]) => kw),
+    medium: sorted.slice(highCount, highCount + medCount).map(([kw]) => kw),
+    low: sorted.slice(highCount + medCount).map(([kw]) => kw),
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1759,6 +1933,7 @@ serve(async (req) => {
       jobId,
       userProfile,
       includeReferral,
+      coverLetterTone,
     } = validateRequest(rawData);
 
     // Validate that profile has required info
@@ -1824,6 +1999,17 @@ serve(async (req) => {
       `Match score calculated: ${matchResult.score}%, matched: ${matchResult.matched.length}, missing: ${matchResult.missing.length}, partial: ${matchResult.partialMatches?.length || 0}`,
     );
 
+    // Categorise keywords by priority (JobOwl-inspired weighted system)
+    const weightedKeywords = categoriseKeywordsByPriority(
+      jdKeywords.hardSkills,
+      jdKeywords.tools,
+      jdKeywords.softSkills,
+      jdKeywords.titles,
+      jdKeywords.certifications,
+      description,
+    );
+    console.log(`Keyword priorities - High: ${weightedKeywords.high.length}, Medium: ${weightedKeywords.medium.length}, Low: ${weightedKeywords.low.length}`);
+
     const candidateName = `${userProfile.firstName} ${userProfile.lastName}`.trim();
     // File naming: FirstName_LastName format with underscores
     const candidateNameForFile = `${userProfile.firstName}_${userProfile.lastName}`.replace(/\s+/g, "_").trim();
@@ -1831,6 +2017,10 @@ serve(async (req) => {
     // Calculate target score - we want 95-100% after AI integration
     const currentMatchPercent = (matchResult.matched.length / jdKeywords.allKeywords.length) * 100;
     const keywordsNeededFor95 = Math.ceil(jdKeywords.allKeywords.length * 0.95) - matchResult.matched.length;
+
+    // Get cover letter tone instructions
+    const toneInstructions = getCoverLetterToneInstructions(coverLetterTone);
+    console.log(`Cover letter tone: ${coverLetterTone}`);
 
 const systemPrompt = `You are an elite ATS (Applicant Tracking System) optimisation specialist with deep expertise in how Jobscan, Greenhouse, Workday, and Lever score resumes. Your ONLY goal is to rewrite the provided CV to score 95% or higher on a Jobscan match report against the provided job description, while keeping every claim 100% truthful and grounded in the candidate's actual experience.
 
@@ -1977,11 +2167,16 @@ ATS KEYWORD DENSITY TARGETS:
 - Tools/Platforms: Mention in skills section AND in relevant experience bullets
 - Soft Skills: Demonstrate through specific examples, not just list them
 
+KEYWORD PRIORITY WEIGHTING (frequency-based from JD analysis):
+HIGH PRIORITY (must appear 3-5 times each): ${weightedKeywords.high.join(", ")}
+MEDIUM PRIORITY (must appear 2-4 times each): ${weightedKeywords.medium.join(", ")}
+LOW PRIORITY (must appear 1-2 times each): ${weightedKeywords.low.join(", ")}
+
 JD KEYWORDS TO INTEGRATE:
 Hard Skills (PRIORITY 1): ${jdKeywords.hardSkills.join(", ")}
 Tools (PRIORITY 2): ${jdKeywords.tools.join(", ")}
 Titles (PRIORITY 3): ${jdKeywords.titles.join(", ")}
-Soft Skills (PRIORITY 4): ${jdKeywords.softSkills.join(", ")}
+Soft Skills (PRIORITY 4 - WEAVE INTO EXPERIENCE BULLETS, NOT SKILLS SECTION): ${jdKeywords.softSkills.join(", ")}
 Certifications: ${jdKeywords.certifications.join(", ")}
 
 MUST ADD THESE (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
@@ -2061,15 +2256,23 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    ${userProfile.portfolio || ""}
 
    Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-   
+
    Re: Application for ${jobTitle}
-   
+
    Dear Hiring Manager,
-   
+
    [4 paragraphs: Hook showing genuine interest, Proof with specific metrics and achievements, Skills alignment with job requirements, Close with availability and enthusiasm]
-   
+
    Sincerely,
    ${candidateName}
+
+   ${toneInstructions}
+
+   COVER LETTER KEYWORD RULES:
+   - Use 8-10 keywords naturally woven into the text (lighter than the CV)
+   - NEVER use banned words: "leveraging", "utilising", "utilizing", "synergy", "passionate"
+   - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
+   - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
 
 ${
   includeReferral
@@ -2332,6 +2535,15 @@ ${
       };
     }
 
+    // Apply content quality engine - remove banned buzzwords and improve natural language
+    if (result.tailoredResume) {
+      result.tailoredResume = applyContentQuality(result.tailoredResume);
+    }
+    if (result.tailoredCoverLetter) {
+      result.tailoredCoverLetter = applyContentQuality(result.tailoredCoverLetter);
+    }
+    console.log("Content quality engine applied - banned words replaced");
+
     // Ensure all required fields with our pre-calculated values
     result.candidateName = result.candidateName || candidateNameForFile;
     result.cvFileName = result.cvFileName || `${candidateNameForFile}_CV.pdf`;
@@ -2391,6 +2603,8 @@ ${
       tools: jdKeywords.tools,
       titles: jdKeywords.titles,
     };
+    result.keywordPriorities = weightedKeywords;
+    result.coverLetterTone = coverLetterTone;
 
     // Validate resume and cover letter
     if (!result.tailoredResume || result.tailoredResume.length < 100) {

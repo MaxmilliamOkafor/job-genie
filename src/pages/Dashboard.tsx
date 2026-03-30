@@ -2,31 +2,37 @@ import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { AIProviderStatus } from '@/components/dashboard/AIProviderStatus';
+import { ResumeStrengthAnalyzer } from '@/components/dashboard/ResumeStrengthAnalyzer';
+import { GenerationHistory } from '@/components/dashboard/GenerationHistory';
+import { InterviewPrepTips } from '@/components/dashboard/InterviewPrepTips';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobs } from '@/hooks/useJobs';
 import { useProfile } from '@/hooks/useProfile';
+import { useApplications } from '@/hooks/useApplications';
 import { Link } from 'react-router-dom';
-import { 
-  Briefcase, 
-  CheckCircle2, 
-  MessageCircle, 
-  Gift, 
+import {
+  Briefcase,
+  CheckCircle2,
+  MessageCircle,
+  Gift,
   Zap,
   ArrowRight,
   Sparkles,
   Target,
   User,
   LogOut,
-  Infinity
+  Infinity,
+  TrendingUp,
 } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const { jobs } = useJobs();
   const { profile } = useProfile();
+  const { applications } = useApplications();
   const [stats, setStats] = useState({
     applied: 0,
     interviewing: 0,
@@ -46,6 +52,11 @@ const Dashboard = () => {
     .filter(j => j.status === 'pending')
     .sort((a, b) => b.match_score - a.match_score)
     .slice(0, 10);
+
+  // Get the most recent application's job info for interview prep
+  const latestApplication = applications?.[0];
+  const latestJobTitle = latestApplication?.job?.title;
+  const latestCompany = latestApplication?.job?.company;
 
   return (
     <AppLayout>
@@ -135,6 +146,17 @@ const Dashboard = () => {
           />
         </div>
 
+        {/* Resume Strength + Generation History side by side */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Resume Strength Analyzer */}
+          {profile && (
+            <ResumeStrengthAnalyzer profile={profile} />
+          )}
+
+          {/* Generation History */}
+          <GenerationHistory applications={applications || []} />
+        </div>
+
         {/* Top Matches */}
         <Card>
           <CardHeader>
@@ -151,7 +173,7 @@ const Dashboard = () => {
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   {topMatches.map(job => (
-                    <a 
+                    <a
                       key={job.id}
                       href={job.url || '#'}
                       target="_blank"
@@ -193,16 +215,26 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Interview Preparation Tips */}
+        {(latestJobTitle || latestCompany) && (
+          <InterviewPrepTips
+            jobTitle={latestJobTitle}
+            company={latestCompany}
+          />
+        )}
 
         {/* Quick Start */}
         <Card>
           <CardHeader>
-            <CardTitle>Quick Start Guide</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Quick Start Guide
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
-              <Link 
-                to="/profile" 
+              <Link
+                to="/profile"
                 className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
               >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
@@ -215,8 +247,8 @@ const Dashboard = () => {
                   </p>
                 </div>
               </Link>
-              <Link 
-                to="/jobs" 
+              <Link
+                to="/jobs"
                 className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
               >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
@@ -229,8 +261,8 @@ const Dashboard = () => {
                   </p>
                 </div>
               </Link>
-              <Link 
-                to="/jobs" 
+              <Link
+                to="/jobs"
                 className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
               >
                 <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
