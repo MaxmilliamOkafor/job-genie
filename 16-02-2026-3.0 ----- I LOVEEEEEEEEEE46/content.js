@@ -1712,6 +1712,23 @@
   function killXButtons() {
     // IMPORTANT: do NOT click generic "remove" buttons globally.
     // Only click remove/clear controls that are near file inputs / upload widgets.
+
+    // v3.2 FIX: Auto-accept confirm() dialogs during file removal
+    // Greenhouse (and other ATS) trigger native confirm("Remove file?") when clicking
+    // remove buttons. We temporarily override confirm() to auto-accept, preventing
+    // the user from seeing the prompt.
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+
+    try {
+      _killXButtonsInner();
+    } finally {
+      // Restore original confirm after a short delay to catch async confirm dialogs
+      setTimeout(() => { window.confirm = originalConfirm; }, 500);
+    }
+  }
+
+  function _killXButtonsInner() {
     const isNearFileInput = (el) => {
       const root = el.closest('form') || document.body;
       const candidates = [
