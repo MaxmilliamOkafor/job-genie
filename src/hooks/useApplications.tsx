@@ -17,6 +17,7 @@ export interface Application {
   email_sent_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  match_score?: number | null;
   job?: {
     id: string;
     title: string;
@@ -24,6 +25,7 @@ export interface Application {
     location: string;
     url: string | null;
     salary: string | null;
+    match_score?: number | null;
   };
 }
 
