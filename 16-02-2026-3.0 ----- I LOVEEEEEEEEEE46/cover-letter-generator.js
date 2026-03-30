@@ -573,17 +573,36 @@
       
       let company = jobData.company || '';
       
-      // Extended list of invalid placeholder values
+      // Extended list of invalid placeholder values (v3.2: significantly expanded)
       const invalidNames = [
-        'company', 'the company', 'your company', 'hiring team', 'organization', 
+        'company', 'the company', 'your company', 'hiring team', 'organization',
         'organisation', 'employer', 'n/a', 'unknown', 'hiring company', 'the hiring company',
-        '[company]', '{company}', '{{company}}', 'company name', '[company name]'
+        '[company]', '{company}', '{{company}}', 'company name', '[company name]',
+        // v3.2 additions — AI-generated placeholder patterns
+        'the organization', 'the organisation', 'this company', 'this organization',
+        'your organization', 'your organisation', 'the firm', 'your firm',
+        'the team', 'your team', 'hiring organization', 'hiring organisation',
+        'prospective employer', 'potential employer', 'the employer',
+        'abc company', 'xyz company', 'acme', 'sample company',
+        'company x', 'company y', 'company z',
+        'test', 'test company', 'example', 'example company',
+        'tbd', 'to be determined', 'not specified', 'unspecified',
+        'confidential', 'confidential company', 'undisclosed',
+        'recipient', 'dear hiring manager', 'hiring manager'
       ];
-      
+
       const isInvalid = (val) => {
         if (!val || typeof val !== 'string') return true;
         const lower = val.toLowerCase().trim();
-        return invalidNames.includes(lower) || lower.length < 2;
+        if (invalidNames.includes(lower) || lower.length < 2) return true;
+        // v3.2: Reject values that are just template placeholders
+        if (/^\[.*\]$/.test(lower) || /^\{.*\}$/.test(lower) || /^<.*>$/.test(lower)) return true;
+        // v3.2: Reject single generic words
+        const genericSingleWords = ['company', 'employer', 'organization', 'organisation', 'firm', 'team', 'business', 'corporation', 'enterprise'];
+        if (genericSingleWords.includes(lower)) return true;
+        // v3.2: Reject if it looks like a URL fragment or path
+        if (/^https?:\/\//.test(lower) || /^www\./.test(lower)) return true;
+        return false;
       };
       
       // STRATEGY 1: Check recipientCompany field from AI response

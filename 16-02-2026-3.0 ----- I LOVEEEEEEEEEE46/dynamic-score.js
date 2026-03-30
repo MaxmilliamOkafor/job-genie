@@ -1,5 +1,6 @@
-// dynamic-score.js - Dynamic fluctuating match score calculation
+// dynamic-score.js - Dynamic fluctuating match score calculation v3.2
 // Calculates real-time ATS match scores based on actual keywords present in CV
+// v3.2: Added keyword density tracking, section-aware scoring, priority distribution analysis
 
 (function(global) {
   'use strict';
@@ -181,6 +182,72 @@
     return '#ff4757'; // Red
   }
 
+  /**
+   * v3.2: Track keyword distribution across CV sections
+   * Ensures keywords aren't all bunched in one section (e.g. just Skills)
+   * @param {string} cvText - Full CV text
+   * @param {Array} matchedKeywords - Keywords found in CV
+   * @returns {Object} Distribution analysis
+   */
+  function analyseKeywordDistribution(cvText, matchedKeywords) {
+    if (!cvText || !matchedKeywords || matchedKeywords.length === 0) {
+      return { sections: {}, wellDistributed: false, distributionScore: 0 };
+    }
+
+    // Split CV into approximate sections by common headers
+    const sectionPatterns = [
+      { name: 'summary', pattern: /(?:PROFESSIONAL\s+SUMMARY|SUMMARY|PROFILE|OBJECTIVE)([\s\S]*?)(?=(?:WORK\s+EXPERIENCE|EXPERIENCE|EDUCATION|SKILLS|CERTIFICATIONS|$))/i },
+      { name: 'experience', pattern: /(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT\s+HISTORY)([\s\S]*?)(?=(?:EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|$))/i },
+      { name: 'skills', pattern: /(?:SKILLS|TECHNICAL\s+SKILLS|CORE\s+COMPETENCIES)([\s\S]*?)(?=(?:EDUCATION|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|$))/i },
+      { name: 'education', pattern: /(?:EDUCATION|ACADEMIC|QUALIFICATIONS)([\s\S]*?)(?=(?:CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|$))/i }
+    ];
+
+    const sections = {};
+    for (const sec of sectionPatterns) {
+      const match = cvText.match(sec.pattern);
+      const sectionText = match ? match[1] || '' : '';
+      const sectionLower = sectionText.toLowerCase();
+
+      let count = 0;
+      for (const kw of matchedKeywords) {
+        const regex = new RegExp('\\b' + kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+        const hits = sectionLower.match(regex);
+        count += hits ? hits.length : 0;
+      }
+      sections[sec.name] = count;
+    }
+
+    // Well-distributed = keywords appear in at least 2 sections beyond just Skills
+    const nonSkillSections = Object.entries(sections)
+      .filter(([name, count]) => name !== 'skills' && count > 0);
+    const wellDistributed = nonSkillSections.length >= 2;
+
+    const totalHits = Object.values(sections).reduce((a, b) => a + b, 0);
+    const maxInOneSection = Math.max(...Object.values(sections));
+    const distributionScore = totalHits > 0
+      ? Math.round((1 - (maxInOneSection / totalHits)) * 100)
+      : 0;
+
+    return { sections, wellDistributed, distributionScore };
+  }
+
+  /**
+   * v3.2: Calculate keyword frequency map for density analysis
+   */
+  function getKeywordFrequency(cvText, keywords) {
+    if (!cvText || !keywords) return {};
+    const cvLower = cvText.toLowerCase();
+    const frequency = {};
+
+    for (const kw of keywords) {
+      const regex = new RegExp('\\b' + kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+      const matches = cvLower.match(regex);
+      frequency[kw] = matches ? matches.length : 0;
+    }
+
+    return frequency;
+  }
+
   // Export functions
   global.DynamicScore = {
     calculateDynamicMatch,
@@ -188,7 +255,9 @@
     animateScore,
     getScoreStatus,
     getScoreColor,
-    extractWords
+    extractWords,
+    analyseKeywordDistribution,
+    getKeywordFrequency
   };
 
 })(typeof window !== 'undefined' ? window : global);
