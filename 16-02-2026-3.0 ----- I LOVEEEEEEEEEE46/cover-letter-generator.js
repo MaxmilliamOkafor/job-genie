@@ -14,28 +14,23 @@
         'I am applying for the {jobTitle} position at {company} because the role aligns directly with my strongest capabilities and career trajectory. My track record of delivering measurable results in high-stakes environments makes me confident I can contribute from day one.',
         'I am writing with genuine interest in the {jobTitle} role at {company}. My career has been defined by converting complex challenges into delivered outcomes, and the scope of this position is exactly where I can make the greatest impact.',
         'The {jobTitle} opportunity at {company} is a compelling match for my {domain} expertise and my ambition to work on problems that matter. I bring both the technical depth and the leadership instincts this role demands.',
-        'I am submitting my application for the {jobTitle} position at {company}, where my proven ability to scale solutions, lead cross-functional delivery, and drive measurable business outcomes aligns closely with your requirements.'
+        'I am submitting my application for the {jobTitle} position at {company}, where my proven ability to scale solutions, lead cross-functional delivery, and drive measurable business outcomes aligns closely with your requirements.',
+        'I am writing to express my interest in the {jobTitle} position at {company}, where I believe my track record of delivering measurable results would be a strong fit.',
+        'I am applying for the {jobTitle} role at {company}. My career has been defined by consistent delivery in high-impact environments, and I am confident this experience translates directly to your team.',
+        'I am keen to bring my {domain} expertise to {company} as a {jobTitle}, building on a track record of driving both technical and commercial outcomes.'
       ],
       bridge: [
         'Over {yearsExp} years in {domain}, I have built a career around translating strategic priorities into tangible business results — repeatedly taking on increasing scope and exceeding expectations.',
         'My {yearsExp}-year background in {domain} has given me deep technical fluency alongside the stakeholder management and commercial awareness needed to operate effectively at a senior level.',
-        'With {yearsExp} years of progressive experience in {domain}, I have developed the rare combination of hands-on technical capability and strategic thinking that high-performing teams need.'
-      ],
-      closing: [
-        'I am confident my combination of technical capability, leadership instinct, and delivery track record would make a meaningful contribution to {company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.',
-        'I would welcome the opportunity to show how my skills and delivery record translate directly into value for {company}. Thank you for considering my application — I look forward to discussing this further.',
-        'Thank you for your consideration. I am available at your convenience and eager to discuss how my background can accelerate {company}\'s goals.'
-        'I am writing to express my interest in the {jobTitle} position at {company}, where I believe my track record of delivering measurable results would be a strong fit.',
-        'I am applying for the {jobTitle} role at {company}. My career has been defined by consistent delivery in high-impact environments, and I am confident this experience translates directly to your team.',
-        'I am keen to bring my {domain} expertise to {company} as a {jobTitle}, building on a track record of driving both technical and commercial outcomes.',
-        'I am submitting my application for the {jobTitle} position at {company}, where my background in scaling solutions and leading cross-functional delivery aligns closely with what you are looking for.'
-      ],
-      bridge: [
+        'With {yearsExp} years of progressive experience in {domain}, I have developed the rare combination of hands-on technical capability and strategic thinking that high-performing teams need.',
         'With {yearsExp} years of progressive experience in {domain}, I have built a career around translating strategic objectives into tangible business outcomes.',
         'My background spans {yearsExp} years in {domain}, during which I have consistently taken on increasing scope and delivered results that exceeded expectations.',
         'Over {yearsExp} years in {domain}, I have developed deep technical fluency alongside the stakeholder management skills needed to operate effectively at a senior level.'
       ],
       closing: [
+        'I am confident my combination of technical capability, leadership instinct, and delivery track record would make a meaningful contribution to {company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.',
+        'I would welcome the opportunity to show how my skills and delivery record translate directly into value for {company}. Thank you for considering my application — I look forward to discussing this further.',
+        'Thank you for your consideration. I am available at your convenience and eager to discuss how my background can accelerate {company}\'s goals.',
         'I would welcome the opportunity to discuss how my experience can contribute to {company}\'s goals. Thank you for your time and consideration.',
         'I look forward to exploring how my skills and delivery record can add value to {company}. Thank you for considering my application.',
         'Thank you for your consideration. I am available at your convenience to discuss how I can contribute to {company}\'s continued growth.'
@@ -46,27 +41,23 @@
       opening: [
         'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role, the calibre of the team, and the impact of the work make this an outstanding opportunity I am determined to pursue.',
         'The {jobTitle} role at {company} sits at the intersection of my strongest skills and deepest professional ambitions. I have been building towards exactly this kind of opportunity throughout my career.',
-        'I was pleased to discover the {jobTitle} opening at {company}. It represents the kind of high-impact, technically challenging work that has driven every career decision I have made.'
-      ],
-      bridge: [
-        'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges where the outcome genuinely matters.',
-        'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems, building systems that perform at scale, and leaving every team stronger than I found it.',
-        'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced, results-driven environments.'
-      ],
-      closing: [
-        'I am confident that my energy, expertise, and delivery record would make a real difference at {company}. I would be glad to discuss how I can contribute — thank you for your time.',
-        'Thank you for considering my application. I am genuinely excited about this opportunity and look forward to discussing how my skills can drive results for {company}.',
-        'I look forward to the possibility of contributing my expertise and energy to {company}\'s mission. Thank you for your time and consideration.'
+        'I was pleased to discover the {jobTitle} opening at {company}. It represents the kind of high-impact, technically challenging work that has driven every career decision I have made.',
         'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role and the calibre of the team make this an outstanding opportunity.',
         'The {jobTitle} role at {company} aligns perfectly with the direction I have been building towards throughout my career, and I am excited to apply.',
         'I was pleased to discover the {jobTitle} opening at {company}, as it sits at the intersection of my strongest skills and deepest professional interests.'
       ],
       bridge: [
+        'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges where the outcome genuinely matters.',
+        'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems, building systems that perform at scale, and leaving every team stronger than I found it.',
+        'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced, results-driven environments.',
         'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges.',
         'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems and building systems that perform at scale.',
         'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced environments.'
       ],
       closing: [
+        'I am confident that my energy, expertise, and delivery record would make a real difference at {company}. I would be glad to discuss how I can contribute — thank you for your time.',
+        'Thank you for considering my application. I am genuinely excited about this opportunity and look forward to discussing how my skills can drive results for {company}.',
+        'I look forward to the possibility of contributing my expertise and energy to {company}\'s mission. Thank you for your time and consideration.',
         'I would be glad to discuss how I can contribute to {company}\'s mission. Thank you for your time.',
         'Thank you for considering my application. I look forward to the chance to discuss how my skills can support {company}\'s objectives.',
         'I am looking forward to the possibility of contributing my expertise and energy to {company}.'
@@ -77,27 +68,23 @@
       opening: [
         'I am applying for the {jobTitle} position at {company}. My {domain} experience and delivery track record are directly relevant to this role.',
         'Please consider my application for the {jobTitle} role at {company}, where my background maps closely to your requirements.',
-        'I wish to be considered for the {jobTitle} position at {company}. I bring the technical depth and execution discipline this role demands.'
-      ],
-      bridge: [
-        'I bring {yearsExp} years of {domain} experience with a consistent record of delivery, stakeholder trust, and measurable outcomes.',
-        'My {yearsExp}-year background in {domain} has equipped me with the technical skills, leadership capability, and commercial awareness this role requires.',
-        'With {yearsExp} years in {domain}, I offer both technical depth and the operational maturity to contribute from day one.'
-      ],
-      closing: [
-        'I look forward to discussing this opportunity and how my background translates into value for {company}. Thank you for your consideration.',
-        'I welcome the chance to discuss this role further. Thank you for your time.',
-        'I would appreciate the opportunity to explore how I can contribute. Thank you for your consideration.'
+        'I wish to be considered for the {jobTitle} position at {company}. I bring the technical depth and execution discipline this role demands.',
         'Please accept my application for the {jobTitle} position at {company}.',
         'I am applying for the {jobTitle} role at {company}, where my experience is directly relevant.',
         'I wish to be considered for the {jobTitle} position at {company}.'
       ],
       bridge: [
+        'I bring {yearsExp} years of {domain} experience with a consistent record of delivery, stakeholder trust, and measurable outcomes.',
+        'My {yearsExp}-year background in {domain} has equipped me with the technical skills, leadership capability, and commercial awareness this role requires.',
+        'With {yearsExp} years in {domain}, I offer both technical depth and the operational maturity to contribute from day one.',
         'I bring {yearsExp} years of {domain} experience with a consistent record of delivery.',
         'My {yearsExp}-year background in {domain} has equipped me with the skills this role demands.',
         'With {yearsExp} years in {domain}, I offer both technical depth and operational maturity.'
       ],
       closing: [
+        'I look forward to discussing this opportunity and how my background translates into value for {company}. Thank you for your consideration.',
+        'I welcome the chance to discuss this role further. Thank you for your time.',
+        'I would appreciate the opportunity to explore how I can contribute. Thank you for your consideration.',
         'I look forward to discussing this opportunity further. Thank you for your consideration.',
         'Please contact me at your convenience. Thank you for your time.',
         'I would appreciate the opportunity to discuss this role. Thank you.'
@@ -573,17 +560,36 @@
       
       let company = jobData.company || '';
       
-      // Extended list of invalid placeholder values
+      // Extended list of invalid placeholder values (v3.2: significantly expanded)
       const invalidNames = [
-        'company', 'the company', 'your company', 'hiring team', 'organization', 
+        'company', 'the company', 'your company', 'hiring team', 'organization',
         'organisation', 'employer', 'n/a', 'unknown', 'hiring company', 'the hiring company',
-        '[company]', '{company}', '{{company}}', 'company name', '[company name]'
+        '[company]', '{company}', '{{company}}', 'company name', '[company name]',
+        // v3.2 additions — AI-generated placeholder patterns
+        'the organization', 'the organisation', 'this company', 'this organization',
+        'your organization', 'your organisation', 'the firm', 'your firm',
+        'the team', 'your team', 'hiring organization', 'hiring organisation',
+        'prospective employer', 'potential employer', 'the employer',
+        'abc company', 'xyz company', 'acme', 'sample company',
+        'company x', 'company y', 'company z',
+        'test', 'test company', 'example', 'example company',
+        'tbd', 'to be determined', 'not specified', 'unspecified',
+        'confidential', 'confidential company', 'undisclosed',
+        'recipient', 'dear hiring manager', 'hiring manager'
       ];
-      
+
       const isInvalid = (val) => {
         if (!val || typeof val !== 'string') return true;
         const lower = val.toLowerCase().trim();
-        return invalidNames.includes(lower) || lower.length < 2;
+        if (invalidNames.includes(lower) || lower.length < 2) return true;
+        // v3.2: Reject values that are just template placeholders
+        if (/^\[.*\]$/.test(lower) || /^\{.*\}$/.test(lower) || /^<.*>$/.test(lower)) return true;
+        // v3.2: Reject single generic words
+        const genericSingleWords = ['company', 'employer', 'organization', 'organisation', 'firm', 'team', 'business', 'corporation', 'enterprise'];
+        if (genericSingleWords.includes(lower)) return true;
+        // v3.2: Reject if it looks like a URL fragment or path
+        if (/^https?:\/\//.test(lower) || /^www\./.test(lower)) return true;
+        return false;
       };
       
       // STRATEGY 1: Check recipientCompany field from AI response

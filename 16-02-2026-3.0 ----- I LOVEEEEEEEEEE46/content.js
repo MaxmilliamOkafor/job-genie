@@ -1712,6 +1712,23 @@
   function killXButtons() {
     // IMPORTANT: do NOT click generic "remove" buttons globally.
     // Only click remove/clear controls that are near file inputs / upload widgets.
+
+    // v3.2 FIX: Auto-accept confirm() dialogs during file removal
+    // Greenhouse (and other ATS) trigger native confirm("Remove file?") when clicking
+    // remove buttons. We temporarily override confirm() to auto-accept, preventing
+    // the user from seeing the prompt.
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+
+    try {
+      _killXButtonsInner();
+    } finally {
+      // Restore original confirm after a short delay to catch async confirm dialogs
+      setTimeout(() => { window.confirm = originalConfirm; }, 500);
+    }
+  }
+
+  function _killXButtonsInner() {
     const isNearFileInput = (el) => {
       const root = el.closest('form') || document.body;
       const candidates = [
@@ -2407,9 +2424,20 @@
 
     killXButtons();
 
+    // v3.2 FIX: Safety timeout — stop attach loops after 30 seconds to prevent
+    // infinite CPU-burning intervals when areBothAttached() never returns true
+    // (e.g. page has no file inputs, or inputs are hidden/disabled)
+    const ATTACH_SAFETY_TIMEOUT_MS = 30000;
+    const attachStartTime = Date.now();
+
     // HYPER BLAZING: 2ms interval (500fps) - 50% faster than ULTRA BLAZING
     attachLoop4ms = setInterval(() => {
       if (!filesLoaded) return;
+      if (Date.now() - attachStartTime > ATTACH_SAFETY_TIMEOUT_MS) {
+        console.warn('[ATS Tailor] ⏱️ Attach loop safety timeout (30s) — stopping');
+        stopAttachLoops();
+        return;
+      }
       forceCVReplace();
       forceCoverReplace();
       if (areBothAttached()) {
@@ -2424,6 +2452,10 @@
     // HYPER BLAZING: 4ms interval for full force - 50% faster
     attachLoop8ms = setInterval(() => {
       if (!filesLoaded) return;
+      if (Date.now() - attachStartTime > ATTACH_SAFETY_TIMEOUT_MS) {
+        stopAttachLoops();
+        return;
+      }
       forceEverything();
       if (areBothAttached()) {
         console.log('[ATS Tailor] ⚡⚡⚡ HYPER BLAZING attach complete');

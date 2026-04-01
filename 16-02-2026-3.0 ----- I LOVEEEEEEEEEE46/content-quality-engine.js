@@ -24,7 +24,18 @@
     // Roast-flagged buzzwords
     'proactively', 'proactive', 'passionate', 'passion',
     'extensive experience', 'strong background',
-    'highly skilled', 'well-versed', 'adept'
+    'highly skilled', 'well-versed', 'adept',
+    // v3.2 additions — expanded AI/buzzword detection from JobOwl analysis
+    'robust', 'seamless', 'holistic', 'synergistic', 'transformative',
+    'groundbreaking', 'revolutionary', 'unparalleled', 'unprecedented',
+    'invaluable', 'instrumental', 'paramount', 'pivotal',
+    'fostered', 'cultivated', 'harnessed', 'amplified',
+    'delved', 'navigated', 'traversed', 'embarked',
+    'multifaceted', 'streamlined', 'nuanced',
+    'impactful', 'synergize', 'ideate', 'operationalize',
+    'ecosystem', 'landscape', 'wheelhouse', 'deep-dive',
+    'self-starter', 'hard-working', 'hardworking',
+    'seasoned', 'consummate', 'top-notch', 'first-rate'
   ];
 
   const BANNED_PHRASES = [
@@ -43,7 +54,22 @@
     'robust solution', 'seamless integration', 'end-to-end',
     'state-of-the-art', 'next-generation', 'mission-critical',
     'thought leadership', 'disruptive innovation',
-    'optimizing ci/cd processes', 'optimising ci/cd processes'
+    'optimizing ci/cd processes', 'optimising ci/cd processes',
+    // v3.2 additions — expanded corporate jargon and AI-flagged phrases
+    'in order to', 'as well as', 'a wide range of', 'a plethora of',
+    'a myriad of', 'wide array of', 'vast array of',
+    'plays a crucial role', 'plays a key role', 'plays a vital role',
+    'it is worth noting', 'it should be noted', 'it goes without saying',
+    'needless to say', 'at the end of the day',
+    'fast-paced environment', 'results-oriented professional',
+    'strong communicator', 'excellent communication skills',
+    'attention to detail', 'works well under pressure',
+    'above and beyond', 'hit the ground running',
+    'with that being said', 'having said that',
+    'in today\'s competitive landscape', 'in this day and age',
+    'passionate about', 'enthusiastic about driving',
+    'uniquely positioned', 'well-positioned to',
+    'demonstrated ability to', 'demonstrated expertise in'
   ];
 
   // ============ AI DETECTION PHRASE PATTERNS ============
@@ -57,7 +83,20 @@
     /with a focus on/gi,
     /in alignment with/gi,
     /in conjunction with/gi,
-    /in tandem with/gi
+    /in tandem with/gi,
+    // v3.2 additions — deeper AI detection patterns from JobOwl analysis
+    /this (ensured|enabled|allowed|facilitated)/gi,
+    /I (successfully|effectively|strategically|proactively)\s/gi,
+    /as a result of (my|this|these)/gi,
+    /played a (key|crucial|vital|pivotal|instrumental) role/gi,
+    /was responsible for/gi,
+    /served as (a|the)/gi,
+    /tasked with/gi,
+    /furthermore,?\s/gi,
+    /moreover,?\s/gi,
+    /additionally,?\s/gi,
+    /in (my|this|the) (capacity|role) as/gi,
+    /demonstrat(ed|ing) (a |my )?(strong|deep|solid)/gi
   ];
 
   // ============ REPLACEMENT MAPPINGS ============
@@ -107,7 +146,47 @@
     'passion': 'commitment',
     'highly skilled': 'skilled',
     'well-versed': 'experienced',
-    'adept': 'skilled'
+    'adept': 'skilled',
+    // v3.2 additions — replacements for newly banned words
+    'robust': 'reliable',
+    'seamless': 'smooth',
+    'holistic': 'complete',
+    'synergistic': 'collaborative',
+    'transformative': 'significant',
+    'groundbreaking': 'innovative',
+    'revolutionary': 'innovative',
+    'unparalleled': 'exceptional',
+    'unprecedented': 'first',
+    'invaluable': 'valuable',
+    'instrumental': 'key',
+    'paramount': 'critical',
+    'pivotal': 'key',
+    'fostered': 'built',
+    'cultivated': 'developed',
+    'harnessed': 'applied',
+    'amplified': 'increased',
+    'delved': 'explored',
+    'navigated': 'managed',
+    'traversed': 'covered',
+    'embarked': 'started',
+    'multifaceted': 'varied',
+    'streamlined': 'simplified',
+    'nuanced': 'detailed',
+    'impactful': 'effective',
+    'synergize': 'collaborate',
+    'ideate': 'brainstorm',
+    'operationalize': 'implement',
+    'ecosystem': 'environment',
+    'landscape': 'field',
+    'wheelhouse': 'area of expertise',
+    'deep-dive': 'analysis',
+    'self-starter': 'independent',
+    'hard-working': 'dedicated',
+    'hardworking': 'dedicated',
+    'seasoned': 'experienced',
+    'consummate': 'skilled',
+    'top-notch': 'excellent',
+    'first-rate': 'excellent'
   };
 
   const PHRASE_REPLACEMENTS = {
@@ -133,7 +212,42 @@
     'which led to': ', achieving',
     'thereby': ', which',
     'thus enabling': ', enabling',
-    'in order to': 'to'
+    'in order to': 'to',
+    // v3.2 additions — expanded phrase replacements for natural language
+    'as well as': 'and',
+    'a wide range of': 'various',
+    'a plethora of': 'many',
+    'a myriad of': 'many',
+    'wide array of': 'range of',
+    'vast array of': 'range of',
+    'plays a crucial role': 'contributes to',
+    'plays a key role': 'contributes to',
+    'plays a vital role': 'supports',
+    'it is worth noting': '',
+    'it should be noted': '',
+    'needless to say': '',
+    'it goes without saying': '',
+    'at the end of the day': 'ultimately',
+    'fast-paced environment': 'busy environment',
+    'above and beyond': 'beyond expectations',
+    'hit the ground running': 'start contributing immediately',
+    'with that being said': '',
+    'having said that': '',
+    'in today\'s competitive landscape': 'currently',
+    'in this day and age': 'today',
+    'passionate about': 'committed to',
+    'enthusiastic about driving': 'focused on delivering',
+    'uniquely positioned': 'well suited',
+    'well-positioned to': 'ready to',
+    'demonstrated ability to': 'ability to',
+    'demonstrated expertise in': 'expertise in',
+    'was responsible for': '',
+    'served as a': 'worked as a',
+    'served as the': 'worked as the',
+    'tasked with': '',
+    'furthermore': '',
+    'moreover': '',
+    'additionally': 'also'
   };
 
   // ============ US TO UK SPELLING CONVERSIONS ============
@@ -416,6 +530,23 @@
         [/\bleveraged\b/gi, 'used'],
         [/\bleverage\b/gi, 'use'],
         [/\bcomprehensive\b/gi, 'thorough'],
+        // v3.2 additions to never-leak guard
+        [/\brobust\b/gi, 'reliable'],
+        [/\bseamless\b/gi, 'smooth'],
+        [/\bholistic\b/gi, 'complete'],
+        [/\btransformative\b/gi, 'significant'],
+        [/\bgroundbreaking\b/gi, 'innovative'],
+        [/\bunparalleled\b/gi, 'exceptional'],
+        [/\binstrumental\b/gi, 'key'],
+        [/\bpivotal\b/gi, 'key'],
+        [/\bfostered\b/gi, 'built'],
+        [/\bcultivated\b/gi, 'developed'],
+        [/\bharnessed\b/gi, 'applied'],
+        [/\bdelved\b/gi, 'explored'],
+        [/\bimpactful\b/gi, 'effective'],
+        [/\bstreamlined\b/gi, 'simplified'],
+        [/\bnuanced\b/gi, 'detailed'],
+        [/\bseasoned\b/gi, 'experienced'],
         [/\bmeticulous\b/gi, 'detailed'],
         // Phrases that must be replaced (multi-word)
         [/\bproven ability\b/gi, 'ability'],
