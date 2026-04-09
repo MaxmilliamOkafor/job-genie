@@ -97,6 +97,7 @@
         let currentY = PDF_CONFIG.margins.top;
         currentY = this.renderHeader(doc, cvData.contact, currentY);
         currentY = this.renderSummary(doc, cvData.summary, currentY);
+        currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY);
         currentY = this.renderExperience(doc, cvData.experience, currentY);
         currentY = this.renderEducation(doc, cvData.education, currentY);
         currentY = this.renderSkills(doc, cvData.skills, currentY);
@@ -199,6 +200,7 @@
       const data = {
         contact: this.extractContact(candidateData, jobData),
         summary: '',
+        coreCompetencies: [],
         experience: [],
         education: [],
         skills: [],
@@ -248,6 +250,11 @@
         
         data.skills = this.parseSkills(tailoredContent.skills || candidateData?.skills);
         data.certifications = this.parseCertifications(tailoredContent.certifications || candidateData?.certifications);
+        
+        // Core Competencies from AI tailoring response
+        if (Array.isArray(tailoredContent.coreCompetencies) && tailoredContent.coreCompetencies.length > 0) {
+          data.coreCompetencies = tailoredContent.coreCompetencies.slice(0, 9);
+        }
       }
 
       return data;
@@ -974,6 +981,45 @@
         }
 
         y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.relaxed;
+      }
+
+      return y + PDF_CONFIG.spacing.beforeSection;
+    },
+
+    // ============ RENDER CORE COMPETENCIES GRID ============
+    renderCoreCompetencies(doc, competencies, startY) {
+      if (!competencies || competencies.length === 0) return startY;
+
+      let y = startY;
+
+      if (y > PDF_CONFIG.page.height - 80) {
+        doc.addPage();
+        y = PDF_CONFIG.margins.top;
+      }
+
+      y = this.renderSectionTitle(doc, 'CORE COMPETENCIES', y);
+
+      const COLS = 3;
+      const pageWidth = PDF_CONFIG.page.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
+      const colWidth = pageWidth / COLS;
+      const fontSize = PDF_CONFIG.fonts.sizes.body;
+      const lineHeight = fontSize * PDF_CONFIG.lineHeight.normal;
+
+      for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
+        if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - lineHeight) {
+          doc.addPage();
+          y = PDF_CONFIG.margins.top;
+        }
+        for (let col = 0; col < COLS; col++) {
+          const idx = row * COLS + col;
+          if (idx < competencies.length) {
+            const text = this.sanitizeForPDF(`- ${competencies[idx]}`);
+            doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+            doc.setFontSize(fontSize);
+            doc.text(text, PDF_CONFIG.margins.left + col * colWidth, y);
+          }
+        }
+        y += lineHeight;
       }
 
       return y + PDF_CONFIG.spacing.beforeSection;

@@ -18,6 +18,7 @@ interface ResumeData {
     portfolio?: string;
   };
   summary?: string;
+  coreCompetencies?: string[];
   experience?: Array<{
     company: string;
     title: string;
@@ -415,7 +416,31 @@ serve(async (req) => {
         drawWrappedText(sanitizedData.summary, MARGIN, 10, helvetica);
       }
 
-      // === WORK EXPERIENCE ===
+      // === CORE COMPETENCIES GRID ===
+      if (sanitizedData.coreCompetencies && sanitizedData.coreCompetencies.length > 0) {
+        drawSectionHeader("Core Competencies");
+        const competencies = sanitizedData.coreCompetencies;
+        const COLS = 3;
+        const colWidth = Math.floor((PAGE_WIDTH - MARGIN * 2) / COLS);
+        for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
+          ensureSpace(LINE_HEIGHT + 4);
+          for (let col = 0; col < COLS; col++) {
+            const idx = row * COLS + col;
+            if (idx < competencies.length) {
+              currentPage.drawText(`- ${competencies[idx]}`, {
+                x: MARGIN + col * colWidth,
+                y: yPosition,
+                size: 10,
+                font: helvetica,
+                color: colors.black,
+              });
+            }
+          }
+          yPosition -= LINE_HEIGHT + 2;
+        }
+        yPosition -= 4;
+      }
+
       // Filter out section-header-as-company entries
       const HEADER_NAMES_SET = new Set([
         'professional experience', 'work experience', 'experience',
@@ -830,6 +855,7 @@ interface StructuredCvEducation {
 interface StructuredCv {
   personalInfo: StructuredCvPersonalInfo;
   summary?: string;
+  coreCompetencies?: string[];
   experience?: StructuredCvExperience[];
   projects?: StructuredCvProject[];
   relevantProjects?: StructuredCvProject[];
@@ -1013,6 +1039,31 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       if (structuredCv.summary) {
         drawSectionHeader("Professional Summary");
         drawWrappedText(structuredCv.summary, MARGIN, 10, helvetica);
+      }
+
+      // CORE COMPETENCIES GRID
+      if (structuredCv.coreCompetencies && structuredCv.coreCompetencies.length > 0) {
+        drawSectionHeader("Core Competencies");
+        const competencies = structuredCv.coreCompetencies;
+        const COLS = 3;
+        const colWidth = Math.floor((PAGE_WIDTH - MARGIN * 2) / COLS);
+        for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
+          ensureSpace(LINE_HEIGHT + 4);
+          for (let col = 0; col < COLS; col++) {
+            const idx = row * COLS + col;
+            if (idx < competencies.length) {
+              currentPage.drawText(`- ${competencies[idx]}`, {
+                x: MARGIN + col * colWidth,
+                y: yPosition,
+                size: 10,
+                font: helvetica,
+                color: rgb(0, 0, 0),
+              });
+            }
+          }
+          yPosition -= LINE_HEIGHT + 2;
+        }
+        yPosition -= 4;
       }
 
       // WORK EXPERIENCE
