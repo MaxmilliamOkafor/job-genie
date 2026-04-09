@@ -2764,6 +2764,7 @@ ${
           portfolio: userProfile.portfolio,
         },
         summary: extractProfessionalSummary(result.tailoredResume || "", result.resumeStructured?.summary),
+        coreCompetencies: Array.isArray(result.resumeStructured?.coreCompetencies) ? result.resumeStructured.coreCompetencies : [],
         experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
           title: exp?.title || "",
