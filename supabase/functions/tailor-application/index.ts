@@ -2374,6 +2374,13 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
 
+   GAP MITIGATION (CRITICAL — from Rule 13):
+   - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
+   - For each gap, demonstrate transferable experience or adjacent skills
+   - Example: If JD requires "Unity" but candidate lacks it → "My deep experience with CI/CD pipelines for mobile application builds, combined with my understanding of game development workflows, positions me to quickly contribute to Unity-based build processes."
+   - Frame gaps as "transferable strength + learning velocity", never as weaknesses
+   - Maximum 1-2 gap mitigations — do not over-apologise
+
 ${
   includeReferral
     ? `
