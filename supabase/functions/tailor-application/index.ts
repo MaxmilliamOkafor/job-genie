@@ -2019,7 +2019,7 @@ serve(async (req) => {
     const keywordsNeededFor95 = Math.ceil(jdKeywords.allKeywords.length * 0.95) - matchResult.matched.length;
 
     // Get cover letter tone instructions
-    const toneInstructions = getCoverLetterToneInstructions(coverLetterTone);
+    const toneInstructions = getCoverLetterToneInstructions(coverLetterTone || "professional");
     console.log(`Cover letter tone: ${coverLetterTone}`);
 
 const systemPrompt = `You are an elite ATS (Applicant Tracking System) optimisation specialist with deep expertise in how Jobscan, Greenhouse, Workday, and Lever score resumes. Your ONLY goal is to rewrite the provided CV to score 95% or higher on a Jobscan match report against the provided job description, while keeping every claim 100% truthful and grounded in the candidate's actual experience.
