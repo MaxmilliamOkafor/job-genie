@@ -986,6 +986,45 @@
       return y + PDF_CONFIG.spacing.beforeSection;
     },
 
+    // ============ RENDER CORE COMPETENCIES GRID ============
+    renderCoreCompetencies(doc, competencies, startY) {
+      if (!competencies || competencies.length === 0) return startY;
+
+      let y = startY;
+
+      if (y > PDF_CONFIG.page.height - 80) {
+        doc.addPage();
+        y = PDF_CONFIG.margins.top;
+      }
+
+      y = this.renderSectionTitle(doc, 'CORE COMPETENCIES', y);
+
+      const COLS = 3;
+      const pageWidth = PDF_CONFIG.page.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
+      const colWidth = pageWidth / COLS;
+      const fontSize = PDF_CONFIG.fonts.sizes.body;
+      const lineHeight = fontSize * PDF_CONFIG.lineHeight.normal;
+
+      for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
+        if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - lineHeight) {
+          doc.addPage();
+          y = PDF_CONFIG.margins.top;
+        }
+        for (let col = 0; col < COLS; col++) {
+          const idx = row * COLS + col;
+          if (idx < competencies.length) {
+            const text = this.sanitizeForPDF(`- ${competencies[idx]}`);
+            doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+            doc.setFontSize(fontSize);
+            doc.text(text, PDF_CONFIG.margins.left + col * colWidth, y);
+          }
+        }
+        y += lineHeight;
+      }
+
+      return y + PDF_CONFIG.spacing.beforeSection;
+    },
+
     // ============ RENDER SKILLS ============
     renderSkills(doc, skills, startY) {
       if (!skills || skills.length === 0) return startY;
