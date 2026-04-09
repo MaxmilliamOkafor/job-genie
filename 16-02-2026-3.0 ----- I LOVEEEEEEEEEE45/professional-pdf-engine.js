@@ -199,6 +199,7 @@
       const data = {
         contact: this.extractContact(candidateData, jobData),
         summary: '',
+        coreCompetencies: [],
         experience: [],
         education: [],
         skills: [],
