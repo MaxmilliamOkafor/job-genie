@@ -2606,8 +2606,122 @@ ${
       );
     }
 
+    // ==========================================
+    // POST-GENERATION KEYWORD FORCE-INJECTION
+    // If keywords are still missing after AI generation, programmatically inject them
+    // into the Technical Proficiencies / Skills section to guarantee ATS pass
+    // ==========================================
+    if (actualMissing.length > 0 && result.tailoredResume) {
+      console.log(`[FORCE-INJECT] ${actualMissing.length} keywords still missing after AI generation. Injecting...`);
+
+      let resume = result.tailoredResume;
+
+      // Strategy 1: Inject into existing TECHNICAL PROFICIENCIES / SKILLS section
+      const skillsSectionPatterns = [
+        /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+        /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+        /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+      ];
+
+      let injected = false;
+      for (const pattern of skillsSectionPatterns) {
+        const match = resume.match(pattern);
+        if (match) {
+          const sectionHeader = match[1];
+          const sectionContent = match[2];
+          const nextSection = match[3];
+
+          // Check which missing keywords are NOT already in the skills section
+          const sectionLower = sectionContent.toLowerCase();
+          const toInject = actualMissing.filter(kw => !sectionLower.includes(kw.toLowerCase()));
+
+          if (toInject.length > 0) {
+            // Append missing keywords to the skills section content
+            const existingTrimmed = sectionContent.trimEnd();
+            const separator = existingTrimmed.endsWith(",") ? " " : ", ";
+            const injectedContent = `${existingTrimmed}${separator}${toInject.join(", ")}`;
+            resume = resume.replace(match[0], `${sectionHeader}${injectedContent}${nextSection}`);
+            console.log(`[FORCE-INJECT] Injected ${toInject.length} keywords into skills section`);
+            injected = true;
+          }
+          break;
+        }
+      }
+
+      // Strategy 2: If no skills section found, append one before Certifications/Education
+      if (!injected) {
+        const insertBeforePatterns = [
+          /(\n\s*CERTIFICATIONS\b)/i,
+          /(\n\s*EDUCATION\b)/i,
+          /(\n\s*ACHIEVEMENTS\b)/i,
+        ];
+
+        for (const pattern of insertBeforePatterns) {
+          const match = resume.match(pattern);
+          if (match && match.index !== undefined) {
+            const newSection = `\n\nTECHNICAL PROFICIENCIES\n${actualMissing.join(", ")}\n`;
+            resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
+            console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${actualMissing.length} keywords`);
+            injected = true;
+            break;
+          }
+        }
+      }
+
+      // Strategy 3: Fallback - append to end of resume
+      if (!injected) {
+        resume += `\n\nTECHNICAL PROFICIENCIES\n${actualMissing.join(", ")}\n`;
+        console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end with ${actualMissing.length} keywords`);
+      }
+
+      result.tailoredResume = resume;
+
+      // Also inject into structured skills if available
+      if (result.resumeStructured?.skills) {
+        const existingPrimary = Array.isArray(result.resumeStructured.skills.primary) ? result.resumeStructured.skills.primary : [];
+        const existingPrimaryLower = existingPrimary.map((s: string) => s.toLowerCase());
+        const newSkills = actualMissing.filter(kw => !existingPrimaryLower.includes(kw.toLowerCase()));
+        result.resumeStructured.skills.primary = [...existingPrimary, ...newSkills];
+        console.log(`[FORCE-INJECT] Added ${newSkills.length} keywords to structured skills`);
+      }
+
+      // Recalculate match score after injection
+      const postInjectText = `${result.tailoredResume.toLowerCase()} ${(result.tailoredCoverLetter || "").toLowerCase()}`;
+      const finalMatched: string[] = [];
+      const finalMissing: string[] = [];
+
+      for (const keyword of jdKeywords.allKeywords) {
+        const keywordLower = keyword.toLowerCase();
+        if (
+          postInjectText.includes(keywordLower) ||
+          postInjectText.includes(keywordLower.replace(/[.\-\/]/g, " ")) ||
+          postInjectText.includes(keywordLower.replace(/\s+/g, ""))
+        ) {
+          finalMatched.push(keyword);
+        } else {
+          finalMissing.push(keyword);
+        }
+      }
+
+      const finalScore = jdKeywords.allKeywords.length > 0
+        ? Math.round((finalMatched.length / jdKeywords.allKeywords.length) * 100)
+        : actualScore;
+
+      console.log(`[FORCE-INJECT] Final match score: ${finalScore}% (${finalMatched.length}/${jdKeywords.allKeywords.length}) — was ${actualScore}%`);
+      if (finalMissing.length > 0) {
+        console.log(`[FORCE-INJECT] Remaining unmatched (${finalMissing.length}): ${finalMissing.join(", ")}`);
+      }
+
+      actualMatched.length = 0;
+      actualMatched.push(...finalMatched);
+      actualMissing.length = 0;
+      actualMissing.push(...finalMissing);
+      result.matchScore = finalScore;
+      result.forceInjectedCount = finalMatched.length - (jdKeywords.allKeywords.length - actualMissing.length - finalMissing.length);
+    }
+
     // Use actual calculated score
-    result.matchScore = actualScore;
+    result.matchScore = result.matchScore || actualScore;
     result.keywordsMatched = actualMatched;
     result.keywordsMissing = actualMissing;
     result.matchedKeywords = actualMatched; // Alias for extension compatibility
