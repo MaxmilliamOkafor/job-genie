@@ -2150,6 +2150,7 @@ Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the J
 These go between Professional Summary and Work Experience for maximum ATS + recruiter impact.
 Format: short 2-4 word phrases (e.g. "Cloud Architecture", "CI/CD Pipelines", "Stakeholder Management").
 Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that appear more than once.
+EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL PROFICIENCIES / Skills section instead, as recruiters find them off-putting at the top of a CV.
 
 RULE 9 — VOCABULARY REFORMULATION (worth ~5 points)
 Do NOT just insert keywords — REFORMULATE existing experience using the JD's exact vocabulary:

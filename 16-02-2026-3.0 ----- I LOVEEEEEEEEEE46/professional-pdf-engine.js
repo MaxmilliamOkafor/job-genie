@@ -97,7 +97,7 @@
         let currentY = PDF_CONFIG.margins.top;
         currentY = this.renderHeader(doc, cvData.contact, currentY);
         currentY = this.renderSummary(doc, cvData.summary, currentY);
-        currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY);
+        currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY, cvData);
         currentY = this.renderExperience(doc, cvData.experience, currentY);
         currentY = this.renderEducation(doc, cvData.education, currentY);
         currentY = this.renderSkills(doc, cvData.skills, currentY);
@@ -987,8 +987,18 @@
     },
 
     // ============ RENDER CORE COMPETENCIES GRID ============
-    renderCoreCompetencies(doc, competencies, startY) {
+    renderCoreCompetencies(doc, competencies, startY, data) {
       if (!competencies || competencies.length === 0) return startY;
+
+      // Filter out soft-skill phrases containing "skills" — move them to Skills section
+      const softSkillPattern = /\bskills?\b/i;
+      const filtered = competencies.filter(c => !softSkillPattern.test(c));
+      const displaced = competencies.filter(c => softSkillPattern.test(c));
+      if (displaced.length > 0 && data && Array.isArray(data.skills)) {
+        data.skills = [...new Set([...data.skills, ...displaced])];
+      }
+      competencies = filtered;
+      if (competencies.length === 0) return startY;
 
       let y = startY;
 
