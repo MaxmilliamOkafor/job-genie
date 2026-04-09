@@ -2631,69 +2631,113 @@ ${
     // ==========================================
     // POST-GENERATION KEYWORD FORCE-INJECTION
     // If keywords are still missing after AI generation, programmatically inject them
-    // into the Technical Proficiencies / Skills section to guarantee ATS pass
+    // Separate strategy for single-word vs multi-word phrases
     // ==========================================
     if (actualMissing.length > 0 && result.tailoredResume) {
       console.log(`[FORCE-INJECT] ${actualMissing.length} keywords still missing after AI generation. Injecting...`);
 
       let resume = result.tailoredResume;
 
-      // Strategy 1: Inject into existing TECHNICAL PROFICIENCIES / SKILLS section
-      const skillsSectionPatterns = [
-        /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-        /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-        /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-      ];
+      // Separate multi-word phrases (need bullet injection) from single keywords (skills section)
+      const multiWordMissing = actualMissing.filter(kw => kw.includes(' '));
+      const singleWordMissing = actualMissing.filter(kw => !kw.includes(' '));
 
-      let injected = false;
-      for (const pattern of skillsSectionPatterns) {
-        const match = resume.match(pattern);
-        if (match) {
-          const sectionHeader = match[1];
-          const sectionContent = match[2];
-          const nextSection = match[3];
-
-          // Check which missing keywords are NOT already in the skills section
-          const sectionLower = sectionContent.toLowerCase();
-          const toInject = actualMissing.filter(kw => !sectionLower.includes(kw.toLowerCase()));
-
-          if (toInject.length > 0) {
-            // Append missing keywords to the skills section content
-            const existingTrimmed = sectionContent.trimEnd();
-            const separator = existingTrimmed.endsWith(",") ? " " : ", ";
-            const injectedContent = `${existingTrimmed}${separator}${toInject.join(", ")}`;
-            resume = resume.replace(match[0], `${sectionHeader}${injectedContent}${nextSection}`);
-            console.log(`[FORCE-INJECT] Injected ${toInject.length} keywords into skills section`);
-            injected = true;
+      // STRATEGY A: Inject multi-word phrases into the LAST experience bullet of the FIRST role
+      // This ensures ATS scanners find exact phrases in context, not just skills lists
+      if (multiWordMissing.length > 0) {
+        const workExpMatch = resume.match(/(WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE)\s*\n/i);
+        if (workExpMatch && workExpMatch.index !== undefined) {
+          // Find the first bullet point block after the work experience header
+          const afterHeader = resume.substring(workExpMatch.index);
+          const bulletLines = afterHeader.split('\n');
+          
+          // Find the last bullet of the first role (before the next company/role header)
+          let lastBulletIdx = -1;
+          let passedFirstBullet = false;
+          for (let i = 1; i < bulletLines.length; i++) {
+            const line = bulletLines[i].trim();
+            if (line.startsWith('-') || line.startsWith('•')) {
+              passedFirstBullet = true;
+              lastBulletIdx = i;
+            }
+            // Stop at next role header (line that doesn't start with - and has a date pattern)
+            if (passedFirstBullet && !line.startsWith('-') && !line.startsWith('•') && line.length > 0 && /\d{2}\/\d{4}/.test(line)) {
+              break;
+            }
           }
-          break;
+
+          if (lastBulletIdx > 0) {
+            // Append a new bullet with all multi-word phrases woven naturally
+            const phrasesText = multiWordMissing.join(', ');
+            const injectionBullet = `- Leveraged programming skills to implement tools and scripts that troubleshoot issues, resolve issues, and improve efficiency across development workflows, demonstrating strong collaboration skills in cross-functional team settings.`;
+            
+            // Build a smarter bullet that uses ALL the actual missing multi-word phrases
+            const smartBullet = buildMultiWordInjectionBullet(multiWordMissing);
+            bulletLines.splice(lastBulletIdx + 1, 0, smartBullet);
+            
+            const newAfterHeader = bulletLines.join('\n');
+            resume = resume.substring(0, workExpMatch.index) + newAfterHeader;
+            console.log(`[FORCE-INJECT] Injected ${multiWordMissing.length} multi-word phrases into experience bullet`);
+          }
         }
       }
 
-      // Strategy 2: If no skills section found, append one before Certifications/Education
-      if (!injected) {
-        const insertBeforePatterns = [
-          /(\n\s*CERTIFICATIONS\b)/i,
-          /(\n\s*EDUCATION\b)/i,
-          /(\n\s*ACHIEVEMENTS\b)/i,
+      // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
+      const toInjectSingles = singleWordMissing;
+      if (toInjectSingles.length > 0) {
+        const skillsSectionPatterns = [
+          /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+          /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+          /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
         ];
 
-        for (const pattern of insertBeforePatterns) {
+        let injected = false;
+        for (const pattern of skillsSectionPatterns) {
           const match = resume.match(pattern);
-          if (match && match.index !== undefined) {
-            const newSection = `\n\nTECHNICAL PROFICIENCIES\n${actualMissing.join(", ")}\n`;
-            resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
-            console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${actualMissing.length} keywords`);
-            injected = true;
+          if (match) {
+            const sectionHeader = match[1];
+            const sectionContent = match[2];
+            const nextSection = match[3];
+
+            const sectionLower = sectionContent.toLowerCase();
+            const toInject = toInjectSingles.filter(kw => !sectionLower.includes(kw.toLowerCase()));
+
+            if (toInject.length > 0) {
+              const existingTrimmed = sectionContent.trimEnd();
+              const separator = existingTrimmed.endsWith(",") ? " " : ", ";
+              const injectedContent = `${existingTrimmed}${separator}${toInject.join(", ")}`;
+              resume = resume.replace(match[0], `${sectionHeader}${injectedContent}${nextSection}`);
+              console.log(`[FORCE-INJECT] Injected ${toInject.length} single keywords into skills section`);
+              injected = true;
+            }
             break;
           }
         }
-      }
 
-      // Strategy 3: Fallback - append to end of resume
-      if (!injected) {
-        resume += `\n\nTECHNICAL PROFICIENCIES\n${actualMissing.join(", ")}\n`;
-        console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end with ${actualMissing.length} keywords`);
+        // Strategy 2: If no skills section found, append one before Certifications/Education
+        if (!injected && toInjectSingles.length > 0) {
+          const insertBeforePatterns = [
+            /(\n\s*CERTIFICATIONS\b)/i,
+            /(\n\s*EDUCATION\b)/i,
+            /(\n\s*ACHIEVEMENTS\b)/i,
+          ];
+
+          for (const pattern of insertBeforePatterns) {
+            const match = resume.match(pattern);
+            if (match && match.index !== undefined) {
+              const newSection = `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+              resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
+              console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${toInjectSingles.length} keywords`);
+              injected = true;
+              break;
+            }
+          }
+
+          if (!injected) {
+            resume += `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+            console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end`);
+          }
+        }
       }
 
       result.tailoredResume = resume;
