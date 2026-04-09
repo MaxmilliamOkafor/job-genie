@@ -2811,12 +2811,8 @@ class ATSTailor {
       'hybrid', 'on-site', 'office', 'headquarters', 'location',
       'apply now', 'submit resume', 'cover letter', 'interview',
       // Too generic to be useful
-      'communication skills', 'team player', 'detail-oriented', 'hard-working',
-      'self-starter', 'quick learner', 'fast learner', 'willing to learn',
       'can-do attitude', 'people person', 'go above and beyond',
-      'think outside the box', 'hit the ground running', 'wear many hats',
-      'training', 'teams', 'environment', 'services', 'solutions',
-      'products', 'clients', 'customers', 'business'
+      'think outside the box', 'hit the ground running', 'wear many hats'
     ]);
 
     // Filter out junk keywords before injection
