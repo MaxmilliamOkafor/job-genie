@@ -1806,6 +1806,41 @@ function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
 }
 
 // ==========================================
+// MULTI-WORD PHRASE INJECTION BULLET BUILDER
+// Constructs a natural-sounding experience bullet containing all missing multi-word JD phrases
+// ==========================================
+function buildMultiWordInjectionBullet(phrases: string[]): string {
+  if (phrases.length === 0) return '';
+  
+  // Group phrases by type for natural sentence construction
+  const verbPhrases: string[] = []; // e.g. "troubleshoot issues", "implement tools"
+  const nounPhrases: string[] = []; // e.g. "programming skills", "collaboration skills"
+  
+  for (const p of phrases) {
+    const firstWord = p.split(' ')[0].toLowerCase();
+    const verbStarters = ['troubleshoot', 'implement', 'improve', 'resolve', 'manage', 'develop', 'create', 'define', 'optimize', 'optimise', 'maintain', 'investigate', 'monitor', 'set', 'collaborate'];
+    if (verbStarters.some(v => firstWord.startsWith(v))) {
+      verbPhrases.push(p);
+    } else {
+      nounPhrases.push(p);
+    }
+  }
+  
+  let bullet = '- ';
+  
+  if (verbPhrases.length > 0 && nounPhrases.length > 0) {
+    // Combine: "Applied [noun phrases] to [verb phrase 1], [verb phrase 2], ..."
+    bullet += `Applied ${nounPhrases.join(' and ')} to ${verbPhrases.join(', ')}, driving measurable improvements across development workflows.`;
+  } else if (verbPhrases.length > 0) {
+    bullet += `Utilised technical expertise to ${verbPhrases.join(', ')}, ensuring reliable and scalable delivery processes.`;
+  } else {
+    bullet += `Demonstrated ${nounPhrases.join(', ')} across cross-functional projects, contributing to continuous process improvement.`;
+  }
+  
+  return bullet;
+}
+
+// ==========================================
 // KEYWORD PRIORITY WEIGHTING (inspired by JobOwl)
 // ==========================================
 
