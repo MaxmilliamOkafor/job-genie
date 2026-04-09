@@ -18,6 +18,7 @@ interface ResumeData {
     portfolio?: string;
   };
   summary?: string;
+  coreCompetencies?: string[];
   experience?: Array<{
     company: string;
     title: string;
