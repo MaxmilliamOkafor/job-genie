@@ -2108,7 +2108,20 @@ Rewrite the professional summary to:
    - If the JD says "7+ years", say "7+ years"
    - NEVER claim more years than the JD asks for — use the JD's own number
    - If the JD does not specify years, omit years from the summary entirely
-   - This prevents ATS "Job Level Match" penalties for over-qualification
+    - This prevents ATS "Job Level Match" penalties for over-qualification
+
+RULE 8 — CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
+Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the JD's most critical requirements.
+These go between Professional Summary and Work Experience for maximum ATS + recruiter impact.
+Format: short 2-4 word phrases (e.g. "Cloud Architecture", "CI/CD Pipelines", "Stakeholder Management").
+Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that appear more than once.
+
+RULE 9 — VOCABULARY REFORMULATION (worth ~5 points)
+Do NOT just insert keywords — REFORMULATE existing experience using the JD's exact vocabulary:
+- If JD says "RAG pipelines" and CV says "LLM workflows with retrieval" → rewrite to "RAG pipeline design and LLM orchestration workflows"
+- If JD says "MLOps" and CV says "observability, evals, error handling" → rewrite to "MLOps and observability: evals, error handling, cost monitoring"
+- If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
+NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
 ---
 PHASE 4: VERIFICATION (Critical — do this before outputting)
