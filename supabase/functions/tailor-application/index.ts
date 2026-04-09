@@ -1806,6 +1806,41 @@ function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
 }
 
 // ==========================================
+// MULTI-WORD PHRASE INJECTION BULLET BUILDER
+// Constructs a natural-sounding experience bullet containing all missing multi-word JD phrases
+// ==========================================
+function buildMultiWordInjectionBullet(phrases: string[]): string {
+  if (phrases.length === 0) return '';
+  
+  // Group phrases by type for natural sentence construction
+  const verbPhrases: string[] = []; // e.g. "troubleshoot issues", "implement tools"
+  const nounPhrases: string[] = []; // e.g. "programming skills", "collaboration skills"
+  
+  for (const p of phrases) {
+    const firstWord = p.split(' ')[0].toLowerCase();
+    const verbStarters = ['troubleshoot', 'implement', 'improve', 'resolve', 'manage', 'develop', 'create', 'define', 'optimize', 'optimise', 'maintain', 'investigate', 'monitor', 'set', 'collaborate'];
+    if (verbStarters.some(v => firstWord.startsWith(v))) {
+      verbPhrases.push(p);
+    } else {
+      nounPhrases.push(p);
+    }
+  }
+  
+  let bullet = '- ';
+  
+  if (verbPhrases.length > 0 && nounPhrases.length > 0) {
+    // Combine: "Applied [noun phrases] to [verb phrase 1], [verb phrase 2], ..."
+    bullet += `Applied ${nounPhrases.join(' and ')} to ${verbPhrases.join(', ')}, driving measurable improvements across development workflows.`;
+  } else if (verbPhrases.length > 0) {
+    bullet += `Utilised technical expertise to ${verbPhrases.join(', ')}, ensuring reliable and scalable delivery processes.`;
+  } else {
+    bullet += `Demonstrated ${nounPhrases.join(', ')} across cross-functional projects, contributing to continuous process improvement.`;
+  }
+  
+  return bullet;
+}
+
+// ==========================================
 // KEYWORD PRIORITY WEIGHTING (inspired by JobOwl)
 // ==========================================
 
@@ -2123,12 +2158,34 @@ Do NOT just insert keywords — REFORMULATE existing experience using the JD's e
 - If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
 NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
+RULE 10 — EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
+ATS scanners like Jobscan check for EXACT multi-word phrases from the JD, not just individual words.
+You MUST use these phrases VERBATIM (not paraphrased) in experience bullets or the summary:
+- If JD says "troubleshoot issues" → use "troubleshoot issues" exactly, not "troubleshot problems" or "resolved issues"
+- If JD says "implement tools" → use "implement tools" exactly, not "built tooling" or "created utilities"
+- If JD says "programming skills" → use "programming skills" exactly, not "coding abilities"
+- If JD says "improve efficiency" → use "improve efficiency" exactly, not "enhanced performance"
+- If JD says "collaboration skills" → use "collaboration skills" exactly, not "teamwork abilities"
+- If JD says "resolve issues" → use "resolve issues" exactly, not "fixed problems"
+- If JD says "game development" → use "game development" exactly
+- If JD says "mobile games" → use "mobile games" exactly
+
+TECHNIQUE: Scan the JD for every 2-3 word verb phrase (e.g., "troubleshoot issues", "implement tools", "improve efficiency", "resolve issues", "monitor build pipelines") and embed each one verbatim into at least one experience bullet. Reformulate the candidate's existing achievements to naturally contain these exact phrases.
+
+Example: 
+- Original: "Fixed pipeline failures and improved CI reliability"
+- JD phrase needed: "troubleshoot issues", "resolve issues", "improve efficiency"
+- Rewritten: "Troubleshoot issues in CI pipelines and resolve issues to improve efficiency, reducing build failures by 70%"
+
+This is NON-NEGOTIABLE. Every 2+ word phrase from the JD responsibilities and requirements sections MUST appear verbatim at least once.
+
 ---
 PHASE 4: VERIFICATION (Critical — do this before outputting)
 After rewriting, run this internal checklist:
 [ ] Does the exact job title appear in the summary?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
+[ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
 [ ] Is "Dublin, IE" present in the header as the candidate's address?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
@@ -2609,69 +2666,113 @@ ${
     // ==========================================
     // POST-GENERATION KEYWORD FORCE-INJECTION
     // If keywords are still missing after AI generation, programmatically inject them
-    // into the Technical Proficiencies / Skills section to guarantee ATS pass
+    // Separate strategy for single-word vs multi-word phrases
     // ==========================================
     if (actualMissing.length > 0 && result.tailoredResume) {
       console.log(`[FORCE-INJECT] ${actualMissing.length} keywords still missing after AI generation. Injecting...`);
 
       let resume = result.tailoredResume;
 
-      // Strategy 1: Inject into existing TECHNICAL PROFICIENCIES / SKILLS section
-      const skillsSectionPatterns = [
-        /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-        /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-        /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-      ];
+      // Separate multi-word phrases (need bullet injection) from single keywords (skills section)
+      const multiWordMissing = actualMissing.filter(kw => kw.includes(' '));
+      const singleWordMissing = actualMissing.filter(kw => !kw.includes(' '));
 
-      let injected = false;
-      for (const pattern of skillsSectionPatterns) {
-        const match = resume.match(pattern);
-        if (match) {
-          const sectionHeader = match[1];
-          const sectionContent = match[2];
-          const nextSection = match[3];
-
-          // Check which missing keywords are NOT already in the skills section
-          const sectionLower = sectionContent.toLowerCase();
-          const toInject = actualMissing.filter(kw => !sectionLower.includes(kw.toLowerCase()));
-
-          if (toInject.length > 0) {
-            // Append missing keywords to the skills section content
-            const existingTrimmed = sectionContent.trimEnd();
-            const separator = existingTrimmed.endsWith(",") ? " " : ", ";
-            const injectedContent = `${existingTrimmed}${separator}${toInject.join(", ")}`;
-            resume = resume.replace(match[0], `${sectionHeader}${injectedContent}${nextSection}`);
-            console.log(`[FORCE-INJECT] Injected ${toInject.length} keywords into skills section`);
-            injected = true;
+      // STRATEGY A: Inject multi-word phrases into the LAST experience bullet of the FIRST role
+      // This ensures ATS scanners find exact phrases in context, not just skills lists
+      if (multiWordMissing.length > 0) {
+        const workExpMatch = resume.match(/(WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE)\s*\n/i);
+        if (workExpMatch && workExpMatch.index !== undefined) {
+          // Find the first bullet point block after the work experience header
+          const afterHeader = resume.substring(workExpMatch.index);
+          const bulletLines = afterHeader.split('\n');
+          
+          // Find the last bullet of the first role (before the next company/role header)
+          let lastBulletIdx = -1;
+          let passedFirstBullet = false;
+          for (let i = 1; i < bulletLines.length; i++) {
+            const line = bulletLines[i].trim();
+            if (line.startsWith('-') || line.startsWith('•')) {
+              passedFirstBullet = true;
+              lastBulletIdx = i;
+            }
+            // Stop at next role header (line that doesn't start with - and has a date pattern)
+            if (passedFirstBullet && !line.startsWith('-') && !line.startsWith('•') && line.length > 0 && /\d{2}\/\d{4}/.test(line)) {
+              break;
+            }
           }
-          break;
+
+          if (lastBulletIdx > 0) {
+            // Append a new bullet with all multi-word phrases woven naturally
+            const phrasesText = multiWordMissing.join(', ');
+            const injectionBullet = `- Leveraged programming skills to implement tools and scripts that troubleshoot issues, resolve issues, and improve efficiency across development workflows, demonstrating strong collaboration skills in cross-functional team settings.`;
+            
+            // Build a smarter bullet that uses ALL the actual missing multi-word phrases
+            const smartBullet = buildMultiWordInjectionBullet(multiWordMissing);
+            bulletLines.splice(lastBulletIdx + 1, 0, smartBullet);
+            
+            const newAfterHeader = bulletLines.join('\n');
+            resume = resume.substring(0, workExpMatch.index) + newAfterHeader;
+            console.log(`[FORCE-INJECT] Injected ${multiWordMissing.length} multi-word phrases into experience bullet`);
+          }
         }
       }
 
-      // Strategy 2: If no skills section found, append one before Certifications/Education
-      if (!injected) {
-        const insertBeforePatterns = [
-          /(\n\s*CERTIFICATIONS\b)/i,
-          /(\n\s*EDUCATION\b)/i,
-          /(\n\s*ACHIEVEMENTS\b)/i,
+      // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
+      const toInjectSingles = singleWordMissing;
+      if (toInjectSingles.length > 0) {
+        const skillsSectionPatterns = [
+          /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+          /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+          /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
         ];
 
-        for (const pattern of insertBeforePatterns) {
+        let injected = false;
+        for (const pattern of skillsSectionPatterns) {
           const match = resume.match(pattern);
-          if (match && match.index !== undefined) {
-            const newSection = `\n\nTECHNICAL PROFICIENCIES\n${actualMissing.join(", ")}\n`;
-            resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
-            console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${actualMissing.length} keywords`);
-            injected = true;
+          if (match) {
+            const sectionHeader = match[1];
+            const sectionContent = match[2];
+            const nextSection = match[3];
+
+            const sectionLower = sectionContent.toLowerCase();
+            const toInject = toInjectSingles.filter(kw => !sectionLower.includes(kw.toLowerCase()));
+
+            if (toInject.length > 0) {
+              const existingTrimmed = sectionContent.trimEnd();
+              const separator = existingTrimmed.endsWith(",") ? " " : ", ";
+              const injectedContent = `${existingTrimmed}${separator}${toInject.join(", ")}`;
+              resume = resume.replace(match[0], `${sectionHeader}${injectedContent}${nextSection}`);
+              console.log(`[FORCE-INJECT] Injected ${toInject.length} single keywords into skills section`);
+              injected = true;
+            }
             break;
           }
         }
-      }
 
-      // Strategy 3: Fallback - append to end of resume
-      if (!injected) {
-        resume += `\n\nTECHNICAL PROFICIENCIES\n${actualMissing.join(", ")}\n`;
-        console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end with ${actualMissing.length} keywords`);
+        // Strategy 2: If no skills section found, append one before Certifications/Education
+        if (!injected && toInjectSingles.length > 0) {
+          const insertBeforePatterns = [
+            /(\n\s*CERTIFICATIONS\b)/i,
+            /(\n\s*EDUCATION\b)/i,
+            /(\n\s*ACHIEVEMENTS\b)/i,
+          ];
+
+          for (const pattern of insertBeforePatterns) {
+            const match = resume.match(pattern);
+            if (match && match.index !== undefined) {
+              const newSection = `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+              resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
+              console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${toInjectSingles.length} keywords`);
+              injected = true;
+              break;
+            }
+          }
+
+          if (!injected) {
+            resume += `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+            console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end`);
+          }
+        }
       }
 
       result.tailoredResume = resume;
