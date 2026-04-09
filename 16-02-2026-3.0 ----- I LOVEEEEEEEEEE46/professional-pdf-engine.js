@@ -97,7 +97,7 @@
         let currentY = PDF_CONFIG.margins.top;
         currentY = this.renderHeader(doc, cvData.contact, currentY);
         currentY = this.renderSummary(doc, cvData.summary, currentY);
-        currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY);
+        currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY, cvData);
         currentY = this.renderExperience(doc, cvData.experience, currentY);
         currentY = this.renderEducation(doc, cvData.education, currentY);
         currentY = this.renderSkills(doc, cvData.skills, currentY);
