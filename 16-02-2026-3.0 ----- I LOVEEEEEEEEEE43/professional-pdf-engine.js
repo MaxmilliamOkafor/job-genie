@@ -250,6 +250,11 @@
         
         data.skills = this.parseSkills(tailoredContent.skills || candidateData?.skills);
         data.certifications = this.parseCertifications(tailoredContent.certifications || candidateData?.certifications);
+        
+        // Core Competencies from AI tailoring response
+        if (Array.isArray(tailoredContent.coreCompetencies) && tailoredContent.coreCompetencies.length > 0) {
+          data.coreCompetencies = tailoredContent.coreCompetencies.slice(0, 9);
+        }
       }
 
       return data;
