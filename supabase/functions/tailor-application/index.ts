@@ -2324,6 +2324,7 @@ ${
       "portfolio": "${userProfile.portfolio}"
     },
     "summary": "[PURE QUALIFICATIONS ONLY - Start with 'Experienced/Senior/Accomplished...' - ZERO contact info, names, emails, phones, or URLs - those are ALREADY in header above]",
+    "coreCompetencies": ["Keyword Phrase 1", "Keyword Phrase 2", "Keyword Phrase 3", "Keyword Phrase 4", "Keyword Phrase 5", "Keyword Phrase 6"],
     "experience": [
       {
         "company": "[Company Name]",
