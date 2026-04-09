@@ -2811,12 +2811,8 @@ class ATSTailor {
       'hybrid', 'on-site', 'office', 'headquarters', 'location',
       'apply now', 'submit resume', 'cover letter', 'interview',
       // Too generic to be useful
-      'communication skills', 'team player', 'detail-oriented', 'hard-working',
-      'self-starter', 'quick learner', 'fast learner', 'willing to learn',
       'can-do attitude', 'people person', 'go above and beyond',
-      'think outside the box', 'hit the ground running', 'wear many hats',
-      'training', 'teams', 'environment', 'services', 'solutions',
-      'products', 'clients', 'customers', 'business'
+      'think outside the box', 'hit the ground running', 'wear many hats'
     ]);
 
     // Filter out junk keywords before injection
@@ -3602,6 +3598,52 @@ class ATSTailor {
             this.generatedDocuments.coverLetter, { removePronouns: false }
           );
           console.log('[ATS Tailor] Applied ContentQualityEngine to cover letter');
+        }
+      }
+
+      // ============ POST-SANITISATION KEYWORD RE-INJECTION ============
+      // ContentQualityEngine may have altered/removed keywords during sanitisation.
+      // Verify all JD keywords are still present and re-inject any that were lost.
+      if (keywords.all?.length > 0 && this.generatedDocuments.cv) {
+        const postSanitiseMatch = this.calculateMatchScore(this.generatedDocuments.cv, keywords);
+        if (postSanitiseMatch.missingKeywords?.length > 0) {
+          console.log(`[ATS Tailor] Post-sanitisation: ${postSanitiseMatch.missingKeywords.length} keywords lost during sanitisation, re-injecting...`);
+          
+          let cvText = this.generatedDocuments.cv;
+          const toReInject = postSanitiseMatch.missingKeywords;
+
+          // Find Technical Proficiencies / Skills section and append missing keywords
+          const skillsMatch = cvText.match(/(TECHNICAL\s+PROFICIENCIES|TECHNICAL\s+SKILLS|SKILLS)\s*\n([^\n]*(?:\n(?![A-Z]{3,})[^\n]*)*)/i);
+          if (skillsMatch) {
+            const sectionStart = skillsMatch.index;
+            const fullMatch = skillsMatch[0];
+            const sectionContent = fullMatch.trimEnd();
+            const separator = sectionContent.endsWith(',') ? ' ' : ', ';
+            const enriched = sectionContent + separator + toReInject.join(', ');
+            cvText = cvText.substring(0, sectionStart) + enriched + cvText.substring(sectionStart + fullMatch.length);
+          } else {
+            // No skills section found - append one before Education/Certifications
+            const insertBefore = cvText.match(/\n(CERTIFICATIONS|EDUCATION|ACHIEVEMENTS)\b/i);
+            if (insertBefore && insertBefore.index !== undefined) {
+              const newSection = `\n\nTECHNICAL PROFICIENCIES\n${toReInject.join(', ')}\n`;
+              cvText = cvText.substring(0, insertBefore.index) + newSection + cvText.substring(insertBefore.index);
+            } else {
+              cvText += `\n\nTECHNICAL PROFICIENCIES\n${toReInject.join(', ')}\n`;
+            }
+          }
+
+          this.generatedDocuments.cv = cvText;
+          
+          // Recalculate final score
+          const finalCheck = this.calculateMatchScore(cvText, keywords);
+          this.generatedDocuments.matchScore = finalCheck.matchScore;
+          this.generatedDocuments.matchedKeywords = finalCheck.matchedKeywords;
+          this.generatedDocuments.missingKeywords = finalCheck.missingKeywords;
+          this.updateMatchAnalysisUI();
+          
+          console.log(`[ATS Tailor] Post-sanitisation re-injection complete: ${finalCheck.matchScore}% (${finalCheck.matchedKeywords?.length}/${keywords.all.length})`);
+        } else {
+          console.log('[ATS Tailor] Post-sanitisation: all keywords intact ✓');
         }
       }
 
