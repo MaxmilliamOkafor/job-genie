@@ -2123,12 +2123,34 @@ Do NOT just insert keywords — REFORMULATE existing experience using the JD's e
 - If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
 NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
+RULE 10 — EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
+ATS scanners like Jobscan check for EXACT multi-word phrases from the JD, not just individual words.
+You MUST use these phrases VERBATIM (not paraphrased) in experience bullets or the summary:
+- If JD says "troubleshoot issues" → use "troubleshoot issues" exactly, not "troubleshot problems" or "resolved issues"
+- If JD says "implement tools" → use "implement tools" exactly, not "built tooling" or "created utilities"
+- If JD says "programming skills" → use "programming skills" exactly, not "coding abilities"
+- If JD says "improve efficiency" → use "improve efficiency" exactly, not "enhanced performance"
+- If JD says "collaboration skills" → use "collaboration skills" exactly, not "teamwork abilities"
+- If JD says "resolve issues" → use "resolve issues" exactly, not "fixed problems"
+- If JD says "game development" → use "game development" exactly
+- If JD says "mobile games" → use "mobile games" exactly
+
+TECHNIQUE: Scan the JD for every 2-3 word verb phrase (e.g., "troubleshoot issues", "implement tools", "improve efficiency", "resolve issues", "monitor build pipelines") and embed each one verbatim into at least one experience bullet. Reformulate the candidate's existing achievements to naturally contain these exact phrases.
+
+Example: 
+- Original: "Fixed pipeline failures and improved CI reliability"
+- JD phrase needed: "troubleshoot issues", "resolve issues", "improve efficiency"
+- Rewritten: "Troubleshoot issues in CI pipelines and resolve issues to improve efficiency, reducing build failures by 70%"
+
+This is NON-NEGOTIABLE. Every 2+ word phrase from the JD responsibilities and requirements sections MUST appear verbatim at least once.
+
 ---
 PHASE 4: VERIFICATION (Critical — do this before outputting)
 After rewriting, run this internal checklist:
 [ ] Does the exact job title appear in the summary?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
+[ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
 [ ] Is "Dublin, IE" present in the header as the candidate's address?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
