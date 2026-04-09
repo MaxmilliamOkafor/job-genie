@@ -1041,6 +1041,31 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         drawWrappedText(structuredCv.summary, MARGIN, 10, helvetica);
       }
 
+      // CORE COMPETENCIES GRID
+      if (structuredCv.coreCompetencies && structuredCv.coreCompetencies.length > 0) {
+        drawSectionHeader("Core Competencies");
+        const competencies = structuredCv.coreCompetencies;
+        const COLS = 3;
+        const colWidth = Math.floor((PAGE_WIDTH - MARGIN * 2) / COLS);
+        for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
+          ensureSpace(LINE_HEIGHT + 4);
+          for (let col = 0; col < COLS; col++) {
+            const idx = row * COLS + col;
+            if (idx < competencies.length) {
+              currentPage.drawText(`- ${competencies[idx]}`, {
+                x: MARGIN + col * colWidth,
+                y: yPosition,
+                size: 10,
+                font: helvetica,
+                color: rgb(0, 0, 0),
+              });
+            }
+          }
+          yPosition -= LINE_HEIGHT + 2;
+        }
+        yPosition -= 4;
+      }
+
       // WORK EXPERIENCE
       // CRITICAL: Filter out entries where company/title is actually a section header
       const SECTION_HEADER_NAMES = new Set([
