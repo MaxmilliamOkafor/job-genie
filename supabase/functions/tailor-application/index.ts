@@ -2179,6 +2179,31 @@ Example:
 
 This is NON-NEGOTIABLE. Every 2+ word phrase from the JD responsibilities and requirements sections MUST appear verbatim at least once.
 
+RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
+Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
+ATS systems and recruiters give the highest weight to the first 1-2 bullets of each role.
+Strategy:
+- For each role, score every bullet by how many JD keywords it contains
+- Place the highest-scoring bullet first
+- The first bullet of the FIRST role is the single most valuable line in the entire CV — pack it with the top JD keywords
+- If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
+
+RULE 12 — STRATEGIC KEYWORD DISTRIBUTION (worth ~10 points)
+Keywords MUST be strategically placed in the highest-weight ATS positions, not randomly scattered:
+- Professional Summary: MUST contain the top 5 most-repeated JD keywords
+- First bullet of EACH work experience role: MUST contain at least 2 JD keywords
+- Core Competencies grid: MUST contain 6-9 of the highest-priority JD phrases
+- Skills section: catches ALL remaining keywords not covered above
+This ensures maximum ATS scoring even if the scanner only reads the top of each section.
+
+RULE 13 — GAP MITIGATION IN COVER LETTER (worth ~5 points)
+For each JD requirement the candidate does NOT directly have:
+1. Identify if it's a hard blocker or nice-to-have
+2. Find adjacent/transferable experience from the candidate's background
+3. Write a specific cover letter sentence that bridges the gap
+Example: JD requires "Unity" but candidate has no Unity → "While my primary experience is in web-based CI/CD systems, I have a strong foundation in game development workflows and am actively building Unity proficiency through personal projects."
+NEVER claim to have skills the candidate lacks. Instead, demonstrate transferability and learning agility.
+
 ---
 PHASE 4: VERIFICATION (Critical — do this before outputting)
 After rewriting, run this internal checklist:
@@ -2186,6 +2211,10 @@ After rewriting, run this internal checklist:
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
 [ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
+[ ] Are the top 5 keywords in the Professional Summary?
+[ ] Is the first bullet of each role keyword-rich (2+ JD keywords)?
+[ ] Are bullets reordered so the most relevant appear first?
+[ ] Does the cover letter address skill gaps with transferable experience?
 [ ] Is "Dublin, IE" present in the header as the candidate's address?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
@@ -2344,6 +2373,13 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    - NEVER use banned words: "leveraging", "utilising", "utilizing", "synergy", "passionate"
    - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
+
+   GAP MITIGATION (CRITICAL — from Rule 13):
+   - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
+   - For each gap, demonstrate transferable experience or adjacent skills
+   - Example: If JD requires "Unity" but candidate lacks it → "My deep experience with CI/CD pipelines for mobile application builds, combined with my understanding of game development workflows, positions me to quickly contribute to Unity-based build processes."
+   - Frame gaps as "transferable strength + learning velocity", never as weaknesses
+   - Maximum 1-2 gap mitigations — do not over-apologise
 
 ${
   includeReferral
