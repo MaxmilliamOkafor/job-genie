@@ -2815,9 +2815,19 @@ class ATSTailor {
       'think outside the box', 'hit the ground running', 'wear many hats'
     ]);
 
+    // PROTECTED KEYWORDS: These are valid ATS terms that must NEVER be filtered out
+    const PROTECTED_KEYWORDS = new Set([
+      'collaboration skills', 'communication skills', 'programming skills',
+      'problem solving', 'troubleshoot issues', 'resolve issues', 'implement tools',
+      'improve efficiency', 'game development', 'mobile games', 'mobile applications',
+      'technical qa', 'performance metrics', 'project management',
+      'business', 'solutions', 'services', 'communication', 'collaboration'
+    ]);
+
     // Filter out junk keywords before injection
     const cleanMissing = missingKeywords.filter(kw => {
       const kwLower = kw.toLowerCase().trim();
+      if (PROTECTED_KEYWORDS.has(kwLower)) return true; // Always keep protected terms
       if (JUNK_KEYWORDS.has(kwLower)) return false;
       if (kwLower.length < 3) return false;  // Too short to be meaningful
       if (kwLower.length > 60) return false;  // Too long, likely a sentence fragment
