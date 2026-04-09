@@ -2258,7 +2258,8 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
    ███ END DUPLICATION BAN ███
-   - Work Experience: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more.
+    - Work Experience: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords.
+   - Core Competencies: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
    - Education
    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
    - Certifications
