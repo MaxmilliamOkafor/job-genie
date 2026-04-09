@@ -831,6 +831,7 @@ interface StructuredCvEducation {
 interface StructuredCv {
   personalInfo: StructuredCvPersonalInfo;
   summary?: string;
+  coreCompetencies?: string[];
   experience?: StructuredCvExperience[];
   projects?: StructuredCvProject[];
   relevantProjects?: StructuredCvProject[];
