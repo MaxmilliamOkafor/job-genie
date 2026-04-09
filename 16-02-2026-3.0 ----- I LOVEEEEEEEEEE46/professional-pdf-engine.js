@@ -987,8 +987,18 @@
     },
 
     // ============ RENDER CORE COMPETENCIES GRID ============
-    renderCoreCompetencies(doc, competencies, startY) {
+    renderCoreCompetencies(doc, competencies, startY, data) {
       if (!competencies || competencies.length === 0) return startY;
+
+      // Filter out soft-skill phrases containing "skills" — move them to Skills section
+      const softSkillPattern = /\bskills?\b/i;
+      const filtered = competencies.filter(c => !softSkillPattern.test(c));
+      const displaced = competencies.filter(c => softSkillPattern.test(c));
+      if (displaced.length > 0 && data && Array.isArray(data.skills)) {
+        data.skills = [...new Set([...data.skills, ...displaced])];
+      }
+      competencies = filtered;
+      if (competencies.length === 0) return startY;
 
       let y = startY;
 
