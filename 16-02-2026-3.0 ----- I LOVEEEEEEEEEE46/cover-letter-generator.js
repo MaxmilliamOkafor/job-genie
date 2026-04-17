@@ -128,6 +128,13 @@
         topKeywordsCount = 10 // Increased for cover letter natural flow
       } = options;
 
+      // v3.3: Smart auto-tone selection based on job title/company signals
+      // If user passes 'auto' or no template, pick the best tone for the role
+      if (!template || template === 'auto') {
+        template = this.autoSelectTone(jobData);
+        console.log(`[CoverLetterGenerator] Auto-selected tone: ${template}`);
+      }
+
       // Get template
       const templateConfig = TEMPLATES[template] || TEMPLATES.professional;
 
@@ -278,41 +285,6 @@
         }
       }
 
-    // ============ BUILD BRIDGE WITH KEYWORDS (1-2 keywords) ============
-    buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
-      let bridge = this.selectRandom(bridgeTemplates, replacements);
-      
-      // Add 1-2 keywords naturally if available
-      if (keywords.length >= 2) {
-        const kw1 = keywords[0];
-        const kw2 = keywords[1];
-        const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
-        
-        // Append naturally: "...expertise, utilising Python and data analytics."
-        if (bridge.endsWith('.')) {
-          bridge = bridge.slice(0, -1) + `, ${phrase} ${kw1} and ${kw2}.`;
-        } else {
-          bridge += `, ${phrase} ${kw1} and ${kw2}.`;
-        }
-      }
-      
-      return bridge;
-    },
-
-    // ============ BUILD CLOSING WITH KEYWORDS (1 keyword) ============
-    buildClosingWithKeywords(closingTemplates, replacements, keywords) {
-      let closing = this.selectRandom(closingTemplates, replacements);
-      
-      // Add 1 keyword naturally at the end if available (softer for cover letter)
-      if (keywords.length >= 5) {
-        const kw = keywords[4] || keywords[0];
-        
-        // Example: "...I look forward to bringing my expertise in project management to your team."
-        if (closing.includes('Thank you')) {
-          closing = closing.replace('Thank you', `I am confident my ${kw} expertise would be valuable to your team. Thank you`);
-        }
-      }
-      
       return closing;
     },
 
@@ -409,8 +381,6 @@
       // Highlight relevant experience
       const experience = candidateData?.professional_experience ||
                         candidateData?.professionalExperience ||
-      const experience = candidateData?.professional_experience || 
-                        candidateData?.professionalExperience || 
                         candidateData?.workExperience || [];
 
       if (experience.length > 0) {
@@ -482,71 +452,6 @@
             `My toolkit also includes ${skillsStr} — capabilities I have applied in production environments to drive efficiency gains, reduce risk, and maintain the high standards that senior leadership expects.`
           ];
           paragraphs.push(para3Variants[Math.floor(Math.random() * para3Variants.length)]);
-        
-        // Find a compelling achievement
-        const bullets = recentJob.bullets || recentJob.achievements || [];
-        let highlightBullet = '';
-        
-        if (bullets.length > 0) {
-          // Prefer bullets with metrics
-          const metricsPattern = /\d+%|\$[\d,]+|\d+x|[0-9]+\+?\s*(users|customers|clients|projects|teams)/i;
-          const withMetrics = bullets.find(b => metricsPattern.test(b));
-          highlightBullet = withMetrics || bullets[0];
-        }
-
-        // PARAGRAPH 1: Role + Achievement + Keywords 1-3
-        const kw1 = topKeywords[0] || '';
-        const kw2 = topKeywords[1] || '';
-        const kw3 = topKeywords[2] || '';
-        
-        let para1 = `As ${title} at ${company}, I have led delivery across complex technical programmes, converting strategic priorities into measurable outcomes.`;
-        if (highlightBullet) {
-          para1 += ` A recent example: ${highlightBullet.replace(/^[•\-*]\s*/, '')}`;
-        }
-        if (kw1 && kw2 && kw3) {
-          para1 += ` My depth in ${kw1}, ${kw2}, and ${kw3} maps directly to the capabilities outlined in your job description.`;
-        } else if (kw1 && kw2) {
-          para1 += ` My depth in ${kw1} and ${kw2} maps directly to your requirements.`;
-        }
-        
-        paragraphs.push(para1);
-      }
-
-      // PARAGRAPH 2: Additional skills alignment with Keywords 4-7
-      if (topKeywords.length > 3) {
-        const kw4 = topKeywords[3] || '';
-        const kw5 = topKeywords[4] || '';
-        const kw6 = topKeywords[5] || '';
-        const kw7 = topKeywords[6] || '';
-        
-        let para2 = 'Additionally, I bring strong capabilities in ';
-        const skills = [kw4, kw5, kw6, kw7].filter(Boolean);
-        
-        if (skills.length >= 3) {
-          para2 += `${skills.slice(0, -1).join(', ')}, and ${skills[skills.length - 1]}`;
-        } else if (skills.length === 2) {
-          para2 += `${skills[0]} and ${skills[1]}`;
-        } else if (skills.length === 1) {
-          para2 += skills[0];
-        }
-        
-        para2 += ', which I apply consistently to accelerate delivery timelines, strengthen execution quality, and raise performance standards from day one.';
-        paragraphs.push(para2);
-      }
-
-      // PARAGRAPH 3 (OPTIONAL): Extra context with Keywords 8-10 if available
-      // UPDATED: Removed "proven ability" - banned AI phrase
-      if (topKeywords.length > 7) {
-        const kw8 = topKeywords[7] || '';
-        const kw9 = topKeywords[8] || '';
-        const kw10 = topKeywords[9] || '';
-        
-        const extraSkills = [kw8, kw9, kw10].filter(Boolean);
-        if (extraSkills.length > 0) {
-          const phrase = KEYWORD_PHRASES[Math.floor(Math.random() * KEYWORD_PHRASES.length)];
-          paragraphs.push(
-                `I also bring hands-on depth ${phrase} ${extraSkills.join(' and ')}, consistently supporting senior stakeholders and delivering measurable, repeatable outcomes.`
-			);
         }
       }
 
@@ -660,6 +565,64 @@
       
       console.log(`[CoverLetterGenerator] ✅ Extracted company name: "${company}"`);
       return company;
+    },
+
+    // ============ SMART TONE AUTO-SELECTION (v3.3) ============
+    // Picks the optimal cover letter tone based on job title seniority and company signals
+    // - Senior/Leadership roles → professional
+    // - Startup/Scale-up/Early career → enthusiastic
+    // - Technical/IC/Contract roles → concise
+    autoSelectTone(jobData) {
+      const title = (jobData?.title || '').toLowerCase();
+      const company = (jobData?.company || '').toLowerCase();
+      const description = (jobData?.description || '').toLowerCase();
+
+      // SENIORITY SIGNALS → professional tone (formal, measured)
+      const seniorPatterns = /\b(senior|staff|principal|lead|director|head of|vp|vice president|chief|c-suite|cto|ceo|cfo|coo|cio|ciso|cmo|president|executive|partner|manager|management)\b/i;
+      if (seniorPatterns.test(title)) return 'professional';
+
+      // LEADERSHIP/MANAGEMENT KEYWORDS → professional
+      const leadershipSignals = /\b(leadership|executive|strategic|governance|board|stakeholder|p&l|profit and loss|transformation|restructuring)\b/i;
+      if (leadershipSignals.test(title) || leadershipSignals.test(description.substring(0, 500))) {
+        return 'professional';
+      }
+
+      // STARTUP/SCALE-UP SIGNALS → enthusiastic tone (energy, passion)
+      const startupPatterns = /\b(startup|scale-up|scaleup|series [abcde]|seed stage|early stage|fast-growing|high-growth|growth-stage|founding|founder|zero to one|0 to 1)\b/i;
+      if (startupPatterns.test(description) || startupPatterns.test(company)) {
+        return 'enthusiastic';
+      }
+
+      // JUNIOR/ENTRY ROLES → enthusiastic
+      const juniorPatterns = /\b(junior|entry level|entry-level|graduate|intern|associate|trainee|apprentice)\b/i;
+      if (juniorPatterns.test(title)) return 'enthusiastic';
+
+      // CONTRACT/FREELANCE/CONCISE ROLES → concise tone
+      const conciseSignals = /\b(contract|contractor|freelance|consultant|temporary|interim|short-term|project-based)\b/i;
+      if (conciseSignals.test(title) || conciseSignals.test(description.substring(0, 300))) {
+        return 'concise';
+      }
+
+      // PURE TECHNICAL IC ROLES → concise
+      const technicalICSignals = /\b(engineer|developer|sre|devops|platform|data scientist|ml engineer|ai engineer|backend|frontend|fullstack|full-stack|ios|android|mobile)\b/i;
+      if (technicalICSignals.test(title) && !seniorPatterns.test(title)) {
+        // Mid-level technical IC — concise works well
+        return 'concise';
+      }
+
+      // DEFAULT → professional (safest choice)
+      return 'professional';
+    },
+
+    // ============ EXTRACT ROLE SENIORITY (v3.3) ============
+    // Determines seniority level for language calibration in the body
+    extractSeniorityLevel(jobData) {
+      const title = (jobData?.title || '').toLowerCase();
+      if (/\b(chief|c-suite|cto|ceo|cfo|coo|cio|ciso|president|executive|evp|svp|vp|vice president)\b/i.test(title)) return 'executive';
+      if (/\b(director|head of|principal|staff)\b/i.test(title)) return 'leadership';
+      if (/\b(senior|sr\.?|lead|manager)\b/i.test(title)) return 'senior';
+      if (/\b(junior|jr\.?|entry|graduate|intern|associate|trainee|apprentice)\b/i.test(title)) return 'junior';
+      return 'mid';
     },
 
     // ============ FORMAT FOR DIFFERENT OUTPUTS ============

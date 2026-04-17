@@ -93,23 +93,120 @@
       'results-oriented','goal-oriented','mission','goodjob'
     ]);
 
-    // Technical/hard skills patterns (boosted)
+    // Technical/hard skills patterns (boosted) - v3.3 MASSIVELY EXPANDED for 2026 tech stack
     const technicalPatterns = new Set([
+      // Programming languages
       'python','java','javascript','typescript','ruby','rails','react','node','nodejs',
-      'aws','azure','gcp','google cloud','kubernetes','docker','terraform','ansible',
-      'postgresql','postgres','mysql','mongodb','redis','elasticsearch','bigquery',
-      'spark','airflow','kafka','dbt','snowflake','databricks','mlops','devops',
-      'ci/cd','github','gitlab','jenkins','circleci','agile','scrum','jira','confluence',
-      'pytorch','tensorflow','scikit-learn','pandas','numpy','sql','nosql','graphql',
-      'rest','api','microservices','serverless','lambda','ecs','eks','s3','rds',
+      'swift','kotlin','dart','rust','scala','perl','haskell','elixir','erlang','clojure',
+      'c','c++','c#','go','golang','php','r','matlab','lua','solidity','julia','groovy',
+      // Cloud platforms
+      'aws','azure','gcp','google cloud','oracle cloud','alibaba cloud','ibm cloud',
+      'digitalocean','linode','heroku','vercel','netlify','cloudflare','fastly',
+      // Container & orchestration
+      'kubernetes','k8s','docker','podman','containerd','helm','openshift','rancher',
+      'nomad','istio','linkerd','envoy','consul','vault','terraform','pulumi','ansible',
+      'chef','puppet','saltstack','cloudformation','arm template','bicep','cdk',
+      // Databases
+      'postgresql','postgres','mysql','mariadb','mongodb','cassandra','dynamodb','cosmosdb',
+      'redis','elasticsearch','opensearch','bigquery','snowflake','databricks','redshift',
+      'clickhouse','duckdb','presto','trino','athena','glue','cockroachdb','scylladb',
+      'neo4j','arangodb','influxdb','timescaledb','pinecone','weaviate','chroma','qdrant',
+      // Data engineering
+      'spark','hadoop','airflow','dagster','prefect','luigi','kafka','rabbitmq','pulsar',
+      'kinesis','dbt','fivetran','airbyte','stitch','matillion','informatica','talend',
+      'flink','beam','storm','nifi','pentaho','mlflow','kubeflow','tecton','feast',
+      // DevOps & CI/CD
+      'mlops','devops','devsecops','finops','gitops','ci/cd','github','gitlab','bitbucket',
+      'jenkins','circleci','travis','teamcity','bamboo','drone','buildkite','argo','argocd',
+      'spinnaker','tekton','flux','harness','octopus','concourse',
+      // Agile & PM
+      'agile','scrum','kanban','safe','lean','six sigma','jira','confluence','asana',
+      'trello','monday','notion','clickup','linear','shortcut','azure devops','rally',
+      // ML/AI frameworks
+      'pytorch','tensorflow','keras','scikit-learn','pandas','numpy','scipy','matplotlib',
+      'seaborn','plotly','xgboost','lightgbm','catboost','huggingface','transformers',
+      'langchain','llamaindex','llama','claude','gpt','openai','anthropic','cohere',
+      'stable diffusion','rag','retrieval-augmented','vector database','embeddings',
+      'fine-tuning','prompt engineering','agentic ai','multi-agent','autogen','crewai',
+      // Data & APIs
+      'sql','nosql','graphql','grpc','rest','restful','soap','websocket','webrtc',
+      'api','microservices','serverless','lambda','step functions','event-driven',
+      'pub/sub','message queue','event streaming','etl','elt',
+      // AWS services
+      'ecs','eks','ec2','s3','rds','dynamodb','lambda','fargate','route 53','cloudfront',
+      'cloudwatch','iam','kms','secrets manager','sqs','sns','eventbridge','api gateway',
+      'cognito','amplify','appsync','glue','emr','sagemaker','bedrock','comprehend',
+      'rekognition','textract','polly','transcribe','translate','personalize',
+      // Azure services
+      'aks','acr','azure ad','entra id','azure sql','cosmos db','event hub','service bus',
+      'data factory','synapse','databricks','sentinel','defender','purview','fabric',
+      // GCP services
+      'gke','gce','cloud run','cloud functions','cloud sql','firestore','pubsub','dataflow',
+      'vertex ai','composer','looker','dataproc','bigtable','spanner',
+      // ML/DS topics
       'machine learning','data science','data engineering','deep learning','nlp','llm',
-      'genai','ai','ml','computer vision','data pipelines','etl','data modeling',
-      'tableau','power bi','looker','heroku','vercel','netlify','linux','unix','bash',
-      'git','svn','html','css','sass','webpack','vite','nextjs','vue','angular',
-      'swift','kotlin','flutter','react native','ios','android','mobile','frontend',
-      'backend','fullstack','full-stack','sre','infrastructure','networking','security',
-      'oauth','jwt','encryption','compliance','gdpr','hipaa','soc2','pci','prince2',
-      'cbap','pmp','certified','certification','.net','c#','go','scala'
+      'genai','generative ai','ai','ml','computer vision','data pipelines','data modeling',
+      'reinforcement learning','supervised learning','unsupervised learning','regression',
+      'classification','clustering','recommendation','anomaly detection','time series',
+      'feature engineering','model deployment','model monitoring','a/b testing','experimentation',
+      'causal inference','statistical analysis','bayesian','hypothesis testing',
+      // BI/Analytics
+      'tableau','power bi','looker','qlik','mode','metabase','superset','hex','sisense',
+      'thoughtspot','domo','datastudio','amplitude','mixpanel','heap','segment','rudderstack',
+      'google analytics','ga4','adobe analytics','hotjar','fullstory','posthog',
+      // DevOps tools
+      'linux','unix','bash','shell','zsh','powershell','git','svn','mercurial',
+      'nginx','apache','haproxy','traefik','envoy','caddy','varnish','cloudflare',
+      // Frontend
+      'html','css','scss','sass','less','postcss','tailwind','bootstrap','mui','chakra',
+      'styled-components','emotion','stitches','vanilla-extract','webpack','vite','rollup',
+      'parcel','esbuild','turbopack','snowpack','babel','swc','postcss',
+      // JS frameworks
+      'nextjs','next.js','nuxt','nuxt.js','gatsby','remix','astro','solidjs','qwik',
+      'vue','vue.js','angular','svelte','sveltekit','preact','lit','alpine.js','htmx',
+      'redux','zustand','jotai','recoil','mobx','pinia','tanstack','react-query','swr',
+      'react native','flutter','ionic','expo','electron','tauri','capacitor',
+      // Mobile
+      'ios','android','xamarin','maui','jetpack compose','swiftui','kotlin multiplatform',
+      'mobile','frontend','backend','fullstack','full-stack','sre','platform engineering',
+      'infrastructure','networking','observability','monitoring','logging','tracing',
+      // Security & compliance
+      'security','cybersecurity','infosec','appsec','cloudsec','zero trust','oauth',
+      'oauth2','oidc','saml','jwt','encryption','tls','pki','cryptography',
+      'compliance','gdpr','hipaa','ccpa','pci','pci-dss','soc2','iso 27001','nist',
+      'sox','fedramp','fisma','hitrust','owasp','penetration testing','red team','blue team',
+      'siem','soar','edr','xdr','mdr','waf','dlp','ids','ips','threat intelligence',
+      'vulnerability management','incident response','disaster recovery','business continuity',
+      // Certifications
+      'prince2','cbap','pmp','pmi-acp','csm','cspo','itil','togaf','aws certified',
+      'azure certified','gcp certified','ccna','ccnp','ccie','cissp','cism','cisa',
+      'ceh','oscp','security+','network+','a+','cfa','cpa','acca','cima','cfe',
+      'certified','certification','.net','.net core','.net framework','aspnet',
+      // Modern trends 2024-2026
+      'wasm','webassembly','edge computing','edge functions','iot','5g','6g','blockchain',
+      'web3','defi','nft','dao','smart contract','metaverse','ar','vr','xr','mr',
+      'quantum computing','quantum','digital twin','iiot','iot','autonomous',
+      'chatgpt','copilot','cursor','claude code','windsurf','replit','v0','bolt',
+      'gpt-4','gpt-5','claude 3','claude 4','gemini','llama','mistral','deepseek',
+      // Soft technical skills
+      'system design','distributed systems','scalability','high availability','fault tolerance',
+      'load balancing','caching','cdn','cdn optimization','performance optimization',
+      'code review','pair programming','mob programming','tdd','bdd','test-driven',
+      'behavior-driven','unit testing','integration testing','e2e testing','smoke testing',
+      'regression testing','chaos engineering','fault injection','canary deployment',
+      'blue-green deployment','feature flags','a/b testing','dark launches',
+      // Testing frameworks
+      'jest','vitest','mocha','chai','jasmine','cypress','playwright','puppeteer','selenium',
+      'webdriver','testcafe','nightwatch','junit','testng','pytest','unittest','nose',
+      'rspec','minitest','karma','ava','tape','k6','jmeter','gatling','locust',
+      // Finance/Business
+      'financial modeling','budgeting','forecasting','p&l','balance sheet','cash flow',
+      'valuation','dcf','lbo','m&a','due diligence','market research','competitive analysis',
+      'swot','porter','5 forces','business model','go-to-market','gtm','sales enablement',
+      // Data & product
+      'product management','product strategy','roadmap','okr','kpi','north star','metrics',
+      'user research','ux research','usability testing','persona','journey mapping',
+      'information architecture','wireframing','prototyping','design thinking','jobs-to-be-done'
     ]);
 
     const words = text.toLowerCase()
@@ -127,14 +224,89 @@
       }
     });
 
-    // Multi-word technical phrases
+    // Multi-word technical phrases - v3.3 MASSIVELY EXPANDED for maximum ATS matching
     const multiWordPatterns = [
-      'project management', 'data science', 'machine learning', 'deep learning',
-      'data engineering', 'cloud platform', 'google cloud platform', 'agile/scrum',
-      'a/b testing', 'ci/cd', 'real-time', 'data pipelines', 'ruby on rails',
-      'node.js', 'react.js', 'vue.js', 'next.js', 'full stack', 'full-stack',
-      'natural language processing', 'computer vision', 'artificial intelligence',
-      '.net core', 'software development', 'full-stack development'
+      // Management & roles
+      'project management', 'product management', 'program management', 'people management',
+      'stakeholder management', 'vendor management', 'change management', 'risk management',
+      'performance management', 'portfolio management', 'account management',
+      // Data & ML
+      'data science', 'data engineering', 'data analysis', 'data analytics', 'data visualization',
+      'data modeling', 'data warehousing', 'data governance', 'data quality', 'data lineage',
+      'machine learning', 'deep learning', 'reinforcement learning', 'supervised learning',
+      'unsupervised learning', 'transfer learning', 'federated learning', 'active learning',
+      'natural language processing', 'computer vision', 'speech recognition', 'recommendation system',
+      'anomaly detection', 'time series forecasting', 'predictive analytics', 'prescriptive analytics',
+      'artificial intelligence', 'generative ai', 'conversational ai', 'edge ai', 'responsible ai',
+      'large language model', 'foundation model', 'vector database', 'prompt engineering',
+      'retrieval augmented generation', 'fine-tuning', 'model deployment', 'model monitoring',
+      'feature engineering', 'feature store', 'model registry', 'ml pipeline', 'mlops pipeline',
+      // Cloud
+      'cloud platform', 'cloud migration', 'cloud native', 'cloud architecture', 'cloud strategy',
+      'cloud security', 'cloud cost optimization', 'multi-cloud', 'hybrid cloud', 'private cloud',
+      'google cloud platform', 'amazon web services', 'microsoft azure', 'oracle cloud infrastructure',
+      'serverless architecture', 'event-driven architecture', 'microservices architecture',
+      'distributed systems', 'high availability', 'fault tolerance', 'disaster recovery',
+      'business continuity', 'infrastructure as code', 'configuration management',
+      // DevOps & methodology
+      'agile methodology', 'scrum master', 'product owner', 'agile/scrum', 'agile coach',
+      'continuous integration', 'continuous deployment', 'continuous delivery',
+      'ci/cd pipeline', 'devops culture', 'site reliability engineering', 'platform engineering',
+      'release engineering', 'incident management', 'post-mortem', 'blameless culture',
+      // Testing
+      'a/b testing', 'multivariate testing', 'unit testing', 'integration testing',
+      'end-to-end testing', 'regression testing', 'performance testing', 'load testing',
+      'stress testing', 'penetration testing', 'smoke testing', 'test automation',
+      'test-driven development', 'behavior-driven development', 'contract testing',
+      // Development
+      'software development', 'application development', 'web development', 'mobile development',
+      'frontend development', 'backend development', 'full-stack development', 'full stack',
+      'full-stack', 'api development', 'rest api', 'restful api', 'graphql api',
+      'microservices', 'service mesh', 'event-driven', 'real-time', 'real-time analytics',
+      'data pipelines', 'data pipeline', 'etl pipeline', 'elt pipeline',
+      // Tech stacks
+      'ruby on rails', 'node.js', 'react.js', 'vue.js', 'next.js', 'nuxt.js',
+      'react native', 'spring boot', '.net core', '.net framework', '.net 6', '.net 7', '.net 8',
+      'express.js', 'nest.js', 'fastify.js', 'angular.js', 'ember.js', 'backbone.js',
+      // Business & soft
+      'problem solving', 'problem-solving', 'critical thinking', 'strategic thinking',
+      'analytical thinking', 'attention to detail', 'communication skills',
+      'cross-functional', 'cross-functional collaboration', 'cross-functional teams',
+      'stakeholder communication', 'executive communication', 'technical writing',
+      'presentation skills', 'public speaking', 'leadership skills', 'team leadership',
+      'thought leadership', 'people leadership', 'technical leadership',
+      'business acumen', 'commercial awareness', 'customer-centric', 'customer-focused',
+      'data-driven', 'data-driven decision making', 'evidence-based', 'results-oriented',
+      'outcome-focused', 'goal-oriented', 'detail-oriented', 'self-motivated', 'self-starter',
+      'time management', 'priority management', 'project delivery', 'process improvement',
+      'continuous improvement', 'operational excellence', 'quality assurance', 'quality control',
+      // Security
+      'cyber security', 'information security', 'application security', 'network security',
+      'endpoint security', 'cloud security', 'security operations', 'security architecture',
+      'zero trust', 'zero-trust', 'defense in depth', 'least privilege', 'identity management',
+      'access management', 'privileged access', 'security compliance', 'security governance',
+      'threat modeling', 'threat hunting', 'threat intelligence', 'vulnerability assessment',
+      'penetration testing', 'red teaming', 'blue teaming', 'purple teaming',
+      'incident response', 'forensic analysis', 'malware analysis', 'security awareness',
+      // Business/finance
+      'financial modeling', 'financial analysis', 'financial planning', 'revenue operations',
+      'sales operations', 'marketing operations', 'business intelligence', 'business analytics',
+      'market analysis', 'competitive analysis', 'swot analysis', 'gap analysis',
+      'root cause analysis', 'requirements analysis', 'business process', 'process mapping',
+      'workflow automation', 'robotic process automation', 'rpa',
+      // Customer success
+      'customer success', 'customer experience', 'customer onboarding', 'customer retention',
+      'customer lifecycle', 'churn reduction', 'upsell', 'cross-sell', 'account expansion',
+      'renewal management', 'quarterly business review', 'health score', 'user engagement',
+      // Product
+      'product strategy', 'product roadmap', 'product marketing', 'product discovery',
+      'user research', 'user experience', 'user interface', 'user-centered design',
+      'design thinking', 'jobs to be done', 'minimum viable product', 'product-market fit',
+      'go-to-market', 'product launch', 'feature prioritization', 'opportunity sizing',
+      // Growth
+      'growth strategy', 'growth marketing', 'growth hacking', 'conversion rate optimization',
+      'funnel optimization', 'lifecycle marketing', 'email marketing', 'content marketing',
+      'seo', 'sem', 'paid acquisition', 'organic growth', 'viral loops', 'retention marketing'
     ];
     
     const textLower = text.toLowerCase();
