@@ -29,7 +29,17 @@
     'pandas', 'numpy', 'matplotlib', 'excel', 'google sheets', 'airflow', 'dbt',
     'power query', 'ssrs', 'ssis', 'spss', 'sas', 'alteryx', 'qlik', 'qlikview',
     'qliksense', 'metabase', 'grafana', 'splunk', 'datadog', 'spark', 'hadoop',
-    'kafka', 'elasticsearch', 'mongodb', 'postgresql', 'mysql', 'redis', 'dynamodb'
+    'kafka', 'elasticsearch', 'mongodb', 'postgresql', 'mysql', 'redis', 'dynamodb',
+    // v3.3 additions - modern data stack
+    'databricks', 'clickhouse', 'duckdb', 'trino', 'presto', 'athena', 'glue',
+    'dagster', 'prefect', 'luigi', 'fivetran', 'airbyte', 'stitch', 'hevo',
+    'delta lake', 'iceberg', 'hudi', 'parquet', 'avro',
+    'hex', 'mode', 'sisense', 'thoughtspot', 'domo', 'superset', 'preset',
+    'amplitude', 'mixpanel', 'heap', 'segment', 'rudderstack', 'posthog',
+    'great expectations', 'soda', 'monte carlo', 'bigeye', 'metaplane',
+    'atlan', 'collibra', 'alation', 'datahub', 'amundsen', 'openlineage',
+    'cube', 'lookml', 'metricflow', 'semantic layer', 'transform',
+    'pinecone', 'weaviate', 'chroma', 'qdrant', 'milvus', 'faiss'
   ]);
 
   const CRM_TOOLS = new Set([
@@ -66,7 +76,23 @@
     'financial modeling', 'budgeting', 'contract negotiation', 'vendor management',
     'product management', 'scrum', 'agile', 'kanban', 'lean', 'six sigma',
     'machine learning', 'deep learning', 'nlp', 'computer vision', 'ai',
-    'api development', 'rest api', 'graphql', 'microservices', 'system design'
+    'api development', 'rest api', 'graphql', 'microservices', 'system design',
+    // v3.3 additions - modern hard skills
+    'generative ai', 'llm', 'prompt engineering', 'rag', 'fine-tuning',
+    'vector database', 'embeddings', 'agentic ai', 'ai agents',
+    'platform engineering', 'site reliability engineering', 'observability',
+    'chaos engineering', 'incident response', 'post-mortem analysis',
+    'zero trust security', 'cloud security posture management', 'cspm',
+    'devsecops', 'shift-left security', 'supply chain security',
+    'data engineering', 'data modeling', 'data governance', 'data quality',
+    'analytics engineering', 'reverse etl', 'semantic layer',
+    'product analytics', 'growth analytics', 'causal inference',
+    'conversion rate optimization', 'funnel analysis', 'retention analysis',
+    'go-to-market strategy', 'product-led growth', 'plg',
+    'technical writing', 'api documentation', 'developer relations', 'devrel',
+    'code review', 'pair programming', 'test-driven development', 'tdd',
+    'behavior-driven development', 'bdd', 'domain-driven design', 'ddd',
+    'event-driven architecture', 'eda', 'cqrs', 'event sourcing'
   ]);
 
   const SOFT_SKILLS = new Set([

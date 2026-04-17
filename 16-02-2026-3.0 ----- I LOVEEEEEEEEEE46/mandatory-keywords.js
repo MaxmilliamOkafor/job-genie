@@ -308,10 +308,98 @@
     // WFM & Contact Center specific
     wfm: new Set([
       'workforce management', 'wfm', 'wfm tools', 'nice', 'verint', 'calabrio',
-      'real-time analysis', 'real time analysis', 'capacity planning', 
-      'scheduling', 'forecasting', 'contact center', 'call center', 
-      'inbound', 'outbound', 'bpo', 'service level', 'sla', 'aht', 
+      'real-time analysis', 'real time analysis', 'capacity planning',
+      'scheduling', 'forecasting', 'contact center', 'call center',
+      'inbound', 'outbound', 'bpo', 'service level', 'sla', 'aht',
       'average handle time', 'shrinkage', 'occupancy', 'adherence'
+    ]),
+
+    // v3.3: Modern GenAI / LLM / Agentic AI stack (2024-2026)
+    generativeAI: new Set([
+      'generative ai', 'genai', 'gen ai', 'large language model', 'llm', 'llms',
+      'foundation model', 'frontier model', 'multimodal', 'multi-modal',
+      'gpt-4', 'gpt-4o', 'gpt-4 turbo', 'gpt-5', 'claude', 'claude 3', 'claude 3.5',
+      'claude opus', 'claude sonnet', 'claude haiku', 'claude 4',
+      'gemini', 'gemini pro', 'gemini ultra', 'llama', 'llama 2', 'llama 3',
+      'mistral', 'mixtral', 'deepseek', 'qwen', 'grok',
+      'openai', 'anthropic', 'google deepmind', 'meta ai', 'mistral ai', 'cohere',
+      'prompt engineering', 'prompt design', 'few-shot learning', 'zero-shot learning',
+      'chain of thought', 'chain-of-thought', 'cot', 'react prompting', 'tree of thought',
+      'fine-tuning', 'lora', 'qlora', 'peft', 'rlhf', 'dpo', 'rag',
+      'retrieval augmented generation', 'retrieval-augmented generation',
+      'vector database', 'vector search', 'embedding model', 'semantic search',
+      'pinecone', 'weaviate', 'chroma', 'qdrant', 'milvus', 'faiss', 'elasticsearch',
+      'langchain', 'llamaindex', 'haystack', 'semantic kernel', 'autogen',
+      'crewai', 'langgraph', 'ai agent', 'ai agents', 'agentic ai', 'agent orchestration',
+      'tool use', 'function calling', 'structured output', 'constrained decoding',
+      'guardrails', 'content moderation', 'ai safety', 'alignment', 'responsible ai',
+      'ai ethics', 'model evaluation', 'evals', 'benchmarks', 'hallucination',
+      'token', 'tokenization', 'context window', 'embeddings', 'cosine similarity',
+      'copilot', 'github copilot', 'cursor', 'claude code', 'v0', 'bolt.new',
+      'perplexity', 'chatgpt', 'chat completions', 'completions api', 'messages api',
+      'anthropic api', 'openai api', 'bedrock', 'vertex ai', 'azure openai',
+      'model context protocol', 'mcp'
+    ]),
+
+    // v3.3: Modern Data / Analytics Engineering (2024-2026)
+    modernDataStack: new Set([
+      'modern data stack', 'dbt', 'dbt cloud', 'dbt core', 'dagster', 'prefect',
+      'airflow', 'astronomer', 'snowflake', 'databricks', 'bigquery', 'redshift',
+      'duckdb', 'clickhouse', 'starburst', 'trino', 'presto', 'athena',
+      'iceberg', 'delta lake', 'hudi', 'parquet', 'avro', 'orc',
+      'fivetran', 'airbyte', 'stitch', 'hevo', 'meltano', 'rivery',
+      'data mesh', 'data fabric', 'data lakehouse', 'lakehouse', 'medallion architecture',
+      'bronze silver gold', 'data contract', 'data quality', 'great expectations',
+      'soda', 'monte carlo', 'acceldata', 'bigeye', 'metaplane',
+      'reverse etl', 'hightouch', 'census', 'activation', 'operational analytics',
+      'semantic layer', 'cube', 'lookml', 'metric store', 'transform', 'feature store',
+      'tecton', 'feast', 'hopsworks', 'data catalog', 'atlan', 'collibra', 'alation',
+      'data observability', 'lineage', 'openlineage', 'datahub', 'amundsen'
+    ]),
+
+    // v3.3: Modern Web/Frontend (2024-2026)
+    modernFrontend: new Set([
+      'next.js 14', 'next.js 15', 'next.js app router', 'server components', 'rsc',
+      'server actions', 'turbopack', 'remix', 'astro', 'qwik', 'solidjs', 'solid',
+      'svelte 5', 'svelte', 'sveltekit', 'vue 3', 'nuxt 3', 'tanstack', 'tanstack query',
+      'tanstack router', 'react query', 'swr', 'zustand', 'jotai', 'valtio',
+      'react 18', 'react 19', 'concurrent rendering', 'suspense', 'streaming ssr',
+      'edge runtime', 'edge functions', 'cloudflare workers', 'deno deploy', 'bun',
+      'vite', 'vitest', 'playwright', 'storybook 8', 'chromatic',
+      'shadcn', 'shadcn/ui', 'radix ui', 'radix', 'tailwind css', 'tailwindcss',
+      'tailwind v4', 'unocss', 'framer motion', 'motion one',
+      'typescript 5', 'typescript strict', 'zod', 'trpc', 'trpc v11'
+    ]),
+
+    // v3.3: Modern DevOps / Platform Engineering (2024-2026)
+    platformEngineering: new Set([
+      'platform engineering', 'internal developer platform', 'idp',
+      'backstage', 'port', 'cortex', 'humanitec', 'coder', 'gitpod',
+      'devex', 'developer experience', 'dora metrics', 'spacex metrics',
+      'gitops', 'flux', 'argo cd', 'argocd', 'terragrunt', 'atlantis',
+      'opa', 'open policy agent', 'gatekeeper', 'kyverno', 'sentinel',
+      'chaos engineering', 'chaos mesh', 'litmus', 'gremlin',
+      'service mesh', 'istio', 'linkerd', 'cilium', 'ebpf',
+      'opentelemetry', 'otel', 'observability', 'slo', 'sli', 'slo burn rate',
+      'error budget', 'distributed tracing', 'structured logging', 'metrics',
+      'finops', 'cost optimization', 'kubecost', 'infracost', 'cloud zero',
+      'supply chain security', 'sbom', 'sigstore', 'cosign', 'slsa', 'in-toto'
+    ]),
+
+    // v3.3: Modern Security (2024-2026)
+    modernSecurity: new Set([
+      'zero trust', 'zero-trust', 'zero trust architecture', 'zta', 'ztna',
+      'sase', 'sse', 'casb', 'swg', 'ztaa',
+      'identity-first security', 'passwordless', 'passkeys', 'webauthn', 'fido2',
+      'privileged access management', 'pam', 'cyberark', 'beyondtrust',
+      'cloud security posture management', 'cspm', 'cwpp', 'cnapp',
+      'cloud workload protection', 'wiz', 'orca', 'lacework', 'prisma cloud',
+      'shift left security', 'shift-left', 'devsecops', 'sast', 'dast', 'iast',
+      'sca', 'software composition analysis', 'snyk', 'checkmarx', 'veracode',
+      'secrets scanning', 'gitguardian', 'truffle hog',
+      'ai security', 'ai red teaming', 'llm security', 'prompt injection',
+      'owasp top 10 for llm', 'jailbreak', 'data exfiltration', 'model poisoning',
+      'supply chain attack', 'solarwinds', 'log4shell', 'mitre att&ck', 'kill chain'
     ])
   };
 
