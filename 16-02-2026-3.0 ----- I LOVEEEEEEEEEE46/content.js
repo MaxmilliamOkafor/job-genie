@@ -165,22 +165,47 @@
     'palantir.com', 'crowdstrike.com', 'snowflake.com', 'netflix.com', 'amd.com'
   ];
 
+  // v3.3.1: Separate ATS-only hosts (always active) from broad company domains
+  // (only active on /careers, /jobs, /apply paths) to prevent glitches on
+  // non-job pages like Google Search, Amazon Shopping, LinkedIn feeds, etc.
+  const ATS_ONLY_HOSTS = [
+    'greenhouse.io', 'job-boards.greenhouse.io', 'boards.greenhouse.io',
+    'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
+    'bullhornstaffing.com', 'bullhorn.com', 'teamtailor.com',
+    'workable.com', 'apply.workable.com', 'icims.com',
+    'oracle.com', 'oraclecloud.com', 'taleo.net',
+    'jobvite.com', 'recruiterbox.com', 'breezy.hr',
+    'recruitee.com', 'personio.de', 'personio.com', 'bamboohr.com',
+    'successfactors.com', 'ultipro.com', 'dayforce.com', 'adp.com',
+    'jazzhr.com'
+  ];
+
+  const CAREER_PATH_RE = /\/(careers?|jobs?|positions?|apply|openings?|vacancies|join|opportunities|hiring|talent)\b/i;
+
   const isSupportedHost = (hostname) => {
     const normalizedHost = hostname.replace(/^www\./, '').toLowerCase();
-    
-    // Check ATS platforms
-    if (SUPPORTED_HOSTS.some((h) => normalizedHost === h || normalizedHost.endsWith(`.${h}`))) {
+    const pathname = window.location.pathname.toLowerCase();
+
+    // Pure ATS platforms — always supported
+    if (ATS_ONLY_HOSTS.some((h) => normalizedHost === h || normalizedHost.endsWith(`.${h}`))) {
       return true;
     }
-    // Check Tier 1-2 company career sites (using Map-based matching)
+
+    // Tier 1/2 company domains — only on career/job paths
     if (matchTier1Domain(normalizedHost)) {
-      return true;
+      return CAREER_PATH_RE.test(pathname);
     }
+
+    // Remaining SUPPORTED_HOSTS entries — require career path too
+    if (SUPPORTED_HOSTS.some((h) => normalizedHost === h || normalizedHost.endsWith(`.${h}`))) {
+      return CAREER_PATH_RE.test(pathname);
+    }
+
     return false;
   };
 
   if (!isSupportedHost(window.location.hostname)) {
-    console.log('[ATS Tailor] Not a supported ATS/company host, skipping');
+    console.log('[ATS Tailor] Not a supported ATS/company host (or not on career path), skipping');
     return;
   }
 
@@ -281,17 +306,22 @@
   // ALWAYS start fresh automation on new recognized ATS URLs
   let lastProcessedUrl = window.location.href;
   let automationCompleteForUrl = new Set();
+  const MAX_COMPLETED_URLS = 50;
   
   // Force reset all state for new job
   function forceResetForNewJob() {
     console.log('[ATS Tailor] 🔄 FORCE RESET - clearing all state for new job');
+
+    // Stop any running attach loops FIRST to prevent stale references
+    stopAttachLoops();
+
     filesLoaded = false;
     cvFile = null;
     coverFile = null;
     coverLetterText = '';
     hasTriggeredTailor = false;
     tailoringInProgress = false;
-    
+
     // Clear any cached data for this session
     if (typeof CacheManager !== 'undefined') {
       CacheManager.clearAllCaches && CacheManager.clearAllCaches();
@@ -321,6 +351,12 @@
       return;
     }
     
+    // Cap the completed-URL set to prevent unbounded memory growth
+    if (automationCompleteForUrl.size > MAX_COMPLETED_URLS) {
+      const oldest = automationCompleteForUrl.values().next().value;
+      automationCompleteForUrl.delete(oldest);
+    }
+
     // ALWAYS force reset for new recognized ATS URL (even if previous automation was running)
     console.log('[ATS Tailor] ✅ New ATS page detected - FORCING fresh automation');
     forceResetForNewJob();
@@ -339,16 +375,24 @@
   }
   
   // Monitor URL changes (for SPAs like Workday)
+  // v3.3.1 FIX: Throttle observer to prevent firing on every DOM mutation
+  let urlCheckPending = false;
   const urlChangeObserver = new MutationObserver(() => {
-    const currentUrl = window.location.href;
-    if (currentUrl !== lastProcessedUrl) {
-      handleUrlChange(currentUrl);
-    }
+    if (urlCheckPending) return;
+    urlCheckPending = true;
+    requestAnimationFrame(() => {
+      urlCheckPending = false;
+      const currentUrl = window.location.href;
+      if (currentUrl !== lastProcessedUrl) {
+        handleUrlChange(currentUrl);
+      }
+    });
   });
-  
-  // Start observing URL changes
-  urlChangeObserver.observe(document.body, { childList: true, subtree: true });
-  
+
+  if (document.body) {
+    urlChangeObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
   // Also listen for popstate events (browser back/forward)
   window.addEventListener('popstate', () => {
     const currentUrl = window.location.href;
@@ -1713,7 +1757,7 @@
     // IMPORTANT: do NOT click generic "remove" buttons globally.
     // Only click remove/clear controls that are near file inputs / upload widgets.
 
-    // v3.2 FIX: Auto-accept confirm() dialogs during file removal
+    // v3.3.1 FIX: Auto-accept confirm() dialogs during file removal
     // Greenhouse (and other ATS) trigger native confirm("Remove file?") when clicking
     // remove buttons. We temporarily override confirm() to auto-accept, preventing
     // the user from seeing the prompt.
@@ -1723,8 +1767,15 @@
     try {
       _killXButtonsInner();
     } finally {
-      // Restore original confirm after a short delay to catch async confirm dialogs
-      setTimeout(() => { window.confirm = originalConfirm; }, 500);
+      // Restore synchronously first, then schedule a safety net for any async confirm
+      // that might fire before the microtask queue drains
+      const restoreConfirm = () => {
+        if (window.confirm !== originalConfirm) {
+          window.confirm = originalConfirm;
+        }
+      };
+      restoreConfirm();
+      setTimeout(restoreConfirm, 300);
     }
   }
 
@@ -2430,26 +2481,27 @@
     const ATTACH_SAFETY_TIMEOUT_MS = 30000;
     const attachStartTime = Date.now();
 
-    // HYPER BLAZING: 2ms interval (500fps) - 50% faster than ULTRA BLAZING
+    // v3.3.1 FIX: Reduced from 2ms/4ms to 50ms/200ms to prevent CPU burn and page lag.
+    // 2ms (500fps) caused jank on non-Workday ATS and interference on other pages.
+    // 50ms is more than fast enough for file input detection.
     attachLoop4ms = setInterval(() => {
       if (!filesLoaded) return;
       if (Date.now() - attachStartTime > ATTACH_SAFETY_TIMEOUT_MS) {
-        console.warn('[ATS Tailor] ⏱️ Attach loop safety timeout (30s) — stopping');
+        console.warn('[ATS Tailor] Attach loop safety timeout (30s) — stopping');
         stopAttachLoops();
         return;
       }
       forceCVReplace();
       forceCoverReplace();
       if (areBothAttached()) {
-        console.log('[ATS Tailor] ⚡⚡⚡ HYPER BLAZING attach complete');
+        console.log('[ATS Tailor] Attach complete');
         showSuccessRibbon();
         updateBanner(SUCCESS_BANNER_MSG, 'success');
         hideBanner();
         stopAttachLoops();
       }
-    }, 2);
+    }, 50);
 
-    // HYPER BLAZING: 4ms interval for full force - 50% faster
     attachLoop8ms = setInterval(() => {
       if (!filesLoaded) return;
       if (Date.now() - attachStartTime > ATTACH_SAFETY_TIMEOUT_MS) {
@@ -2458,13 +2510,13 @@
       }
       forceEverything();
       if (areBothAttached()) {
-        console.log('[ATS Tailor] ⚡⚡⚡ HYPER BLAZING attach complete');
+        console.log('[ATS Tailor] Attach complete');
         showSuccessRibbon();
         updateBanner(SUCCESS_BANNER_MSG, 'success');
         hideBanner();
         stopAttachLoops();
       }
-    }, 4);
+    }, 200);
   }
 
   // ============ LOAD FILES AND START ==========

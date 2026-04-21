@@ -108,11 +108,27 @@ const THANK_YOU_URL_PATTERNS = [
   '/complete', '/applied', '/finished'
 ];
 
-// Track processed tabs to avoid duplicate triggers
+// Track processed tabs to avoid duplicate triggers (capped to prevent memory leak)
 const processedTabs = new Set();
+const MAX_PROCESSED_TABS = 100;
 
-// Track thank you pages to skip
+// Track thank you pages to skip (capped)
 const thankYouPages = new Set();
+const MAX_THANK_YOU_PAGES = 200;
+
+function cappedAddProcessedTab(tabId) {
+  if (processedTabs.size >= MAX_PROCESSED_TABS) {
+    processedTabs.delete(processedTabs.values().next().value);
+  }
+  processedTabs.add(tabId);
+}
+
+function cappedAddThankYouPage(url) {
+  if (thankYouPages.size >= MAX_THANK_YOU_PAGES) {
+    thankYouPages.delete(thankYouPages.values().next().value);
+  }
+  thankYouPages.add(url);
+}
 
 // Check if URL is a thank you page
 function isThankYouPageUrl(url) {
@@ -190,7 +206,7 @@ async function handleAutoTrigger(tabId, url) {
     console.log(`[ATS Tailor] ⚡ ATS Platform detected: ${platform} on tab ${tabId}`);
     
     // Mark as processed immediately to prevent duplicate triggers
-    processedTabs.add(tabId);
+    cappedAddProcessedTab(tabId);
 
     // Wait for content script to be ready (2 seconds delay)
     await delay(2000);
@@ -269,11 +285,8 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('[ATS Tailor] Extension installed - setting defaults');
     chrome.storage.local.set({
-      workday_email: 'Maxokafordev@gmail.com',
-      workday_password: 'May19315park@',
-      workday_verify_password: 'May19315park@',
       workday_auto_enabled: true,
-      autoTriggerEnabled: true // Auto-trigger enabled by default
+      autoTriggerEnabled: true
     });
   } else if (details.reason === 'update') {
     console.log('[ATS Tailor] Extension updated to version', chrome.runtime.getManifest().version);
@@ -515,7 +528,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bulkQueue = [];
     updateBulkProgressStorage();
     if (currentBulkTabId) {
-      try { chrome.tabs.remove(currentBulkTabId); } catch {}
+      try { chrome.tabs.remove(currentBulkTabId); } catch (e) {
+        console.warn('[ATS Tailor Bulk] Could not close tab:', e.message);
+      }
       currentBulkTabId = null;
     }
     sendResponse({ status: 'stopped' });
@@ -641,7 +656,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }, 5000);
           
           // Mark as processed
-          processedTabs.add(tab.id);
+          cappedAddProcessedTab(tab.id);
         }
       } catch (e) {}
     })();
@@ -690,11 +705,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[ATS Tailor] 🛑 Thank You page detected, marking as processed:', message.url);
     
     // Add to thank you pages set to prevent re-processing
-    thankYouPages.add(message.url);
-    
+    cappedAddThankYouPage(message.url);
+
     // Mark sender tab as processed
     if (sender.tab?.id) {
-      processedTabs.add(sender.tab.id);
+      cappedAddProcessedTab(sender.tab.id);
       
       // Update badge to indicate skipped
       chrome.action.setBadgeText({ text: '⏭️', tabId: sender.tab.id }).catch(() => {});
@@ -725,9 +740,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             action: 'AUTOMATION_RESET_COMPLETE',
             source: 'background',
             timestamp: Date.now()
-          }).catch(() => {});
+          }).catch((e) => {
+            console.warn('[ATS Tailor] Reset message failed (content script may not be loaded):', e.message);
+          });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[ATS Tailor] Force reset error:', e.message);
+      }
     })();
     
     sendResponse({ status: 'reset_triggered' });
