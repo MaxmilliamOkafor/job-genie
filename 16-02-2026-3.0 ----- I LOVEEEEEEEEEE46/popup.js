@@ -50,54 +50,6 @@ function _buildMMYYYYRange(startDate, endDate) {
   return `${s} – ${e}`;
 }
 
-// ============ PERFECTION v3.0: IMMUTABILITY VALIDATION ============
-// Ensures company names, job titles, and dates are NEVER modified by AI
-function validateWorkExperienceImmutability(originalExperience, tailoredExperience) {
-  if (!Array.isArray(originalExperience) || !Array.isArray(tailoredExperience)) {
-    console.warn('[PERFECTION] Cannot validate: invalid experience arrays');
-    return tailoredExperience;
-  }
-
-  return tailoredExperience.map((tailoredExp, index) => {
-    const originalExp = originalExperience[index];
-    if (!originalExp) return tailoredExp;
-
-    // Force original values for IMMUTABLE fields
-    const origCompany = originalExp.company || originalExp.companyName || '';
-    const origTitle = originalExp.title || originalExp.jobTitle || originalExp.position || '';
-    const origDates = originalExp.dates || originalExp.date || 
-                      _buildMMYYYYRange(originalExp.startDate, originalExp.endDate);
-
-    const result = {
-      ...tailoredExp,
-      company: origCompany,     // ← LOCKED FROM ORIGINAL PROFILE
-      companyName: origCompany, // ← LOCKED FROM ORIGINAL PROFILE
-      title: origTitle,         // ← LOCKED FROM ORIGINAL PROFILE
-      jobTitle: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
-      position: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
-      dates: origDates,         // ← LOCKED FROM ORIGINAL PROFILE
-      date: origDates,          // ← LOCKED FROM ORIGINAL PROFILE
-      startDate: originalExp.startDate || tailoredExp.startDate,
-      endDate: originalExp.endDate || tailoredExp.endDate,
-      // Keep tailored bullets/achievements
-      bullets: tailoredExp.bullets || tailoredExp.achievements || tailoredExp.description || originalExp.bullets || [],
-      achievements: tailoredExp.achievements || tailoredExp.bullets || originalExp.achievements || []
-    };
-
-    // Log any detected changes for debugging
-    if (tailoredExp.company !== origCompany || tailoredExp.title !== origTitle) {
-      console.warn(`[PERFECTION] ⚠️ Immutable field override at index ${index}:`, {
-        originalCompany: origCompany,
-        attemptedCompany: tailoredExp.company,
-        originalTitle: origTitle,
-        attemptedTitle: tailoredExp.title
-      });
-    }
-
-    return result;
-  });
-}
-
 console.log('[ATS PERFECTION] v3.0 loaded with immutable field protection');
 
 // ============ TIER 1-2 TECH COMPANY DETECTION (70+ companies) ============
@@ -1127,11 +1079,11 @@ class ATSTailor {
     if (!step) return;
     const icon = step.querySelector('.step-icon');
     if (status === 'working') {
-      icon.textContent = '⏳';
+      if (icon) icon.textContent = '⏳';
       step.classList.add('active');
       step.classList.remove('complete');
     } else if (status === 'complete') {
-      icon.textContent = '✓';
+      if (icon) icon.textContent = '✓';
       step.classList.remove('active');
       step.classList.add('complete');
     }
@@ -1443,13 +1395,15 @@ class ATSTailor {
   }
   
   startBulkProgressPolling() {
-    setInterval(() => {
+    if (this._bulkPollInterval) clearInterval(this._bulkPollInterval);
+    this._bulkPollInterval = setInterval(() => {
       chrome.runtime.sendMessage({ action: 'GET_BULK_PROGRESS' }, (response) => {
+        if (chrome.runtime.lastError) return;
         if (response?.progress) {
           this.updateBulkProgress(response.progress);
         }
       });
-    }, 1000);
+    }, 2000);
   }
   
   updateBulkProgress(progress) {
@@ -3883,7 +3837,7 @@ class ATSTailor {
         jobUrl: this.currentJob?.url || window.location?.href
       });
     } finally {
-      // INSTANT RESET TO BLUE READY STATE: No delays, always ready for next URL
+      // INSTANT RESET TO BLUE READY STATE
       const btnIconLeft = btn.querySelector('.btn-icon-left');
       const btnText = btn.querySelector('.btn-text');
       const btnTime = btn.querySelector('.btn-time');
@@ -3892,31 +3846,22 @@ class ATSTailor {
       btn.classList.remove('btn-tailoring');
       btn.classList.add('btn-gradient');
 
-      
-      btn.disabled = false;
-      btn.classList.remove('btn-tailoring');
-      btn.classList.add('btn-gradient');
-      
-      // Set BLUE READY state
       if (btnIconLeft) btnIconLeft.textContent = '⚡';
       if (btnText) btnText.textContent = 'Extract & Apply Keywords to CV';
       if (btnTime) btnTime.textContent = '~5s';
 
-      // Only hide progress UI on success; on error keep it visible so user sees the message
+      // On error keep progress visible so user sees the message; otherwise hide
       const hadError = progressText && progressText.textContent.startsWith('Error:');
       if (!hadError) {
         progressContainer?.classList.add('hidden');
       }
-      
-      // Immediately reset progress UI
-      progressContainer?.classList.add('hidden');
+
       [1, 2, 3].forEach(n => {
         const step = document.getElementById(`step${n}`);
         if (step) {
           step.classList.remove('active', 'complete');
           const icon = step.querySelector('.step-icon');
           if (icon) icon.textContent = hadError ? '❌' : '⏳';
-          if (icon) icon.textContent = '⏳';
         }
       });
     }

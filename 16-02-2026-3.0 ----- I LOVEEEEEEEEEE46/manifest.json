@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Genie — Smart CV & Cover Letter Tailor",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Automatically tailor your CV and cover letter to every job posting. Intelligent keyword matching, ATS-optimised PDF generation, cover letter builder, and one-click application across 130+ hiring platforms including Greenhouse, Workday, SmartRecruiters, and major company career sites.",
   "permissions": [
     "storage",
