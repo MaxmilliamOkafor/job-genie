@@ -1,31 +1,24 @@
-// content-quality-engine.js - Anti-AI Detection & Content Quality v2.0
-// Features: UK spelling enforcement, banned words filtering, em dash removal, sentence variation
-// Ensures authentic, human-written content that avoids AI detection patterns
-// v2.0: Comprehensive UK spelling, expanded banned words, sentence structure variation detection
+// content-quality-engine.js - Anti-AI Detection & Content Quality v3.0
+// v3.0: Comprehensive anti-AI humaniser — 200+ banned words, 150+ banned phrases,
+//       50+ regex patterns, sentence-structure variation, paragraph-opening diversification
 
 (function(global) {
   'use strict';
 
-  // ============ BANNED WORDS & PHRASES (AI Detection Flags) ============
-  // COMPLETE LIST - Never use these words in CV/Cover Letter content
+  // ============ BANNED WORDS (AI Detection Flags) ============
   const BANNED_WORDS = [
-    // Original banned list
     'orchestrated', 'championed', 'pioneered', 'helmed', 'realm',
     'comprehensive', 'demonstrating', 'showcasing', 'spearheaded',
     'meticulous', 'approximately', 'dynamic', 'synergy', 'cutting-edge',
     'best-in-class', 'world-class', 'results-driven', 'detail-oriented',
     'team player', 'go-getter', 'various', 'assisted',
-    // Leverage/Utilize variants (buzzword usage)
     'leverage', 'leveraging', 'leveraged',
     'utilize', 'utilizing', 'utilized', 'utilising', 'utilised',
     'utilise', 'utilization', 'utilisation',
-    // Additional banned terms from spec
-    'measurable', // Replace with actual metrics/numbers
-    // Roast-flagged buzzwords
+    'measurable',
     'proactively', 'proactive', 'passionate', 'passion',
     'extensive experience', 'strong background',
     'highly skilled', 'well-versed', 'adept',
-    // v3.2 additions — expanded AI/buzzword detection from JobOwl analysis
     'robust', 'seamless', 'holistic', 'synergistic', 'transformative',
     'groundbreaking', 'revolutionary', 'unparalleled', 'unprecedented',
     'invaluable', 'instrumental', 'paramount', 'pivotal',
@@ -35,18 +28,53 @@
     'impactful', 'synergize', 'ideate', 'operationalize',
     'ecosystem', 'landscape', 'wheelhouse', 'deep-dive',
     'self-starter', 'hard-working', 'hardworking',
-    'seasoned', 'consummate', 'top-notch', 'first-rate'
+    'seasoned', 'consummate', 'top-notch', 'first-rate',
+    // v3.0 — words flagged by GPTZero, Originality.ai, Turnitin, Copyleaks
+    'furthermore', 'moreover', 'additionally', 'subsequently',
+    'consequently', 'henceforth', 'nonetheless', 'notwithstanding',
+    'facilitate', 'facilitated', 'facilitating',
+    'endeavour', 'endeavor', 'endeavoured', 'endeavored',
+    'spearhead', 'trailblazing', 'trailblazer',
+    'cornerstone', 'linchpin', 'bedrock', 'catalyst',
+    'intricate', 'intricacies', 'complexities',
+    'plethora', 'myriad', 'copious', 'abundant',
+    'burgeoning', 'nascent', 'fledgling',
+    'trajectory', 'paradigm', 'ethos',
+    'proficient', 'proficiency',
+    'adeptly', 'astutely', 'diligently',
+    'meticulously', 'rigorously', 'strategically',
+    'wholeheartedly', 'steadfastly', 'unwavering',
+    'exemplary', 'commendable', 'noteworthy', 'remarkable',
+    'indispensable', 'imperative', 'quintessential',
+    'amalgamation', 'confluence', 'convergence',
+    'bolstered', 'bolster', 'augmented', 'augment',
+    'propelled', 'catapulted', 'galvanised', 'galvanized',
+    'underscored', 'underscore', 'underscoring',
+    'dovetails', 'dovetail', 'dovetailed',
+    'juxtapose', 'juxtaposed', 'juxtaposition',
+    'dichotomy', 'interplay', 'nexus', 'tapestry',
+    'overarching', 'wide-ranging', 'far-reaching',
+    'underpinned', 'underpinning', 'underpin',
+    'spanned', 'encompassed', 'encompassing',
+    'ensured', 'ensuring',
+    'whilst', 'hereby', 'therein', 'thereof', 'whereby',
+    'aforementioned', 'abovementioned',
+    'honed', 'refined',
+    'garnered', 'accrued', 'amassed',
+    'poised', 'primed',
+    'bespoke', 'tailor-made',
+    'unmatched', 'unsurpassed', 'unrivalled', 'unrivaled',
+    'cognisant', 'cognizant', 'conversant',
+    'elucidated', 'elucidate', 'delineated', 'delineate',
+    'exigencies', 'vicissitudes'
   ];
 
   const BANNED_PHRASES = [
-    // Proven X phrases
     'proven ability', 'proven track record', 'proven record',
     'proven proficiency', 'proven proficiency in', 'proven expertise',
-    // Buzzword phrases
     'the intersection of', 'drive impactful outcomes',
     'strategic initiatives', 'stakeholder environments',
     'think outside the box', 'highly motivated',
-    // Corporate jargon
     'deep dive', 'low-hanging fruit', 'move the needle',
     'circle back', 'touch base', 'game-changer', 'paradigm shift',
     'best practices', 'core competencies', 'value proposition',
@@ -55,7 +83,6 @@
     'state-of-the-art', 'next-generation', 'mission-critical',
     'thought leadership', 'disruptive innovation',
     'optimizing ci/cd processes', 'optimising ci/cd processes',
-    // v3.2 additions — expanded corporate jargon and AI-flagged phrases
     'in order to', 'as well as', 'a wide range of', 'a plethora of',
     'a myriad of', 'wide array of', 'vast array of',
     'plays a crucial role', 'plays a key role', 'plays a vital role',
@@ -69,10 +96,79 @@
     'in today\'s competitive landscape', 'in this day and age',
     'passionate about', 'enthusiastic about driving',
     'uniquely positioned', 'well-positioned to',
-    'demonstrated ability to', 'demonstrated expertise in'
+    'demonstrated ability to', 'demonstrated expertise in',
+    // v3.0 — deep AI-detection phrases (GPTZero/Originality/Copyleaks research)
+    'it is important to note', 'it is crucial to note',
+    'it is essential to', 'it is imperative to',
+    'in light of', 'in the realm of', 'in the context of',
+    'with respect to', 'with regard to', 'in terms of',
+    'on the other hand', 'by the same token',
+    'to that end', 'to this end', 'in this regard',
+    'it cannot be overstated', 'it bears mentioning',
+    'a testament to', 'a reflection of',
+    'stands as a', 'serves as a testament',
+    'has been instrumental in', 'was instrumental in',
+    'has played a pivotal role', 'played a pivotal role',
+    'at the forefront of', 'has been at the forefront',
+    'I am deeply committed', 'deeply committed to',
+    'I firmly believe', 'I am firmly committed',
+    'I am well-equipped', 'well-equipped to',
+    'I am eager to', 'eager to contribute',
+    'I bring a wealth of', 'a wealth of experience',
+    'track record of success', 'track record of delivering',
+    'consistent track record', 'strong track record',
+    'hands-on experience with', 'extensive experience with',
+    'extensive knowledge of', 'in-depth knowledge of',
+    'in-depth understanding', 'deep understanding of',
+    'solid understanding of', 'thorough understanding of',
+    'significant experience', 'considerable experience',
+    'honed my skills', 'sharpened my skills',
+    'committed to excellence', 'strive for excellence',
+    'dedicated to delivering', 'dedicated to ensuring',
+    'aligned with the company', 'aligned with your mission',
+    'in a fast-paced', 'thrives in fast-paced',
+    'cross-functional collaboration', 'cross-functional teams',
+    'I am confident that', 'I am confident my',
+    'make me an ideal candidate', 'ideal candidate for',
+    'make me a strong candidate', 'strong candidate for',
+    'the perfect fit', 'a perfect fit',
+    'I look forward to the opportunity', 'relish the opportunity',
+    'I welcome the opportunity', 'welcome the chance',
+    'I would be thrilled', 'I would be delighted',
+    'at your earliest convenience', 'at your convenience',
+    'do not hesitate to contact', 'please do not hesitate',
+    'thank you for your time and consideration',
+    'thank you for considering my application',
+    'I am excited about', 'excited to bring',
+    'I am enthusiastic about', 'enthusiastic about joining',
+    'tangible results', 'tangible outcomes', 'tangible impact',
+    'measurable results', 'measurable outcomes', 'measurable impact',
+    'concrete results', 'quantifiable results',
+    'directly contributed to', 'contributed significantly to',
+    'was pivotal in', 'was crucial in', 'was key in',
+    'high-stakes environment', 'high-stakes environments',
+    'high-visibility', 'high-impact',
+    'drove significant', 'drove substantial',
+    'successfully implemented', 'successfully delivered',
+    'successfully managed', 'successfully led',
+    'effectively managed', 'effectively led',
+    'strategically planned', 'strategically positioned',
+    'throughout my career', 'throughout my tenure',
+    'over the course of', 'during my tenure',
+    'my professional journey', 'career journey',
+    'throughout my professional journey',
+    'skill set', 'skillset', 'toolkit',
+    'brings to the table', 'bring to the table',
+    'in my capacity as', 'in my role as',
+    'a combination of', 'combining my',
+    'coupled with', 'coupled with my',
+    'paired with', 'paired with my',
+    'I wholeheartedly', 'I am wholeheartedly',
+    'resonates deeply', 'resonates strongly',
+    'your esteemed', 'your renowned', 'your prestigious'
   ];
 
-  // ============ AI DETECTION PHRASE PATTERNS ============
+  // ============ AI DETECTION PHRASE PATTERNS (regex) ============
   const AI_PHRASE_PATTERNS = [
     /resulting in/gi,
     /leading to/gi,
@@ -84,7 +180,6 @@
     /in alignment with/gi,
     /in conjunction with/gi,
     /in tandem with/gi,
-    // v3.2 additions — deeper AI detection patterns from JobOwl analysis
     /this (ensured|enabled|allowed|facilitated)/gi,
     /I (successfully|effectively|strategically|proactively)\s/gi,
     /as a result of (my|this|these)/gi,
@@ -96,7 +191,39 @@
     /moreover,?\s/gi,
     /additionally,?\s/gi,
     /in (my|this|the) (capacity|role) as/gi,
-    /demonstrat(ed|ing) (a |my )?(strong|deep|solid)/gi
+    /demonstrat(ed|ing) (a |my )?(strong|deep|solid)/gi,
+    // v3.0 — patterns AI detectors specifically key on
+    /I am (deeply|firmly|strongly|fully) (committed|convinced|confident|dedicated)/gi,
+    /this (position|role|opportunity) (aligns|resonates|dovetails)/gi,
+    /I (possess|bring|offer) a (unique|rare|strong|diverse) (combination|blend|mix)/gi,
+    /(my|the) ability to (seamlessly|effectively|efficiently|strategically)/gi,
+    /I (thrive|excel|flourish) in/gi,
+    /has (equipped|prepared|positioned) me/gi,
+    /has (honed|sharpened|refined|strengthened) my/gi,
+    /I have (consistently|continually|repeatedly) (delivered|exceeded|surpassed)/gi,
+    /I am (well-suited|well suited|ideally suited|uniquely suited)/gi,
+    /(extensive|considerable|significant|substantial) experience in/gi,
+    /a (proven|demonstrated|established|solid|strong) track record/gi,
+    /I (believe|feel|think) (that )?my (experience|background|skills)/gi,
+    /would (make|render) me (an?|the) (ideal|excellent|strong|perfect)/gi,
+    /allow me to (hit the ground running|contribute immediately)/gi,
+    /I am (writing|reaching out|applying) to express/gi,
+    /I am confident (that |in )?(my|I)/gi,
+    /(poised|ready|prepared|equipped) to (make|deliver|drive|contribute)/gi,
+    /what (sets|makes) me (apart|unique|different|stand out)/gi,
+    /not only .{5,40} but also/gi,
+    /both .{3,20} and .{3,20} (skills|abilities|capabilities)/gi,
+    /my (unique|diverse|broad|extensive) (background|experience|skill set)/gi,
+    /I (look forward|am eager|am excited|am keen) to (the opportunity|discussing|exploring|contributing)/gi,
+    /(sincerely|genuinely|truly) (believe|feel|hope)/gi,
+    /I have a (strong|genuine|deep) (interest|desire|commitment)/gi,
+    /aligns (well|closely|perfectly|directly) with/gi,
+    /your (esteemed|renowned|prestigious|respected) (company|organisation|organization|firm)/gi,
+    /\b(utilise|utilize|leverage|harness|employ) (my|the|this|these) (expertise|experience|knowledge|skills)\b/gi,
+    /I have (always|long) been (passionate|fascinated|interested)/gi,
+    /I would (relish|cherish|welcome|appreciate) the (opportunity|chance|prospect)/gi,
+    /^(in conclusion|to summarise|to summarize|in summary),?\s/gim,
+    /^(as mentioned|as noted|as discussed|as stated|as highlighted),?\s/gim
   ];
 
   // ============ REPLACEMENT MAPPINGS ============
@@ -186,7 +313,88 @@
     'seasoned': 'experienced',
     'consummate': 'skilled',
     'top-notch': 'excellent',
-    'first-rate': 'excellent'
+    'first-rate': 'excellent',
+    // v3.0 — replacements for newly banned words
+    'furthermore': '',
+    'moreover': '',
+    'additionally': 'also',
+    'subsequently': 'then',
+    'consequently': 'so',
+    'nonetheless': 'still',
+    'notwithstanding': 'despite',
+    'facilitate': 'help',
+    'facilitated': 'helped',
+    'facilitating': 'helping',
+    'endeavour': 'effort',
+    'endeavor': 'effort',
+    'cornerstone': 'foundation',
+    'linchpin': 'core',
+    'bedrock': 'basis',
+    'catalyst': 'driver',
+    'intricate': 'complex',
+    'plethora': 'many',
+    'myriad': 'many',
+    'copious': 'many',
+    'abundant': 'plenty of',
+    'trajectory': 'direction',
+    'paradigm': 'model',
+    'ethos': 'culture',
+    'proficient': 'skilled',
+    'proficiency': 'skill',
+    'adeptly': 'well',
+    'astutely': 'carefully',
+    'diligently': 'carefully',
+    'meticulously': 'carefully',
+    'rigorously': 'thoroughly',
+    'strategically': '',
+    'wholeheartedly': 'fully',
+    'steadfastly': 'consistently',
+    'unwavering': 'steady',
+    'exemplary': 'strong',
+    'commendable': 'good',
+    'noteworthy': 'notable',
+    'remarkable': 'strong',
+    'indispensable': 'essential',
+    'imperative': 'important',
+    'quintessential': 'typical',
+    'bolstered': 'strengthened',
+    'bolster': 'strengthen',
+    'augmented': 'added to',
+    'augment': 'add to',
+    'propelled': 'moved',
+    'catapulted': 'pushed',
+    'galvanised': 'motivated',
+    'galvanized': 'motivated',
+    'underscored': 'showed',
+    'underscore': 'show',
+    'overarching': 'broad',
+    'wide-ranging': 'broad',
+    'far-reaching': 'broad',
+    'underpinned': 'supported',
+    'underpinning': 'supporting',
+    'encompassed': 'included',
+    'encompassing': 'including',
+    'ensured': 'made sure',
+    'ensuring': 'making sure',
+    'whilst': 'while',
+    'hereby': '',
+    'aforementioned': 'previous',
+    'honed': 'improved',
+    'refined': 'improved',
+    'garnered': 'gained',
+    'accrued': 'gained',
+    'amassed': 'built up',
+    'poised': 'ready',
+    'primed': 'ready',
+    'bespoke': 'custom',
+    'tailor-made': 'custom',
+    'unmatched': 'strong',
+    'unsurpassed': 'top',
+    'unrivalled': 'top',
+    'unrivaled': 'top',
+    'cognisant': 'aware',
+    'cognizant': 'aware',
+    'conversant': 'familiar'
   };
 
   const PHRASE_REPLACEMENTS = {
@@ -247,7 +455,98 @@
     'tasked with': '',
     'furthermore': '',
     'moreover': '',
-    'additionally': 'also'
+    'additionally': 'also',
+    // v3.0 — replacements for newly banned phrases
+    'it is important to note': '',
+    'it is crucial to note': '',
+    'it is essential to': 'I need to',
+    'it is imperative to': 'I need to',
+    'in light of': 'given',
+    'in the realm of': 'in',
+    'in the context of': 'within',
+    'with respect to': 'about',
+    'with regard to': 'about',
+    'in terms of': 'for',
+    'to that end': 'so',
+    'to this end': 'so',
+    'in this regard': 'here',
+    'it cannot be overstated': '',
+    'it bears mentioning': '',
+    'a testament to': 'showing',
+    'a reflection of': 'showing',
+    'at the forefront of': 'leading',
+    'I am deeply committed': 'I am committed',
+    'deeply committed to': 'committed to',
+    'I am firmly committed': 'I am committed',
+    'I firmly believe': 'I believe',
+    'I am well-equipped': 'I am ready',
+    'well-equipped to': 'ready to',
+    'I am eager to': 'I want to',
+    'eager to contribute': 'ready to contribute',
+    'I bring a wealth of': 'I bring',
+    'a wealth of experience': 'experience',
+    'track record of success': 'record',
+    'track record of delivering': 'history of delivering',
+    'extensive experience with': 'experience with',
+    'extensive knowledge of': 'knowledge of',
+    'in-depth knowledge of': 'knowledge of',
+    'in-depth understanding': 'understanding',
+    'deep understanding of': 'understanding of',
+    'solid understanding of': 'understanding of',
+    'thorough understanding of': 'understanding of',
+    'significant experience': 'experience',
+    'considerable experience': 'experience',
+    'honed my skills': 'built my skills',
+    'committed to excellence': 'committed to quality',
+    'I am confident that': '',
+    'I am confident my': 'My',
+    'make me an ideal candidate': 'suit this role',
+    'ideal candidate for': 'a fit for',
+    'make me a strong candidate': 'suit this role',
+    'I look forward to the opportunity': 'I look forward',
+    'I welcome the opportunity': 'I would like',
+    'I would be thrilled': 'I would be glad',
+    'I would be delighted': 'I would be glad',
+    'at your earliest convenience': 'when convenient',
+    'do not hesitate to contact': 'feel free to contact',
+    'please do not hesitate': 'feel free',
+    'tangible results': 'results',
+    'tangible outcomes': 'outcomes',
+    'measurable results': 'results',
+    'measurable outcomes': 'outcomes',
+    'concrete results': 'results',
+    'quantifiable results': 'results',
+    'successfully implemented': 'implemented',
+    'successfully delivered': 'delivered',
+    'successfully managed': 'managed',
+    'successfully led': 'led',
+    'effectively managed': 'managed',
+    'effectively led': 'led',
+    'strategically planned': 'planned',
+    'throughout my career': 'across my career',
+    'over the course of': 'over',
+    'during my tenure': 'while there',
+    'my professional journey': 'my career',
+    'career journey': 'career',
+    'skill set': 'skills',
+    'skillset': 'skills',
+    'toolkit': 'skills',
+    'brings to the table': 'offers',
+    'bring to the table': 'offer',
+    'in my capacity as': 'as',
+    'in my role as': 'as',
+    'coupled with': 'along with',
+    'coupled with my': 'along with my',
+    'I am excited about': 'I am interested in',
+    'I am enthusiastic about': 'I am interested in',
+    'high-stakes environment': 'demanding environment',
+    'high-visibility': 'visible',
+    'high-impact': 'important',
+    'cross-functional collaboration': 'working across teams',
+    'cross-functional teams': 'mixed teams',
+    'your esteemed': 'your',
+    'your renowned': 'your',
+    'your prestigious': 'your'
   };
 
   // ============ US TO UK SPELLING CONVERSIONS ============
@@ -461,10 +760,77 @@
         result = this.removeBannedContent(result);
       }
 
+      // Step 7: Humaniser pass — break AI-detectable patterns
+      result = this.humaniseText(result);
+
       // Final cleanup
       result = this.finalCleanup(result);
 
       return result;
+    },
+
+    // ============ HUMANISER PASS (v3.0 anti-AI detection) ============
+    humaniseText(text) {
+      if (!text || typeof text !== 'string') return text;
+      let r = text;
+
+      // 1. Break consecutive sentences starting with "I" — AI writing signature
+      //    "I did X. I then Y. I also Z." → vary with "The", "This", "My", drop subject
+      r = r.replace(/(\. )(I )(have |had |am |was |will |would |can |could |did )?/g, (match, dot, subj, aux, offset) => {
+        const rand = Math.random();
+        if (rand < 0.25) return dot + (aux || '');       // drop subject entirely: ". Had..."
+        if (rand < 0.45) return dot + 'My ';              // ". My work..."
+        if (rand < 0.60) return dot + 'This ';            // ". This..."
+        return match;                                      // keep 40% unchanged for variety
+      });
+
+      // 2. Vary paragraph/sentence openers — flag if 3+ consecutive sentences start same way
+      const sentences = r.split(/(?<=[.!?])\s+/);
+      if (sentences.length >= 3) {
+        const openers = sentences.map(s => (s.match(/^\S+/) || [''])[0].toLowerCase());
+        for (let i = 2; i < openers.length; i++) {
+          if (openers[i] === openers[i - 1] && openers[i] === openers[i - 2]) {
+            const alts = ['Specifically, ', 'For example, ', 'In practice, ', 'Here, ', 'At ', 'One example: '];
+            const pick = alts[Math.floor(Math.random() * alts.length)];
+            sentences[i] = pick + sentences[i].charAt(0).toLowerCase() + sentences[i].slice(1);
+          }
+        }
+        r = sentences.join(' ');
+      }
+
+      // 3. Contract formal phrases to casual contractions (human writers use these)
+      r = r.replace(/\bI have\b/g, () => Math.random() < 0.4 ? "I've" : 'I have');
+      r = r.replace(/\bI would\b/g, () => Math.random() < 0.4 ? "I'd" : 'I would');
+      r = r.replace(/\bI will\b/g, () => Math.random() < 0.3 ? "I'll" : 'I will');
+      r = r.replace(/\bdo not\b/g, () => Math.random() < 0.3 ? "don't" : 'do not');
+      r = r.replace(/\bdid not\b/g, () => Math.random() < 0.3 ? "didn't" : 'did not');
+      r = r.replace(/\bcannot\b/g, () => Math.random() < 0.3 ? "can't" : 'cannot');
+      r = r.replace(/\bwould not\b/g, () => Math.random() < 0.3 ? "wouldn't" : 'would not');
+      r = r.replace(/\bit is\b/g, () => Math.random() < 0.3 ? "it's" : 'it is');
+      r = r.replace(/\bthat is\b/g, () => Math.random() < 0.3 ? "that's" : 'that is');
+
+      // 4. Vary sentence length — split overly long sentences (AI tends to write long, even ones)
+      r = r.replace(/([^.!?]{120,?})(,\s)(which |that |where |and )/g, (m, before, comma, conj) => {
+        if (Math.random() < 0.4) return before + '. ' + conj.charAt(0).toUpperCase() + conj.slice(1);
+        return m;
+      });
+
+      // 5. Remove adverb-stacking (two+ adverbs near each other is an AI signature)
+      r = r.replace(/\b(consistently|effectively|efficiently|significantly|substantially|dramatically|tremendously|considerably)\s+(improved|enhanced|increased|reduced|decreased|boosted|grew|delivered)/gi,
+        (m, adv, verb) => verb);
+
+      // 6. Replace passive "was/were + past participle" with active where possible
+      r = r.replace(/\bwas (given|assigned|tasked|entrusted|appointed)\b/gi, 'received');
+      r = r.replace(/\bwere (implemented|deployed|developed|built|created)\b/gi, (m, verb) => verb);
+
+      // 7. Remove filler hedging that AI inserts ("I believe that", "I feel that")
+      r = r.replace(/\bI (believe|feel|think) that\b/gi, '');
+
+      // 8. Collapse double spaces introduced by removals
+      r = r.replace(/ {2,}/g, ' ');
+      r = r.replace(/\.\s*\.\s/g, '. ');
+
+      return r.trim();
     },
 
     // ============ CV/ATS BLOCK SANITISATION (Preserve line layout) ============

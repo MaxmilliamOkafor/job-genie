@@ -6,88 +6,90 @@
 (function(global) {
   'use strict';
 
-  // ============ COVER LETTER TEMPLATES ============
+  // ============ COVER LETTER TEMPLATES (v3.0 — rewritten for AI-detection resistance) ============
+  // Each template uses varied sentence structures, avoids formulaic openers,
+  // mixes sentence lengths, and sounds like a real person wrote it.
   const TEMPLATES = {
     professional: {
       name: 'Professional',
       opening: [
-        'I am applying for the {jobTitle} position at {company} because the role aligns directly with my strongest capabilities and career trajectory. My track record of delivering measurable results in high-stakes environments makes me confident I can contribute from day one.',
-        'I am writing with genuine interest in the {jobTitle} role at {company}. My career has been defined by converting complex challenges into delivered outcomes, and the scope of this position is exactly where I can make the greatest impact.',
-        'The {jobTitle} opportunity at {company} is a compelling match for my {domain} expertise and my ambition to work on problems that matter. I bring both the technical depth and the leadership instincts this role demands.',
-        'I am submitting my application for the {jobTitle} position at {company}, where my proven ability to scale solutions, lead cross-functional delivery, and drive measurable business outcomes aligns closely with your requirements.',
-        'I am writing to express my interest in the {jobTitle} position at {company}, where I believe my track record of delivering measurable results would be a strong fit.',
-        'I am applying for the {jobTitle} role at {company}. My career has been defined by consistent delivery in high-impact environments, and I am confident this experience translates directly to your team.',
-        'I am keen to bring my {domain} expertise to {company} as a {jobTitle}, building on a track record of driving both technical and commercial outcomes.'
+        'Your {jobTitle} listing caught my attention because the day-to-day work maps closely to what I have been doing for the past few years in {domain}. Rather than list qualifications, I would rather explain why I think this is a good match.',
+        'I spotted the {jobTitle} role at {company} and wanted to apply straight away. The requirements read like a summary of the work I do best, and I think there is a real fit here.',
+        'The {jobTitle} position at {company} stood out to me. I have spent my career solving the kinds of problems described in the listing, and I would like the chance to do the same for your team.',
+        'I am writing about the {jobTitle} opening at {company}. Having worked in {domain} for a while now, the brief felt like something written with my background in mind.',
+        'When I read through the {jobTitle} brief at {company}, two things were clear: the work is technically interesting and the requirements overlap with what I already do well. That is why I am applying.',
+        'I would like to apply for the {jobTitle} role at {company}. The scope of the position fits squarely with the type of {domain} work I have been doing, and I think I can bring something useful to the team.',
+        'I came across the {jobTitle} position at {company} and it caught my eye. The problems you are trying to solve are the same ones I have been working on, and I think I could add real value.'
       ],
       bridge: [
-        'Over {yearsExp} years in {domain}, I have built a career around translating strategic priorities into tangible business results — repeatedly taking on increasing scope and exceeding expectations.',
-        'My {yearsExp}-year background in {domain} has given me deep technical fluency alongside the stakeholder management and commercial awareness needed to operate effectively at a senior level.',
-        'With {yearsExp} years of progressive experience in {domain}, I have developed the rare combination of hands-on technical capability and strategic thinking that high-performing teams need.',
-        'With {yearsExp} years of progressive experience in {domain}, I have built a career around translating strategic objectives into tangible business outcomes.',
-        'My background spans {yearsExp} years in {domain}, during which I have consistently taken on increasing scope and delivered results that exceeded expectations.',
-        'Over {yearsExp} years in {domain}, I have developed deep technical fluency alongside the stakeholder management skills needed to operate effectively at a senior level.'
+        'I have spent roughly {yearsExp} years working in {domain}. During that time I have picked up the technical skills the role asks for, but more importantly I have learned how to get things shipped on time and to a standard I am proud of.',
+        'My background is {yearsExp} years in {domain}, mostly spent building things, fixing things, and figuring out how to do both faster. I have worked with senior stakeholders and know how to turn their priorities into actual delivered work.',
+        'Over the past {yearsExp} years I have worked across several {domain} roles. Each one taught me something different, but the common thread has been taking on hard problems and delivering outcomes people could point to.',
+        'I have {yearsExp} years of {domain} experience. What that really means is I have had enough time to learn what works, what does not, and how to tell the difference quickly.',
+        'Across {yearsExp} years in {domain}, I have gone from writing code to running projects to mentoring others who now do both. The technical and people sides of the work come naturally to me at this point.',
+        'My {yearsExp} years in {domain} have given me a good mix of hands-on technical ability and the softer skills you need when working with clients, leadership, or teams under pressure.'
       ],
       closing: [
-        'I am confident my combination of technical capability, leadership instinct, and delivery track record would make a meaningful contribution to {company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.',
-        'I would welcome the opportunity to show how my skills and delivery record translate directly into value for {company}. Thank you for considering my application — I look forward to discussing this further.',
-        'Thank you for your consideration. I am available at your convenience and eager to discuss how my background can accelerate {company}\'s goals.',
-        'I would welcome the opportunity to discuss how my experience can contribute to {company}\'s goals. Thank you for your time and consideration.',
-        'I look forward to exploring how my skills and delivery record can add value to {company}. Thank you for considering my application.',
-        'Thank you for your consideration. I am available at your convenience to discuss how I can contribute to {company}\'s continued growth.'
+        'I would be happy to chat about how my background fits the role. Thank you for reading this far — I appreciate your time.',
+        'If the above sounds like a fit, I am free to talk whenever works for you. Thanks for considering me.',
+        'I hope this gives a good sense of what I can bring. I am available to discuss the role at your convenience. Thank you.',
+        'Happy to go into more detail on any of the above. Thanks for your time, and I hope to hear from you.',
+        'I think there is a strong match here and I would enjoy the chance to prove it. Thank you for your time.',
+        'Thanks for taking the time to read this. I am around whenever suits for a conversation about the role.'
       ]
     },
     enthusiastic: {
       name: 'Enthusiastic',
       opening: [
-        'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role, the calibre of the team, and the impact of the work make this an outstanding opportunity I am determined to pursue.',
-        'The {jobTitle} role at {company} sits at the intersection of my strongest skills and deepest professional ambitions. I have been building towards exactly this kind of opportunity throughout my career.',
-        'I was pleased to discover the {jobTitle} opening at {company}. It represents the kind of high-impact, technically challenging work that has driven every career decision I have made.',
-        'I was immediately drawn to the {jobTitle} position at {company} — the scope of the role and the calibre of the team make this an outstanding opportunity.',
-        'The {jobTitle} role at {company} aligns perfectly with the direction I have been building towards throughout my career, and I am excited to apply.',
-        'I was pleased to discover the {jobTitle} opening at {company}, as it sits at the intersection of my strongest skills and deepest professional interests.'
+        'I got genuinely excited when I saw the {jobTitle} position at {company}. Not in a vague way — the specific problems listed in the brief are exactly what I spend my days thinking about.',
+        'The {jobTitle} role at {company} is the kind of thing I have been looking for. The technical scope is interesting, the team looks strong, and the work itself matters. I wanted to apply before someone else snapped it up.',
+        'I have been following {company} for a while, so when the {jobTitle} opening came up it felt like the right moment to put my hand up. The role matches what I do well and what I want to do next.',
+        'I want to apply for the {jobTitle} at {company}. Honestly, it is not often that a job description makes me stop scrolling, but this one did. The work is exactly the kind of challenge I enjoy.',
+        'The {jobTitle} listing at {company} immediately grabbed me. I have spent {yearsExp} years doing similar work in {domain}, and the idea of doing it at {company} is very appealing.',
+        'I read the {jobTitle} brief at {company} twice because I wanted to make sure it was as good a fit as it seemed on first read. It is. I would love to be considered.'
       ],
       bridge: [
-        'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges where the outcome genuinely matters.',
-        'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems, building systems that perform at scale, and leaving every team stronger than I found it.',
-        'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced, results-driven environments.',
-        'My {yearsExp} years of hands-on experience in {domain} have shaped both my technical depth and my appetite for tackling complex, high-stakes challenges.',
-        'Throughout my {yearsExp}-year career in {domain}, I have developed a genuine drive for solving hard problems and building systems that perform at scale.',
-        'Having spent {yearsExp} years in {domain}, I have built both the technical competence and the collaborative instincts to operate effectively in fast-paced environments.'
+        'I have {yearsExp} years in {domain} and still genuinely enjoy the work. I like the process of taking a messy problem, working out the moving parts, and building something that actually solves it.',
+        'Over {yearsExp} years in {domain}, I have picked up a lot of the technical skills this role needs — but what I think sets me apart is how much I care about getting the details right while still moving quickly.',
+        'My {yearsExp} years in {domain} have been busy ones. I have built systems, led teams, shipped products, and made plenty of mistakes I have since learned from. That mix of experience is what I am bringing here.',
+        'I have been working in {domain} for {yearsExp} years now. In that time I have learned that the best outcomes come from a mix of technical skill, clear communication, and genuine curiosity about the problem.',
+        'What I have learned across {yearsExp} years in {domain} is that good work comes from understanding both the technology and the people it serves. I bring that perspective to everything I do.',
+        'After {yearsExp} years in {domain}, I still get energised by the work. I like building things that matter, fixing things that are broken, and helping teams do both faster.'
       ],
       closing: [
-        'I am confident that my energy, expertise, and delivery record would make a real difference at {company}. I would be glad to discuss how I can contribute — thank you for your time.',
-        'Thank you for considering my application. I am genuinely excited about this opportunity and look forward to discussing how my skills can drive results for {company}.',
-        'I look forward to the possibility of contributing my expertise and energy to {company}\'s mission. Thank you for your time and consideration.',
-        'I would be glad to discuss how I can contribute to {company}\'s mission. Thank you for your time.',
-        'Thank you for considering my application. I look forward to the chance to discuss how my skills can support {company}\'s objectives.',
-        'I am looking forward to the possibility of contributing my expertise and energy to {company}.'
+        'I would really like the chance to talk about this role — even a short conversation would let me show you what I can bring. Thank you for your time.',
+        'If any of this sounds like it could be a fit, I am keen to chat. Thanks for reading, and I hope to speak with you soon.',
+        'I think I could do great things at {company} and I would jump at the chance to prove it. Thanks for considering me.',
+        'I appreciate you taking the time to read this. If there is a fit, I am ready to move quickly. I hope to hear from you.',
+        'I am genuinely interested in this opportunity. Happy to discuss further whenever works for your team. Thank you.',
+        'Thank you for considering me. I would love to chat about how I can contribute to what {company} is building.'
       ]
     },
     concise: {
       name: 'Concise',
       opening: [
-        'I am applying for the {jobTitle} position at {company}. My {domain} experience and delivery track record are directly relevant to this role.',
-        'Please consider my application for the {jobTitle} role at {company}, where my background maps closely to your requirements.',
-        'I wish to be considered for the {jobTitle} position at {company}. I bring the technical depth and execution discipline this role demands.',
-        'Please accept my application for the {jobTitle} position at {company}.',
-        'I am applying for the {jobTitle} role at {company}, where my experience is directly relevant.',
-        'I wish to be considered for the {jobTitle} position at {company}.'
+        'I am applying for the {jobTitle} role at {company}. The requirements map to my {domain} background and I think I can do this job well.',
+        'Writing to apply for the {jobTitle} at {company}. My {domain} experience covers what the role needs.',
+        'I would like to be considered for the {jobTitle} position at {company}. My background fits the brief.',
+        'Applying for the {jobTitle} at {company}. I have the right experience and want to put it to use here.',
+        'I am interested in the {jobTitle} at {company}. The role suits my {domain} skills and the work sounds interesting.',
+        'Please consider me for the {jobTitle} at {company}. I have done this type of work before and done it well.'
       ],
       bridge: [
-        'I bring {yearsExp} years of {domain} experience with a consistent record of delivery, stakeholder trust, and measurable outcomes.',
-        'My {yearsExp}-year background in {domain} has equipped me with the technical skills, leadership capability, and commercial awareness this role requires.',
-        'With {yearsExp} years in {domain}, I offer both technical depth and the operational maturity to contribute from day one.',
-        'I bring {yearsExp} years of {domain} experience with a consistent record of delivery.',
-        'My {yearsExp}-year background in {domain} has equipped me with the skills this role demands.',
-        'With {yearsExp} years in {domain}, I offer both technical depth and operational maturity.'
+        '{yearsExp} years in {domain}. I have built things, shipped things, and know how to deliver under pressure.',
+        'My background: {yearsExp} years in {domain}, with a clear record of getting work done well and on time.',
+        'I bring {yearsExp} years of {domain} work. Technical skills, delivery experience, and the ability to work with anyone.',
+        '{yearsExp} years in {domain}. I know the tools, I know the patterns, and I know how to deliver.',
+        'Quick summary: {yearsExp} years in {domain}. Strong technically, good with people, and I get things finished.',
+        'I have {yearsExp} years in {domain} — enough to know what good looks like and how to get there quickly.'
       ],
       closing: [
-        'I look forward to discussing this opportunity and how my background translates into value for {company}. Thank you for your consideration.',
-        'I welcome the chance to discuss this role further. Thank you for your time.',
-        'I would appreciate the opportunity to explore how I can contribute. Thank you for your consideration.',
-        'I look forward to discussing this opportunity further. Thank you for your consideration.',
-        'Please contact me at your convenience. Thank you for your time.',
-        'I would appreciate the opportunity to discuss this role. Thank you.'
+        'Happy to discuss. Thank you for your time.',
+        'Available to talk whenever works for you. Thanks.',
+        'I would appreciate a conversation about the role. Thank you.',
+        'Thanks for considering me. I am free to chat at your convenience.',
+        'Looking forward to hearing from you. Thank you.',
+        'Let me know if you would like to talk further. Thanks for your time.'
       ]
     }
   };
@@ -96,21 +98,23 @@
   const ACHIEVEMENT_VERBS = [
     'Led', 'Developed', 'Implemented', 'Architected', 'Delivered',
     'Directed', 'Drove', 'Increased', 'Reduced', 'Optimised',
-    'Transformed', 'Streamlined', 'Built', 'Launched', 'Established'
+    'Built', 'Launched', 'Set up', 'Designed', 'Shipped'
   ];
 
-  // ============ NATURAL KEYWORD PHRASES (for cover letters - softer than CV) ============
-  // UPDATED: Removed "leveraging" and "utilising" - banned AI buzzwords
+  // v3.0: Natural keyword connectors — sound like a person mentioning their skills
   const KEYWORD_PHRASES = [
-    'with expertise in',
-    'with strong skills in',
-    'applying',
-    'through',
-    'incorporating',
-    'employing',
-    'using',
-    'via',
-    'working with'
+    'especially around',
+    'mainly in',
+    'including',
+    'particularly',
+    'a lot of it involving',
+    'with a focus on',
+    'hands-on with',
+    'working directly with',
+    'day-to-day with',
+    'most recently in',
+    'covering',
+    'across areas like'
   ];
 
   // ============ COVER LETTER GENERATOR ============
@@ -246,19 +250,19 @@
       return result;
     },
 
-    // ============ BUILD BRIDGE WITH KEYWORDS (2-3 keywords woven in) ============
+    // ============ BUILD BRIDGE WITH KEYWORDS (v3.0 — natural, human tone) ============
     buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
       let bridge = this.selectRandom(bridgeTemplates, replacements);
 
-      // Weave 2-3 keywords naturally into the bridge paragraph
       if (keywords.length >= 3) {
         const kw1 = keywords[0];
         const kw2 = keywords[1];
         const kw3 = keywords[2];
         const phrases = [
-          `This includes deep hands-on work in ${kw1}, ${kw2}, and ${kw3} — skills I have applied consistently to drive measurable outcomes.`,
-          `Core to my approach has been ${kw1} and ${kw2}, alongside ${kw3}, which together form the foundation of how I deliver results.`,
-          `My strengths in ${kw1}, ${kw2}, and ${kw3} have been central to every major initiative I have led.`
+          `Most of that time has been spent on ${kw1}, ${kw2}, and ${kw3}.`,
+          `A big chunk of that involved ${kw1} and ${kw2}, with ${kw3} coming in more recently.`,
+          `${kw1}, ${kw2}, and ${kw3} have been the common thread across those roles.`,
+          `The day-to-day has centred on ${kw1}, ${kw2}, and ${kw3} — all areas I know well.`
         ];
         bridge += ' ' + phrases[Math.floor(Math.random() * phrases.length)];
       } else if (keywords.length >= 2) {
@@ -271,17 +275,20 @@
       return bridge;
     },
 
-    // ============ BUILD CLOSING WITH KEYWORDS (1-2 keywords, confident tone) ============
+    // ============ BUILD CLOSING WITH KEYWORDS ============
     buildClosingWithKeywords(closingTemplates, replacements, keywords) {
       let closing = this.selectRandom(closingTemplates, replacements);
 
-      // The closing templates are already strong. Optionally reinforce with a keyword
-      // if the template doesn't already contain one.
       if (keywords.length >= 5) {
         const kw = keywords[4] || keywords[0];
         const hasKeyword = keywords.some(k => closing.toLowerCase().includes(k.toLowerCase()));
-        if (!hasKeyword && closing.includes('Thank you')) {
-          closing = closing.replace('Thank you', `My ${kw} capabilities would complement your team well. Thank you`);
+        if (!hasKeyword && closing.includes('Thank')) {
+          const injections = [
+            `I am also happy to discuss my ${kw} experience in more detail. `,
+            `If ${kw} matters for this role, I have plenty to share on that front. `,
+            `Happy to go deeper on ${kw} or anything else. `
+          ];
+          closing = injections[Math.floor(Math.random() * injections.length)] + closing;
         }
       }
 
@@ -374,11 +381,10 @@
       return unique.slice(0, count);
     },
 
-    // ============ BUILD BODY PARAGRAPHS WITH KEYWORD INJECTION ============
+    // ============ BUILD BODY PARAGRAPHS (v3.0 — human-sounding, anti-AI-detection) ============
     buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics) {
       const paragraphs = [];
 
-      // Highlight relevant experience
       const experience = candidateData?.professional_experience ||
                         candidateData?.professionalExperience ||
                         candidateData?.workExperience || [];
@@ -388,39 +394,45 @@
         const company = recentJob.company || 'my current organisation';
         const title = recentJob.title || 'my role';
 
-        // Find compelling achievements (prefer bullets with metrics)
         const bullets = recentJob.bullets || recentJob.achievements || [];
         const metricsPattern = /\d+%|\$[\d,]+|\d+x|[0-9]+\+?\s*(users|customers|clients|projects|teams)/i;
         const withMetrics = bullets.filter(b => metricsPattern.test(b));
         const topBullet = withMetrics[0] || bullets[0] || '';
         const secondBullet = withMetrics[1] || bullets[1] || '';
 
-        // PARAGRAPH 1: Concrete evidence — show, don't tell (Keywords 1-3)
         const kw1 = topKeywords[0] || '';
         const kw2 = topKeywords[1] || '';
         const kw3 = topKeywords[2] || '';
 
-        let para1 = `In my most recent role as ${title} at ${company}, I was entrusted with high-visibility programmes that demanded both technical depth and commercial awareness.`;
+        const para1Starts = [
+          `Most recently I worked as ${title} at ${company}.`,
+          `At ${company} I was ${title}.`,
+          `My last role was ${title} at ${company}.`
+        ];
+        let para1 = para1Starts[Math.floor(Math.random() * para1Starts.length)];
+
         if (topBullet) {
           const cleaned = topBullet.replace(/^[•\-*▪]\s*/, '').trim();
-          para1 += ` Notably, I ${cleaned.charAt(0).toLowerCase() + cleaned.slice(1)}`;
+          const lc = cleaned.charAt(0).toLowerCase() + cleaned.slice(1);
+          para1 += ` One thing I am particularly proud of: I ${lc}`;
           if (!para1.endsWith('.')) para1 += '.';
         }
         if (secondBullet) {
           const cleaned2 = secondBullet.replace(/^[•\-*▪]\s*/, '').trim();
-          para1 += ` I also ${cleaned2.charAt(0).toLowerCase() + cleaned2.slice(1)}`;
+          const lc2 = cleaned2.charAt(0).toLowerCase() + cleaned2.slice(1);
+          const bridges = ['On top of that, I ', 'I also ', 'Separately, I '];
+          para1 += ` ${bridges[Math.floor(Math.random() * bridges.length)]}${lc2}`;
           if (!para1.endsWith('.')) para1 += '.';
         }
         if (kw1 && kw2 && kw3) {
-          para1 += ` These results are rooted in my ${kw1}, ${kw2}, and ${kw3} capabilities — skills I would bring directly to your team.`;
+          para1 += ` A lot of that work involved ${kw1}, ${kw2}, and ${kw3} — all of which show up in your job description too.`;
         } else if (kw1 && kw2) {
-          para1 += ` My depth in ${kw1} and ${kw2} maps directly to your requirements.`;
+          para1 += ` Both ${kw1} and ${kw2} were central to that work.`;
         }
 
         paragraphs.push(para1);
       }
 
-      // PARAGRAPH 2: Strategic skills alignment (Keywords 4-7)
       if (topKeywords.length > 3) {
         const skills = [topKeywords[3], topKeywords[4], topKeywords[5], topKeywords[6]].filter(Boolean);
         let skillsList = '';
@@ -433,14 +445,13 @@
         }
 
         const para2Variants = [
-          `Beyond day-to-day execution, I bring depth in ${skillsList} that enables me to operate effectively at both strategic and operational levels. Whether mentoring junior colleagues, negotiating with senior stakeholders, or driving continuous improvement across delivery teams, I consistently raise the bar and create repeatable frameworks that outlast any single project.`,
-          `I also bring strong capabilities in ${skillsList}, which I apply to accelerate delivery timelines, strengthen execution quality, and raise performance standards. My approach is to build sustainable processes — not just hit targets, but create the conditions for teams to consistently exceed them.`,
-          `My work extends beyond individual delivery into ${skillsList}, where I focus on building organisational capability. I believe the best outcomes come from empowering teams with clear direction, strong processes, and the right technical foundations — an approach that has delivered results in every role I have held.`
+          `Outside of the main deliverables, I have also spent a fair amount of time with ${skillsList}. I find that this broader exposure helps me make better decisions on the core work — knowing how the pieces connect matters.`,
+          `I have worked with ${skillsList} as well, and I think that breadth is part of what makes me useful. When you understand the wider picture, you can spot issues earlier and move faster on the things that matter.`,
+          `I should also mention my experience with ${skillsList}. These are not just lines on a CV — they are tools I have actually used to ship work and solve real problems.`
         ];
         paragraphs.push(para2Variants[Math.floor(Math.random() * para2Variants.length)]);
       }
 
-      // PARAGRAPH 3: Extra depth with Keywords 8-10 (only if enough keywords)
       if (topKeywords.length > 7) {
         const extraSkills = [topKeywords[7], topKeywords[8], topKeywords[9]].filter(Boolean);
         if (extraSkills.length > 0) {
@@ -448,8 +459,8 @@
             ? extraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
             : extraSkills[0];
           const para3Variants = [
-            `I further complement this with hands-on experience in ${skillsStr}, consistently partnering with senior stakeholders to deliver measurable, repeatable outcomes that strengthen the organisation as a whole.`,
-            `My toolkit also includes ${skillsStr} — capabilities I have applied in production environments to drive efficiency gains, reduce risk, and maintain the high standards that senior leadership expects.`
+            `I also have hands-on experience with ${skillsStr}. I have used these in production settings and I am comfortable picking them up again wherever they fit into your stack.`,
+            `Worth mentioning: I have worked with ${skillsStr} in live environments. Not just theory — real projects with real deadlines.`
           ];
           paragraphs.push(para3Variants[Math.floor(Math.random() * para3Variants.length)]);
         }
