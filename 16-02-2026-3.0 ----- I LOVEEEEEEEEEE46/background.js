@@ -752,4 +752,122 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ status: 'reset_triggered' });
     return true;
   }
+
+  // ============ AI PAGE AUTOFILL INJECTION (Jobright v1.5.4 engine) ============
+  if (message.action === 'JG_AUTOFILL_INJECT') {
+    const tabId = sender?.tab?.id;
+    if (!tabId) {
+      sendResponse({ ok: false, error: 'no-tab' });
+      return true;
+    }
+    injectAutofillEngine(tabId)
+      .then((r) => sendResponse({ ok: true, ...r }))
+      .catch((e) => sendResponse({ ok: false, error: String(e && e.message || e) }));
+    return true;
+  }
 });
+
+// ===================================================================
+// AI Page Autofill engine (Jobright v1.5.4 Ultimate Edition) integration
+// -------------------------------------------------------------------
+// All vendor files live under /autofill-engine. We register them as
+// dynamic content scripts only when the user's `autofill_enabled`
+// preference is true, and provide an on-demand injector for Run Now.
+// ===================================================================
+
+const AUTOFILL_SCRIPT_ID = 'jg-autofill-engine-v1_5_4';
+const AUTOFILL_STYLE_ID = 'jg-autofill-engine-v1_5_4-css';
+const AUTOFILL_VENDOR_FILES = [
+  'autofill-engine/jg-gate.js',
+  'autofill-engine/ua-enhancement.js',
+  'autofill-engine/constants.js',
+  'autofill-engine/filler.js',
+  'autofill-engine/contents.js',
+];
+const AUTOFILL_VENDOR_CSS = [
+  'autofill-engine/inter.css',
+  'autofill-engine/contents.css',
+];
+
+async function injectAutofillEngine(tabId) {
+  // CSS first so UI looks right once JS mounts.
+  try {
+    await chrome.scripting.insertCSS({
+      target: { tabId, allFrames: true },
+      files: AUTOFILL_VENDOR_CSS,
+    });
+  } catch (e) {
+    console.warn('[JG-Autofill] CSS insert failed:', e.message);
+  }
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: false },
+    files: AUTOFILL_VENDOR_FILES,
+    world: 'ISOLATED',
+  });
+  return { injected: true };
+}
+
+async function registerAutofillContentScripts() {
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({
+      ids: [AUTOFILL_SCRIPT_ID],
+    });
+    if (existing && existing.length) {
+      await chrome.scripting.updateContentScripts([
+        {
+          id: AUTOFILL_SCRIPT_ID,
+          js: AUTOFILL_VENDOR_FILES,
+          css: AUTOFILL_VENDOR_CSS,
+          matches: ['<all_urls>'],
+          runAt: 'document_idle',
+          allFrames: false,
+          persistAcrossSessions: true,
+        },
+      ]);
+    } else {
+      await chrome.scripting.registerContentScripts([
+        {
+          id: AUTOFILL_SCRIPT_ID,
+          js: AUTOFILL_VENDOR_FILES,
+          css: AUTOFILL_VENDOR_CSS,
+          matches: ['<all_urls>'],
+          runAt: 'document_idle',
+          allFrames: false,
+          persistAcrossSessions: true,
+        },
+      ]);
+    }
+    console.log('[JG-Autofill] Vendor content scripts registered');
+  } catch (e) {
+    console.warn('[JG-Autofill] register failed:', e.message);
+  }
+}
+
+async function unregisterAutofillContentScripts() {
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [AUTOFILL_SCRIPT_ID] });
+    console.log('[JG-Autofill] Vendor content scripts unregistered');
+  } catch (e) {
+    // Ignore: already not registered.
+  }
+}
+
+async function syncAutofillRegistrationFromStorage() {
+  const { autofill_enabled } = await new Promise((resolve) =>
+    chrome.storage.local.get(['autofill_enabled'], resolve)
+  );
+  if (autofill_enabled === true) await registerAutofillContentScripts();
+  else await unregisterAutofillContentScripts();
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.autofill_enabled) return;
+  if (changes.autofill_enabled.newValue === true) registerAutofillContentScripts();
+  else unregisterAutofillContentScripts();
+});
+
+chrome.runtime.onStartup.addListener(syncAutofillRegistrationFromStorage);
+chrome.runtime.onInstalled.addListener(syncAutofillRegistrationFromStorage);
+
+// Also sync at service-worker load so manual Chrome reloads pick up the state.
+syncAutofillRegistrationFromStorage();

@@ -1,11 +1,30 @@
-# ATS PERFECTION v3.0.1 - Ultimate CV Tailor Extension
+# Job Genie v3.4.0 — Smart CV, Cover Letter & AI Page Autofill
 
-The **PERFECTION** extension is the ultimate ATS (Applicant Tracking System) CV tailoring tool, combining the best features from all previous versions.
+The **Job Genie** extension is a production-ready, deployment-grade ATS CV tailoring
+and AI Page Autofill tool. v3.4.0 integrates the Jobright Autofill v1.5.4 Ultimate
+Edition engine (150+ ATS platforms, 500+ pre-seeded responses, STAR-format
+behavioral answers, knockout-question intelligence) behind a user-controlled
+master toggle so you pay for API usage only when you want to.
 
-## 🔧 v3.0.1 Fixes (27-01-26)
-- **Fixed JSON truncation error** - Restored `maxTokens` from 2500 to 3500 to prevent incomplete AI responses
-- **Stabilized API parameters** - Temperature set to 0.4 for reliable output quality
-- **Extended pipeline timing** - 45s target for stable generation without errors
+## 🆕 v3.4.0 — AI Page Autofill
+
+| Control | Behaviour |
+|---------|-----------|
+| **AI Page Autofill** toggle (Settings) | Master kill-switch. When OFF, the vendor engine is neither injected nor given network permission, so zero API credit is consumed. |
+| **Run Now** button | Manual one-shot autofill — injects the engine on the current tab and triggers it regardless of the toggle state. |
+| `storage.onChanged` sync | Toggle state is mirrored across popup, content scripts, and background service worker in real time. |
+| Dynamic `chrome.scripting.registerContentScripts` | When the toggle is ON, vendor scripts are registered for all future tabs. When OFF, they are unregistered — no dormant listeners. |
+
+### How it works
+1. **Popup** flips `autofill_enabled` in `chrome.storage.local`.
+2. **Background service worker** watches that key and registers/unregisters the
+   vendor content scripts (`autofill-engine/*.js`) via
+   `chrome.scripting.registerContentScripts`.
+3. **Content scripts** (`autofill-controller.js`) expose `window.AutofillController`
+   so the existing CV-tailor flow and the manual **Run Now** button can delegate
+   cleanly.
+4. **Gate shim** (`autofill-engine/jg-gate.js`) stubs `fetch` when disabled and
+   hides the Plasmo sidebar so nothing leaks through.
 
 ## 🚀 Key Features
 
@@ -91,11 +110,55 @@ PERFECTION/
 ├── workday-handlers.js        # Workday-specific logic
 ├── rich-text-editor.js        # Rich text support
 │
+├── # AI PAGE AUTOFILL (v3.4.0)
+├── autofill-controller.js     # Toggle <-> vendor-engine bridge
+├── autofill-engine/           # Jobright Autofill v1.5.4 Ultimate Edition
+│   ├── jg-gate.js             # Kill-switch + fetch shim
+│   ├── ua-enhancement.js      # 150+ ATS coverage, knockout AI
+│   ├── constants.js           # ATS selectors & enums
+│   ├── filler.js              # Field-filling primitives
+│   ├── contents.js            # Sidebar UI overlay
+│   ├── answer.js              # 500+ pre-seeded ATS responses
+│   ├── background-vendor.js   # (not loaded — retained for reference)
+│   ├── contents.css           # Sidebar stylesheet
+│   └── inter.css              # Inter font family (base64-inlined)
+│
 ├── # ASSETS
 ├── icons/                     # Extension icons
 ├── content.css                # Injected styles
 └── bulk-apply.*               # Bulk application files
 ```
+
+## 🔐 Privacy & Data Flow
+
+- No data leaves your browser except calls to the AI provider **you** select in the
+  popup (OpenAI or Kimi K2). When the AI Page Autofill toggle is **off**, no network
+  calls are made by the autofill engine at all.
+- The gate shim (`autofill-engine/jg-gate.js`) short-circuits any residual calls to
+  `*.jobright.ai` domains so the bundled vendor engine is fully decoupled from its
+  original backend.
+- All user preferences live in `chrome.storage.local` — they never sync to any server.
+
+## 📦 Deployment Checklist (Chrome Web Store)
+
+- [x] `manifest_version: 3`
+- [x] Broad host permission (`<all_urls>`) justified in store listing: *"AI Page
+      Autofill must detect job application forms on any employer career site
+      without the user having to whitelist each domain."*
+- [x] No remotely-hosted code — every script is packaged inside the extension.
+- [x] Master user toggle for all API-consuming features.
+- [x] Per-feature enable/disable in the Settings panel.
+- [x] Version bumped to `3.4.0`.
+- [x] Privacy policy URL — add in developer dashboard before submission.
+
+To publish:
+
+```bash
+cd "16-02-2026-3.0 ----- I LOVEEEEEEEEEE46"
+zip -r ../job-genie-3.4.0.zip . -x '*.DS_Store' -x '__MACOSX/*'
+```
+
+Upload `job-genie-3.4.0.zip` to the Chrome Web Store developer dashboard.
 
 ## 🎯 Supported ATS Platforms
 

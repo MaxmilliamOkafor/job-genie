@@ -502,24 +502,47 @@
     
     // ============ TOGGLE AUTOFILL ============
     if (message.action === 'TOGGLE_AUTOFILL') {
-      if (window.AutofillController) {
-        window.AutofillController.enabled = message.enabled;
-      }
-      sendResponse({ status: 'toggled', enabled: message.enabled });
+      (async () => {
+        try {
+          if (window.AutofillController && typeof window.AutofillController.setEnabled === 'function') {
+            await window.AutofillController.setEnabled(!!message.enabled);
+          } else {
+            // Fallback so storage stays in sync even if controller script is not yet loaded.
+            window.__JG_AUTOFILL_DISABLED__ = !message.enabled;
+            chrome.storage.local.set({ autofill_enabled: !!message.enabled });
+          }
+          sendResponse({ status: 'toggled', enabled: !!message.enabled });
+        } catch (e) {
+          sendResponse({ status: 'error', error: e.message });
+        }
+      })();
       return true;
     }
-    
+
     // ============ RUN MANUAL AUTOFILL ============
+    // Priority order:
+    //   1) AI Page Autofill engine (Jobright v1.5.4) via window.AutofillController
+    //   2) Workday-specific handlers (legacy fallback)
     if (message.action === 'RUN_MANUAL_AUTOFILL') {
       console.log('[ATS Tailor] Running manual autofill...');
       (async () => {
         try {
           let filledCount = 0;
-          
-          if (window.WorkdayPages) {
+          let engineUsed = 'none';
+
+          if (window.AutofillController && typeof window.AutofillController.runManual === 'function') {
+            try {
+              const result = await window.AutofillController.runManual();
+              filledCount += result?.filledCount || 0;
+              engineUsed = 'ai-page-autofill';
+            } catch (e) {
+              console.warn('[ATS Tailor] AI autofill engine error, falling back:', e);
+            }
+          }
+
+          if (filledCount === 0 && window.WorkdayPages) {
             const profile = await new Promise(r => chrome.storage.local.get(['ats_profile'], r)).then(r => r.ats_profile || {});
-            
-            // Detect page type and run appropriate handler
+
             const body = document.body.textContent?.toLowerCase() || '';
             if (body.includes('contact information') || document.querySelector('[data-automation-id="email"]')) {
               await window.WorkdayPages.handleContactInfo(profile);
@@ -534,9 +557,10 @@
               await window.WorkdayPages.handleApplicationQuestions();
               filledCount += 8;
             }
+            if (filledCount > 0) engineUsed = engineUsed === 'none' ? 'workday-handlers' : engineUsed;
           }
-          
-          sendResponse({ success: true, filledCount });
+
+          sendResponse({ success: true, filledCount, engine: engineUsed });
         } catch (e) {
           console.error('[ATS Tailor] Manual autofill error:', e);
           sendResponse({ success: false, error: e.message });

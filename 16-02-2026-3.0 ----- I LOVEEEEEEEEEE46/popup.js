@@ -1159,7 +1159,8 @@ class ATSTailor {
       chrome.storage.local.get(['autofill_enabled'], resolve);
     });
     
-    const enabled = result.autofill_enabled !== false; // Default to enabled
+    // Default OFF: matches "Toggle off to save API usage" messaging.
+    const enabled = result.autofill_enabled === true;
     const toggle = document.getElementById('autofillEnabledToggle');
     if (toggle) toggle.checked = enabled;
     const workdayToggle = document.getElementById('workdayAutofillToggle');
