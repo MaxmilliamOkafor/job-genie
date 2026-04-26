@@ -386,17 +386,64 @@
     });
 
     // Reconstruct CV with preserved structure + modified bullets
-    const uniqueCV = reconstructCVWithModifiedBullets(parsed, modifiedRoles);
+    let uniqueCV = reconstructCVWithModifiedBullets(parsed, modifiedRoles);
+
+    // === Career Boost: archetype-aware summary framing + coverage % ===
+    // If a JD is supplied via candidateData.jdText we (a) detect the role
+    // archetype, (b) prepend a one-line archetype framing to the summary,
+    // and (c) compute the resulting JD-keyword coverage.  All optional --
+    // skipped silently if the engine is missing.
+    let archetype = null;
+    let coverage = null;
+    if (typeof CareerBoostEngine !== 'undefined') {
+      try {
+        const jdText = candidateData?.jdText || candidateData?.jobDescription || '';
+        if (jdText && jdText.length > 60) {
+          archetype = CareerBoostEngine.detectArchetype(jdText);
+          if (archetype && archetype.primary) {
+            const yearsExp = candidateData?.yearsExperience || '';
+            const domain = candidateData?.domain || '';
+            const top3 = (priorityMap && Object.keys(priorityMap).length
+              ? Object.entries(priorityMap).filter(([, v]) => v === 'high').map(([k]) => k)
+              : allKeywords).slice(0, 3);
+            const framing = CareerBoostEngine.buildArchetypeSummary({
+              archetype, yearsExp, domain, baseSummary: '', topKeywords: top3,
+            });
+            // Inject framing line at the top of the summary section.
+            uniqueCV = uniqueCV.replace(
+              /(SUMMARY|PROFESSIONAL SUMMARY|PROFILE)([\s\S]*?\n)/i,
+              (full, header, rest) => `${header}\n${framing}\n${rest}`
+            );
+            stats.archetype = {
+              key: archetype.primary.key,
+              label: archetype.primary.label,
+              confidence: archetype.confidence,
+              hybrid: archetype.secondary?.label || null,
+            };
+          }
+        }
+        coverage = CareerBoostEngine.keywordCoverage(uniqueCV, jobKeywords);
+        stats.keywordCoveragePercent = coverage.percent;
+        stats.keywordCoverageBand = coverage.band;
+        stats.missingKeywords = coverage.missing;
+      } catch (e) {
+        console.warn('[UniqueCVEngine] CareerBoostEngine augmentation skipped:', e.message);
+      }
+    }
 
     const timing = performance.now() - startTime;
-    console.log(`[UniqueCVEngine] Generated unique CV in ${timing.toFixed(0)}ms:`, 
-      `${stats.keywordsInjected} keywords injected (H:${stats.keywordCoverage.high} M:${stats.keywordCoverage.medium} L:${stats.keywordCoverage.low})`);
+    console.log(`[UniqueCVEngine] Generated unique CV in ${timing.toFixed(0)}ms:`,
+      `${stats.keywordsInjected} keywords injected (H:${stats.keywordCoverage.high} M:${stats.keywordCoverage.medium} L:${stats.keywordCoverage.low})`,
+      coverage ? `| ATS coverage: ${coverage.percent}% (${coverage.band})` : '',
+      stats.archetype ? `| Archetype: ${stats.archetype.label}` : '');
 
     return {
       uniqueCV,
       originalCV: cvText,
       stats,
       timing,
+      archetype: stats.archetype || null,
+      coverage,
       fileHash: generateFileHash(uniqueCV)
     };
   }

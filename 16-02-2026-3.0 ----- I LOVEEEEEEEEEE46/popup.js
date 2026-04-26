@@ -148,17 +148,21 @@ class ATSTailor {
   constructor() {
     this.session = null;
     this.currentJob = null;
-    this.generatedDocuments = { 
-      cv: null, 
-      coverLetter: null, 
-      cvPdf: null, 
-      coverPdf: null, 
-      cvFileName: null, 
+    this.generatedDocuments = {
+      cv: null,
+      coverLetter: null,
+      cvPdf: null,
+      coverPdf: null,
+      cvFileName: null,
       coverFileName: null,
       matchScore: 0,
       matchedKeywords: [],
       missingKeywords: [],
-      keywords: null
+      keywords: null,
+      // Career Boost augmentations
+      archetype: null,
+      coverageBand: null,
+      coveragePercent: null
     };
     this.stats = { today: 0, total: 0, avgTime: 0, times: [] };
     this.currentPreviewTab = 'cv';
@@ -1159,7 +1163,8 @@ class ATSTailor {
       chrome.storage.local.get(['autofill_enabled'], resolve);
     });
     
-    const enabled = result.autofill_enabled !== false; // Default to enabled
+    // Default OFF: matches "Toggle off to save API usage" messaging.
+    const enabled = result.autofill_enabled === true;
     const toggle = document.getElementById('autofillEnabledToggle');
     if (toggle) toggle.checked = enabled;
     const workdayToggle = document.getElementById('workdayAutofillToggle');
@@ -1761,6 +1766,40 @@ class ATSTailor {
     
     // Update AI Match Analysis Panel
     this.updateMatchAnalysisUI();
+  }
+
+  /**
+   * Render the Career Boost badge (archetype + ATS coverage band) into the
+   * AI Match Analysis card. Falls back silently if the host element does
+   * not exist (older popup.html builds).
+   */
+  renderCareerBoostBadge() {
+    try {
+      const host = document.getElementById('aiMatchAnalysis');
+      if (!host) return;
+      let badge = document.getElementById('careerBoostBadge');
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'careerBoostBadge';
+        badge.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;font-size:11px;';
+        host.prepend(badge);
+      }
+      const arch = this.generatedDocuments.archetype;
+      const pct = this.generatedDocuments.coveragePercent;
+      const band = this.generatedDocuments.coverageBand;
+      const pieces = [];
+      if (arch && arch.label) {
+        const hybrid = arch.hybrid ? ` + ${arch.hybrid}` : '';
+        pieces.push(`<span style="background:#1e293b;color:#a5f3fc;padding:3px 8px;border-radius:6px;">🎯 ${arch.label}${hybrid}</span>`);
+      }
+      if (typeof pct === 'number' && band) {
+        const colour = band === 'strong' ? '#16a34a' : band === 'good' ? '#0ea5e9' : band === 'moderate' ? '#f59e0b' : '#ef4444';
+        pieces.push(`<span style="background:${colour};color:white;padding:3px 8px;border-radius:6px;">📊 ATS coverage ${pct}% (${band})</span>`);
+      }
+      badge.innerHTML = pieces.join('');
+    } catch (e) {
+      console.warn('[Popup] renderCareerBoostBadge failed:', e.message);
+    }
   }
 
   /**
@@ -3406,9 +3445,32 @@ class ATSTailor {
         this.generatedDocuments.matchedKeywords = initial.matchedKeywords;
         this.generatedDocuments.missingKeywords = initial.missingKeywords;
         this.generatedDocuments.matchScore = initial.matchScore;
-        
+
+        // === Career Boost: archetype detection + ATS coverage band ===
+        try {
+          if (typeof CareerBoostEngine !== 'undefined') {
+            const jdText = this.currentJob?.description || this.currentJob?.jdText || '';
+            if (jdText && jdText.length > 60) {
+              const arch = CareerBoostEngine.detectArchetype(jdText);
+              if (arch?.primary) {
+                this.generatedDocuments.archetype = {
+                  label: arch.primary.label,
+                  hybrid: arch.secondary?.label || null,
+                  confidence: arch.confidence,
+                };
+              }
+            }
+            const cov = CareerBoostEngine.keywordCoverage(this.generatedDocuments.cv, keywords);
+            this.generatedDocuments.coveragePercent = cov.percent;
+            this.generatedDocuments.coverageBand = cov.band;
+          }
+        } catch (e) {
+          console.warn('[Popup] CareerBoostEngine analysis skipped:', e.message);
+        }
+
         // UPDATE UI: Show initial match score
         this.updateMatchAnalysisUI();
+        this.renderCareerBoostBadge();
       }
 
       console.log('[ATS Tailor] Step 2 - Initial match score:', this.generatedDocuments.matchScore + '%');

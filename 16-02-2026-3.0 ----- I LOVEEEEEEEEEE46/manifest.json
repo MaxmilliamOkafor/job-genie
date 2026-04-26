@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Job Genie — Smart CV & Cover Letter Tailor",
-  "version": "3.3.2",
-  "description": "Automatically tailor your CV and cover letter to every job posting. Intelligent keyword matching, ATS-optimised PDF generation, cover letter builder, and one-click application across 130+ hiring platforms including Greenhouse, Workday, SmartRecruiters, and major company career sites.",
+  "name": "Job Genie — Smart CV, Cover Letter & AI Page Autofill",
+  "version": "3.4.0",
+  "description": "Automatically tailor your CV and cover letter to every job posting, plus 1-click AI Page Autofill across 150+ ATS platforms. Intelligent keyword matching, ATS-optimised PDF generation, cover letter builder, STAR-format behavioral answers, 500+ pre-seeded responses, and knockout-question intelligence — with a master toggle for full user control over API usage.",
   "permissions": [
     "storage",
     "activeTab",
@@ -11,6 +11,7 @@
     "alarms"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://*.greenhouse.io/*",
     "https://*.workday.com/*",
     "https://*.myworkdayjobs.com/*",
@@ -235,11 +236,19 @@
         "cv-formatter-perfect-enhanced.js",
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
+        "career-boost-engine.js",
         "workday-handlers.js",
+        "autofill-controller.js",
         "content.js"
       ],
       "css": ["content.css"],
       "run_at": "document_end"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["autofill-controller.js"],
+      "run_at": "document_end",
+      "all_frames": false
     }
   ],
   "background": {
@@ -291,9 +300,19 @@
         "cv-formatter-perfect-enhanced.js",
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
+        "career-boost-engine.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
-        "workday-handlers.js"
+        "workday-handlers.js",
+        "autofill-controller.js",
+        "autofill-engine/jg-gate.js",
+        "autofill-engine/ua-enhancement.js",
+        "autofill-engine/constants.js",
+        "autofill-engine/filler.js",
+        "autofill-engine/contents.js",
+        "autofill-engine/answer.js",
+        "autofill-engine/contents.css",
+        "autofill-engine/inter.css"
       ],
       "matches": ["<all_urls>"]
     }
