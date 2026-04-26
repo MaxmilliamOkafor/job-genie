@@ -177,6 +177,35 @@
       let body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);
       let closing = this.buildClosingWithKeywords(templateConfig.closing, { company }, topKeywords);
 
+      // === Career Boost: append a JD-specific hook to the opener and one
+      // gap-bridge sentence to the body. Both are skipped silently if the
+      // engine is not loaded or if there is no JD text to mine. ===
+      let gapBridgeLine = '';
+      if (typeof CareerBoostEngine !== 'undefined') {
+        try {
+          const jdText = jobData?.description || jobData?.jdText || jobData?.text || '';
+          if (jdText && jdText.length > 60) {
+            const hook = CareerBoostEngine.extractJdHook(jdText, company);
+            if (hook && hook.kind !== 'fallback') {
+              opening = `${opening} What specifically drew me in was ${hook.hook}.`;
+            }
+
+            const cvText = candidateData?.cvText || candidateData?.rawCV || candidateData?.resumeText || '';
+            if (cvText) {
+              const { gaps } = CareerBoostEngine.analyzeGaps(jdText, cvText, { maxGaps: 1 });
+              if (gaps.length && gaps[0].hasAdjacent) {
+                gapBridgeLine = gaps[0].bridge;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[CoverLetterGenerator] Career boost augmentation skipped:', e.message);
+        }
+      }
+      if (gapBridgeLine) {
+        body = `${body}\n\n${gapBridgeLine}`;
+      }
+
       // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
       if (typeof ContentQualityEngine !== 'undefined') {
         opening = ContentQualityEngine.sanitiseContent(opening);

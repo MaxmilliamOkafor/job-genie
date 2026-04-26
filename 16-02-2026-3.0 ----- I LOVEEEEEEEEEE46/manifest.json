@@ -236,6 +236,7 @@
         "cv-formatter-perfect-enhanced.js",
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
+        "career-boost-engine.js",
         "workday-handlers.js",
         "autofill-controller.js",
         "content.js"
@@ -299,6 +300,7 @@
         "cv-formatter-perfect-enhanced.js",
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
+        "career-boost-engine.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
         "workday-handlers.js",
