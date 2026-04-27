@@ -1387,7 +1387,7 @@
       const years = this.extractYearsExperience(data.summary) || '7+';
       const recentTitle = data.experience?.[0]?.title || 'Senior Professional';
 
-      const para1 = `I am applying for the ${jobTitle} position at ${company} because the role sits squarely at the intersection of my strongest capabilities and career ambitions. As a ${recentTitle} with ${years} years of hands-on experience, I have built my career around ${kw1} and ${kw2} — consistently converting complex challenges into delivered outcomes that move the business forward.`;
+      const para1 = `I am applying for the ${jobTitle} position at ${company} because the role sits squarely at the intersection of my strongest capabilities and career ambitions. As a ${recentTitle} with ${years} years of hands-on experience, I have built my career around ${kw1} and ${kw2}, consistently converting complex challenges into delivered outcomes that move the business forward.`;
       addText(para1, false, font.body);
       y += 14;
 
@@ -1406,7 +1406,7 @@
         para2 += ` I also ${secondBullet.replace(/^[A-Z][a-z]+ed\s/, '').replace(/^[-•*▪]\s*/, '').charAt(0).toLowerCase() + secondBullet.replace(/^[A-Z][a-z]+ed\s/, '').replace(/^[-•*▪]\s*/, '').slice(1)}`;
         if (!para2.endsWith('.')) para2 += '.';
       }
-      para2 += ` These results reflect my commitment to ${kw3} and ${kw4} — skills I would bring directly to your team.`;
+      para2 += ` These results reflect my commitment to ${kw3} and ${kw4}, skills I would bring directly to your team.`;
       addText(para2, false, font.body);
       y += 14;
 
@@ -1421,7 +1421,7 @@
       y += 14;
 
       // === PARAGRAPH 4: Compelling close — confident, not passive ===
-      const para4 = `I am confident that my combination of technical capability, leadership instinct, and track record of delivery would make a meaningful contribution to ${company}. I would welcome the opportunity to discuss how my background aligns with your goals — and how I can add value from day one. Thank you for your time and consideration.`;
+      const para4 = `I am confident that my combination of technical capability, leadership instinct, and track record of delivery would make a meaningful contribution to ${company}. I would welcome the opportunity to discuss how my background aligns with your goals, and how I can add value from day one. Thank you for your time and consideration.`;
       // === PARAGRAPH 1: Positioning ===
       const kw1 = highPriority[0] || 'software engineering';
       const kw2 = highPriority[1] || 'delivery excellence';
@@ -1520,7 +1520,7 @@
       const portfolioDisplay = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
 
       // Build persuasive body paragraphs
-      let p1 = `I am applying for the ${jobTitle} position at ${company} because the role aligns directly with my strongest capabilities and career trajectory. As a ${recentTitle} with ${years} years of hands-on experience, I have built my career around ${kw1} and ${kw2} — consistently turning complex challenges into delivered outcomes.`;
+      let p1 = `I am applying for the ${jobTitle} position at ${company} because the role aligns directly with my strongest capabilities and career trajectory. As a ${recentTitle} with ${years} years of hands-on experience, I have built my career around ${kw1} and ${kw2}, consistently turning complex challenges into delivered outcomes.`;
 
       let p2 = `At ${topExp}, I was responsible for high-visibility programmes demanding both technical depth and commercial awareness.`;
       if (topBullet) {
@@ -1528,7 +1528,7 @@
         p2 += ` For example, I ${cleaned.charAt(0).toLowerCase() + cleaned.slice(1)}`;
         if (!p2.endsWith('.')) p2 += '.';
       }
-      p2 += ` This experience sharpened my ${kw3} and ${kw4} skills — both of which I would bring directly to your team.`;
+      p2 += ` This experience sharpened my ${kw3} and ${kw4} skills, both of which I would bring directly to your team.`;
 
       const p3 = `Beyond execution, I bring depth in ${kw5}, ${kw6}, and ${kw7} that enables me to operate at both strategic and operational levels. I consistently drive ${kw8} across delivery teams, creating repeatable frameworks that outlast any single project.`;
 
