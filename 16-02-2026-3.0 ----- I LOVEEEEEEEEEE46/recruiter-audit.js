@@ -13,18 +13,149 @@
   'use strict';
 
   // ===================================================================
-  // 1. BUZZWORD PURGE
+  // v2 — FILLER WORD STRIP
   // -------------------------------------------------------------------
-  // 30 most overused empty phrases that signal "auto-generated" or
-  // "no actual experience to back it up". Replacements are neutral or
-  // simply removed where the sentence still reads cleanly.
+  // Single adverbs that add zero information ("very", "really", "just",
+  // "basically", "actually"...).  Safe to remove because dropping an
+  // adverb leaves a grammatical sentence.  We DO NOT touch them inside
+  // proper nouns or quoted strings.
   // ===================================================================
 
+  const FILLER_WORDS = [
+    'very', 'really', 'just', 'basically', 'actually', 'literally',
+    'essentially', 'absolutely', 'totally', 'simply', 'honestly',
+    'definitely', 'certainly', 'obviously', 'clearly', 'quite',
+    'rather', 'somewhat', 'arguably',
+  ];
+
+  function stripFillers(text) {
+    if (!text || typeof text !== 'string') return { text: text || '', removed: 0 };
+    let out = text;
+    let removed = 0;
+    for (const w of FILLER_WORDS) {
+      const re = new RegExp(`\\b${w}\\b\\s*`, 'gi');
+      const before = out;
+      out = out.replace(re, '');
+      if (out !== before) removed++;
+    }
+    out = out
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/[ \t]+([.,;:])/g, '$1')
+      .replace(/[ \t]+$/gm, '');
+    // Re-capitalise: start of any bullet, and start of any sentence after
+    // a sentence-end punctuation (filler removal at sentence-start lower-
+    // cases the next word otherwise).
+    out = out
+      .replace(/(^|\n)([\-*•]|\d+\.)\s+([a-z])/g, (_, lf, b, c) => `${lf}${b} ${c.toUpperCase()}`)
+      .replace(/([.!?]\s+)([a-z])/g, (_, p, c) => `${p}${c.toUpperCase()}`);
+    return { text: out, removed };
+  }
+
+  // ===================================================================
+  // v2 — WEAK-VERB FLAG ("Responsible for", "Helped with", "Assisted")
+  // -------------------------------------------------------------------
+  // These verbs describe presence, not impact.  Recruiters discount any
+  // bullet that opens with one.  Surfaced as warnings (not auto-rewritten
+  // because the right replacement requires real domain knowledge).
+  // ===================================================================
+
+  const WEAK_BULLET_OPENERS = [
+    'responsible for', 'helped', 'helped with', 'helped to', 'assisted',
+    'assisted with', 'worked on', 'worked with', 'participated in',
+    'involved in', 'contributed to', 'in charge of', 'tasked with',
+    'duties included', 'role involved', 'responsibilities included',
+  ];
+
+  function weakVerbAudit(text) {
+    if (!text) return { weak: [] };
+    const weak = [];
+    const lines = text.split('\n');
+    for (const raw of lines) {
+      const line = raw.trim().replace(/^([\-*•]|\d+\.)\s+/, '');
+      if (!line) continue;
+      const lower = line.toLowerCase();
+      for (const opener of WEAK_BULLET_OPENERS) {
+        if (lower.startsWith(opener)) {
+          weak.push({ opener, sample: line.slice(0, 110) });
+          break;
+        }
+      }
+      if (weak.length >= 8) break;
+    }
+    return { weak };
+  }
+
+  // ===================================================================
+  // v2 — ACTION-VERB BULLET CHECK
+  // -------------------------------------------------------------------
+  // Bullets that lead with a strong past-tense action verb skim well.
+  // Bullets that open with anything else (article, pronoun, gerund,
+  // weak verb) get flagged.  Pure warning — no auto-rewrite.
+  // ===================================================================
+
+  const STRONG_ACTION_VERBS = new Set([
+    'built', 'shipped', 'designed', 'launched', 'deployed', 'scaled', 'led',
+    'managed', 'drove', 'delivered', 'owned', 'created', 'developed', 'engineered',
+    'architected', 'rebuilt', 'reduced', 'increased', 'grew', 'doubled', 'tripled',
+    'cut', 'saved', 'generated', 'closed', 'won', 'shipped', 'launched', 'mentored',
+    'hired', 'rolled', 'migrated', 'consolidated', 'modernised', 'modernized',
+    'automated', 'instrumented', 'productionised', 'productionized', 'open-sourced',
+    'authored', 'published', 'presented', 'negotiated', 'partnered', 'enabled',
+    'unblocked', 'fixed', 'optimised', 'optimized', 'restructured', 'refactored',
+    'translated', 'consulted', 'advised',
+  ]);
+
+  function actionVerbAudit(text) {
+    if (!text) return { weakOpeners: [] };
+    const weakOpeners = [];
+    const lines = text.split('\n');
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!/^([\-*•]|\d+\.)\s+/.test(line)) continue;
+      const stripped = line.replace(/^([\-*•]|\d+\.)\s+/, '').trim();
+      const firstWord = stripped.split(/\s+/)[0]?.toLowerCase().replace(/[.,;:]$/, '');
+      if (!firstWord) continue;
+      if (STRONG_ACTION_VERBS.has(firstWord)) continue;
+      // Allow numbers / metrics openers ("$2M saved...", "30% reduction...")
+      if (/^[\$\d]/.test(firstWord)) continue;
+      weakOpeners.push({ firstWord, sample: stripped.slice(0, 110) });
+      if (weakOpeners.length >= 8) break;
+    }
+    return { weakOpeners };
+  }
+
+  // ===================================================================
+  // v2 — COVER LETTER LENGTH + PRONOUN BALANCE
+  // -------------------------------------------------------------------
+  // Recruiter rule of thumb: cover letter <= 350 words, opener mentions
+  // company/role more than self.  Auto-flag (not auto-trim) because
+  // shortening risks losing important content.
+  // ===================================================================
+
+  function coverLetterHealth(coverText) {
+    if (!coverText) return { wordCount: 0, tooLong: false, iCount: 0, youCount: 0, selfHeavy: false };
+    const wordCount = coverText.split(/\s+/).filter(Boolean).length;
+    const iCount = (coverText.match(/\bI\b/g) || []).length;
+    const youCount = (coverText.match(/\b(you|your|we|our)\b/gi) || []).length;
+    return {
+      wordCount,
+      tooLong: wordCount > 350,
+      iCount,
+      youCount,
+      selfHeavy: iCount > 0 && youCount > 0 && iCount / (iCount + youCount) > 0.65,
+    };
+  }
+
+  // ===================================================================
+  // 1. BUZZWORD PURGE
+  // -------------------------------------------------------------------
   // Only multi-word adjective phrases get auto-removed -- these almost
   // always sit as standalone modifiers ("a results-driven engineer who...")
   // so removal leaves clean English.  Verb-phrase noise ("I leverage...",
   // "I am passionate about...") is too risky to auto-rewrite and is
   // surfaced as a warning instead.
+  // ===================================================================
+
   const BUZZWORD_PHRASE_REPLACEMENTS = [
     [/\bresults[- ]driven\b/gi, ''],
     [/\bresults[- ]oriented\b/gi, ''],
@@ -299,6 +430,11 @@
       vocabulary: flags.vocabulary !== false,
       titleEcho: flags.titleEcho !== false,
       firstSixSeconds: flags.firstSixSeconds !== false,
+      // v2
+      fillerWords: flags.fillerWords !== false,
+      weakVerbs: flags.weakVerbs !== false,
+      actionVerbs: flags.actionVerbs !== false,
+      coverHealth: flags.coverHealth !== false,
     };
 
     let outCV = cvText;
@@ -358,6 +494,48 @@
       }
     }
 
+    // v2: filler-word strip (auto-fix)
+    if (f.fillerWords) {
+      const cv = stripFillers(outCV);
+      const cl = stripFillers(outCL);
+      outCV = cv.text;
+      outCL = cl.text;
+      if (cv.removed + cl.removed > 0) {
+        report.fixes.push(`fillers: ${cv.removed + cl.removed} adverbs removed`);
+      }
+    }
+
+    // v2: weak-verb opener flag (warning only -- replacement requires domain knowledge)
+    if (f.weakVerbs) {
+      const w = weakVerbAudit(outCV);
+      if (w.weak.length > 0) {
+        report.warnings.push({ kind: 'weak-bullet-openers', count: w.weak.length, samples: w.weak.slice(0, 3) });
+      }
+    }
+
+    // v2: action-verb opener check (warning)
+    if (f.actionVerbs) {
+      const a = actionVerbAudit(outCV);
+      if (a.weakOpeners.length > 0) {
+        report.warnings.push({
+          kind: 'non-action-verb-openers',
+          count: a.weakOpeners.length,
+          samples: a.weakOpeners.slice(0, 3).map((x) => x.sample),
+        });
+      }
+    }
+
+    // v2: cover letter length + pronoun balance
+    if (f.coverHealth && outCL) {
+      const h = coverLetterHealth(outCL);
+      if (h.tooLong) {
+        report.warnings.push({ kind: 'cover-letter-too-long', wordCount: h.wordCount, target: 350 });
+      }
+      if (h.selfHeavy) {
+        report.warnings.push({ kind: 'cover-letter-self-heavy', iCount: h.iCount, youCount: h.youCount });
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -369,6 +547,11 @@
     mirrorJdVocabulary,
     echoJobTitle,
     firstSixSecondsCheck,
+    // v2
+    stripFillers,
+    weakVerbAudit,
+    actionVerbAudit,
+    coverLetterHealth,
   };
 
   global.RecruiterAudit = RecruiterAudit;
