@@ -2980,6 +2980,23 @@ class ATSTailor {
       return;
     }
 
+    // ATOMIC guard: prevent concurrent tailoring runs.  Multiple call
+    // sites (Extract & Apply button, post-login auto-trigger, content.js
+    // popup ping, manual Tailor button) can fire near-simultaneously and
+    // would otherwise each kick off a full pipeline for the same job.
+    if (this._tailoringInProgress) {
+      console.log('[ATS Tailor Popup] tailorDocuments already running, ignoring duplicate call');
+      return;
+    }
+    // De-duplicate per job URL too -- guards against accidental re-entry
+    // even after a tailoring run completes within the same popup session.
+    const jobUrl = this.currentJob?.url || this.currentJob?.jobUrl || window.location?.href || '';
+    if (!options.force && jobUrl && this._lastTailoredJobUrl === jobUrl) {
+      console.log('[ATS Tailor Popup] Job already tailored this session, skipping (pass {force:true} to override)');
+      return;
+    }
+    this._tailoringInProgress = true;
+
     const startTime = Date.now();
     const btn = document.getElementById('tailorBtn');
     const progressContainer = document.getElementById('progressContainer');
@@ -3838,6 +3855,13 @@ class ATSTailor {
         jobUrl: this.currentJob?.url || window.location?.href
       });
     } finally {
+      // Release the atomic guard and record the URL we just tailored so
+      // duplicate triggers for the same job become no-ops until the user
+      // forces a re-tailor.
+      this._tailoringInProgress = false;
+      const completedUrl = this.currentJob?.url || this.currentJob?.jobUrl || window.location?.href || '';
+      if (completedUrl) this._lastTailoredJobUrl = completedUrl;
+
       // INSTANT RESET TO BLUE READY STATE
       const btnIconLeft = btn.querySelector('.btn-icon-left');
       const btnText = btn.querySelector('.btn-text');
