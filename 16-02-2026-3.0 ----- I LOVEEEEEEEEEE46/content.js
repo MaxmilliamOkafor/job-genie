@@ -2212,10 +2212,16 @@
 
   // ============ AUTO-TAILOR DOCUMENTS ============
   async function autoTailorDocuments() {
+    // ATOMIC guard: set the flags BEFORE any await so a second concurrent
+    // caller (mutation-observer fire + setTimeout fallback fire is the
+    // common case) cannot pass through this gate.  If the cache lookup
+    // below decides we don't need to tailor, we reset the flags then.
     if (hasTriggeredTailor || tailoringInProgress) {
       console.log('[ATS Tailor] Already triggered or in progress, skipping');
       return;
     }
+    hasTriggeredTailor = true;
+    tailoringInProgress = true;
 
     // Check if we've already tailored for this URL
     const cached = await new Promise(resolve => {
@@ -2223,15 +2229,16 @@
         resolve(result.ats_tailored_urls || {});
       });
     });
-    
+
     if (cached[currentJobUrl]) {
       console.log('[ATS Tailor] Already tailored for this URL, loading cached files');
+      // Cache hit -- release the in-progress flag so future explicit
+      // re-tailors are still possible, but keep hasTriggeredTailor=true
+      // so the auto-trigger paths don't re-fire on this URL.
+      tailoringInProgress = false;
       loadFilesAndStart();
       return;
     }
-
-    hasTriggeredTailor = true;
-    tailoringInProgress = true;
     
     createStatusBanner();
     updateBanner('Generating tailored CV & Cover Letter...', 'working');

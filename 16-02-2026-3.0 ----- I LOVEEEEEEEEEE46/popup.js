@@ -2980,6 +2980,23 @@ class ATSTailor {
       return;
     }
 
+    // ATOMIC guard: prevent concurrent tailoring runs.  Multiple call
+    // sites (Extract & Apply button, post-login auto-trigger, content.js
+    // popup ping, manual Tailor button) can fire near-simultaneously and
+    // would otherwise each kick off a full pipeline for the same job.
+    if (this._tailoringInProgress) {
+      console.log('[ATS Tailor Popup] tailorDocuments already running, ignoring duplicate call');
+      return;
+    }
+    // De-duplicate per job URL too -- guards against accidental re-entry
+    // even after a tailoring run completes within the same popup session.
+    const jobUrl = this.currentJob?.url || this.currentJob?.jobUrl || window.location?.href || '';
+    if (!options.force && jobUrl && this._lastTailoredJobUrl === jobUrl) {
+      console.log('[ATS Tailor Popup] Job already tailored this session, skipping (pass {force:true} to override)');
+      return;
+    }
+    this._tailoringInProgress = true;
+
     const startTime = Date.now();
     const btn = document.getElementById('tailorBtn');
     const progressContainer = document.getElementById('progressContainer');
@@ -3731,6 +3748,37 @@ class ATSTailor {
         console.log('[ATS Tailor] Applied dedupeSectionHeaders to CV text before PDF generation');
       }
 
+      // === Recruiter Audit: post-process pass on the FINAL CV + cover
+      // letter text, just before PDF generation.  Strips empty buzzword
+      // phrases, mirrors JD vocabulary to exact terms, echoes the JD job
+      // title into the scan zone, and surfaces unquantified bullets +
+      // first-six-seconds gaps as warnings the user can act on.
+      // Pure text ops, ~5ms.  Skipped silently if the module is missing
+      // or the caller passes options.recruiterAudit === false.
+      if (options.recruiterAudit !== false && typeof RecruiterAudit !== 'undefined' && this.generatedDocuments.cv) {
+        try {
+          const profile = await new Promise((resolve) =>
+            chrome.storage.local.get(['ats_profile'], (r) => resolve(r.ats_profile || {}))
+          );
+          const candidateName = [profile.first_name || profile.firstName, profile.last_name || profile.lastName]
+            .filter(Boolean).join(' ').trim();
+          const audited = RecruiterAudit.runRecruiterAudit({
+            cvText: this.generatedDocuments.cv,
+            coverLetterText: this.generatedDocuments.coverLetter || '',
+            jdText: this.currentJob?.description || this.currentJob?.jdText || '',
+            jdTitle: this.currentJob?.title || '',
+            candidateName,
+          });
+          this.generatedDocuments.cv = audited.cvText;
+          if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;
+          this.generatedDocuments.recruiterAudit = audited.report;
+          console.log('[ATS Tailor] Recruiter audit:', audited.report.fixes.length, 'fixes,',
+            audited.report.warnings.length, 'warnings,', audited.report.timingMs + 'ms');
+        } catch (e) {
+          console.warn('[ATS Tailor] Recruiter audit skipped:', e.message);
+        }
+      }
+
       // CRITICAL: Sanitise the structuredCv before PDF generation (all paths)
       this.sanitizeStructuredCV();
 
@@ -3838,6 +3886,13 @@ class ATSTailor {
         jobUrl: this.currentJob?.url || window.location?.href
       });
     } finally {
+      // Release the atomic guard and record the URL we just tailored so
+      // duplicate triggers for the same job become no-ops until the user
+      // forces a re-tailor.
+      this._tailoringInProgress = false;
+      const completedUrl = this.currentJob?.url || this.currentJob?.jobUrl || window.location?.href || '';
+      if (completedUrl) this._lastTailoredJobUrl = completedUrl;
+
       // INSTANT RESET TO BLUE READY STATE
       const btnIconLeft = btn.querySelector('.btn-icon-left');
       const btnText = btn.querySelector('.btn-text');

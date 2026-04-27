@@ -243,21 +243,45 @@
       ];
 
       let coverLetter = paragraphs.join('\n');
-      
+
       // Final sanitisation pass on complete letter
       if (typeof ContentQualityEngine !== 'undefined') {
         coverLetter = ContentQualityEngine.sanitiseContent(coverLetter, { removePronouns: false });
       }
-      
+
+      // === Recruiter Audit: post-process pass.  Strips empty buzzword
+      // phrases, mirrors JD vocabulary, ensures the JD job title appears
+      // in the opener.  Skipped silently if the audit module is missing.
+      // Pure text ops, ~5ms. ===
+      let auditReport = null;
+      if (options.recruiterAudit !== false && typeof RecruiterAudit !== 'undefined') {
+        try {
+          const audited = RecruiterAudit.runRecruiterAudit({
+            cvText: '',
+            coverLetterText: coverLetter,
+            jdText: jobData?.description || jobData?.jdText || jobData?.text || '',
+            jdTitle: jobTitle,
+            candidateName: fullName,
+            flags: { firstSixSeconds: false, quantification: false }, // CV-only checks; skip for letter
+          });
+          coverLetter = audited.coverLetterText;
+          auditReport = audited.report;
+        } catch (e) {
+          console.warn('[CoverLetterGenerator] Recruiter audit skipped:', e.message);
+        }
+      }
+
       const timing = performance.now() - startTime;
-      console.log(`[CoverLetterGenerator] Generated in ${timing.toFixed(0)}ms with ${topKeywords.length} keywords naturally woven in`);
+      console.log(`[CoverLetterGenerator] Generated in ${timing.toFixed(0)}ms with ${topKeywords.length} keywords naturally woven in`,
+        auditReport ? `| audit: ${auditReport.fixes.length} fixes, ${auditReport.warnings.length} warnings` : '');
 
       return {
         text: coverLetter,
         paragraphs,
         wordCount: coverLetter.split(/\s+/).length,
         keywordsUsed: topKeywords,
-        timing
+        timing,
+        recruiterAudit: auditReport,
       };
     },
 
