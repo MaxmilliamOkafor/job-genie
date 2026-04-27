@@ -3748,6 +3748,37 @@ class ATSTailor {
         console.log('[ATS Tailor] Applied dedupeSectionHeaders to CV text before PDF generation');
       }
 
+      // === Recruiter Audit: post-process pass on the FINAL CV + cover
+      // letter text, just before PDF generation.  Strips empty buzzword
+      // phrases, mirrors JD vocabulary to exact terms, echoes the JD job
+      // title into the scan zone, and surfaces unquantified bullets +
+      // first-six-seconds gaps as warnings the user can act on.
+      // Pure text ops, ~5ms.  Skipped silently if the module is missing
+      // or the caller passes options.recruiterAudit === false.
+      if (options.recruiterAudit !== false && typeof RecruiterAudit !== 'undefined' && this.generatedDocuments.cv) {
+        try {
+          const profile = await new Promise((resolve) =>
+            chrome.storage.local.get(['ats_profile'], (r) => resolve(r.ats_profile || {}))
+          );
+          const candidateName = [profile.first_name || profile.firstName, profile.last_name || profile.lastName]
+            .filter(Boolean).join(' ').trim();
+          const audited = RecruiterAudit.runRecruiterAudit({
+            cvText: this.generatedDocuments.cv,
+            coverLetterText: this.generatedDocuments.coverLetter || '',
+            jdText: this.currentJob?.description || this.currentJob?.jdText || '',
+            jdTitle: this.currentJob?.title || '',
+            candidateName,
+          });
+          this.generatedDocuments.cv = audited.cvText;
+          if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;
+          this.generatedDocuments.recruiterAudit = audited.report;
+          console.log('[ATS Tailor] Recruiter audit:', audited.report.fixes.length, 'fixes,',
+            audited.report.warnings.length, 'warnings,', audited.report.timingMs + 'ms');
+        } catch (e) {
+          console.warn('[ATS Tailor] Recruiter audit skipped:', e.message);
+        }
+      }
+
       // CRITICAL: Sanitise the structuredCv before PDF generation (all paths)
       this.sanitizeStructuredCV();
 

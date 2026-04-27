@@ -237,6 +237,7 @@
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
         "career-boost-engine.js",
+        "recruiter-audit.js",
         "workday-handlers.js",
         "autofill-controller.js",
         "content.js"
@@ -301,6 +302,7 @@
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
         "career-boost-engine.js",
+        "recruiter-audit.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
         "workday-handlers.js",
