@@ -177,21 +177,30 @@
       let body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);
       let closing = this.buildClosingWithKeywords(templateConfig.closing, { company }, topKeywords);
 
-      // === Career Boost: append a JD-specific hook to the opener and one
-      // gap-bridge sentence to the body. Both are skipped silently if the
-      // engine is not loaded or if there is no JD text to mine. ===
+      // === Career Boost (cover letter only): blend a JD-specific hook into
+      // the opener, and merge ONE gap-bridge sentence into the body when
+      // the candidate's CV shows clear adjacent experience.  Skipped
+      // silently if the engine is missing, the JD is too short, or the
+      // caller passes `useCareerBoost: false`.  Pure text ops, <10ms. ===
+      const useCareerBoost = options.useCareerBoost !== false;
       let gapBridgeLine = '';
-      if (typeof CareerBoostEngine !== 'undefined') {
+      if (useCareerBoost && typeof CareerBoostEngine !== 'undefined') {
         try {
           const jdText = jobData?.description || jobData?.jdText || jobData?.text || '';
-          if (jdText && jdText.length > 60) {
+          if (jdText && jdText.length > 80) {
             const hook = CareerBoostEngine.extractJdHook(jdText, company);
-            if (hook && hook.kind !== 'fallback') {
-              opening = `${opening} What specifically drew me in was ${hook.hook}.`;
+            // Only insert hooks when we have a high-signal one (named team,
+            // product, mission, or stated challenge). Stack/fallback hooks
+            // tend to read as filler so we drop them.
+            if (hook && ['team', 'team-prefix', 'product', 'mission', 'challenge', 'milestone'].includes(hook.kind)) {
+              opening = `${opening.replace(/[.\s]+$/, '')}. ${hook.hook.charAt(0).toUpperCase() + hook.hook.slice(1)} is what made me want to apply rather than scroll past.`;
             }
 
             const cvText = candidateData?.cvText || candidateData?.rawCV || candidateData?.resumeText || '';
-            if (cvText) {
+            // Only add a gap bridge when we found a STRONG adjacency. We
+            // skip the defensive "if X is a hard requirement..." fallback
+            // because it weakens the letter.
+            if (cvText && cvText.length > 60) {
               const { gaps } = CareerBoostEngine.analyzeGaps(jdText, cvText, { maxGaps: 1 });
               if (gaps.length && gaps[0].hasAdjacent) {
                 gapBridgeLine = gaps[0].bridge;
@@ -203,7 +212,9 @@
         }
       }
       if (gapBridgeLine) {
-        body = `${body}\n\n${gapBridgeLine}`;
+        // Merge the bridge into the body as a continuation, not a new
+        // paragraph -- avoids the "bolted-on" feel.
+        body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
       }
 
       // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
