@@ -806,8 +806,8 @@ class ATSTailor {
       });
     });
 
-    // NEW: Manual Autofill Button (Settings panel)
-    document.getElementById('manualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
+    // (Settings panel "Run Now" button has been removed — the toggle
+    // above is the single source of truth for AI Page Autofill.)
 
     // NEW: Manual Autofill Button (Workday panel)
     document.getElementById('workdayManualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
@@ -1168,8 +1168,9 @@ class ATSTailor {
   }
   
   async runManualAutofill() {
+    // The Settings-panel "Run Now" button has been retired. This method
+    // is kept only for the Workday panel's "Run Manual Autofill" button.
     const btns = [
-      document.getElementById('manualAutofillBtn'),
       document.getElementById('workdayManualAutofillBtn')
     ].filter(Boolean);
 
@@ -1202,7 +1203,7 @@ class ATSTailor {
       btns.forEach(btn => {
         btn.disabled = false;
         const textEl = btn.querySelector('.btn-text');
-        if (textEl) textEl.textContent = btn.id === 'manualAutofillBtn' ? 'Run Now' : 'Run Manual Autofill';
+        if (textEl) textEl.textContent = 'Run Manual Autofill';
       });
     }
   }
@@ -3375,8 +3376,8 @@ class ATSTailor {
         }
       };
 
-      const sanitisedCv = sanitise(result.tailoredResume);
-      const sanitisedCover = sanitise(result.tailoredCoverLetter || result.coverLetter);
+      const sanitisedCv = sanitise(this.normalizeDocumentText(result.tailoredResume, 'cv'));
+      const sanitisedCover = sanitise(this.normalizeDocumentText(result.tailoredCoverLetter || result.coverLetter, 'cover'));
 
       this.generatedDocuments = {
         cv: sanitisedCv,
@@ -4574,7 +4575,7 @@ class ATSTailor {
 
     if (typeof rawDoc !== 'string') return '';
 
-    const trimmed = rawDoc.trim();
+    let trimmed = rawDoc.trim();
     if (!trimmed) return '';
 
     // Some pipelines return stringified JSON instead of plain text document content
@@ -4586,6 +4587,26 @@ class ATSTailor {
       } catch (_) {
         // Not JSON - keep original text
       }
+    }
+
+    // Defensive: malformed LLM output sometimes leaks the OTHER document
+    // field's JSON syntax into this one (e.g. CV ends with `",
+    // "tailoredCoverLetter":"..."}` ).  Strip any such trailing fragment.
+    const otherKey = type === 'cv' ? 'tailoredCoverLetter' : 'tailoredResume';
+    const otherRe = new RegExp(`["\\s,]+\\\\?"?${otherKey}\\\\?"?\\s*:.*$`, 'is');
+    if (otherRe.test(trimmed)) {
+      trimmed = trimmed.replace(otherRe, '').replace(/[",\s]+$/, '').trim();
+    }
+
+    // Defensive: convert literal escape sequences (\n \t \") into the actual
+    // characters they represent.  Happens when JSON-encoded strings are
+    // passed through code paths that don't unescape.
+    if (trimmed.includes('\\n') || trimmed.includes('\\t') || trimmed.includes('\\"')) {
+      trimmed = trimmed
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
     }
 
     return trimmed;

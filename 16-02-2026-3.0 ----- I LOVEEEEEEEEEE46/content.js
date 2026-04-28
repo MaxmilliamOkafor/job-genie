@@ -1887,6 +1887,19 @@
   // ============ FORCE CV REPLACE ==========
   function forceCVReplace() {
     if (!cvFile) return false;
+    // Authorise file-input writes to bypass the autofill-engine guard
+    // (autofill-engine/jg-gate.js blocks all unauthorised file-input
+    // writes so the Jobright vendor engine cannot pre-attach files).
+    window.__JG_FILE_ATTACH_AUTHORISED__ = true;
+    try {
+      return _forceCVReplaceImpl();
+    } finally {
+      window.__JG_FILE_ATTACH_AUTHORISED__ = false;
+    }
+  }
+
+  function _forceCVReplaceImpl() {
+    if (!cvFile) return false;
 
     // Workday: attach once, then stop. Workday clears the input after upload, which
     // previously caused our fast loop to re-attach endlessly.
@@ -1947,6 +1960,16 @@
 
   // ============ FORCE COVER REPLACE ============
   function forceCoverReplace() {
+    if (!coverFile && !coverLetterText) return false;
+    window.__JG_FILE_ATTACH_AUTHORISED__ = true;
+    try {
+      return _forceCoverReplaceImpl();
+    } finally {
+      window.__JG_FILE_ATTACH_AUTHORISED__ = false;
+    }
+  }
+
+  function _forceCoverReplaceImpl() {
     if (!coverFile && !coverLetterText) return false;
     let attached = false;
 

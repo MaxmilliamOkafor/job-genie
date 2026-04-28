@@ -141,20 +141,20 @@
         </div>
         <p class="setting-help">Runs once per job when upload fields are detected.</p>
         
-        <!-- AI Autofill Toggle - Controls API Usage -->
+        <!-- AI Page Autofill Toggle - master kill-switch for the autofill engine -->
         <div class="setting-row autofill-setting">
-          <label class="toggle-row" for="autofillEnabledToggle">
+          <div class="toggle-row">
             <span class="toggle-label">
               <span class="setting-icon">🤖</span>
               AI Page Autofill
             </span>
-            <input type="checkbox" id="autofillEnabledToggle" />
-          </label>
-          <button id="manualAutofillBtn" class="btn btn-small btn-accent" title="Run autofill manually on current page">
-            <span class="btn-text">Run Now</span>
-          </button>
+            <label class="toggle-switch" for="autofillEnabledToggle" aria-label="Toggle AI Page Autofill">
+              <input type="checkbox" id="autofillEnabledToggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
-        <p class="setting-help">Toggle off to save API usage. Use "Run Now" for manual autofill.</p>
+        <p class="setting-help">When ON, the autofill engine fills application forms automatically. When OFF, the engine is fully disabled — no API calls, no form interaction.</p>
         
         <!-- User Location (always shown in CV header as "Dublin, IE | phone | email | extracted location") -->
         <div class="location-setting">

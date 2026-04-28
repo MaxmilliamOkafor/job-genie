@@ -6,7 +6,7 @@
 (function(global) {
   'use strict';
 
-  // ============ COVER LETTER TEMPLATES (v3.0 — rewritten for AI-detection resistance) ============
+  // ============ COVER LETTER TEMPLATES (v3.0. rewritten for AI-detection resistance) ============
   // Each template uses varied sentence structures, avoids formulaic openers,
   // mixes sentence lengths, and sounds like a real person wrote it.
   const TEMPLATES = {
@@ -30,7 +30,7 @@
         'My {yearsExp} years in {domain} have given me a good mix of hands-on technical ability and the softer skills you need when working with clients, leadership, or teams under pressure.'
       ],
       closing: [
-        'I would be happy to chat about how my background fits the role. Thank you for reading this far — I appreciate your time.',
+        'I would be happy to chat about how my background fits the role. Thank you for reading this far. I appreciate your time.',
         'If the above sounds like a fit, I am free to talk whenever works for you. Thanks for considering me.',
         'I hope this gives a good sense of what I can bring. I am available to discuss the role at your convenience. Thank you.',
         'Happy to go into more detail on any of the above. Thanks for your time, and I hope to hear from you.',
@@ -41,7 +41,7 @@
     enthusiastic: {
       name: 'Enthusiastic',
       opening: [
-        'I got genuinely excited when I saw the {jobTitle} position at {company}. Not in a vague way — the specific problems listed in the brief are exactly what I spend my days thinking about.',
+        'I got genuinely excited when I saw the {jobTitle} position at {company}. Not in a vague way. The specific problems listed in the brief are exactly what I spend my days thinking about.',
         'The {jobTitle} role at {company} is the kind of thing I have been looking for. The technical scope is interesting, the team looks strong, and the work itself matters. I wanted to apply before someone else snapped it up.',
         'I have been following {company} for a while, so when the {jobTitle} opening came up it felt like the right moment to put my hand up. The role matches what I do well and what I want to do next.',
         'I want to apply for the {jobTitle} at {company}. Honestly, it is not often that a job description makes me stop scrolling, but this one did. The work is exactly the kind of challenge I enjoy.',
@@ -50,14 +50,14 @@
       ],
       bridge: [
         'I have {yearsExp} years in {domain} and still genuinely enjoy the work. I like the process of taking a messy problem, working out the moving parts, and building something that actually solves it.',
-        'Over {yearsExp} years in {domain}, I have picked up a lot of the technical skills this role needs — but what I think sets me apart is how much I care about getting the details right while still moving quickly.',
+        'Over {yearsExp} years in {domain}, I have picked up a lot of the technical skills this role needs. But what I think sets me apart is how much I care about getting the details right while still moving quickly.',
         'My {yearsExp} years in {domain} have been busy ones. I have built systems, led teams, shipped products, and made plenty of mistakes I have since learned from. That mix of experience is what I am bringing here.',
         'I have been working in {domain} for {yearsExp} years now. In that time I have learned that the best outcomes come from a mix of technical skill, clear communication, and genuine curiosity about the problem.',
         'What I have learned across {yearsExp} years in {domain} is that good work comes from understanding both the technology and the people it serves. I bring that perspective to everything I do.',
         'After {yearsExp} years in {domain}, I still get energised by the work. I like building things that matter, fixing things that are broken, and helping teams do both faster.'
       ],
       closing: [
-        'I would really like the chance to talk about this role — even a short conversation would let me show you what I can bring. Thank you for your time.',
+        'I would really like the chance to talk about this role. Even a short conversation would let me show you what I can bring. Thank you for your time.',
         'If any of this sounds like it could be a fit, I am keen to chat. Thanks for reading, and I hope to speak with you soon.',
         'I think I could do great things at {company} and I would jump at the chance to prove it. Thanks for considering me.',
         'I appreciate you taking the time to read this. If there is a fit, I am ready to move quickly. I hope to hear from you.',
@@ -81,7 +81,7 @@
         'I bring {yearsExp} years of {domain} work. Technical skills, delivery experience, and the ability to work with anyone.',
         '{yearsExp} years in {domain}. I know the tools, I know the patterns, and I know how to deliver.',
         'Quick summary: {yearsExp} years in {domain}. Strong technically, good with people, and I get things finished.',
-        'I have {yearsExp} years in {domain} — enough to know what good looks like and how to get there quickly.'
+        'I have {yearsExp} years in {domain}. Enough to know what good looks like and how to get there quickly.'
       ],
       closing: [
         'Happy to discuss. Thank you for your time.',
@@ -101,7 +101,7 @@
     'Built', 'Launched', 'Set up', 'Designed', 'Shipped'
   ];
 
-  // v3.0: Natural keyword connectors — sound like a person mentioning their skills
+  // v3.0: Natural keyword connectors. sound like a person mentioning their skills
   const KEYWORD_PHRASES = [
     'especially around',
     'mainly in',
@@ -214,7 +214,7 @@
       if (gapBridgeLine) {
         // Merge the bridge into the body as a continuation, not a new
         // paragraph -- avoids the "bolted-on" feel.
-        body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
+        Body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
       }
 
       // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
@@ -314,7 +314,7 @@
       return result;
     },
 
-    // ============ BUILD BRIDGE WITH KEYWORDS (v3.0 — natural, human tone) ============
+    // ============ BUILD BRIDGE WITH KEYWORDS (v3.0. Natural, human tone) ============
     buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
       let bridge = this.selectRandom(bridgeTemplates, replacements);
 
@@ -326,7 +326,7 @@
           `Most of that time has been spent on ${kw1}, ${kw2}, and ${kw3}.`,
           `A big chunk of that involved ${kw1} and ${kw2}, with ${kw3} coming in more recently.`,
           `${kw1}, ${kw2}, and ${kw3} have been the common thread across those roles.`,
-          `The day-to-day has centred on ${kw1}, ${kw2}, and ${kw3} — all areas I know well.`
+          `The day-to-day has centred on ${kw1}, ${kw2}, and ${kw3}. All areas I know well.`
         ];
         bridge += ' ' + phrases[Math.floor(Math.random() * phrases.length)];
       } else if (keywords.length >= 2) {
@@ -411,7 +411,7 @@
         
         if (years && years.length >= 2) {
           const startYear = parseInt(years[0]);
-          const endYear = /present/i.test(dates) ? currentYear : parseInt(years[1]);
+          const endYear = /present/i.test(dates) ? CurrentYear : parseInt(years[1]);
           totalYears += endYear - startYear;
         } else if (years && years.length === 1) {
           const startYear = parseInt(years[0]);
@@ -445,7 +445,7 @@
       return unique.slice(0, count);
     },
 
-    // ============ BUILD BODY PARAGRAPHS (v3.0 — human-sounding, anti-AI-detection) ============
+    // ============ BUILD BODY PARAGRAPHS (v3.0. Human-sounding, anti-AI-detection) ============
     buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics) {
       const paragraphs = [];
 
@@ -489,7 +489,7 @@
           if (!para1.endsWith('.')) para1 += '.';
         }
         if (kw1 && kw2 && kw3) {
-          para1 += ` A lot of that work involved ${kw1}, ${kw2}, and ${kw3} — all of which show up in your job description too.`;
+          para1 += ` A lot of that work involved ${kw1}, ${kw2}, and ${kw3}. All of which show up in your job description too.`;
         } else if (kw1 && kw2) {
           para1 += ` Both ${kw1} and ${kw2} were central to that work.`;
         }
@@ -509,9 +509,9 @@
         }
 
         const para2Variants = [
-          `Outside of the main deliverables, I have also spent a fair amount of time with ${skillsList}. I find that this broader exposure helps me make better decisions on the core work — knowing how the pieces connect matters.`,
+          `Outside of the main deliverables, I have also spent a fair amount of time with ${skillsList}. I find that this broader exposure helps me make better decisions on the core work. Knowing how the pieces connect matters.`,
           `I have worked with ${skillsList} as well, and I think that breadth is part of what makes me useful. When you understand the wider picture, you can spot issues earlier and move faster on the things that matter.`,
-          `I should also mention my experience with ${skillsList}. These are not just lines on a CV — they are tools I have actually used to ship work and solve real problems.`
+          `I should also mention my experience with ${skillsList}. These are not just lines on a CV. They are tools I have actually used to ship work and solve real problems.`
         ];
         paragraphs.push(para2Variants[Math.floor(Math.random() * para2Variants.length)]);
       }
@@ -520,11 +520,11 @@
         const extraSkills = [topKeywords[7], topKeywords[8], topKeywords[9]].filter(Boolean);
         if (extraSkills.length > 0) {
           const skillsStr = extraSkills.length > 1
-            ? extraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
+            ? ExtraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
             : extraSkills[0];
           const para3Variants = [
             `I also have hands-on experience with ${skillsStr}. I have used these in production settings and I am comfortable picking them up again wherever they fit into your stack.`,
-            `Worth mentioning: I have worked with ${skillsStr} in live environments. Not just theory — real projects with real deadlines.`
+            `Worth mentioning: I have worked with ${skillsStr} in live environments. Not just theory. Real projects with real deadlines.`
           ];
           paragraphs.push(para3Variants[Math.floor(Math.random() * para3Variants.length)]);
         }
@@ -545,7 +545,7 @@
         'company', 'the company', 'your company', 'hiring team', 'organization',
         'organisation', 'employer', 'n/a', 'unknown', 'hiring company', 'the hiring company',
         '[company]', '{company}', '{{company}}', 'company name', '[company name]',
-        // v3.2 additions — AI-generated placeholder patterns
+        // v3.2 additions. AI-generated placeholder patterns
         'the organization', 'the organisation', 'this company', 'this organization',
         'your organization', 'your organisation', 'the firm', 'your firm',
         'the team', 'your team', 'hiring organization', 'hiring organisation',
@@ -584,7 +584,7 @@
       
       // STRATEGY 3: Extract from job title like "Senior Engineer at Bugcrowd"
       if (isInvalid(company)) {
-        const titleMatch = (jobData.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.\-]+?)(?:\s*[-|–—]|\s*$)/i);
+        const titleMatch = (jobData.title || '').match(/\bat\s+([A-Z][A-Za-z0-9\s&.\-]+?)(?:\s*[-|–,]|\s*$)/i);
         if (titleMatch) {
           company = titleMatch[1].trim();
         }
@@ -681,7 +681,7 @@
       // PURE TECHNICAL IC ROLES → concise
       const technicalICSignals = /\b(engineer|developer|sre|devops|platform|data scientist|ml engineer|ai engineer|backend|frontend|fullstack|full-stack|ios|android|mobile)\b/i;
       if (technicalICSignals.test(title) && !seniorPatterns.test(title)) {
-        // Mid-level technical IC — concise works well
+        // Mid-level technical IC. Concise works well
         return 'concise';
       }
 
@@ -716,7 +716,7 @@
     // ============ VALIDATE COVER LETTER ============
     validate(coverLetter) {
       const issues = [];
-      const text = typeof coverLetter === 'string' ? coverLetter : coverLetter.text;
+      const text = typeof coverLetter === 'string' ? CoverLetter : coverLetter.text;
       const wordCount = text.split(/\s+/).length;
 
       if (wordCount < 150) {
@@ -743,7 +743,7 @@
     extractAchievement(bullet) {
       if (!bullet) return 'significant performance improvements';
       const match = bullet.match(/(\d+%?\s*(?:improvement|increase|reduction|faster|efficiency|growth))/i);
-      return match ? match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
+      return match ? Match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
     }
   };
 

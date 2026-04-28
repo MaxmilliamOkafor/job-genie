@@ -415,6 +415,56 @@
   // ORCHESTRATOR
   // ===================================================================
 
+  // ===================================================================
+  // PRE-PASS — defensive clean-up that runs BEFORE every other check.
+  // -------------------------------------------------------------------
+  // Catches three classes of corruption that would otherwise reach the
+  // PDF renderer verbatim:
+  //   (a) JSON-encoded escape sequences ("\n", "\t", \") that never got
+  //       unescaped (happens when an LLM JSON response is fed in raw).
+  //   (b) trailing JSON syntax leaked from the OTHER document field
+  //       (e.g. CV ends with `","tailoredCoverLetter":"..."}`).
+  //   (c) em-dashes (-- and --) that the user has explicitly asked us
+  //       to never emit.  Replaced with comma + space, which preserves
+  //       sentence cadence without the em-dash glyph.
+  // ===================================================================
+
+  function _cleanCorruption(text, type) {
+    if (!text || typeof text !== 'string') return text || '';
+    let out = text;
+
+    // (a) Unescape literal JSON escape sequences.
+    if (out.includes('\\n') || out.includes('\\t') || out.includes('\\"')) {
+      out = out
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+
+    // (b) Strip trailing other-document JSON fragments.
+    const otherKey = type === 'cv' ? 'tailoredCoverLetter' : 'tailoredResume';
+    const otherRe = new RegExp(`["\\s,]+\\\\?"?${otherKey}\\\\?"?\\s*:.*$`, 'is');
+    if (otherRe.test(out)) {
+      out = out.replace(otherRe, '').replace(/[",\s]+$/, '').trim();
+    }
+    // Strip a stray opening brace and "tailoredResume": prefix some LLMs leak.
+    out = out.replace(/^\s*\{?\s*"tailoredResume"\s*:\s*"/, '');
+    out = out.replace(/^\s*\{?\s*"tailoredCoverLetter"\s*:\s*"/, '');
+
+    // (c) Em-dash and en-dash to neutral punctuation.  ` -- ` -> `, `,
+    // bare `--` (no surrounding space) -> `, `, en-dash `-` -> hyphen-minus
+    // when used as a punctuation separator (we leave date-range hyphens alone
+    // by NOT touching the `-` already in the string).
+    out = out
+      .replace(/\s*—\s*/g, ', ')
+      .replace(/—/g, ', ')
+      .replace(/\s*–\s*/g, ', ')
+      .replace(/–/g, ', ');
+
+    return out;
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -424,6 +474,8 @@
     flags = {},
   } = {}) {
     const t0 = Date.now();
+    cvText = _cleanCorruption(cvText, 'cv');
+    coverLetterText = _cleanCorruption(coverLetterText, 'cover');
     const f = {
       buzzwords: flags.buzzwords !== false,
       quantification: flags.quantification !== false,
