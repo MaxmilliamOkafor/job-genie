@@ -789,8 +789,39 @@ const AUTOFILL_VENDOR_CSS = [
   'autofill-engine/contents.css',
 ];
 
+// Hosts where the 7.5 MB vendor bundle would crash heavy SPAs.  Mirror of
+// the EXCLUDE_MATCHES list used for static registration.
+const AUTOFILL_DENYLIST_HOSTS = [
+  'hiring.cafe', 'linkedin.com', 'indeed.com', 'glassdoor.com',
+  'levels.fyi', 'teamblind.com', 'otta.com', 'welcometothejungle.com',
+  'angel.co', 'wellfound.com', 'jobright.ai',
+  'chat.openai.com', 'chatgpt.com', 'claude.ai',
+];
+
+function _isAutofillBlockedUrl(url) {
+  if (!url) return true;
+  try {
+    const host = new URL(url).hostname;
+    return AUTOFILL_DENYLIST_HOSTS.some((h) => host === h || host.endsWith('.' + h));
+  } catch (e) {
+    return true;
+  }
+}
+
 async function injectAutofillEngine(tabId) {
-  // CSS first so UI looks right once JS mounts.
+  // Defense-in-depth: even when called via Run Now / toggle ON, refuse
+  // to inject the multi-MB vendor bundle into job-aggregator SPAs that
+  // have no forms to fill and crash under the memory load.
+  let tabUrl = '';
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    tabUrl = tab?.url || '';
+  } catch (e) {}
+  if (_isAutofillBlockedUrl(tabUrl)) {
+    console.warn('[JG-Autofill] Skipping inject for denied host:', tabUrl);
+    return { injected: false, reason: 'denied-host', url: tabUrl };
+  }
+
   try {
     await chrome.scripting.insertCSS({
       target: { tabId, allFrames: true },
@@ -808,34 +839,92 @@ async function injectAutofillEngine(tabId) {
 }
 
 async function registerAutofillContentScripts() {
+  // Match list: only actual ATS application hosts where forms exist to fill.
+  // Loading the 7.5 MB vendor bundle on every page (`<all_urls>`) was
+  // crashing job-aggregator SPAs (hiring.cafe, etc.) under memory pressure.
+  const ATS_MATCHES = [
+    'https://*.greenhouse.io/*',
+    'https://*.workday.com/*',
+    'https://*.myworkdayjobs.com/*',
+    'https://*.smartrecruiters.com/*',
+    'https://*.bullhornstaffing.com/*',
+    'https://*.bullhorn.com/*',
+    'https://*.teamtailor.com/*',
+    'https://*.workable.com/*',
+    'https://*.icims.com/*',
+    'https://*.oracle.com/*',
+    'https://*.oraclecloud.com/*',
+    'https://*.taleo.net/*',
+    'https://*.jobvite.com/*',
+    'https://*.bamboohr.com/*',
+    'https://*.recruitee.com/*',
+    'https://*.jazzhr.com/*',
+    'https://*.lever.co/*',
+    'https://*.ashbyhq.com/*',
+    'https://*.successfactors.com/*',
+    'https://*.brassring.com/*',
+    'https://*.adp.com/*',
+    'https://*.csod.com/*',
+    'https://*.ukg.com/*',
+    'https://*.paylocity.com/*',
+    'https://*.zohorecruit.com/*',
+    'https://*.personio.com/*',
+    'https://*.metacareers.com/*',
+    'https://*.netflix.net/*',
+    // career sub-paths on major employers
+    'https://*.google.com/about/careers/*',
+    'https://*.meta.com/careers/*',
+    'https://*.amazon.com/jobs/*',
+    'https://*.microsoft.com/en-us/jobs/*',
+    'https://*.apple.com/careers/*',
+    'https://*.salesforce.com/company/careers/*',
+    'https://*.stripe.com/jobs/*',
+    'https://*.tiktok.com/careers/*',
+    // Generic apply-page heuristic: many ATS embed under /apply or /job paths.
+    // We can't safely match these without overmatching, so keep the host list
+    // explicit instead.
+  ];
+  // Sites that look like job aggregators and that the vendor MUST NOT load
+  // on (heavy SPAs, no application forms, or the vendor's own product).
+  const EXCLUDE_MATCHES = [
+    'https://hiring.cafe/*',
+    'https://*.hiring.cafe/*',
+    'https://*.linkedin.com/*',
+    'https://*.indeed.com/*',
+    'https://*.glassdoor.com/*',
+    'https://*.levels.fyi/*',
+    'https://*.teamblind.com/*',
+    'https://*.otta.com/*',
+    'https://*.welcometothejungle.com/*',
+    'https://*.angel.co/*',
+    'https://*.wellfound.com/*',
+    'https://*.jobright.ai/*',
+    'https://*.google.com/search*',
+    'https://*.bing.com/search*',
+    'https://chat.openai.com/*',
+    'https://chatgpt.com/*',
+    'https://claude.ai/*',
+  ];
+
+  const scriptDef = {
+    id: AUTOFILL_SCRIPT_ID,
+    js: AUTOFILL_VENDOR_FILES,
+    css: AUTOFILL_VENDOR_CSS,
+    matches: ATS_MATCHES,
+    excludeMatches: EXCLUDE_MATCHES,
+    runAt: 'document_idle',
+    allFrames: false,
+    persistAcrossSessions: true,
+  };
+
   try {
     const existing = await chrome.scripting.getRegisteredContentScripts({
       ids: [AUTOFILL_SCRIPT_ID],
     });
     if (existing && existing.length) {
-      await chrome.scripting.updateContentScripts([
-        {
-          id: AUTOFILL_SCRIPT_ID,
-          js: AUTOFILL_VENDOR_FILES,
-          css: AUTOFILL_VENDOR_CSS,
-          matches: ['<all_urls>'],
-          runAt: 'document_idle',
-          allFrames: false,
-          persistAcrossSessions: true,
-        },
-      ]);
+      await chrome.scripting.updateContentScripts([scriptDef]);
     } else {
-      await chrome.scripting.registerContentScripts([
-        {
-          id: AUTOFILL_SCRIPT_ID,
-          js: AUTOFILL_VENDOR_FILES,
-          css: AUTOFILL_VENDOR_CSS,
-          matches: ['<all_urls>'],
-          runAt: 'document_idle',
-          allFrames: false,
-          persistAcrossSessions: true,
-        },
-      ]);
+      await chrome.scripting.registerContentScripts([scriptDef]);
     }
     console.log('[JG-Autofill] Vendor content scripts registered');
   } catch (e) {
