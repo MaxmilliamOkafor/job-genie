@@ -806,8 +806,8 @@ class ATSTailor {
       });
     });
 
-    // NEW: Manual Autofill Button (Settings panel)
-    document.getElementById('manualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
+    // (Settings panel "Run Now" button has been removed — the toggle
+    // above is the single source of truth for AI Page Autofill.)
 
     // NEW: Manual Autofill Button (Workday panel)
     document.getElementById('workdayManualAutofillBtn')?.addEventListener('click', () => this.runManualAutofill());
@@ -1168,8 +1168,9 @@ class ATSTailor {
   }
   
   async runManualAutofill() {
+    // The Settings-panel "Run Now" button has been retired. This method
+    // is kept only for the Workday panel's "Run Manual Autofill" button.
     const btns = [
-      document.getElementById('manualAutofillBtn'),
       document.getElementById('workdayManualAutofillBtn')
     ].filter(Boolean);
 
@@ -1202,7 +1203,7 @@ class ATSTailor {
       btns.forEach(btn => {
         btn.disabled = false;
         const textEl = btn.querySelector('.btn-text');
-        if (textEl) textEl.textContent = btn.id === 'manualAutofillBtn' ? 'Run Now' : 'Run Manual Autofill';
+        if (textEl) textEl.textContent = 'Run Manual Autofill';
       });
     }
   }
