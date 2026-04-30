@@ -66,7 +66,16 @@
     },
 
     async runManual() {
-      window.__JG_AUTOFILL_DISABLED__ = false; // one-shot override
+      // Strictly gate on the toggle: when AI Page Autofill is OFF, refuse to
+      // run even from the manual entrypoint. Tailoring (Extract & Apply) is a
+      // separate flow and remains unaffected.
+      const enabled = await this._readEnabled();
+      this.enabled = enabled;
+      window.__JG_AUTOFILL_DISABLED__ = !enabled;
+      if (!enabled) {
+        log('Manual run blocked: AI Page Autofill is OFF');
+        return { success: false, blocked: true, reason: 'autofill-disabled', filledCount: 0 };
+      }
       await this._requestInject({ reason: 'manual-run', force: true });
 
       // The vendor engine exposes several entrypoints.  We fire every reasonable

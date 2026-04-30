@@ -527,6 +527,18 @@
       console.log('[ATS Tailor] Running manual autofill...');
       (async () => {
         try {
+          // Strict gate: AI Page Autofill toggle is the single source of truth.
+          // When OFF, refuse to fire any form-filling path (vendor engine OR
+          // workday-handlers fallback). Tailoring runs separately and is unaffected.
+          const { autofill_enabled } = await new Promise((r) =>
+            chrome.storage.local.get(['autofill_enabled'], r)
+          );
+          if (autofill_enabled !== true) {
+            console.log('[ATS Tailor] Manual autofill blocked: AI Page Autofill is OFF');
+            sendResponse({ success: false, blocked: true, reason: 'autofill-disabled', filledCount: 0 });
+            return;
+          }
+
           let filledCount = 0;
           let engineUsed = 'none';
 
