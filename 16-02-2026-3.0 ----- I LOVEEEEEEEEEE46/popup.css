@@ -220,7 +220,8 @@ body::-webkit-scrollbar-thumb {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--openai-color);
+  background: #3a3f50;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-full);
   transition: var(--transition-normal);
 }
@@ -231,18 +232,21 @@ body::-webkit-scrollbar-thumb {
   height: 12px;
   width: 12px;
   left: 2px;
-  bottom: 2px;
-  background: white;
+  bottom: 1px;
+  background: #c8ccd6;
   border-radius: 50%;
   transition: var(--transition-normal);
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background: var(--kimi-color);
+  background: var(--success);
+  border-color: var(--success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
   transform: translateX(16px);
+  background: #ffffff;
 }
 
 /* Status Indicator */
@@ -2149,7 +2153,8 @@ body::-webkit-scrollbar-thumb {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--openai-color);
+  background: #3a3f50;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-full);
   transition: var(--transition-fast);
 }
@@ -2160,18 +2165,21 @@ body::-webkit-scrollbar-thumb {
   height: 14px;
   width: 14px;
   left: 2px;
-  bottom: 2px;
-  background: white;
+  bottom: 1px;
+  background: #c8ccd6;
   border-radius: 50%;
   transition: var(--transition-fast);
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background: var(--kimi-color);
+  background: var(--success);
+  border-color: var(--success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
   transform: translateX(18px);
+  background: #ffffff;
 }
 
 /* ============ PDF DEBUG PANEL ============ */

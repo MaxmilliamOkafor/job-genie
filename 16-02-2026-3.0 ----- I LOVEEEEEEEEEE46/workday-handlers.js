@@ -767,7 +767,7 @@
       const result = await new Promise(resolve => {
         chrome.storage.local.get(['autofill_enabled', 'autofill_auto'], resolve);
       });
-      this.enabled = result.autofill_enabled !== false;
+      this.enabled = result.autofill_enabled === true;
       this.autoEnabled = result.autofill_auto === true;
       console.log('[AutofillController] Enabled:', this.enabled, 'Auto:', this.autoEnabled);
     },

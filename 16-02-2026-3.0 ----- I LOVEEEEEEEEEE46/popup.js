@@ -1193,6 +1193,8 @@ class ATSTailor {
 
       if (response?.success) {
         this.showToast(`✅ Autofill complete! Filled ${response.filledCount || 0} fields`, 'success');
+      } else if (response?.blocked) {
+        this.showToast('AI Page Autofill is OFF — turn it on to run autofill', 'error');
       } else {
         this.showToast(response?.error || 'Autofill failed', 'error');
       }
