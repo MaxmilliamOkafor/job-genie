@@ -465,12 +465,162 @@
     return out;
   }
 
+  // ===================================================================
+  // v3 — HONESTY AUDIT
+  // -------------------------------------------------------------------
+  // For every JD keyword that appears in the TAILORED CV but does NOT
+  // appear (in any form, including word stems) in the ORIGINAL CV, flag
+  // it as potentially fabricated.  Recruiters trust authenticity more
+  // than keyword density; this catches cases where the tailor engine has
+  // injected a skill the candidate cannot actually back up in interview.
+  //
+  // Conservative: we only flag MULTI-CHARACTER terms (>=3 chars), allow
+  // common transformations (plural/singular, hyphen variants, case), and
+  // never flag the candidate's own name or proper nouns from the JD.
+  // ===================================================================
+
+  function _normalizeForCompare(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[‐-―]/g, '-')      // dashes to hyphen
+      .replace(/[''']/g, "'")                // smart quotes
+      .replace(/[\s\-_/]+/g, ' ')             // collapse separators
+      .replace(/s\b/g, '')                    // drop trailing 's' (plural -> singular)
+      .replace(/ing\b/g, '')                  // drop -ing
+      .replace(/ed\b/g, '');                  // drop -ed
+  }
+
+  function honestyAudit({ tailoredCV, originalCV, jobKeywords }) {
+    if (!tailoredCV || !originalCV) return { potentiallyFabricated: [] };
+    const tailoredNorm = _normalizeForCompare(tailoredCV);
+    const originalNorm = _normalizeForCompare(originalCV);
+    const flat = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim())
+      .filter((k) => k.length >= 3);
+
+    const seen = new Set();
+    const flagged = [];
+    for (const kw of flat) {
+      const key = kw.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const probe = _normalizeForCompare(kw);
+      if (!probe) continue;
+      const inTailored = tailoredNorm.includes(probe);
+      const inOriginal = originalNorm.includes(probe);
+      if (inTailored && !inOriginal) {
+        flagged.push(kw);
+        if (flagged.length >= 12) break;
+      }
+    }
+    return { potentiallyFabricated: flagged };
+  }
+
+  function _flatKeywords(jobKeywords) {
+    if (!jobKeywords) return [];
+    if (Array.isArray(jobKeywords)) return jobKeywords;
+    if (jobKeywords.all) return jobKeywords.all;
+    const out = [];
+    for (const k of ['highPriority', 'mediumPriority', 'lowPriority']) {
+      if (Array.isArray(jobKeywords[k])) out.push(...jobKeywords[k]);
+    }
+    return out;
+  }
+
+  // ===================================================================
+  // v3 — SUMMARY CLAMP
+  // -------------------------------------------------------------------
+  // Locates the Professional Summary block and enforces:
+  //   * <= 360 characters (truncated at sentence boundary, never mid-word)
+  //   * No "looking for X" / "open to X" / "seeking X" sentence (techtalk
+  //     skill: "do not include a line about what they're looking to do
+  //     next — this adds no value and wastes character space").
+  // Safe-mode: only touches text BETWEEN the summary header and the
+  // next blank line or next ALL-CAPS section header.  If the boundary
+  // can't be found cleanly, the clamp is skipped.
+  // ===================================================================
+
+  const SUMMARY_HEADER_RE = /^(SUMMARY|PROFESSIONAL SUMMARY|PROFILE|ABOUT(?: ME)?)\s*:?\s*$/im;
+  const NEXT_SECTION_RE = /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|PROJECTS|CERTIFICATIONS|CORE COMPETENCIES|AREAS OF EXPERTISE)\s*:?\s*$/im;
+  const LOOKING_SENTENCE_RE = /[^.!?\n]*\b(looking (?:for|to)|seeking|open to (?:new )?(?:opportunit|role|position)|aspir(?:e|ing) to)\b[^.!?\n]*[.!?]?/gi;
+
+  function clampSummary(text, { maxChars = 360 } = {}) {
+    if (!text) return { text: text || '', clamped: false, removedSentences: 0 };
+    const lines = text.split('\n');
+    let headerIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (SUMMARY_HEADER_RE.test(lines[i].trim())) { headerIdx = i; break; }
+    }
+    if (headerIdx < 0) return { text, clamped: false, removedSentences: 0 };
+
+    // Find end of summary block: next blank line OR next ALL-CAPS section header.
+    let endIdx = lines.length;
+    for (let i = headerIdx + 1; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (t === '' || NEXT_SECTION_RE.test(t)) { endIdx = i; break; }
+    }
+    if (endIdx <= headerIdx + 1) return { text, clamped: false, removedSentences: 0 };
+
+    const summaryLines = lines.slice(headerIdx + 1, endIdx);
+    let summary = summaryLines.join(' ').trim();
+    let removedSentences = 0;
+
+    // Strip "looking to / seeking / open to" sentences first.
+    const before = summary;
+    summary = summary.replace(LOOKING_SENTENCE_RE, '').replace(/\s{2,}/g, ' ').trim();
+    if (summary !== before) removedSentences = 1;
+
+    // Truncate at sentence boundary if still too long.
+    let clamped = false;
+    if (summary.length > maxChars) {
+      const sentences = summary.match(/[^.!?]+[.!?]+\s*/g) || [summary];
+      let acc = '';
+      for (const s of sentences) {
+        if ((acc + s).length > maxChars) break;
+        acc += s;
+      }
+      summary = (acc || summary.slice(0, maxChars)).trim();
+      // Don't end mid-word
+      summary = summary.replace(/\s+\S*$/, m => m.length < 25 ? '' : m).trim();
+      if (!/[.!?]$/.test(summary)) summary += '.';
+      clamped = true;
+    }
+
+    const newLines = [...lines.slice(0, headerIdx + 1), summary, ...lines.slice(endIdx)];
+    return { text: newLines.join('\n'), clamped, removedSentences };
+  }
+
+  // ===================================================================
+  // v3 — BULLET LENGTH CAP
+  // -------------------------------------------------------------------
+  // Bullets longer than ~280 chars (≈2 lines at 11pt body width) get
+  // skimmed past.  Warning only — automatic truncation would lose meaning.
+  // ===================================================================
+
+  function bulletLengthAudit(text, { maxChars = 280 } = {}) {
+    if (!text) return { tooLong: [] };
+    const lines = text.split('\n');
+    const tooLong = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!/^([\-*•]|\d+\.)\s+/.test(line)) continue;
+      const stripped = line.replace(/^([\-*•]|\d+\.)\s+/, '');
+      if (stripped.length > maxChars) {
+        tooLong.push({ length: stripped.length, sample: stripped.slice(0, 110) + '…' });
+        if (tooLong.length >= 5) break;
+      }
+    }
+    return { tooLong };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
     jdText = '',
     jdTitle = '',
     candidateName = '',
+    originalCV = '',
+    jobKeywords = null,
     flags = {},
   } = {}) {
     const t0 = Date.now();
@@ -487,6 +637,10 @@
       weakVerbs: flags.weakVerbs !== false,
       actionVerbs: flags.actionVerbs !== false,
       coverHealth: flags.coverHealth !== false,
+      // v3
+      honesty: flags.honesty !== false,
+      summaryClamp: flags.summaryClamp !== false,
+      bulletLength: flags.bulletLength !== false,
     };
 
     let outCV = cvText;
@@ -588,6 +742,50 @@
       }
     }
 
+    // v3: honesty audit (warning only -- never rewrites the CV)
+    if (f.honesty && originalCV && jobKeywords) {
+      try {
+        const h = honestyAudit({ tailoredCV: outCV, originalCV, jobKeywords });
+        if (h.potentiallyFabricated.length > 0) {
+          report.warnings.push({
+            kind: 'potentially-fabricated-keywords',
+            count: h.potentiallyFabricated.length,
+            samples: h.potentiallyFabricated.slice(0, 6),
+            note: 'Keywords present in tailored CV but absent from your original CV. Review before submitting.',
+          });
+        }
+      } catch (e) {
+        // Defensive: never let an audit failure break the pipeline.
+      }
+    }
+
+    // v3: summary clamp (auto-fix: <= 360 chars + strip "looking to..." sentences)
+    if (f.summaryClamp && outCV) {
+      try {
+        const c = clampSummary(outCV, { maxChars: 360 });
+        if (c.clamped || c.removedSentences > 0) {
+          outCV = c.text;
+          const parts = [];
+          if (c.removedSentences > 0) parts.push(`${c.removedSentences} "looking-to" sentence(s) stripped`);
+          if (c.clamped) parts.push('summary clamped to 360 chars');
+          report.fixes.push(`summary: ${parts.join(', ')}`);
+        }
+      } catch (e) {}
+    }
+
+    // v3: bullet length cap (warning only -- truncation would lose meaning)
+    if (f.bulletLength && outCV) {
+      const b = bulletLengthAudit(outCV, { maxChars: 280 });
+      if (b.tooLong.length > 0) {
+        report.warnings.push({
+          kind: 'over-long-bullets',
+          count: b.tooLong.length,
+          samples: b.tooLong.slice(0, 3),
+          note: 'Bullets longer than ~2 lines get skimmed past by recruiters. Consider tightening.',
+        });
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -604,6 +802,10 @@
     weakVerbAudit,
     actionVerbAudit,
     coverLetterHealth,
+    // v3
+    honestyAudit,
+    clampSummary,
+    bulletLengthAudit,
   };
 
   global.RecruiterAudit = RecruiterAudit;
