@@ -25,6 +25,46 @@
   const log = (...a) => console.log(TAG, ...a);
   const warn = (...a) => console.warn(TAG, ...a);
 
+  // ===================================================================
+  // Host denylist -- third layer of defense (alongside background.js
+  // excludeMatches + denylist in injectAutofillEngine).  On these hosts
+  // the controller self-disables and never messages the background, so
+  // no autofill code path can run -- even Run Now from the popup.
+  // Keep in sync with AUTOFILL_DENYLIST_HOSTS in background.js.
+  // ===================================================================
+  const DENYLIST_HOSTS = [
+    'hiring.cafe', 'linkedin.com', 'indeed.com', 'glassdoor.com',
+    'levels.fyi', 'teamblind.com', 'otta.com', 'welcometothejungle.com',
+    'angel.co', 'wellfound.com', 'jobright.ai',
+    'chat.openai.com', 'chatgpt.com', 'claude.ai',
+  ];
+
+  function _isDeniedHost() {
+    try {
+      const host = window.location.hostname || '';
+      return DENYLIST_HOSTS.some((h) => host === h || host.endsWith('.' + h));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (_isDeniedHost()) {
+    log('On denied host (' + window.location.hostname + ') -- autofill controller fully disabled');
+    // Install a NO-OP controller so any code that references
+    // window.AutofillController doesn't crash.
+    window.AutofillController = {
+      __jgBridge: true,
+      __deniedHost: true,
+      enabled: false,
+      vendorInjected: false,
+      setEnabled: async () => false,
+      runManual: async () => ({ success: false, reason: 'denied-host' }),
+      init: async () => {},
+    };
+    window.__JG_AUTOFILL_DISABLED__ = true;
+    return;
+  }
+
   const Controller = {
     __jgBridge: true,
     enabled: false,
