@@ -3771,6 +3771,11 @@ class ATSTailor {
             jdText: this.currentJob?.description || this.currentJob?.jdText || '',
             jdTitle: this.currentJob?.title || '',
             candidateName,
+            // v3: honesty audit needs the ORIGINAL CV + JD keywords so it
+            // can flag any tailored term that wasn't already in the user's
+            // genuine CV.  Both are already in scope at this point.
+            originalCV: this.baseCVContent || '',
+            jobKeywords: this.generatedDocuments.keywords || null,
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;

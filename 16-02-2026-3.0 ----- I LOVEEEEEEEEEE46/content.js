@@ -1929,6 +1929,7 @@
       try {
         const dt = new DataTransfer();
         dt.items.add(cvFile);
+        target.dataset.jgAttachOk = '1'; // mark for watchdog so it doesn't clear our write
         target.files = dt.files;
         fireEvents(target);
 
@@ -1961,6 +1962,7 @@
 
       const dt = new DataTransfer();
       dt.items.add(cvFile);
+      input.dataset.jgAttachOk = '1';
       input.files = dt.files;
       fireEvents(input);
       attached = true;
@@ -1997,6 +1999,7 @@
 
         const dt = new DataTransfer();
         dt.items.add(coverFile);
+        input.dataset.jgAttachOk = '1';
         input.files = dt.files;
         fireEvents(input);
         attached = true;
