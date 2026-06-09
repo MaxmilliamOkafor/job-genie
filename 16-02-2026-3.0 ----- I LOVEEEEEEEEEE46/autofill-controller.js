@@ -101,8 +101,31 @@
       log('Toggle ->', this.enabled);
       if (this.enabled) {
         await this._requestInject({ reason: 'toggle-on' });
+      } else {
+        // Toggling OFF: actively neutralise any vendor instance already
+        // running on this tab. The kill-switch flag above makes jg-gate's
+        // value/file/fetch guards block all further vendor writes, and we
+        // tear down the vendor's visible UI + any pending timers it owns.
+        this._teardownVendor();
       }
       return this.enabled;
+    },
+
+    _teardownVendor() {
+      try {
+        // Remove the vendor's injected sidebar / shadow hosts so nothing
+        // stays interactive after the user turns autofill off.
+        document
+          .querySelectorAll('#plasmo-shadow-container, div[id^="plasmo-"], [data-jobright-helper]')
+          .forEach((el) => { try { el.remove(); } catch (e) {} });
+        document.documentElement.classList.add('jg-autofill-off');
+        // Tell the vendor (and our own listeners) to stop, best-effort.
+        window.dispatchEvent(new CustomEvent('jobright:autofill:stop'));
+        window.dispatchEvent(new CustomEvent('ultimate-autofill:stop'));
+        log('Vendor torn down after toggle OFF');
+      } catch (e) {
+        warn('teardown error', e);
+      }
     },
 
     async runManual() {
