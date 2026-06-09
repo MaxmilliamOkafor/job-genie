@@ -20,6 +20,67 @@
     return window.__JG_AUTOFILL_DISABLED__ === true;
   }
 
+  // ==== Text/select VALUE-write guard (the real "toggle-off" fix) ====
+  // The vendor engine has 220+ `.value=` writes for text inputs, textareas
+  // and selects. Blocking its fetch/XHR stops API CALLS, but on a tab that
+  // was already loaded while the toggle was ON, the vendor's in-memory DOM
+  // logic could still POPULATE fields after the user toggles OFF -- that is
+  // the "it randomly starts autofilling" bug.
+  //
+  // Fix: guard the value setters on HTMLInputElement / HTMLTextAreaElement /
+  // HTMLSelectElement prototypes. When autofill is DISABLED, a value write is
+  // blocked ONLY when its call stack originates inside a VENDOR script
+  // (autofill-engine/*). This is the precise target: it never blocks
+  //   * the website's own React/JS  (different JS world entirely), nor
+  //   * Job Genie's own content scripts (content.js, workday-handlers.js,
+  //     etc.) which belong to the separate Auto-trigger / Auto-tailoring
+  //     toggles and must keep working when only AI Page Autofill is off.
+  //
+  // The vendor lives at chrome-extension://<id>/autofill-engine/*.js, so its
+  // frames are identifiable by the "/autofill-engine/" path in the stack.
+  window.__JG_BLOCKED_VENDOR_VALUE_WRITES__ = window.__JG_BLOCKED_VENDOR_VALUE_WRITES__ || 0;
+
+  function _isVendorCaller() {
+    // Only pay the stack-capture cost when autofill is actually disabled.
+    try {
+      const stack = new Error().stack || '';
+      // Vendor bundle files: jg-gate is us, so exclude it; the actual
+      // filler/ua-enhancement/contents/answer live under /autofill-engine/.
+      return /autofill-engine\/(ua-enhancement|filler|contents|answer)\.js/.test(stack);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _installValueGuard(Ctor, label) {
+    try {
+      const proto = Ctor && Ctor.prototype;
+      if (!proto) return;
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (!desc || typeof desc.set !== 'function') return;
+      const origSet = desc.set;
+      Object.defineProperty(proto, 'value', {
+        configurable: false,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (v) {
+          if (disabled() && !window.__JG_AUTOFILL_AUTHORISED__ &&
+              v !== '' && v != null && _isVendorCaller()) {
+            window.__JG_BLOCKED_VENDOR_VALUE_WRITES__++;
+            return; // silently drop the vendor's autofill write
+          }
+          return origSet.call(this, v);
+        },
+      });
+    } catch (e) {
+      console.warn(TAG, 'value guard install failed for', label, e);
+    }
+  }
+
+  _installValueGuard(window.HTMLInputElement, 'input');
+  _installValueGuard(window.HTMLTextAreaElement, 'textarea');
+  _installValueGuard(window.HTMLSelectElement, 'select');
+
   // ==== Block XHR-based API calls when the toggle is OFF. ====
   try {
     const origOpen = XMLHttpRequest.prototype.open;

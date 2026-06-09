@@ -238,6 +238,7 @@
         "qualification-threshold-engine.js",
         "career-boost-engine.js",
         "recruiter-audit.js",
+        "application-validator.js",
         "workday-handlers.js",
         "autofill-controller.js",
         "content.js"
@@ -303,6 +304,7 @@
         "qualification-threshold-engine.js",
         "career-boost-engine.js",
         "recruiter-audit.js",
+        "application-validator.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
         "workday-handlers.js",

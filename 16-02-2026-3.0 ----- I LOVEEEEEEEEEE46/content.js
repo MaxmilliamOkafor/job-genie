@@ -500,6 +500,31 @@
       return true;
     }
     
+    // ============ CHECK APPLICATION COMPLETENESS ============
+    // Read-only scan: reports which REQUIRED fields are still empty so the
+    // user never submits an incomplete application (a top cause of silent
+    // rejection). Never fills or submits.
+    if (message.action === 'CHECK_APPLICATION_COMPLETENESS') {
+      try {
+        if (window.ApplicationValidator) {
+          const report = window.ApplicationValidator.checkRequiredFields();
+          if (report.hasForm) {
+            const msg = window.ApplicationValidator.summarise(report);
+            if (typeof updateBanner === 'function' && typeof createStatusBanner === 'function') {
+              createStatusBanner();
+              updateBanner(msg, report.complete ? 'success' : 'error');
+            }
+          }
+          sendResponse({ status: 'checked', report });
+        } else {
+          sendResponse({ status: 'unavailable' });
+        }
+      } catch (e) {
+        sendResponse({ status: 'error', error: e.message });
+      }
+      return true;
+    }
+
     // ============ TOGGLE AUTOFILL ============
     if (message.action === 'TOGGLE_AUTOFILL') {
       (async () => {
