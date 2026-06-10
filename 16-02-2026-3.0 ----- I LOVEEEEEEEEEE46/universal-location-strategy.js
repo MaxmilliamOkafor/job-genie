@@ -1073,6 +1073,34 @@ function getLocationPreview(rawLocation) {
   };
 }
 
+/**
+ * Is this string a place we can actually recognise?
+ * Final gate before a job-derived location is stated as the candidate's
+ * own location on the CV: letters-only junk ("Asdfgh", "Anywhere in
+ * EMEA") passes shape checks but fails recognition. Recognition sources:
+ * 199k-city dataset (when loaded), static CITY_COUNTRY_MAP, country
+ * names/ISO2 codes.  "City, CC" with a plausible 2-letter country code
+ * is accepted even when the city is unknown (small towns).
+ */
+function isRecognizedPlace(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return false;
+  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  const city = parts[0] || '';
+
+  // The CITY segment itself must resolve. A country suffix alone is NOT
+  // sufficient: forceCityCountryFormat appends the fallback's country to
+  // unknown junk ("Asdfgh" -> "Asdfgh, IE"), so trusting the suffix would
+  // wave junk through. Unknown-but-real small towns fall back to the
+  // profile location, which is safe; junk on the CV is not.
+  if (_findCity(city)) return true;
+  if (CITY_COUNTRY_MAP[city.toLowerCase()]) return true;
+  if (MAJOR_US_CITIES.includes(city.toLowerCase())) return true;
+  // A bare country ("Ireland", "DE") is acceptable as a place.
+  if (_toISO2(city)) return true;
+  return false;
+}
+
 // Export
 if (typeof window !== 'undefined') {
   window.ATSLocationTailor = {
@@ -1084,6 +1112,7 @@ if (typeof window !== 'undefined') {
     inferCountryFromCity,
     deduplicateAndFormat,
     forceCityCountryFormat,
+    isRecognizedPlace,
   };
 }
 
@@ -1097,5 +1126,6 @@ if (typeof module !== 'undefined' && module.exports) {
     inferCountryFromCity,
     deduplicateAndFormat,
     forceCityCountryFormat,
+    isRecognizedPlace,
   };
 }

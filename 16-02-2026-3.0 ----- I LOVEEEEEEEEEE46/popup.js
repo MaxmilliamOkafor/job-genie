@@ -4035,6 +4035,21 @@ class ATSTailor {
     if (/^(tbd|n\/?a|various|multiple|flexible|anywhere|unknown|remote|hybrid|onsite|location)$/i.test(s.split(',')[0].trim())) {
       return fallback;
     }
+    // Remote/hybrid wording anywhere in the string means this isn't a
+    // clean place name -- the normalizer should already have resolved it,
+    // so whatever reached here is junk. Fall back.
+    if (/\b(remote|hybrid|onsite|on-site|wfh|work\s*from\s*home|virtual)\b/i.test(s)) {
+      return fallback;
+    }
+    // Recognition gate: letters-only junk ("Asdfgh", "Anywhere in EMEA")
+    // passes the shape check, so verify the place actually resolves
+    // against the city dataset / country codes when the strategy is loaded.
+    try {
+      if (window.ATSLocationTailor?.isRecognizedPlace &&
+          !window.ATSLocationTailor.isRecognizedPlace(s)) {
+        return fallback;
+      }
+    } catch (e) {}
     // Tidy casing: title-case an all-lowercase city; uppercase 2-letter codes.
     s = s.split(',').map((part, i) => {
       const p = part.trim();

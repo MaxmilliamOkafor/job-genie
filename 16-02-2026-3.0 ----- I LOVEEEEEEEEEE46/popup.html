@@ -962,6 +962,11 @@
   <script src="strategic-keyword-integration.js"></script>
   <script src="qualification-threshold-engine.js"></script>
   <script src="recruiter-audit.js"></script>
+  <!-- Location stack: popup.js calls ATSLocationTailor for the job-adaptive
+       CV header location; without these it silently no-ops to raw text. -->
+  <script src="location-db.js"></script>
+  <script src="city-dataset.js"></script>
+  <script src="universal-location-strategy.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
