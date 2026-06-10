@@ -581,9 +581,14 @@
         if ((acc + s).length > maxChars) break;
         acc += s;
       }
+      const usedSentenceBoundary = !!acc;
       summary = (acc || summary.slice(0, maxChars)).trim();
-      // Don't end mid-word
-      summary = summary.replace(/\s+\S*$/, m => m.length < 25 ? '' : m).trim();
+      // Don't end mid-word -- but ONLY when we hard-sliced. A sentence-
+      // boundary cut already ends cleanly; stripping its last word
+      // produced truncated phrases like "ensuring exceptional."
+      if (!usedSentenceBoundary) {
+        summary = summary.replace(/\s+\S*$/, m => m.length < 25 ? '' : m).trim();
+      }
       if (!/[.!?]$/.test(summary)) summary += '.';
       clamped = true;
     }
