@@ -4060,6 +4060,35 @@ class ATSTailor {
     return s;
   }
 
+  /**
+   * Summary text for the generated PDF.
+   * CRITICAL: prefer the summary from the AUDITED CV text
+   * (this.generatedDocuments.cv) so every recruiter-audit fix (buzzword
+   * purge, 360-char clamp, target-role echo, em-dash removal) reaches
+   * the actual FILE. Previously the raw profile ats_strategy overrode
+   * it inside OpenResumeGenerator, so audit fixes applied only to the
+   * preview text -- not the PDF the user submits.
+   */
+  getAuditedSummaryForPdf(fallbackSummary) {
+    const cvText = this.generatedDocuments?.cv || '';
+    const m = cvText.match(/^(?:PROFESSIONAL SUMMARY|SUMMARY|PROFILE)\s*:?\s*\n([\s\S]*?)(?=\n\s*\n|\n(?:WORK EXPERIENCE|EXPERIENCE|CORE COMPETENCIES|EMPLOYMENT|SKILLS|EDUCATION)\b)/im);
+    let summary = m && m[1] ? m[1].trim().replace(/\s*\n\s*/g, ' ') : '';
+    if (summary) return summary;
+
+    // Fallback: raw profile strategy text -- run the same audit fixes on it.
+    summary = String(fallbackSummary || '').trim();
+    if (summary && typeof RecruiterAudit !== 'undefined') {
+      try {
+        summary = RecruiterAudit.purgeBuzzwords(summary).text;
+        const wrapped = 'PROFESSIONAL SUMMARY\n' + summary + '\n\nEXPERIENCE';
+        const clamped = RecruiterAudit.clampSummary(wrapped, { maxChars: 360 });
+        const mm = clamped.text.match(/PROFESSIONAL SUMMARY\n([\s\S]*?)\n\nEXPERIENCE/);
+        if (mm && mm[1]) summary = mm[1].trim();
+      } catch (e) {}
+    }
+    return summary;
+  }
+
   async regeneratePDFAfterBoost() {
     try {
       console.log('[ATS Tailor] Regenerating PDF after boost (OpenResume style)...');
@@ -4127,7 +4156,9 @@ class ATSTailor {
               education: candidateData.education,
               skills: candidateData.skills,
               certifications: candidateData.certifications,
-              summary: candidateData.ats_strategy,
+              // Audited summary (from generatedDocuments.cv) so the PDF
+              // matches the preview -- NOT the raw profile ats_strategy.
+              summary: this.getAuditedSummaryForPdf(candidateData.ats_strategy),
               city: tailoredLocation
             }
           );
