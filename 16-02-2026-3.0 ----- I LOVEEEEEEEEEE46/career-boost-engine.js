@@ -276,7 +276,10 @@
     {
       tag: 'challenge',
       re: /\b(?:you ?will|you'?ll|the role will)\s+([^.\n]{20,160})/i,
-      shape: (m) => `the ${m[1].trim().replace(/[.;:,]+$/, '')} challenge described in the brief`,
+      // The capture follows "you will", so it starts with a bare verb
+      // ("define the roadmap..."). "the chance to <verb phrase>" is the
+      // only framing that stays grammatical for any verb.
+      shape: (m) => `the chance to ${m[1].trim().replace(/[.;:,]+$/, '')}`,
     },
     {
       tag: 'milestone',

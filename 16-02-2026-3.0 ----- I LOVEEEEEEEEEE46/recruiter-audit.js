@@ -25,7 +25,9 @@
     'very', 'really', 'just', 'basically', 'actually', 'literally',
     'essentially', 'absolutely', 'totally', 'simply', 'honestly',
     'definitely', 'certainly', 'obviously', 'clearly', 'quite',
-    'rather', 'somewhat', 'arguably',
+    // NOTE: 'rather' deliberately excluded -- it is load-bearing in
+    // "rather than X" constructions used by the cover-letter templates.
+    'somewhat', 'arguably',
   ];
 
   function stripFillers(text) {
