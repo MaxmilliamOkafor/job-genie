@@ -793,45 +793,72 @@
       return normalized;
     },
 
-    // ============ FORMAT DATE TO MM-YYYY ============
-    // ATS-compliant: "01-2023 - Present" or "04-2021 - 12-2022"
+    // ============ FORMAT DATE TO "Month YYYY" ============
+    // Jobscan-recommended formats are MM/YY, MM/YYYY, or "Month YYYY"
+    // ("Mar 2019" or "March 2019"). The previous MM-YYYY ("01-2023") was
+    // flagged by Jobscan as non-compliant. We standardise on the long
+    // form: "January 2023 - Present" / "April 2021 - December 2022".
     formatDateMMYYYY(dateStr) {
+      const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const ABBR = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, sept:9, oct:10, nov:11, dec:12,
+        january:1, february:2, march:3, april:4, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
       if (!dateStr) return '';
-      const hasPresent = /present|current|now/i.test(dateStr);
+      const monthName = (mo) => {
+        const n = parseInt(mo, 10);
+        if (n >= 1 && n <= 12) return MONTHS[n - 1];
+        return null;
+      };
+      const expandWord = (w) => {
+        const i = ABBR[String(w || '').toLowerCase()];
+        return i ? MONTHS[i - 1] : null;
+      };
+      const hasPresent = /present|current|now|ongoing/i.test(dateStr);
 
-      // Try YYYY-MM format (e.g., "2023-01")
-      const isoMatches = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
-      if (isoMatches && isoMatches.length >= 1) {
-        const parts = isoMatches.map(m => {
+      // YYYY-MM or YYYY/MM (ISO)
+      const iso = dateStr.match(/\b(\d{4})[-/](\d{1,2})\b/g);
+      if (iso && iso.length) {
+        const parts = iso.map(m => {
           const [y, mo] = m.split(/[-/]/);
-          return `${mo.padStart(2, '0')}-${y}`;
+          const name = monthName(mo);
+          return name ? `${name} ${y}` : `${y}`;
         });
         if (hasPresent) return `${parts[0]} - Present`;
         if (parts.length >= 2) return `${parts[0]} - ${parts[1]}`;
         return parts[0];
       }
 
-      // Try MM/YYYY or MM-YYYY format already
-      const mmyyyyMatches = dateStr.match(/\b(\d{1,2})[\/\-](\d{4})\b/g);
-      if (mmyyyyMatches && mmyyyyMatches.length >= 1) {
-        const parts = mmyyyyMatches.map(m => {
-          const [mo, y] = m.split(/[\/\-]/);
-          return `${mo.padStart(2, '0')}-${y}`;
+      // MM/YYYY or MM-YYYY
+      const mmy = dateStr.match(/\b(\d{1,2})[-/](\d{4})\b/g);
+      if (mmy && mmy.length) {
+        const parts = mmy.map(m => {
+          const [mo, y] = m.split(/[-/]/);
+          const name = monthName(mo);
+          return name ? `${name} ${y}` : y;
         });
         if (hasPresent) return `${parts[0]} - Present`;
         if (parts.length >= 2) return `${parts[0]} - ${parts[1]}`;
         return parts[0];
       }
 
-      // Fallback: extract years, prefix with 01-
+      // "Mar 2019" / "March 2019" (already in target form, but normalise
+      // abbreviated months to long form for consistency).
+      const word = dateStr.match(/\b([A-Za-z]+)\.?\s+(\d{4})\b/g);
+      if (word && word.length) {
+        const parts = word.map(m => {
+          const [, mon, y] = m.match(/([A-Za-z]+)\.?\s+(\d{4})/);
+          const name = expandWord(mon) || mon;
+          return `${name} ${y}`;
+        });
+        if (hasPresent) return `${parts[0]} - Present`;
+        if (parts.length >= 2) return `${parts[0]} - ${parts[1]}`;
+        return parts[0];
+      }
+
+      // Fallback: year-only -> "January YYYY"
       const years = dateStr.match(/\d{4}/g);
-      if (hasPresent && years && years.length >= 1) {
-        return `01-${years[0]} - Present`;
-      } else if (years && years.length >= 2) {
-        return `01-${years[0]} - 01-${years[1]}`;
-      } else if (years && years.length === 1) {
-        return `01-${years[0]}`;
-      }
+      if (hasPresent && years && years.length >= 1) return `January ${years[0]} - Present`;
+      if (years && years.length >= 2) return `January ${years[0]} - January ${years[1]}`;
+      if (years && years.length === 1) return `January ${years[0]}`;
       return dateStr;
     },
 
@@ -1332,6 +1359,52 @@
         y += size * lineHeight + 2;
       };
 
+      // Render a centered single line with clickable hyperlinks for URL
+      // segments (LinkedIn, GitHub, portfolio) and the email. Segments are
+      // separated by " | ". URL segments are coloured/underlined and given
+      // an annotated link rectangle so a click opens the target.
+      const ensureScheme = (url) => /^https?:\/\//i.test(url) ? url : ('https://' + url);
+      const addCenteredLinkedLine = (segments, size = font.body) => {
+        doc.setFontSize(size);
+        doc.setFont(font.family, 'normal');
+        const sep = '  |  ';
+        const drawn = segments.filter(Boolean);
+        if (drawn.length === 0) return;
+        // Measure each segment so we can center the entire line.
+        const widths = drawn.map((s) => doc.getTextWidth(s.text));
+        const sepWidth = doc.getTextWidth(sep);
+        const total = widths.reduce((a, b) => a + b, 0) + sepWidth * (drawn.length - 1);
+        let x = (page.width - total) / 2;
+        const linkColor = [0, 102, 204]; // muted blue, classic CV link colour
+        const textColor = [0, 0, 0];
+        drawn.forEach((seg, i) => {
+          if (seg.url) {
+            doc.setTextColor(...linkColor);
+          } else {
+            doc.setTextColor(...textColor);
+          }
+          doc.text(seg.text, x, y);
+          if (seg.url) {
+            // Underline + annotation rectangle for the clickable region.
+            doc.setDrawColor(...linkColor);
+            doc.setLineWidth(0.5);
+            doc.line(x, y + 1.5, x + widths[i], y + 1.5);
+            try {
+              doc.link(x, y - size * 0.8, widths[i], size * 1.05, { url: seg.url });
+            } catch (e) {}
+          }
+          x += widths[i];
+          if (i < drawn.length - 1) {
+            doc.setTextColor(...textColor);
+            doc.text(sep, x, y);
+            x += sepWidth;
+          }
+        });
+        doc.setTextColor(...textColor);
+        doc.setDrawColor(0, 0, 0);
+        y += size * lineHeight + 2;
+      };
+
       // Extract info
       const name = data.contact.name;
       const jobTitle = jobData?.title || 'the open position';
@@ -1350,21 +1423,33 @@
       const highPriority = Array.isArray(keywordsArray) ? keywordsArray.slice(0, 8) : [];
       const topExp = data.experience?.[0]?.company || 'my previous roles';
 
-      // === HEADER ===
+      // === HEADER (professional, hyperlinked) ===
       addCenteredText(name.toUpperCase(), true, font.name);
       y += 2;
 
-      // Dublin, IE | Phone | Email format
+      // Line 1: job-adaptive location + phone + clickable email
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const extractedLocCL = data.contact.location ? String(data.contact.location).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
-      const contactLine = ['Dublin, IE', formattedPhone, data.contact.email, extractedLocCL].filter(Boolean).join(' | ');
-      addCenteredText(contactLine, false, font.body);
+      const headerLocation = (data.contact.location && String(data.contact.location).trim())
+        || data.contact.city || 'Dublin, IE';
+      addCenteredLinkedLine([
+        { text: headerLocation },
+        formattedPhone ? { text: formattedPhone } : null,
+        data.contact.email ? { text: data.contact.email, url: 'mailto:' + data.contact.email } : null,
+      ], font.body);
 
-      // Portfolio link
-      const portfolio = data.contact.portfolio ? data.contact.portfolio.replace(/^https?:\/\//i, '').replace(/\/$/, '') : '';
-      if (portfolio) {
+      // Line 2: clickable LinkedIn / GitHub / portfolio (small font)
+      const stripScheme = (u) => String(u || '').replace(/^https?:\/\//i, '').replace(/\/$/, '');
+      const linkedinDisplay = stripScheme(data.contact.linkedin);
+      const githubDisplay = stripScheme(data.contact.github);
+      const portfolioDisplay = stripScheme(data.contact.portfolio);
+      const linkSegments = [
+        linkedinDisplay ? { text: linkedinDisplay, url: ensureScheme(data.contact.linkedin) } : null,
+        githubDisplay ? { text: githubDisplay, url: ensureScheme(data.contact.github) } : null,
+        portfolioDisplay ? { text: portfolioDisplay, url: ensureScheme(data.contact.portfolio) } : null,
+      ].filter(Boolean);
+      if (linkSegments.length) {
         y += 2;
-        addCenteredText(portfolio, false, font.small);
+        addCenteredLinkedLine(linkSegments, font.small);
       }
       y += 16;
 
