@@ -68,6 +68,11 @@
       .toString()
       .trim()
       .toLowerCase()
+      // Fold accents FIRST ("krak\u00f3w" -> "krakow"); without this the
+      // strip below turned accented letters into spaces ("krak w"),
+      // mangling index keys for every accented city in the dataset.
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[\u2019']/g, '')
       .replace(/[^a-z0-9\s]/g, ' ')
       .replace(/\s+/g, ' ')

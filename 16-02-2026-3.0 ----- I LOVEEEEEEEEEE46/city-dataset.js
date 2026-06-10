@@ -24,16 +24,22 @@
   let CITY_MAP = null;
   let isLoaded = false;
 
+  // Strip diacritics: "kraków" -> "krakow", "medellín" -> "medellin".
+  // Recruiters type city names without accents constantly; the dataset
+  // stores them accented, so we index BOTH forms.
+  function foldAccents(s) {
+    try {
+      return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } catch (e) {
+      return s;
+    }
+  }
+
   function buildCityMap(rawData) {
     const map = new Map();
 
-    for (const row of rawData) {
-      const name = (row.name || '').toString().trim();
-      const cc = (row.country || '').toString().trim().toUpperCase();
-      if (!name || !cc) continue;
-
-      const key = name.toLowerCase();
-
+    const put = (key, cc) => {
+      if (!key) return;
       // If duplicate, prefer higher-priority country
       if (map.has(key)) {
         const existing = map.get(key);
@@ -43,6 +49,19 @@
       } else {
         map.set(key, cc);
       }
+    };
+
+    for (const row of rawData) {
+      const name = (row.name || '').toString().trim();
+      const cc = (row.country || '').toString().trim().toUpperCase();
+      if (!name || !cc) continue;
+
+      const key = name.toLowerCase();
+      put(key, cc);
+
+      // Index the accent-folded variant too ("krakow" -> PL).
+      const folded = foldAccents(key);
+      if (folded !== key) put(folded, cc);
     }
 
     return map;
@@ -88,7 +107,8 @@
   function lookupCity(cityName) {
     if (!CITY_MAP) return null;
     const key = (cityName || '').toString().trim().toLowerCase();
-    return CITY_MAP.get(key) || null;
+    // Exact, then accent-folded (handles NFC/NFD input variants too).
+    return CITY_MAP.get(key) || CITY_MAP.get(foldAccents(key)) || null;
   }
 
   // Expose globally

@@ -396,10 +396,17 @@
 
     // ============ CALCULATE YEARS OF EXPERIENCE ============
     calculateYearsExperience(candidateData) {
-      const experience = candidateData?.professional_experience || 
-                        candidateData?.professionalExperience || 
+      // Explicit value from profile wins over date arithmetic.
+      const explicit = candidateData?.yearsExperience ?? candidateData?.years_experience ?? candidateData?.yearsExp;
+      if (explicit != null && String(explicit).trim() !== '') {
+        const n = parseInt(explicit, 10);
+        if (!isNaN(n) && n > 0) return n >= 10 ? '10+' : `${n}+`;
+      }
+
+      const experience = candidateData?.professional_experience ||
+                        candidateData?.professionalExperience ||
                         candidateData?.workExperience || [];
-      
+
       if (experience.length === 0) return '5+';
 
       let totalYears = 0;
@@ -408,10 +415,10 @@
       for (const job of experience) {
         const dates = job.dates || '';
         const years = dates.match(/\d{4}/g);
-        
+
         if (years && years.length >= 2) {
           const startYear = parseInt(years[0]);
-          const endYear = /present/i.test(dates) ? CurrentYear : parseInt(years[1]);
+          const endYear = /present/i.test(dates) ? currentYear : parseInt(years[1]);
           totalYears += endYear - startYear;
         } else if (years && years.length === 1) {
           const startYear = parseInt(years[0]);
@@ -438,10 +445,19 @@
       const all = keywords.all || [];
       const medium = keywords.mediumPriority || [];
       
-      // Combine and dedupe, prioritising high priority
+      // Combine and dedupe case-insensitively but PRESERVE original casing,
+      // so acronyms like "AI/ML", "AWS", "SQL" don't end up lowercase
+      // mid-sentence ("my ai/ml experience" reads like a bot wrote it).
       const combined = [...highPriority, ...all, ...medium];
-      const unique = [...new Set(combined.map(k => k.toLowerCase()))];
-      
+      const seen = new Set();
+      const unique = [];
+      for (const k of combined) {
+        const key = String(k || '').toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        unique.push(String(k).trim());
+      }
+
       return unique.slice(0, count);
     },
 

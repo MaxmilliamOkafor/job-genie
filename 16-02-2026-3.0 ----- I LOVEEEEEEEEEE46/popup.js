@@ -1771,6 +1771,58 @@ class ATSTailor {
    * OPTIMIZED: Update AI Match Analysis panel with keyword chips
    * Uses batch DOM updates for performance
    */
+  /**
+   * Render recruiter-audit warnings as a collapsed, text-only details
+   * section under the AI Match Analysis card. Only appears when there is
+   * something actionable; removed entirely when there are no warnings.
+   */
+  renderAuditWarnings(report) {
+    try {
+      const host = document.getElementById('aiMatchAnalysis') || document.getElementById('documentsCard');
+      if (!host) return;
+      let panel = document.getElementById('auditWarningsPanel');
+      const warnings = (report && report.warnings) || [];
+      if (warnings.length === 0) {
+        if (panel) panel.remove();
+        return;
+      }
+      if (!panel) {
+        panel = document.createElement('details');
+        panel.id = 'auditWarningsPanel';
+        panel.style.cssText = 'margin:8px 0;font-size:11px;color:var(--text-secondary,#94a3b8);';
+        host.appendChild(panel);
+      }
+      const LABELS = {
+        'potentially-fabricated-keywords': (w) =>
+          `Review before submitting — ${w.count} keyword(s) not in your original CV: ${(w.samples || []).join(', ')}`,
+        'unquantified-bullets': (w) =>
+          `${w.count} of ${w.totalBullets} bullets have no number/metric`,
+        'over-long-bullets': (w) => `${w.count} bullet(s) longer than 2 lines`,
+        'weak-bullet-openers': (w) =>
+          `${w.count} bullet(s) open with weak verbs (e.g. "${(w.samples && w.samples[0] && w.samples[0].opener) || 'responsible for'}")`,
+        'non-action-verb-openers': (w) => `${w.count} bullet(s) don't open with an action verb`,
+        'mixed-date-formats': (w) => w.note,
+        'missing-standard-headers': (w) => w.note,
+        'first-six-seconds': (w) => `CV top section missing: ${(w.missing || []).join(', ')}`,
+        'buzzword-words-flagged': (w) => `Buzzwords to rewrite manually: ${(w.words || []).join(', ')}`,
+        'cover-letter-too-long': (w) => `Cover letter is ${w.wordCount} words (target ≤ ${w.target})`,
+        'cover-letter-self-heavy': (w) => `Cover letter talks about you ${w.iCount}x vs them ${w.youCount}x — add company focus`,
+      };
+      const items = warnings
+        .map((w) => {
+          const fn = LABELS[w.kind];
+          const text = fn ? fn(w) : (w.note || w.kind);
+          return `<li style="margin:3px 0;">${text}</li>`;
+        })
+        .join('');
+      panel.innerHTML =
+        `<summary style="cursor:pointer;">📋 ${warnings.length} quality note(s) — click to review</summary>` +
+        `<ul style="margin:6px 0 2px 16px;padding:0;">${items}</ul>`;
+    } catch (e) {
+      console.warn('[Popup] renderAuditWarnings failed:', e.message);
+    }
+  }
+
   updateMatchAnalysisUI() {
     const matchScore = this.generatedDocuments.matchScore || 0;
     const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
@@ -3205,7 +3257,8 @@ class ATSTailor {
             certifications: Array.isArray(p.certifications) ? p.certifications : [],
             achievements: Array.isArray(p.achievements) ? p.achievements : [],
             atsStrategy: p.ats_strategy || '',
-            city: this._defaultLocation,
+            // Job-adaptive location (sanitised; falls back to profile)
+            city: this.getApplicationLocation(),
             country: p.country || undefined,
             address: p.address || undefined,
             state: p.state || undefined,
@@ -3678,20 +3731,24 @@ class ATSTailor {
         }
       }
 
-      // CRITICAL: Fix CV text header to always include "Dublin, IE" as candidate address
+      // CRITICAL: Ensure the CV header carries the candidate address.
+      // Job-adaptive: uses the (sanitised) job location so geo-screened
+      // ATS filters don't knock the application out on distance alone;
+      // falls back to the profile location when the job's is junk.
+      const applicationLocation = this.getApplicationLocation();
       if (this.generatedDocuments.cv) {
         let cvText = this.generatedDocuments.cv;
-        // If header line has phone/email but no "Dublin, IE", prepend it
         const headerLines = cvText.split('\n').slice(0, 5);
-        const hasLocationLine = headerLines.some(l => /Dublin,?\s*IE/i.test(l));
+        const hasLocationLine = headerLines.some(l =>
+          l.includes(applicationLocation) || /Dublin,?\s*IE/i.test(l));
         if (!hasLocationLine) {
-          // Find the contact line (contains phone or email) and prepend Dublin, IE
+          // Find the contact line (contains phone or email) and prepend location
           cvText = cvText.replace(
             /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
-            '$1Dublin, IE | $2'
+            '$1' + applicationLocation + ' | $2'
           );
           this.generatedDocuments.cv = cvText;
-          console.log('[ATS Tailor] Prepended Dublin, IE to CV header');
+          console.log('[ATS Tailor] Prepended location to CV header:', applicationLocation);
         }
       }
 
@@ -3733,11 +3790,13 @@ class ATSTailor {
             '$1\nmaxmilliamlabs-ai.web.app\n'
           );
         }
-        // Add Dublin, IE to cover letter header if missing
-        if (!/Dublin,?\s*IE/i.test(coverText.split('Dear')[0] || '')) {
+        // Add the job-adaptive location to the cover letter header if missing
+        const clLocation = this.getApplicationLocation();
+        const clHead = coverText.split('Dear')[0] || '';
+        if (!clHead.includes(clLocation) && !/Dublin,?\s*IE/i.test(clHead)) {
           coverText = coverText.replace(
             /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
-            '$1Dublin, IE | $2'
+            '$1' + clLocation + ' | $2'
           );
         }
         this.generatedDocuments.coverLetter = coverText;
@@ -3782,6 +3841,7 @@ class ATSTailor {
           this.generatedDocuments.recruiterAudit = audited.report;
           console.log('[ATS Tailor] Recruiter audit:', audited.report.fixes.length, 'fixes,',
             audited.report.warnings.length, 'warnings,', audited.report.timingMs + 'ms');
+          this.renderAuditWarnings(audited.report);
         } catch (e) {
           console.warn('[ATS Tailor] Recruiter audit skipped:', e.message);
         }
@@ -3934,10 +3994,76 @@ class ATSTailor {
   /**
    * Regenerate PDF after CV boost with dynamic location tailoring
    */
+  /**
+   * Job-adaptive candidate location for THIS application.
+   * Uses the job's normalized location (so geo-screened roles don't knock
+   * the candidate out on distance alone) and falls back to the profile
+   * location. Job locations are typed by recruiters and can be misspelled
+   * or malformed, so the result is sanitised and shape-validated -- any
+   * junk falls back to the profile location rather than landing on the CV.
+   */
+  getApplicationLocation() {
+    const fallback = this._defaultLocation || 'Dublin, IE';
+    let loc = '';
+    try {
+      if (window.ATSLocationTailor?.normalizeJobLocationForApplication) {
+        loc = window.ATSLocationTailor.normalizeJobLocationForApplication(
+          this.currentJob?.location || '', fallback);
+      } else {
+        loc = this.currentJob?.location || fallback;
+      }
+    } catch (e) {
+      loc = fallback;
+    }
+    return this.sanitizeLocationString(loc, fallback);
+  }
+
+  sanitizeLocationString(loc, fallback) {
+    if (!loc) return fallback;
+    let s = String(loc)
+      .replace(/\s+/g, ' ')
+      .replace(/\s*,\s*/g, ', ')
+      .replace(/, ,+/g, ',')
+      .replace(/^[,\s]+|[,\s.]+$/g, '')
+      .trim();
+    // Validate shape: "City", "City, CC", "City, Country", "City, ST, US".
+    // Recruiter-typed junk (digits, slashes, "hybrid/remote- london!!", etc.)
+    // fails this and falls back to the profile location.
+    const valid = /^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ.'\- ]{1,39}(?:,\s*[A-Za-z]{2}(?:,\s*[A-Za-z]{2})?|,\s*[A-Za-zÀ-ÖØ-öø-ÿ.'\- ]{2,30})?$/.test(s);
+    if (!valid) return fallback;
+    // Recruiter placeholders that pass the shape check but aren't places.
+    if (/^(tbd|n\/?a|various|multiple|flexible|anywhere|unknown|remote|hybrid|onsite|location)$/i.test(s.split(',')[0].trim())) {
+      return fallback;
+    }
+    // Remote/hybrid wording anywhere in the string means this isn't a
+    // clean place name -- the normalizer should already have resolved it,
+    // so whatever reached here is junk. Fall back.
+    if (/\b(remote|hybrid|onsite|on-site|wfh|work\s*from\s*home|virtual)\b/i.test(s)) {
+      return fallback;
+    }
+    // Recognition gate: letters-only junk ("Asdfgh", "Anywhere in EMEA")
+    // passes the shape check, so verify the place actually resolves
+    // against the city dataset / country codes when the strategy is loaded.
+    try {
+      if (window.ATSLocationTailor?.isRecognizedPlace &&
+          !window.ATSLocationTailor.isRecognizedPlace(s)) {
+        return fallback;
+      }
+    } catch (e) {}
+    // Tidy casing: title-case an all-lowercase city; uppercase 2-letter codes.
+    s = s.split(',').map((part, i) => {
+      const p = part.trim();
+      if (i > 0 && /^[A-Za-z]{2}$/.test(p)) return p.toUpperCase();
+      if (p === p.toLowerCase()) return p.replace(/(^|[\s\-'])[a-z]/g, (c) => c.toUpperCase());
+      return p;
+    }).join(', ');
+    return s;
+  }
+
   async regeneratePDFAfterBoost() {
     try {
       console.log('[ATS Tailor] Regenerating PDF after boost (OpenResume style)...');
-      
+
       // Get ATS-safe location in strict format: "City, ISO2" (or "City, ST, US")
       let tailoredLocation = this._defaultLocation || 'Dublin, IE';
       if (window.ATSLocationTailor?.normalizeJobLocationForApplication) {
@@ -3948,6 +4074,9 @@ class ATSTailor {
       } else if (this.currentJob?.location) {
         tailoredLocation = this.currentJob.location;
       }
+      // Recruiter-typed job locations can be malformed; sanitise + validate
+      // before the value reaches any CV/cover header or PDF.
+      tailoredLocation = this.sanitizeLocationString(tailoredLocation, this._defaultLocation || 'Dublin, IE');
       console.log('[ATS Tailor] Tailored location:', tailoredLocation);
 
       // Get user profile for header
@@ -4041,7 +4170,7 @@ class ATSTailor {
             linkedin: candidateData.linkedin,
             github: candidateData.github,
             portfolio: candidateData.portfolio,
-            city: 'Dublin, IE',
+            city: tailoredLocation,
             location: tailoredLocation,
             professional_experience: candidateData.professional_experience || []
           };
