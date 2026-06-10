@@ -2593,6 +2593,7 @@
         updateBanner(SUCCESS_BANNER_MSG, 'success');
         hideBanner();
         stopAttachLoops();
+        scheduleCompletenessCheck();
       }
     }, 50);
 
@@ -2609,8 +2610,36 @@
         updateBanner(SUCCESS_BANNER_MSG, 'success');
         hideBanner();
         stopAttachLoops();
+        scheduleCompletenessCheck();
       }
     }, 200);
+  }
+
+  // ============ POST-ATTACH COMPLETENESS CHECK ============
+  // After the CV + cover letter are attached, wait for the page (and any
+  // autofill) to settle, then run the read-only required-field scan and
+  // warn ONLY if something required is still empty. Silent when complete,
+  // so the success banner isn't replaced with noise.
+  let completenessCheckScheduled = false;
+  function scheduleCompletenessCheck() {
+    if (completenessCheckScheduled) return;
+    completenessCheckScheduled = true;
+    setTimeout(() => {
+      try {
+        if (!window.ApplicationValidator) return;
+        const report = window.ApplicationValidator.checkRequiredFields();
+        if (report.hasForm && !report.complete) {
+          const msg = window.ApplicationValidator.summarise(report);
+          console.warn('[ATS Tailor] Completeness check:', msg);
+          createStatusBanner();
+          updateBanner(msg, 'error');
+        } else if (report.hasForm) {
+          console.log('[ATS Tailor] Completeness check: all required fields filled');
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] Completeness check failed:', e.message);
+      }
+    }, 4000);
   }
 
   // ============ LOAD FILES AND START ==========

@@ -613,6 +613,52 @@
     return { tooLong };
   }
 
+  // ===================================================================
+  // v4 — ATS PARSE-SAFETY CHECKS
+  // -------------------------------------------------------------------
+  // The two most common reasons an ATS parser garbles an otherwise-good
+  // CV: (a) mixed date formats confuse experience-duration extraction,
+  // (b) non-standard section headers stop the parser from finding the
+  // experience/education/skills blocks at all.  Both are warnings only.
+  // ===================================================================
+
+  const DATE_FORMAT_PATTERNS = {
+    'MM/YYYY': /\b(0[1-9]|1[0-2])\/\d{4}\b/g,
+    'Month YYYY': /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\b/g,
+    'YYYY-MM': /\b\d{4}-(0[1-9]|1[0-2])\b/g,
+    'MM-YYYY': /\b(0[1-9]|1[0-2])-\d{4}\b/g,
+  };
+
+  function dateFormatAudit(text) {
+    if (!text) return { consistent: true, formats: [] };
+    const found = [];
+    for (const [name, re] of Object.entries(DATE_FORMAT_PATTERNS)) {
+      re.lastIndex = 0;
+      const matches = text.match(re);
+      if (matches && matches.length > 0) {
+        found.push({ format: name, count: matches.length, example: matches[0] });
+      }
+    }
+    return { consistent: found.length <= 1, formats: found };
+  }
+
+  const STANDARD_SECTION_HEADERS = [
+    /^(WORK\s+)?EXPERIENCE\s*:?\s*$/im,
+    /^(PROFESSIONAL\s+)?SUMMARY\s*:?\s*$|^PROFILE\s*:?\s*$/im,
+    /^EDUCATION\s*:?\s*$/im,
+    /^(TECHNICAL\s+)?SKILLS\s*:?\s*$|^TECHNICAL PROFICIENCIES\s*:?\s*$|^CORE COMPETENCIES\s*:?\s*$/im,
+  ];
+  const SECTION_NAMES = ['Experience', 'Summary/Profile', 'Education', 'Skills'];
+
+  function sectionHeaderAudit(text) {
+    if (!text) return { missing: [] };
+    const missing = [];
+    STANDARD_SECTION_HEADERS.forEach((re, i) => {
+      if (!re.test(text)) missing.push(SECTION_NAMES[i]);
+    });
+    return { missing };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -641,6 +687,9 @@
       honesty: flags.honesty !== false,
       summaryClamp: flags.summaryClamp !== false,
       bulletLength: flags.bulletLength !== false,
+      // v4
+      dateFormats: flags.dateFormats !== false,
+      sectionHeaders: flags.sectionHeaders !== false,
     };
 
     let outCV = cvText;
@@ -786,6 +835,31 @@
       }
     }
 
+    // v4: mixed date formats confuse ATS experience-duration extraction
+    if (f.dateFormats && outCV) {
+      const d = dateFormatAudit(outCV);
+      if (!d.consistent) {
+        report.warnings.push({
+          kind: 'mixed-date-formats',
+          formats: d.formats,
+          note: 'CV mixes date formats (' + d.formats.map((x) => x.format).join(' + ') +
+            '). ATS parsers extract experience duration most reliably from ONE consistent format.',
+        });
+      }
+    }
+
+    // v4: missing standard section headers stop ATS parsers finding blocks
+    if (f.sectionHeaders && outCV) {
+      const s = sectionHeaderAudit(outCV);
+      if (s.missing.length > 0) {
+        report.warnings.push({
+          kind: 'missing-standard-headers',
+          missing: s.missing,
+          note: 'ATS parsers look for standard section headers. Missing/non-standard: ' + s.missing.join(', '),
+        });
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -806,6 +880,9 @@
     honestyAudit,
     clampSummary,
     bulletLengthAudit,
+    // v4
+    dateFormatAudit,
+    sectionHeaderAudit,
   };
 
   global.RecruiterAudit = RecruiterAudit;

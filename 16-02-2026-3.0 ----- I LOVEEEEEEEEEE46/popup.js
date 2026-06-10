@@ -1771,6 +1771,58 @@ class ATSTailor {
    * OPTIMIZED: Update AI Match Analysis panel with keyword chips
    * Uses batch DOM updates for performance
    */
+  /**
+   * Render recruiter-audit warnings as a collapsed, text-only details
+   * section under the AI Match Analysis card. Only appears when there is
+   * something actionable; removed entirely when there are no warnings.
+   */
+  renderAuditWarnings(report) {
+    try {
+      const host = document.getElementById('aiMatchAnalysis') || document.getElementById('documentsCard');
+      if (!host) return;
+      let panel = document.getElementById('auditWarningsPanel');
+      const warnings = (report && report.warnings) || [];
+      if (warnings.length === 0) {
+        if (panel) panel.remove();
+        return;
+      }
+      if (!panel) {
+        panel = document.createElement('details');
+        panel.id = 'auditWarningsPanel';
+        panel.style.cssText = 'margin:8px 0;font-size:11px;color:var(--text-secondary,#94a3b8);';
+        host.appendChild(panel);
+      }
+      const LABELS = {
+        'potentially-fabricated-keywords': (w) =>
+          `Review before submitting — ${w.count} keyword(s) not in your original CV: ${(w.samples || []).join(', ')}`,
+        'unquantified-bullets': (w) =>
+          `${w.count} of ${w.totalBullets} bullets have no number/metric`,
+        'over-long-bullets': (w) => `${w.count} bullet(s) longer than 2 lines`,
+        'weak-bullet-openers': (w) =>
+          `${w.count} bullet(s) open with weak verbs (e.g. "${(w.samples && w.samples[0] && w.samples[0].opener) || 'responsible for'}")`,
+        'non-action-verb-openers': (w) => `${w.count} bullet(s) don't open with an action verb`,
+        'mixed-date-formats': (w) => w.note,
+        'missing-standard-headers': (w) => w.note,
+        'first-six-seconds': (w) => `CV top section missing: ${(w.missing || []).join(', ')}`,
+        'buzzword-words-flagged': (w) => `Buzzwords to rewrite manually: ${(w.words || []).join(', ')}`,
+        'cover-letter-too-long': (w) => `Cover letter is ${w.wordCount} words (target ≤ ${w.target})`,
+        'cover-letter-self-heavy': (w) => `Cover letter talks about you ${w.iCount}x vs them ${w.youCount}x — add company focus`,
+      };
+      const items = warnings
+        .map((w) => {
+          const fn = LABELS[w.kind];
+          const text = fn ? fn(w) : (w.note || w.kind);
+          return `<li style="margin:3px 0;">${text}</li>`;
+        })
+        .join('');
+      panel.innerHTML =
+        `<summary style="cursor:pointer;">📋 ${warnings.length} quality note(s) — click to review</summary>` +
+        `<ul style="margin:6px 0 2px 16px;padding:0;">${items}</ul>`;
+    } catch (e) {
+      console.warn('[Popup] renderAuditWarnings failed:', e.message);
+    }
+  }
+
   updateMatchAnalysisUI() {
     const matchScore = this.generatedDocuments.matchScore || 0;
     const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
@@ -3782,6 +3834,7 @@ class ATSTailor {
           this.generatedDocuments.recruiterAudit = audited.report;
           console.log('[ATS Tailor] Recruiter audit:', audited.report.fixes.length, 'fixes,',
             audited.report.warnings.length, 'warnings,', audited.report.timingMs + 'ms');
+          this.renderAuditWarnings(audited.report);
         } catch (e) {
           console.warn('[ATS Tailor] Recruiter audit skipped:', e.message);
         }
