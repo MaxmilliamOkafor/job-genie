@@ -2126,7 +2126,7 @@ Do not just list soft skills. Weave them into experience bullets:
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
 
 RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
-- Location in CV header MUST be: "Dublin, IE | ${userProfile.phone} | ${userProfile.email} | ${smartLocation}" — the candidate's permanent address "Dublin, IE" MUST always be first.
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" — use the job-derived location, NOT a hardcoded address.
 - Job title from JD appears in summary (Rule 1)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
