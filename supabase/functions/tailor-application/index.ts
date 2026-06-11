@@ -2246,7 +2246,7 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 
 ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (MM/YYYY format) - Only tailor the bullet points
-2. Location in CV header MUST be: "Dublin, IE" as candidate address + "${smartLocation}" as job location (NO "open to relocation" suffix)
+2. Location in CV header MUST be the job-derived location: "${smartLocation}" (NO "open to relocation" suffix, NO hardcoded Dublin)
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
