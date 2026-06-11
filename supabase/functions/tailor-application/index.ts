@@ -2411,7 +2411,7 @@ ${
       "name": "${candidateName}",
       "email": "${userProfile.email}",
       "phone": "${userProfile.phone}",
-      "location": "Dublin, IE",
+      "location": "${smartLocation}",
       "jobLocation": "${smartLocation}",
       "linkedin": "${userProfile.linkedin}",
       "github": "${userProfile.github}",
