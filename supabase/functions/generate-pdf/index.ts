@@ -1282,8 +1282,9 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 20;
 
-      // Contact line — "Dublin, IE" MUST always be first
-      const cl2ContactLine = ['Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
+      // Contact line — job-adaptive location, Dublin only as fallback
+      const cl2RawLoc = (pInfo.location || buildLocationHeaderFromStructuredCv(pInfo) || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const cl2ContactLine = [cl2RawLoc || 'Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
       if (cl2ContactLine) {
         currentPage.drawText(cl2ContactLine, {
           x: MARGIN,
