@@ -2353,7 +2353,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 
 2) CREATE COVER LETTER:
    ${candidateName}
-   Dublin, IE | ${userProfile.email} | ${userProfile.phone}
+   ${smartLocation} | ${userProfile.email} | ${userProfile.phone}
    ${userProfile.portfolio || ""}
 
    Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
