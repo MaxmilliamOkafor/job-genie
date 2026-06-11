@@ -1010,15 +1010,13 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 26;
 
-      // Contact line — "Dublin, IE" MUST always be first (candidate permanent address)
-      const contactParts: string[] = ['Dublin, IE'];
+      // Contact line — job-adaptive location first, Dublin only as fallback
+      const contactParts: string[] = [];
+      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
+      const cleanLocHeader = (locationHeader || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      contactParts.push(cleanLocHeader || 'Dublin, IE');
       if (pInfo.phone) contactParts.push(pInfo.phone);
       if (pInfo.email) contactParts.push(pInfo.email);
-      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
-      if (locationHeader) {
-        const cleanLocHeader = locationHeader.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/Dublin,?\s*IE/gi, '').trim();
-        if (cleanLocHeader) contactParts.push(cleanLocHeader);
-      }
 
       if (contactParts.length > 0) {
         drawWrappedText(contactParts.join(" | "), MARGIN, 10, helvetica);
