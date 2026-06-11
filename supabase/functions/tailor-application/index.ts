@@ -2216,7 +2216,7 @@ After rewriting, run this internal checklist:
 [ ] Is the first bullet of each role keyword-rich (2+ JD keywords)?
 [ ] Are bullets reordered so the most relevant appear first?
 [ ] Does the cover letter address skill gaps with transferable experience?
-[ ] Is "Dublin, IE" present in the header as the candidate's address?
+[ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Do weighted/repeated JD terms appear more than once in the CV?
