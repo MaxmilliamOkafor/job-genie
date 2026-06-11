@@ -680,8 +680,9 @@ serve(async (req) => {
       });
       yPosition -= 20;
 
-      // Contact info — "Dublin, IE" MUST always be first
-      const clContactLine = ['Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
+      // Contact info — job-adaptive location, Dublin only as fallback
+      const clRawLoc = (sanitizedData.personalInfo.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const clContactLine = [clRawLoc || 'Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
         .filter(Boolean)
         .join(" | ");
 
