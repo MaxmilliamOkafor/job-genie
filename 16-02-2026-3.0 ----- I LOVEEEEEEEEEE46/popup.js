@@ -4047,21 +4047,24 @@ class ATSTailor {
    */
   getApplicationLocation() {
     const fallback = this._defaultLocation || 'Dublin, IE';
+    const raw = this.currentJob?.location || '';
     let loc = '';
     try {
       if (window.ATSLocationTailor?.normalizeJobLocationForApplication) {
-        loc = window.ATSLocationTailor.normalizeJobLocationForApplication(
-          this.currentJob?.location || '', fallback);
+        loc = window.ATSLocationTailor.normalizeJobLocationForApplication(raw, fallback);
       } else {
-        loc = this.currentJob?.location || fallback;
+        loc = raw || fallback;
       }
     } catch (e) {
       loc = fallback;
     }
-    return this.sanitizeLocationString(loc, fallback);
+    const result = this.sanitizeLocationString(loc, fallback, { rawSource: raw });
+    // Diagnostic: shows exactly why a location was (or wasn't) adapted.
+    console.log(`[ATS Tailor] Location: raw="${raw}" -> normalized="${loc}" -> final="${result}"`);
+    return result;
   }
 
-  sanitizeLocationString(loc, fallback) {
+  sanitizeLocationString(loc, fallback, opts = {}) {
     if (!loc) return fallback;
     let s = String(loc)
       .replace(/\s+/g, ' ')
@@ -4087,10 +4090,23 @@ class ATSTailor {
     // Recognition gate: letters-only junk ("Asdfgh", "Anywhere in EMEA")
     // passes the shape check, so verify the place actually resolves
     // against the city dataset / country codes when the strategy is loaded.
+    //
+    // ESCAPE HATCH: small real towns (e.g. "Foster City, CA") may be
+    // missing from the 33k-city dataset. If the city segment was typed
+    // VERBATIM by the recruiter in the raw job location AND the raw text
+    // also contained a country/state token, trust it -- the fabrication
+    // problem we're guarding against is the normalizer APPENDING a country
+    // to junk, which can't happen when the recruiter supplied both parts.
     try {
       if (window.ATSLocationTailor?.isRecognizedPlace &&
           !window.ATSLocationTailor.isRecognizedPlace(s)) {
-        return fallback;
+        const rawSource = String(opts.rawSource || '').toLowerCase();
+        const citySeg = s.split(',')[0].trim().toLowerCase();
+        const recruiterTypedCity = citySeg.length >= 3 && rawSource.includes(citySeg);
+        const recruiterTypedRegion = /,\s*[A-Za-z]{2}\b|,\s*[A-Za-z][A-Za-z ]{3,}$/.test(String(opts.rawSource || '').trim());
+        if (!(recruiterTypedCity && recruiterTypedRegion)) {
+          return fallback;
+        }
       }
     } catch (e) {}
     // Tidy casing: title-case an all-lowercase city; uppercase 2-letter codes.

@@ -384,14 +384,15 @@ serve(async (req) => {
       });
       yPosition -= 26;
 
-      // CONTACT LINE - Simple pipe-separated, "Dublin, IE" MUST always be first
-      const contactParts: string[] = ['Dublin, IE'];
+      // CONTACT LINE - Simple pipe-separated. Job-adaptive candidate
+      // location first (passed via personalInfo.location), profile
+      // fallback "Dublin, IE" only when nothing was supplied.
+      const adaptiveLoc = (sanitizedData.personalInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const contactParts: string[] = [adaptiveLoc || 'Dublin, IE'];
       if (sanitizedData.personalInfo.phone) contactParts.push(sanitizedData.personalInfo.phone);
       if (sanitizedData.personalInfo.email) contactParts.push(sanitizedData.personalInfo.email);
-      if (sanitizedData.personalInfo.location) {
-        const cleanLoc = sanitizedData.personalInfo.location.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/Dublin,?\s*IE/gi, '').trim();
-        if (cleanLoc) contactParts.push(cleanLoc);
-      }
 
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(" | ");
@@ -682,8 +683,11 @@ serve(async (req) => {
       });
       yPosition -= 20;
 
-      // Contact info — "Dublin, IE" MUST always be first
-      const clContactLine = ['Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
+      // Contact info - job-adaptive location first, Dublin fallback
+      const clAdaptiveLoc = (sanitizedData.personalInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const clContactLine = [clAdaptiveLoc || 'Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
         .filter(Boolean)
         .join(" | ");
 
@@ -1011,15 +1015,14 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 26;
 
-      // Contact line — "Dublin, IE" MUST always be first (candidate permanent address)
-      const contactParts: string[] = ['Dublin, IE'];
+      // Contact line - job-adaptive candidate location first, Dublin fallback
+      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
+      const structAdaptiveLoc = (locationHeader || pInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const contactParts: string[] = [structAdaptiveLoc || 'Dublin, IE'];
       if (pInfo.phone) contactParts.push(pInfo.phone);
       if (pInfo.email) contactParts.push(pInfo.email);
-      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
-      if (locationHeader) {
-        const cleanLocHeader = locationHeader.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/Dublin,?\s*IE/gi, '').trim();
-        if (cleanLocHeader) contactParts.push(cleanLocHeader);
-      }
 
       if (contactParts.length > 0) {
         drawWrappedText(contactParts.join(" | "), MARGIN, 10, helvetica);
@@ -1285,8 +1288,11 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 20;
 
-      // Contact line — "Dublin, IE" MUST always be first
-      const cl2ContactLine = ['Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
+      // Contact line - job-adaptive candidate location first, Dublin fallback
+      const cl2AdaptiveLoc = (pInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const cl2ContactLine = [cl2AdaptiveLoc || 'Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
       if (cl2ContactLine) {
         currentPage.drawText(cl2ContactLine, {
           x: MARGIN,

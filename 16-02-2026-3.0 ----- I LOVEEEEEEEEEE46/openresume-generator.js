@@ -1153,11 +1153,13 @@
       y += 2;
 
       // === CONTACT LINE ===
-      // Format: "Dublin, IE | +CountryCode: Number | email | Extracted Location"
+      // Format: "Adaptive Location | +CountryCode: Number | email"
+      // data.contact.location carries the JOB-ADAPTIVE location passed from
+      // popup (city: tailoredLocation). Previously 'Dublin, IE' was
+      // hardcoded here, which is why header location never changed.
       const formattedPhone = this.formatPhoneForATS(data.contact.phone);
-      const candidateLocation = 'Dublin, IE';
-      const extractedLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim();
-      const contactParts = [candidateLocation, formattedPhone, data.contact.email, extractedLocation].filter(Boolean);
+      const candidateLocation = String(data.contact.location || '').replace(/\bopen\s+to\s+relocation\b/gi, '').trim() || 'Dublin, IE';
+      const contactParts = [candidateLocation, formattedPhone, data.contact.email].filter(Boolean);
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(' | ');
         addText(contactLine, false, true, font.body);
