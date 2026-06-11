@@ -391,6 +391,10 @@ serve(async (req) => {
         .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
         .trim();
       const contactParts: string[] = [adaptiveLoc || 'Dublin, IE'];
+      // CONTACT LINE — job-adaptive location first, Dublin only as fallback
+      const contactParts: string[] = [];
+      const rawLoc = (sanitizedData.personalInfo.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      contactParts.push(rawLoc || 'Dublin, IE');
       if (sanitizedData.personalInfo.phone) contactParts.push(sanitizedData.personalInfo.phone);
       if (sanitizedData.personalInfo.email) contactParts.push(sanitizedData.personalInfo.email);
 
@@ -688,6 +692,9 @@ serve(async (req) => {
         .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
         .trim();
       const clContactLine = [clAdaptiveLoc || 'Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
+      // Contact info — job-adaptive location, Dublin only as fallback
+      const clRawLoc = (sanitizedData.personalInfo.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const clContactLine = [clRawLoc || 'Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
         .filter(Boolean)
         .join(" | ");
 
@@ -1021,6 +1028,11 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
         .trim();
       const contactParts: string[] = [structAdaptiveLoc || 'Dublin, IE'];
+      // Contact line — job-adaptive location first, Dublin only as fallback
+      const contactParts: string[] = [];
+      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
+      const cleanLocHeader = (locationHeader || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      contactParts.push(cleanLocHeader || 'Dublin, IE');
       if (pInfo.phone) contactParts.push(pInfo.phone);
       if (pInfo.email) contactParts.push(pInfo.email);
 
@@ -1293,6 +1305,9 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
         .trim();
       const cl2ContactLine = [cl2AdaptiveLoc || 'Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
+      // Contact line — job-adaptive location, Dublin only as fallback
+      const cl2RawLoc = (pInfo.location || buildLocationHeaderFromStructuredCv(pInfo) || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      const cl2ContactLine = [cl2RawLoc || 'Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
       if (cl2ContactLine) {
         currentPage.drawText(cl2ContactLine, {
           x: MARGIN,
