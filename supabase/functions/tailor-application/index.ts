@@ -2126,7 +2126,7 @@ Do not just list soft skills. Weave them into experience bullets:
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
 
 RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
-- Location in CV header MUST be: "Dublin, IE | ${userProfile.phone} | ${userProfile.email} | ${smartLocation}" — the candidate's permanent address "Dublin, IE" MUST always be first.
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" — use the job-derived location, NOT a hardcoded address.
 - Job title from JD appears in summary (Rule 1)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
@@ -2216,7 +2216,7 @@ After rewriting, run this internal checklist:
 [ ] Is the first bullet of each role keyword-rich (2+ JD keywords)?
 [ ] Are bullets reordered so the most relevant appear first?
 [ ] Does the cover letter address skill gaps with transferable experience?
-[ ] Is "Dublin, IE" present in the header as the candidate's address?
+[ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Do weighted/repeated JD terms appear more than once in the CV?
@@ -2246,7 +2246,7 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 
 ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (MM/YYYY format) - Only tailor the bullet points
-2. Location in CV header MUST be: "Dublin, IE" as candidate address + "${smartLocation}" as job location (NO "open to relocation" suffix)
+2. Location in CV header MUST be the job-derived location: "${smartLocation}" (NO "open to relocation" suffix, NO hardcoded Dublin)
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
@@ -2321,7 +2321,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 
 1) CREATE RESUME with these exact sections:
    - Header: ${candidateName}
-   - Contact Line: Dublin, IE | ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
+   - Contact Line: ${smartLocation} | ${userProfile.phone} | ${userProfile.email}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ""} | ${userProfile.portfolio || ""}
    - PROFESSIONAL SUMMARY: 4-6 lines of PURE QUALIFICATIONS ONLY.
       
@@ -2353,7 +2353,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 
 2) CREATE COVER LETTER:
    ${candidateName}
-   Dublin, IE | ${userProfile.email} | ${userProfile.phone}
+   ${smartLocation} | ${userProfile.email} | ${userProfile.phone}
    ${userProfile.portfolio || ""}
 
    Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
@@ -2411,7 +2411,7 @@ ${
       "name": "${candidateName}",
       "email": "${userProfile.email}",
       "phone": "${userProfile.phone}",
-      "location": "Dublin, IE",
+      "location": "${smartLocation}",
       "jobLocation": "${smartLocation}",
       "linkedin": "${userProfile.linkedin}",
       "github": "${userProfile.github}",
