@@ -25,30 +25,59 @@ window.addEventListener('error', (event) => {
   // Don't prevent default for these - let them be logged
 });
 
-// ============ GLOBAL DATE NORMALISATION: YYYY-MM → MM-YYYY ============
-// Converts ISO dates like "2023-01" to "01-2023" for ATS compliance
-function _toMMYYYY(token) {
+// ============ GLOBAL DATE NORMALISATION: any → "Month YYYY" ============
+// Jobscan-recommended formats are MM/YY, MM/YYYY, or "Month YYYY" / "Mon YYYY".
+// "01-2023" (the old format) is NOT on that list and was being flagged.
+// We standardise on "Month YYYY" for both halves of the range -- most
+// human-readable, fully ATS-safe, no ambiguity. Range separator: " - ".
+const _MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const _MONTH_LOOKUP = (() => {
+  const map = {};
+  _MONTHS_LONG.forEach((m, i) => {
+    map[m.toLowerCase()] = i + 1;
+    map[m.slice(0, 3).toLowerCase()] = i + 1;
+  });
+  map['sept'] = 9;
+  return map;
+})();
+function _toMonthYYYY(token) {
   if (!token) return '';
   const t = String(token).trim();
-  if (/^present$/i.test(t)) return 'Present';
-  if (/current|now/i.test(t)) return 'Present';
-  // YYYY-MM → MM-YYYY
-  const iso = t.match(/^((?:19|20)\d{2})[-/](\d{1,2})$/);
-  if (iso) return `${iso[2].padStart(2, '0')}-${iso[1]}`;
-  // Already MM-YYYY or MM/YYYY → normalise to MM-YYYY
-  const mmyyyy = t.match(/^(\d{1,2})[-/]((?:19|20)\d{2})$/);
-  if (mmyyyy) return `${mmyyyy[1].padStart(2, '0')}-${mmyyyy[2]}`;
-  // Year only → return as-is
+  if (!t || /^present$|^current$|^now$|^to\s*date$|^ongoing$/i.test(t)) return 'Present';
+  // YYYY-MM (ISO)
+  let m = t.match(/^((?:19|20)\d{2})[-/](\d{1,2})$/);
+  if (m) {
+    const mi = parseInt(m[2], 10);
+    if (mi >= 1 && mi <= 12) return `${_MONTHS_LONG[mi - 1]} ${m[1]}`;
+  }
+  // MM-YYYY or MM/YYYY (old internal format)
+  m = t.match(/^(\d{1,2})[-/]((?:19|20)\d{2})$/);
+  if (m) {
+    const mi = parseInt(m[1], 10);
+    if (mi >= 1 && mi <= 12) return `${_MONTHS_LONG[mi - 1]} ${m[2]}`;
+  }
+  // "Month YYYY" or "Mon YYYY" -- expand abbreviated month names to long form
+  m = t.match(/^([A-Za-z]+)\.?\s+((?:19|20)\d{2})$/);
+  if (m) {
+    const mi = _MONTH_LOOKUP[m[1].toLowerCase()];
+    if (mi) return `${_MONTHS_LONG[mi - 1]} ${m[2]}`;
+    return t;
+  }
+  // Year only -- leave as-is
   return t;
 }
-function _buildMMYYYYRange(startDate, endDate) {
-  const s = _toMMYYYY(startDate);
-  const e = _toMMYYYY(endDate || 'Present');
+// Back-compat alias for code paths that still reference _toMMYYYY
+const _toMMYYYY = _toMonthYYYY;
+
+function _buildMonthYearRange(startDate, endDate) {
+  const s = _toMonthYYYY(startDate);
+  const e = _toMonthYYYY(endDate || 'Present');
   if (!s && !e) return '';
   if (!s) return e;
   if (!e || s === e) return s;
-  return `${s} – ${e}`;
+  return `${s} - ${e}`;
 }
+const _buildMMYYYYRange = _buildMonthYearRange; // back-compat alias
 
 console.log('[ATS PERFECTION] v3.0 loaded with immutable field protection');
 
@@ -3731,48 +3760,60 @@ class ATSTailor {
         }
       }
 
-      // CRITICAL: Ensure the CV header carries the candidate address.
-      // Job-adaptive: uses the (sanitised) job location so geo-screened
-      // ATS filters don't knock the application out on distance alone;
-      // falls back to the profile location when the job's is junk.
+      // CRITICAL: Ensure the CV header carries the JOB-ADAPTIVE candidate
+      // address. The model often pre-writes "Dublin, IE" (it sees the
+      // profile city), and the previous "is there already a location?"
+      // check matched that and skipped the replacement -- so the adaptive
+      // value never reached the file. Fix: ALWAYS replace whatever the
+      // contact line starts with with the adaptive location.
       const applicationLocation = this.getApplicationLocation();
       if (this.generatedDocuments.cv) {
         let cvText = this.generatedDocuments.cv;
-        const headerLines = cvText.split('\n').slice(0, 5);
-        const hasLocationLine = headerLines.some(l =>
-          l.includes(applicationLocation) || /Dublin,?\s*IE/i.test(l));
-        if (!hasLocationLine) {
-          // Find the contact line (contains phone or email) and prepend location
-          cvText = cvText.replace(
-            /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
-            '$1' + applicationLocation + ' | $2'
+        const phoneEmailRe = /^(.+\n)([^\n]*(?:\+?\d[\d\s:+()-]{6,}|\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})[^\n]*)/m;
+        const m = cvText.match(phoneEmailRe);
+        if (m) {
+          // Strip a leading location-like prefix (e.g. "Dublin, IE | ")
+          // from the contact line, then prepend the adaptive value.
+          const stripped = m[2].replace(
+            /^[\s,;|]*[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ.'\- ]{1,60}(?:,\s*[A-Za-z]{2,30}){0,2}\s*[|,;]\s*/, ''
           );
+          cvText = cvText.replace(phoneEmailRe, m[1] + applicationLocation + ' | ' + stripped);
           this.generatedDocuments.cv = cvText;
-          console.log('[ATS Tailor] Prepended location to CV header:', applicationLocation);
+          console.log('[ATS Tailor] CV header location set to:', applicationLocation);
         }
       }
 
-      // CRITICAL: Normalise all experience dates to MM-YYYY format in generated CV text
+      // CRITICAL: Normalise all experience dates to "Month YYYY" format in
+      // generated CV text. Jobscan's match report explicitly recommends
+      // MM/YY, MM/YYYY, or "Month YYYY"; the previous MM-YYYY (e.g.
+      // "01-2023") was being flagged as non-compliant. We standardise on
+      // "Month YYYY" for the most human-readable, ATS-safe output.
       if (this.generatedDocuments.cv) {
         let cvText = this.generatedDocuments.cv;
-        // Convert YYYY-MM → MM-YYYY in text (e.g., "2023-01" → "01-2023")
-        cvText = cvText.replace(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/g, (match, year, month) => {
-          return `${month.padStart(2, '0')}-${year}`;
+        const monthName = (mm) => _MONTHS_LONG[Math.max(1, Math.min(12, parseInt(mm, 10))) - 1];
+        // Order matters. Step 1: expand abbreviated month names FIRST so
+        // they don't conflict with the year-only fallbacks. "Jan 2023" ->
+        // "January 2023".
+        cvText = cvText.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+((?:19|20)\d{2})\b/g, (m, mon, y) => {
+          const mi = _MONTH_LOOKUP[mon.toLowerCase()];
+          return mi ? `${_MONTHS_LONG[mi - 1]} ${y}` : m;
         });
-        // Convert MM/YYYY → MM-YYYY (slash to hyphen)
-        cvText = cvText.replace(/\b(\d{1,2})\/((?:19|20)\d{2})\b/g, (match, month, year) => {
-          return `${month.padStart(2, '0')}-${year}`;
+        // Step 2: numeric formats -> "Month YYYY".
+        cvText = cvText.replace(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/g, (m, y, mo) => `${monthName(mo)} ${y}`);
+        cvText = cvText.replace(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/g, (m, mo, y) => {
+          const n = parseInt(mo, 10);
+          return n >= 1 && n <= 12 ? `${monthName(mo)} ${y}` : m;
         });
-        // Convert standalone year ranges "YYYY – Present" → "01-YYYY – Present"
-        cvText = cvText.replace(/\b((?:19|20)\d{2})\s*[–—-]\s*Present\b/gi, (match, year) => {
-          return `01-${year} – Present`;
-        });
-        // Convert standalone year ranges "YYYY – YYYY" → "01-YYYY – 01-YYYY"
-        cvText = cvText.replace(/\b((?:19|20)\d{2})\s*[–—-]\s*((?:19|20)\d{2})\b/g, (match, startYear, endYear) => {
-          return `01-${startYear} – 01-${endYear}`;
-        });
+        // Step 3: year-only ranges -> "January YYYY ..." (only applies to
+        // YEARS NOT already preceded by a month name -- the negative
+        // lookbehind prevents reprocessing "January 2023 - Present").
+        cvText = cvText.replace(/(?<![A-Za-z]\s)\b((?:19|20)\d{2})\s*[–—-]\s*Present\b/gi, (m, y) => `January ${y} - Present`);
+        cvText = cvText.replace(/(?<![A-Za-z]\s)\b((?:19|20)\d{2})\s*[–—-]\s*((?:19|20)\d{2})\b/g, (m, s, e) => `January ${s} - January ${e}`);
+        // Step 4: normalise any remaining en/em dash range separators
+        // between "Month YYYY" tokens to plain hyphens.
+        cvText = cvText.replace(/(\b[A-Za-z]+ (?:19|20)\d{2})\s*[–—]\s*(Present|[A-Za-z]+ (?:19|20)\d{2})\b/g, '$1 - $2');
         this.generatedDocuments.cv = cvText;
-        console.log('[ATS Tailor] Converted dates to MM-YYYY format');
+        console.log('[ATS Tailor] Converted dates to "Month YYYY" format');
       }
 
       // CRITICAL: Sanitise cover letter text to remove standalone "Company" line
@@ -3790,14 +3831,16 @@ class ATSTailor {
             '$1\nmaxmilliamlabs-ai.web.app\n'
           );
         }
-        // Add the job-adaptive location to the cover letter header if missing
+        // Force the cover-letter header location to the job-adaptive
+        // value (replacing whatever the model wrote, typically "Dublin, IE").
         const clLocation = this.getApplicationLocation();
-        const clHead = coverText.split('Dear')[0] || '';
-        if (!clHead.includes(clLocation) && !/Dublin,?\s*IE/i.test(clHead)) {
-          coverText = coverText.replace(
-            /^(.+\n)(\+?\d[\d\s:+-]+\|[^\n]+)/m,
-            '$1' + clLocation + ' | $2'
+        const clPhoneEmailRe = /^(.+\n)([^\n]*(?:\+?\d[\d\s:+()-]{6,}|\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})[^\n]*)/m;
+        const mCl = coverText.match(clPhoneEmailRe);
+        if (mCl) {
+          const strippedCl = mCl[2].replace(
+            /^[\s,;|]*[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ.'\- ]{1,60}(?:,\s*[A-Za-z]{2,30}){0,2}\s*[|,;]\s*/, ''
           );
+          coverText = coverText.replace(clPhoneEmailRe, mCl[1] + clLocation + ' | ' + strippedCl);
         }
         this.generatedDocuments.coverLetter = coverText;
         console.log('[ATS Tailor] Sanitised cover letter text');
@@ -4004,21 +4047,24 @@ class ATSTailor {
    */
   getApplicationLocation() {
     const fallback = this._defaultLocation || 'Dublin, IE';
+    const raw = this.currentJob?.location || '';
     let loc = '';
     try {
       if (window.ATSLocationTailor?.normalizeJobLocationForApplication) {
-        loc = window.ATSLocationTailor.normalizeJobLocationForApplication(
-          this.currentJob?.location || '', fallback);
+        loc = window.ATSLocationTailor.normalizeJobLocationForApplication(raw, fallback);
       } else {
-        loc = this.currentJob?.location || fallback;
+        loc = raw || fallback;
       }
     } catch (e) {
       loc = fallback;
     }
-    return this.sanitizeLocationString(loc, fallback);
+    const result = this.sanitizeLocationString(loc, fallback, { rawSource: raw });
+    // Diagnostic: shows exactly why a location was (or wasn't) adapted.
+    console.log(`[ATS Tailor] Location: raw="${raw}" -> normalized="${loc}" -> final="${result}"`);
+    return result;
   }
 
-  sanitizeLocationString(loc, fallback) {
+  sanitizeLocationString(loc, fallback, opts = {}) {
     if (!loc) return fallback;
     let s = String(loc)
       .replace(/\s+/g, ' ')
@@ -4044,10 +4090,23 @@ class ATSTailor {
     // Recognition gate: letters-only junk ("Asdfgh", "Anywhere in EMEA")
     // passes the shape check, so verify the place actually resolves
     // against the city dataset / country codes when the strategy is loaded.
+    //
+    // ESCAPE HATCH: small real towns (e.g. "Foster City, CA") may be
+    // missing from the 33k-city dataset. If the city segment was typed
+    // VERBATIM by the recruiter in the raw job location AND the raw text
+    // also contained a country/state token, trust it -- the fabrication
+    // problem we're guarding against is the normalizer APPENDING a country
+    // to junk, which can't happen when the recruiter supplied both parts.
     try {
       if (window.ATSLocationTailor?.isRecognizedPlace &&
           !window.ATSLocationTailor.isRecognizedPlace(s)) {
-        return fallback;
+        const rawSource = String(opts.rawSource || '').toLowerCase();
+        const citySeg = s.split(',')[0].trim().toLowerCase();
+        const recruiterTypedCity = citySeg.length >= 3 && rawSource.includes(citySeg);
+        const recruiterTypedRegion = /,\s*[A-Za-z]{2}\b|,\s*[A-Za-z][A-Za-z ]{3,}$/.test(String(opts.rawSource || '').trim());
+        if (!(recruiterTypedCity && recruiterTypedRegion)) {
+          return fallback;
+        }
       }
     } catch (e) {}
     // Tidy casing: title-case an all-lowercase city; uppercase 2-letter codes.

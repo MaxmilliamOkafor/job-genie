@@ -384,6 +384,13 @@ serve(async (req) => {
       });
       yPosition -= 26;
 
+      // CONTACT LINE - Simple pipe-separated. Job-adaptive candidate
+      // location first (passed via personalInfo.location), profile
+      // fallback "Dublin, IE" only when nothing was supplied.
+      const adaptiveLoc = (sanitizedData.personalInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const contactParts: string[] = [adaptiveLoc || 'Dublin, IE'];
       // CONTACT LINE — job-adaptive location first, Dublin only as fallback
       const contactParts: string[] = [];
       const rawLoc = (sanitizedData.personalInfo.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
@@ -680,6 +687,11 @@ serve(async (req) => {
       });
       yPosition -= 20;
 
+      // Contact info - job-adaptive location first, Dublin fallback
+      const clAdaptiveLoc = (sanitizedData.personalInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const clContactLine = [clAdaptiveLoc || 'Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
       // Contact info — job-adaptive location, Dublin only as fallback
       const clRawLoc = (sanitizedData.personalInfo.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
       const clContactLine = [clRawLoc || 'Dublin, IE', sanitizedData.personalInfo.phone, sanitizedData.personalInfo.email]
@@ -1010,6 +1022,12 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 26;
 
+      // Contact line - job-adaptive candidate location first, Dublin fallback
+      const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
+      const structAdaptiveLoc = (locationHeader || pInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const contactParts: string[] = [structAdaptiveLoc || 'Dublin, IE'];
       // Contact line — job-adaptive location first, Dublin only as fallback
       const contactParts: string[] = [];
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
@@ -1282,6 +1300,11 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
       });
       yPosition -= 20;
 
+      // Contact line - job-adaptive candidate location first, Dublin fallback
+      const cl2AdaptiveLoc = (pInfo.location || '')
+        .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '')
+        .trim();
+      const cl2ContactLine = [cl2AdaptiveLoc || 'Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');
       // Contact line — job-adaptive location, Dublin only as fallback
       const cl2RawLoc = (pInfo.location || buildLocationHeaderFromStructuredCv(pInfo) || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
       const cl2ContactLine = [cl2RawLoc || 'Dublin, IE', pInfo.phone, pInfo.email].filter(Boolean).join(' | ');

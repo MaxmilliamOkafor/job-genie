@@ -2126,6 +2126,7 @@ Do not just list soft skills. Weave them into experience bullets:
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
 
 RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" — the candidate location adapts to the job's city (smartLocation) so geo-filters do not reject the application.
 - Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" — use the job-derived location, NOT a hardcoded address.
 - Job title from JD appears in summary (Rule 1)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
@@ -2216,6 +2217,7 @@ After rewriting, run this internal checklist:
 [ ] Is the first bullet of each role keyword-rich (2+ JD keywords)?
 [ ] Are bullets reordered so the most relevant appear first?
 [ ] Does the cover letter address skill gaps with transferable experience?
+[ ] Is "${smartLocation}" present in the header as the candidate's location?
 [ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
@@ -2246,6 +2248,7 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 
 ABSOLUTE RULES:
 1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (MM/YYYY format) - Only tailor the bullet points
+2. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
 2. Location in CV header MUST be the job-derived location: "${smartLocation}" (NO "open to relocation" suffix, NO hardcoded Dublin)
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
