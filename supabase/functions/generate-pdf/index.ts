@@ -384,14 +384,12 @@ serve(async (req) => {
       });
       yPosition -= 26;
 
-      // CONTACT LINE - Simple pipe-separated, "Dublin, IE" MUST always be first
-      const contactParts: string[] = ['Dublin, IE'];
+      // CONTACT LINE — job-adaptive location first, Dublin only as fallback
+      const contactParts: string[] = [];
+      const rawLoc = (sanitizedData.personalInfo.location || '').replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').trim();
+      contactParts.push(rawLoc || 'Dublin, IE');
       if (sanitizedData.personalInfo.phone) contactParts.push(sanitizedData.personalInfo.phone);
       if (sanitizedData.personalInfo.email) contactParts.push(sanitizedData.personalInfo.email);
-      if (sanitizedData.personalInfo.location) {
-        const cleanLoc = sanitizedData.personalInfo.location.replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, '').replace(/Dublin,?\s*IE/gi, '').trim();
-        if (cleanLoc) contactParts.push(cleanLoc);
-      }
 
       if (contactParts.length > 0) {
         const contactLine = contactParts.join(" | ");
