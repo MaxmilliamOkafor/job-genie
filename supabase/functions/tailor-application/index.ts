@@ -2321,7 +2321,7 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
 
 1) CREATE RESUME with these exact sections:
    - Header: ${candidateName}
-   - Contact Line: Dublin, IE | ${userProfile.phone} | ${userProfile.email} | ${smartLocation}
+   - Contact Line: ${smartLocation} | ${userProfile.phone} | ${userProfile.email}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ""} | ${userProfile.portfolio || ""}
    - PROFESSIONAL SUMMARY: 4-6 lines of PURE QUALIFICATIONS ONLY.
       
