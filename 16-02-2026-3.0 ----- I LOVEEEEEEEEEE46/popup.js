@@ -1822,6 +1822,10 @@ class ATSTailor {
         host.appendChild(panel);
       }
       const LABELS = {
+        'hiring-company-in-wrong-bullet': (w) => {
+          const s = (w.samples && w.samples[0]) || {};
+          return `🚨 CRITICAL: bullet under "${s.employer || '?'}" mentions "${w.hiringCompany || s.hiringCompany || '?'}" — that's a fabrication a recruiter will flag. Edit before submitting.`;
+        },
         'potentially-fabricated-keywords': (w) =>
           `Review before submitting — ${w.count} keyword(s) not in your original CV: ${(w.samples || []).join(', ')}`,
         'unquantified-bullets': (w) =>
@@ -3872,6 +3876,7 @@ class ATSTailor {
             coverLetterText: this.generatedDocuments.coverLetter || '',
             jdText: this.currentJob?.description || this.currentJob?.jdText || '',
             jdTitle: this.currentJob?.title || '',
+            jdCompany: this.currentJob?.company || '',
             candidateName,
             // v3: honesty audit needs the ORIGINAL CV + JD keywords so it
             // can flag any tailored term that wasn't already in the user's

@@ -2096,6 +2096,52 @@ Pre-extracted gap analysis:
 ---
 PHASE 3: REWRITE — EXECUTE ALL 7 RULES
 
+RULE 0 — ANTI-FABRICATION (HARDEST RULE, OVERRIDES ALL OTHERS)
+This rule is non-negotiable. It is more important than match score, more
+important than keyword density, more important than Rule 10's verbatim-
+phrase requirement. Violations look like obvious lies to a recruiter and
+get the application instantly rejected, often blacklisting the candidate.
+
+NEVER do any of the following — even when injecting "missing keywords":
+
+1. Do NOT name the hiring company (or its products / brand / hardware /
+   software / acronyms) in a bullet about a DIFFERENT employer's role.
+   Example of what NEVER to write, given a JD for AMD applied to a Meta role:
+     ❌ "Provided technical support for AMD's commercial products..."
+     ❌ "...optimising workloads on AMD-based solutions..."
+     ❌ "...delivered technical presentations enhancing confidence in AMD technology..."
+     ❌ "...managing escalations of issues related to AMD hardware..."
+   The candidate worked at META during that period, not for AMD.
+   Writing AMD into a Meta bullet is a fabrication and a red flag.
+
+2. Do NOT claim job-content the candidate didn't perform. The role's
+   actual duties live in the ORIGINAL CV; you may reword and reorder
+   them, but you may not invent new responsibilities, products
+   supported, platforms used, customers served, sales activities, or
+   technical surfaces.
+
+3. Do NOT inject a JD phrase into a bullet where it has no truthful
+   anchor in the original bullet. If the JD says "managed mainframe
+   migrations" and no role in the CV touched mainframes, that phrase
+   does NOT appear anywhere. Rule 10's verbatim-phrase requirement
+   applies ONLY where the candidate genuinely has the experience.
+
+4. Do NOT add tools / certifications / domain experience the candidate
+   does not already have somewhere in the original CV.
+
+5. The hiring company's NAME may appear in: the cover letter (where it
+   addresses them), and the summary's "Target role" / opener line. It
+   must NEVER appear inside a work-experience bullet describing past
+   employment.
+
+TEST before writing each bullet: "Could the candidate defend this
+sentence in an interview when asked 'tell me about that?'" If the answer
+is no, the bullet is fabricated — rewrite it using only what is in the
+original CV, even if that means missing a keyword.
+
+If a Rule 3 / Rule 9 / Rule 10 instruction conflicts with Rule 0,
+Rule 0 wins. Lose the keyword, save the candidate's credibility.
+
 RULE 1 — JOB TITLE IN SUMMARY (Searchability fix, worth ~5 points)
 The EXACT job title from the job description MUST appear in the professional summary. Do not paraphrase it. Write it verbatim.
 
@@ -2107,13 +2153,24 @@ The skills section must be completely replaced. Rewrite it as:
   Soft Skills: [all soft skill keywords from the JD, exact phrasing]
 This section alone can close 15-20 points of the gap. Minimum 15-25 keywords.
 
-RULE 3 — EXPERIENCE BULLETS: INJECT WEIGHTED TERMS
+RULE 3 — EXPERIENCE BULLETS: INJECT WEIGHTED TERMS (subject to Rule 0)
 For each role in work history:
 - Scan which Phase 1 keywords are THEMATICALLY relevant to that role
+  based on the ORIGINAL CV bullet content (not the JD's wishlist).
 - Rewrite 1-2 bullets per role to naturally incorporate missing keywords
-- Use the exact term as it appears in the JD, not a synonym
-- NEVER fabricate metrics or achievements not in the original CV
-- Prioritise injecting the terms that appeared most often in the JD
+  ONLY when the underlying work in that role genuinely involved that
+  concept. "Genuinely involved" means the original bullet describes
+  the activity; you are renaming it with the JD's vocabulary, not
+  inventing the activity.
+- Use the exact term as it appears in the JD, not a synonym.
+- NEVER fabricate metrics, achievements, products supported, customer
+  segments, or technical surfaces not in the original CV.
+- NEVER mention the HIRING company / its products / its hardware / its
+  brand inside a bullet for a DIFFERENT employer. See Rule 0.
+- If a keyword has no truthful anchor in any role, leave it for the
+  Skills section instead of forcing it into a bullet.
+- Prioritise injecting the terms that appeared most often in the JD,
+  subject to all of the above.
 
 RULE 4 — MATCH SCALE LANGUAGE TO JD
 If the JD uses "petabytes" and the CV says "10TB", rewrite to contextualise relative to enterprise/petabyte-scale systems.
@@ -2179,7 +2236,19 @@ Example:
 - JD phrase needed: "troubleshoot issues", "resolve issues", "improve efficiency"
 - Rewritten: "Troubleshoot issues in CI pipelines and resolve issues to improve efficiency, reducing build failures by 70%"
 
-This is NON-NEGOTIABLE. Every 2+ word phrase from the JD responsibilities and requirements sections MUST appear verbatim at least once.
+This rule is subject to Rule 0. A JD phrase appears verbatim ONLY in
+a bullet where the original CV already describes that activity. If no
+role honestly maps to the phrase, the phrase does NOT appear in
+experience -- it may appear in Skills (if it is a tool/skill the
+candidate genuinely has) or be omitted entirely. NEVER invent a
+responsibility to host a phrase. Match score is meaningless if the
+recruiter spots a lie.
+
+ABSOLUTELY FORBIDDEN: writing the HIRING company's name, products,
+brand, hardware, or technology stack into a bullet for a DIFFERENT
+employer. Example: applying to AMD, a Meta bullet must never say "AMD"
+or "AMD's commercial products" or "AMD-based solutions". The candidate
+worked at Meta, not AMD.
 
 RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
