@@ -2111,6 +2111,10 @@ NEVER do any of the following — even when injecting "missing keywords":
      ❌ "...optimising workloads on AMD-based solutions..."
      ❌ "...delivered technical presentations enhancing confidence in AMD technology..."
      ❌ "...managing escalations of issues related to AMD hardware..."
+     BAD: "Provided technical support for AMD's commercial products..."
+     BAD: "...optimising workloads on AMD-based solutions..."
+     BAD: "...delivered technical presentations enhancing confidence in AMD technology..."
+     BAD: "...managing escalations of issues related to AMD hardware..."
    The candidate worked at META during that period, not for AMD.
    Writing AMD into a Meta bullet is a fabrication and a red flag.
 
