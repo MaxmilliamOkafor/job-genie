@@ -2107,6 +2107,10 @@ NEVER do any of the following — even when injecting "missing keywords":
 1. Do NOT name the hiring company (or its products / brand / hardware /
    software / acronyms) in a bullet about a DIFFERENT employer's role.
    Example of what NEVER to write, given a JD for AMD applied to a Meta role:
+     ❌ "Provided technical support for AMD's commercial products..."
+     ❌ "...optimising workloads on AMD-based solutions..."
+     ❌ "...delivered technical presentations enhancing confidence in AMD technology..."
+     ❌ "...managing escalations of issues related to AMD hardware..."
      BAD: "Provided technical support for AMD's commercial products..."
      BAD: "...optimising workloads on AMD-based solutions..."
      BAD: "...delivered technical presentations enhancing confidence in AMD technology..."

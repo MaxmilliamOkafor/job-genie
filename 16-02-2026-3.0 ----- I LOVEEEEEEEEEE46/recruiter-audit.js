@@ -666,11 +666,88 @@
     return { missing };
   }
 
+  // ===================================================================
+  // v5 — HIRING-COMPANY-IN-WRONG-BULLET DETECTOR
+  // -------------------------------------------------------------------
+  // The single worst failure mode: the tailor model writes the hiring
+  // company's name (e.g. "AMD", "IEQ Capital") into an experience bullet
+  // for a DIFFERENT employer (Meta, Accenture). That is an obvious
+  // fabrication. We scan every bullet, identify which role it belongs to
+  // by tracking the most-recent role header above it, and flag any
+  // bullet that mentions the hiring company while sitting under a
+  // different employer.
+  // ===================================================================
+
+  function hiringCompanyAudit(cvText, hiringCompany) {
+    if (!cvText || !hiringCompany || hiringCompany.length < 2) return { violations: [] };
+    const target = String(hiringCompany).trim();
+    if (!target) return { violations: [] };
+    // Build a flexible regex that matches the company name and common
+    // possessive / acronym forms.
+    const esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${esc}(?:'s|\\.com)?\\b`, 'i');
+
+    const lines = cvText.split('\n');
+    const violations = [];
+    // We track up to TWO recent non-bullet lines because the typical CV
+    // shape is "Company\nTitle\nDates" -- the company name is two lines
+    // above the dates, not one. After we see a bullet we reset, so the
+    // next role's header is detected fresh.
+    let employerLines = [];
+    let inExperience = false;
+
+    const stopWords = new Set(['SUMMARY','PROFESSIONAL SUMMARY','PROFILE','CORE COMPETENCIES','AREAS OF EXPERTISE','EDUCATION','SKILLS','CERTIFICATIONS','PROJECTS']);
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      const upper = line.toUpperCase();
+
+      if (/^(WORK\s+)?EXPERIENCE\s*:?\s*$|^EMPLOYMENT\s*:?\s*$/i.test(line)) {
+        inExperience = true;
+        continue;
+      }
+      if (stopWords.has(upper)) { inExperience = false; employerLines = []; continue; }
+      if (!inExperience) continue;
+
+      const isBullet = /^([\-*•]|\d+\.)\s+/.test(line);
+      if (!isBullet) {
+        const isDateLine = /\b(19|20)\d{2}\b/.test(line) && !/[a-z]{4,}\s+[a-z]{4,}/i.test(line);
+        if (!isDateLine && line.length < 80) {
+          employerLines.push(line);
+          if (employerLines.length > 3) employerLines.shift();
+        }
+        continue;
+      }
+      // First bullet of a role -- the employer is the FIRST header line
+      // we saw above it (companies appear before titles).
+      const currentEmployer = employerLines[0] || null;
+
+      // If it mentions the hiring company AND the current employer is
+      // something else (and the hiring company isn't ANY header line of
+      // this role), that's a fabrication.
+      if (re.test(line)) {
+        const headerMatches = employerLines.some(h => re.test(h));
+        if (currentEmployer && !headerMatches) {
+          violations.push({
+            employer: currentEmployer.slice(0, 60),
+            hiringCompany: target,
+            sample: line.replace(/^([\-*•]|\d+\.)\s+/, '').slice(0, 140),
+          });
+        }
+      }
+      if (violations.length >= 6) break;
+    }
+
+    return { violations };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
     jdText = '',
     jdTitle = '',
+    jdCompany = '',
     candidateName = '',
     originalCV = '',
     jobKeywords = null,
@@ -697,6 +774,8 @@
       // v4
       dateFormats: flags.dateFormats !== false,
       sectionHeaders: flags.sectionHeaders !== false,
+      // v5
+      hiringCompanyLies: flags.hiringCompanyLies !== false,
     };
 
     let outCV = cvText;
@@ -867,6 +946,23 @@
       }
     }
 
+    // v5: hiring-company-in-wrong-bullet (the AMD-into-Meta fabrication).
+    // This is a CRITICAL warning -- it represents an interview-killing
+    // lie. Surfaced with a distinct kind so the popup can highlight it.
+    if (f.hiringCompanyLies && outCV && jdCompany) {
+      const hc = hiringCompanyAudit(outCV, jdCompany);
+      if (hc.violations.length > 0) {
+        report.warnings.push({
+          kind: 'hiring-company-in-wrong-bullet',
+          severity: 'critical',
+          count: hc.violations.length,
+          samples: hc.violations.slice(0, 3),
+          note: 'CRITICAL: bullet(s) describe the hiring company (' + jdCompany +
+            ') as part of work at a different employer. This is a fabrication a recruiter will flag. Edit before submitting.',
+        });
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -890,6 +986,8 @@
     // v4
     dateFormatAudit,
     sectionHeaderAudit,
+    // v5
+    hiringCompanyAudit,
   };
 
   global.RecruiterAudit = RecruiterAudit;
