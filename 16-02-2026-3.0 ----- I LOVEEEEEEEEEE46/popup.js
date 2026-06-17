@@ -961,6 +961,31 @@ class ATSTailor {
     URL.revokeObjectURL(url);
     this.showToast(`Downloaded ${result.filename} (ATS-friendly)`, 'success');
   }
+
+  /**
+   * Build the DOCX once after tailoring and store its base64 on
+   * generatedDocuments so the content script can attach it to ATS
+   * forms when the user's attach_format preference is "docx".
+   * Pure text -> docx; cannot regress the PDF path.
+   */
+  buildDocxArtifact() {
+    try {
+      const cvText = this.generatedDocuments?.cv;
+      if (!cvText || typeof DocxGenerator === 'undefined' || !DocxGenerator.fromCvText) return;
+      const baseName = (this.generatedDocuments.cvFileName || 'Resume').replace(/\.(pdf|docx|txt)$/i, '');
+      const result = DocxGenerator.fromCvText(cvText, {
+        name: baseName,
+        filename: `${baseName}.docx`,
+      });
+      if (result && result.success && result.base64) {
+        this.generatedDocuments.cvDocx = result.base64;
+        this.generatedDocuments.cvDocxFileName = result.filename || `${baseName}.docx`;
+        console.log('[ATS Tailor] DOCX artifact ready:', this.generatedDocuments.cvDocxFileName);
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] DOCX build failed:', e?.message);
+    }
+  }
   
   /**
    * Check for pending automation trigger when popup opens
@@ -1229,15 +1254,33 @@ class ATSTailor {
   // ============ AUTOFILL SETTINGS ============
   async loadAutofillSettings() {
     const result = await new Promise(resolve => {
-      chrome.storage.local.get(['autofill_enabled'], resolve);
+      chrome.storage.local.get(['autofill_enabled', 'attach_format'], resolve);
     });
-    
+
     // Default OFF: matches "Toggle off to save API usage" messaging.
     const enabled = result.autofill_enabled === true;
     const toggle = document.getElementById('autofillEnabledToggle');
     if (toggle) toggle.checked = enabled;
     const workdayToggle = document.getElementById('workdayAutofillToggle');
     if (workdayToggle) workdayToggle.checked = enabled;
+
+    // CV attach format (default PDF for backward compatibility).
+    const fmt = result.attach_format === 'docx' ? 'docx' : 'pdf';
+    const fmtSelect = document.getElementById('attachFormatSelect');
+    if (fmtSelect) {
+      fmtSelect.value = fmt;
+      if (!fmtSelect._jgBound) {
+        fmtSelect._jgBound = true;
+        fmtSelect.addEventListener('change', (e) => {
+          const v = e.target.value === 'docx' ? 'docx' : 'pdf';
+          chrome.storage.local.set({ attach_format: v });
+          // Re-push the payload so the new format takes effect immediately
+          // on the current page without re-tailoring.
+          this.pushAttachPayloadToActiveTab();
+          this.showToast(`CV will attach as ${v.toUpperCase()}`, 'success');
+        });
+      }
+    }
   }
   
   async runManualAutofill() {
@@ -3969,6 +4012,12 @@ class ATSTailor {
       // ============ FINAL: Attach CV & Update UI ============
       updateProgress(90, 'Attaching tailored CV to application...');
 
+      // Build the DOCX artifact so it can be the attached file when the
+      // user's attach_format preference is DOCX (the ATS-preferred format).
+      this.buildDocxArtifact();
+      const attachFmtPref = await new Promise((r) => chrome.storage.local.get(['attach_format'], r));
+      const attachFormat = attachFmtPref.attach_format === 'docx' ? 'docx' : 'pdf';
+
       // CRITICAL: Store files in chrome.storage for content.js attach loop
       await chrome.storage.local.set({
         cvPDF: this.generatedDocuments.cvPdf,
@@ -3976,8 +4025,12 @@ class ATSTailor {
         coverLetterText: this.generatedDocuments.coverLetter || '',
         cvFileName: this.generatedDocuments.cvFileName,
         coverFileName: this.generatedDocuments.coverFileName,
+        // DOCX variant + chosen format for the content-script attach loop
+        cvDocx: this.generatedDocuments.cvDocx || null,
+        cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
+        attach_format: attachFormat,
       });
-      console.log('[ATS Tailor] Stored cvPDF/coverPDF in chrome.storage for content.js');
+      console.log('[ATS Tailor] Stored cv (pdf+docx) in chrome.storage, attach format =', attachFormat);
       
       // Auto-attach BOTH CV and Cover Letter to the page
       try {
@@ -4387,6 +4440,41 @@ class ATSTailor {
     } catch (error) {
       console.error('[ATS Tailor] PDF regeneration failed:', error);
       // Don't throw - boost was successful, just PDF failed
+    } finally {
+      // Build DOCX in parallel so the content-script attach can choose
+      // PDF or DOCX based on the user's attach_format preference.
+      this.buildDocxArtifact();
+      // Push the freshly-built docx + filename + format preference to
+      // the active tab so the attach loop picks the right file.
+      this.pushAttachPayloadToActiveTab();
+    }
+  }
+
+  /**
+   * Read the user's attach_format preference and forward the current
+   * CV (and cover) artifacts to the content script. The content script
+   * uses this to construct the File it uploads to the ATS form.
+   */
+  async pushAttachPayloadToActiveTab() {
+    try {
+      const tabs = await new Promise((r) => chrome.tabs.query({ active: true, currentWindow: true }, r));
+      const tabId = tabs && tabs[0] && tabs[0].id;
+      if (!tabId) return;
+      const pref = await new Promise((r) => chrome.storage.local.get(['attach_format'], r));
+      const format = pref.attach_format === 'docx' ? 'docx' : 'pdf';
+      const payload = {
+        action: 'JG_SET_ATTACH_PAYLOAD',
+        format,
+        cvPdf: this.generatedDocuments.cvPdf || null,
+        cvFileName: this.generatedDocuments.cvFileName || null,
+        cvDocx: this.generatedDocuments.cvDocx || null,
+        cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
+        coverPdf: this.generatedDocuments.coverPdf || null,
+        coverFileName: this.generatedDocuments.coverFileName || null,
+      };
+      chrome.tabs.sendMessage(tabId, payload).catch(() => {});
+    } catch (e) {
+      console.warn('[ATS Tailor] pushAttachPayloadToActiveTab failed:', e?.message);
     }
   }
 

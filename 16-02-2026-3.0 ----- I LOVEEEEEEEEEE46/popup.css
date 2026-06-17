@@ -564,6 +564,16 @@ body::-webkit-scrollbar-thumb {
   cursor: pointer;
 }
 
+.mini-select {
+  background: var(--bg-input, #1b2436);
+  color: var(--text-primary, #e7ecf5);
+  border: 1px solid var(--border-color, #2c3852);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .setting-help {
   font-size: 10px;
   color: var(--text-muted);
