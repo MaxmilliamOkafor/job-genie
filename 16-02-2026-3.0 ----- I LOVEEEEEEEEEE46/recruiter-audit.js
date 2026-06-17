@@ -189,6 +189,20 @@
     /\bmove the needle\b/i,
     /\bgame[- ]changer\b/i,
     /\bthought leader(ship)?\b/i,
+    // Common AI-generated tells (recruiter-spotted, kill credibility on sight)
+    /\bspearhead(ed|ing)?\b/i,
+    /\brobust\b/i,
+    /\bseamless(ly)?\b/i,
+    /\bcutting[- ]edge\b/i,
+    /\bbleeding[- ]edge\b/i,
+    /\bdelve(d|s|ing)?\s+into\b/i,
+    /\bin (today'?s|the)\s+fast[- ]paced\b/i,
+    /\bever[- ]evolving\b/i,
+    /\bnavigate the complex(it(y|ies))?\b/i,
+    /\bunlock(ed|ing)? (the )?potential\b/i,
+    /\b(synergiz|harmoniz)e\b/i,
+    /\btestament to\b/i,
+    /\bvibrant ecosystem\b/i,
   ];
 
   // Single words that are problematic but cannot be safely auto-removed
@@ -667,6 +681,125 @@
   }
 
   // ===================================================================
+  // v6 — BELIEVABLE-METRICS DENSITY AUDIT
+  // -------------------------------------------------------------------
+  // Recruiter intuition: a CV with a precise jaw-dropping number in
+  // every bullet ("99.2% accuracy across 2M+ users", "GBP1.6B+ daily")
+  // reads as fabricated. The fix isn't fewer numbers; it's a MIX of
+  // quantified outcomes and grounded qualitative ones. This audit flags
+  // when the density of "big precise stats" exceeds the believability
+  // threshold so the user can swap a few back to qualitative.
+  //
+  // Heuristic: a "big precise stat" is a bullet containing either
+  //   - a percentage >= 30%      ("70%", "94%")
+  //   - a multiplier with M/B/k  ("2M+", "GBP1.6B", "10TB")
+  //   - 5+ contiguous digits     ("500,000", "120000")
+  // If 70%+ of all bullets carry one, the CV likely overclaims.
+  // ===================================================================
+
+  const BIG_STAT_RE = /\b\d{2,3}%|\b(?:GBP|USD|EUR|\$|£|€)?\s*\d+(?:\.\d+)?\s*(?:M\+?|B\+?|K\+?|TB|GB|million|billion|thousand)\b|\b\d{5,}\b/i;
+
+  function metricsDensityAudit(text, { threshold = 0.7 } = {}) {
+    if (!text) return { density: 0, totalBullets: 0, statBullets: 0, overclaiming: false };
+    const lines = text.split('\n');
+    let totalBullets = 0;
+    let statBullets = 0;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!/^([\-*•]|\d+\.)\s+/.test(line)) continue;
+      const stripped = line.replace(/^([\-*•]|\d+\.)\s+/, '');
+      if (stripped.length < 25) continue; // ignore one-liner labels
+      totalBullets++;
+      if (BIG_STAT_RE.test(stripped)) statBullets++;
+    }
+    const density = totalBullets > 0 ? statBullets / totalBullets : 0;
+    return {
+      density,
+      totalBullets,
+      statBullets,
+      overclaiming: totalBullets >= 5 && density >= threshold,
+    };
+  }
+
+  // ===================================================================
+  // v6 — UK/IE DEGREE + GPA MISMATCH
+  // -------------------------------------------------------------------
+  // UK/IE degrees use Honours classifications ("First Class Honours",
+  // "Upper Second", "Distinction"). Bolting a US-style "GPA 3.90/4.00"
+  // onto one looks wrong to a UK recruiter and signals AI-generated
+  // output. Flag whenever both appear in the same education entry.
+  // ===================================================================
+
+  const UK_IE_CLASS_RE = /\b(First Class Honours|Second Class Honours|Upper Second|Lower Second|Third Class|Distinction|Merit|Pass)\b/i;
+  const GPA_RE = /\b(\d{1,2}\.\d{1,2})\s*\/\s*(?:4\.0{0,2}|5\.0{0,2})\b|\bGPA[:\s]+\d{1,2}\.\d{1,2}\b/i;
+
+  function gpaOnUkIeDegreeAudit(text) {
+    if (!text) return { violations: [] };
+    const lines = text.split('\n');
+    const violations = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (UK_IE_CLASS_RE.test(line) && GPA_RE.test(line)) {
+        const gpaMatch = line.match(GPA_RE);
+        violations.push({
+          line: line.trim().slice(0, 120),
+          gpa: gpaMatch ? gpaMatch[0] : '',
+        });
+      } else if (UK_IE_CLASS_RE.test(line)) {
+        // Two-line case: classification on one line, GPA on the next
+        const next = lines[i + 1] || '';
+        if (GPA_RE.test(next) && !UK_IE_CLASS_RE.test(next)) {
+          const gpaMatch = next.match(GPA_RE);
+          violations.push({
+            line: (line.trim() + ' | ' + next.trim()).slice(0, 120),
+            gpa: gpaMatch ? gpaMatch[0] : '',
+          });
+        }
+      }
+    }
+    return { violations };
+  }
+
+  // ===================================================================
+  // v6 — CERTIFICATION COHERENCE
+  // -------------------------------------------------------------------
+  // A scattered cert pile (CISSP + Salesforce Admin + AWS Data + PMI +
+  // PRINCE2 + ITIL + ...) reads as padding -- the candidate looks
+  // unfocused. Flag when certs span 3+ unrelated DOMAINS for one CV.
+  // ===================================================================
+
+  const CERT_DOMAINS = {
+    security: [/CISSP/i, /Security\+|CompTIA Security/i, /CEH\b/i, /CISM/i, /CISA/i, /OSCP/i, /GIAC/i],
+    cloud: [/AWS Certified/i, /Azure (Administrator|Solutions|Developer|AZ-\d)/i, /Google Cloud|GCP Certified|Professional Cloud/i, /Solutions Architect/i],
+    data: [/Data Analyst|Data Engineer|Data Scientist|Databricks|Snowflake/i, /Microsoft Certified:\s*Data/i, /Google Data Analytics/i],
+    ml: [/Machine Learning|Deep Learning|TensorFlow Developer|Azure AI Engineer/i, /AI Engineer Associate/i],
+    project: [/PMP\b|PMI/i, /PRINCE2/i, /CAPM/i, /Agile|Scrum Master|CSM|PSM\b|Certified ScrumMaster/i, /ITIL/i],
+    business: [/CBAP/i, /Business Analysis Professional/i, /Six Sigma|Lean Six Sigma/i],
+    crm: [/Salesforce (Admin|Administrator|Developer|Architect)/i, /HubSpot Certified/i],
+    finance: [/CFA/i, /FRM\b/i, /ACCA/i, /CIMA/i, /Series \d/i],
+  };
+
+  function certCoherenceAudit(text) {
+    if (!text) return { domains: [], scattered: false };
+    // Isolate CERTIFICATIONS section -- avoid matching against bullet
+    // contents that happen to mention these systems in passing.
+    const m = text.match(/CERTIFICATIONS\s*:?\s*\n([\s\S]*?)(?=\n[A-Z][A-Z ]{3,}\s*:?\s*\n|$)/i);
+    if (!m) return { domains: [], scattered: false };
+    const block = m[1];
+    const found = new Set();
+    for (const [domain, patterns] of Object.entries(CERT_DOMAINS)) {
+      for (const re of patterns) {
+        if (re.test(block)) { found.add(domain); break; }
+      }
+    }
+    const arr = [...found];
+    return {
+      domains: arr,
+      scattered: arr.length >= 3,
+    };
+  }
+
+  // ===================================================================
   // v5 — HIRING-COMPANY-IN-WRONG-BULLET DETECTOR
   // -------------------------------------------------------------------
   // The single worst failure mode: the tailor model writes the hiring
@@ -776,6 +909,10 @@
       sectionHeaders: flags.sectionHeaders !== false,
       // v5
       hiringCompanyLies: flags.hiringCompanyLies !== false,
+      // v6
+      metricsDensity: flags.metricsDensity !== false,
+      gpaOnUkIe: flags.gpaOnUkIe !== false,
+      certCoherence: flags.certCoherence !== false,
     };
 
     let outCV = cvText;
@@ -963,6 +1100,47 @@
       }
     }
 
+    // v6: believable-metrics density
+    if (f.metricsDensity && outCV) {
+      const m = metricsDensityAudit(outCV);
+      if (m.overclaiming) {
+        report.warnings.push({
+          kind: 'metrics-density-too-high',
+          density: m.density,
+          statBullets: m.statBullets,
+          totalBullets: m.totalBullets,
+          note: 'Most bullets carry a big precise stat (' + m.statBullets + '/' + m.totalBullets +
+            '). A wall of jaw-dropping numbers reads as fabricated to senior recruiters. Keep the strongest 2-3 quantified wins per role and ground the rest qualitatively.',
+        });
+      }
+    }
+
+    // v6: certification coherence (CV only)
+    if (f.certCoherence && outCV) {
+      const c = certCoherenceAudit(outCV);
+      if (c.scattered) {
+        report.warnings.push({
+          kind: 'certs-scattered',
+          domains: c.domains,
+          note: 'Certs span ' + c.domains.length + ' unrelated domains (' + c.domains.join(', ') +
+            '). A scattered pile reads as padding; a focused 3-7 on-target set reads as a specialist. Trim certs that don\'t support the target role.',
+        });
+      }
+    }
+
+    // v6: UK/IE classification with US-style GPA suffix
+    if (f.gpaOnUkIe && outCV) {
+      const g = gpaOnUkIeDegreeAudit(outCV);
+      if (g.violations.length > 0) {
+        report.warnings.push({
+          kind: 'gpa-on-uk-ie-degree',
+          count: g.violations.length,
+          samples: g.violations.slice(0, 2),
+          note: 'UK/IE degrees use Honours classifications. Appending a US-style GPA (e.g. "3.90/4.00") looks wrong to UK recruiters. Keep the classification, drop the GPA suffix.',
+        });
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -988,6 +1166,10 @@
     sectionHeaderAudit,
     // v5
     hiringCompanyAudit,
+    // v6
+    metricsDensityAudit,
+    gpaOnUkIeDegreeAudit,
+    certCoherenceAudit,
   };
 
   global.RecruiterAudit = RecruiterAudit;

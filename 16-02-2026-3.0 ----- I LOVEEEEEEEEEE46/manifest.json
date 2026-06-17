@@ -239,6 +239,7 @@
         "career-boost-engine.js",
         "recruiter-audit.js",
         "application-validator.js",
+        "docx-generator.js",
         "workday-handlers.js",
         "autofill-controller.js",
         "content.js"
@@ -305,6 +306,7 @@
         "career-boost-engine.js",
         "recruiter-audit.js",
         "application-validator.js",
+        "docx-generator.js",
         "cv-preview-enhanced.html",
         "integration-example.html",
         "workday-handlers.js",

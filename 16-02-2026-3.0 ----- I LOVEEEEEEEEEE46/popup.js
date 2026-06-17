@@ -705,6 +705,7 @@ class ATSTailor {
     
     // NEW: Text download buttons
     document.getElementById('downloadCvText')?.addEventListener('click', () => this.downloadTextVersion('cv'));
+    document.getElementById('downloadCvDocx')?.addEventListener('click', () => this.downloadDocxVersion());
     document.getElementById('downloadCoverText')?.addEventListener('click', () => this.downloadTextVersion('cover'));
     
     // AI Provider Selection (toggle buttons - persistent)
@@ -916,6 +917,49 @@ class ATSTailor {
     }
     
     this.showToast(`Downloaded ${fileName}`, 'success');
+  }
+
+  /**
+   * Download the audited CV as a .docx -- the format most ATS portals
+   * (Workday, Greenhouse, Lever, Taleo, iCIMS, BambooHR, Glassdoor,
+   * eFinancialCareers, LinkedIn) parse most reliably. PDF is shipped
+   * too, but DOCX is the parse-safest single-file deliverable.
+   */
+  downloadDocxVersion() {
+    const cvText = this.generatedDocuments.cv;
+    if (!cvText) {
+      this.showToast('No CV content yet — tailor first.', 'error');
+      return;
+    }
+    if (typeof DocxGenerator === 'undefined' || !DocxGenerator.fromCvText) {
+      this.showToast('DOCX generator not loaded', 'error');
+      return;
+    }
+    const baseName = (this.generatedDocuments.cvFileName || 'Resume').replace(/\.(pdf|docx|txt)$/i, '');
+    const result = DocxGenerator.fromCvText(cvText, {
+      name: baseName,
+      filename: `${baseName}.docx`,
+    });
+    if (!result.success) {
+      this.showToast(`DOCX export failed: ${result.error}`, 'error');
+      return;
+    }
+    // base64 -> blob -> download
+    const bin = atob(result.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = result.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    this.showToast(`Downloaded ${result.filename} (ATS-friendly)`, 'success');
   }
   
   /**
@@ -1822,6 +1866,12 @@ class ATSTailor {
         host.appendChild(panel);
       }
       const LABELS = {
+        'metrics-density-too-high': (w) =>
+          `${w.statBullets}/${w.totalBullets} bullets carry big precise stats — reads as fabricated. Ground 2-3 qualitatively.`,
+        'gpa-on-uk-ie-degree': (w) =>
+          `UK/IE degree shown with US-style GPA — drop the "${(w.samples && w.samples[0] && w.samples[0].gpa) || '/4.00'}" suffix.`,
+        'certs-scattered': (w) =>
+          `Certs span ${(w.domains || []).length} unrelated domains (${(w.domains || []).join(', ')}) — reads as padding. Trim to 3-7 on-target.`,
         'hiring-company-in-wrong-bullet': (w) => {
           const s = (w.samples && w.samples[0]) || {};
           return `🚨 CRITICAL: bullet under "${s.employer || '?'}" mentions "${w.hiringCompany || s.hiringCompany || '?'}" — that's a fabrication a recruiter will flag. Edit before submitting.`;
