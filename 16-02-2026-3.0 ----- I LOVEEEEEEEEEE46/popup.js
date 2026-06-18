@@ -3576,8 +3576,8 @@ class ATSTailor {
         coverLetter: sanitisedCover,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
-        cvFileName: `${fileBaseName}_CV.pdf`,
-        coverFileName: `${fileBaseName}_Cover_Letter.pdf`,
+        cvFileName: `${fileBaseName}_CV.docx`,
+        coverFileName: `${fileBaseName}_Cover_Letter.docx`,
         matchScore: result.matchScore || 0,
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || [],
@@ -4034,6 +4034,7 @@ class ATSTailor {
         // preview only -- never the attached document).
         cvPDF: this.generatedDocuments.cvPdf,
         cvFileName: this.generatedDocuments.cvFileName,
+        cvText: this.generatedDocuments.cv || '',
         cvDocx: this.generatedDocuments.cvDocx || null,
         cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
         // Cover letter (DOCX too -- text retained for diff/audit).
@@ -4485,11 +4486,13 @@ class ATSTailor {
         cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
         cvPdf: this.generatedDocuments.cvPdf || null,
         cvFileName: this.generatedDocuments.cvFileName || null,
+        cvText: this.generatedDocuments.cv || '',
         // Cover
         coverDocx: this.generatedDocuments.coverDocx || null,
         coverDocxFileName: this.generatedDocuments.coverDocxFileName || null,
         coverPdf: this.generatedDocuments.coverPdf || null,
         coverFileName: this.generatedDocuments.coverFileName || null,
+        coverText: this.generatedDocuments.coverLetter || '',
       };
       chrome.tabs.sendMessage(tabId, payload).catch(() => {});
     } catch (e) {
