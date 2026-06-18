@@ -394,6 +394,79 @@
     return btoa(s);
   }
 
+  // ---- COVER LETTER -> DOCX paragraphs (same navy design language) ----
+  // Cover letters have no SECTION HEADERS -- the structure is:
+  //   <name>            -- navy 22pt bold
+  //   <contact + links> -- hyperlinked
+  //   ---- navy hairline ----
+  //   <date>            -- muted
+  //   Re: <Job Title>   -- navy bold
+  //   Dear Hiring Manager,
+  //   <body paragraphs>
+  //   Sincerely,
+  //   <name>
+  function buildCoverLetterBodyXml(text) {
+    const lines = text.split('\n');
+    const out = [];
+    const rels = [];
+
+    let firstNonEmpty = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim()) { firstNonEmpty = i; break; }
+    }
+    if (firstNonEmpty < 0) return { bodyXml: '', rels };
+
+    // NAME
+    out.push(paragraph(
+      run(lines[firstNonEmpty].trim(), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
+      { align: 'left', spacingAfter: 40 }
+    ));
+
+    // Contact / links lines until we hit either a date line, a "Re:" line,
+    // or "Dear" -- those mark the end of the header block.
+    let i = firstNonEmpty + 1;
+    for (; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (!t) continue;
+      if (/^(re:|dear\b|sincerely|yours\s+(sincerely|truly))/i.test(t)) break;
+      // Date line: e.g. "June 10, 2026"
+      if (/^[A-Za-z]+\s+\d{1,2},\s+\d{4}$/.test(t)) break;
+      out.push(contactParagraph(t, rels, { align: 'left', sz: 19, spacingAfter: 40 }));
+    }
+
+    // Navy hairline under the header
+    out.push(paragraph('', { bottomBorder: { color: C.NAVY, sz: 8 }, spacingAfter: 200 }));
+
+    // Body
+    for (; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (!t) { out.push(paragraph('', { spacingAfter: 80 })); continue; }
+
+      // Date
+      if (/^[A-Za-z]+\s+\d{1,2},\s+\d{4}$/.test(t)) {
+        out.push(paragraph(run(t, { color: C.MUTED, sz: 21 }), { spacingAfter: 120 }));
+        continue;
+      }
+      // "Re: Job Title"
+      if (/^re:/i.test(t)) {
+        out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: 22 }), { spacingAfter: 120 }));
+        continue;
+      }
+      // Salutation / closing salutation
+      if (/^dear\b/i.test(t) || /^sincerely|^yours\s+(sincerely|truly)/i.test(t)) {
+        out.push(paragraph(run(t, { color: C.BODY, sz: 21 }), { spacingAfter: 120 }));
+        continue;
+      }
+      // Body paragraph (justified for letter look, ~1.4 line height)
+      out.push(paragraph(
+        run(t, { color: C.BODY, sz: 21 }),
+        { spacingAfter: 120, line: 288, lineRule: 'auto' }
+      ));
+    }
+
+    return { bodyXml: out.join(''), rels };
+  }
+
   function fromCvText(cvText, opts = {}) {
     try {
       if (!cvText || typeof cvText !== 'string') {
@@ -417,7 +490,30 @@
     }
   }
 
-  global.DocxGenerator = { fromCvText };
+  function fromCoverLetterText(coverText, opts = {}) {
+    try {
+      if (!coverText || typeof coverText !== 'string') {
+        return { success: false, error: 'empty cover letter text' };
+      }
+      const { bodyXml, rels } = buildCoverLetterBodyXml(coverText);
+      const files = [
+        { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
+        { name: '_rels/.rels', content: ROOT_RELS_XML },
+        { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
+        { name: 'word/document.xml', content: documentXml(bodyXml) },
+      ];
+      const zipBytes = buildZip(files);
+      const base64 = bytesToBase64(zipBytes);
+      const baseName = (opts.name || 'Cover_Letter').replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '');
+      const filename = opts.filename || `${baseName}_Cover_Letter.docx`;
+      return { success: true, base64, filename, size: zipBytes.length };
+    } catch (e) {
+      console.warn(TAG, 'cover-letter generation failed:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  global.DocxGenerator = { fromCvText, fromCoverLetterText };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }

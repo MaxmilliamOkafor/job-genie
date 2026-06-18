@@ -504,27 +504,32 @@
     // Read-only scan: reports which REQUIRED fields are still empty so the
     // user never submits an incomplete application (a top cause of silent
     // rejection). Never fills or submits.
-    // ============ SET ATTACH PAYLOAD (PDF or DOCX) ============
-    // Popup pushes this after tailoring. cvFile gets routed to whichever
-    // format the user picked (attach_format preference). DOCX is the
-    // ATS-preferred format; PDF stays the default for backward compat.
+    // ============ SET ATTACH PAYLOAD (DOCX is the only attach format) ============
+    // Popup pushes this after tailoring. Both CV and cover letter are
+    // attached as DOCX -- it's the format ATS portals parse most
+    // reliably AND the file recruiters actually open. PDF is accepted
+    // as a fallback only when the DOCX hasn't been built yet.
     if (message.action === 'JG_SET_ATTACH_PAYLOAD') {
       try {
-        const wantDocx = message.format === 'docx' && message.cvDocx;
-        if (wantDocx) {
+        // CV
+        if (message.cvDocx) {
           const f = createDocxFile(message.cvDocx, message.cvDocxFileName || 'Resume.docx');
           if (f) { cvFile = f; filesLoaded = true; }
         } else if (message.cvPdf) {
           const f = createPDFFile(message.cvPdf, message.cvFileName || 'Resume.pdf');
           if (f) { cvFile = f; filesLoaded = true; }
         }
-        if (message.coverPdf) {
+        // Cover letter
+        if (message.coverDocx) {
+          const cf = createDocxFile(message.coverDocx, message.coverDocxFileName || 'Cover_Letter.docx');
+          if (cf) coverFile = cf;
+        } else if (message.coverPdf) {
           const cf = createPDFFile(message.coverPdf, message.coverFileName || 'Cover_Letter.pdf');
           if (cf) coverFile = cf;
         }
-        console.log('[ATS Tailor] Attach payload set, format =', message.format,
-          'cvFile =', cvFile && cvFile.name);
-        sendResponse({ ok: true, format: message.format, cvFileName: cvFile && cvFile.name });
+        console.log('[ATS Tailor] Attach payload set -- CV:', cvFile && cvFile.name,
+          '| Cover:', coverFile && coverFile.name);
+        sendResponse({ ok: true, cvFileName: cvFile && cvFile.name, coverFileName: coverFile && coverFile.name });
       } catch (e) {
         sendResponse({ ok: false, error: e.message });
       }
@@ -2683,17 +2688,25 @@
 
   // ============ LOAD FILES AND START ==========
   function loadFilesAndStart() {
-    chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName', 'cvDocx', 'cvDocxFileName', 'attach_format'], (data) => {
-      // Attach the CV in the user's chosen format. DOCX parses most
-      // reliably on Workday/Greenhouse/Lever/Taleo/iCIMS; PDF stays the
-      // default. Cover letter remains PDF.
-      if (data.attach_format === 'docx' && data.cvDocx) {
+    chrome.storage.local.get([
+      'cvDocx', 'cvDocxFileName', 'coverDocx', 'coverDocxFileName',
+      'cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName',
+    ], (data) => {
+      // DOCX is the ONLY attached format -- best ATS parseability on
+      // Workday/Greenhouse/Lever/Taleo/iCIMS and the file most recruiters
+      // actually open from the portal. We fall back to PDF only if a
+      // DOCX hasn't been generated yet (older cached payload).
+      if (data.cvDocx) {
         cvFile = createDocxFile(data.cvDocx, data.cvDocxFileName || 'Tailored_Resume.docx');
-        console.log('[ATS Tailor] Attaching CV as DOCX:', cvFile && cvFile.name);
       } else {
         cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
       }
-      coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
+      if (data.coverDocx) {
+        coverFile = createDocxFile(data.coverDocx, data.coverDocxFileName || 'Tailored_Cover_Letter.docx');
+      } else {
+        coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
+      }
+      console.log('[ATS Tailor] Attaching CV:', cvFile && cvFile.name, '| Cover:', coverFile && coverFile.name);
       coverLetterText = data.coverLetterText || '';
       filesLoaded = true;
 
