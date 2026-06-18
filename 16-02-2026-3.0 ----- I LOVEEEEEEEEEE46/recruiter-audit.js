@@ -213,6 +213,10 @@
     'leveraged', 'utilize', 'utilise', 'utilized', 'utilised', 'proactive',
     'proactively', 'rockstar', 'ninja', 'guru', 'evangelist', 'disruptive',
     'visionary',
+    // AI-generated tells (recruiter-spotted; kill credibility on sight)
+    'spearheaded', 'spearhead', 'robust', 'seamless', 'seamlessly',
+    'cutting-edge', 'bleeding-edge', 'ever-evolving', 'meticulous',
+    'meticulously', 'plethora', 'myriad', 'pivotal', 'paramount',
   ];
 
   function purgeBuzzwords(text) {
@@ -701,7 +705,11 @@
 
   function metricsDensityAudit(text, { threshold = 0.7 } = {}) {
     if (!text) return { density: 0, totalBullets: 0, statBullets: 0, overclaiming: false };
-    const lines = text.split('\n');
+    // Scope to the EXPERIENCE section only -- cert/education bullets carry
+    // no metrics and would dilute the density, masking a real stat-wall.
+    const expMatch = text.match(/(?:WORK\s+)?EXPERIENCE\s*:?\s*\n([\s\S]*?)(?=\n(?:EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|AWARDS|REFERENCES)\b|$)/i);
+    const scope = expMatch ? expMatch[1] : text;
+    const lines = scope.split('\n');
     let totalBullets = 0;
     let statBullets = 0;
     for (const raw of lines) {
@@ -717,7 +725,7 @@
       density,
       totalBullets,
       statBullets,
-      overclaiming: totalBullets >= 5 && density >= threshold,
+      overclaiming: totalBullets >= 4 && density >= threshold,
     };
   }
 

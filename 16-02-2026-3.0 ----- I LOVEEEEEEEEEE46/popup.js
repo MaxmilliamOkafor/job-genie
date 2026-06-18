@@ -697,15 +697,17 @@ class ATSTailor {
     document.getElementById('editJobTitle')?.addEventListener('click', () => this.toggleJobTitleEdit());
     document.getElementById('jobTitleInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.saveJobTitleEdit(); });
     document.getElementById('jobTitleInput')?.addEventListener('blur', () => this.saveJobTitleEdit());
-    document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocument('cv'));
-    document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocument('cover'));
+    // DOCX is the only download format -- best ATS parseability and the
+    // file most recruiters actually open from the ATS portal.
+    document.getElementById('downloadCv')?.addEventListener('click', () => this.downloadDocxVersion('cv'));
+    document.getElementById('downloadCover')?.addEventListener('click', () => this.downloadDocxVersion('cover'));
     document.getElementById('attachBoth')?.addEventListener('click', () => this.attachBothDocuments());
     document.getElementById('copyContent')?.addEventListener('click', () => this.copyCurrentContent());
     document.getElementById('copyCoverageBtn')?.addEventListener('click', () => this.copyCoverageReport());
     
     // NEW: Text download buttons
     document.getElementById('downloadCvText')?.addEventListener('click', () => this.downloadTextVersion('cv'));
-    document.getElementById('downloadCvDocx')?.addEventListener('click', () => this.downloadDocxVersion());
+    // downloadCvDocx button removed -- downloadCv is DOCX now (DOCX-only product).
     document.getElementById('downloadCoverText')?.addEventListener('click', () => this.downloadTextVersion('cover'));
     
     // AI Provider Selection (toggle buttons - persistent)
@@ -920,26 +922,33 @@ class ATSTailor {
   }
 
   /**
-   * Download the audited CV as a .docx -- the format most ATS portals
-   * (Workday, Greenhouse, Lever, Taleo, iCIMS, BambooHR, Glassdoor,
-   * eFinancialCareers, LinkedIn) parse most reliably. PDF is shipped
-   * too, but DOCX is the parse-safest single-file deliverable.
+   * Download the audited CV or cover letter as a .docx -- DOCX is the
+   * only download format because it's the format ATS portals (Workday,
+   * Greenhouse, Lever, Taleo, iCIMS, BambooHR, Glassdoor, LinkedIn)
+   * parse most reliably AND the file most recruiters actually open
+   * from the portal.
    */
-  downloadDocxVersion() {
-    const cvText = this.generatedDocuments.cv;
-    if (!cvText) {
-      this.showToast('No CV content yet — tailor first.', 'error');
+  downloadDocxVersion(type = 'cv') {
+    const isCover = type === 'cover';
+    const sourceText = isCover ? this.generatedDocuments.coverLetter : this.generatedDocuments.cv;
+    if (!sourceText) {
+      this.showToast(`No ${isCover ? 'cover letter' : 'CV'} content yet — tailor first.`, 'error');
       return;
     }
-    if (typeof DocxGenerator === 'undefined' || !DocxGenerator.fromCvText) {
+    if (typeof DocxGenerator === 'undefined') {
       this.showToast('DOCX generator not loaded', 'error');
       return;
     }
-    const baseName = (this.generatedDocuments.cvFileName || 'Resume').replace(/\.(pdf|docx|txt)$/i, '');
-    const result = DocxGenerator.fromCvText(cvText, {
-      name: baseName,
-      filename: `${baseName}.docx`,
-    });
+    const builder = isCover ? DocxGenerator.fromCoverLetterText : DocxGenerator.fromCvText;
+    if (!builder) {
+      this.showToast('DOCX generator missing required function', 'error');
+      return;
+    }
+    const fallbackName = isCover
+      ? (this.generatedDocuments.coverFileName || 'Cover_Letter')
+      : (this.generatedDocuments.cvFileName || 'Resume');
+    const baseName = fallbackName.replace(/\.(pdf|docx|txt)$/i, '');
+    const result = builder(sourceText, { name: baseName, filename: `${baseName}.docx` });
     if (!result.success) {
       this.showToast(`DOCX export failed: ${result.error}`, 'error');
       return;
@@ -960,6 +969,49 @@ class ATSTailor {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     this.showToast(`Downloaded ${result.filename} (ATS-friendly)`, 'success');
+  }
+
+  /**
+   * Build the DOCX once after tailoring and store its base64 on
+   * generatedDocuments so the content script can attach it to ATS
+   * forms when the user's attach_format preference is "docx".
+   * Pure text -> docx; cannot regress the PDF path.
+   */
+  buildDocxArtifact() {
+    if (typeof DocxGenerator === 'undefined') {
+      console.warn('[ATS Tailor] DOCX generator not loaded');
+      return;
+    }
+    // CV
+    try {
+      const cvText = this.generatedDocuments?.cv;
+      if (cvText && DocxGenerator.fromCvText) {
+        const baseName = (this.generatedDocuments.cvFileName || 'Resume').replace(/\.(pdf|docx|txt)$/i, '');
+        const result = DocxGenerator.fromCvText(cvText, { name: baseName, filename: `${baseName}.docx` });
+        if (result && result.success && result.base64) {
+          this.generatedDocuments.cvDocx = result.base64;
+          this.generatedDocuments.cvDocxFileName = result.filename || `${baseName}.docx`;
+          console.log('[ATS Tailor] CV DOCX ready:', this.generatedDocuments.cvDocxFileName);
+        }
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] CV DOCX build failed:', e?.message);
+    }
+    // Cover letter
+    try {
+      const clText = this.generatedDocuments?.coverLetter;
+      if (clText && DocxGenerator.fromCoverLetterText) {
+        const baseName = (this.generatedDocuments.coverFileName || 'Cover_Letter').replace(/\.(pdf|docx|txt)$/i, '');
+        const result = DocxGenerator.fromCoverLetterText(clText, { name: baseName, filename: `${baseName}.docx` });
+        if (result && result.success && result.base64) {
+          this.generatedDocuments.coverDocx = result.base64;
+          this.generatedDocuments.coverDocxFileName = result.filename || `${baseName}.docx`;
+          console.log('[ATS Tailor] Cover Letter DOCX ready:', this.generatedDocuments.coverDocxFileName);
+        }
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] Cover DOCX build failed:', e?.message);
+    }
   }
   
   /**
@@ -1231,13 +1283,15 @@ class ATSTailor {
     const result = await new Promise(resolve => {
       chrome.storage.local.get(['autofill_enabled'], resolve);
     });
-    
+
     // Default OFF: matches "Toggle off to save API usage" messaging.
     const enabled = result.autofill_enabled === true;
     const toggle = document.getElementById('autofillEnabledToggle');
     if (toggle) toggle.checked = enabled;
     const workdayToggle = document.getElementById('workdayAutofillToggle');
     if (workdayToggle) workdayToggle.checked = enabled;
+    // DOCX is now the only attach format; the selector was removed and
+    // attach_format is hard-pinned to 'docx' inside the tailor pipeline.
   }
   
   async runManualAutofill() {
@@ -3969,15 +4023,30 @@ class ATSTailor {
       // ============ FINAL: Attach CV & Update UI ============
       updateProgress(90, 'Attaching tailored CV to application...');
 
+      // Build both DOCX artifacts (CV + cover letter). DOCX is the ONLY
+      // attach/download format -- best ATS parseability and the file
+      // most recruiters actually open from the portal.
+      this.buildDocxArtifact();
+
       // CRITICAL: Store files in chrome.storage for content.js attach loop
       await chrome.storage.local.set({
+        // CV (DOCX is the attached file; PDF kept for backward compat /
+        // preview only -- never the attached document).
         cvPDF: this.generatedDocuments.cvPdf,
-        coverPDF: this.generatedDocuments.coverPdf,
-        coverLetterText: this.generatedDocuments.coverLetter || '',
         cvFileName: this.generatedDocuments.cvFileName,
+        cvDocx: this.generatedDocuments.cvDocx || null,
+        cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
+        // Cover letter (DOCX too -- text retained for diff/audit).
+        coverPDF: this.generatedDocuments.coverPdf,
         coverFileName: this.generatedDocuments.coverFileName,
+        coverLetterText: this.generatedDocuments.coverLetter || '',
+        coverDocx: this.generatedDocuments.coverDocx || null,
+        coverDocxFileName: this.generatedDocuments.coverDocxFileName || null,
+        // Hard-pinned to DOCX (the user-facing format selector was
+        // removed; DOCX everywhere is the new product behaviour).
+        attach_format: 'docx',
       });
-      console.log('[ATS Tailor] Stored cvPDF/coverPDF in chrome.storage for content.js');
+      console.log('[ATS Tailor] Stored CV+cover DOCX in chrome.storage (DOCX-only attach)');
       
       // Auto-attach BOTH CV and Cover Letter to the page
       try {
@@ -4387,6 +4456,44 @@ class ATSTailor {
     } catch (error) {
       console.error('[ATS Tailor] PDF regeneration failed:', error);
       // Don't throw - boost was successful, just PDF failed
+    } finally {
+      // Build DOCX in parallel so the content-script attach can choose
+      // PDF or DOCX based on the user's attach_format preference.
+      this.buildDocxArtifact();
+      // Push the freshly-built docx + filename + format preference to
+      // the active tab so the attach loop picks the right file.
+      this.pushAttachPayloadToActiveTab();
+    }
+  }
+
+  /**
+   * Forward CV + cover-letter DOCX artifacts to the content script.
+   * DOCX is the only attach format (best ATS parseability and the file
+   * recruiters open from the portal); PDF rides along only as a fallback
+   * the content script can use if the DOCX hasn't been built yet.
+   */
+  async pushAttachPayloadToActiveTab() {
+    try {
+      const tabs = await new Promise((r) => chrome.tabs.query({ active: true, currentWindow: true }, r));
+      const tabId = tabs && tabs[0] && tabs[0].id;
+      if (!tabId) return;
+      const payload = {
+        action: 'JG_SET_ATTACH_PAYLOAD',
+        format: 'docx',
+        // CV
+        cvDocx: this.generatedDocuments.cvDocx || null,
+        cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
+        cvPdf: this.generatedDocuments.cvPdf || null,
+        cvFileName: this.generatedDocuments.cvFileName || null,
+        // Cover
+        coverDocx: this.generatedDocuments.coverDocx || null,
+        coverDocxFileName: this.generatedDocuments.coverDocxFileName || null,
+        coverPdf: this.generatedDocuments.coverPdf || null,
+        coverFileName: this.generatedDocuments.coverFileName || null,
+      };
+      chrome.tabs.sendMessage(tabId, payload).catch(() => {});
+    } catch (e) {
+      console.warn('[ATS Tailor] pushAttachPayloadToActiveTab failed:', e?.message);
     }
   }
 
@@ -5246,14 +5353,19 @@ class ATSTailor {
 
 
   async attachDocument(type) {
+    // DOCX is the attached file (best ATS parseability). PDF base64 is
+    // passed only as a fallback the content script uses if no DOCX exists.
+    const docx = type === 'cv' ? this.generatedDocuments.cvDocx : this.generatedDocuments.coverDocx;
+    const docxFileName = type === 'cv' ? this.generatedDocuments.cvDocxFileName : this.generatedDocuments.coverDocxFileName;
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
-    const filename =
-      type === 'cv'
-        ? this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_')
-        : this.generatedDocuments.coverFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter.pdf`.replace(/_+/g, '_');
+    const baseFallback = type === 'cv'
+      ? `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV`.replace(/_+/g, '_')
+      : `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter`.replace(/_+/g, '_');
+    const filename = docxFileName
+      || (docx ? `${baseFallback}.docx` : (type === 'cv' ? this.generatedDocuments.cvFileName : this.generatedDocuments.coverFileName) || `${baseFallback}.pdf`);
 
-    if (!doc && !textDoc) {
+    if (!docx && !doc && !textDoc) {
       this.showToast('No document available', 'error');
       return;
     }
@@ -5268,7 +5380,8 @@ class ATSTailor {
           {
             action: 'attachDocument',
             type,
-            pdf: doc,
+            docx,            // preferred: DOCX base64
+            pdf: doc,        // fallback only
             text: textDoc,
             filename,
           },

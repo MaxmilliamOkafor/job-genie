@@ -504,6 +504,38 @@
     // Read-only scan: reports which REQUIRED fields are still empty so the
     // user never submits an incomplete application (a top cause of silent
     // rejection). Never fills or submits.
+    // ============ SET ATTACH PAYLOAD (DOCX is the only attach format) ============
+    // Popup pushes this after tailoring. Both CV and cover letter are
+    // attached as DOCX -- it's the format ATS portals parse most
+    // reliably AND the file recruiters actually open. PDF is accepted
+    // as a fallback only when the DOCX hasn't been built yet.
+    if (message.action === 'JG_SET_ATTACH_PAYLOAD') {
+      try {
+        // CV
+        if (message.cvDocx) {
+          const f = createDocxFile(message.cvDocx, message.cvDocxFileName || 'Resume.docx');
+          if (f) { cvFile = f; filesLoaded = true; }
+        } else if (message.cvPdf) {
+          const f = createPDFFile(message.cvPdf, message.cvFileName || 'Resume.pdf');
+          if (f) { cvFile = f; filesLoaded = true; }
+        }
+        // Cover letter
+        if (message.coverDocx) {
+          const cf = createDocxFile(message.coverDocx, message.coverDocxFileName || 'Cover_Letter.docx');
+          if (cf) coverFile = cf;
+        } else if (message.coverPdf) {
+          const cf = createPDFFile(message.coverPdf, message.coverFileName || 'Cover_Letter.pdf');
+          if (cf) coverFile = cf;
+        }
+        console.log('[ATS Tailor] Attach payload set -- CV:', cvFile && cvFile.name,
+          '| Cover:', coverFile && coverFile.name);
+        sendResponse({ ok: true, cvFileName: cvFile && cvFile.name, coverFileName: coverFile && coverFile.name });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message });
+      }
+      return true;
+    }
+
     if (message.action === 'CHECK_APPLICATION_COMPLETENESS') {
       try {
         if (window.ApplicationValidator) {
@@ -899,16 +931,23 @@
       
       (async () => {
         try {
-          const { type, pdf, text, filename } = message;
-          
-          if (!pdf && !text) {
+          const { type, docx, pdf, text, filename } = message;
+
+          if (!docx && !pdf && !text) {
             sendResponse({ success: false, message: 'No document data provided' });
             return;
           }
-          
-          // Create file from base64 PDF data
+
+          // Build the file -- DOCX preferred (best ATS parseability),
+          // PDF only as a fallback when no DOCX was generated.
           let file = null;
-          if (pdf) {
+          if (docx) {
+            file = createDocxFile(docx, filename || `${type}.docx`);
+            if (!file) {
+              sendResponse({ success: false, message: 'Failed to create DOCX file' });
+              return;
+            }
+          } else if (pdf) {
             file = createPDFFile(pdf, filename || `${type}.pdf`);
             if (!file) {
               sendResponse({ success: false, message: 'Failed to create PDF file' });
@@ -1683,23 +1722,35 @@
 
   // ============ PDF FILE CREATION ============
   function createPDFFile(base64, name) {
+    return createBlobFile(base64, name, 'application/pdf');
+  }
+
+  function createDocxFile(base64, name) {
+    return createBlobFile(
+      base64,
+      name,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+  }
+
+  function createBlobFile(base64, name, mime) {
     try {
       if (!base64) return null;
-      
+
       let data = base64;
       if (base64.includes(',')) {
         data = base64.split(',')[1];
       }
-      
+
       const byteString = atob(data);
       const buffer = new ArrayBuffer(byteString.length);
       const view = new Uint8Array(buffer);
       for (let i = 0; i < byteString.length; i++) {
         view[i] = byteString.charCodeAt(i);
       }
-      
-      const file = new File([buffer], name, { type: 'application/pdf' });
-      console.log(`[ATS Tailor] Created PDF: ${name} (${file.size} bytes)`);
+
+      const file = new File([buffer], name, { type: mime });
+      console.log(`[ATS Tailor] Created ${mime}: ${name} (${file.size} bytes)`);
       return file;
     } catch (e) {
       console.error('[ATS Tailor] PDF creation failed:', e);
@@ -2644,9 +2695,25 @@
 
   // ============ LOAD FILES AND START ==========
   function loadFilesAndStart() {
-    chrome.storage.local.get(['cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName'], (data) => {
-      cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
-      coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
+    chrome.storage.local.get([
+      'cvDocx', 'cvDocxFileName', 'coverDocx', 'coverDocxFileName',
+      'cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName',
+    ], (data) => {
+      // DOCX is the ONLY attached format -- best ATS parseability on
+      // Workday/Greenhouse/Lever/Taleo/iCIMS and the file most recruiters
+      // actually open from the portal. We fall back to PDF only if a
+      // DOCX hasn't been generated yet (older cached payload).
+      if (data.cvDocx) {
+        cvFile = createDocxFile(data.cvDocx, data.cvDocxFileName || 'Tailored_Resume.docx');
+      } else {
+        cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
+      }
+      if (data.coverDocx) {
+        coverFile = createDocxFile(data.coverDocx, data.coverDocxFileName || 'Tailored_Cover_Letter.docx');
+      } else {
+        coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
+      }
+      console.log('[ATS Tailor] Attaching CV:', cvFile && cvFile.name, '| Cover:', coverFile && coverFile.name);
       coverLetterText = data.coverLetterText || '';
       filesLoaded = true;
 
