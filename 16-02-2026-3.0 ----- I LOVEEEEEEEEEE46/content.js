@@ -931,16 +931,23 @@
       
       (async () => {
         try {
-          const { type, pdf, text, filename } = message;
-          
-          if (!pdf && !text) {
+          const { type, docx, pdf, text, filename } = message;
+
+          if (!docx && !pdf && !text) {
             sendResponse({ success: false, message: 'No document data provided' });
             return;
           }
-          
-          // Create file from base64 PDF data
+
+          // Build the file -- DOCX preferred (best ATS parseability),
+          // PDF only as a fallback when no DOCX was generated.
           let file = null;
-          if (pdf) {
+          if (docx) {
+            file = createDocxFile(docx, filename || `${type}.docx`);
+            if (!file) {
+              sendResponse({ success: false, message: 'Failed to create DOCX file' });
+              return;
+            }
+          } else if (pdf) {
             file = createPDFFile(pdf, filename || `${type}.pdf`);
             if (!file) {
               sendResponse({ success: false, message: 'Failed to create PDF file' });

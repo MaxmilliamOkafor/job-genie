@@ -5353,14 +5353,19 @@ class ATSTailor {
 
 
   async attachDocument(type) {
+    // DOCX is the attached file (best ATS parseability). PDF base64 is
+    // passed only as a fallback the content script uses if no DOCX exists.
+    const docx = type === 'cv' ? this.generatedDocuments.cvDocx : this.generatedDocuments.coverDocx;
+    const docxFileName = type === 'cv' ? this.generatedDocuments.cvDocxFileName : this.generatedDocuments.coverDocxFileName;
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const textDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
-    const filename =
-      type === 'cv'
-        ? this.generatedDocuments.cvFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV.pdf`.replace(/_+/g, '_')
-        : this.generatedDocuments.coverFileName || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter.pdf`.replace(/_+/g, '_');
+    const baseFallback = type === 'cv'
+      ? `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_CV`.replace(/_+/g, '_')
+      : `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_Cover_Letter`.replace(/_+/g, '_');
+    const filename = docxFileName
+      || (docx ? `${baseFallback}.docx` : (type === 'cv' ? this.generatedDocuments.cvFileName : this.generatedDocuments.coverFileName) || `${baseFallback}.pdf`);
 
-    if (!doc && !textDoc) {
+    if (!docx && !doc && !textDoc) {
       this.showToast('No document available', 'error');
       return;
     }
@@ -5375,7 +5380,8 @@ class ATSTailor {
           {
             action: 'attachDocument',
             type,
-            pdf: doc,
+            docx,            // preferred: DOCX base64
+            pdf: doc,        // fallback only
             text: textDoc,
             filename,
           },
