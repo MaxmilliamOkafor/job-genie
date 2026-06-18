@@ -331,14 +331,18 @@
     },
 
     // ============ FORMAT PHONE ============
+    // International standard "+CC NNN NNN NNNN", no colon, no leading 0.
     formatPhone(phone) {
       if (!phone) return '';
-      const cleaned = phone.replace(/[^\d+]/g, '');
-      if (cleaned.startsWith('+')) {
-        const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
-        if (match) {
-          return `+${match[1]} ${match[2]}`;
-        }
+      const cleaned = String(phone).replace(/[^\d+]/g, '');
+      const m = cleaned.match(/^\+(\d{1,3})0?(\d+)$/);
+      if (m) {
+        const cc = m[1];
+        const local = m[2];
+        let grouped = local;
+        if (local.length >= 9) grouped = `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
+        else if (local.length >= 7) grouped = `${local.slice(0, 3)} ${local.slice(3)}`;
+        return `+${cc} ${grouped}`;
       }
       return phone;
     },
