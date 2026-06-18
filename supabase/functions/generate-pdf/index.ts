@@ -1755,6 +1755,8 @@ function docxSectionHeader(label: string): Paragraph[] {
   return [
     new Paragraph({
       spacing: { before: 280, after: 60 },
+      keepNext: true,
+      keepLines: true,
       children: [new TextRun({
         text: label.toUpperCase(),
         font: DOCX_FONT,
@@ -1766,6 +1768,50 @@ function docxSectionHeader(label: string): Paragraph[] {
     }),
     docxHairline(),
   ];
+}
+
+function expandCertifications(items: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of items) {
+    if (!raw) continue;
+    // Split on commas / semicolons / pipes / bullets / newlines, but keep
+    // parenthetical content intact (e.g. "Administrator (CKA)").
+    const parts = String(raw)
+      .replace(/\s*[\u2022\u2023\u25E6\u2043]\s*/g, "|")
+      .split(/\s*(?:;|\||\n|,(?![^()]*\)))\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const p of parts) out.push(p);
+  }
+  return out;
+}
+
+function docxCertificationsGrid(items: string[]): Paragraph[] {
+  const list = expandCertifications(items);
+  if (!list.length) return [];
+  // Two-column grid via a centre tab stop so long titles wrap cleanly
+  // while short titles pair up — much more scannable than a comma list.
+  const HALF = Math.ceil(list.length / 2);
+  const rows: Paragraph[] = [];
+  for (let i = 0; i < HALF; i++) {
+    const left = list[i];
+    const right = list[i + HALF];
+    const runs: TextRun[] = [
+      new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      new TextRun({ text: left, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+    ];
+    if (right) {
+      runs.push(new TextRun({ text: "\t", font: DOCX_FONT, size: 21 }));
+      runs.push(new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }));
+      runs.push(new TextRun({ text: right, font: DOCX_FONT, size: 21, color: DOCX_BODY }));
+    }
+    rows.push(new Paragraph({
+      spacing: { after: 80, line: 290 },
+      tabStops: [{ type: TabStopType.LEFT, position: 4680 }],
+      children: runs,
+    }));
+  }
+  return rows;
 }
 
 function docxBullet(text: string): Paragraph {
@@ -1903,7 +1949,7 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
-    for (const c of data.certifications) children.push(docxBullet(c));
+    children.push(...docxCertificationsGrid(data.certifications));
   }
 
   if (data.achievements?.length) {
