@@ -48,6 +48,76 @@
     }
   }
 
+  // ===================================================================
+  // Eligibility gate -- the fix for "fires on websites it shouldn't".
+  // The controller content script runs on <all_urls> (needed so autofill
+  // can reach the long tail of 150+ ATS platforms we don't hardcode), but
+  // it must NOT pull in the multi-MB vendor engine on a random news site /
+  // blog / app that has no job-application form. We only auto-inject when
+  // the page is either a known ATS host OR shows real application-form
+  // signals. Everything else is left completely untouched (zero usage).
+  // ===================================================================
+  // Full ATS domains -- matched as a domain suffix (host === d or *.d).
+  const ATS_DOMAINS = [
+    'greenhouse.io', 'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
+    'bullhorn.com', 'bullhornstaffing.com', 'teamtailor.com', 'workable.com',
+    'icims.com', 'oraclecloud.com', 'taleo.net', 'lever.co',
+    'ashbyhq.com', 'jobvite.com', 'bamboohr.com', 'recruitee.com', 'jazzhr.com',
+    'applytojob.com', 'successfactors.com', 'brassring.com', 'csod.com',
+    'zohorecruit.com', 'personio.com', 'breezy.hr', 'metacareers.com',
+    'eightfold.ai', 'phenom.com', 'avature.net', 'gr8people.com', 'job-boards.greenhouse.io',
+  ];
+  // Application subdomains -- matched only as a leading label (jobs.X /
+  // careers.X / apply.X), never mid-domain ("lifecareers.io" won't match).
+  const ATS_SUBDOMAIN_PREFIXES = ['jobs.', 'careers.', 'apply.', 'recruiting.', 'jobboards.', 'job-boards.', 'career.', 'talent.'];
+
+  function _isAtsHost() {
+    try {
+      const host = (window.location.hostname || '').toLowerCase();
+      if (!host) return false;
+      if (ATS_DOMAINS.some((d) => host === d || host.endsWith('.' + d))) return true;
+      if (ATS_SUBDOMAIN_PREFIXES.some((p) => host.startsWith(p))) return true;
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Cheap synchronous check: does this page look like a job application?
+  function _hasApplicationSignals() {
+    try {
+      // A resume/CV file upload is the strongest single signal.
+      const fileInputs = document.querySelectorAll('input[type="file"]');
+      if (fileInputs.length > 0) {
+        for (const fi of fileInputs) {
+          const hay = ((fi.name || '') + ' ' + (fi.id || '') + ' ' + (fi.accept || '') + ' ' +
+            (fi.getAttribute('aria-label') || '')).toLowerCase();
+          if (/resume|cv|cover|upload|attach|\.pdf|\.docx?/.test(hay)) return true;
+        }
+        // Any file input on an apply-ish URL is enough.
+        if (/apply|application|career|job/i.test(location.href)) return true;
+      }
+      // Apply-form text markers + an actual form on the page.
+      const url = location.href.toLowerCase();
+      const urlLooksApply = /\/(apply|application|applications|job|jobs|career|careers|candidate|submit-application)/.test(url)
+        || /(^|\.)apply\./.test(location.hostname);
+      if (urlLooksApply && document.querySelector('form, input, textarea, select')) {
+        const bodyText = (document.body && document.body.innerText || '').slice(0, 6000).toLowerCase();
+        if (/apply for|application|first name|last name|resume|cover letter|work authoriz|are you legally/.test(bodyText)) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Eligible now = known ATS host OR clear application-form signals.
+  function _isEligibleNow() {
+    return _isAtsHost() || _hasApplicationSignals();
+  }
+
   if (_isDeniedHost()) {
     log('On denied host (' + window.location.hostname + ') -- autofill controller fully disabled');
     // Install a NO-OP controller so any code that references
@@ -87,7 +157,49 @@
       this.enabled = await this._readEnabled();
       window.__JG_AUTOFILL_DISABLED__ = !this.enabled;
       log('Init, enabled =', this.enabled);
-      if (this.enabled) await this._requestInject({ reason: 'auto-on-load' });
+      if (!this.enabled) return;
+
+      // ELIGIBILITY GATE: only pull in the vendor engine on actual
+      // job-application pages. On a random website (no ATS host, no
+      // application form) we do nothing -- no inject, no API usage.
+      if (_isEligibleNow()) {
+        log('Eligible page -- injecting on load');
+        await this._requestInject({ reason: 'auto-on-load' });
+        return;
+      }
+
+      // Not eligible at load. Many ATS forms are SPAs whose upload field
+      // appears a few seconds later, so watch briefly for an application
+      // form to materialise -- but give up after a short window so we
+      // never sit observing a random site indefinitely.
+      this._watchForEligibility();
+    },
+
+    _watchForEligibility() {
+      if (this._eligibilityWatcher || !document.body) return;
+      let done = false;
+      const finish = (eligible) => {
+        if (done) return;
+        done = true;
+        try { observer.disconnect(); } catch (e) {}
+        clearTimeout(timer);
+        if (eligible && this.enabled) {
+          log('Application form appeared -- injecting');
+          this._requestInject({ reason: 'form-appeared' });
+        } else if (!eligible) {
+          log('No application form within window -- staying dormant (no injection)');
+        }
+      };
+      const observer = new MutationObserver(() => {
+        if (_isEligibleNow()) finish(true);
+      });
+      this._eligibilityWatcher = observer;
+      try {
+        observer.observe(document.body, { childList: true, subtree: true });
+      } catch (e) { return; }
+      // Hard stop after 12s -- a real ATS form loads well within this;
+      // a random site never will, and we stop watching either way.
+      const timer = setTimeout(() => finish(false), 12000);
     },
 
     async setEnabled(value) {
@@ -100,7 +212,14 @@
       } catch (e) {}
       log('Toggle ->', this.enabled);
       if (this.enabled) {
-        await this._requestInject({ reason: 'toggle-on' });
+        // Respect the eligibility gate on toggle-on too: only inject if
+        // this is an application page, else watch briefly. Prevents the
+        // engine loading when the user enables autofill on a random tab.
+        if (_isEligibleNow()) {
+          await this._requestInject({ reason: 'toggle-on' });
+        } else {
+          this._watchForEligibility();
+        }
       } else {
         // Toggling OFF: actively neutralise any vendor instance already
         // running on this tab. The kill-switch flag above makes jg-gate's
