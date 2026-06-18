@@ -9,6 +9,17 @@ import {
   PDFString,
   PDFArray,
 } from "https://esm.sh/pdf-lib@1.17.1";
+import {
+  Document as DocxDocument,
+  Packer,
+  Paragraph,
+  TextRun,
+  ExternalHyperlink,
+  AlignmentType,
+  TabStopType,
+  BorderStyle,
+} from "npm:docx@8.5.0";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -943,7 +954,7 @@ serve(async (req) => {
       sanitizedData.skills?.primary?.slice(0, 20) || [],
     );
 
-    let pages: PDFPage[];
+    let docxBytes: Uint8Array;
     if (sanitizedData.type === "resume") {
       const contact: ContactInfo = {
         location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
@@ -953,34 +964,26 @@ serve(async (req) => {
         github: sanitizedData.personalInfo.github,
         portfolio: sanitizedData.personalInfo.portfolio,
       };
-      pages = renderResume(pdfDoc, fonts, {
+      const norm: NormalisedResume = {
         personalInfo: { name: sanitizedData.personalInfo.name, contact },
         summary: sanitizedData.summary,
         coreCompetencies: sanitizedData.coreCompetencies,
         experience: (sanitizedData.experience || []).map((e) => ({
-          company: e.company,
-          title: e.title,
-          dates: e.dates,
-          location: e.location,
+          company: e.company, title: e.title, dates: e.dates, location: e.location,
           bullets: e.bullets || [],
         })),
         projects: (sanitizedData.projects || []).map((p) => ({
-          name: p.name,
-          role: p.role,
-          dates: p.dates,
-          technologies: p.technologies,
+          name: p.name, role: p.role, dates: p.dates, technologies: p.technologies,
           bullets: p.bullets || [],
         })),
         education: (sanitizedData.education || []).map((e) => ({
-          degree: e.degree,
-          school: e.school,
-          dates: e.dates,
-          gpa: e.gpa,
+          degree: e.degree, school: e.school, dates: e.dates, gpa: e.gpa,
         })),
         skills: sanitizedData.skills,
         certifications: sanitizedData.certifications || [],
         achievements: sanitizedData.achievements,
-      });
+      };
+      docxBytes = await buildResumeDocxBytes(norm);
     } else if (sanitizedData.type === "cover_letter" && sanitizedData.coverLetter) {
       const contact: ContactInfo = {
         location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
@@ -990,38 +993,33 @@ serve(async (req) => {
         github: sanitizedData.personalInfo.github,
         portfolio: sanitizedData.personalInfo.portfolio,
       };
-      pages = renderCoverLetter(pdfDoc, fonts, {
+      docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: { name: sanitizedData.personalInfo.name, contact },
         jobTitle: sanitizedData.coverLetter.jobTitle,
         paragraphs: sanitizedData.coverLetter.paragraphs || [],
       });
     } else {
-      pages = [];
+      docxBytes = new Uint8Array();
     }
 
-    const pdfBytes = await pdfDoc.save();
     const fileName = computeFileName(sanitizedData);
+    const base64Docx = bytesToBase64(docxBytes);
+    console.log(`Premium DOCX generated: ${fileName} Size: ${docxBytes.length} bytes`);
 
-    console.log(
-      `Premium PDF generated: ${fileName} Size: ${pdfBytes.length} bytes, Pages: ${pages.length}`,
+    return new Response(
+      JSON.stringify({ pdf: base64Docx, docx: base64Docx, fileName }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-
-    return new Response(new Uint8Array(pdfBytes), {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
-      },
-    });
   } catch (error) {
-    console.error("PDF generation error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
+    console.error("DOCX generation error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to generate DOCX";
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
+
 
 // ---- profileData → ResumeData ----
 function profileToResumeData(profile: Record<string, unknown>): ResumeData {
@@ -1129,8 +1127,9 @@ function computeFileName(data: ResumeData): string {
     data.candidateName ||
     data.personalInfo.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
   return data.type === "resume"
-    ? `${candidateName}_CV.pdf`
-    : `${candidateName}_Cover_Letter.pdf`;
+    ? `${candidateName}_CV.docx`
+    : `${candidateName}_Cover_Letter.docx`;
+
 }
 
 // ============================================================
@@ -1150,97 +1149,67 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
     const candidateName =
       pInfo?.name || `${pInfo?.firstName || ""} ${pInfo?.lastName || ""}`.trim();
 
-    const { pdfDoc, fonts } = await setupPdf(
-      `${candidateName} - ${type === "resume" ? "Resume" : "Cover Letter"}`,
-      candidateName,
-      type === "resume" ? "Professional Resume" : "Cover Letter",
-      structuredCv?.skills?.primary?.slice(0, 20) || [],
-    );
-
-    let pages: PDFPage[] = [];
+    let docxBytes: Uint8Array = new Uint8Array();
+    const baseName = (fileName || `${candidateName}_${type === "resume" ? "CV" : "Cover_Letter"}`).replace(/\.(pdf|docx)$/i, "");
+    const outFileName = `${baseName}.docx`;
 
     if (type === "resume" && structuredCv) {
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
       const loc = cleanLocation(locationHeader || pInfo.location || "") || "Dublin, IE";
       const contact: ContactInfo = {
-        location: loc,
-        phone: pInfo.phone,
-        email: pInfo.email,
-        linkedin: pInfo.linkedin,
-        github: pInfo.github,
-        portfolio: pInfo.portfolio,
+        location: loc, phone: pInfo.phone, email: pInfo.email,
+        linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
       };
-
-      const projects = (structuredCv.projects || structuredCv.relevantProjects || []).map(
-        (p) => ({
-          name: p.name,
-          role: p.role,
-          technologies: p.technologies,
-          bullets:
-            p.bullets && p.bullets.length
-              ? p.bullets.slice(0, 6)
-              : p.description
-                ? p.description.split("\n").filter(Boolean).slice(0, 4)
-                : [],
-        }),
-      );
-
-      pages = renderResume(pdfDoc, fonts, {
+      const projects = (structuredCv.projects || structuredCv.relevantProjects || []).map((p) => ({
+        name: p.name, role: p.role, technologies: p.technologies,
+        bullets: p.bullets && p.bullets.length
+          ? p.bullets.slice(0, 6)
+          : p.description ? p.description.split("\n").filter(Boolean).slice(0, 4) : [],
+      }));
+      const norm: NormalisedResume = {
         personalInfo: { name: candidateName, contact },
         summary: structuredCv.summary,
         coreCompetencies: structuredCv.coreCompetencies,
         experience: (structuredCv.experience || []).map((e) => ({
-          company: e.company,
-          title: e.title,
-          dates: e.dates,
+          company: e.company, title: e.title, dates: e.dates,
           bullets: (e.bullets || []).slice(0, 6),
         })),
         projects,
         education: (structuredCv.education || []).map((edu) => ({
-          degree: edu.degree,
-          school: edu.school,
-          dates: edu.dates,
-          gpa: edu.gpa,
+          degree: edu.degree, school: edu.school, dates: edu.dates, gpa: edu.gpa,
         })),
         skills: structuredCv.skills,
         certifications: structuredCv.certifications || [],
-      });
+      };
+      docxBytes = await buildResumeDocxBytes(norm);
     } else if (type === "coverletter") {
       if (!pInfo || !plainText) {
         return new Response(
-          JSON.stringify({
-            error: "Missing personalInfo or plainText for cover letter generation",
-          }),
+          JSON.stringify({ error: "Missing personalInfo or plainText for cover letter generation" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       const loc = cleanLocation(pInfo.location || "") || "Dublin, IE";
       const contact: ContactInfo = {
-        location: loc,
-        phone: pInfo.phone,
-        email: pInfo.email,
-        linkedin: pInfo.linkedin,
-        github: pInfo.github,
-        portfolio: pInfo.portfolio,
+        location: loc, phone: pInfo.phone, email: pInfo.email,
+        linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
       };
       const paragraphs = plainText.split(/\n\s*\n/).filter((p) => p.trim());
-      pages = renderCoverLetter(pdfDoc, fonts, {
+      docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: { name: candidateName, contact },
         jobTitle: "",
         paragraphs,
       });
     }
 
-    const pdfBytes = await pdfDoc.save();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
-    console.log(
-      `[generate-pdf] StructuredCv PDF generated: ${fileName}, size: ${pdfBytes.length} bytes, pages: ${pages.length}`,
-    );
+    const base64Docx = bytesToBase64(docxBytes);
+    console.log(`[generate-pdf] StructuredCv DOCX generated: ${outFileName}, size: ${docxBytes.length} bytes`);
 
     return new Response(
-      JSON.stringify({ success: true, pdf: base64Pdf, fileName, pages: pages.length }),
+      JSON.stringify({ success: true, pdf: base64Docx, docx: base64Docx, fileName: outFileName }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+
   } catch (error) {
     console.error("[generate-pdf] StructuredCv processing error:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
@@ -1645,30 +1614,22 @@ async function handleRawContentRequest(body: {
     }
 
     // ---- Render ----
-    const { pdfDoc, fonts } = await setupPdf(
-      `${displayName} - ${type === "cv" ? "Resume" : "Cover Letter"}`,
-      displayName,
-      type === "cv" ? "Professional Resume" : "Cover Letter",
-      norm.skills?.primary?.slice(0, 20) || [],
-    );
-
-    let pages: PDFPage[];
+    let docxBytes: Uint8Array;
     if (type === "cv") {
-      pages = renderResume(pdfDoc, fonts, norm);
+      docxBytes = await buildResumeDocxBytes(norm);
     } else {
       const paragraphs = content
         .split(/\n\s*\n/)
         .map((p) => p.trim())
         .filter(Boolean);
-      pages = renderCoverLetter(pdfDoc, fonts, {
+      docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: norm.personalInfo,
         jobTitle: jobTitle || "",
         paragraphs,
       });
     }
 
-    const pdfBytes = await pdfDoc.save();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+    const base64Docx = bytesToBase64(docxBytes);
 
     let finalFileName = fileName;
     if (!finalFileName) {
@@ -1682,22 +1643,26 @@ async function handleRawContentRequest(body: {
       else nameForFile = "Applicant";
       nameForFile = nameForFile.replace(/[^a-zA-Z0-9_]/g, "");
       finalFileName =
-        type === "cv" ? `${nameForFile}_CV.pdf` : `${nameForFile}_Cover_Letter.pdf`;
+        type === "cv" ? `${nameForFile}_CV.docx` : `${nameForFile}_Cover_Letter.docx`;
+    } else {
+      finalFileName = finalFileName.replace(/\.pdf$/i, ".docx");
+      if (!/\.docx$/i.test(finalFileName)) finalFileName = `${finalFileName}.docx`;
     }
 
     console.log(
-      `[generate-pdf] Generated ${finalFileName}, size: ${pdfBytes.length} bytes, pages: ${pages.length}, location: ${tailoredLocation}`,
+      `[generate-pdf] Generated DOCX ${finalFileName}, size: ${docxBytes.length} bytes, location: ${tailoredLocation}`,
     );
 
     return new Response(
       JSON.stringify({
-        pdf: base64Pdf,
+        pdf: base64Docx,
+        docx: base64Docx,
         fileName: finalFileName,
         location: tailoredLocation || "",
-        pages: pages.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+
   } catch (error) {
     console.error("[generate-pdf] Raw content processing error:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
@@ -1706,4 +1671,330 @@ async function handleRawContentRequest(body: {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+}
+
+// ============================================================
+// DOCX BUILDER — premium navy design, ATS-safe single column
+// ============================================================
+
+const DOCX_NAVY = "16243F";
+const DOCX_BODY = "21232A";
+const DOCX_MUTED = "66707A";
+const DOCX_LINK = "0066CC";
+const DOCX_RULE = "BDC7D9";
+const DOCX_FONT = "Calibri";
+const RIGHT_TAB = 9300; // ~6.45in in twips, inside 0.62in margins on A4
+
+const UK_IE_CLASSIFICATION =
+  /(first\s+class|second\s+class|upper\s+second|lower\s+second|2:1|2:2|distinction|merit|pass\s+with|honou?rs)/i;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function docxNavyRule(): Paragraph {
+  return new Paragraph({
+    spacing: { before: 60, after: 200 },
+    border: { bottom: { color: DOCX_NAVY, space: 1, style: BorderStyle.SINGLE, size: 6 } },
+  });
+}
+function docxHairline(): Paragraph {
+  return new Paragraph({
+    spacing: { before: 0, after: 160 },
+    border: { bottom: { color: DOCX_RULE, space: 1, style: BorderStyle.SINGLE, size: 4 } },
+  });
+}
+
+function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHyperlink> {
+  const sep = "   \u00B7   ";
+  const out: Array<TextRun | ExternalHyperlink> = [];
+  const push = (node: TextRun | ExternalHyperlink) => {
+    if (out.length) {
+      out.push(new TextRun({ text: sep, font: DOCX_FONT, size: 19, color: DOCX_MUTED }));
+    }
+    out.push(node);
+  };
+  if (contact.location) push(new TextRun({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.phone) push(new TextRun({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.email) {
+    push(new ExternalHyperlink({
+      link: `mailto:${contact.email}`,
+      children: [new TextRun({ text: contact.email, font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+    }));
+  }
+  for (const url of [contact.linkedin, contact.github, contact.portfolio]) {
+    if (!url) continue;
+    push(new ExternalHyperlink({
+      link: ensureUrl(url),
+      children: [new TextRun({ text: displayUrl(url), font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+    }));
+  }
+  return out;
+}
+
+function docxHeader(name: string, contact: ContactInfo): Paragraph[] {
+  return [
+    new Paragraph({
+      spacing: { after: 120 },
+      children: [new TextRun({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
+    }),
+    new Paragraph({
+      spacing: { after: 60 },
+      children: docxContactChildren(contact),
+    }),
+    docxNavyRule(),
+  ];
+}
+
+function docxSectionHeader(label: string): Paragraph[] {
+  return [
+    new Paragraph({
+      spacing: { before: 280, after: 60 },
+      children: [new TextRun({
+        text: label.toUpperCase(),
+        font: DOCX_FONT,
+        size: 22,
+        bold: true,
+        color: DOCX_NAVY,
+        characterSpacing: 20,
+      })],
+    }),
+    docxHairline(),
+  ];
+}
+
+function docxBullet(text: string): Paragraph {
+  return new Paragraph({
+    spacing: { after: 60, line: 290 },
+    indent: { left: 360, hanging: 220 },
+    children: [
+      new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      new TextRun({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+    ],
+  });
+}
+
+function docxExperience(e: ExperienceEntry): Paragraph[] {
+  const out: Paragraph[] = [];
+  const header: TextRun[] = [];
+  if (e.company) header.push(new TextRun({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
+  if (e.title) {
+    if (header.length) header.push(new TextRun({ text: "  \u2014  ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
+    header.push(new TextRun({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  }
+  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  out.push(new Paragraph({
+    spacing: { before: 200, after: 60 },
+    tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
+    children: header,
+  }));
+  for (const b of (e.bullets || [])) out.push(docxBullet(b));
+  return out;
+}
+
+function docxProject(p: ProjectEntry): Paragraph[] {
+  const out: Paragraph[] = [];
+  const header: TextRun[] = [
+    new TextRun({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+  ];
+  if (p.role) header.push(new TextRun({ text: "  \u2014  " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  if (p.dates) header.push(new TextRun({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  out.push(new Paragraph({
+    spacing: { before: 200, after: 60 },
+    tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
+    children: header,
+  }));
+  if (p.technologies?.length) {
+    out.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [
+        new TextRun({ text: "Tech: ", font: DOCX_FONT, size: 20, bold: true, color: DOCX_BODY }),
+        new TextRun({ text: p.technologies.join(", "), font: DOCX_FONT, size: 20, color: DOCX_BODY }),
+      ],
+    }));
+  }
+  for (const b of (p.bullets || [])) out.push(docxBullet(b));
+  return out;
+}
+
+function docxEducation(e: EducationEntry): Paragraph[] {
+  const out: Paragraph[] = [];
+  let suffix = "";
+  if (e.gpa) {
+    suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? `  \u2014  ${e.gpa}` : `  \u2014  GPA: ${e.gpa}`;
+  }
+  const header: TextRun[] = [
+    new TextRun({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+  ];
+  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  out.push(new Paragraph({
+    spacing: { before: 160, after: 40 },
+    tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
+    children: header,
+  }));
+  if (e.school) {
+    out.push(new Paragraph({
+      spacing: { after: 80 },
+      children: [new TextRun({ text: e.school, font: DOCX_FONT, size: 20, color: DOCX_MUTED })],
+    }));
+  }
+  return out;
+}
+
+function docxSkills(groups: Array<{ label: string; items: string[] }>): Paragraph[] {
+  return groups.map((g) => new Paragraph({
+    spacing: { after: 80, line: 290 },
+    children: [
+      new TextRun({ text: `${g.label}: `, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+      new TextRun({ text: g.items.join(", "), font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+    ],
+  }));
+}
+
+async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array> {
+  const children: Paragraph[] = [];
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+
+  if (data.summary) {
+    children.push(...docxSectionHeader("Professional Summary"));
+    children.push(new Paragraph({
+      spacing: { after: 160, line: 300 },
+      children: [new TextRun({ text: data.summary, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    }));
+  }
+
+  const filteredExp = (data.experience || []).filter((e) => {
+    if (isHeaderName(e.company)) return false;
+    if (!e.company || e.company.trim().length < 2) return false;
+    return true;
+  });
+  if (filteredExp.length) {
+    children.push(...docxSectionHeader("Professional Experience"));
+    for (const e of filteredExp) children.push(...docxExperience(e));
+  }
+
+  if (data.projects?.length) {
+    children.push(...docxSectionHeader("Selected Projects"));
+    for (const p of data.projects) children.push(...docxProject(p));
+  }
+
+  if (data.education?.length) {
+    children.push(...docxSectionHeader("Education"));
+    for (const ed of data.education) children.push(...docxEducation(ed));
+  }
+
+  if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
+    children.push(...docxSectionHeader("Skills"));
+    const groups: Array<{ label: string; items: string[] }> = [];
+    if (data.skills.primary?.length) groups.push({ label: "Technical", items: data.skills.primary });
+    if (data.skills.secondary?.length) groups.push({ label: "Additional", items: data.skills.secondary });
+    children.push(...docxSkills(groups));
+  }
+
+  if (data.coreCompetencies?.length) {
+    children.push(...docxSectionHeader("Core Competencies"));
+    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
+  }
+
+  if (data.certifications?.length) {
+    children.push(...docxSectionHeader("Certifications"));
+    for (const c of data.certifications) children.push(docxBullet(c));
+  }
+
+  if (data.achievements?.length) {
+    children.push(...docxSectionHeader("Achievements"));
+    for (const a of data.achievements) {
+      const txt = a.description
+        ? `${a.title}${a.date ? ` (${a.date})` : ""} \u2014 ${a.description}`
+        : `${a.title}${a.date ? ` (${a.date})` : ""}`;
+      children.push(docxBullet(txt));
+    }
+  }
+
+  const doc = new DocxDocument({
+    creator: "QuantumHire",
+    title: `${data.personalInfo.name} - Resume`,
+    styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 893, right: 893, bottom: 893, left: 893 },
+        },
+      },
+      children,
+    }],
+  });
+  const buf = await Packer.toBuffer(doc);
+  return new Uint8Array(buf);
+}
+
+async function buildCoverLetterDocxBytes(data: {
+  personalInfo: { name: string; contact: ContactInfo };
+  jobTitle: string;
+  paragraphs: string[];
+}): Promise<Uint8Array> {
+  const children: Paragraph[] = [];
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+
+  const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
+  children.push(new Paragraph({
+    spacing: { after: 200 },
+    children: [new TextRun({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
+  }));
+
+  if (data.jobTitle) {
+    children.push(new Paragraph({
+      spacing: { after: 200 },
+      children: [
+        new TextRun({ text: "Re: ", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+        new TextRun({ text: data.jobTitle, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+      ],
+    }));
+  }
+
+  children.push(new Paragraph({
+    spacing: { after: 200 },
+    children: [new TextRun({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+  }));
+
+  for (const p of data.paragraphs) {
+    const t = (p || "").trim();
+    if (!t) continue;
+    children.push(new Paragraph({
+      spacing: { after: 200, line: 320 },
+      alignment: AlignmentType.JUSTIFIED,
+      children: [new TextRun({ text: t, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    }));
+  }
+
+  children.push(new Paragraph({
+    spacing: { before: 200, after: 60 },
+    children: [new TextRun({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+  }));
+  children.push(new Paragraph({
+    children: [new TextRun({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
+  }));
+
+  const doc = new DocxDocument({
+    creator: "QuantumHire",
+    title: `${data.personalInfo.name} - Cover Letter`,
+    styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 893, right: 893, bottom: 893, left: 893 },
+        },
+      },
+      children,
+    }],
+  });
+  const buf = await Packer.toBuffer(doc);
+  return new Uint8Array(buf);
 }
