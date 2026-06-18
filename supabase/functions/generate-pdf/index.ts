@@ -1127,8 +1127,9 @@ function computeFileName(data: ResumeData): string {
     data.candidateName ||
     data.personalInfo.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
   return data.type === "resume"
-    ? `${candidateName}_CV.pdf`
-    : `${candidateName}_Cover_Letter.pdf`;
+    ? `${candidateName}_CV.docx`
+    : `${candidateName}_Cover_Letter.docx`;
+
 }
 
 // ============================================================
