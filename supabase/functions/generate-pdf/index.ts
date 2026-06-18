@@ -954,7 +954,7 @@ serve(async (req) => {
       sanitizedData.skills?.primary?.slice(0, 20) || [],
     );
 
-    let pages: PDFPage[];
+    let docxBytes: Uint8Array;
     if (sanitizedData.type === "resume") {
       const contact: ContactInfo = {
         location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
@@ -964,34 +964,26 @@ serve(async (req) => {
         github: sanitizedData.personalInfo.github,
         portfolio: sanitizedData.personalInfo.portfolio,
       };
-      pages = renderResume(pdfDoc, fonts, {
+      const norm: NormalisedResume = {
         personalInfo: { name: sanitizedData.personalInfo.name, contact },
         summary: sanitizedData.summary,
         coreCompetencies: sanitizedData.coreCompetencies,
         experience: (sanitizedData.experience || []).map((e) => ({
-          company: e.company,
-          title: e.title,
-          dates: e.dates,
-          location: e.location,
+          company: e.company, title: e.title, dates: e.dates, location: e.location,
           bullets: e.bullets || [],
         })),
         projects: (sanitizedData.projects || []).map((p) => ({
-          name: p.name,
-          role: p.role,
-          dates: p.dates,
-          technologies: p.technologies,
+          name: p.name, role: p.role, dates: p.dates, technologies: p.technologies,
           bullets: p.bullets || [],
         })),
         education: (sanitizedData.education || []).map((e) => ({
-          degree: e.degree,
-          school: e.school,
-          dates: e.dates,
-          gpa: e.gpa,
+          degree: e.degree, school: e.school, dates: e.dates, gpa: e.gpa,
         })),
         skills: sanitizedData.skills,
         certifications: sanitizedData.certifications || [],
         achievements: sanitizedData.achievements,
-      });
+      };
+      docxBytes = await buildResumeDocxBytes(norm);
     } else if (sanitizedData.type === "cover_letter" && sanitizedData.coverLetter) {
       const contact: ContactInfo = {
         location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
@@ -1001,38 +993,33 @@ serve(async (req) => {
         github: sanitizedData.personalInfo.github,
         portfolio: sanitizedData.personalInfo.portfolio,
       };
-      pages = renderCoverLetter(pdfDoc, fonts, {
+      docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: { name: sanitizedData.personalInfo.name, contact },
         jobTitle: sanitizedData.coverLetter.jobTitle,
         paragraphs: sanitizedData.coverLetter.paragraphs || [],
       });
     } else {
-      pages = [];
+      docxBytes = new Uint8Array();
     }
 
-    const pdfBytes = await pdfDoc.save();
     const fileName = computeFileName(sanitizedData);
+    const base64Docx = bytesToBase64(docxBytes);
+    console.log(`Premium DOCX generated: ${fileName} Size: ${docxBytes.length} bytes`);
 
-    console.log(
-      `Premium PDF generated: ${fileName} Size: ${pdfBytes.length} bytes, Pages: ${pages.length}`,
+    return new Response(
+      JSON.stringify({ pdf: base64Docx, docx: base64Docx, fileName }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-
-    return new Response(new Uint8Array(pdfBytes), {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
-      },
-    });
   } catch (error) {
-    console.error("PDF generation error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
+    console.error("DOCX generation error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to generate DOCX";
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
+
 
 // ---- profileData → ResumeData ----
 function profileToResumeData(profile: Record<string, unknown>): ResumeData {
