@@ -3187,6 +3187,43 @@ class ATSTailor {
       console.log('[ATS Tailor Popup] Job already tailored this session, skipping (pass {force:true} to override)');
       return;
     }
+    // ROLE-FIT GATE: warn before tailoring when the job is outside the
+    // candidate's professional family. Pure keyword tailoring cannot
+    // bridge "ML Engineer applying to Journalist" -- the model ends up
+    // pretending the candidate is a journalist, which a hiring editor
+    // rejects in seconds. Better to warn and let the user decide.
+    if (!options.force && !options.skipFitGate && typeof CareerBoostEngine !== 'undefined') {
+      try {
+        const jdText = this.currentJob?.description || this.currentJob?.jdText || this.currentJob?.title || '';
+        const cvText = this.baseCVContent || '';
+        if (jdText && cvText && CareerBoostEngine.detectArchetype) {
+          const jobArch = CareerBoostEngine.detectArchetype(jdText)?.primary;
+          const profileArch = CareerBoostEngine.detectArchetype(cvText)?.primary;
+          if (jobArch && profileArch && jobArch.key !== profileArch.key) {
+            // Only block on a confident mismatch -- avoid false positives
+            // on roles where the JD is ambiguous.
+            const jobConf = CareerBoostEngine.detectArchetype(jdText)?.confidence || 0;
+            if (jobConf >= 0.6) {
+              const msg = `Role-fit warning\n\n` +
+                `This looks like a ${jobArch.label} role, but your CV reads as ${profileArch.label}.\n\n` +
+                `Tailoring cannot honestly bridge that gap -- it would have to fabricate a background ` +
+                `you don't have. A recruiter spots this in seconds.\n\n` +
+                `Tailor anyway? (Cancel = stop and review)`;
+              const proceed = confirm(msg);
+              if (!proceed) {
+                this._tailoringInProgress = false;
+                this.showToast('Tailor cancelled (role-fit mismatch)', 'success');
+                return;
+              }
+              console.log('[ATS Tailor] Role-fit override:', profileArch.label, '->', jobArch.label);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] Role-fit gate skipped:', e?.message);
+      }
+    }
+
     this._tailoringInProgress = true;
 
     const startTime = Date.now();
@@ -3576,8 +3613,8 @@ class ATSTailor {
         coverLetter: sanitisedCover,
         cvPdf: result.resumePdf,
         coverPdf: result.coverLetterPdf,
-        cvFileName: `${fileBaseName}_CV.pdf`,
-        coverFileName: `${fileBaseName}_Cover_Letter.pdf`,
+        cvFileName: `${fileBaseName}_CV.docx`,
+        coverFileName: `${fileBaseName}_Cover_Letter.docx`,
         matchScore: result.matchScore || 0,
         matchedKeywords: result.keywordsMatched || result.matchedKeywords || [],
         missingKeywords: result.keywordsMissing || result.missingKeywords || [],
@@ -4034,6 +4071,7 @@ class ATSTailor {
         // preview only -- never the attached document).
         cvPDF: this.generatedDocuments.cvPdf,
         cvFileName: this.generatedDocuments.cvFileName,
+        cvText: this.generatedDocuments.cv || '',
         cvDocx: this.generatedDocuments.cvDocx || null,
         cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
         // Cover letter (DOCX too -- text retained for diff/audit).
@@ -4485,11 +4523,13 @@ class ATSTailor {
         cvDocxFileName: this.generatedDocuments.cvDocxFileName || null,
         cvPdf: this.generatedDocuments.cvPdf || null,
         cvFileName: this.generatedDocuments.cvFileName || null,
+        cvText: this.generatedDocuments.cv || '',
         // Cover
         coverDocx: this.generatedDocuments.coverDocx || null,
         coverDocxFileName: this.generatedDocuments.coverDocxFileName || null,
         coverPdf: this.generatedDocuments.coverPdf || null,
         coverFileName: this.generatedDocuments.coverFileName || null,
+        coverText: this.generatedDocuments.coverLetter || '',
       };
       chrome.tabs.sendMessage(tabId, payload).catch(() => {});
     } catch (e) {

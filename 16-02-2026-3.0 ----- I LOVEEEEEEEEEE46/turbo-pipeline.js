@@ -710,7 +710,22 @@
   }
 
   // ============ FAST WORK EXPERIENCE TAILORING ============
+  // DISABLED: this used patterns like ", incorporating {kw} principles"
+  // and " applying {kw} methods" to suffix-append keywords to experience
+  // bullets. Same broken-English failure as the FT-application audit
+  // ("...per sprint, through scoops"). Now returns the CV unchanged --
+  // keyword placement is the LLM's job (summary/skills) plus
+  // mirrorJdVocabulary (synonym-swap inside existing bullet wording).
   function fastTailorWorkExperience(cvText, missingKeywords) {
+    try {
+      if (Array.isArray(missingKeywords) && missingKeywords.length) {
+        console.warn('[TurboPipeline] suppressed fastTailorWorkExperience suffix-append:', missingKeywords.slice(0, 5));
+      }
+    } catch (e) {}
+    return { tailoredCV: cvText, injectedKeywords: [] };
+  }
+
+  function _legacyFastTailorWorkExperience_disabled(cvText, missingKeywords) {
     let tailoredCV = cvText;
     const injected = [];
 

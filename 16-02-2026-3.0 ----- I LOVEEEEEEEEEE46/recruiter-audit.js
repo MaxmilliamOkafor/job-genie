@@ -768,6 +768,45 @@
     return { violations };
   }
 
+  // Strip the US-style GPA suffix from any line that ALSO carries a UK/IE
+  // Honours classification. "BSc Computer Science -- First Class Honours
+  // (3.80/4.00)" becomes "BSc Computer Science -- First Class Honours".
+  // Two-line shape ("First Class Honours\n3.80/4.00") -> drop the GPA
+  // line. Lines that have ONLY a GPA (US degrees) are untouched.
+  function stripGpaFromUkIeDegrees(text) {
+    if (!text) return { text: text || '', stripped: 0 };
+    const lines = text.split('\n');
+    const out = [];
+    let stripped = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Same-line case: remove "(3.90/4.00)" or "GPA: 3.9" + tidy trailing punctuation.
+      if (UK_IE_CLASS_RE.test(line) && GPA_RE.test(line)) {
+        const cleaned = line
+          .replace(/\s*\(\s*\d{1,2}\.\d{1,2}\s*\/\s*(?:4\.0{0,2}|5\.0{0,2})\s*\)\s*/g, '')
+          .replace(GPA_RE, '')
+          .replace(/[\-–—\s,;|]+$/, '')
+          .replace(/\s{2,}/g, ' ')
+          .trimEnd();
+        out.push(cleaned);
+        stripped++;
+        continue;
+      }
+      // Two-line case: drop the standalone GPA line beneath an Honours line.
+      if (UK_IE_CLASS_RE.test(line) && i + 1 < lines.length) {
+        const next = lines[i + 1];
+        if (GPA_RE.test(next) && !UK_IE_CLASS_RE.test(next) && next.trim().length < 30) {
+          out.push(line);
+          i += 1; // skip the GPA line
+          stripped++;
+          continue;
+        }
+      }
+      out.push(line);
+    }
+    return { text: out.join('\n'), stripped };
+  }
+
   // ===================================================================
   // v6 — CERTIFICATION COHERENCE
   // -------------------------------------------------------------------
@@ -1136,15 +1175,23 @@
       }
     }
 
-    // v6: UK/IE classification with US-style GPA suffix
+    // v6: UK/IE classification with US-style GPA suffix.
+    // AUTO-FIX: strip the GPA off any Honours-classification line. Then
+    // run the audit and only warn for residual cases (e.g. structured
+    // edge cases the strip regex couldn't safely touch).
     if (f.gpaOnUkIe && outCV) {
+      const stripped = stripGpaFromUkIeDegrees(outCV);
+      if (stripped.stripped > 0) {
+        outCV = stripped.text;
+        report.fixes.push(`gpa-on-uk-ie: stripped US-style GPA from ${stripped.stripped} degree line(s)`);
+      }
       const g = gpaOnUkIeDegreeAudit(outCV);
       if (g.violations.length > 0) {
         report.warnings.push({
           kind: 'gpa-on-uk-ie-degree',
           count: g.violations.length,
           samples: g.violations.slice(0, 2),
-          note: 'UK/IE degrees use Honours classifications. Appending a US-style GPA (e.g. "3.90/4.00") looks wrong to UK recruiters. Keep the classification, drop the GPA suffix.',
+          note: 'UK/IE degrees use Honours classifications. Drop the US-style GPA suffix.',
         });
       }
     }
@@ -1177,6 +1224,7 @@
     // v6
     metricsDensityAudit,
     gpaOnUkIeDegreeAudit,
+    stripGpaFromUkIeDegrees,
     certCoherenceAudit,
   };
 

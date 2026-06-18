@@ -511,22 +511,18 @@
     // as a fallback only when the DOCX hasn't been built yet.
     if (message.action === 'JG_SET_ATTACH_PAYLOAD') {
       try {
-        // CV
-        if (message.cvDocx) {
-          const f = createDocxFile(message.cvDocx, message.cvDocxFileName || 'Resume.docx');
-          if (f) { cvFile = f; filesLoaded = true; }
-        } else if (message.cvPdf) {
-          const f = createPDFFile(message.cvPdf, message.cvFileName || 'Resume.pdf');
-          if (f) { cvFile = f; filesLoaded = true; }
-        }
-        // Cover letter
-        if (message.coverDocx) {
-          const cf = createDocxFile(message.coverDocx, message.coverDocxFileName || 'Cover_Letter.docx');
-          if (cf) coverFile = cf;
-        } else if (message.coverPdf) {
-          const cf = createPDFFile(message.coverPdf, message.coverFileName || 'Cover_Letter.pdf');
-          if (cf) coverFile = cf;
-        }
+        // CV: DOCX base64 -> build DOCX from text -> PDF fallback
+        const cvF = message.cvDocx
+          ? createDocxFile(message.cvDocx, message.cvDocxFileName || 'Resume.docx')
+          : (buildDocxFileFromText(message.cvText || '', message.cvFileName, 'cv')
+             || (message.cvPdf ? createPDFFile(message.cvPdf, message.cvFileName || 'Resume.pdf') : null));
+        if (cvF) { cvFile = cvF; filesLoaded = true; }
+        // Cover letter: same priority
+        const coF = message.coverDocx
+          ? createDocxFile(message.coverDocx, message.coverDocxFileName || 'Cover_Letter.docx')
+          : (buildDocxFileFromText(message.coverText || '', message.coverFileName, 'cover')
+             || (message.coverPdf ? createPDFFile(message.coverPdf, message.coverFileName || 'Cover_Letter.pdf') : null));
+        if (coF) coverFile = coF;
         console.log('[ATS Tailor] Attach payload set -- CV:', cvFile && cvFile.name,
           '| Cover:', coverFile && coverFile.name);
         sendResponse({ ok: true, cvFileName: cvFile && cvFile.name, coverFileName: coverFile && coverFile.name });
@@ -938,21 +934,21 @@
             return;
           }
 
-          // Build the file -- DOCX preferred (best ATS parseability),
-          // PDF only as a fallback when no DOCX was generated.
+          // Build the file -- DOCX always preferred. Priority:
+          // pre-built DOCX base64 -> build DOCX on the spot from text ->
+          // PDF only as a last resort when there is no text to build from.
           let file = null;
           if (docx) {
             file = createDocxFile(docx, filename || `${type}.docx`);
-            if (!file) {
-              sendResponse({ success: false, message: 'Failed to create DOCX file' });
-              return;
-            }
-          } else if (pdf) {
+          } else if (text) {
+            file = buildDocxFileFromText(text, filename, type === 'cover' ? 'cover' : 'cv');
+          }
+          if (!file && pdf) {
             file = createPDFFile(pdf, filename || `${type}.pdf`);
-            if (!file) {
-              sendResponse({ success: false, message: 'Failed to create PDF file' });
-              return;
-            }
+          }
+          if (!file) {
+            sendResponse({ success: false, message: 'Failed to create document file' });
+            return;
           }
           
           // Store in global variables for attachment functions
@@ -1731,6 +1727,27 @@
       name,
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     );
+  }
+
+  // Build a DOCX File ON THE SPOT from CV/cover plain text using the
+  // DocxGenerator that is loaded as a content script on ATS hosts. This
+  // is the last-resort guarantee that a CV/cover always attaches as DOCX
+  // even if the popup never passed pre-built base64 (stale storage,
+  // older cached payload, etc.).
+  function buildDocxFileFromText(text, name, kind) {
+    try {
+      if (!text || typeof DocxGenerator === 'undefined') return null;
+      const fn = kind === 'cover' ? DocxGenerator.fromCoverLetterText : DocxGenerator.fromCvText;
+      if (typeof fn !== 'function') return null;
+      const baseName = (name || (kind === 'cover' ? 'Cover_Letter' : 'Resume')).replace(/\.(pdf|docx|txt)$/i, '');
+      const result = fn(text, { name: baseName, filename: `${baseName}.docx` });
+      if (result && result.success && result.base64) {
+        return createDocxFile(result.base64, result.filename || `${baseName}.docx`);
+      }
+    } catch (e) {
+      console.warn('[ATS Tailor] on-the-spot DOCX build failed:', e && e.message);
+    }
+    return null;
   }
 
   function createBlobFile(base64, name, mime) {
@@ -2697,22 +2714,19 @@
   function loadFilesAndStart() {
     chrome.storage.local.get([
       'cvDocx', 'cvDocxFileName', 'coverDocx', 'coverDocxFileName',
-      'cvPDF', 'coverPDF', 'coverLetterText', 'cvFileName', 'coverFileName',
+      'cvPDF', 'coverPDF', 'cvText', 'coverLetterText', 'cvFileName', 'coverFileName',
     ], (data) => {
-      // DOCX is the ONLY attached format -- best ATS parseability on
-      // Workday/Greenhouse/Lever/Taleo/iCIMS and the file most recruiters
-      // actually open from the portal. We fall back to PDF only if a
-      // DOCX hasn't been generated yet (older cached payload).
-      if (data.cvDocx) {
-        cvFile = createDocxFile(data.cvDocx, data.cvDocxFileName || 'Tailored_Resume.docx');
-      } else {
-        cvFile = createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf');
-      }
-      if (data.coverDocx) {
-        coverFile = createDocxFile(data.coverDocx, data.coverDocxFileName || 'Tailored_Cover_Letter.docx');
-      } else {
-        coverFile = createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf');
-      }
+      // DOCX is the ONLY attached format. Priority: pre-built DOCX base64
+      // from the popup -> build DOCX on the spot from the CV/cover text ->
+      // (last resort) PDF only if there is no text at all to build from.
+      cvFile = data.cvDocx
+        ? createDocxFile(data.cvDocx, data.cvDocxFileName || 'Tailored_Resume.docx')
+        : (buildDocxFileFromText(data.cvText || '', data.cvFileName, 'cv')
+           || createPDFFile(data.cvPDF, data.cvFileName || 'Tailored_Resume.pdf'));
+      coverFile = data.coverDocx
+        ? createDocxFile(data.coverDocx, data.coverDocxFileName || 'Tailored_Cover_Letter.docx')
+        : (buildDocxFileFromText(data.coverLetterText || '', data.coverFileName, 'cover')
+           || createPDFFile(data.coverPDF, data.coverFileName || 'Tailored_Cover_Letter.pdf'));
       console.log('[ATS Tailor] Attaching CV:', cvFile && cvFile.name, '| Cover:', coverFile && coverFile.name);
       coverLetterText = data.coverLetterText || '';
       filesLoaded = true;

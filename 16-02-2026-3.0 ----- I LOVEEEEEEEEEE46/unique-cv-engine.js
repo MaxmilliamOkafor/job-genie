@@ -244,8 +244,33 @@
     };
   }
 
-  // ============ GENERATE UNIQUE BULLET (JOB-TAILORED - AGGRESSIVE INJECTION) ============
+  // ============ GENERATE UNIQUE BULLET — HONEST MODE ============
+  // Historic behaviour: pick random connector ("through", "via",
+  // "employing"...) and splice keywords into the candidate's real
+  // achievement bullets. That produced grammatically broken output
+  // like "...per sprint, through scoops" / "...built with storytelling"
+  // on the FT journalist application, which a recruiter spots as
+  // auto-generated spam in under five seconds.
+  //
+  // New rule: the candidate's experience bullets are IMMUTABLE in this
+  // engine. We return the original bullet text untouched. Keyword
+  // placement happens via:
+  //   1. Summary + Skills (server-side LLM, with anti-fabrication rules)
+  //   2. JD-vocabulary mirroring (recruiter-audit.js) -- swap a synonym
+  //      already present in the bullet to the JD's exact term, never
+  //      add an unrelated phrase.
+  // Unmatched keywords are surfaced in the audit, not stuffed.
   function generateUniqueBullet(originalBullet, allKeywords, usedKeywords, templateIndex, priorityMap = {}) {
+    if (!originalBullet) return '';
+    // Return the original bullet text verbatim. No injection.
+    return originalBullet.text || originalBullet;
+  }
+
+  // The legacy injection logic is retained below ONLY as dead code, kept
+  // out of the export surface; nothing reaches it. Left in place so a
+  // future reader can see what was suppressed and why -- the live entry
+  // point above short-circuits before any of it runs.
+  function _legacyGenerateUniqueBullet_disabled(originalBullet, allKeywords, usedKeywords, templateIndex, priorityMap = {}) {
     if (!originalBullet || !allKeywords?.length) return originalBullet.text || originalBullet;
 
     const bulletText = originalBullet.text || originalBullet;

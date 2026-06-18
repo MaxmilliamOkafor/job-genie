@@ -863,23 +863,35 @@
     },
 
     // ============ FORMAT PHONE FOR ATS ============
-    // Format: "+CountryCode: LocalNumber" (e.g., "+353: 0874261508")
+    // International-standard format: "+CC NNN NNN NNNN" -- NO colon.
+    // Previous format "+353: 0874261508" wrote a literal colon between
+    // country code and local number, which (a) breaks ATS phone parsers
+    // and (b) reads as malformed to a human ("+353:" is not a thing).
     formatPhoneForATS(phone) {
       if (!phone) return '';
-      
-      // Remove all non-digit and non-plus characters
-      let cleaned = phone.replace(/[^\d+]/g, '');
-      
-      // If starts with +, format as "+XXX: rest"
-      if (cleaned.startsWith('+')) {
-        // Match country code (1-3 digits after +)
-        const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
-        if (match) {
-          return `+${match[1]}: ${match[2]}`;
-        }
+      // Strip everything that isn't a digit or a leading '+'.
+      let cleaned = String(phone).replace(/[^\d+]/g, '');
+      if (!cleaned) return '';
+
+      // Drop a leading 0 right after the country code if someone wrote
+      // "+353 0874261508" -- the 0 is the trunk prefix, not part of the
+      // international number.
+      const m = cleaned.match(/^\+(\d{1,3})0?(\d+)$/);
+      if (m) {
+        const cc = m[1];
+        const local = m[2];
+        // Light readability grouping: 3-3-4 / 3-4 depending on length.
+        let grouped = local;
+        if (local.length >= 9) grouped = `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
+        else if (local.length >= 7) grouped = `${local.slice(0, 3)} ${local.slice(3)}`;
+        return `+${cc} ${grouped}`;
       }
-      
-      // Return original if no country code detected
+      // No country-code prefix: return digits only, lightly spaced.
+      if (/^\d{7,}$/.test(cleaned)) {
+        return cleaned.length >= 10
+          ? `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`
+          : cleaned;
+      }
       return phone;
     },
 
@@ -923,6 +935,21 @@
     // ============ INJECT ALL KEYWORDS INTO EXPERIENCE (100% MATCH) ============
     // High/Medium: 3-5x mentions, Low: 1-2x mentions
     injectAllKeywordsIntoExperience(experience, keywordsByPriority) {
+      // DISABLED. This was the most aggressive stuffer -- it targeted
+      // 4-6 mentions PER keyword and spliced random connectors
+      // ('through', 'via', 'employing'...) into the candidate's bullets,
+      // producing exactly the broken-English output the FT-application
+      // audit flagged. Experience bullets are now immutable; keyword
+      // placement is the LLM's job (summary/skills) + JD-vocabulary
+      // mirroring of existing wording. Returns experience unchanged.
+      try {
+        const n = (keywordsByPriority && (keywordsByPriority.all || []).length) || 0;
+        if (n) console.warn('[OpenResume] suppressed aggressive experience keyword injection (' + n + ' kw)');
+      } catch (e) {}
+      return experience;
+    },
+
+    _legacyInjectAllKeywordsIntoExperience_disabled(experience, keywordsByPriority) {
       if (!experience || experience.length === 0) return experience;
 
       const { high = [], medium = [], low = [], all = [] } = keywordsByPriority;
