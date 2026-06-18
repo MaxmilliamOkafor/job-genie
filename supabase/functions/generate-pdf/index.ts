@@ -1148,97 +1148,67 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
     const candidateName =
       pInfo?.name || `${pInfo?.firstName || ""} ${pInfo?.lastName || ""}`.trim();
 
-    const { pdfDoc, fonts } = await setupPdf(
-      `${candidateName} - ${type === "resume" ? "Resume" : "Cover Letter"}`,
-      candidateName,
-      type === "resume" ? "Professional Resume" : "Cover Letter",
-      structuredCv?.skills?.primary?.slice(0, 20) || [],
-    );
-
-    let pages: PDFPage[] = [];
+    let docxBytes: Uint8Array = new Uint8Array();
+    const baseName = (fileName || `${candidateName}_${type === "resume" ? "CV" : "Cover_Letter"}`).replace(/\.(pdf|docx)$/i, "");
+    const outFileName = `${baseName}.docx`;
 
     if (type === "resume" && structuredCv) {
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
       const loc = cleanLocation(locationHeader || pInfo.location || "") || "Dublin, IE";
       const contact: ContactInfo = {
-        location: loc,
-        phone: pInfo.phone,
-        email: pInfo.email,
-        linkedin: pInfo.linkedin,
-        github: pInfo.github,
-        portfolio: pInfo.portfolio,
+        location: loc, phone: pInfo.phone, email: pInfo.email,
+        linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
       };
-
-      const projects = (structuredCv.projects || structuredCv.relevantProjects || []).map(
-        (p) => ({
-          name: p.name,
-          role: p.role,
-          technologies: p.technologies,
-          bullets:
-            p.bullets && p.bullets.length
-              ? p.bullets.slice(0, 6)
-              : p.description
-                ? p.description.split("\n").filter(Boolean).slice(0, 4)
-                : [],
-        }),
-      );
-
-      pages = renderResume(pdfDoc, fonts, {
+      const projects = (structuredCv.projects || structuredCv.relevantProjects || []).map((p) => ({
+        name: p.name, role: p.role, technologies: p.technologies,
+        bullets: p.bullets && p.bullets.length
+          ? p.bullets.slice(0, 6)
+          : p.description ? p.description.split("\n").filter(Boolean).slice(0, 4) : [],
+      }));
+      const norm: NormalisedResume = {
         personalInfo: { name: candidateName, contact },
         summary: structuredCv.summary,
         coreCompetencies: structuredCv.coreCompetencies,
         experience: (structuredCv.experience || []).map((e) => ({
-          company: e.company,
-          title: e.title,
-          dates: e.dates,
+          company: e.company, title: e.title, dates: e.dates,
           bullets: (e.bullets || []).slice(0, 6),
         })),
         projects,
         education: (structuredCv.education || []).map((edu) => ({
-          degree: edu.degree,
-          school: edu.school,
-          dates: edu.dates,
-          gpa: edu.gpa,
+          degree: edu.degree, school: edu.school, dates: edu.dates, gpa: edu.gpa,
         })),
         skills: structuredCv.skills,
         certifications: structuredCv.certifications || [],
-      });
+      };
+      docxBytes = await buildResumeDocxBytes(norm);
     } else if (type === "coverletter") {
       if (!pInfo || !plainText) {
         return new Response(
-          JSON.stringify({
-            error: "Missing personalInfo or plainText for cover letter generation",
-          }),
+          JSON.stringify({ error: "Missing personalInfo or plainText for cover letter generation" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       const loc = cleanLocation(pInfo.location || "") || "Dublin, IE";
       const contact: ContactInfo = {
-        location: loc,
-        phone: pInfo.phone,
-        email: pInfo.email,
-        linkedin: pInfo.linkedin,
-        github: pInfo.github,
-        portfolio: pInfo.portfolio,
+        location: loc, phone: pInfo.phone, email: pInfo.email,
+        linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
       };
       const paragraphs = plainText.split(/\n\s*\n/).filter((p) => p.trim());
-      pages = renderCoverLetter(pdfDoc, fonts, {
+      docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: { name: candidateName, contact },
         jobTitle: "",
         paragraphs,
       });
     }
 
-    const pdfBytes = await pdfDoc.save();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
-    console.log(
-      `[generate-pdf] StructuredCv PDF generated: ${fileName}, size: ${pdfBytes.length} bytes, pages: ${pages.length}`,
-    );
+    const base64Docx = bytesToBase64(docxBytes);
+    console.log(`[generate-pdf] StructuredCv DOCX generated: ${outFileName}, size: ${docxBytes.length} bytes`);
 
     return new Response(
-      JSON.stringify({ success: true, pdf: base64Pdf, fileName, pages: pages.length }),
+      JSON.stringify({ success: true, pdf: base64Docx, docx: base64Docx, fileName: outFileName }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+
   } catch (error) {
     console.error("[generate-pdf] StructuredCv processing error:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
