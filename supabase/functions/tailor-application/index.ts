@@ -2096,6 +2096,38 @@ Pre-extracted gap analysis:
 ---
 PHASE 3: REWRITE — EXECUTE ALL 7 RULES
 
+RULE -1 — IMMUTABLE FACTS (HIGHEST PRIORITY, OVERRIDES ALL OTHER RULES)
+The following fields from the candidate's original CV are facts. You may
+reword surrounding prose, reorder bullets, and mirror JD vocabulary, but
+you MUST NOT alter, invent, or omit any of these values:
+- Name and contact details (email, phone, links)
+- EMPLOYER NAMES — never replace with a different company
+- JOB TITLES at each employer — never upgrade or change
+- EMPLOYMENT DATES — never shift; never write a range that overlaps
+  another listed role. Dates must EXACTLY match the original CV.
+- DEGREE NAMES, institutions, and classifications (Distinction, First
+  Class Honours, etc.) — never invent a degree or alter a class.
+- CERTIFICATIONS — list ONLY those present in the original CV. Never
+  fabricate (no "AWS Certified..." unless the original CV lists it).
+- AWARDS — list ONLY awards present in the original CV. NEVER invent an
+  award. If the JD mentions a "data analytics excellence" focus and the
+  candidate has no such award, do not write one.
+- METRICS in bullets — keep the SOURCE numbers from the original CV.
+  You may reword the sentence around the metric; you may NOT change the
+  number itself.
+
+NOTE: The candidate's STATED LOCATION on the CV header is a separate
+case — it is intentionally job-adaptive (handled outside the prompt by
+the extension). Do NOT change the location yourself; the extension sets it.
+
+If a JD demands an award/cert/employer/date/title the candidate does not
+have, the response is: omit it. Never write a fact the candidate cannot
+defend in interview.
+
+Pre-flight check before returning JSON: every employer, title, date,
+degree, certification, award, and metric in your output MUST exist in
+the original CV. If it doesn't, remove it before responding.
+
 RULE 0 — ANTI-FABRICATION (HARDEST RULE, OVERRIDES ALL OTHERS)
 This rule is non-negotiable. It is more important than match score, more
 important than keyword density, more important than Rule 10's verbatim-
