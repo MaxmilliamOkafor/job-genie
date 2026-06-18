@@ -9,6 +9,17 @@ import {
   PDFString,
   PDFArray,
 } from "https://esm.sh/pdf-lib@1.17.1";
+import {
+  Document as DocxDocument,
+  Packer,
+  Paragraph,
+  TextRun,
+  ExternalHyperlink,
+  AlignmentType,
+  TabStopType,
+  BorderStyle,
+} from "npm:docx@8.5.0";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
