@@ -1949,7 +1949,7 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
-    children.push(...docxCertificationsGrid(data.certifications));
+    for (const c of expandCertifications(data.certifications)) children.push(docxBullet(c));
   }
 
   if (data.achievements?.length) {
