@@ -285,10 +285,26 @@
     },
 
     // ============ ENHANCE BULLET POINTS WITH KEYWORDS ============
+    // DISABLED at the orchestrator level. Even with appendWithPhrase
+    // neutered, this used metric-context insertion ("...beforeMetric
+    // through {kws}, afterMetric") and soft-skill suffix appends that
+    // still produced broken-English output on real applications.
+    // Bullets are now immutable; the LLM owns summary/skills placement.
     enhanceBulletPointsWithKeywords(workExperience, keywords, options = {}) {
+      try { console.warn('[StrategicKeyword] suppressed enhanceBulletPointsWithKeywords (suffix injection disabled)'); } catch (e) {}
+      // Return the experience UNCHANGED in the exact shape the caller
+      // expects (enhancedExperience + stats.integratedKeywords). Returning
+      // the wrong key would blank the experience section.
+      return {
+        enhancedExperience: workExperience,
+        stats: { bulletsModified: 0, keywordsIntegrated: 0, integratedKeywords: [], strategiesUsed: {} },
+      };
+    },
+
+    _legacyEnhanceBulletPointsWithKeywords_disabled(workExperience, keywords, options = {}) {
       const categorized = this.categorizeKeywords(keywords);
       const matches = this.matchKeywordsToExperience(categorized, workExperience);
-      
+
       const enhancedExperience = JSON.parse(JSON.stringify(workExperience));
       const stats = {
         bulletsModified: 0,

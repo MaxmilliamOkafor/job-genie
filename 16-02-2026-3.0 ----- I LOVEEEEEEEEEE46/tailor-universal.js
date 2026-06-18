@@ -244,26 +244,15 @@
    * Strategy: Append keywords with natural connectors (NO rewriting)
    * CRITICAL: Never use banned buzzwords (no "leveraging" / "utilizing" / "utilising")
    */
+  // DISABLED: keyword-into-bullet suffix injection.
+  // Pattern produced "...per sprint, through scoops" / "...built with
+  // storytelling" -- recruiter-killing on sight. Experience bullets are
+  // now immutable here; keyword placement happens via the LLM
+  // (summary/skills) and via mirrorJdVocabulary (synonym -> JD term
+  // inside existing wording only). Returns the original bullet untouched.
   function injectKeywordNaturally(bulletPrefix, bulletText, keyword) {
-    const text = bulletText.trim();
-    const kwLower = keyword.toLowerCase();
-
-    // Check if keyword already exists - if so, return unchanged
-    if (text.toLowerCase().includes(kwLower)) {
-      return bulletPrefix + text;
-    }
-
-    // Natural injection phrases (UK-friendly, not AI-buzzwords)
-    const phrases = ['using', 'through', 'via', 'applying', 'incorporating', 'employing', 'built with'];
-    const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
-
-    // If ends with period, insert before period
-    if (text.endsWith('.')) {
-      return `${bulletPrefix}${text.slice(0, -1)}, ${getPhrase()} ${keyword}.`;
-    }
-
-    // Otherwise append
-    return `${bulletPrefix}${text}, ${getPhrase()} ${keyword}.`;
+    try { console.warn('[TailorUniversal] suppressed bullet suffix-append for keyword:', keyword); } catch (e) {}
+    return (bulletPrefix || '') + (bulletText || '');
   }
 
   // ============ KEYWORD INJECTION ============

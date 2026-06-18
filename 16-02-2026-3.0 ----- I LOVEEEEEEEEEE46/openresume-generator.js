@@ -935,6 +935,21 @@
     // ============ INJECT ALL KEYWORDS INTO EXPERIENCE (100% MATCH) ============
     // High/Medium: 3-5x mentions, Low: 1-2x mentions
     injectAllKeywordsIntoExperience(experience, keywordsByPriority) {
+      // DISABLED. This was the most aggressive stuffer -- it targeted
+      // 4-6 mentions PER keyword and spliced random connectors
+      // ('through', 'via', 'employing'...) into the candidate's bullets,
+      // producing exactly the broken-English output the FT-application
+      // audit flagged. Experience bullets are now immutable; keyword
+      // placement is the LLM's job (summary/skills) + JD-vocabulary
+      // mirroring of existing wording. Returns experience unchanged.
+      try {
+        const n = (keywordsByPriority && (keywordsByPriority.all || []).length) || 0;
+        if (n) console.warn('[OpenResume] suppressed aggressive experience keyword injection (' + n + ' kw)');
+      } catch (e) {}
+      return experience;
+    },
+
+    _legacyInjectAllKeywordsIntoExperience_disabled(experience, keywordsByPriority) {
       if (!experience || experience.length === 0) return experience;
 
       const { high = [], medium = [], low = [], all = [] } = keywordsByPriority;
