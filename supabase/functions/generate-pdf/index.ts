@@ -1672,3 +1672,329 @@ async function handleRawContentRequest(body: {
     });
   }
 }
+
+// ============================================================
+// DOCX BUILDER — premium navy design, ATS-safe single column
+// ============================================================
+
+const DOCX_NAVY = "16243F";
+const DOCX_BODY = "21232A";
+const DOCX_MUTED = "66707A";
+const DOCX_LINK = "0066CC";
+const DOCX_RULE = "BDC7D9";
+const DOCX_FONT = "Calibri";
+const RIGHT_TAB = 9300; // ~6.45in in twips, inside 0.62in margins on A4
+
+const UK_IE_CLASSIFICATION =
+  /(first\s+class|second\s+class|upper\s+second|lower\s+second|2:1|2:2|distinction|merit|pass\s+with|honou?rs)/i;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function docxNavyRule(): Paragraph {
+  return new Paragraph({
+    spacing: { before: 60, after: 200 },
+    border: { bottom: { color: DOCX_NAVY, space: 1, style: BorderStyle.SINGLE, size: 6 } },
+  });
+}
+function docxHairline(): Paragraph {
+  return new Paragraph({
+    spacing: { before: 0, after: 160 },
+    border: { bottom: { color: DOCX_RULE, space: 1, style: BorderStyle.SINGLE, size: 4 } },
+  });
+}
+
+function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHyperlink> {
+  const sep = "   \u00B7   ";
+  const out: Array<TextRun | ExternalHyperlink> = [];
+  const push = (node: TextRun | ExternalHyperlink) => {
+    if (out.length) {
+      out.push(new TextRun({ text: sep, font: DOCX_FONT, size: 19, color: DOCX_MUTED }));
+    }
+    out.push(node);
+  };
+  if (contact.location) push(new TextRun({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.phone) push(new TextRun({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.email) {
+    push(new ExternalHyperlink({
+      link: `mailto:${contact.email}`,
+      children: [new TextRun({ text: contact.email, font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+    }));
+  }
+  for (const url of [contact.linkedin, contact.github, contact.portfolio]) {
+    if (!url) continue;
+    push(new ExternalHyperlink({
+      link: ensureUrl(url),
+      children: [new TextRun({ text: displayUrl(url), font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+    }));
+  }
+  return out;
+}
+
+function docxHeader(name: string, contact: ContactInfo): Paragraph[] {
+  return [
+    new Paragraph({
+      spacing: { after: 120 },
+      children: [new TextRun({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
+    }),
+    new Paragraph({
+      spacing: { after: 60 },
+      children: docxContactChildren(contact),
+    }),
+    docxNavyRule(),
+  ];
+}
+
+function docxSectionHeader(label: string): Paragraph[] {
+  return [
+    new Paragraph({
+      spacing: { before: 280, after: 60 },
+      children: [new TextRun({
+        text: label.toUpperCase(),
+        font: DOCX_FONT,
+        size: 22,
+        bold: true,
+        color: DOCX_NAVY,
+        characterSpacing: 20,
+      })],
+    }),
+    docxHairline(),
+  ];
+}
+
+function docxBullet(text: string): Paragraph {
+  return new Paragraph({
+    spacing: { after: 60, line: 290 },
+    indent: { left: 360, hanging: 220 },
+    children: [
+      new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      new TextRun({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+    ],
+  });
+}
+
+function docxExperience(e: ExperienceEntry): Paragraph[] {
+  const out: Paragraph[] = [];
+  const header: TextRun[] = [];
+  if (e.company) header.push(new TextRun({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
+  if (e.title) {
+    if (header.length) header.push(new TextRun({ text: "  \u2014  ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
+    header.push(new TextRun({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  }
+  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  out.push(new Paragraph({
+    spacing: { before: 200, after: 60 },
+    tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
+    children: header,
+  }));
+  for (const b of (e.bullets || [])) out.push(docxBullet(b));
+  return out;
+}
+
+function docxProject(p: ProjectEntry): Paragraph[] {
+  const out: Paragraph[] = [];
+  const header: TextRun[] = [
+    new TextRun({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+  ];
+  if (p.role) header.push(new TextRun({ text: "  \u2014  " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  if (p.dates) header.push(new TextRun({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  out.push(new Paragraph({
+    spacing: { before: 200, after: 60 },
+    tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
+    children: header,
+  }));
+  if (p.technologies?.length) {
+    out.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [
+        new TextRun({ text: "Tech: ", font: DOCX_FONT, size: 20, bold: true, color: DOCX_BODY }),
+        new TextRun({ text: p.technologies.join(", "), font: DOCX_FONT, size: 20, color: DOCX_BODY }),
+      ],
+    }));
+  }
+  for (const b of (p.bullets || [])) out.push(docxBullet(b));
+  return out;
+}
+
+function docxEducation(e: EducationEntry): Paragraph[] {
+  const out: Paragraph[] = [];
+  let suffix = "";
+  if (e.gpa) {
+    suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? `  \u2014  ${e.gpa}` : `  \u2014  GPA: ${e.gpa}`;
+  }
+  const header: TextRun[] = [
+    new TextRun({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+  ];
+  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  out.push(new Paragraph({
+    spacing: { before: 160, after: 40 },
+    tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
+    children: header,
+  }));
+  if (e.school) {
+    out.push(new Paragraph({
+      spacing: { after: 80 },
+      children: [new TextRun({ text: e.school, font: DOCX_FONT, size: 20, color: DOCX_MUTED })],
+    }));
+  }
+  return out;
+}
+
+function docxSkills(groups: Array<{ label: string; items: string[] }>): Paragraph[] {
+  return groups.map((g) => new Paragraph({
+    spacing: { after: 80, line: 290 },
+    children: [
+      new TextRun({ text: `${g.label}: `, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+      new TextRun({ text: g.items.join(", "), font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+    ],
+  }));
+}
+
+async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array> {
+  const children: Paragraph[] = [];
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+
+  if (data.summary) {
+    children.push(...docxSectionHeader("Professional Summary"));
+    children.push(new Paragraph({
+      spacing: { after: 160, line: 300 },
+      children: [new TextRun({ text: data.summary, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    }));
+  }
+
+  const filteredExp = (data.experience || []).filter((e) => {
+    if (isHeaderName(e.company)) return false;
+    if (!e.company || e.company.trim().length < 2) return false;
+    return true;
+  });
+  if (filteredExp.length) {
+    children.push(...docxSectionHeader("Professional Experience"));
+    for (const e of filteredExp) children.push(...docxExperience(e));
+  }
+
+  if (data.projects?.length) {
+    children.push(...docxSectionHeader("Selected Projects"));
+    for (const p of data.projects) children.push(...docxProject(p));
+  }
+
+  if (data.education?.length) {
+    children.push(...docxSectionHeader("Education"));
+    for (const ed of data.education) children.push(...docxEducation(ed));
+  }
+
+  if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
+    children.push(...docxSectionHeader("Skills"));
+    const groups: Array<{ label: string; items: string[] }> = [];
+    if (data.skills.primary?.length) groups.push({ label: "Technical", items: data.skills.primary });
+    if (data.skills.secondary?.length) groups.push({ label: "Additional", items: data.skills.secondary });
+    children.push(...docxSkills(groups));
+  }
+
+  if (data.coreCompetencies?.length) {
+    children.push(...docxSectionHeader("Core Competencies"));
+    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
+  }
+
+  if (data.certifications?.length) {
+    children.push(...docxSectionHeader("Certifications"));
+    for (const c of data.certifications) children.push(docxBullet(c));
+  }
+
+  if (data.achievements?.length) {
+    children.push(...docxSectionHeader("Achievements"));
+    for (const a of data.achievements) {
+      const txt = a.description
+        ? `${a.title}${a.date ? ` (${a.date})` : ""} \u2014 ${a.description}`
+        : `${a.title}${a.date ? ` (${a.date})` : ""}`;
+      children.push(docxBullet(txt));
+    }
+  }
+
+  const doc = new DocxDocument({
+    creator: "QuantumHire",
+    title: `${data.personalInfo.name} - Resume`,
+    styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 893, right: 893, bottom: 893, left: 893 },
+        },
+      },
+      children,
+    }],
+  });
+  const buf = await Packer.toBuffer(doc);
+  return new Uint8Array(buf);
+}
+
+async function buildCoverLetterDocxBytes(data: {
+  personalInfo: { name: string; contact: ContactInfo };
+  jobTitle: string;
+  paragraphs: string[];
+}): Promise<Uint8Array> {
+  const children: Paragraph[] = [];
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+
+  const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
+  children.push(new Paragraph({
+    spacing: { after: 200 },
+    children: [new TextRun({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
+  }));
+
+  if (data.jobTitle) {
+    children.push(new Paragraph({
+      spacing: { after: 200 },
+      children: [
+        new TextRun({ text: "Re: ", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+        new TextRun({ text: data.jobTitle, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+      ],
+    }));
+  }
+
+  children.push(new Paragraph({
+    spacing: { after: 200 },
+    children: [new TextRun({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+  }));
+
+  for (const p of data.paragraphs) {
+    const t = (p || "").trim();
+    if (!t) continue;
+    children.push(new Paragraph({
+      spacing: { after: 200, line: 320 },
+      alignment: AlignmentType.JUSTIFIED,
+      children: [new TextRun({ text: t, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    }));
+  }
+
+  children.push(new Paragraph({
+    spacing: { before: 200, after: 60 },
+    children: [new TextRun({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+  }));
+  children.push(new Paragraph({
+    children: [new TextRun({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
+  }));
+
+  const doc = new DocxDocument({
+    creator: "QuantumHire",
+    title: `${data.personalInfo.name} - Cover Letter`,
+    styles: { default: { document: { run: { font: DOCX_FONT, size: 21 } } } },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 893, right: 893, bottom: 893, left: 893 },
+        },
+      },
+      children,
+    }],
+  });
+  const buf = await Packer.toBuffer(doc);
+  return new Uint8Array(buf);
+}
