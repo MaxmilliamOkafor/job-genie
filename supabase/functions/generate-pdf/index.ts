@@ -1613,30 +1613,22 @@ async function handleRawContentRequest(body: {
     }
 
     // ---- Render ----
-    const { pdfDoc, fonts } = await setupPdf(
-      `${displayName} - ${type === "cv" ? "Resume" : "Cover Letter"}`,
-      displayName,
-      type === "cv" ? "Professional Resume" : "Cover Letter",
-      norm.skills?.primary?.slice(0, 20) || [],
-    );
-
-    let pages: PDFPage[];
+    let docxBytes: Uint8Array;
     if (type === "cv") {
-      pages = renderResume(pdfDoc, fonts, norm);
+      docxBytes = await buildResumeDocxBytes(norm);
     } else {
       const paragraphs = content
         .split(/\n\s*\n/)
         .map((p) => p.trim())
         .filter(Boolean);
-      pages = renderCoverLetter(pdfDoc, fonts, {
+      docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: norm.personalInfo,
         jobTitle: jobTitle || "",
         paragraphs,
       });
     }
 
-    const pdfBytes = await pdfDoc.save();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+    const base64Docx = bytesToBase64(docxBytes);
 
     let finalFileName = fileName;
     if (!finalFileName) {
@@ -1650,22 +1642,26 @@ async function handleRawContentRequest(body: {
       else nameForFile = "Applicant";
       nameForFile = nameForFile.replace(/[^a-zA-Z0-9_]/g, "");
       finalFileName =
-        type === "cv" ? `${nameForFile}_CV.pdf` : `${nameForFile}_Cover_Letter.pdf`;
+        type === "cv" ? `${nameForFile}_CV.docx` : `${nameForFile}_Cover_Letter.docx`;
+    } else {
+      finalFileName = finalFileName.replace(/\.pdf$/i, ".docx");
+      if (!/\.docx$/i.test(finalFileName)) finalFileName = `${finalFileName}.docx`;
     }
 
     console.log(
-      `[generate-pdf] Generated ${finalFileName}, size: ${pdfBytes.length} bytes, pages: ${pages.length}, location: ${tailoredLocation}`,
+      `[generate-pdf] Generated DOCX ${finalFileName}, size: ${docxBytes.length} bytes, location: ${tailoredLocation}`,
     );
 
     return new Response(
       JSON.stringify({
-        pdf: base64Pdf,
+        pdf: base64Docx,
+        docx: base64Docx,
         fileName: finalFileName,
         location: tailoredLocation || "",
-        pages: pages.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+
   } catch (error) {
     console.error("[generate-pdf] Raw content processing error:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to generate PDF";
