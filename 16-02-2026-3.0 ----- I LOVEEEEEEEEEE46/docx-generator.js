@@ -139,8 +139,9 @@
   const SECTION_HEADERS = [
     'PROFESSIONAL SUMMARY', 'SUMMARY', 'PROFILE',
     'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
-    'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
-    'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'CERTIFICATIONS', 'PROJECTS',
+    'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT', 'PROFESSIONAL EXPERIENCE',
+    'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES',
+    'CERTIFICATIONS', 'PROJECTS', 'SELECTED PROJECTS', 'AWARDS',
   ];
 
   function buildBodyXml(cvText) {
@@ -181,6 +182,24 @@
       // Body
       let roleState = 'none';        // 'expectCompany' | 'expectTitle' | 'inRole'
       let inExperience = false;
+      // Tracks the section we are currently rendering into so list-shaped
+      // content (CERTIFICATIONS / TECHNICAL PROFICIENCIES / SKILLS) can
+      // be split into one bullet per item even when the source has them
+      // as a single comma-separated paragraph.
+      let currentSection = '';
+      // Sections where comma-separated content is rendered as one bullet
+      // per item (each cert / competency is a distinct credential, and
+      // bullets are easier to scan than a wall of commas). Technical
+      // proficiencies stay as a comma list -- keyword-rich + denser,
+      // which is what recruiters expect for tech stack.
+      const LIST_SECTIONS = new Set([
+        'CERTIFICATIONS', 'CORE COMPETENCIES', 'AREAS OF EXPERTISE', 'AWARDS',
+      ]);
+      // A helper to emit a single navy-bullet item paragraph.
+      const emitBullet = (item) => out.push(paragraph(
+        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
+        { indent: 360, hanging: 240, spacingAfter: 50, line: 288, lineRule: 'auto' }
+      ));
       for (; i < lines.length; i++) {
         const t = lines[i].trim();
         if (!t) {
@@ -198,15 +217,13 @@
           ));
           inExperience = EXPERIENCE_HEADERS.includes(upper);
           roleState = inExperience ? 'expectCompany' : 'none';
+          currentSection = upper;
           continue;
         }
 
         if (/^([\-*•]|\d+\.)\s+/.test(t)) {
           const item = t.replace(/^([\-*•]|\d+\.)\s+/, '');
-          out.push(paragraph(
-            run('• ', { color: C.NAVY, sz: 21 }) + run(item, { color: C.BODY, sz: 21 }),
-            { indent: 360, hanging: 200, spacingAfter: 40, line: 276, lineRule: 'auto' }
-          ));
+          emitBullet(item);
           if (inExperience) roleState = 'inRole';
           continue;
         }
@@ -231,6 +248,22 @@
           // Anything else inside a role -> body
           out.push(paragraph(run(t, { color: C.BODY, sz: 21 }), { spacingAfter: 40 }));
           continue;
+        }
+
+        // LIST-SHAPED SECTIONS (CERTIFICATIONS / TECHNICAL PROFICIENCIES
+        // / CORE COMPETENCIES / AREAS OF EXPERTISE): if a single line
+        // contains 2+ comma-separated items and no full-sentence
+        // punctuation, render each item as its own navy bullet -- the
+        // recruiter-scannable layout the user requested.
+        if (LIST_SECTIONS.has(currentSection)) {
+          const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
+          if (looksLikeList) {
+            const items = t.split(/,\s*/)
+              .map((s) => s.replace(/^[•\-*]\s*/, '').trim())
+              .filter((s) => s.length > 0);
+            items.forEach(emitBullet);
+            continue;
+          }
         }
 
         // Non-experience body. "Label: items" (skills) -> bold label.
