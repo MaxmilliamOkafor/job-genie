@@ -70,6 +70,14 @@
   function paragraph(content, opts = {}) {
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
+    // Tab stops: opts.tabs is an array of integers (twips from left margin).
+    // Used by the 3-column CORE COMPETENCIES layout -- a single-column
+    // paragraph with tab-aligned items reads in linear order to every ATS
+    // parser while LOOKING like a 3-column grid to the human eye.
+    if (Array.isArray(opts.tabs) && opts.tabs.length) {
+      const stops = opts.tabs.map((pos) => `<w:tab w:val="left" w:pos="${pos}"/>`).join('');
+      ppr.push(`<w:tabs>${stops}</w:tabs>`);
+    }
     const sp = [];
     if (opts.spacingBefore != null) sp.push(`w:before="${opts.spacingBefore}"`);
     if (opts.spacingAfter != null) sp.push(`w:after="${opts.spacingAfter}"`);
@@ -187,14 +195,39 @@
       // be split into one bullet per item even when the source has them
       // as a single comma-separated paragraph.
       let currentSection = '';
-      // Sections where comma-separated content is rendered as one bullet
-      // per item (each cert / competency is a distinct credential, and
-      // bullets are easier to scan than a wall of commas). Technical
-      // proficiencies stay as a comma list -- keyword-rich + denser,
-      // which is what recruiters expect for tech stack.
+      // One-per-line bulleted sections: each item is its own paragraph.
       const LIST_SECTIONS = new Set([
-        'CERTIFICATIONS', 'CORE COMPETENCIES', 'AREAS OF EXPERTISE', 'AWARDS',
+        'CERTIFICATIONS', 'AWARDS',
       ]);
+      // Three-column sections: items render in a 3-up grid via tab stops.
+      // Crucially this is a SINGLE-COLUMN paragraph layout under the hood
+      // -- no tables, no Word columns -- so ATS parsers (Workday,
+      // Greenhouse, Lever, Taleo, iCIMS) read the items in linear left-
+      // to-right reading order, exactly as they would a normal list.
+      const GRID_SECTIONS = new Set([
+        'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
+      ]);
+      // Tab-stop positions in twips, evenly spread across the content
+      // area between left margin (900) and right margin (900) of an
+      // A4 page (11906 twips wide -> 10106 content). Three stops at
+      // 0, ~3370, ~6740 give clean visual thirds.
+      const GRID_TABS = [0, 3370, 6740];
+      // Navy bullet character used inline within each grid cell. We
+      // build the runs by hand so a <w:tab/> can separate the cells.
+      const gridCellRuns = (item) =>
+        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 });
+      // Render an array of competency strings as paragraphs of 3 columns.
+      // Final row pads to 3 cells with empty strings so the trailing tab
+      // alignment stays consistent for both human and parser.
+      const emitGrid = (items) => {
+        for (let r = 0; r < items.length; r += 3) {
+          const row = [items[r], items[r + 1] || '', items[r + 2] || ''];
+          const cells = row
+            .map((it, idx) => (idx === 0 ? gridCellRuns(it) : `<w:r><w:tab/></w:r>${it ? gridCellRuns(it) : ''}`))
+            .join('');
+          out.push(paragraph(cells, { tabs: GRID_TABS, spacingAfter: 40, line: 276, lineRule: 'auto' }));
+        }
+      };
       // A helper to emit a single navy-bullet item paragraph.
       const emitBullet = (item) => out.push(paragraph(
         run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
@@ -250,18 +283,22 @@
           continue;
         }
 
-        // LIST-SHAPED SECTIONS (CERTIFICATIONS / TECHNICAL PROFICIENCIES
-        // / CORE COMPETENCIES / AREAS OF EXPERTISE): if a single line
-        // contains 2+ comma-separated items and no full-sentence
-        // punctuation, render each item as its own navy bullet -- the
-        // recruiter-scannable layout the user requested.
-        if (LIST_SECTIONS.has(currentSection)) {
+        // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items
+        // with no sentence punctuation gets split into per-item paragraphs.
+        // CORE COMPETENCIES / AREAS OF EXPERTISE -> 3-column tab-grid
+        //   (single-column paragraphs underneath, ATS-safe).
+        // CERTIFICATIONS / AWARDS              -> one bullet per line.
+        if (LIST_SECTIONS.has(currentSection) || GRID_SECTIONS.has(currentSection)) {
           const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
           if (looksLikeList) {
             const items = t.split(/,\s*/)
               .map((s) => s.replace(/^[•\-*]\s*/, '').trim())
               .filter((s) => s.length > 0);
-            items.forEach(emitBullet);
+            if (GRID_SECTIONS.has(currentSection)) {
+              emitGrid(items);
+            } else {
+              items.forEach(emitBullet);
+            }
             continue;
           }
         }
