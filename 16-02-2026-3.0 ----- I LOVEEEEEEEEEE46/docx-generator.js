@@ -92,6 +92,37 @@
     return `<w:p>${pprXml}${content}</w:p>`;
   }
 
+  // ---- phone normaliser (parser-safe, no stray colon) ------------------
+  // The source CV text header sometimes arrives as "+353: 0874261508"
+  // (a stray colon between country code and number) which breaks ATS
+  // phone parsers and reads as malformed. Normalise any phone-shaped
+  // contact segment to "+CC NNN NNN NNNN" -- colon removed, trunk 0
+  // after the country code dropped, light readability grouping.
+  function normalizePhoneToken(seg) {
+    const cleaned = String(seg || '').replace(/[^\d+]/g, '');
+    if (!/\d{7,}/.test(cleaned)) return seg; // not a phone
+    const m = cleaned.match(/^\+(\d{1,3})0?(\d+)$/);
+    if (m) {
+      const cc = m[1], local = m[2];
+      let grouped = local;
+      if (local.length >= 9) grouped = `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
+      else if (local.length >= 7) grouped = `${local.slice(0, 3)} ${local.slice(3)}`;
+      return `+${cc} ${grouped}`;
+    }
+    if (/^\d{7,}$/.test(cleaned)) {
+      return cleaned.length >= 10
+        ? `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`
+        : cleaned;
+    }
+    return seg;
+  }
+
+  // Does this segment look like a phone number? (mostly digits + phone punct)
+  function looksLikePhone(seg) {
+    const s = String(seg || '').trim();
+    return /^[+(]?[\d][\d\s:+()\-.]{6,}$/.test(s) && (s.match(/\d/g) || []).length >= 7;
+  }
+
   // ---- contact line with real hyperlinks -------------------------------
   // Splits a contact/links line on " | " or " · " and renders each segment;
   // email/URL segments become clickable hyperlinks (collected into rels).
@@ -112,7 +143,9 @@
         relsCollector.push({ id, target });
         pieces.push(`<w:hyperlink r:id="${id}">${run(seg, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
       } else {
-        pieces.push(run(seg, { color: C.BODY, sz: opts.sz || 19 }));
+        // Phone segments get normalised (strip stray colon, group digits).
+        const display = looksLikePhone(seg) ? normalizePhoneToken(seg) : seg;
+        pieces.push(run(display, { color: C.BODY, sz: opts.sz || 19 }));
       }
     });
     return paragraph(pieces.join(''), { align: opts.align || 'left', spacingAfter: opts.spacingAfter != null ? opts.spacingAfter : 40 });
