@@ -95,9 +95,12 @@
   // ---- contact line with real hyperlinks -------------------------------
   // Splits a contact/links line on " | " or " · " and renders each segment;
   // email/URL segments become clickable hyperlinks (collected into rels).
+  // Uses " | " (pipe) as the visible separator -- the delimiter resume
+  // parsers (Workday, Greenhouse, Sovren, HireAbility) handle most
+  // reliably when splitting a contact line into email/phone/location.
   function contactParagraph(text, relsCollector, opts = {}) {
     const segs = text.split(/\s*[|·]\s*/).map((s) => s.trim()).filter(Boolean);
-    const sep = '   ·   ';
+    const sep = '  |  ';
     const pieces = [];
     segs.forEach((seg, i) => {
       if (i > 0) pieces.push(run(sep, { color: C.MUTED, sz: opts.sz || 19 }));
@@ -113,6 +116,22 @@
       }
     });
     return paragraph(pieces.join(''), { align: opts.align || 'left', spacingAfter: opts.spacingAfter != null ? opts.spacingAfter : 40 });
+  }
+
+  // ---- name normaliser (parser-friendly First Last) --------------------
+  // Resume parsers split the candidate's name into First/Last fields most
+  // reliably from Title Case ("Maxmilliam Okafor"), and often FAIL on an
+  // all-caps name ("MAXMILLIAM OKAFOR"). If the supplied name is entirely
+  // upper-case we convert it to Title Case for the UNDERLYING text (the
+  // generator can still render it visually bold/large). Names that are
+  // already mixed case are left untouched so "McDonald" / "O'Brien" /
+  // "van der Berg" are never mangled.
+  function normalizeNameForParsing(name) {
+    const n = String(name || '').trim();
+    if (!n) return n;
+    // Only touch all-caps names (no lowercase letters present).
+    if (/[a-z]/.test(n)) return n;
+    return n.toLowerCase().replace(/(^|[\s'\-])([a-z])/g, (m, sep, ch) => sep + ch.toUpperCase());
   }
 
   // Is this line a date range? ("January 2023 - Present", "2021 - 2022")
@@ -168,7 +187,7 @@
     if (firstNonEmpty >= 0) {
       // NAME -- navy, bold, 22pt, left-aligned (matches the PDF header)
       out.push(paragraph(
-        run(lines[firstNonEmpty].trim(), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
+        run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
         { align: 'left', spacingAfter: 40 }
       ));
 
@@ -488,7 +507,7 @@
 
     // NAME
     out.push(paragraph(
-      run(lines[firstNonEmpty].trim(), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
+      run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
       { align: 'left', spacingAfter: 40 }
     ));
 
