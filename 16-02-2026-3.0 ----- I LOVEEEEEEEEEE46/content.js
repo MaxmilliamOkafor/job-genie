@@ -857,8 +857,14 @@
               }
             });
             
-            cvFile = createPDFFile(pdfResult.cv.base64 || pdfResult.cv, pdfResult.cv.filename || 'Resume.pdf');
-            coverFile = pdfResult.cover ? createPDFFile(pdfResult.cover.base64 || pdfResult.cover, pdfResult.cover.filename || 'Cover_Letter.pdf') : null;
+            // DOCX-first: build from the tailored TEXT (ATS-best, the
+            // file recruiters open); fall back to the generated PDF only
+            // if the DOCX build isn't possible.
+            cvFile = buildDocxFileFromText(typeof tailoredCV === 'string' ? tailoredCV : '', pdfResult.cv.filename, 'cv')
+              || createPDFFile(pdfResult.cv.base64 || pdfResult.cv, pdfResult.cv.filename || 'Resume.pdf');
+            const _coverTxt = (typeof coverContent !== 'undefined' && coverContent && coverContent.text) ? coverContent.text : '';
+            coverFile = (_coverTxt && buildDocxFileFromText(_coverTxt, pdfResult.cover && pdfResult.cover.filename, 'cover'))
+              || (pdfResult.cover ? createPDFFile(pdfResult.cover.base64 || pdfResult.cover, pdfResult.cover.filename || 'Cover_Letter.pdf') : null);
             filesLoaded = true;
             
             forceEverything();
@@ -1203,11 +1209,15 @@
         const elapsed = Math.round(performance.now() - start);
         console.log(`[ATS Workday TOP1] ✅ Pipeline complete in ${elapsed}ms, score: ${result.matchScore}%`);
         
-        // Store generated files
+        // Store generated files -- DOCX-first from tailored text.
         if (result.success && result.cvPDF) {
-          cvFile = createPDFFile(result.cvPDF.base64 || result.cvPDF, result.cvPDF.filename || 'Resume.pdf');
+          const _cvTxt = result.tailoredResume || result.tailoredCV || result.cvText || '';
+          const _covTxt = result.tailoredCoverLetter || result.coverLetter || '';
+          cvFile = buildDocxFileFromText(_cvTxt, result.cvPDF.filename, 'cv')
+            || createPDFFile(result.cvPDF.base64 || result.cvPDF, result.cvPDF.filename || 'Resume.pdf');
           if (result.coverPDF) {
-            coverFile = createPDFFile(result.coverPDF.base64 || result.coverPDF, result.coverPDF.filename || 'Cover_Letter.pdf');
+            coverFile = (_covTxt && buildDocxFileFromText(_covTxt, result.coverPDF.filename, 'cover'))
+              || createPDFFile(result.coverPDF.base64 || result.coverPDF, result.coverPDF.filename || 'Cover_Letter.pdf');
           }
           filesLoaded = true;
           
@@ -2502,21 +2512,52 @@
 
       // Store PDFs in chrome.storage for the attach loop
       const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
-      
+
+      // Build DOCX from the tailored TEXT right here so the attach loop
+      // attaches DOCX (not the backend PDF). DocxGenerator is loaded as a
+      // content script on ATS hosts. This is the content-script auto-flow
+      // equivalent of the popup's buildDocxArtifact.
+      const cvTextOut = result.tailoredResume || '';
+      const coverTextOut = result.tailoredCoverLetter || result.coverLetter || '';
+      let cvDocxB64 = null, cvDocxName = null, coverDocxB64 = null, coverDocxName = null;
+      try {
+        if (typeof DocxGenerator !== 'undefined') {
+          if (cvTextOut && DocxGenerator.fromCvText) {
+            const d = DocxGenerator.fromCvText(cvTextOut, { name: `${fallbackName}_CV`, filename: `${fallbackName}_CV.docx` });
+            if (d && d.success) { cvDocxB64 = d.base64; cvDocxName = d.filename; }
+          }
+          if (coverTextOut && DocxGenerator.fromCoverLetterText) {
+            const d = DocxGenerator.fromCoverLetterText(coverTextOut, { name: `${fallbackName}_Cover_Letter`, filename: `${fallbackName}_Cover_Letter.docx` });
+            if (d && d.success) { coverDocxB64 = d.base64; coverDocxName = d.filename; }
+          }
+        }
+      } catch (e) {
+        console.warn('[ATS Tailor] auto-flow DOCX build failed:', e && e.message);
+      }
+
       await new Promise(resolve => {
         chrome.storage.local.set({
           cvPDF: result.resumePdf,
           coverPDF: result.coverLetterPdf,
-          coverLetterText: result.tailoredCoverLetter || result.coverLetter || '',
-          cvFileName: result.cvFileName || `${fallbackName}_CV.pdf`,
-          coverFileName: result.coverLetterFileName || `${fallbackName}_Cover_Letter.pdf`,
+          cvText: cvTextOut,
+          coverLetterText: coverTextOut,
+          cvDocx: cvDocxB64,
+          cvDocxFileName: cvDocxName,
+          coverDocx: coverDocxB64,
+          coverDocxFileName: coverDocxName,
+          cvFileName: cvDocxName || `${fallbackName}_CV.docx`,
+          coverFileName: coverDocxName || `${fallbackName}_Cover_Letter.docx`,
           ats_lastGeneratedDocuments: {
             cv: result.tailoredResume,
             coverLetter: result.tailoredCoverLetter || result.coverLetter,
             cvPdf: result.resumePdf,
             coverPdf: result.coverLetterPdf,
-            cvFileName: result.cvFileName || `${fallbackName}_CV.pdf`,
-            coverFileName: result.coverLetterFileName || `${fallbackName}_Cover_Letter.pdf`,
+            cvDocx: cvDocxB64,
+            cvDocxFileName: cvDocxName,
+            coverDocx: coverDocxB64,
+            coverDocxFileName: coverDocxName,
+            cvFileName: cvDocxName || `${fallbackName}_CV.docx`,
+            coverFileName: coverDocxName || `${fallbackName}_Cover_Letter.docx`,
             matchScore: result.matchScore || 0,
           }
         }, resolve);
@@ -3011,8 +3052,9 @@
       }
       
       if (pdfResult?.cv) {
-        // Store and attach files
-        cvFile = createPDFFile(pdfResult.cv.base64 || pdfResult.cv, pdfResult.cv.filename || 'Resume.pdf');
+        // Store and attach files -- DOCX-first from the tailored text.
+        cvFile = buildDocxFileFromText(typeof tailoredCV === 'string' ? tailoredCV : '', pdfResult.cv.filename, 'cv')
+          || createPDFFile(pdfResult.cv.base64 || pdfResult.cv, pdfResult.cv.filename || 'Resume.pdf');
         coverFile = pdfResult.cover ? createPDFFile(pdfResult.cover.base64 || pdfResult.cover, pdfResult.cover.filename || 'Cover_Letter.pdf') : null;
         filesLoaded = true;
         

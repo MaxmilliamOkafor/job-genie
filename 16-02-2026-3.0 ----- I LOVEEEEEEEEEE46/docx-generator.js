@@ -70,6 +70,14 @@
   function paragraph(content, opts = {}) {
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
+    // Tab stops: opts.tabs is an array of integers (twips from left margin).
+    // Used by the 3-column CORE COMPETENCIES layout -- a single-column
+    // paragraph with tab-aligned items reads in linear order to every ATS
+    // parser while LOOKING like a 3-column grid to the human eye.
+    if (Array.isArray(opts.tabs) && opts.tabs.length) {
+      const stops = opts.tabs.map((pos) => `<w:tab w:val="left" w:pos="${pos}"/>`).join('');
+      ppr.push(`<w:tabs>${stops}</w:tabs>`);
+    }
     const sp = [];
     if (opts.spacingBefore != null) sp.push(`w:before="${opts.spacingBefore}"`);
     if (opts.spacingAfter != null) sp.push(`w:after="${opts.spacingAfter}"`);
@@ -84,12 +92,46 @@
     return `<w:p>${pprXml}${content}</w:p>`;
   }
 
+  // ---- phone normaliser (parser-safe, no stray colon) ------------------
+  // The source CV text header sometimes arrives as "+353: 0874261508"
+  // (a stray colon between country code and number) which breaks ATS
+  // phone parsers and reads as malformed. Normalise any phone-shaped
+  // contact segment to "+CC NNN NNN NNNN" -- colon removed, trunk 0
+  // after the country code dropped, light readability grouping.
+  function normalizePhoneToken(seg) {
+    const cleaned = String(seg || '').replace(/[^\d+]/g, '');
+    if (!/\d{7,}/.test(cleaned)) return seg; // not a phone
+    const m = cleaned.match(/^\+(\d{1,3})0?(\d+)$/);
+    if (m) {
+      const cc = m[1], local = m[2];
+      let grouped = local;
+      if (local.length >= 9) grouped = `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
+      else if (local.length >= 7) grouped = `${local.slice(0, 3)} ${local.slice(3)}`;
+      return `+${cc} ${grouped}`;
+    }
+    if (/^\d{7,}$/.test(cleaned)) {
+      return cleaned.length >= 10
+        ? `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`
+        : cleaned;
+    }
+    return seg;
+  }
+
+  // Does this segment look like a phone number? (mostly digits + phone punct)
+  function looksLikePhone(seg) {
+    const s = String(seg || '').trim();
+    return /^[+(]?[\d][\d\s:+()\-.]{6,}$/.test(s) && (s.match(/\d/g) || []).length >= 7;
+  }
+
   // ---- contact line with real hyperlinks -------------------------------
   // Splits a contact/links line on " | " or " · " and renders each segment;
   // email/URL segments become clickable hyperlinks (collected into rels).
+  // Uses " | " (pipe) as the visible separator -- the delimiter resume
+  // parsers (Workday, Greenhouse, Sovren, HireAbility) handle most
+  // reliably when splitting a contact line into email/phone/location.
   function contactParagraph(text, relsCollector, opts = {}) {
     const segs = text.split(/\s*[|·]\s*/).map((s) => s.trim()).filter(Boolean);
-    const sep = '   ·   ';
+    const sep = '  |  ';
     const pieces = [];
     segs.forEach((seg, i) => {
       if (i > 0) pieces.push(run(sep, { color: C.MUTED, sz: opts.sz || 19 }));
@@ -101,10 +143,28 @@
         relsCollector.push({ id, target });
         pieces.push(`<w:hyperlink r:id="${id}">${run(seg, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
       } else {
-        pieces.push(run(seg, { color: C.BODY, sz: opts.sz || 19 }));
+        // Phone segments get normalised (strip stray colon, group digits).
+        const display = looksLikePhone(seg) ? normalizePhoneToken(seg) : seg;
+        pieces.push(run(display, { color: C.BODY, sz: opts.sz || 19 }));
       }
     });
     return paragraph(pieces.join(''), { align: opts.align || 'left', spacingAfter: opts.spacingAfter != null ? opts.spacingAfter : 40 });
+  }
+
+  // ---- name normaliser (parser-friendly First Last) --------------------
+  // Resume parsers split the candidate's name into First/Last fields most
+  // reliably from Title Case ("Maxmilliam Okafor"), and often FAIL on an
+  // all-caps name ("MAXMILLIAM OKAFOR"). If the supplied name is entirely
+  // upper-case we convert it to Title Case for the UNDERLYING text (the
+  // generator can still render it visually bold/large). Names that are
+  // already mixed case are left untouched so "McDonald" / "O'Brien" /
+  // "van der Berg" are never mangled.
+  function normalizeNameForParsing(name) {
+    const n = String(name || '').trim();
+    if (!n) return n;
+    // Only touch all-caps names (no lowercase letters present).
+    if (/[a-z]/.test(n)) return n;
+    return n.toLowerCase().replace(/(^|[\s'\-])([a-z])/g, (m, sep, ch) => sep + ch.toUpperCase());
   }
 
   // Is this line a date range? ("January 2023 - Present", "2021 - 2022")
@@ -139,8 +199,9 @@
   const SECTION_HEADERS = [
     'PROFESSIONAL SUMMARY', 'SUMMARY', 'PROFILE',
     'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
-    'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
-    'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'CERTIFICATIONS', 'PROJECTS',
+    'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT', 'PROFESSIONAL EXPERIENCE',
+    'EDUCATION', 'SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES',
+    'CERTIFICATIONS', 'PROJECTS', 'SELECTED PROJECTS', 'AWARDS',
   ];
 
   function buildBodyXml(cvText) {
@@ -159,7 +220,7 @@
     if (firstNonEmpty >= 0) {
       // NAME -- navy, bold, 22pt, left-aligned (matches the PDF header)
       out.push(paragraph(
-        run(lines[firstNonEmpty].trim(), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
+        run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
         { align: 'left', spacingAfter: 40 }
       ));
 
@@ -181,6 +242,49 @@
       // Body
       let roleState = 'none';        // 'expectCompany' | 'expectTitle' | 'inRole'
       let inExperience = false;
+      // Tracks the section we are currently rendering into so list-shaped
+      // content (CERTIFICATIONS / TECHNICAL PROFICIENCIES / SKILLS) can
+      // be split into one bullet per item even when the source has them
+      // as a single comma-separated paragraph.
+      let currentSection = '';
+      // One-per-line bulleted sections: each item is its own paragraph.
+      const LIST_SECTIONS = new Set([
+        'CERTIFICATIONS', 'AWARDS',
+      ]);
+      // Three-column sections: items render in a 3-up grid via tab stops.
+      // Crucially this is a SINGLE-COLUMN paragraph layout under the hood
+      // -- no tables, no Word columns -- so ATS parsers (Workday,
+      // Greenhouse, Lever, Taleo, iCIMS) read the items in linear left-
+      // to-right reading order, exactly as they would a normal list.
+      const GRID_SECTIONS = new Set([
+        'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
+      ]);
+      // Tab-stop positions in twips, evenly spread across the content
+      // area between left margin (900) and right margin (900) of an
+      // A4 page (11906 twips wide -> 10106 content). Three stops at
+      // 0, ~3370, ~6740 give clean visual thirds.
+      const GRID_TABS = [0, 3370, 6740];
+      // Navy bullet character used inline within each grid cell. We
+      // build the runs by hand so a <w:tab/> can separate the cells.
+      const gridCellRuns = (item) =>
+        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 });
+      // Render an array of competency strings as paragraphs of 3 columns.
+      // Final row pads to 3 cells with empty strings so the trailing tab
+      // alignment stays consistent for both human and parser.
+      const emitGrid = (items) => {
+        for (let r = 0; r < items.length; r += 3) {
+          const row = [items[r], items[r + 1] || '', items[r + 2] || ''];
+          const cells = row
+            .map((it, idx) => (idx === 0 ? gridCellRuns(it) : `<w:r><w:tab/></w:r>${it ? gridCellRuns(it) : ''}`))
+            .join('');
+          out.push(paragraph(cells, { tabs: GRID_TABS, spacingAfter: 40, line: 276, lineRule: 'auto' }));
+        }
+      };
+      // A helper to emit a single navy-bullet item paragraph.
+      const emitBullet = (item) => out.push(paragraph(
+        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
+        { indent: 360, hanging: 240, spacingAfter: 50, line: 288, lineRule: 'auto' }
+      ));
       for (; i < lines.length; i++) {
         const t = lines[i].trim();
         if (!t) {
@@ -198,15 +302,13 @@
           ));
           inExperience = EXPERIENCE_HEADERS.includes(upper);
           roleState = inExperience ? 'expectCompany' : 'none';
+          currentSection = upper;
           continue;
         }
 
         if (/^([\-*•]|\d+\.)\s+/.test(t)) {
           const item = t.replace(/^([\-*•]|\d+\.)\s+/, '');
-          out.push(paragraph(
-            run('• ', { color: C.NAVY, sz: 21 }) + run(item, { color: C.BODY, sz: 21 }),
-            { indent: 360, hanging: 200, spacingAfter: 40, line: 276, lineRule: 'auto' }
-          ));
+          emitBullet(item);
           if (inExperience) roleState = 'inRole';
           continue;
         }
@@ -231,6 +333,26 @@
           // Anything else inside a role -> body
           out.push(paragraph(run(t, { color: C.BODY, sz: 21 }), { spacingAfter: 40 }));
           continue;
+        }
+
+        // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items
+        // with no sentence punctuation gets split into per-item paragraphs.
+        // CORE COMPETENCIES / AREAS OF EXPERTISE -> 3-column tab-grid
+        //   (single-column paragraphs underneath, ATS-safe).
+        // CERTIFICATIONS / AWARDS              -> one bullet per line.
+        if (LIST_SECTIONS.has(currentSection) || GRID_SECTIONS.has(currentSection)) {
+          const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
+          if (looksLikeList) {
+            const items = t.split(/,\s*/)
+              .map((s) => s.replace(/^[•\-*]\s*/, '').trim())
+              .filter((s) => s.length > 0);
+            if (GRID_SECTIONS.has(currentSection)) {
+              emitGrid(items);
+            } else {
+              items.forEach(emitBullet);
+            }
+            continue;
+          }
         }
 
         // Non-experience body. "Label: items" (skills) -> bold label.
@@ -418,7 +540,7 @@
 
     // NAME
     out.push(paragraph(
-      run(lines[firstNonEmpty].trim(), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
+      run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
       { align: 'left', spacingAfter: 40 }
     ));
 
