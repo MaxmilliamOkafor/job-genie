@@ -55,7 +55,6 @@ interface TailorRequest {
     coverLetter: string;
     // Canonical field: professional_experience (with fallback to workExperience for backward compatibility)
     professionalExperience: any[];
-    relevantProjects?: any[];
     education: any[];
     skills: any[];
     certifications: string[];
@@ -196,10 +195,6 @@ function validateRequest(data: any): TailorRequest {
     coverLetter: validateString(profile.coverLetter || "", MAX_STRING_LONG, "coverLetter"),
     // Use canonical experience array (professionalExperience preferred)
     professionalExperience: experienceArray.slice(0, 20),
-    // Relevant projects (with optional techStack / liveUrl / codeUrl). Accept
-    // both camelCase (request payload) and snake_case (DB column) shapes.
-    relevantProjects: Array.isArray(profile.relevantProjects) ? profile.relevantProjects.slice(0, 10) :
-                      Array.isArray((profile as any).relevant_projects) ? (profile as any).relevant_projects.slice(0, 10) : [],
     education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
     skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
     certifications: validateStringArray(
@@ -1811,87 +1806,6 @@ function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
 }
 
 // ==========================================
-// SELECTED PROJECTS — DETERMINISTIC SECTION BUILDER
-// The LLM may omit the projects section or mangle a URL. Because a working
-// live-demo/code link is a heavy ATS/recruiter scoring signal, we rebuild
-// the section verbatim from the structured profile and force it into the
-// resume (replacing any version the model produced). URLs are copied
-// exactly — never generated.
-// ==========================================
-function _looksLikeUrl(u: string): boolean {
-  if (!u) return false;
-  return /^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u);
-}
-
-function buildSelectedProjectsSection(projects: any[]): string {
-  if (!Array.isArray(projects) || projects.length === 0) return "";
-  const blocks: string[] = [];
-  for (const p of projects.slice(0, 8)) {
-    if (!p) continue;
-    const name = String(p.name || p.projectName || p.title || "").trim();
-    if (!name) continue;
-
-    const tech = String(p.techStack || p.tech || p.technologies || "").trim();
-
-    let bullets: string[] = [];
-    if (Array.isArray(p.bullets)) bullets = p.bullets;
-    else if (typeof p.description === "string") bullets = p.description.split(/\r?\n/);
-    bullets = bullets
-      .map((b: any) => String(b || "").replace(/^[\s\-•*]+/, "").trim())
-      .filter(Boolean)
-      .slice(0, 4);
-
-    const liveRaw = String(p.liveUrl || p.live_url || p.demoUrl || (p.links && p.links.live) || "").trim();
-    const codeRaw = String(p.codeUrl || p.code_url || p.repoUrl || p.repo || (p.links && p.links.code) || "").trim();
-    const live = _looksLikeUrl(liveRaw) ? liveRaw : "";
-    const code = _looksLikeUrl(codeRaw) ? codeRaw : "";
-
-    const lines: string[] = [name];
-    if (tech) lines.push(tech);
-    for (const b of bullets) lines.push(`• ${b}`);
-    const linkParts: string[] = [];
-    if (live) linkParts.push(`Live demo: ${live}`);
-    if (code) linkParts.push(`Code: ${code}`);
-    if (linkParts.length) lines.push(linkParts.join(" | "));
-
-    blocks.push(lines.join("\n"));
-  }
-  if (blocks.length === 0) return "";
-  return `SELECTED PROJECTS\n\n${blocks.join("\n\n")}`;
-}
-
-function ensureSelectedProjectsSection(resume: string, projects: any[]): string {
-  const section = buildSelectedProjectsSection(projects);
-  if (!section || !resume) return resume;
-
-  // Remove any projects section the LLM produced, then drop the canonical
-  // one in the same position so ordering is preserved.
-  const existingRe = /\n[ \t]*(SELECTED PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|NOTABLE PROJECTS|PROJECTS)[ \t]*:?[ \t]*\n[\s\S]*?(?=\n[ \t]*[A-Z][A-Z &/]{3,}[ \t]*:?[ \t]*\n|$)/;
-  const m = existingRe.exec(resume);
-  if (m) {
-    const out = resume.slice(0, m.index) + "\n\n" + section + "\n" + resume.slice(m.index + m[0].length);
-    return out.replace(/\n{4,}/g, "\n\n\n");
-  }
-
-  // No section present: insert before Education, else before the skills /
-  // certifications blocks, else append at the end.
-  const anchors = [
-    /\n[ \t]*EDUCATION[ \t]*:?[ \t]*\n/,
-    /\n[ \t]*TECHNICAL PROFICIENCIES[ \t]*:?[ \t]*\n/,
-    /\n[ \t]*TECHNICAL SKILLS[ \t]*:?[ \t]*\n/,
-    /\n[ \t]*SKILLS[ \t]*:?[ \t]*\n/,
-    /\n[ \t]*CERTIFICATIONS[ \t]*:?[ \t]*\n/,
-  ];
-  for (const a of anchors) {
-    const am = a.exec(resume);
-    if (am) {
-      return resume.slice(0, am.index) + "\n\n" + section + "\n" + resume.slice(am.index);
-    }
-  }
-  return resume.replace(/\s*$/, "") + "\n\n" + section + "\n";
-}
-
-// ==========================================
 // MULTI-WORD PHRASE INJECTION BULLET BUILDER
 // Constructs a natural-sounding experience bullet containing all missing multi-word JD phrases
 // ==========================================
@@ -2029,7 +1943,6 @@ serve(async (req) => {
         portfolio: profileData.portfolio || "",
         coverLetter: profileData.cover_letter || "",
         professionalExperience: dbExperience,
-        relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
         education: profileData.education || [],
         skills: profileData.skills || [],
         certifications: profileData.certifications || [],
@@ -2512,9 +2425,6 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
-SELECTED PROJECTS (PRESERVE PROJECT NAMES, TECH STACK, AND URLS EXACTLY — NEVER INVENT, ALTER, OR DROP A LINK):
-${userProfile.relevantProjects && userProfile.relevantProjects.length ? JSON.stringify(userProfile.relevantProjects, null, 2) : "None provided"}
-
 === INSTRUCTIONS ===
 
 1) CREATE RESUME with these exact sections:
@@ -2545,12 +2455,6 @@ ${userProfile.relevantProjects && userProfile.relevantProjects.length ? JSON.str
    ███ END DUPLICATION BAN ███
     - Work Experience: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords.
    - Core Competencies: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-   - SELECTED PROJECTS (include ONLY if projects are provided in the CANDIDATE PROFILE above; OMIT this section entirely when none are provided). Header the section "SELECTED PROJECTS". For EACH project output, in order:
-       Line 1: the project name exactly as provided
-       Line 2: the tech stack as a comma-separated list (use the project's techStack/tech field; skip this line if none provided)
-       Then the provided bullet(s)/description as "• " bullets, lightly reworded with JD keywords ONLY where natural — NEVER fabricate features, metrics, or technologies the project does not list
-       Final line: "Live demo: <liveUrl> | Code: <codeUrl>" using ONLY the URLs provided on the project (liveUrl/codeUrl/links) — copy each URL VERBATIM, never invent, guess, shorten, or modify a URL; omit a single link if its URL is missing, and omit the whole line if neither exists
-     CRITICAL: preserve every project name, tech stack, and URL exactly as provided. A working live-demo or code link is a major scoring signal — never drop it.
    - Education
    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
    - Certifications
@@ -2856,15 +2760,6 @@ ${
       result.tailoredCoverLetter = applyContentQuality(result.tailoredCoverLetter);
     }
     console.log("Content quality engine applied - banned words replaced");
-
-    // Guarantee the SELECTED PROJECTS section from structured data with exact
-    // URLs. The LLM can drop the section or mangle a link, and a working
-    // demo/code link is a heavy ATS/recruiter scoring signal, so we rebuild
-    // it deterministically and force it into the resume.
-    if (result.tailoredResume && userProfile.relevantProjects && userProfile.relevantProjects.length) {
-      result.tailoredResume = ensureSelectedProjectsSection(result.tailoredResume, userProfile.relevantProjects);
-      console.log(`[SELECTED PROJECTS] Guaranteed section for ${userProfile.relevantProjects.length} project(s)`);
-    }
 
     // Ensure all required fields with our pre-calculated values
     result.candidateName = result.candidateName || candidateNameForFile;
