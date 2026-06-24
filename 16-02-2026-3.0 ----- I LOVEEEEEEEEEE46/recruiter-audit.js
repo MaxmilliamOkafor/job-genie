@@ -1134,16 +1134,20 @@
     const section = buildProjectsSectionText(projects);
     if (!section || !cvText) return { text: cvText || '', injected: false };
 
-    // Replace any projects section already present (fixes mangled links),
-    // keeping its position.
+    // Strip any projects section already present (from the server or a prior
+    // run) so we can place the canonical one at the preferred position.
+    // Preferred order: ... Work Experience -> SELECTED PROJECTS -> Education ...
     const existingRe = /\n[ \t]*(SELECTED PROJECTS|RELEVANT PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|NOTABLE PROJECTS|PROJECTS)[ \t]*:?[ \t]*\n[\s\S]*?(?=\n[ \t]*[A-Z][A-Z &/]{3,}[ \t]*:?[ \t]*\n|$)/;
-    const m = existingRe.exec(cvText);
+    let base = cvText;
+    let replaced = false;
+    const m = existingRe.exec(base);
     if (m) {
-      const out = cvText.slice(0, m.index) + '\n\n' + section + '\n' + cvText.slice(m.index + m[0].length);
-      return { text: out.replace(/\n{4,}/g, '\n\n\n'), injected: true, replaced: true };
+      base = (base.slice(0, m.index) + '\n' + base.slice(m.index + m[0].length)).replace(/\n{4,}/g, '\n\n\n');
+      replaced = true;
     }
 
-    // Otherwise insert before Education, else before skills/certs, else append.
+    // Insert before Education (i.e. right after Work Experience). Fallbacks
+    // keep it ahead of the skills/certifications tail; else append.
     const anchors = [
       /\n[ \t]*EDUCATION[ \t]*:?[ \t]*\n/,
       /\n[ \t]*TECHNICAL PROFICIENCIES[ \t]*:?[ \t]*\n/,
@@ -1152,12 +1156,13 @@
       /\n[ \t]*CERTIFICATIONS[ \t]*:?[ \t]*\n/,
     ];
     for (const a of anchors) {
-      const am = a.exec(cvText);
+      const am = a.exec(base);
       if (am) {
-        return { text: cvText.slice(0, am.index) + '\n\n' + section + '\n' + cvText.slice(am.index), injected: true };
+        const out = base.slice(0, am.index) + '\n\n' + section + '\n' + base.slice(am.index);
+        return { text: out.replace(/\n{4,}/g, '\n\n\n'), injected: true, replaced };
       }
     }
-    return { text: cvText.replace(/\s*$/, '') + '\n\n' + section + '\n', injected: true };
+    return { text: base.replace(/\s*$/, '') + '\n\n' + section + '\n', injected: true, replaced };
   }
 
   function runRecruiterAudit({
