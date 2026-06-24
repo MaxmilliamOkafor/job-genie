@@ -10,38 +10,14 @@ interface RelevantProject {
   description?: string;
   bullets?: string[];
   skills?: string[];
+  techStack?: string;
+  liveUrl?: string;
+  codeUrl?: string;
 }
 
 interface RelevantProjectsPreviewProps {
   projects: RelevantProject[];
 }
-
-const formatDateRange = (startDate?: string, endDate?: string): string => {
-  const normaliseRaw = (raw?: string) => {
-    if (!raw) return '';
-    const seg = raw.split('|').map(s => s.trim()).filter(Boolean).pop() ?? '';
-    return seg;
-  };
-
-  const extractYear = (raw?: string) => {
-    const date = normaliseRaw(raw);
-    if (!date) return '';
-    if (/present/i.test(date)) return 'Present';
-    const yearMatch = date.match(/\b(19|20)\d{2}\b/);
-    return yearMatch ? yearMatch[0] : date;
-  };
-
-  const startRaw = normaliseRaw(startDate);
-  const endRaw = normaliseRaw(endDate);
-  const startHasPresent = /present/i.test(startRaw);
-
-  const start = extractYear(startRaw);
-  const end = endRaw ? extractYear(endRaw) : (startHasPresent ? 'Present' : '');
-
-  if (!start && !end) return '';
-  if (!end || start === end) return start;
-  return `${start} – ${end}`;
-};
 
 export function RelevantProjectsPreview({ projects }: RelevantProjectsPreviewProps) {
   if (!projects || projects.length === 0) {
@@ -50,12 +26,12 @@ export function RelevantProjectsPreview({ projects }: RelevantProjectsPreviewPro
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Eye className="h-4 w-4" />
-            Relevant Projects Preview
+            Selected Projects Preview
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No projects to preview. Add projects above to see how they'll appear in your ATS-optimized CV.
+            No projects to preview. Add projects above to see how they'll appear.
           </p>
         </CardContent>
       </Card>
@@ -67,68 +43,79 @@ export function RelevantProjectsPreview({ projects }: RelevantProjectsPreviewPro
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Eye className="h-4 w-4" />
-          Relevant Projects Preview
+          Selected Projects Preview
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          This shows exactly how your projects will render in the final ATS PDF
+          Recruiter-facing format with tech stack and links
         </p>
       </CardHeader>
       <CardContent>
-        <div 
-          className="bg-white text-black p-6 rounded-lg border shadow-inner space-y-5"
-          style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+        <div
+          className="bg-[#0f1115] text-gray-200 p-8 rounded-lg border border-gray-800"
+          style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' }}
         >
-          {projects.map((project, index) => {
-            const bullets = project.bullets && project.bullets.length > 0 
-              ? project.bullets 
-              : (typeof project.description === 'string' && project.description.trim())
-                ? project.description.split(/\r?\n/).filter(Boolean)
-                : [];
+          <div className="text-xs font-semibold tracking-[0.25em] text-gray-400 uppercase mb-3">
+            Selected Projects
+          </div>
+          <div className="border-t border-gray-700 mb-6" />
 
-            const name = project.name || 'Project Name';
-            const role = project.role || 'Role';
-            const dateRange = formatDateRange(project.startDate, project.endDate);
+          <div className="space-y-6">
+            {projects.map((project, index) => {
+              const description =
+                (project.description && project.description.trim()) ||
+                (project.bullets && project.bullets[0]) ||
+                '';
+              const extraBullets =
+                project.description && project.bullets ? project.bullets : (project.bullets || []).slice(1);
 
-            return (
-              <div key={project.id || index} className="space-y-1">
-                {/* Line 1: Project Name (bold) */}
-                <div className="font-bold text-sm" style={{ fontSize: '10.5pt' }}>
-                  {name}
-                </div>
-                
-                {/* Line 2: Role (italic) with optional Dates right-aligned */}
-                <div className="flex justify-between items-baseline gap-4">
-                  <div className="text-sm italic" style={{ fontSize: '10.5pt' }}>
-                    {role}
+              return (
+                <div key={project.id || index} className="text-[15px] leading-relaxed">
+                  <div>
+                    <span className="font-bold text-white">{project.name || 'Project Name'}</span>
+                    {project.techStack && (
+                      <span className="text-gray-400"> — {project.techStack}</span>
+                    )}
                   </div>
-                  {dateRange && (
-                    <div className="text-gray-600 text-xs whitespace-nowrap" style={{ fontSize: '10pt' }}>
-                      {dateRange}
+                  {description && (
+                    <div className="mt-1 text-gray-300">
+                      {description}
+                      {(project.liveUrl || project.codeUrl) && <span> </span>}
+                      {project.liveUrl && (
+                        <a
+                          href={project.liveUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-400 hover:underline whitespace-nowrap"
+                        >
+                          Live demo ↗
+                        </a>
+                      )}
+                      {project.liveUrl && project.codeUrl && (
+                        <span className="text-gray-500"> · </span>
+                      )}
+                      {project.codeUrl && (
+                        <a
+                          href={project.codeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-400 hover:underline whitespace-nowrap"
+                        >
+                          Code ↗
+                        </a>
+                      )}
                     </div>
                   )}
+                  {extraBullets && extraBullets.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-gray-300 text-sm list-disc pl-5">
+                      {extraBullets.map((b, i) => (
+                        <li key={i}>{b.replace(/^[-•▪*]+\s*/, '')}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                
-                {/* Bullets with proper ATS bullet points */}
-                {bullets.length > 0 && (
-                  <ul className="list-disc list-inside text-xs mt-2 space-y-0.5 text-gray-800" style={{ fontSize: '10pt', marginLeft: '16px' }}>
-                    {bullets.slice(0, 4).map((bullet, bIndex) => (
-                      <li key={bIndex} className="leading-snug">
-                        {bullet.replace(/^[-•▪*]+\s*/, '')}
-                      </li>
-                    ))}
-                    {bullets.length > 4 && (
-                      <li className="text-gray-500 italic">
-                        +{bullets.length - 4} more bullets...
-                      </li>
-                    )}
-                  </ul>
-                )}
-                
-                {/* Spacing between projects */}
-                {index < projects.length - 1 && <div className="h-2" />}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </CardContent>
     </Card>
