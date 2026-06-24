@@ -1506,6 +1506,33 @@ const Profile = () => {
                           }}
                           placeholder="Your Role with dates (e.g., AI Product Manager - 2022 - 2023)"
                         />
+                        <Input
+                          value={project.techStack || ''}
+                          onChange={(e) => {
+                            const projects = [...(localProfile.relevant_projects || [])];
+                            projects[projectIndex] = { ...projects[projectIndex], techStack: e.target.value };
+                            updateLocalField('relevant_projects', projects);
+                          }}
+                          placeholder="Tech Stack (e.g., Python, FastAPI, React, AWS)"
+                        />
+                        <Input
+                          value={project.liveUrl || ''}
+                          onChange={(e) => {
+                            const projects = [...(localProfile.relevant_projects || [])];
+                            projects[projectIndex] = { ...projects[projectIndex], liveUrl: e.target.value };
+                            updateLocalField('relevant_projects', projects);
+                          }}
+                          placeholder="Live Demo URL (https://...)"
+                        />
+                        <Input
+                          value={project.codeUrl || ''}
+                          onChange={(e) => {
+                            const projects = [...(localProfile.relevant_projects || [])];
+                            projects[projectIndex] = { ...projects[projectIndex], codeUrl: e.target.value };
+                            updateLocalField('relevant_projects', projects);
+                          }}
+                          placeholder="Code / GitHub URL (https://github.com/...)"
+                        />
                         <p className="text-sm text-muted-foreground italic">
                           💡 Include dates in your role above for better CV generation
                         </p>
