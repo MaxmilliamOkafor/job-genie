@@ -1423,7 +1423,7 @@ const Profile = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FolderGit2 className="h-5 w-5" />
-              Relevant Projects
+              Selected Projects
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
