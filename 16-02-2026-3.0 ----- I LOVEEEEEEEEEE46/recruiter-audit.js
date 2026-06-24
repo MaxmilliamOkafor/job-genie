@@ -922,6 +922,156 @@
     return { violations };
   }
 
+  // ===================================================================
+  // v7 — PROJECT QUALITY AUDIT
+  // -------------------------------------------------------------------
+  // Mirrors how a real recruiter scoring engine grades the PROJECTS
+  // section (rubric: resume_evaluation_criteria.jinja). Three checks,
+  // all PURE WARNINGS -- no rewrite, no fabrication risk:
+  //
+  //   #1 LINKS. A project with no GitHub/live-demo link scores 30-50%
+  //      lower; each linkless project is a -3 to -5 point deduction. We
+  //      flag every project block that carries no URL or link hint.
+  //   #2 COMPLEXITY. Generic/tutorial-grade titles (Todo App, Calculator,
+  //      Weather App, basic CRUD, "sentiment analysis with NLTK",
+  //      service clones) are penalised; one complex project beats five
+  //      simple ones. We flag tutorial-grade titles so the user reframes
+  //      or drops them.
+  //   #3 OPEN-SOURCE HONESTY. "Open source" is scored as contributions to
+  //      OTHERS' projects; a personal repo caps at ~10 pts and labelling
+  //      your own repo "open-source contribution" can trigger a -3 to -5
+  //      deduction. We flag any "open source" claim that is NOT backed by
+  //      a link to a repo owned by someone other than the candidate (the
+  //      candidate's own GitHub handle is derived from the CV itself).
+  // ===================================================================
+
+  const PROJECT_SECTION_RE = /^(SELECTED PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|SIDE PROJECTS|NOTABLE PROJECTS|PROJECTS)\s*:?\s*$/i;
+
+  // A project block ends where the next top-level CV section begins.
+  const PROJECT_SECTION_END_RE = /^(WORK\s+EXPERIENCE|PROFESSIONAL EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|CORE COMPETENCIES|AREAS OF EXPERTISE|AWARDS|ACHIEVEMENTS|REFERENCES|PUBLICATIONS|SUMMARY|PROFESSIONAL SUMMARY|PROFILE)\s*:?\s*$/i;
+
+  // Presence of any of these = the project is linked. We accept anchor-
+  // text hints ("Live demo", "Code", "↗") as well as raw URLs because the
+  // PDF renderer emits hyperlinks whose visible text often omits the URL.
+  const PROJECT_LINK_HINT_RE = /\b(https?:\/\/|www\.|github\.com|gitlab\.com|bitbucket\.org|live\s*demo|source\s*code|repo(sitory)?)\b|\.(io|dev|app|vercel\.app|netlify\.app|github\.io)\/|(?:code|demo|repo|link)\s*↗|↗/i;
+
+  // Generic / tutorial-grade titles the rubric hard-codes as deductions.
+  // Kept deliberately specific to avoid false-flagging real project names.
+  const GENERIC_PROJECT_PATTERNS = [
+    /\bto-?do\s*(list|app|application)?\b/i,
+    /\bcalculator\b/i,
+    /\bweather\s*app(lication)?\b/i,
+    /\bnotes?\s*app\b/i,
+    /\btic[- ]tac[- ]toe\b/i,
+    /\bnumber\s*guess(ing)?\b/i,
+    /\bquiz\s*app\b/i,
+    /\bportfolio\s*(website|site)\b/i,
+    /\bblog\s*(website|site|app)\b/i,
+    /\bbasic\s*crud\b/i,
+    /\bcrud\s*(app|application)\b/i,
+    /\bsentiment\s*analysis\s*(with|using)\s*nltk\b/i,
+    /\bhello\s*world\b/i,
+    /\b(netflix|twitter|instagram|amazon|spotify|youtube|airbnb|uber)\s*clone\b/i,
+  ];
+
+  // The candidate's own GitHub handle = the most frequently linked handle
+  // anywhere in the CV (header + projects). Robustly identifies "self".
+  function _dominantGithubHandle(text) {
+    const re = /github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/gi;
+    const counts = Object.create(null);
+    const skip = new Set(['orgs', 'sponsors', 'features', 'about', 'pricing', 'topics']);
+    let m;
+    while ((m = re.exec(text))) {
+      const h = m[1].toLowerCase();
+      if (skip.has(h)) continue;
+      counts[h] = (counts[h] || 0) + 1;
+    }
+    let best = null;
+    let bestN = 0;
+    for (const h in counts) {
+      if (counts[h] > bestN) { best = h; bestN = counts[h]; }
+    }
+    return best;
+  }
+
+  // True if the block links a repo owned by someone OTHER than the
+  // candidate (i.e. a genuine external contribution). When the handle
+  // can't be identified we treat ANY repo link as external -- conservative,
+  // so we never falsely accuse a real contribution of being a personal repo.
+  function _hasExternalRepo(blockText, ownHandle) {
+    const re = /github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/gi;
+    let m;
+    while ((m = re.exec(blockText))) {
+      const h = m[1].toLowerCase();
+      if (!ownHandle || h !== ownHandle) return true;
+    }
+    return false;
+  }
+
+  function projectQualityAudit(cvText) {
+    const empty = { linkless: [], generic: [], openSourceOwnRepo: [], totalProjects: 0 };
+    if (!cvText || typeof cvText !== 'string') return empty;
+
+    const lines = cvText.split('\n');
+    let start = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (PROJECT_SECTION_RE.test(lines[i].trim())) { start = i + 1; break; }
+    }
+    if (start < 0) return empty;
+    let end = lines.length;
+    for (let i = start; i < lines.length; i++) {
+      if (PROJECT_SECTION_END_RE.test(lines[i].trim())) { end = i; break; }
+    }
+    const section = lines.slice(start, end);
+
+    // Group the section into project blocks. A non-bullet line that
+    // follows a blank line, a bullet, or the section start opens a new
+    // project (its title); a non-bullet line that immediately follows
+    // another text line is a continuation (role / tech-stack / blurb).
+    const blocks = [];
+    let current = null;
+    let prevType = 'start';
+    for (const raw of section) {
+      const trimmed = raw.trim();
+      if (!trimmed) { prevType = 'blank'; continue; }
+      const isBullet = /^([\-*•▪]|\d+\.)\s+/.test(trimmed);
+      if (isBullet) {
+        if (current) current.lines.push(trimmed);
+        prevType = 'bullet';
+        continue;
+      }
+      if (prevType === 'text' && current) {
+        current.lines.push(trimmed);
+      } else {
+        current = { title: trimmed, lines: [trimmed] };
+        blocks.push(current);
+      }
+      prevType = 'text';
+    }
+
+    const ownHandle = _dominantGithubHandle(cvText);
+    const linkless = [];
+    const generic = [];
+    const openSourceOwnRepo = [];
+
+    for (const b of blocks) {
+      const blockText = b.lines.join('\n');
+      const titleSample = b.title.slice(0, 90);
+
+      if (!PROJECT_LINK_HINT_RE.test(blockText)) {
+        linkless.push({ title: titleSample });
+      }
+      for (const re of GENERIC_PROJECT_PATTERNS) {
+        if (re.test(b.title)) { generic.push({ title: titleSample }); break; }
+      }
+      if (/\bopen[\s-]?source(d|s)?\b/i.test(blockText) && !_hasExternalRepo(blockText, ownHandle)) {
+        openSourceOwnRepo.push({ title: titleSample });
+      }
+    }
+
+    return { linkless, generic, openSourceOwnRepo, totalProjects: blocks.length };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -960,6 +1110,8 @@
       metricsDensity: flags.metricsDensity !== false,
       gpaOnUkIe: flags.gpaOnUkIe !== false,
       certCoherence: flags.certCoherence !== false,
+      // v7
+      projectQuality: flags.projectQuality !== false,
     };
 
     let outCV = cvText;
@@ -1196,6 +1348,44 @@
       }
     }
 
+    // v7: project quality -- links (#1), tutorial-grade titles (#2),
+    // open-source-on-personal-repo honesty (#3). All warnings only; this
+    // maps 1:1 to how a real recruiter scoring engine grades PROJECTS.
+    if (f.projectQuality && outCV) {
+      const pq = projectQualityAudit(outCV);
+      if (pq.linkless.length > 0) {
+        report.warnings.push({
+          kind: 'projects-missing-links',
+          count: pq.linkless.length,
+          totalProjects: pq.totalProjects,
+          samples: pq.linkless.slice(0, 4).map((p) => p.title),
+          note: pq.linkless.length + ' of ' + pq.totalProjects + ' project(s) have no GitHub or live-demo link. ' +
+            'Recruiter scoring engines dock 30-50% for a linkless project (-3 to -5 points each). ' +
+            'Add a working repo or live-demo URL to each.',
+        });
+      }
+      if (pq.generic.length > 0) {
+        report.warnings.push({
+          kind: 'generic-project-titles',
+          count: pq.generic.length,
+          samples: pq.generic.slice(0, 4).map((p) => p.title),
+          note: 'Tutorial-grade project titles (Todo App, Calculator, Weather App, basic CRUD, service clones) ' +
+            'are penalised. One complex project beats five simple ones. Reframe around the hard problem you ' +
+            'solved, or drop it.',
+        });
+      }
+      if (pq.openSourceOwnRepo.length > 0) {
+        report.warnings.push({
+          kind: 'open-source-personal-repo',
+          count: pq.openSourceOwnRepo.length,
+          samples: pq.openSourceOwnRepo.slice(0, 4).map((p) => p.title),
+          note: '"Open source" is scored as contributions to OTHERS\' projects. Labelling your own personal ' +
+            'repo "open-source" caps at ~10 pts and can trigger a -3 to -5 deduction. Call it a "personal ' +
+            'project", or cite a real external contribution (a merged PR / issue / repo you don\'t own).',
+        });
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -1226,6 +1416,8 @@
     gpaOnUkIeDegreeAudit,
     stripGpaFromUkIeDegrees,
     certCoherenceAudit,
+    // v7
+    projectQualityAudit,
   };
 
   global.RecruiterAudit = RecruiterAudit;
