@@ -151,6 +151,32 @@
     return paragraph(pieces.join(''), { align: opts.align || 'left', spacingAfter: opts.spacingAfter != null ? opts.spacingAfter : 40 });
   }
 
+  // ---- inline URL hyperlinker (body) -----------------------------------
+  // Wraps every http(s) URL in a line as a clickable hyperlink whose VISIBLE
+  // text is the URL itself. This keeps links BOTH ATS-parseable (the full URL
+  // stays in the extracted text — strict parsers never lose it) AND clickable.
+  // Non-URL text (labels like "Live demo:" / "Code:") renders as normal body
+  // runs. Used for the SELECTED PROJECTS link lines.
+  function linkifyRuns(text, relsCollector, runOpts = {}) {
+    const urlRe = /(https?:\/\/[^\s|]+)/g;
+    let out = '';
+    let last = 0;
+    let m;
+    while ((m = urlRe.exec(text)) !== null) {
+      if (m.index > last) out += run(text.slice(last, m.index), runOpts);
+      // Keep a trailing ) . , ; out of the link target but still visible.
+      const raw = m[1];
+      const target = raw.replace(/[).,;]+$/, '');
+      const id = `rIdLink${relsCollector.length + 1}`;
+      relsCollector.push({ id, target });
+      out += `<w:hyperlink r:id="${id}">${run(target, Object.assign({}, runOpts, { color: C.LINK, underline: true }))}</w:hyperlink>`;
+      if (target.length < raw.length) out += run(raw.slice(target.length), runOpts);
+      last = m.index + raw.length;
+    }
+    if (last < text.length) out += run(text.slice(last), runOpts);
+    return out;
+  }
+
   // ---- name normaliser (parser-friendly First Last) --------------------
   // Resume parsers split the candidate's name into First/Last fields most
   // reliably from Title Case ("Maxmilliam Okafor"), and often FAIL on an
@@ -353,6 +379,16 @@
             }
             continue;
           }
+        }
+
+        // Lines containing URLs (e.g. SELECTED PROJECTS "Live demo / Code"):
+        // render each URL as a clickable hyperlink while keeping the full URL
+        // visible as text, so it stays 100% ATS-parseable. Labels render as
+        // plain body text.
+        if (/https?:\/\//.test(t)) {
+          out.push(paragraph(linkifyRuns(t, rels, { color: C.BODY, sz: 21 }),
+            { spacingAfter: 40, line: 276, lineRule: 'auto' }));
+          continue;
         }
 
         // Non-experience body. "Label: items" (skills) -> bold label.
