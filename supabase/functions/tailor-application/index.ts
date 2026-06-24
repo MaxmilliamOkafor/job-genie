@@ -2428,6 +2428,10 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
+SELECTED PROJECTS (preserve project names, tech stack, and URLs EXACTLY as given; NEVER invent, guess, or alter any link):
+${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
+
+
 === INSTRUCTIONS ===
 
 1) CREATE RESUME with these exact sections:
