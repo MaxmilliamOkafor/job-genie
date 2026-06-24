@@ -210,6 +210,8 @@ function validateRequest(data: any): TailorRequest {
     address: profile.address ? validateString(profile.address, MAX_STRING_MEDIUM, "address") : undefined,
     state: profile.state ? validateString(profile.state, MAX_STRING_SHORT, "state") : undefined,
     zipCode: profile.zipCode ? validateString(profile.zipCode, MAX_STRING_SHORT, "zipCode") : undefined,
+    relevantProjects: Array.isArray(profile.relevantProjects) ? profile.relevantProjects.slice(0, 10) :
+                      Array.isArray(profile.relevant_projects) ? profile.relevant_projects.slice(0, 10) : [],
   };
 
   // Cover letter tone selection
@@ -1953,6 +1955,7 @@ serve(async (req) => {
         address: profileData.address || "",
         state: profileData.state || "",
         zipCode: profileData.zip_code || "",
+        relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
       };
 
       console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
@@ -2425,6 +2428,10 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
+SELECTED PROJECTS (preserve project names, tech stack, and URLs EXACTLY as given; NEVER invent, guess, or alter any link):
+${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
+
+
 === INSTRUCTIONS ===
 
 1) CREATE RESUME with these exact sections:
@@ -2760,6 +2767,60 @@ ${
       result.tailoredCoverLetter = applyContentQuality(result.tailoredCoverLetter);
     }
     console.log("Content quality engine applied - banned words replaced");
+
+    // Deterministic SELECTED PROJECTS injection — rebuild from structured profile data
+    // so project names, tech stack, and URLs are preserved verbatim (anti-fabrication).
+    if (result.tailoredResume && Array.isArray(userProfile.relevantProjects) && userProfile.relevantProjects.length > 0) {
+      const buildProjectsSection = (projects: any[]): string => {
+        const lines: string[] = ["SELECTED PROJECTS", ""];
+        for (const p of projects) {
+          if (!p || typeof p !== "object") continue;
+          const name = (p.name || "").toString().trim();
+          if (!name) continue;
+          lines.push(name);
+          const techStack = Array.isArray(p.techStack)
+            ? p.techStack.filter(Boolean).join(", ")
+            : (p.techStack || "").toString().trim();
+          if (techStack) lines.push(techStack);
+          const bullets = Array.isArray(p.bullets) ? p.bullets : [];
+          for (const b of bullets) {
+            const t = (b || "").toString().trim();
+            if (t) lines.push(`• ${t}`);
+          }
+          const live = (p.liveUrl || "").toString().trim();
+          const code = (p.codeUrl || "").toString().trim();
+          if (live || code) {
+            const parts: string[] = [];
+            if (live) parts.push(`Live demo: ${live}`);
+            if (code) parts.push(`Code: ${code}`);
+            lines.push(parts.join(" | "));
+          }
+          lines.push("");
+        }
+        return lines.join("\n").trimEnd();
+      };
+
+      const projectsBlock = buildProjectsSection(userProfile.relevantProjects);
+      if (projectsBlock) {
+        const resume = result.tailoredResume;
+        // Match an existing SELECTED PROJECTS / RELEVANT PROJECTS / PROJECTS section
+        // up to the next ALL-CAPS section header or end of document.
+        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/m;
+        if (sectionRegex.test(resume)) {
+          result.tailoredResume = resume.replace(sectionRegex, projectsBlock + "\n");
+        } else {
+          // Insert before EDUCATION; if missing, append at end.
+          const eduRegex = /^EDUCATION\b/m;
+          if (eduRegex.test(resume)) {
+            result.tailoredResume = resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
+          } else {
+            result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
+          }
+        }
+        console.log(`Injected SELECTED PROJECTS section (${userProfile.relevantProjects.length} projects)`);
+      }
+    }
+
 
     // Ensure all required fields with our pre-calculated values
     result.candidateName = result.candidateName || candidateNameForFile;
