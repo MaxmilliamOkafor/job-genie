@@ -1450,6 +1450,63 @@ const Profile = () => {
                   <Plus className="h-4 w-4" />
                   Add Project
                 </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    const examples = [
+                      {
+                        id: crypto.randomUUID(),
+                        name: 'SignalDesk — Real-Time Market-Sentiment Engine',
+                        role: '',
+                        techStack: 'Python, LLMs (RAG), Kafka, FastAPI, React, AWS',
+                        description: 'Streams live financial news and filings through an LLM that extracts entities and sentiment with inline source citations and a hallucination-eval harness, surfacing ticker-level signals on a live dashboard updated within seconds of publication.',
+                        liveUrl: 'https://maxmilliamokafor.github.io/signaldesk/',
+                        codeUrl: 'https://github.com/MaxmilliamOkafor/signaldesk',
+                        bullets: [],
+                        skills: [],
+                      },
+                      {
+                        id: crypto.randomUUID(),
+                        name: 'DriftGuard — Self-Healing MLOps Platform',
+                        role: '',
+                        techStack: 'Python, MLflow, Evidently, Docker, Kubernetes, GitHub Actions',
+                        description: 'Open-source framework that watches a deployed model for data and concept drift and automatically retrains, validates, and canary-deploys a new version with zero human intervention — a public dashboard replays drift events and the auto-recovery in real time.',
+                        liveUrl: 'https://maxmilliamokafor.github.io/driftguard/',
+                        codeUrl: 'https://github.com/MaxmilliamOkafor/driftguard',
+                        bullets: [],
+                        skills: [],
+                      },
+                      {
+                        id: crypto.randomUUID(),
+                        name: 'LatencyLab — Sub-30ms Transformer Serving Benchmark',
+                        role: '',
+                        techStack: 'PyTorch, ONNX Runtime, Triton, quantisation / distillation',
+                        description: 'Takes one transformer and compresses it through quantisation, distillation, and ONNX/Triton, cutting p99 inference from ~180ms to under 30ms at a fraction of the cost — an interactive benchmark lets recruiters compare accuracy vs. latency vs. spend per technique.',
+                        liveUrl: 'https://maxmilliamokafor.github.io/latencylab/',
+                        codeUrl: 'https://github.com/MaxmilliamOkafor/latencylab',
+                        bullets: [],
+                        skills: [],
+                      },
+                      {
+                        id: crypto.randomUUID(),
+                        name: 'LedgerLens — Explainable Credit-Risk Scoring API',
+                        role: '',
+                        techStack: 'Python, XGBoost, SHAP, FastAPI, Fairlearn, Docker',
+                        description: "Credit-risk model served as an API that returns a per-decision SHAP explanation, a bias/fairness audit, and a published model card — an interactive demo lets you change an applicant's inputs and watch the score and the reasons update live.",
+                        liveUrl: 'https://maxmilliamokafor.github.io/ledgerlens/',
+                        codeUrl: 'https://github.com/MaxmilliamOkafor/ledgerlens',
+                        bullets: [],
+                        skills: [],
+                      },
+                    ];
+                    updateLocalField('relevant_projects', [...(localProfile.relevant_projects || []), ...examples]);
+                    toast.success('Example portfolio added. Click Save to persist.');
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Load Example Portfolio
+                </Button>
                 {(localProfile.relevant_projects || []).length > 0 && (
                   <Button 
                     variant="destructive" 
