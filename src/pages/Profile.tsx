@@ -1602,7 +1602,12 @@ const Profile = () => {
                       </div>
                     ) : (
                       <>
-                        <h3 className="font-bold">{project.name}</h3>
+                        <h3 className="font-bold">
+                          {project.name}
+                          {project.techStack && (
+                            <span className="font-normal text-muted-foreground"> — {project.techStack}</span>
+                          )}
+                        </h3>
                         <p className="text-muted-foreground">{project.role}</p>
                         {/* Display bullets in view mode */}
                         {project.bullets && project.bullets.length > 0 && (
@@ -1614,6 +1619,21 @@ const Profile = () => {
                               </li>
                             ))}
                           </ul>
+                        )}
+                        {(project.liveUrl || project.codeUrl) && (
+                          <p className="mt-2 text-sm">
+                            {project.liveUrl && (
+                              <a href={project.liveUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                Live demo ↗
+                              </a>
+                            )}
+                            {project.liveUrl && project.codeUrl && <span className="text-muted-foreground"> · </span>}
+                            {project.codeUrl && (
+                              <a href={project.codeUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                Code ↗
+                              </a>
+                            )}
+                          </p>
                         )}
                       </>
                     )}
