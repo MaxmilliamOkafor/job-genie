@@ -1955,6 +1955,7 @@ serve(async (req) => {
         address: profileData.address || "",
         state: profileData.state || "",
         zipCode: profileData.zip_code || "",
+        relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
       };
 
       console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
