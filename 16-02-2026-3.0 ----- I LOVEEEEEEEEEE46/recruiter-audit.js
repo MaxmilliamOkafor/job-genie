@@ -1040,7 +1040,11 @@
         prevType = 'bullet';
         continue;
       }
-      if (prevType === 'text' && current) {
+      // A new project starts only after a blank line (or at the section
+      // start). A non-bullet line following text OR a bullet is a
+      // continuation (tech-stack line, links line like "Live demo: ... |
+      // Code: ...", etc.) and stays with the current project.
+      if ((prevType === 'text' || prevType === 'bullet') && current) {
         current.lines.push(trimmed);
       } else {
         current = { title: trimmed, lines: [trimmed] };
@@ -1072,6 +1076,90 @@
     return { linkless, generic, openSourceOwnRepo, totalProjects: blocks.length };
   }
 
+  // ===================================================================
+  // v8 — SELECTED PROJECTS INJECTION (auto-fix)
+  // -------------------------------------------------------------------
+  // The CV generator (or the server) can omit the projects section
+  // entirely. Because projects are a heavy ATS/recruiter scoring signal,
+  // we rebuild the section deterministically from the structured profile
+  // and force it into the CV text — as ATS-parseable plain text with the
+  // standard "SELECTED PROJECTS" header, a tech-stack line, "• " bullets,
+  // and a "Live demo: <url> | Code: <url>" line. URLs are copied VERBATIM
+  // from the profile, never generated. Em/en dashes in names are
+  // normalised to commas to match the rest of the pipeline.
+  // ===================================================================
+
+  function _looksLikeUrl(u) {
+    if (!u) return false;
+    return /^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u);
+  }
+
+  function buildProjectsSectionText(projects) {
+    if (!Array.isArray(projects) || projects.length === 0) return '';
+    const blocks = [];
+    for (const p of projects.slice(0, 8)) {
+      if (!p) continue;
+      let name = String(p.name || p.projectName || p.title || '').trim();
+      if (!name) continue;
+      name = name.replace(/\s*[—–]\s*/g, ', ');               // ATS-safe: no em/en dash
+      const tech = String(p.techStack || p.tech || p.technologies || '').trim().replace(/\s*[—–]\s*/g, ', ');
+
+      let bullets = Array.isArray(p.bullets) ? p.bullets
+        : (typeof p.description === 'string' ? p.description.split(/\r?\n/) : []);
+      bullets = bullets
+        .map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
+        .filter(Boolean)
+        .slice(0, 4);
+
+      const liveRaw = String(p.liveUrl || p.live_url || p.demoUrl || (p.links && p.links.live) || '').trim();
+      const codeRaw = String(p.codeUrl || p.code_url || p.repoUrl || p.repo || (p.links && p.links.code) || '').trim();
+      const live = _looksLikeUrl(liveRaw) ? liveRaw : '';
+      const code = _looksLikeUrl(codeRaw) ? codeRaw : '';
+
+      const lines = [name];
+      if (tech) lines.push(tech);
+      for (const b of bullets) lines.push(`• ${b}`);
+      const lp = [];
+      if (live) lp.push(`Live demo: ${live}`);
+      if (code) lp.push(`Code: ${code}`);
+      if (lp.length) lines.push(lp.join(' | '));
+
+      blocks.push(lines.join('\n'));
+    }
+    if (blocks.length === 0) return '';
+    return `SELECTED PROJECTS\n\n${blocks.join('\n\n')}`;
+  }
+
+  function ensureProjectsSection(cvText, projects) {
+    const section = buildProjectsSectionText(projects);
+    if (!section || !cvText) return { text: cvText || '', injected: false };
+
+    // Replace any projects section already present (fixes mangled links),
+    // keeping its position.
+    const existingRe = /\n[ \t]*(SELECTED PROJECTS|RELEVANT PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|NOTABLE PROJECTS|PROJECTS)[ \t]*:?[ \t]*\n[\s\S]*?(?=\n[ \t]*[A-Z][A-Z &/]{3,}[ \t]*:?[ \t]*\n|$)/;
+    const m = existingRe.exec(cvText);
+    if (m) {
+      const out = cvText.slice(0, m.index) + '\n\n' + section + '\n' + cvText.slice(m.index + m[0].length);
+      return { text: out.replace(/\n{4,}/g, '\n\n\n'), injected: true, replaced: true };
+    }
+
+    // Otherwise insert before Education, else before skills/certs, else append.
+    const anchors = [
+      /\n[ \t]*EDUCATION[ \t]*:?[ \t]*\n/,
+      /\n[ \t]*TECHNICAL PROFICIENCIES[ \t]*:?[ \t]*\n/,
+      /\n[ \t]*TECHNICAL SKILLS[ \t]*:?[ \t]*\n/,
+      /\n[ \t]*SKILLS[ \t]*:?[ \t]*\n/,
+      /\n[ \t]*CERTIFICATIONS[ \t]*:?[ \t]*\n/,
+    ];
+    for (const a of anchors) {
+      const am = a.exec(cvText);
+      if (am) {
+        return { text: cvText.slice(0, am.index) + '\n\n' + section + '\n' + cvText.slice(am.index), injected: true };
+      }
+    }
+    return { text: cvText.replace(/\s*$/, '') + '\n\n' + section + '\n', injected: true };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -1081,6 +1169,7 @@
     candidateName = '',
     originalCV = '',
     jobKeywords = null,
+    relevantProjects = null,
     flags = {},
   } = {}) {
     const t0 = Date.now();
@@ -1112,11 +1201,26 @@
       certCoherence: flags.certCoherence !== false,
       // v7
       projectQuality: flags.projectQuality !== false,
+      // v8
+      projectsInject: flags.projectsInject !== false,
     };
 
     let outCV = cvText;
     let outCL = coverLetterText;
     const report = { fixes: [], warnings: [], timingMs: 0 };
+
+    // v8: guarantee the SELECTED PROJECTS section from structured profile
+    // data (auto-fix). Runs first so every later audit sees the projects
+    // text (e.g. the v7 link check then passes instead of false-flagging).
+    if (f.projectsInject && relevantProjects && relevantProjects.length && outCV) {
+      try {
+        const r = ensureProjectsSection(outCV, relevantProjects);
+        if (r.injected) {
+          outCV = r.text;
+          report.fixes.push(`projects: SELECTED PROJECTS ${r.replaced ? 'normalised' : 'injected'} (${relevantProjects.length} project(s))`);
+        }
+      } catch (e) {}
+    }
 
     if (f.buzzwords) {
       const cv = purgeBuzzwords(outCV);
@@ -1418,6 +1522,9 @@
     certCoherenceAudit,
     // v7
     projectQualityAudit,
+    // v8
+    buildProjectsSectionText,
+    ensureProjectsSection,
   };
 
   global.RecruiterAudit = RecruiterAudit;

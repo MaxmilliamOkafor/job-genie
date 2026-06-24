@@ -4025,6 +4025,11 @@ class ATSTailor {
             // genuine CV.  Both are already in scope at this point.
             originalCV: this.baseCVContent || '',
             jobKeywords: this.generatedDocuments.keywords || null,
+            // v8: guarantee the SELECTED PROJECTS section from the profile's
+            // structured projects (with verbatim live/code links) so it
+            // renders on every generated CV, fully ATS-parseable.
+            relevantProjects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects
+              : (Array.isArray(profile.relevantProjects) ? profile.relevantProjects : []),
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;

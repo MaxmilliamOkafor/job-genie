@@ -750,7 +750,21 @@
           } else if (typeof TailorUniversal !== 'undefined' && TailorUniversal.tailorCV) {
             tailoredCV = await TailorUniversal.tailorCV(baseCV, keywords, { jobTitle, company: jobInfo.company });
           }
-          
+
+          // Guarantee the SELECTED PROJECTS section from the profile's
+          // structured projects (verbatim live/code links) so it renders
+          // on this auto-attach path too, fully ATS-parseable.
+          if (typeof RecruiterAudit !== 'undefined' && RecruiterAudit.ensureProjectsSection) {
+            const projs = Array.isArray(profile.relevant_projects) ? profile.relevant_projects
+              : (Array.isArray(profile.relevantProjects) ? profile.relevantProjects : []);
+            if (projs.length && typeof tailoredCV === 'string') {
+              try {
+                const r = RecruiterAudit.ensureProjectsSection(tailoredCV, projs);
+                if (r.injected) tailoredCV = r.text;
+              } catch (e) {}
+            }
+          }
+
           // Calculate match score
           let matchScore = 0;
           if (typeof ReliableExtractor !== 'undefined' && ReliableExtractor.matchKeywords) {
