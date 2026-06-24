@@ -210,6 +210,8 @@ function validateRequest(data: any): TailorRequest {
     address: profile.address ? validateString(profile.address, MAX_STRING_MEDIUM, "address") : undefined,
     state: profile.state ? validateString(profile.state, MAX_STRING_SHORT, "state") : undefined,
     zipCode: profile.zipCode ? validateString(profile.zipCode, MAX_STRING_SHORT, "zipCode") : undefined,
+    relevantProjects: Array.isArray(profile.relevantProjects) ? profile.relevantProjects.slice(0, 10) :
+                      Array.isArray(profile.relevant_projects) ? profile.relevant_projects.slice(0, 10) : [],
   };
 
   // Cover letter tone selection
