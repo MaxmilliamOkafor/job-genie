@@ -1811,6 +1811,87 @@ function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
 }
 
 // ==========================================
+// SELECTED PROJECTS — DETERMINISTIC SECTION BUILDER
+// The LLM may omit the projects section or mangle a URL. Because a working
+// live-demo/code link is a heavy ATS/recruiter scoring signal, we rebuild
+// the section verbatim from the structured profile and force it into the
+// resume (replacing any version the model produced). URLs are copied
+// exactly — never generated.
+// ==========================================
+function _looksLikeUrl(u: string): boolean {
+  if (!u) return false;
+  return /^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u);
+}
+
+function buildSelectedProjectsSection(projects: any[]): string {
+  if (!Array.isArray(projects) || projects.length === 0) return "";
+  const blocks: string[] = [];
+  for (const p of projects.slice(0, 8)) {
+    if (!p) continue;
+    const name = String(p.name || p.projectName || p.title || "").trim();
+    if (!name) continue;
+
+    const tech = String(p.techStack || p.tech || p.technologies || "").trim();
+
+    let bullets: string[] = [];
+    if (Array.isArray(p.bullets)) bullets = p.bullets;
+    else if (typeof p.description === "string") bullets = p.description.split(/\r?\n/);
+    bullets = bullets
+      .map((b: any) => String(b || "").replace(/^[\s\-•*]+/, "").trim())
+      .filter(Boolean)
+      .slice(0, 4);
+
+    const liveRaw = String(p.liveUrl || p.live_url || p.demoUrl || (p.links && p.links.live) || "").trim();
+    const codeRaw = String(p.codeUrl || p.code_url || p.repoUrl || p.repo || (p.links && p.links.code) || "").trim();
+    const live = _looksLikeUrl(liveRaw) ? liveRaw : "";
+    const code = _looksLikeUrl(codeRaw) ? codeRaw : "";
+
+    const lines: string[] = [name];
+    if (tech) lines.push(tech);
+    for (const b of bullets) lines.push(`• ${b}`);
+    const linkParts: string[] = [];
+    if (live) linkParts.push(`Live demo: ${live}`);
+    if (code) linkParts.push(`Code: ${code}`);
+    if (linkParts.length) lines.push(linkParts.join(" | "));
+
+    blocks.push(lines.join("\n"));
+  }
+  if (blocks.length === 0) return "";
+  return `SELECTED PROJECTS\n\n${blocks.join("\n\n")}`;
+}
+
+function ensureSelectedProjectsSection(resume: string, projects: any[]): string {
+  const section = buildSelectedProjectsSection(projects);
+  if (!section || !resume) return resume;
+
+  // Remove any projects section the LLM produced, then drop the canonical
+  // one in the same position so ordering is preserved.
+  const existingRe = /\n[ \t]*(SELECTED PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|NOTABLE PROJECTS|PROJECTS)[ \t]*:?[ \t]*\n[\s\S]*?(?=\n[ \t]*[A-Z][A-Z &/]{3,}[ \t]*:?[ \t]*\n|$)/;
+  const m = existingRe.exec(resume);
+  if (m) {
+    const out = resume.slice(0, m.index) + "\n\n" + section + "\n" + resume.slice(m.index + m[0].length);
+    return out.replace(/\n{4,}/g, "\n\n\n");
+  }
+
+  // No section present: insert before Education, else before the skills /
+  // certifications blocks, else append at the end.
+  const anchors = [
+    /\n[ \t]*EDUCATION[ \t]*:?[ \t]*\n/,
+    /\n[ \t]*TECHNICAL PROFICIENCIES[ \t]*:?[ \t]*\n/,
+    /\n[ \t]*TECHNICAL SKILLS[ \t]*:?[ \t]*\n/,
+    /\n[ \t]*SKILLS[ \t]*:?[ \t]*\n/,
+    /\n[ \t]*CERTIFICATIONS[ \t]*:?[ \t]*\n/,
+  ];
+  for (const a of anchors) {
+    const am = a.exec(resume);
+    if (am) {
+      return resume.slice(0, am.index) + "\n\n" + section + "\n" + resume.slice(am.index);
+    }
+  }
+  return resume.replace(/\s*$/, "") + "\n\n" + section + "\n";
+}
+
+// ==========================================
 // MULTI-WORD PHRASE INJECTION BULLET BUILDER
 // Constructs a natural-sounding experience bullet containing all missing multi-word JD phrases
 // ==========================================
@@ -2775,6 +2856,15 @@ ${
       result.tailoredCoverLetter = applyContentQuality(result.tailoredCoverLetter);
     }
     console.log("Content quality engine applied - banned words replaced");
+
+    // Guarantee the SELECTED PROJECTS section from structured data with exact
+    // URLs. The LLM can drop the section or mangle a link, and a working
+    // demo/code link is a heavy ATS/recruiter scoring signal, so we rebuild
+    // it deterministically and force it into the resume.
+    if (result.tailoredResume && userProfile.relevantProjects && userProfile.relevantProjects.length) {
+      result.tailoredResume = ensureSelectedProjectsSection(result.tailoredResume, userProfile.relevantProjects);
+      console.log(`[SELECTED PROJECTS] Guaranteed section for ${userProfile.relevantProjects.length} project(s)`);
+    }
 
     // Ensure all required fields with our pre-calculated values
     result.candidateName = result.candidateName || candidateNameForFile;
