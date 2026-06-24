@@ -2485,6 +2485,7 @@
             portfolio: p.portfolio || '',
             coverLetter: p.cover_letter || '',
             workExperience: Array.isArray(p.professional_experience) ? p.professional_experience : (Array.isArray(p.relevant_projects) ? p.relevant_projects : []),
+            relevantProjects: Array.isArray(p.relevant_projects) ? p.relevant_projects : [],
             education: Array.isArray(p.education) ? p.education : [],
             skills: Array.isArray(p.skills) ? p.skills : [],
             certifications: Array.isArray(p.certifications) ? p.certifications : [],

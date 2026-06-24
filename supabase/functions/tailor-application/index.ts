@@ -55,6 +55,7 @@ interface TailorRequest {
     coverLetter: string;
     // Canonical field: professional_experience (with fallback to workExperience for backward compatibility)
     professionalExperience: any[];
+    relevantProjects?: any[];
     education: any[];
     skills: any[];
     certifications: string[];
@@ -195,6 +196,10 @@ function validateRequest(data: any): TailorRequest {
     coverLetter: validateString(profile.coverLetter || "", MAX_STRING_LONG, "coverLetter"),
     // Use canonical experience array (professionalExperience preferred)
     professionalExperience: experienceArray.slice(0, 20),
+    // Relevant projects (with optional techStack / liveUrl / codeUrl). Accept
+    // both camelCase (request payload) and snake_case (DB column) shapes.
+    relevantProjects: Array.isArray(profile.relevantProjects) ? profile.relevantProjects.slice(0, 10) :
+                      Array.isArray((profile as any).relevant_projects) ? (profile as any).relevant_projects.slice(0, 10) : [],
     education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
     skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
     certifications: validateStringArray(
@@ -1943,6 +1948,7 @@ serve(async (req) => {
         portfolio: profileData.portfolio || "",
         coverLetter: profileData.cover_letter || "",
         professionalExperience: dbExperience,
+        relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
         education: profileData.education || [],
         skills: profileData.skills || [],
         certifications: profileData.certifications || [],
@@ -2425,6 +2431,9 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
+SELECTED PROJECTS (PRESERVE PROJECT NAMES, TECH STACK, AND URLS EXACTLY — NEVER INVENT, ALTER, OR DROP A LINK):
+${userProfile.relevantProjects && userProfile.relevantProjects.length ? JSON.stringify(userProfile.relevantProjects, null, 2) : "None provided"}
+
 === INSTRUCTIONS ===
 
 1) CREATE RESUME with these exact sections:
@@ -2455,6 +2464,12 @@ ${JSON.stringify(userProfile.achievements, null, 2)}
    ███ END DUPLICATION BAN ███
     - Work Experience: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords.
    - Core Competencies: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
+   - SELECTED PROJECTS (include ONLY if projects are provided in the CANDIDATE PROFILE above; OMIT this section entirely when none are provided). Header the section "SELECTED PROJECTS". For EACH project output, in order:
+       Line 1: the project name exactly as provided
+       Line 2: the tech stack as a comma-separated list (use the project's techStack/tech field; skip this line if none provided)
+       Then the provided bullet(s)/description as "• " bullets, lightly reworded with JD keywords ONLY where natural — NEVER fabricate features, metrics, or technologies the project does not list
+       Final line: "Live demo: <liveUrl> | Code: <codeUrl>" using ONLY the URLs provided on the project (liveUrl/codeUrl/links) — copy each URL VERBATIM, never invent, guess, shorten, or modify a URL; omit a single link if its URL is missing, and omit the whole line if neither exists
+     CRITICAL: preserve every project name, tech stack, and URL exactly as provided. A working live-demo or code link is a major scoring signal — never drop it.
    - Education
    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
    - Certifications
