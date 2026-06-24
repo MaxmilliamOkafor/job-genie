@@ -3008,44 +3008,42 @@ class ATSTailor {
         
         // Find all bullet points
         const bullets = experienceText.match(/^[•\-\*]\s*.+$/gm) || [];
-        // Target 2-3 keywords per bullet for natural integration
-        const keywordsPerBullet = Math.ceil(remaining.length * 0.7 / Math.max(bullets.length, 1));
-        const maxKeywordsInExp = Math.min(remaining.length, bullets.length * 3);
-        const toInject = remaining.slice(0, maxKeywordsInExp);
-        remaining = remaining.slice(maxKeywordsInExp);
-        
+
+        // TONED DOWN: appending keywords to every bullet reads as spam and
+        // trips believability checks. Inject at most ONE keyword per bullet,
+        // into at most half the bullets, and only keywords that fit a
+        // natural "using X" frame (short noun phrases). Everything else
+        // falls through to the Summary / Skills steps below — a cleaner and
+        // equally strong ATS signal than stuffed bullets.
+        const fitsUsingFrame = (kw) => {
+          const k = (kw || '').trim();
+          if (!k || k.length > 24) return false;
+          if (k.split(/\s+/).length > 2) return false;            // multi-word JD fragments read as nonsense
+          if (/\b(licensure|licen[sc]e|diploma|degree|certif\w*|experience|years?|ability|knowledge|background|education)\b/i.test(k)) return false;
+          return true;
+        };
+        const naturalConnectors = ['using', 'with'];
+        const fitting = remaining.filter(fitsUsingFrame);
+        const maxBullets = Math.max(1, Math.floor(bullets.length / 2));
+        const toInject = fitting.slice(0, Math.min(maxBullets, fitting.length));
+        // Keep everything we did NOT inject (non-fitting + overflow) so the
+        // Summary / Skills steps still capture them.
+        const injectedSet = new Set(toInject.map((k) => k.toLowerCase()));
+        remaining = remaining.filter((k) => !injectedSet.has(k.toLowerCase()));
+
         let keywordIdx = 0;
         bullets.forEach((bullet, idx) => {
           if (keywordIdx >= toInject.length) return;
-          
-          // Get 1-3 keywords for this bullet
-          const numToAdd = Math.min(3, Math.ceil((toInject.length - keywordIdx) / (bullets.length - idx)));
-          const kwToAdd = toInject.slice(keywordIdx, keywordIdx + numToAdd);
-          keywordIdx += numToAdd;
-          
-          if (kwToAdd.length === 0) return;
-          
-          // Natural integration based on bullet content
-          const phrase = getRandomPhrase();
-          let enhanced = bullet;
-          
-          if (kwToAdd.length === 1) {
-            // Single keyword
-            enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]}.`);
-          } else if (kwToAdd.length === 2) {
-            // Two keywords
-            enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd[0]} and ${kwToAdd[1]}.`);
-          } else {
-            // Multiple: "...incorporating [kw1], [kw2], and [kw3]"
-            const last = kwToAdd.pop();
-            enhanced = bullet.replace(/\.?\s*$/, `, ${phrase} ${kwToAdd.join(', ')}, and ${last}.`);
-            kwToAdd.push(last); // Put it back for tracking
-          }
-          
+          if (idx % 2 === 1) return;                              // skip alternate bullets so not every line carries a tail
+          const kw = toInject[keywordIdx];
+          if (bullet.toLowerCase().includes(kw.toLowerCase())) { keywordIdx++; return; }
+          const connector = naturalConnectors[keywordIdx % naturalConnectors.length];
+          const enhanced = bullet.replace(/\.?\s*$/, `, ${connector} ${kw}.`);
           experienceText = experienceText.replace(bullet, enhanced);
-          injectedKeywords.push(...kwToAdd);
+          injectedKeywords.push(kw);
+          keywordIdx++;
         });
-        
+
         tailoredCV = tailoredCV.substring(0, expStart) + experienceText + tailoredCV.substring(expEnd);
       }
     }
@@ -3097,10 +3095,15 @@ class ATSTailor {
           const eEnd = eStart + expMatch2[0].length;
           let eText = expMatch2[0];
           const eBullets = eText.match(/^[•\-\*]\s*.+$/gm) || [];
+          // TONED DOWN: cap soft-skill tails at 2 bullets (was unbounded), and
+          // only on bullets that don't already carry an appended ", X." tail,
+          // so we never stack two tails on one line.
+          const MAX_SOFT_TAILS = 2;
           let sIdx = 0;
-          for (let i = 0; i < eBullets.length && sIdx < softRemaining.length; i++) {
+          for (let i = 0; i < eBullets.length && sIdx < Math.min(softRemaining.length, MAX_SOFT_TAILS); i++) {
             const kw = softRemaining[sIdx];
-            if (!eBullets[i].toLowerCase().includes(kw.toLowerCase())) {
+            const alreadyTailed = /,\s+(using|with|demonstrating)\s+[^.]+\.$/i.test(eBullets[i].trim());
+            if (!alreadyTailed && !eBullets[i].toLowerCase().includes(kw.toLowerCase())) {
               const enhanced = eBullets[i].replace(/\.?\s*$/, `, demonstrating ${kw}.`);
               eText = eText.replace(eBullets[i], enhanced);
               injectedKeywords.push(kw);
@@ -3335,7 +3338,7 @@ class ATSTailor {
 
       // Fetch user profile (API call) - includes CV file info
       const profileRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code,cv_file_path,cv_file_name,cv_uploaded_at,preferred_ai_provider`,
+        `${SUPABASE_URL}/rest/v1/profiles?user_id=eq.${this.session.user.id}&select=first_name,last_name,email,phone,linkedin,github,portfolio,cover_letter,professional_experience,relevant_projects,education,skills,certifications,achievements,ats_strategy,city,country,address,state,zip_code,cv_file_path,cv_file_name,cv_uploaded_at,preferred_ai_provider`,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,
@@ -3426,6 +3429,7 @@ class ATSTailor {
             portfolio: p.portfolio || '',
             coverLetter: p.cover_letter || '',
             professionalExperience: Array.isArray(p.professional_experience) ? p.professional_experience : [],
+            relevantProjects: Array.isArray(p.relevant_projects) ? p.relevant_projects : [],
             education: Array.isArray(p.education) ? p.education : [],
             skills: Array.isArray(p.skills) ? p.skills : [],
             certifications: Array.isArray(p.certifications) ? p.certifications : [],
@@ -4024,6 +4028,11 @@ class ATSTailor {
             // genuine CV.  Both are already in scope at this point.
             originalCV: this.baseCVContent || '',
             jobKeywords: this.generatedDocuments.keywords || null,
+            // v8: guarantee the SELECTED PROJECTS section from the profile's
+            // structured projects (with verbatim live/code links) so it
+            // renders on every generated CV, fully ATS-parseable.
+            relevantProjects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects
+              : (Array.isArray(profile.relevantProjects) ? profile.relevantProjects : []),
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;
