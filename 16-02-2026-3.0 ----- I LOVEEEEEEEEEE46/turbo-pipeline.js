@@ -386,20 +386,32 @@
     let experienceSection = tailoredCV.substring(expStart, expEnd);
     
     // Role-based distribution targets (more recent roles get more keywords)
+    // TONED DOWN: one keyword per bullet max — multi-keyword tails read as
+    // spam and trip recruiter believability checks.
     const roleTargets = [
-      { name: 'Role 1 (Most Recent)', maxKeywordsPerBullet: 3, maxBullets: 6 },
-      { name: 'Role 2', maxKeywordsPerBullet: 3, maxBullets: 5 },
-      { name: 'Role 3', maxKeywordsPerBullet: 2, maxBullets: 4 },
-      { name: 'Role 4', maxKeywordsPerBullet: 2, maxBullets: 3 }
+      { name: 'Role 1 (Most Recent)', maxKeywordsPerBullet: 1, maxBullets: 6 },
+      { name: 'Role 2', maxKeywordsPerBullet: 1, maxBullets: 5 },
+      { name: 'Role 3', maxKeywordsPerBullet: 1, maxBullets: 4 },
+      { name: 'Role 4', maxKeywordsPerBullet: 1, maxBullets: 3 }
     ];
-    
-    // Natural injection phrases (varied for authenticity)
-    // CRITICAL: Do NOT use banned AI-buzzwords (no "leveraging" / "utilizing" / "utilising")
-    const phrases = [
-      'using', 'applying', 'through', 'incorporating', 'employing',
-      'via', 'working with', 'built with'
-    ];
+
+    // Natural injection connectors. TONED DOWN to the two that always read
+    // as plain English — "via X" / "built with X" / "incorporating X"
+    // produced broken tails like "via texas licensure and injections".
+    const phrases = ['using', 'with'];
     const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
+
+    // Only tail a bullet with a keyword that fits a natural "using X" frame:
+    // short noun phrases, never credential/qualification nouns ("texas
+    // licensure", "supervision of aides"). Non-fitting keywords stay for the
+    // skills-section coverage instead of breaking bullet grammar.
+    const fitsUsingFrame = (kw) => {
+      const k = (kw || '').trim();
+      if (!k || k.length > 24) return false;
+      if (k.split(/\s+/).length > 2) return false;
+      if (/\b(licensure|licen[sc]e|diploma|degree|certif\w*|experience|years?|ability|knowledge|background|education)\b/i.test(k)) return false;
+      return true;
+    };
 
     // Split into lines and identify role boundaries
     const lines = experienceSection.split('\n');
@@ -438,12 +450,21 @@
         continue;
       }
       
+      // TONED DOWN: only tail every other bullet so no role reads as a wall
+      // of appended keywords, and never stack a tail on a bullet that
+      // already carries one.
+      const alreadyTailed = /,\s+(using|with|demonstrating)\s+[^.]+\.$/i.test(trimmed);
+      if (bulletCountInRole % 2 === 0 || alreadyTailed) {
+        modifiedLines.push(line);
+        continue;
+      }
+
       // Find ALL keywords (high, medium, low) that need more mentions (below minMentions target)
       const needsMore = allKeywords.filter(kw => {
         const current = stats[kw].mentions;
         const target = stats[kw].target;
         const inLine = line.toLowerCase().includes(kw.toLowerCase());
-        return current < target && !inLine;
+        return current < target && !inLine && fitsUsingFrame(kw);
       });
       
       if (needsMore.length === 0) {
@@ -682,16 +703,19 @@
       injected = result.injectedKeywords;
     }
 
-    // ALL KEYWORDS DISTRIBUTION (3-5x mentions for high/medium, 1-2x for low)
+    // ALL KEYWORDS DISTRIBUTION — TONED DOWN to 1-2 mentions per keyword.
+    // The old 3-5x targets appended the same "using X" tail to up to five
+    // bullets, which reads as keyword stuffing. One in-context mention plus
+    // the skills-section listing is the full ATS signal.
     if (keywords.all?.length > 0 || keywords.highPriority?.length > 0) {
       const distResult = distributeAllKeywords(tailoredCV, keywords, {
         maxBulletsPerRole: 6,
-        highMinMentions: 3,
-        highMaxMentions: 5,
-        medMinMentions: 3,
-        medMaxMentions: 5,
+        highMinMentions: 1,
+        highMaxMentions: 2,
+        medMinMentions: 1,
+        medMaxMentions: 2,
         lowMinMentions: 1,
-        lowMaxMentions: 2
+        lowMaxMentions: 1
       });
       tailoredCV = distResult.tailoredCV;
     }
