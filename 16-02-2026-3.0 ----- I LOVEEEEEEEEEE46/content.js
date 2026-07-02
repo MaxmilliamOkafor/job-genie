@@ -1225,8 +1225,20 @@
         
         // Store generated files -- DOCX-first from tailored text.
         if (result.success && result.cvPDF) {
-          const _cvTxt = result.tailoredResume || result.tailoredCV || result.cvText || '';
+          let _cvTxt = result.tailoredResume || result.tailoredCV || result.cvText || '';
           const _covTxt = result.tailoredCoverLetter || result.coverLetter || '';
+          // Dedupe + guarantee ONE canonical SELECTED PROJECTS section
+          // before the DOCX is built (server/LLM can each emit a copy).
+          try {
+            if (_cvTxt && typeof RecruiterAudit !== 'undefined' && RecruiterAudit.ensureProjectsSection) {
+              const _projs = Array.isArray(candidateData && candidateData.relevant_projects) ? candidateData.relevant_projects
+                : (Array.isArray(candidateData && candidateData.relevantProjects) ? candidateData.relevantProjects : []);
+              if (_projs.length) {
+                const r = RecruiterAudit.ensureProjectsSection(_cvTxt, _projs);
+                if (r.injected) _cvTxt = r.text;
+              }
+            }
+          } catch (e) {}
           cvFile = buildDocxFileFromText(_cvTxt, result.cvPDF.filename, 'cv')
             || createPDFFile(result.cvPDF.base64 || result.cvPDF, result.cvPDF.filename || 'Resume.pdf');
           if (result.coverPDF) {
@@ -2532,8 +2544,22 @@
       // attaches DOCX (not the backend PDF). DocxGenerator is loaded as a
       // content script on ATS hosts. This is the content-script auto-flow
       // equivalent of the popup's buildDocxArtifact.
-      const cvTextOut = result.tailoredResume || '';
+      let cvTextOut = result.tailoredResume || '';
       const coverTextOut = result.tailoredCoverLetter || result.coverLetter || '';
+
+      // Dedupe + guarantee the SELECTED PROJECTS section. The server LLM and
+      // the server's own injector can both emit a copy (duplicated sections
+      // observed in production DOCX); rebuild ONE canonical section from the
+      // profile's structured projects before the DOCX is generated.
+      try {
+        if (cvTextOut && typeof RecruiterAudit !== 'undefined' && RecruiterAudit.ensureProjectsSection) {
+          const _projs = Array.isArray(p.relevant_projects) ? p.relevant_projects : [];
+          if (_projs.length) {
+            const r = RecruiterAudit.ensureProjectsSection(cvTextOut, _projs);
+            if (r.injected) cvTextOut = r.text;
+          }
+        }
+      } catch (e) {}
       let cvDocxB64 = null, cvDocxName = null, coverDocxB64 = null, coverDocxName = null;
       try {
         if (typeof DocxGenerator !== 'undefined') {

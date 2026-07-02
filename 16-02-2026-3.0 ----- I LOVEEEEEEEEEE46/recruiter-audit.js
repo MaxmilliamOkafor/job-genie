@@ -1134,16 +1134,49 @@
     const section = buildProjectsSectionText(projects);
     if (!section || !cvText) return { text: cvText || '', injected: false };
 
-    // Strip any projects section already present (from the server or a prior
-    // run) so we can place the canonical one at the preferred position.
+    // Strip EVERY projects section already present (from the server, the
+    // LLM, or a prior run) so we can place ONE canonical section at the
+    // preferred position. The server LLM and the server's own injector can
+    // BOTH emit a copy — duplicated sections were observed in production —
+    // so loop until no section remains.
     // Preferred order: ... Work Experience -> SELECTED PROJECTS -> Education ...
-    const existingRe = /\n[ \t]*(SELECTED PROJECTS|RELEVANT PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|NOTABLE PROJECTS|PROJECTS)[ \t]*:?[ \t]*\n[\s\S]*?(?=\n[ \t]*[A-Z][A-Z &/]{3,}[ \t]*:?[ \t]*\n|$)/;
     let base = cvText;
+    // Normalise mixed-case projects headers ("Selected Projects") to CAPS so
+    // the strip below catches LLM-emitted variants. The strip regex itself
+    // stays case-SENSITIVE because its end-of-section detection relies on
+    // the next ALL-CAPS header; an /i flag would let a line like
+    // "Tech Stack:" falsely terminate the section.
+    base = base.replace(/^[ \t]*(selected projects|relevant projects|technical projects|key projects|personal projects|notable projects|projects)[ \t]*:?[ \t]*$/gim,
+      (s) => s.toUpperCase());
+    const existingRe = /\n[ \t]*(SELECTED PROJECTS|RELEVANT PROJECTS|TECHNICAL PROJECTS|KEY PROJECTS|PERSONAL PROJECTS|NOTABLE PROJECTS|PROJECTS)[ \t]*:?[ \t]*\n[\s\S]*?(?=\n[ \t]*[A-Z][A-Z &/]{3,}[ \t]*:?[ \t]*\n|$)/;
     let replaced = false;
-    const m = existingRe.exec(base);
-    if (m) {
+    for (let guard = 0; guard < 6; guard++) {
+      const m = existingRe.exec(base);
+      if (!m) break;
       base = (base.slice(0, m.index) + '\n' + base.slice(m.index + m[0].length)).replace(/\n{4,}/g, '\n\n\n');
       replaced = true;
+    }
+
+    // Scrub HEADERLESS leftover copies: the LLM sometimes re-emits a project
+    // block (name line + "Tech Stack:" / "Live URL:" labels + bullets)
+    // outside any section header, which header-based stripping cannot see.
+    // We know the canonical project names from the profile, so remove any
+    // remaining paragraph that STARTS with one of them.
+    const normLine = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const nameKeys = (Array.isArray(projects) ? projects : [])
+      .map((p) => normLine(p && (p.name || p.projectName || p.title)))
+      .filter((k) => k.length >= 4)
+      .map((k) => k.split(' ').slice(0, 3).join(' '));
+    if (nameKeys.length) {
+      const paras = base.split(/\n[ \t]*\n/);
+      const kept = paras.filter((para) => {
+        const first = normLine(para.split('\n')[0]);
+        return !nameKeys.some((k) => k && first.startsWith(k));
+      });
+      if (kept.length !== paras.length) {
+        base = kept.join('\n\n');
+        replaced = true;
+      }
     }
 
     // Insert before Education (i.e. right after Work Experience). Fallbacks
