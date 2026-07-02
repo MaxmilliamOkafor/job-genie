@@ -2460,11 +2460,12 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
    ███ END DUPLICATION BAN ███
-    - Work Experience: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. EVERY missing keyword MUST appear in at least one bullet. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords.
-   - Core Competencies: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-   - Education
-   - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
-   - Certifications
+    - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
+    - WORK EXPERIENCE: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence.
+    - SELECTED PROJECTS: preserve project names, tech stack, and URLs EXACTLY as given; NEVER invent, guess, or alter any link.
+    - EDUCATION
+    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
+    - CERTIFICATIONS
 
 2) CREATE COVER LETTER:
    ${candidateName}
