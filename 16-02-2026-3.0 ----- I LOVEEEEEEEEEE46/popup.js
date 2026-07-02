@@ -2988,16 +2988,7 @@ class ATSTailor {
     let tailoredCV = cvText;
     let injectedKeywords = [];
     let remaining = [...cleanMissing];
-    
-    // Natural injection phrases for Work Experience
-    // CRITICAL: Never use banned buzzwords (no leveraging/utilizing/utilising)
-    const actionPhrases = [
-      'using', 'applying', 'implementing', 'integrating',
-      'incorporating', 'employing', 'deploying', 'through', 'via', 'built with'
-    ];
-    
-    const getRandomPhrase = () => actionPhrases[Math.floor(Math.random() * actionPhrases.length)];
-    
+
     // STEP 1: PRIMARY - Inject into Work Experience (25+ keywords naturally across bullets)
     if (remaining.length > 0) {
       const experienceMatch = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
