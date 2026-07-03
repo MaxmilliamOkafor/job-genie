@@ -2428,7 +2428,7 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
-SELECTED PROJECTS (preserve project names, tech stack, and URLs EXACTLY as given; NEVER invent, guess, or alter any link):
+SELECTED PROJECTS (Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text):
 ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
 
@@ -2462,7 +2462,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    ███ END DUPLICATION BAN ███
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
     - WORK EXPERIENCE: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence.
-    - SELECTED PROJECTS: preserve project names, tech stack, and URLs EXACTLY as given; NEVER invent, guess, or alter any link.
+    - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
     - EDUCATION
     - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
     - CERTIFICATIONS
@@ -2803,20 +2803,22 @@ ${
 
       const projectsBlock = buildProjectsSection(userProfile.relevantProjects);
       if (projectsBlock) {
-        const resume = result.tailoredResume;
-        // Match an existing SELECTED PROJECTS / RELEVANT PROJECTS / PROJECTS section
-        // up to the next ALL-CAPS section header or end of document.
-        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/m;
-        if (sectionRegex.test(resume)) {
-          result.tailoredResume = resume.replace(sectionRegex, projectsBlock + "\n");
+        let resume = result.tailoredResume;
+        // Strip ALL existing projects sections — case-insensitive and global, looping until no match remains.
+        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
+        while (sectionRegex.test(resume)) {
+          resume = resume.replace(sectionRegex, "");
+          // Reset lastIndex so the next global search starts from the top of the updated text
+          sectionRegex.lastIndex = 0;
+        }
+        resume = resume.replace(/\n{3,}/g, "\n\n").trim();
+
+        // Insert canonical block before EDUCATION, or append if EDUCATION is missing.
+        const eduRegex = /^EDUCATION\b/m;
+        if (eduRegex.test(resume)) {
+          result.tailoredResume = resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
         } else {
-          // Insert before EDUCATION; if missing, append at end.
-          const eduRegex = /^EDUCATION\b/m;
-          if (eduRegex.test(resume)) {
-            result.tailoredResume = resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
-          } else {
-            result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
-          }
+          result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
         }
         console.log(`Injected SELECTED PROJECTS section (${userProfile.relevantProjects.length} projects)`);
       }
