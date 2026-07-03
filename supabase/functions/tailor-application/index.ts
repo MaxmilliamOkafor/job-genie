@@ -2803,20 +2803,22 @@ ${
 
       const projectsBlock = buildProjectsSection(userProfile.relevantProjects);
       if (projectsBlock) {
-        const resume = result.tailoredResume;
-        // Match an existing SELECTED PROJECTS / RELEVANT PROJECTS / PROJECTS section
-        // up to the next ALL-CAPS section header or end of document.
-        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/m;
-        if (sectionRegex.test(resume)) {
-          result.tailoredResume = resume.replace(sectionRegex, projectsBlock + "\n");
+        let resume = result.tailoredResume;
+        // Strip ALL existing projects sections — case-insensitive and global, looping until no match remains.
+        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
+        while (sectionRegex.test(resume)) {
+          resume = resume.replace(sectionRegex, "");
+          // Reset lastIndex so the next global search starts from the top of the updated text
+          sectionRegex.lastIndex = 0;
+        }
+        resume = resume.replace(/\n{3,}/g, "\n\n").trim();
+
+        // Insert canonical block before EDUCATION, or append if EDUCATION is missing.
+        const eduRegex = /^EDUCATION\b/m;
+        if (eduRegex.test(resume)) {
+          result.tailoredResume = resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
         } else {
-          // Insert before EDUCATION; if missing, append at end.
-          const eduRegex = /^EDUCATION\b/m;
-          if (eduRegex.test(resume)) {
-            result.tailoredResume = resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
-          } else {
-            result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
-          }
+          result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
         }
         console.log(`Injected SELECTED PROJECTS section (${userProfile.relevantProjects.length} projects)`);
       }
