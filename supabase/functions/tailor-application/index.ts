@@ -2428,7 +2428,7 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
-SELECTED PROJECTS (preserve project names, tech stack, and URLs EXACTLY as given; NEVER invent, guess, or alter any link):
+SELECTED PROJECTS (Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text):
 ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
 
