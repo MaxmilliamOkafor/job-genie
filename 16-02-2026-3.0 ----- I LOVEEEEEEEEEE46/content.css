@@ -13,12 +13,18 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
 }
 
-/* Push page content down when banner is visible */
+/* The status banner is now a compact top-right pill: it floats over the
+   page and must NOT displace content. (It used to be a full-width bar
+   that pushed the body down 44px.) Explicit zero overrides any stale
+   padding left by earlier versions. */
 body:has(#ats-auto-banner) {
-  padding-top: 44px !important;
+  padding-top: 0 !important;
 }
 
-/* Fallback for browsers without :has() support */
 .ats-banner-active {
-  padding-top: 44px !important;
+  padding-top: 0 !important;
+}
+
+body.ats-success-ribbon-active {
+  padding-top: 0 !important;
 }

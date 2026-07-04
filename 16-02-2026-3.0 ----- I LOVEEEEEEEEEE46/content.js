@@ -1645,38 +1645,8 @@
   }
   
   function showWorkdaySuccessRibbon() {
-    const existingRibbon = document.getElementById('ats-success-ribbon');
-    if (existingRibbon) existingRibbon.remove();
-
-    const ribbon = document.createElement('div');
-    ribbon.id = 'ats-success-ribbon';
-    ribbon.innerHTML = `
-      <style>
-        #ats-success-ribbon {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 9999999;
-          background: linear-gradient(135deg, #00ff88 0%, #00cc66 50%, #00aa55 100%);
-          padding: 14px 20px;
-          font: bold 15px system-ui, -apple-system, sans-serif;
-          color: #000;
-          text-align: center;
-          box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5);
-          animation: ats-success-glow 1.5s ease-in-out infinite;
-        }
-        @keyframes ats-success-glow {
-          0%, 100% { box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5); }
-          50% { box-shadow: 0 4px 30px rgba(0, 255, 136, 0.8); }
-        }
-      </style>
-      <span>${SUCCESS_BANNER_MSG.replace('🚀 ATS TAILOR ', '')}</span>
-    `;
-    
-    document.body.appendChild(ribbon);
-    const orangeBanner = document.getElementById('ats-auto-banner');
-    if (orangeBanner) orangeBanner.style.display = 'none';
+    // Same compact success pill as the main flow -- never a full-width bar.
+    showSuccessRibbon();
   }
   
   // ============ GREENHOUSE FLOW ==========
@@ -1702,54 +1672,96 @@
   }
 
   // ============ STATUS BANNER ============
+  // Compact status pill (was a full-width ribbon pinned over the page).
+  // Top-right corner, dismissible, pulses only while working, and success
+  // states fade out on their own -- it must never cover the form the user
+  // is trying to fill.
+  let _bannerDismissed = false;
+  let _bannerFadeTimer = null;
+
   function createStatusBanner() {
+    if (_bannerDismissed) return;
     if (document.getElementById('ats-auto-banner')) return;
-    
+
     const banner = document.createElement('div');
     banner.id = 'ats-auto-banner';
     banner.innerHTML = `
       <style>
         #ats-auto-banner {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 999999;
+          top: 12px;
+          right: 12px;
+          left: auto;
+          z-index: 2147483646;
+          max-width: 420px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
           background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
-          padding: 12px 20px;
-          font: bold 14px system-ui, sans-serif;
+          padding: 8px 12px;
+          border-radius: 999px;
+          font: 600 12px/1.35 system-ui, sans-serif;
           color: #000;
-          text-align: center;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          animation: ats-pulse 2s ease-in-out infinite;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.28);
+          opacity: 1;
+          transition: opacity .35s ease;
         }
+        #ats-auto-banner.working { animation: ats-pulse 2s ease-in-out infinite; }
         @keyframes ats-pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.85; }
         }
-        #ats-auto-banner .ats-status { margin-left: 10px; }
+        #ats-auto-banner .ats-status { flex: 1; min-width: 0; }
         #ats-auto-banner.success { background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%); }
         #ats-auto-banner.error { background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%); color: #fff; }
+        #ats-auto-banner .ats-close {
+          flex: none;
+          border: 0;
+          background: rgba(0,0,0,0.15);
+          color: inherit;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          font: 700 11px/18px system-ui, sans-serif;
+          text-align: center;
+          cursor: pointer;
+          padding: 0;
+        }
+        #ats-auto-banner.fade-out { opacity: 0; }
       </style>
       <span class="ats-prefix">🚀 ATS TAILOR</span>
       <span class="ats-status" id="ats-banner-status">Detecting upload fields...</span>
+      <button class="ats-close" title="Dismiss" aria-label="Dismiss">✕</button>
     `;
+    banner.querySelector('.ats-close').addEventListener('click', () => {
+      _bannerDismissed = true;
+      banner.remove();
+    });
     document.body.appendChild(banner);
   }
 
   function updateBanner(status, type = 'working') {
+    if (_bannerDismissed) return;
     const banner = document.getElementById('ats-auto-banner');
     const statusEl = document.getElementById('ats-banner-status');
     if (banner) {
-      banner.className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
+      banner.classList.remove('working', 'success', 'error', 'fade-out');
+      banner.classList.add(type === 'success' ? 'success' : type === 'error' ? 'error' : 'working');
+      // Success is a terminal state: linger briefly, then fade away so the
+      // pill never squats on the page after the job is done.
+      if (_bannerFadeTimer) { clearTimeout(_bannerFadeTimer); _bannerFadeTimer = null; }
+      if (type === 'success') {
+        _bannerFadeTimer = setTimeout(() => hideBanner(), 8000);
+      }
     }
     if (statusEl) statusEl.textContent = status;
   }
 
   function hideBanner() {
-    // Keep the banner visible permanently - don't remove it
-    // The orange ribbon should always stay visible on ATS platforms
-    console.log('[ATS Tailor] Banner will remain visible');
+    const banner = document.getElementById('ats-auto-banner');
+    if (!banner) return;
+    banner.classList.add('fade-out');
+    setTimeout(() => banner.remove(), 400);
   }
 
   // ============ PDF FILE CREATION ============
@@ -2662,7 +2674,9 @@
     return cvOk && coverOk;
   }
 
-  // ============ SHOW GREEN SUCCESS RIBBON ============
+  // ============ SHOW GREEN SUCCESS PILL ============
+  // Compact top-right pill (was a full-width bar that glowed forever and
+  // pushed the whole page down 50px). Dismissible, fades out on its own.
   function showSuccessRibbon() {
     const existingRibbon = document.getElementById('ats-success-ribbon');
     if (existingRibbon) return; // Already shown
@@ -2673,28 +2687,30 @@
       <style>
         #ats-success-ribbon {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 9999999;
+          top: 12px;
+          right: 12px;
+          left: auto;
+          z-index: 2147483646;
+          max-width: 420px;
           background: linear-gradient(135deg, #00ff88 0%, #00cc66 50%, #00aa55 100%);
-          padding: 14px 20px;
-          font: bold 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+          padding: 8px 12px;
+          border-radius: 999px;
+          font: 600 12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
           color: #000;
-          text-align: center;
-          box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5), 0 2px 8px rgba(0,0,0,0.2);
-          animation: ats-success-glow 1.5s ease-in-out infinite;
+          box-shadow: 0 4px 14px rgba(0, 200, 100, 0.4), 0 2px 8px rgba(0,0,0,0.2);
+          animation: ats-success-glow 1.5s ease-in-out 3;
           display: flex;
           align-items: center;
-          justify-content: center;
-          gap: 12px;
+          gap: 8px;
+          opacity: 1;
+          transition: opacity .35s ease;
         }
         @keyframes ats-success-glow {
-          0%, 100% { box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5), 0 2px 8px rgba(0,0,0,0.2); }
-          50% { box-shadow: 0 4px 30px rgba(0, 255, 136, 0.8), 0 2px 12px rgba(0,0,0,0.3); }
+          0%, 100% { box-shadow: 0 4px 14px rgba(0, 200, 100, 0.4); }
+          50% { box-shadow: 0 4px 24px rgba(0, 255, 136, 0.7); }
         }
         #ats-success-ribbon .ats-icon {
-          font-size: 20px;
+          font-size: 15px;
           animation: ats-bounce 0.6s ease-out;
         }
         @keyframes ats-bounce {
@@ -2702,32 +2718,47 @@
           50% { transform: scale(1.3); }
           100% { transform: scale(1); }
         }
-        #ats-success-ribbon .ats-text {
-          font-weight: 700;
-          letter-spacing: 0.5px;
-        }
+        #ats-success-ribbon .ats-text { font-weight: 700; letter-spacing: 0.3px; }
         #ats-success-ribbon .ats-badge {
           background: rgba(0,0,0,0.15);
-          padding: 4px 10px;
-          border-radius: 12px;
-          font-size: 12px;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 10px;
           font-weight: 600;
         }
-        body.ats-success-ribbon-active { padding-top: 50px !important; }
+        #ats-success-ribbon .ats-close {
+          flex: none;
+          border: 0;
+          background: rgba(0,0,0,0.15);
+          color: inherit;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          font: 700 11px/18px system-ui, sans-serif;
+          text-align: center;
+          cursor: pointer;
+          padding: 0;
+        }
+        #ats-success-ribbon.fade-out { opacity: 0; }
       </style>
       <span class="ats-icon">✅</span>
-      <span class="ats-text">CV & COVER LETTER ATTACHED SUCCESSFULLY</span>
+      <span class="ats-text">CV & Cover Letter attached</span>
       <span class="ats-badge">ATS-PERFECT</span>
+      <button class="ats-close" title="Dismiss" aria-label="Dismiss">✕</button>
     `;
-    
+
+    ribbon.querySelector('.ats-close').addEventListener('click', () => ribbon.remove());
     document.body.appendChild(ribbon);
-    document.body.classList.add('ats-success-ribbon-active');
-    
-    // Hide the orange banner if it exists
+
+    // Replace the status pill (same corner) and self-dismiss after 12s.
     const orangeBanner = document.getElementById('ats-auto-banner');
-    if (orangeBanner) orangeBanner.style.display = 'none';
-    
-    console.log('[ATS Tailor] ✅ GREEN SUCCESS RIBBON displayed');
+    if (orangeBanner) orangeBanner.remove();
+    setTimeout(() => {
+      ribbon.classList.add('fade-out');
+      setTimeout(() => ribbon.remove(), 400);
+    }, 12000);
+
+    console.log('[ATS Tailor] ✅ Success pill displayed');
   }
 
   function ultraFastReplace() {
