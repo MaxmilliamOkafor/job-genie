@@ -2500,6 +2500,23 @@
           company: jobInfo.company,
           location: jobInfo.location,
           description: jobInfo.description,
+          // Job-derived city sent explicitly so the server's smartLocation
+          // uses it as Priority 1 (deterministic). Only when the location
+          // modules are loaded on this host AND the normalised city is
+          // job-derived (sentinel fallback detects junk/remote-only text).
+          extractedCity: (() => {
+            try {
+              const T = window.ATSLocationTailor;
+              if (T && T.normalizeJobLocationForApplication && jobInfo.location) {
+                const SENTINEL = '__NO_JOB_CITY__';
+                const norm = T.normalizeJobLocationForApplication(jobInfo.location, SENTINEL);
+                if (norm && norm !== SENTINEL && (!T.isRecognizedPlace || T.isRecognizedPlace(norm))) {
+                  return norm;
+                }
+              }
+            } catch (e) {}
+            return undefined;
+          })(),
           requirements: [],
           userProfile: {
             firstName: p.first_name || '',
