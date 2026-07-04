@@ -2791,18 +2791,38 @@
   function scheduleCompletenessCheck() {
     if (completenessCheckScheduled) return;
     completenessCheckScheduled = true;
+    // Two-pass scan: autofill/React rendering may still be settling at the
+    // first pass, so an "incomplete" result is only surfaced when a second
+    // scan 4s later CONFIRMS it. And it renders as the neutral ribbon (not
+    // the red error banner) -- it's a review nudge, not a failure.
+    const runScan = () => {
+      if (!window.ApplicationValidator) return null;
+      return window.ApplicationValidator.checkRequiredFields();
+    };
     setTimeout(() => {
       try {
-        if (!window.ApplicationValidator) return;
-        const report = window.ApplicationValidator.checkRequiredFields();
-        if (report.hasForm && !report.complete) {
-          const msg = window.ApplicationValidator.summarise(report);
-          console.warn('[ATS Tailor] Completeness check:', msg);
-          createStatusBanner();
-          updateBanner(msg, 'error');
-        } else if (report.hasForm) {
+        const first = runScan();
+        if (!first || !first.hasForm) return;
+        if (first.complete) {
           console.log('[ATS Tailor] Completeness check: all required fields filled');
+          return;
         }
+        setTimeout(() => {
+          try {
+            const second = runScan();
+            if (!second || !second.hasForm || second.complete) {
+              console.log('[ATS Tailor] Completeness check: settled complete on re-scan');
+              return;
+            }
+            const msg = 'Review before submitting — ' +
+              window.ApplicationValidator.summarise(second).replace(/^⚠️\s*/, '');
+            console.warn('[ATS Tailor] Completeness check:', msg);
+            createStatusBanner();
+            updateBanner(msg, 'working');
+          } catch (e) {
+            console.warn('[ATS Tailor] Completeness re-scan failed:', e.message);
+          }
+        }, 4000);
       } catch (e) {
         console.warn('[ATS Tailor] Completeness check failed:', e.message);
       }

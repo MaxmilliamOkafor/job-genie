@@ -348,11 +348,31 @@
       }
       return p.city || '';
     }
-    if (/state|province|region/.test(l)) return p.state || '';
+    // Referral-name questions ("please state the employee's name") must be
+    // left BLANK -- we have no referrer, and the state/location matchers
+    // below would otherwise dump "Dublin, IE" into them.
+    if (/referral.*name|referr(er|ing).*name|employee.?s?\s.*name|name.*of.*(referr|employee)/.test(l)) return '';
+    // "state" only as the NOUN (US state / province) -- never the verb
+    // ("please state the...", "stated location").
+    if (/\b(state|province|region)\b/.test(l) && !/\bstate[sd]?\s+(the|your|why|how|what|any|below)\b|please\s+state|stated\b/.test(l)) return p.state || '';
     if (/zip|postal/.test(l)) return p.postal_code || p.zip || '';
-    if (/country/.test(l) && !/code|phone|dial/.test(l)) return p.country || DEFAULTS.country;
+    if (/country/.test(l) && !/code|phone|dial/.test(l)) {
+      // Sanitise a polluted country value ("Dublin, Dublin, IE" -> Ireland):
+      // take the last comma segment and expand a bare ISO2 code.
+      let c = String(p.country || '').trim();
+      if (c.includes(',')) c = c.split(',').pop().trim();
+      const ISO2_NAMES = { IE: 'Ireland', US: 'United States', GB: 'United Kingdom', UK: 'United Kingdom', CA: 'Canada', AU: 'Australia', DE: 'Germany', FR: 'France', NL: 'Netherlands', ES: 'Spain', IT: 'Italy', PT: 'Portugal', CH: 'Switzerland', BE: 'Belgium', AT: 'Austria', SE: 'Sweden', NO: 'Norway', DK: 'Denmark', FI: 'Finland', PL: 'Poland', NZ: 'New Zealand', IN: 'India', SG: 'Singapore', AE: 'United Arab Emirates' };
+      if (/^[A-Za-z]{2}$/.test(c)) c = ISO2_NAMES[c.toUpperCase()] || c;
+      return c || DEFAULTS.country;
+    }
     if (/address|street/.test(l)) return p.address || '';
-    if (/location|where.*(you|do you).*live/.test(l)) return p.city ? `${p.city}, ${p.state || ''}`.trim().replace(/,$/, '') : '';
+    // Free-text "WHAT sponsorship would you require" must be answered as a
+    // sentence BEFORE the location/authorized/sponsor rules can hijack the
+    // label ("...work at the STATED LOCATION, what sponsorship...").
+    if (/what.*sponsor|which.*sponsor|sponsor(ship)?.*(would|do)\s*(you)?\s*(require|need)/.test(l)) return 'None - I do not require sponsorship.';
+    // Location FIELDS only -- never eligibility questions that merely
+    // mention "the stated location".
+    if (/location|where.*(you|do you).*live/.test(l) && !/authoriz|sponsor|relocat|eligib|stated/.test(l)) return p.city ? `${p.city}, ${p.state || ''}`.trim().replace(/,$/, '') : '';
     if (/linkedin/.test(l)) return p.linkedin_profile_url || p.linkedin || '';
     if (/github/.test(l)) return p.github_url || p.github || '';
     if (/website|portfolio|personal.?url/.test(l)) return p.website_url || p.website || '';
@@ -362,15 +382,21 @@
     if (/major|field.?of.?study|concentration/.test(l)) return p.major || '';
     if (/gpa|grade.?point/.test(l)) return p.gpa || '';
     if (/graduation|grad.?date|grad.?year/.test(l)) return p.graduation_year || p.grad_year || '';
-    if (/title|position|role|current.?title|job.?title/.test(l) && !/company/.test(l)) return p.current_title || p.title || '';
+    // "role" appears in eligibility questions ("...of this role?") -- only
+    // treat as a job-title FIELD when the label isn't such a question.
+    if (/title|position|role|current.?title|job.?title/.test(l) && !/company|authoriz|eligib|sponsor|apply|hear/.test(l)) return p.current_title || p.title || '';
     if (/company|employer|org|current.?company/.test(l)) return p.current_company || p.company || '';
-    if (/\bfrom\b|start.?date|begin.?date/.test(l) && !/salary|pay/.test(l)) return p.work_start_year ? `01/${p.work_start_year}` : `01/${new Date().getFullYear() - 2}`;
-    if (/\bto\b|end.?date/.test(l) && !/salary|pay|email/.test(l)) return p.work_end_year ? `12/${p.work_end_year}` : `12/${new Date().getFullYear()}`;
+    // Date-range fields only: bare \bfrom\b / \bto\b matched ANY sentence
+    // containing those words ("authorized TO work..." got "12/2026").
+    if ((/^\s*from\s*$|from.?(date|month|year)|start.?date|begin.?date/.test(l)) && !/salary|pay/.test(l)) return p.work_start_year ? `01/${p.work_start_year}` : `01/${new Date().getFullYear() - 2}`;
+    if ((/^\s*to\s*$|to.?(date|month|year)|end.?date/.test(l)) && !/salary|pay|email/.test(l)) return p.work_end_year ? `12/${p.work_end_year}` : `12/${new Date().getFullYear()}`;
     if (/salary|compensation|pay|desired.?pay/.test(l)) return p.expected_salary || DEFAULTS.salary;
     if (/cover.?letter|motivation|additional.?info|message.?to/.test(l)) return p.cover_letter || DEFAULTS.cover;
     if (/summary|about.?(yourself|you|me)|bio|objective/.test(l)) return p.summary || p.cover_letter || DEFAULTS.cover;
     if (/why.*(compan|role|want|interest|position)/.test(l)) return DEFAULTS.why;
-    if (/how.*hear|where.*(find|learn|discover)|source|referred/.test(l)) return DEFAULTS.howHeard;
+    // \breferred\b: bare /referred/ matched INSIDE "preferred" and filled
+    // "LinkedIn" into pronoun questions.
+    if (/how.*hear|where.*(find|learn|discover)|source|\breferred\b/.test(l)) return DEFAULTS.howHeard;
     if (/years.*(exp|work)|exp.*years|total.*experience/.test(l)) return DEFAULTS.years;
     if (/availab|start.?date|notice|when.*start/.test(l)) return DEFAULTS.availability;
     if (/authoriz|eligible|work.*right|legal.*right/.test(l)) return DEFAULTS.authorized;

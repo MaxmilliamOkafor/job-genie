@@ -75,6 +75,42 @@
     return (el.getAttribute('placeholder') || el.name || el.id || 'Unnamed field').trim();
   }
 
+  // ---- React/custom-widget awareness -------------------------------
+  // Modern ATS forms (Ashby, Greenhouse React, Lever) render the chosen
+  // value OUTSIDE the underlying input: a combobox keeps value="" while a
+  // sibling div shows "Ireland"; a file input stays empty while the
+  // uploaded filename renders as a chip. Flagging those as "empty" makes
+  // the banner cry wolf on correctly-filled forms.
+  function _fieldContainer(el) {
+    return (
+      el.closest('[class*="field" i], [class*="question" i], [class*="form-group" i], [data-qa], fieldset, li') ||
+      el.parentElement
+    );
+  }
+
+  function _comboboxHasRenderedValue(el) {
+    if (el.getAttribute('role') !== 'combobox' && !el.getAttribute('aria-autocomplete') &&
+        !/combobox|select/i.test(el.className || '')) return false;
+    const box = _fieldContainer(el);
+    if (!box) return false;
+    // react-select style: an element whose class mentions singleValue /
+    // selected shows the chosen option's text.
+    const valueEl = box.querySelector(
+      '[class*="singleValue" i], [class*="single-value" i], [class*="selectedValue" i], [class*="selected-option" i]'
+    );
+    if (valueEl && valueEl.textContent.trim()) return true;
+    // Generic: aria-activedescendant or a non-placeholder rendered value.
+    if (el.getAttribute('aria-activedescendant')) return true;
+    return false;
+  }
+
+  function _fileHasUploadedChip(el) {
+    const box = _fieldContainer(el);
+    if (!box) return false;
+    // An uploaded-file chip renders the filename ("Maxmilliam_CV.docx").
+    return /\.(pdf|docx?|txt|rtf)\b/i.test(box.textContent || '');
+  }
+
   // ---- is this field empty / unfilled? ----
   function _isEmpty(el) {
     const tag = el.tagName.toLowerCase();
@@ -95,9 +131,15 @@
       return !el.checked;
     }
     if (el.type === 'file') {
-      return !el.files || el.files.length === 0;
+      if (el.files && el.files.length > 0) return false;
+      // React upload widgets clear the input after processing the file --
+      // trust the rendered filename chip.
+      return !_fileHasUploadedChip(el);
     }
-    return !String(el.value || '').trim();
+    if (String(el.value || '').trim()) return false;
+    // Custom dropdown/autocomplete whose value lives in React state.
+    if (_comboboxHasRenderedValue(el)) return false;
+    return true;
   }
 
   function checkRequiredFields(root) {
