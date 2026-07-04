@@ -3408,6 +3408,15 @@ class ATSTailor {
           company: this.currentJob.company || '',
           location: this.currentJob.location || '',
           description: this.currentJob.description || '',
+          // Job-derived city sent explicitly so the server's smartLocation
+          // uses it as Priority 1 (deterministic) instead of re-extracting
+          // from raw text. NEVER the profile fallback — that would pin every
+          // CV header to the home city.
+          extractedCity: (() => {
+            const appLoc = this.getApplicationLocation();
+            const fb = this._defaultLocation || 'Dublin, IE';
+            return appLoc && appLoc !== fb ? appLoc : undefined;
+          })(),
           requirements: [],
           aiProvider: this.aiProvider, // Pass selected AI provider
           userProfile: {

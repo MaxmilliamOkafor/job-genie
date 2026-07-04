@@ -125,12 +125,20 @@
     const direct = COUNTRY_INDEX.get(key);
     if (direct) return direct;
 
+    // Never fuzzy-match a token that is a KNOWN CITY — "Austin" must stay
+    // the city Austin, not fuzzy-match the country "Austria" (distance 2)
+    // and turn into "Vienna, AT" on the CV header. Exact country matches
+    // above still win (checked before this guard).
+    if (CITY_INDEX.has(key)) return null;
+
     // Fuzzy match with conservative cutoff
     let best = null;
     let bestDist = Infinity;
 
-    // For short keys, keep cutoff tight to avoid false positives
-    const cutoff = key.length <= 5 ? 1 : key.length <= 10 ? 2 : 3;
+    // Tight cutoffs: distance 2 on short tokens produced real-world false
+    // positives (austin -> austria). Distance 1 still catches genuine
+    // typos ("Irland" -> Ireland, "Germny" -> Germany).
+    const cutoff = key.length <= 8 ? 1 : 2;
 
     for (const [k, c] of COUNTRY_INDEX) {
       // only compare similar-length candidates

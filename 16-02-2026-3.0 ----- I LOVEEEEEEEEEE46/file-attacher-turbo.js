@@ -506,44 +506,53 @@
       return false;
     },
 
-    // ============ GREEN SUCCESS RIBBON ============
+    // ============ GREEN SUCCESS PILL ============
+    // Compact top-right pill (was a full-width bar that glowed forever and
+    // pushed the whole page down 50px). Dismissible, fades out on its own,
+    // never displaces or covers the form.
     showSuccessRibbon(cvAttached, coverAttached) {
       // Remove existing success ribbon if any
       const existingRibbon = document.getElementById('ats-success-ribbon');
       if (existingRibbon) existingRibbon.remove();
+      // Clean up the body-padding hack older versions injected.
+      document.body.classList.remove('ats-success-ribbon-active');
+      const oldStyle = document.getElementById('ats-success-ribbon-style');
+      if (oldStyle) oldStyle.remove();
 
       const status = [];
       if (cvAttached) status.push('CV');
       if (coverAttached) status.push('Cover Letter');
-      
+
       const ribbon = document.createElement('div');
       ribbon.id = 'ats-success-ribbon';
       ribbon.innerHTML = `
         <style>
           #ats-success-ribbon {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 9999999;
+            top: 12px;
+            right: 12px;
+            left: auto;
+            z-index: 2147483646;
+            max-width: 420px;
             background: linear-gradient(135deg, #00ff88 0%, #00cc66 50%, #00aa55 100%);
-            padding: 14px 20px;
-            font: bold 15px system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font: 600 12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
             color: #000;
-            text-align: center;
-            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5), 0 2px 8px rgba(0,0,0,0.2);
-            animation: ats-success-glow 1.5s ease-in-out infinite;
+            box-shadow: 0 4px 14px rgba(0, 200, 100, 0.4), 0 2px 8px rgba(0,0,0,0.2);
+            animation: ats-success-glow 1.5s ease-in-out 3;
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 12px;
+            gap: 8px;
+            opacity: 1;
+            transition: opacity .35s ease;
           }
           @keyframes ats-success-glow {
-            0%, 100% { box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5), 0 2px 8px rgba(0,0,0,0.2); }
-            50% { box-shadow: 0 4px 30px rgba(0, 255, 136, 0.8), 0 2px 12px rgba(0,0,0,0.3); }
+            0%, 100% { box-shadow: 0 4px 14px rgba(0, 200, 100, 0.4); }
+            50% { box-shadow: 0 4px 24px rgba(0, 255, 136, 0.7); }
           }
           #ats-success-ribbon .ats-icon {
-            font-size: 20px;
+            font-size: 15px;
             animation: ats-bounce 0.6s ease-out;
           }
           @keyframes ats-bounce {
@@ -551,35 +560,43 @@
             50% { transform: scale(1.3); }
             100% { transform: scale(1); }
           }
-          #ats-success-ribbon .ats-text {
-            font-weight: 700;
-            letter-spacing: 0.5px;
-          }
+          #ats-success-ribbon .ats-text { font-weight: 700; letter-spacing: 0.3px; }
           #ats-success-ribbon .ats-badge {
             background: rgba(0,0,0,0.15);
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
             font-weight: 600;
           }
+          #ats-success-ribbon .ats-close {
+            flex: none;
+            border: 0;
+            background: rgba(0,0,0,0.15);
+            color: inherit;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            font: 700 11px/18px system-ui, sans-serif;
+            text-align: center;
+            cursor: pointer;
+            padding: 0;
+          }
+          #ats-success-ribbon.fade-out { opacity: 0; }
         </style>
         <span class="ats-icon">✅</span>
-        <span class="ats-text">${status.join(' & ')} ATTACHED SUCCESSFULLY</span>
+        <span class="ats-text">${status.join(' & ')} attached</span>
         <span class="ats-badge">ATS-PERFECT</span>
+        <button class="ats-close" title="Dismiss" aria-label="Dismiss">✕</button>
       `;
-      
-      document.body.appendChild(ribbon);
-      document.body.classList.add('ats-success-ribbon-active');
-      
-      // Add body padding for ribbon
-      const style = document.createElement('style');
-      style.id = 'ats-success-ribbon-style';
-      style.textContent = `
-        body.ats-success-ribbon-active { padding-top: 50px !important; }
-      `;
-      document.head.appendChild(style);
 
-      console.log('[FileAttacher] ✅ GREEN SUCCESS RIBBON displayed');
+      ribbon.querySelector('.ats-close').addEventListener('click', () => ribbon.remove());
+      document.body.appendChild(ribbon);
+      setTimeout(() => {
+        ribbon.classList.add('fade-out');
+        setTimeout(() => ribbon.remove(), 400);
+      }, 12000);
+
+      console.log('[FileAttacher] ✅ Success pill displayed');
     },
     
     // ============ ATTACH BOTH FILES TOGETHER (SYNC - LAZYAPPLY OPTIMIZED) ============
