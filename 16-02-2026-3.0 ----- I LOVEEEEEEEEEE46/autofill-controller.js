@@ -58,64 +58,87 @@
   // signals. Everything else is left completely untouched (zero usage).
   // ===================================================================
   // Full ATS domains -- matched as a domain suffix (host === d or *.d).
+  // These are DEDICATED application platforms: being there at all means
+  // the user is applying, so the engine may inject on load.
   const ATS_DOMAINS = [
     'greenhouse.io', 'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
     'bullhorn.com', 'bullhornstaffing.com', 'teamtailor.com', 'workable.com',
     'icims.com', 'oraclecloud.com', 'taleo.net', 'lever.co',
     'ashbyhq.com', 'jobvite.com', 'bamboohr.com', 'recruitee.com', 'jazzhr.com',
-    'applytojob.com', 'successfactors.com', 'brassring.com', 'csod.com',
-    'zohorecruit.com', 'personio.com', 'breezy.hr', 'metacareers.com',
+    'applytojob.com', 'successfactors.com', 'successfactors.eu', 'brassring.com', 'csod.com',
+    'zohorecruit.com', 'personio.com', 'personio.de', 'breezy.hr', 'metacareers.com',
     'eightfold.ai', 'phenom.com', 'avature.net', 'gr8people.com', 'job-boards.greenhouse.io',
+    'rippling.com', 'ultipro.com', 'adp.com', 'dover.com', 'pinpointhq.com',
   ];
   // Application subdomains -- matched only as a leading label (jobs.X /
   // careers.X / apply.X), never mid-domain ("lifecareers.io" won't match).
+  // Often just LISTING pages, so they additionally require a real
+  // application form before anything injects.
   const ATS_SUBDOMAIN_PREFIXES = ['jobs.', 'careers.', 'apply.', 'recruiting.', 'jobboards.', 'job-boards.', 'career.', 'talent.'];
 
-  function _isAtsHost() {
+  function _isAtsDomain() {
     try {
       const host = (window.location.hostname || '').toLowerCase();
       if (!host) return false;
-      if (ATS_DOMAINS.some((d) => host === d || host.endsWith('.' + d))) return true;
-      if (ATS_SUBDOMAIN_PREFIXES.some((p) => host.startsWith(p))) return true;
-      return false;
+      return ATS_DOMAINS.some((d) => host === d || host.endsWith('.' + d));
     } catch (e) {
       return false;
     }
   }
 
-  // Cheap synchronous check: does this page look like a job application?
+  function _isCareerSubdomain() {
+    try {
+      const host = (window.location.hostname || '').toLowerCase();
+      if (!host) return false;
+      return ATS_SUBDOMAIN_PREFIXES.some((p) => host.startsWith(p));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Strict check: does this page carry a REAL application form? The anchor
+  // signal is a file upload -- URL words alone ("/careers", "/jobs") are
+  // exactly how the engine used to wake up on random articles and company
+  // pages while the user was just browsing.
   function _hasApplicationSignals() {
     try {
-      // A resume/CV file upload is the strongest single signal.
       const fileInputs = document.querySelectorAll('input[type="file"]');
-      if (fileInputs.length > 0) {
-        for (const fi of fileInputs) {
-          const hay = ((fi.name || '') + ' ' + (fi.id || '') + ' ' + (fi.accept || '') + ' ' +
-            (fi.getAttribute('aria-label') || '')).toLowerCase();
-          if (/resume|cv|cover|upload|attach|\.pdf|\.docx?/.test(hay)) return true;
-        }
-        // Any file input on an apply-ish URL is enough.
-        if (/apply|application|career|job/i.test(location.href)) return true;
+      let hasAnyFileInput = false;
+      for (const fi of fileInputs) {
+        hasAnyFileInput = true;
+        const hay = ((fi.name || '') + ' ' + (fi.id || '') + ' ' + (fi.accept || '') + ' ' +
+          (fi.getAttribute('aria-label') || '')).toLowerCase();
+        // Resume/cover-labelled upload = unmistakably an application form.
+        if (/resume|cv|cover/.test(hay)) return true;
       }
-      // Apply-form text markers + an actual form on the page.
-      const url = location.href.toLowerCase();
-      const urlLooksApply = /\/(apply|application|applications|job|jobs|career|careers|candidate|submit-application)/.test(url)
+      if (!hasAnyFileInput) return false;
+      // An unlabelled file input still counts, but ONLY when the URL is
+      // apply-shaped AND the page text reads like an application form --
+      // all three signals together, never URL words alone.
+      const urlLooksApply = /\/(apply|application|applications|submit-application|candidate)/i.test(location.href)
         || /(^|\.)apply\./.test(location.hostname);
-      if (urlLooksApply && document.querySelector('form, input, textarea, select')) {
-        const bodyText = (document.body && document.body.innerText || '').slice(0, 6000).toLowerCase();
-        if (/apply for|application|first name|last name|resume|cover letter|work authoriz|are you legally/.test(bodyText)) {
-          return true;
-        }
-      }
-      return false;
+      if (!urlLooksApply) return false;
+      const bodyText = (document.body && document.body.innerText || '').slice(0, 6000).toLowerCase();
+      return /apply for|first name|last name|resume|cover letter|work authoriz|are you legally/.test(bodyText);
     } catch (e) {
       return false;
     }
   }
 
-  // Eligible now = known ATS host OR clear application-form signals.
+  // Eligible now:
+  //   - dedicated ATS platform      -> yes, immediately
+  //   - careers/jobs subdomain      -> only with a real application form
+  //   - any other (random) website  -> only with a real application form
   function _isEligibleNow() {
-    return _isAtsHost() || _hasApplicationSignals();
+    if (_isAtsDomain()) return true;
+    return _hasApplicationSignals();
+  }
+
+  // May we OBSERVE this page waiting for a form to appear? Only on hosts
+  // with a job-application identity. On a random website the controller
+  // must be fully dormant: no injection, no MutationObserver, nothing.
+  function _mayWatchForEligibility() {
+    return _isAtsDomain() || _isCareerSubdomain();
   }
 
   if (_isDeniedHost()) {
@@ -176,6 +199,14 @@
     },
 
     _watchForEligibility() {
+      // Random websites get NO observer -- the extension stays fully
+      // dormant there. Only hosts with a job-application identity
+      // (dedicated ATS platform or jobs./careers. subdomain) are watched
+      // for a late-loading application form.
+      if (!_mayWatchForEligibility()) {
+        log('Not a job host -- staying fully dormant (no observer)');
+        return;
+      }
       if (this._eligibilityWatcher || !document.body) return;
       let done = false;
       const finish = (eligible) => {
