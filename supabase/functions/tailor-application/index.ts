@@ -2491,6 +2491,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - NEVER use banned words: "leveraging", "utilising", "utilizing", "synergy", "passionate"
    - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
+   - COMPANY-FIRST BALANCE: Address the company directly — use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
 
    GAP MITIGATION (CRITICAL — from Rule 13):
    - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
