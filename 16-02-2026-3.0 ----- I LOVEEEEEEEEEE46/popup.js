@@ -1933,7 +1933,9 @@ class ATSTailor {
         'potentially-fabricated-keywords': (w) =>
           `Review before submitting — ${w.count} keyword(s) not in your original CV: ${(w.samples || []).join(', ')}`,
         'unquantified-bullets': (w) =>
-          `${w.count} of ${w.totalBullets} bullets have no number/metric`,
+          w.restoreHints && w.restoreHints.length
+            ? `🚨 ${w.note || 'Tailored CV lost all metrics.'} (${w.count}/${w.totalBullets} bullets unquantified)`
+            : `${w.count} of ${w.totalBullets} bullets have no number/metric`,
         'over-long-bullets': (w) => `${w.count} bullet(s) longer than 2 lines`,
         'weak-bullet-openers': (w) =>
           `${w.count} bullet(s) open with weak verbs (e.g. "${(w.samples && w.samples[0] && w.samples[0].opener) || 'responsible for'}")`,
@@ -4028,8 +4030,10 @@ class ATSTailor {
             candidateName,
             // v3: honesty audit needs the ORIGINAL CV + JD keywords so it
             // can flag any tailored term that wasn't already in the user's
-            // genuine CV.  Both are already in scope at this point.
-            originalCV: this.baseCVContent || '',
+            // genuine CV. baseCVContent is often the PARSED PROFILE OBJECT
+            // (not text) -- passing it raw stringified to "[object Object]"
+            // and silently broke every original-vs-tailored comparison.
+            originalCV: this.getOriginalCVText(),
             jobKeywords: this.generatedDocuments.keywords || null,
             // v8: guarantee the SELECTED PROJECTS section from the profile's
             // structured projects (with verbatim live/code links) so it
@@ -4219,6 +4223,40 @@ class ATSTailor {
    * or malformed, so the result is sanitised and shape-validated -- any
    * junk falls back to the profile location rather than landing on the CV.
    */
+  // Serialise the stored base-CV data to PLAIN TEXT for the recruiter
+  // audit's original-vs-tailored comparisons (honesty + metric-loss).
+  // baseCVContent is usually the parsed profile OBJECT, which would
+  // otherwise stringify to "[object Object]" and break every comparison.
+  getOriginalCVText() {
+    const c = this.baseCVContent;
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+    try {
+      const parts = [];
+      const exp = c.professional_experience || c.professionalExperience || [];
+      for (const e of (Array.isArray(exp) ? exp : [])) {
+        parts.push([e.company, e.title || e.role, e.dates].filter(Boolean).join(' | '));
+        const bullets = Array.isArray(e.bullets) ? e.bullets
+          : (typeof e.description === 'string' ? e.description.split(/\r?\n/) : []);
+        for (const b of bullets) if (b && String(b).trim()) parts.push('• ' + String(b).trim());
+      }
+      const projs = c.relevant_projects || c.relevantProjects || [];
+      for (const p of (Array.isArray(projs) ? projs : [])) {
+        parts.push([p.name, p.techStack].filter(Boolean).join(' | '));
+        const bullets = Array.isArray(p.bullets) ? p.bullets
+          : (typeof p.description === 'string' ? p.description.split(/\r?\n/) : []);
+        for (const b of bullets) if (b && String(b).trim()) parts.push('• ' + String(b).trim());
+      }
+      const skills = Array.isArray(c.skills) ? c.skills : [];
+      if (skills.length) parts.push('Skills: ' + skills.map((s) => (typeof s === 'string' ? s : (s && s.name) || '')).filter(Boolean).join(', '));
+      const certs = Array.isArray(c.certifications) ? c.certifications : [];
+      for (const ct of certs) if (ct) parts.push('• ' + String(ct));
+      return parts.join('\n');
+    } catch (e) {
+      return '';
+    }
+  }
+
   getApplicationLocation() {
     const fallback = this._defaultLocation || 'Dublin, IE';
     const raw = this.currentJob?.location || '';

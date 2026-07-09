@@ -1141,7 +1141,7 @@
     return /^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u);
   }
 
-  function buildProjectsSectionText(projects) {
+  function buildProjectsSectionText(projects, ownHandle) {
     if (!Array.isArray(projects) || projects.length === 0) return '';
     const blocks = [];
     for (const p of projects.slice(0, 8)) {
@@ -1163,6 +1163,19 @@
       const live = _looksLikeUrl(liveRaw) ? liveRaw : '';
       const code = _looksLikeUrl(codeRaw) ? codeRaw : '';
 
+      // HONESTY: "open source" is scored as contributions to OTHERS'
+      // projects; a personal repo described as "Open-source framework..."
+      // caps the score and can trigger a deduction (v7 flags it). When the
+      // code link is the candidate's OWN repo, silently drop the leading
+      // "Open-source" qualifier -- the project stays truthfully described.
+      if (ownHandle && code.toLowerCase().includes('github.com/' + ownHandle)) {
+        const neutralise = (s) => s
+          .replace(/^open[-\s]?sourced?\s+(\w)/i, (m, c) => c.toUpperCase())
+          .replace(/\ban?\s+open[-\s]?sourced?\s+/gi, 'a ');
+        name = neutralise(name);
+        bullets = bullets.map(neutralise);
+      }
+
       const lines = [name];
       if (tech) lines.push(tech);
       for (const b of bullets) lines.push(`• ${b}`);
@@ -1178,7 +1191,7 @@
   }
 
   function ensureProjectsSection(cvText, projects) {
-    const section = buildProjectsSectionText(projects);
+    const section = buildProjectsSectionText(projects, _dominantGithubHandle(cvText || ''));
     if (!section || !cvText) return { text: cvText || '', injected: false };
 
     // Strip EVERY projects section already present (from the server, the
@@ -1457,12 +1470,30 @@
     if (f.quantification) {
       const q = quantificationAudit(outCV);
       if (q.unquantified.length > 0) {
-        report.warnings.push({
+        const warning = {
           kind: 'unquantified-bullets',
           count: q.unquantified.length,
           totalBullets: q.total,
           samples: q.unquantified.slice(0, 3),
-        });
+        };
+        // METRIC-LOSS DETECTION: when the tailored CV lost ALL numbers but
+        // the ORIGINAL profile carried quantified bullets, that is a
+        // rewrite regression, not missing source data. Surface the original
+        // metric-bearing bullets so the user restores them -- we never
+        // invent numbers ourselves.
+        if (q.total > 0 && q.unquantified.length === q.total && originalCV) {
+          const originalQuantified = String(originalCV).split('\n')
+            .map((l) => l.trim().replace(/^([\-*•]|\d+\.)\s+/, ''))
+            .filter((l) => l.length > 25 && /\d/.test(l) && SCALE_WORDS.test(l) && !/^\d{2}\/\d{4}|\b(19|20)\d{2}\b.*\|/.test(l))
+            .slice(0, 3);
+          if (originalQuantified.length > 0) {
+            warning.severity = 'critical';
+            warning.restoreHints = originalQuantified;
+            warning.note = 'The tailored CV lost ALL metrics your original bullets carried. Restore numbers like: "' +
+              originalQuantified[0].slice(0, 90) + '"';
+          }
+        }
+        report.warnings.push(warning);
       }
     }
 
