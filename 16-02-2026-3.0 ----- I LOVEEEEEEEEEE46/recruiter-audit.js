@@ -1306,6 +1306,54 @@
     return { text: out.join('\n'), fixed };
   }
 
+  // ===================================================================
+  // v10 — WEAK-OPENER AUTO-FIX (safe subset)
+  // -------------------------------------------------------------------
+  // "Responsible for developing X" says the same thing as "Developed X"
+  // with less impact. The gerund form makes this transform mechanically
+  // safe: strip the weak prefix and conjugate the gerund to past tense
+  // via an explicit verb map — never guessed, so grammar can't break.
+  // Anything not matching the exact <weak prefix> + <known gerund> shape
+  // is left for the warning (human rewrite).
+  // ===================================================================
+
+  const GERUND_TO_PAST = {
+    developing: 'Developed', managing: 'Managed', building: 'Built',
+    creating: 'Created', leading: 'Led', designing: 'Designed',
+    implementing: 'Implemented', maintaining: 'Maintained',
+    delivering: 'Delivered', improving: 'Improved', supporting: 'Supported',
+    coordinating: 'Coordinated', overseeing: 'Oversaw', driving: 'Drove',
+    running: 'Ran', writing: 'Wrote', testing: 'Tested',
+    deploying: 'Deployed', migrating: 'Migrated', optimising: 'Optimised',
+    optimizing: 'Optimized', automating: 'Automated', analysing: 'Analysed',
+    analyzing: 'Analyzed', ensuring: 'Ensured', establishing: 'Established',
+    mentoring: 'Mentored', collaborating: 'Collaborated', executing: 'Executed',
+    defining: 'Defined', launching: 'Launched', architecting: 'Architected',
+    reviewing: 'Reviewed', monitoring: 'Monitored', documenting: 'Documented',
+  };
+
+  const WEAK_PREFIX_RE = /^([\-*•]\s*|\d+\.\s+)?(responsible for|tasked with|in charge of|duties included|worked on|helped with|assisted with|assisted in)\s+([a-z]+ing)\b/i;
+
+  function fixWeakOpeners(text) {
+    if (!text) return { text: text || '', fixed: 0 };
+    let fixed = 0;
+    const lines = text.split('\n');
+    const out = lines.map((raw) => {
+      const trimmed = raw.trim();
+      if (!/^([\-*•]|\d+\.)\s+/.test(trimmed)) return raw;
+      const m = trimmed.match(WEAK_PREFIX_RE);
+      if (!m) return raw;
+      const past = GERUND_TO_PAST[(m[3] || '').toLowerCase()];
+      if (!past) return raw;
+      fixed++;
+      const bulletMark = m[1] || '';
+      const rest = trimmed.slice(m[0].length);
+      const indent = raw.slice(0, raw.indexOf(trimmed));
+      return `${indent}${bulletMark}${past}${rest}`;
+    });
+    return { text: out.join('\n'), fixed };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -1351,6 +1399,8 @@
       projectsInject: flags.projectsInject !== false,
       // v9
       acronymCasing: flags.acronymCasing !== false,
+      // v10
+      weakOpenerFix: flags.weakOpenerFix !== false,
     };
 
     let outCV = cvText;
@@ -1431,6 +1481,16 @@
       outCL = cl.text;
       if (cv.removed + cl.removed > 0) {
         report.fixes.push(`fillers: ${cv.removed + cl.removed} adverbs removed`);
+      }
+    }
+
+    // v10: safe weak-opener auto-fix BEFORE the warning pass, so only the
+    // genuinely ambiguous cases (no known gerund) still warn.
+    if (f.weakOpenerFix && outCV) {
+      const w = fixWeakOpeners(outCV);
+      if (w.fixed > 0) {
+        outCV = w.text;
+        report.fixes.push(`weak-openers: ${w.fixed} bullet(s) rewritten to action verbs`);
       }
     }
 
@@ -1688,6 +1748,8 @@
     ensureProjectsSection,
     // v9
     fixAcronymCasing,
+    // v10
+    fixWeakOpeners,
   };
 
   global.RecruiterAudit = RecruiterAudit;
