@@ -1471,7 +1471,7 @@ const Profile = () => {
                         name: 'DriftGuard — Self-Healing MLOps Platform',
                         role: '',
                         techStack: 'Python, MLflow, Evidently, Docker, Kubernetes, GitHub Actions',
-                        description: 'Open-source framework that watches a deployed model for data and concept drift and automatically retrains, validates, and canary-deploys a new version with zero human intervention — a public dashboard replays drift events and the auto-recovery in real time.',
+                        description: 'Self-healing MLOps framework that watches a deployed model for data and concept drift and automatically retrains, validates, and canary-deploys a new version with zero human intervention — a public dashboard replays drift events and the auto-recovery in real time.',
                         liveUrl: 'https://maxmilliamokafor.github.io/driftguard/',
                         codeUrl: 'https://github.com/MaxmilliamOkafor/driftguard',
                         bullets: [],
