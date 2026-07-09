@@ -2459,9 +2459,10 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
       
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
-   ███ END DUPLICATION BAN ███
+    ███ END DUPLICATION BAN ███
+       TITLE REDUNDANCY: If the job title contains a parenthetical qualifier — e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' — do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-    - WORK EXPERIENCE: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence.
+    - WORK EXPERIENCE: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Each role should keep 2-3 quantified results (%, time saved, scale, revenue). If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
     - EDUCATION
     - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
@@ -2490,6 +2491,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - NEVER use banned words: "leveraging", "utilising", "utilizing", "synergy", "passionate"
    - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
+   - COMPANY-FIRST BALANCE: Address the company directly — use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
 
    GAP MITIGATION (CRITICAL — from Rule 13):
    - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
