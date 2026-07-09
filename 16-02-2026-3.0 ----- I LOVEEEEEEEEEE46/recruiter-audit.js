@@ -372,8 +372,27 @@
     if (cleanedTitle.length < 3 || cleanedTitle.length > 80) {
       return { text, injected: false };
     }
+    // Strip any legacy robotic "Target role: X." label BEFORE checking
+    // presence -- otherwise a label from an earlier generation satisfies
+    // the includes() check and survives forever (and reads as a duplicate:
+    // "Target role: X. Experienced X with..."). The label is often INLINE
+    // at the start of the summary paragraph (the summary clamp joins
+    // lines), and titles contain periods ("Sr."), so we remove the label
+    // plus the KNOWN title precisely rather than splitting on sentences.
+    const escT = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let hadLabel = false;
+    if (kind !== 'coverLetter' && /Target role:/i.test(text)) {
+      hadLabel = true;
+      // 1) Label followed by this exact title (inline or own line).
+      text = text.replace(new RegExp('[ \\t]*Target role:\\s*' + escT(cleanedTitle) + '\\.?\\s*', 'gi'), '');
+      // 2) Any leftover label on its own line (different/older title).
+      text = text.replace(/^[ \t]*Target role:[^\n]*\n?/gim, '');
+      // 3) A bare inline label prefix: drop just the label words.
+      text = text.replace(/Target role:\s*/gi, '');
+      text = text.replace(/\n{3,}/g, '\n\n');
+    }
     if (text.toLowerCase().includes(cleanedTitle.toLowerCase())) {
-      return { text, injected: false };
+      return { text, injected: hadLabel };
     }
 
     if (kind === 'coverLetter') {
@@ -391,10 +410,38 @@
       return { text: `Re: ${cleanedTitle}\n\n${text}`, injected: true };
     }
 
-    // CV: inject into the summary section (under SUMMARY / PROFESSIONAL SUMMARY / PROFILE).
+    // CV: the exact JD title must appear in the summary -- but NEVER as a
+    // robotic "Target role:" label, and never twice back-to-back
+    // ("Target role: X. Experienced X with..."). Strip any legacy label
+    // line first; the logic below re-ensures the title properly.
+    text = text.replace(/^[ \t]*Target role:[^\n]*\n?/gim, '');
+    if (text.toLowerCase().includes(cleanedTitle.toLowerCase())) {
+      return { text, injected: false };
+    }
+    // Preferred: MERGE into a title the summary already carries
+    // ("Experienced Sr. Software Engineer with..." + JD "Sr. Software
+    // Engineer (Data Science)" -> replace the partial title with the exact
+    // JD string, so it appears ONCE). Fallback: a bare headline line under
+    // the summary header, which reads like a standard CV headline.
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Core title = JD title minus any parenthetical qualifier.
+    const coreTitle = cleanedTitle.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    // Try the core title and its Sr./Senior sibling as merge anchors.
+    const anchors = [coreTitle];
+    if (/\bSr\.?\s/i.test(coreTitle)) anchors.push(coreTitle.replace(/\bSr\.?\s/i, 'Senior '));
+    else if (/\bSenior\s/i.test(coreTitle)) anchors.push(coreTitle.replace(/\bSenior\s/i, 'Sr. '));
+    for (const anchor of anchors) {
+      if (anchor.length < 5) continue;
+      const re = new RegExp(esc(anchor), 'i');
+      if (re.test(text)) {
+        return { text: text.replace(re, cleanedTitle), injected: true };
+      }
+    }
+    // No similar title to merge into: emit the exact title as a clean
+    // headline line under the summary header (no label).
     const summaryRe = /(SUMMARY|PROFESSIONAL SUMMARY|PROFILE)\s*\n/i;
     if (summaryRe.test(text)) {
-      const out = text.replace(summaryRe, (m) => `${m}Target role: ${cleanedTitle}.\n`);
+      const out = text.replace(summaryRe, (m) => `${m}${cleanedTitle}\n`);
       return { text: out, injected: true };
     }
     return { text, injected: false };
@@ -1094,7 +1141,7 @@
     return /^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u);
   }
 
-  function buildProjectsSectionText(projects) {
+  function buildProjectsSectionText(projects, ownHandle) {
     if (!Array.isArray(projects) || projects.length === 0) return '';
     const blocks = [];
     for (const p of projects.slice(0, 8)) {
@@ -1116,6 +1163,19 @@
       const live = _looksLikeUrl(liveRaw) ? liveRaw : '';
       const code = _looksLikeUrl(codeRaw) ? codeRaw : '';
 
+      // HONESTY: "open source" is scored as contributions to OTHERS'
+      // projects; a personal repo described as "Open-source framework..."
+      // caps the score and can trigger a deduction (v7 flags it). When the
+      // code link is the candidate's OWN repo, silently drop the leading
+      // "Open-source" qualifier -- the project stays truthfully described.
+      if (ownHandle && code.toLowerCase().includes('github.com/' + ownHandle)) {
+        const neutralise = (s) => s
+          .replace(/^open[-\s]?sourced?\s+(\w)/i, (m, c) => c.toUpperCase())
+          .replace(/\ban?\s+open[-\s]?sourced?\s+/gi, 'a ');
+        name = neutralise(name);
+        bullets = bullets.map(neutralise);
+      }
+
       const lines = [name];
       if (tech) lines.push(tech);
       for (const b of bullets) lines.push(`• ${b}`);
@@ -1131,7 +1191,7 @@
   }
 
   function ensureProjectsSection(cvText, projects) {
-    const section = buildProjectsSectionText(projects);
+    const section = buildProjectsSectionText(projects, _dominantGithubHandle(cvText || ''));
     if (!section || !cvText) return { text: cvText || '', injected: false };
 
     // Strip EVERY projects section already present (from the server, the
@@ -1198,6 +1258,115 @@
     return { text: base.replace(/\s*$/, '') + '\n\n' + section + '\n', injected: true, replaced };
   }
 
+  // ===================================================================
+  // v9 — ACRONYM / PROPER-NOUN CASING (auto-fix)
+  // -------------------------------------------------------------------
+  // Injected JD keywords arrive lowercase ("...focus on Python, ml and
+  // data pipelines"), which reads as auto-generated to a recruiter. Fix
+  // standalone lowercase tokens to their canonical casing. Conservative:
+  // only unambiguous tech terms (never words like "rest", "go", "spark",
+  // "react" that double as English), word-boundary matched, and lines
+  // containing URLs/emails are left untouched.
+  // ===================================================================
+
+  const CANONICAL_CASING = {
+    ml: 'ML', ai: 'AI', nlp: 'NLP', llm: 'LLM', llms: 'LLMs', genai: 'GenAI',
+    sql: 'SQL', nosql: 'NoSQL', aws: 'AWS', gcp: 'GCP', api: 'API', apis: 'APIs',
+    etl: 'ETL', elt: 'ELT', sre: 'SRE', k8s: 'K8s', gpu: 'GPU', cpu: 'CPU',
+    saas: 'SaaS', rag: 'RAG', mlops: 'MLOps', devops: 'DevOps', dataops: 'DataOps',
+    ui: 'UI', ux: 'UX', qa: 'QA', kpi: 'KPI', kpis: 'KPIs', sla: 'SLA', slas: 'SLAs',
+    json: 'JSON', xml: 'XML', html: 'HTML', css: 'CSS', php: 'PHP', grpc: 'gRPC',
+    graphql: 'GraphQL', cicd: 'CI/CD',
+    python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript',
+    java: 'Java', kotlin: 'Kotlin', scala: 'Scala', kubernetes: 'Kubernetes',
+    docker: 'Docker', terraform: 'Terraform', ansible: 'Ansible',
+    pytorch: 'PyTorch', tensorflow: 'TensorFlow', pandas: 'pandas',
+    numpy: 'NumPy', scikit: 'scikit', postgresql: 'PostgreSQL',
+    postgres: 'Postgres', mysql: 'MySQL', mongodb: 'MongoDB', redis: 'Redis',
+    kafka: 'Kafka', airflow: 'Airflow', databricks: 'Databricks',
+    snowflake: 'Snowflake', tableau: 'Tableau', jira: 'Jira', github: 'GitHub',
+    gitlab: 'GitLab', jenkins: 'Jenkins', fastapi: 'FastAPI', django: 'Django',
+    flask: 'Flask', mlflow: 'MLflow', linux: 'Linux', hadoop: 'Hadoop',
+  };
+
+  const _CASING_RE = new RegExp(
+    '\\b(' + Object.keys(CANONICAL_CASING).join('|') + ')\\b', 'gi'
+  );
+
+  function fixAcronymCasing(text) {
+    if (!text || typeof text !== 'string') return { text: text || '', fixed: 0 };
+    let fixed = 0;
+    const lines = text.split('\n');
+    const out = lines.map((line) => {
+      // Never touch URLs / emails ("github.com/x" must stay lowercase).
+      if (line.includes('://') || line.includes('@') || /\bwww\./i.test(line) || /\.(com|io|dev|net|org)\b/i.test(line)) return line;
+      let l = line.replace(_CASING_RE, (m) => {
+        const canon = CANONICAL_CASING[m.toLowerCase()];
+        if (!canon || m === canon) return m;
+        // ALL-CAPS tokens are usually intentional header styling -- skip.
+        if (m.length > 1 && m === m.toUpperCase()) return m;
+        // Never DE-capitalise: a sentence-start "Pandas" must not become
+        // "pandas"; only canonicalise upward/mixed ("aws"/"Aws" -> "AWS",
+        // "ml"/"Ml" -> "ML", "mlflow" -> "MLflow").
+        if (canon === canon.toLowerCase() && m !== m.toLowerCase()) return m;
+        fixed++;
+        return canon;
+      });
+      // Slash form the word-boundary map can't reach.
+      l = l.replace(/\bci\/cd\b/g, () => { fixed++; return 'CI/CD'; });
+      return l;
+    });
+    return { text: out.join('\n'), fixed };
+  }
+
+  // ===================================================================
+  // v10 — WEAK-OPENER AUTO-FIX (safe subset)
+  // -------------------------------------------------------------------
+  // "Responsible for developing X" says the same thing as "Developed X"
+  // with less impact. The gerund form makes this transform mechanically
+  // safe: strip the weak prefix and conjugate the gerund to past tense
+  // via an explicit verb map — never guessed, so grammar can't break.
+  // Anything not matching the exact <weak prefix> + <known gerund> shape
+  // is left for the warning (human rewrite).
+  // ===================================================================
+
+  const GERUND_TO_PAST = {
+    developing: 'Developed', managing: 'Managed', building: 'Built',
+    creating: 'Created', leading: 'Led', designing: 'Designed',
+    implementing: 'Implemented', maintaining: 'Maintained',
+    delivering: 'Delivered', improving: 'Improved', supporting: 'Supported',
+    coordinating: 'Coordinated', overseeing: 'Oversaw', driving: 'Drove',
+    running: 'Ran', writing: 'Wrote', testing: 'Tested',
+    deploying: 'Deployed', migrating: 'Migrated', optimising: 'Optimised',
+    optimizing: 'Optimized', automating: 'Automated', analysing: 'Analysed',
+    analyzing: 'Analyzed', ensuring: 'Ensured', establishing: 'Established',
+    mentoring: 'Mentored', collaborating: 'Collaborated', executing: 'Executed',
+    defining: 'Defined', launching: 'Launched', architecting: 'Architected',
+    reviewing: 'Reviewed', monitoring: 'Monitored', documenting: 'Documented',
+  };
+
+  const WEAK_PREFIX_RE = /^([\-*•]\s*|\d+\.\s+)?(responsible for|tasked with|in charge of|duties included|worked on|helped with|assisted with|assisted in)\s+([a-z]+ing)\b/i;
+
+  function fixWeakOpeners(text) {
+    if (!text) return { text: text || '', fixed: 0 };
+    let fixed = 0;
+    const lines = text.split('\n');
+    const out = lines.map((raw) => {
+      const trimmed = raw.trim();
+      if (!/^([\-*•]|\d+\.)\s+/.test(trimmed)) return raw;
+      const m = trimmed.match(WEAK_PREFIX_RE);
+      if (!m) return raw;
+      const past = GERUND_TO_PAST[(m[3] || '').toLowerCase()];
+      if (!past) return raw;
+      fixed++;
+      const bulletMark = m[1] || '';
+      const rest = trimmed.slice(m[0].length);
+      const indent = raw.slice(0, raw.indexOf(trimmed));
+      return `${indent}${bulletMark}${past}${rest}`;
+    });
+    return { text: out.join('\n'), fixed };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -1241,6 +1410,10 @@
       projectQuality: flags.projectQuality !== false,
       // v8
       projectsInject: flags.projectsInject !== false,
+      // v9
+      acronymCasing: flags.acronymCasing !== false,
+      // v10
+      weakOpenerFix: flags.weakOpenerFix !== false,
     };
 
     let outCV = cvText;
@@ -1297,12 +1470,30 @@
     if (f.quantification) {
       const q = quantificationAudit(outCV);
       if (q.unquantified.length > 0) {
-        report.warnings.push({
+        const warning = {
           kind: 'unquantified-bullets',
           count: q.unquantified.length,
           totalBullets: q.total,
           samples: q.unquantified.slice(0, 3),
-        });
+        };
+        // METRIC-LOSS DETECTION: when the tailored CV lost ALL numbers but
+        // the ORIGINAL profile carried quantified bullets, that is a
+        // rewrite regression, not missing source data. Surface the original
+        // metric-bearing bullets so the user restores them -- we never
+        // invent numbers ourselves.
+        if (q.total > 0 && q.unquantified.length === q.total && originalCV) {
+          const originalQuantified = String(originalCV).split('\n')
+            .map((l) => l.trim().replace(/^([\-*•]|\d+\.)\s+/, ''))
+            .filter((l) => l.length > 25 && /\d/.test(l) && SCALE_WORDS.test(l) && !/^\d{2}\/\d{4}|\b(19|20)\d{2}\b.*\|/.test(l))
+            .slice(0, 3);
+          if (originalQuantified.length > 0) {
+            warning.severity = 'critical';
+            warning.restoreHints = originalQuantified;
+            warning.note = 'The tailored CV lost ALL metrics your original bullets carried. Restore numbers like: "' +
+              originalQuantified[0].slice(0, 90) + '"';
+          }
+        }
+        report.warnings.push(warning);
       }
     }
 
@@ -1321,6 +1512,16 @@
       outCL = cl.text;
       if (cv.removed + cl.removed > 0) {
         report.fixes.push(`fillers: ${cv.removed + cl.removed} adverbs removed`);
+      }
+    }
+
+    // v10: safe weak-opener auto-fix BEFORE the warning pass, so only the
+    // genuinely ambiguous cases (no known gerund) still warn.
+    if (f.weakOpenerFix && outCV) {
+      const w = fixWeakOpeners(outCV);
+      if (w.fixed > 0) {
+        outCV = w.text;
+        report.fixes.push(`weak-openers: ${w.fixed} bullet(s) rewritten to action verbs`);
       }
     }
 
@@ -1528,6 +1729,19 @@
       }
     }
 
+    // v9: canonical acronym/proper-noun casing (auto-fix). Runs LAST so it
+    // also fixes lowercase tokens introduced by earlier injection steps
+    // ("...focus on Python, ml and data pipelines" -> "ML").
+    if (f.acronymCasing) {
+      const cv = fixAcronymCasing(outCV);
+      const cl = fixAcronymCasing(outCL);
+      outCV = cv.text;
+      outCL = cl.text;
+      if (cv.fixed + cl.fixed > 0) {
+        report.fixes.push(`casing: ${cv.fixed + cl.fixed} tech term(s) canonicalised`);
+      }
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -1563,6 +1777,10 @@
     // v8
     buildProjectsSectionText,
     ensureProjectsSection,
+    // v9
+    fixAcronymCasing,
+    // v10
+    fixWeakOpeners,
   };
 
   global.RecruiterAudit = RecruiterAudit;
