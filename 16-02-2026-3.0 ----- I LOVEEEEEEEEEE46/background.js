@@ -941,18 +941,89 @@ async function unregisterAutofillContentScripts() {
   }
 }
 
-async function syncAutofillRegistrationFromStorage() {
-  const { autofill_enabled } = await new Promise((resolve) =>
-    chrome.storage.local.get(['autofill_enabled'], resolve)
-  );
-  if (autofill_enabled === true) await registerAutofillContentScripts();
-  else await unregisterAutofillContentScripts();
+// ===================================================================
+// Native Indeed autofill (lightweight, separate from the heavy vendor).
+// Indeed is denylisted for the 7.5 MB vendor bundle because it crashes
+// Indeed's SPA -- so we register a small dedicated filler there instead,
+// gated on the SAME `autofill_enabled` toggle. It self-checks the toggle
+// at runtime too, so it can never fire while the toggle is off.
+// ===================================================================
+const INDEED_SCRIPT_ID = 'jg-indeed-autofill';
+
+async function registerIndeedAutofill() {
+  const scriptDef = {
+    id: INDEED_SCRIPT_ID,
+    js: ['indeed-autofill.js'],
+    matches: ['https://*.indeed.com/*', 'https://smartapply.indeed.com/*'],
+    runAt: 'document_idle',
+    allFrames: true,          // Indeed renders the apply form inside an iframe
+    persistAcrossSessions: true,
+  };
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [INDEED_SCRIPT_ID] });
+    if (existing && existing.length) await chrome.scripting.updateContentScripts([scriptDef]);
+    else await chrome.scripting.registerContentScripts([scriptDef]);
+    console.log('[JG-Indeed] content script registered');
+  } catch (e) {
+    console.warn('[JG-Indeed] register failed:', e.message);
+  }
+}
+
+async function unregisterIndeedAutofill() {
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [INDEED_SCRIPT_ID] });
+    console.log('[JG-Indeed] content script unregistered');
+  } catch (e) {
+    // Ignore: already not registered.
+  }
+}
+
+// ===================================================================
+// SINGLE-AUTHORITY TOGGLE SYNC (the fix for "the toggle messes up").
+// -------------------------------------------------------------------
+// register/unregister are async. Firing them directly from rapid
+// storage.onChanged events raced: on->off->on could apply out of order
+// and leave the engine registered while the toggle reads OFF (or the
+// reverse). We now funnel EVERY trigger through one promise-chained lock
+// that, each turn, reads the LIVE toggle value and drives the registered
+// state to match it. Last write always wins; state can never desync.
+// ===================================================================
+let _syncChain = Promise.resolve();
+let _syncPending = false;
+
+function syncAutofillRegistrationFromStorage() {
+  // Coalesce bursts: if a sync is already queued behind the running one,
+  // don't stack more -- the queued run will read the latest value anyway.
+  if (_syncPending) return _syncChain;
+  _syncPending = true;
+  _syncChain = _syncChain.then(async () => {
+    _syncPending = false;
+    let enabled = false;
+    try {
+      const r = await new Promise((resolve) => chrome.storage.local.get(['autofill_enabled'], resolve));
+      enabled = r && r.autofill_enabled === true;
+    } catch (e) {}
+    try {
+      if (enabled) {
+        await registerAutofillContentScripts();
+        await registerIndeedAutofill();
+      } else {
+        await unregisterAutofillContentScripts();
+        await unregisterIndeedAutofill();
+      }
+      console.log('[JG-Autofill] Toggle sync applied: enabled =', enabled);
+    } catch (e) {
+      console.warn('[JG-Autofill] Toggle sync error:', e && e.message);
+    }
+  }).catch(() => { _syncPending = false; });
+  return _syncChain;
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.autofill_enabled) return;
-  if (changes.autofill_enabled.newValue === true) registerAutofillContentScripts();
-  else unregisterAutofillContentScripts();
+  // Always re-derive from live state -- never trust the event's newValue
+  // in isolation (it can arrive out of order under rapid toggling).
+  syncAutofillRegistrationFromStorage();
 });
 
 chrome.runtime.onStartup.addListener(syncAutofillRegistrationFromStorage);
