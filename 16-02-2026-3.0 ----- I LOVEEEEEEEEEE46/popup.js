@@ -817,6 +817,15 @@ class ATSTailor {
       });
     });
 
+    // LinkedIn Easy Apply Toggle -- independent of the master autofill
+    // switch. Registration is driven by background.js's single-authority
+    // sync, so we only need to persist the preference here.
+    document.getElementById('linkedinAutofillToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ linkedin_autofill_enabled: enabled });
+      this.showToast(enabled ? '💼 LinkedIn Easy Apply autofill enabled' : 'LinkedIn autofill disabled', 'success');
+    });
+
     // NEW: Automatic Autofill Toggle (Workday panel)
     document.getElementById('workdayAutofillToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
@@ -1281,7 +1290,7 @@ class ATSTailor {
   // ============ AUTOFILL SETTINGS ============
   async loadAutofillSettings() {
     const result = await new Promise(resolve => {
-      chrome.storage.local.get(['autofill_enabled'], resolve);
+      chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve);
     });
 
     // Default OFF: matches "Toggle off to save API usage" messaging.
@@ -1290,6 +1299,9 @@ class ATSTailor {
     if (toggle) toggle.checked = enabled;
     const workdayToggle = document.getElementById('workdayAutofillToggle');
     if (workdayToggle) workdayToggle.checked = enabled;
+    // LinkedIn Easy Apply is an independent preference (also default OFF).
+    const liToggle = document.getElementById('linkedinAutofillToggle');
+    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
     // DOCX is now the only attach format; the selector was removed and
     // attach_format is hard-pinned to 'docx' inside the tailor pipeline.
   }

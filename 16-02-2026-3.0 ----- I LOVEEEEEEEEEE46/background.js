@@ -949,34 +949,55 @@ async function unregisterAutofillContentScripts() {
 // at runtime too, so it can never fire while the toggle is off.
 // ===================================================================
 const INDEED_SCRIPT_ID = 'jg-indeed-autofill';
+const LINKEDIN_SCRIPT_ID = 'jg-linkedin-autofill';
 
-async function registerIndeedAutofill() {
+// Both site fillers share autofill-core.js (field intelligence) and must
+// load it FIRST -- content-script file order is guaranteed by Chrome.
+async function _registerSiteFiller(id, files, matches, allFrames) {
   const scriptDef = {
-    id: INDEED_SCRIPT_ID,
-    js: ['indeed-autofill.js'],
-    matches: ['https://*.indeed.com/*', 'https://smartapply.indeed.com/*'],
+    id,
+    js: ['autofill-core.js'].concat(files),
+    matches,
     runAt: 'document_idle',
-    allFrames: true,          // Indeed renders the apply form inside an iframe
+    allFrames: !!allFrames,
     persistAcrossSessions: true,
   };
   try {
-    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [INDEED_SCRIPT_ID] });
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
     if (existing && existing.length) await chrome.scripting.updateContentScripts([scriptDef]);
     else await chrome.scripting.registerContentScripts([scriptDef]);
-    console.log('[JG-Indeed] content script registered');
+    console.log('[JG-Autofill] registered:', id);
   } catch (e) {
-    console.warn('[JG-Indeed] register failed:', e.message);
+    console.warn('[JG-Autofill] register failed for ' + id + ':', e.message);
   }
 }
 
-async function unregisterIndeedAutofill() {
+async function _unregisterSiteFiller(id) {
   try {
-    await chrome.scripting.unregisterContentScripts({ ids: [INDEED_SCRIPT_ID] });
-    console.log('[JG-Indeed] content script unregistered');
+    await chrome.scripting.unregisterContentScripts({ ids: [id] });
+    console.log('[JG-Autofill] unregistered:', id);
   } catch (e) {
     // Ignore: already not registered.
   }
 }
+
+// Indeed rides the MASTER autofill toggle.
+const registerIndeedAutofill = () => _registerSiteFiller(
+  INDEED_SCRIPT_ID, ['indeed-autofill.js'],
+  ['https://*.indeed.com/*', 'https://smartapply.indeed.com/*'],
+  true                       // apply form renders inside an iframe
+);
+const unregisterIndeedAutofill = () => _unregisterSiteFiller(INDEED_SCRIPT_ID);
+
+// LinkedIn Easy Apply has its OWN dedicated toggle, so it can run without
+// pulling in the heavy vendor engine (which is denylisted on linkedin.com
+// because it crashes the SPA).
+const registerLinkedInAutofill = () => _registerSiteFiller(
+  LINKEDIN_SCRIPT_ID, ['linkedin-autofill.js'],
+  ['https://*.linkedin.com/*'],
+  false
+);
+const unregisterLinkedInAutofill = () => _unregisterSiteFiller(LINKEDIN_SCRIPT_ID);
 
 // ===================================================================
 // SINGLE-AUTHORITY TOGGLE SYNC (the fix for "the toggle messes up").
@@ -999,11 +1020,16 @@ function syncAutofillRegistrationFromStorage() {
   _syncChain = _syncChain.then(async () => {
     _syncPending = false;
     let enabled = false;
+    let linkedinEnabled = false;
     try {
-      const r = await new Promise((resolve) => chrome.storage.local.get(['autofill_enabled'], resolve));
+      const r = await new Promise((resolve) =>
+        chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve)
+      );
       enabled = r && r.autofill_enabled === true;
+      linkedinEnabled = r && r.linkedin_autofill_enabled === true;
     } catch (e) {}
     try {
+      // Master toggle: vendor engine + Indeed filler.
       if (enabled) {
         await registerAutofillContentScripts();
         await registerIndeedAutofill();
@@ -1011,7 +1037,11 @@ function syncAutofillRegistrationFromStorage() {
         await unregisterAutofillContentScripts();
         await unregisterIndeedAutofill();
       }
-      console.log('[JG-Autofill] Toggle sync applied: enabled =', enabled);
+      // LinkedIn Easy Apply: independent toggle.
+      if (linkedinEnabled) await registerLinkedInAutofill();
+      else await unregisterLinkedInAutofill();
+
+      console.log('[JG-Autofill] Toggle sync applied: autofill =', enabled, '| linkedin =', linkedinEnabled);
     } catch (e) {
       console.warn('[JG-Autofill] Toggle sync error:', e && e.message);
     }
@@ -1020,7 +1050,8 @@ function syncAutofillRegistrationFromStorage() {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes.autofill_enabled) return;
+  if (area !== 'local') return;
+  if (!changes.autofill_enabled && !changes.linkedin_autofill_enabled) return;
   // Always re-derive from live state -- never trust the event's newValue
   // in isolation (it can arrive out of order under rapid toggling).
   syncAutofillRegistrationFromStorage();

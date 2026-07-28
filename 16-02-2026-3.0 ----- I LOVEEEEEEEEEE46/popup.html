@@ -156,6 +156,22 @@
         </div>
         <p class="setting-help">When ON, the autofill engine fills application forms automatically. When OFF, the engine is fully disabled — no API calls, no form interaction.</p>
 
+        <!-- LinkedIn Easy Apply Toggle - independent of the master switch,
+             because the heavy engine is denylisted on linkedin.com -->
+        <div class="setting-row autofill-setting">
+          <div class="toggle-row">
+            <span class="toggle-label">
+              <span class="setting-icon">💼</span>
+              LinkedIn Easy Apply Autofill
+            </span>
+            <label class="toggle-switch" for="linkedinAutofillToggle" aria-label="Toggle LinkedIn Easy Apply Autofill">
+              <input type="checkbox" id="linkedinAutofillToggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <p class="setting-help">When ON, fills the LinkedIn Easy Apply dialog from your profile as each step appears. It never clicks Continue or Submit — you review and submit. Runs only on linkedin.com.</p>
+
         <!-- User Location (always shown in CV header as "Dublin, IE | phone | email | extracted location") -->
         <div class="location-setting">
           <label class="setting-label">
