@@ -1,43 +1,37 @@
 /**
- * Job Genie - Apply Verdict (pre-submission go/no-go)
+ * Job Genie - Tailoring Focus (pre-submission guidance)
  *
  * WHY THIS EXISTS
  * ---------------
- * The pipeline already computes a genuine qualification match, then
- * auto-injects gap-closing keywords to lift the score. That inflated
- * score was the only number the user ever saw -- and the honest
- * pre-tailoring fit was discarded. So an application with hard,
- * unfixable blockers (JD wants 8 years, CV shows 3) looked "100% match"
- * right up until the rejection.
+ * The pipeline computes a genuine qualification match, then auto-injects
+ * gap-closing keywords to lift the score. Only the inflated number was
+ * ever stored, and nothing rendered it -- so the user never learned WHICH
+ * parts of their CV were doing the work and which gaps were still open.
  *
- * This module answers the question the user actually has:
- *   "Is this application worth sending, and what really blocks me?"
+ * This module turns that data into TAILORING DIRECTION: for the gaps the
+ * JD cares about most, what should this CV lead with, emphasise, or
+ * reframe to make the strongest honest case for this specific role?
  *
- * It grades on GENUINE fit (pre-injection) and, above all, surfaces
- * KNOCKOUTS -- the criteria recruiters and ATS filters hard-filter on:
- *   * years of experience below the JD's stated minimum
- *   * unmet REQUIRED hard qualifications (degree, certification, core skill)
- * Keyword injection cannot fix a knockout; only a different application
- * or genuinely new experience can. Saying so plainly is the point.
+ * It is deliberately NOT a go/no-go gate. This is tailoring software --
+ * the user decides where to apply; our job is to make each application
+ * as strong as it can truthfully be. Every item below is phrased as an
+ * action, never as a discouragement, and never suggests claiming
+ * experience the candidate does not have.
  *
- * Pure logic, no DOM, no network. Never blocks an application -- it
- * informs. The user decides.
+ * Pure logic, no DOM, no network.
  */
 (function (global) {
   'use strict';
 
-  // Qualification types that function as hard filters. A missing
-  // "soft_skill" rarely rejects anyone; a missing degree or a years
-  // shortfall routinely does.
-  const KNOCKOUT_TYPES = new Set([
+  // Qualification types the JD weights most heavily. Gaps here deserve a
+  // deliberate tailoring angle rather than a passing keyword mention.
+  const HIGH_LEVERAGE_TYPES = new Set([
     'experience_years', 'education', 'certification', 'technical_skill',
   ]);
 
   const YEARS_RE = /(\d{1,2})\s*\+?\s*(?:-\s*\d{1,2}\s*)?years?\s*(?:of\s+)?(?:relevant\s+|professional\s+|industry\s+|hands[- ]on\s+)?(?:experience|background)/i;
 
-  // ---- Years of experience --------------------------------------------
-  // JD side: the LARGEST stated minimum is the real bar ("3+ years" in a
-  // nice-to-have line and "8+ years" in requirements -> the bar is 8).
+  // JD side: the LARGEST stated minimum is the real bar.
   function extractRequiredYears(jdText) {
     if (!jdText) return null;
     const re = new RegExp(YEARS_RE.source, 'gi');
@@ -50,9 +44,9 @@
     return max;
   }
 
-  // CV side: prefer an explicit claim ("over 5 years of experience"); fall
-  // back to the span between the earliest and latest years present, which
-  // approximates career length without over-claiming.
+  // CV side: an explicit claim wins; otherwise approximate from the span
+  // of years present. Never used to fabricate tenure -- only to decide
+  // whether to advise leading with scope instead of tenure.
   function extractCandidateYears(cvText) {
     if (!cvText) return null;
     const text = String(cvText);
@@ -63,97 +57,102 @@
     }
     const yearMatches = text.match(/\b(19[89]\d|20[0-4]\d)\b/g);
     if (yearMatches && yearMatches.length >= 2) {
-      const years = yearMatches.map(Number);
-      const earliest = Math.min.apply(null, years);
-      const nowYear = new Date().getFullYear();
-      const span = nowYear - earliest;
+      const earliest = Math.min.apply(null, yearMatches.map(Number));
+      const span = new Date().getFullYear() - earliest;
       if (span > 0 && span <= 40) return span;
     }
     return null;
   }
 
+  // Turn an unmet qualification into an honest tailoring instruction.
+  function actionFor(qualType, label) {
+    const l = String(label || '').trim().slice(0, 100);
+    switch (qualType) {
+      case 'education':
+        return `"${l}" — lead with equivalent hands-on experience and any certifications up front, so a screener sees the capability before the credential.`;
+      case 'certification':
+        return `"${l}" — if you hold anything adjacent, surface it in the header/certifications; if in progress, say so plainly.`;
+      case 'technical_skill':
+        return `"${l}" — if you have genuine adjacent experience, name it explicitly in the summary and the closest bullet; don't leave the screener to infer it.`;
+      case 'domain_knowledge':
+        return `"${l}" — connect your nearest domain experience to this one in the summary line.`;
+      default:
+        return `"${l}" — work this into the bullet where you genuinely did it, using the JD's exact wording.`;
+    }
+  }
+
   /**
-   * @param {object} o
-   * @param {object} o.thresholdResult  autoTailorForThreshold(...) output
-   * @param {string} o.jdText           raw job description
-   * @param {string} o.originalCV       the user's GENUINE CV text (pre-tailoring)
-   * @returns {{verdict,label,score,blockers,gaps,summary,advice}}
+   * @returns {{focus,label,score,priorities,gaps,summary,advice}}
    */
   function evaluate({ thresholdResult = null, jdText = '', originalCV = '' } = {}) {
-    const blockers = [];   // hard filters -- keyword tailoring cannot fix
-    const gaps = [];       // soft gaps -- worth strengthening
+    const priorities = [];  // high-leverage gaps -> deliberate tailoring angle
+    const gaps = [];        // lighter gaps -> mention where truthful
 
-    // 1. GENUINE fit score: the pre-injection number, never the inflated one.
+    // Genuine fit: the pre-injection score, so the user knows how much of
+    // the match is real vs. keyword-assisted.
     let score = null;
     if (thresholdResult && typeof thresholdResult.initialScore === 'number') {
       score = Math.round(thresholdResult.initialScore);
     }
 
-    // 2. Years-of-experience knockout -- the most common silent rejection.
+    // Seniority framing: when the JD's bar is above evidenced tenure, the
+    // winning move is to lead with scope/impact rather than years.
     const requiredYears = extractRequiredYears(jdText);
     const candidateYears = extractCandidateYears(originalCV);
     if (requiredYears !== null && candidateYears !== null && candidateYears + 1 < requiredYears) {
-      blockers.push({
-        kind: 'years',
-        text: `JD asks for ${requiredYears}+ years; your CV evidences about ${candidateYears}. ` +
-          `This is a hard filter on most ATS screens — tailoring cannot close it.`,
-      });
+      priorities.push(
+        `JD asks for ${requiredYears}+ years; your CV evidences about ${candidateYears}. ` +
+        `Lead with scope and impact — your largest system, biggest number, most senior decision — ` +
+        `so the screener reads seniority from results rather than tenure.`
+      );
     }
 
-    // 3. Unmet REQUIRED qualifications, split by knockout vs soft gap.
     const breakdown = (thresholdResult && thresholdResult.matchResults &&
       thresholdResult.matchResults.qualificationBreakdown) || [];
     for (const q of breakdown) {
       if (q.met || q.type !== 'required') continue;
-      const label = String(q.qualification || '').replace(/\s+/g, ' ').trim().slice(0, 110);
+      const label = String(q.qualification || '').replace(/\s+/g, ' ').trim();
       if (!label) continue;
-      if (KNOCKOUT_TYPES.has(q.qualType) && (q.confidence || 0) < 0.25) {
-        blockers.push({ kind: q.qualType, text: label });
+      if (HIGH_LEVERAGE_TYPES.has(q.qualType) && (q.confidence || 0) < 0.25) {
+        priorities.push(actionFor(q.qualType, label));
       } else {
-        gaps.push(label);
+        gaps.push(label.slice(0, 110));
       }
     }
 
-    // 4. Verdict. Blockers dominate: a single hard filter sinks an
-    //    otherwise-strong application, which is exactly the information
-    //    the user needs BEFORE spending an hour on it.
-    const hardBlockers = blockers.length;
-    let verdict;
-    if (hardBlockers >= 2 || (hardBlockers === 1 && score !== null && score < 55)) {
-      verdict = 'unlikely';
-    } else if (hardBlockers === 1 || (score !== null && score < 55)) {
-      verdict = 'stretch';
-    } else {
-      verdict = 'strong';
-    }
+    // Focus level describes HOW MUCH tailoring work this role needs --
+    // never whether to apply.
+    let focus;
+    if (priorities.length >= 2 || (score !== null && score < 55)) focus = 'heavy';
+    else if (priorities.length === 1 || (score !== null && score < 75)) focus = 'targeted';
+    else focus = 'light';
 
     const LABELS = {
-      strong: '🟢 Strong match — worth applying',
-      stretch: '🟡 Stretch — apply, but expect long odds',
-      unlikely: '🔴 Likely auto-rejected — spend your time elsewhere',
+      light: '🟢 Strong alignment — light tailoring',
+      targeted: '🟡 Good angle available — targeted tailoring',
+      heavy: '🔵 Needs a strong angle — heavy tailoring',
     };
-
     const ADVICE = {
-      strong: 'Genuine fit. Make sure your project links load and your bullets carry real numbers.',
-      stretch: 'Apply if you want it, but treat it as a long shot — prioritise roles without a hard blocker.',
-      unlikely: 'The blocker(s) below are hard filters that CV wording cannot fix. A closer-matched role is a better use of this hour.',
+      light: 'Your CV already speaks to this role. Make sure the metrics are real and the project links load.',
+      targeted: 'Lead with the priority below and this becomes a genuinely competitive application.',
+      heavy: 'Build the case around the priorities below — lead with your strongest transferable evidence, and keep every claim true.',
     };
 
     const parts = [];
-    if (score !== null) parts.push(`Genuine fit ${score}% (before keyword tailoring)`);
-    if (hardBlockers) parts.push(`${hardBlockers} hard blocker${hardBlockers > 1 ? 's' : ''}`);
-    if (gaps.length) parts.push(`${gaps.length} soft gap${gaps.length > 1 ? 's' : ''}`);
+    if (score !== null) parts.push(`Genuine fit ${score}% before tailoring`);
+    if (priorities.length) parts.push(`${priorities.length} priorit${priorities.length > 1 ? 'ies' : 'y'} to lead with`);
+    if (gaps.length) parts.push(`${gaps.length} keyword gap${gaps.length > 1 ? 's' : ''}`);
 
     return {
-      verdict,
-      label: LABELS[verdict],
+      focus,
+      label: LABELS[focus],
       score,
       requiredYears,
       candidateYears,
-      blockers: blockers.slice(0, 4),
+      priorities: priorities.slice(0, 4),
       gaps: gaps.slice(0, 4),
       summary: parts.join(' · '),
-      advice: ADVICE[verdict],
+      advice: ADVICE[focus],
     };
   }
 

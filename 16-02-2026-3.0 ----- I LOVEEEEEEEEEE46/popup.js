@@ -1903,9 +1903,9 @@ class ATSTailor {
    * section under the AI Match Analysis card. Only appears when there is
    * something actionable; removed entirely when there are no warnings.
    */
-  // Pre-submission go/no-go panel. Rendered ABOVE the quality notes
-  // because it answers the more important question: is this application
-  // worth sending at all?
+  // Tailoring-focus panel. Rendered ABOVE the quality notes: it tells the
+  // user what to LEAD WITH for this specific role. Guidance only -- this
+  // is tailoring software, so it never gates or discourages an application.
   renderApplyVerdict(v) {
     try {
       if (!v) return;
@@ -1918,21 +1918,21 @@ class ATSTailor {
         host.insertBefore(panel, host.firstChild);
       }
       const COLORS = {
-        strong: { bg: 'rgba(0,200,100,0.10)', bd: '#00c864', fg: '#00c864' },
-        stretch: { bg: 'rgba(255,170,0,0.10)', bd: '#ffaa00', fg: '#ffaa00' },
-        unlikely: { bg: 'rgba(255,68,68,0.10)', bd: '#ff4444', fg: '#ff6b6b' },
+        light: { bg: 'rgba(0,200,100,0.10)', bd: '#00c864', fg: '#00c864' },
+        targeted: { bg: 'rgba(255,170,0,0.10)', bd: '#ffaa00', fg: '#ffaa00' },
+        heavy: { bg: 'rgba(56,139,253,0.12)', bd: '#388bfd', fg: '#6cb1ff' },
       };
-      const c = COLORS[v.verdict] || COLORS.stretch;
+      const c = COLORS[v.focus] || COLORS.targeted;
       const esc = (s) => String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-      const blockerHtml = (v.blockers || []).length
-        ? `<div style="margin-top:6px;"><div style="font-weight:600;color:${c.fg};">Hard blockers (tailoring cannot fix):</div>
-             <ul style="margin:3px 0 0 16px;padding:0;">${(v.blockers || [])
-               .map((b) => `<li style="margin:2px 0;">${esc(b.text)}</li>`).join('')}</ul></div>`
+      const blockerHtml = (v.priorities || []).length
+        ? `<div style="margin-top:6px;"><div style="font-weight:600;color:${c.fg};">Lead with these:</div>
+             <ul style="margin:3px 0 0 16px;padding:0;">${(v.priorities || [])
+               .map((p) => `<li style="margin:2px 0;">${esc(p)}</li>`).join('')}</ul></div>`
         : '';
       const gapHtml = (v.gaps || []).length
-        ? `<div style="margin-top:6px;"><div style="font-weight:600;">Soft gaps (worth strengthening):</div>
+        ? `<div style="margin-top:6px;"><div style="font-weight:600;">Also work in where true:</div>
              <ul style="margin:3px 0 0 16px;padding:0;">${(v.gaps || [])
                .map((g) => `<li style="margin:2px 0;">${esc(g)}</li>`).join('')}</ul></div>`
         : '';
@@ -3805,12 +3805,11 @@ class ATSTailor {
           this.generatedDocuments.qualificationMatch = thresholdResult;
           this.generatedDocuments.qualificationDashboard = thresholdResult.dashboard;
 
-          // APPLY VERDICT: grade GENUINE fit (thresholdResult.initialScore,
+          // TAILORING FOCUS: read GENUINE fit (thresholdResult.initialScore,
           // captured BEFORE the gap-closing injection below inflates it) and
-          // surface hard blockers -- years shortfall, unmet required
-          // qualifications -- that no amount of keyword tailoring can fix.
-          // This is the signal that tells the user which applications are
-          // worth sending at all.
+          // turn the JD's highest-leverage gaps into tailoring direction --
+          // what this CV should LEAD WITH for this specific role. Guidance
+          // only; it never gates or discourages an application.
           if (typeof ApplyVerdict !== 'undefined') {
             try {
               const verdict = ApplyVerdict.evaluate({
@@ -3819,7 +3818,7 @@ class ATSTailor {
                 originalCV: this.getOriginalCVText() || this.generatedDocuments.cv || '',
               });
               this.generatedDocuments.applyVerdict = verdict;
-              console.log('[ATS Tailor] Apply verdict:', verdict.verdict, '|', verdict.summary);
+              console.log('[ATS Tailor] Tailoring focus:', verdict.focus, '|', verdict.summary);
               this.renderApplyVerdict(verdict);
             } catch (e) {
               console.warn('[ATS Tailor] Apply verdict failed:', e && e.message);
