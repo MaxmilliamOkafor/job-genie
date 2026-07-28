@@ -1903,6 +1903,54 @@ class ATSTailor {
    * section under the AI Match Analysis card. Only appears when there is
    * something actionable; removed entirely when there are no warnings.
    */
+  // Pre-submission go/no-go panel. Rendered ABOVE the quality notes
+  // because it answers the more important question: is this application
+  // worth sending at all?
+  renderApplyVerdict(v) {
+    try {
+      if (!v) return;
+      const host = document.getElementById('aiMatchAnalysis') || document.getElementById('documentsCard');
+      if (!host) return;
+      let panel = document.getElementById('applyVerdictPanel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'applyVerdictPanel';
+        host.insertBefore(panel, host.firstChild);
+      }
+      const COLORS = {
+        strong: { bg: 'rgba(0,200,100,0.10)', bd: '#00c864', fg: '#00c864' },
+        stretch: { bg: 'rgba(255,170,0,0.10)', bd: '#ffaa00', fg: '#ffaa00' },
+        unlikely: { bg: 'rgba(255,68,68,0.10)', bd: '#ff4444', fg: '#ff6b6b' },
+      };
+      const c = COLORS[v.verdict] || COLORS.stretch;
+      const esc = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+      const blockerHtml = (v.blockers || []).length
+        ? `<div style="margin-top:6px;"><div style="font-weight:600;color:${c.fg};">Hard blockers (tailoring cannot fix):</div>
+             <ul style="margin:3px 0 0 16px;padding:0;">${(v.blockers || [])
+               .map((b) => `<li style="margin:2px 0;">${esc(b.text)}</li>`).join('')}</ul></div>`
+        : '';
+      const gapHtml = (v.gaps || []).length
+        ? `<div style="margin-top:6px;"><div style="font-weight:600;">Soft gaps (worth strengthening):</div>
+             <ul style="margin:3px 0 0 16px;padding:0;">${(v.gaps || [])
+               .map((g) => `<li style="margin:2px 0;">${esc(g)}</li>`).join('')}</ul></div>`
+        : '';
+
+      panel.style.cssText =
+        `margin:8px 0;padding:10px 12px;font-size:11px;line-height:1.45;` +
+        `background:${c.bg};border:1px solid ${c.bd};border-left:3px solid ${c.bd};` +
+        `border-radius:8px;color:var(--text-secondary,#94a3b8);`;
+      panel.innerHTML =
+        `<div style="font-weight:700;font-size:12px;color:${c.fg};">${esc(v.label)}</div>` +
+        (v.summary ? `<div style="margin-top:3px;opacity:.85;">${esc(v.summary)}</div>` : '') +
+        blockerHtml + gapHtml +
+        `<div style="margin-top:7px;font-style:italic;opacity:.9;">${esc(v.advice)}</div>`;
+    } catch (e) {
+      console.warn('[ATS Tailor] renderApplyVerdict failed:', e && e.message);
+    }
+  }
+
   renderAuditWarnings(report) {
     try {
       const host = document.getElementById('aiMatchAnalysis') || document.getElementById('documentsCard');
@@ -3756,6 +3804,27 @@ class ATSTailor {
           // Store qualification results for UI display
           this.generatedDocuments.qualificationMatch = thresholdResult;
           this.generatedDocuments.qualificationDashboard = thresholdResult.dashboard;
+
+          // APPLY VERDICT: grade GENUINE fit (thresholdResult.initialScore,
+          // captured BEFORE the gap-closing injection below inflates it) and
+          // surface hard blockers -- years shortfall, unmet required
+          // qualifications -- that no amount of keyword tailoring can fix.
+          // This is the signal that tells the user which applications are
+          // worth sending at all.
+          if (typeof ApplyVerdict !== 'undefined') {
+            try {
+              const verdict = ApplyVerdict.evaluate({
+                thresholdResult,
+                jdText: this.currentJob.description || '',
+                originalCV: this.getOriginalCVText() || this.generatedDocuments.cv || '',
+              });
+              this.generatedDocuments.applyVerdict = verdict;
+              console.log('[ATS Tailor] Apply verdict:', verdict.verdict, '|', verdict.summary);
+              this.renderApplyVerdict(verdict);
+            } catch (e) {
+              console.warn('[ATS Tailor] Apply verdict failed:', e && e.message);
+            }
+          }
 
           if (thresholdResult.needsTailoring && thresholdResult.keywordsToInject?.length > 0) {
             console.log(`[ATS Tailor] Qualification gap detected: ${thresholdResult.initialScore}% (need ${thresholdResult.targetScore}%). Injecting ${thresholdResult.keywordsToInject.length} gap-closing keywords.`);
