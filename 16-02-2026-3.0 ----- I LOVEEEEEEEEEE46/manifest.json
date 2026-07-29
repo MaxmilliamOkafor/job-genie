@@ -8,7 +8,8 @@
     "activeTab",
     "scripting",
     "tabs",
-    "alarms"
+    "alarms",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -254,6 +255,8 @@
         "cv-formatter-perfect-enhanced.js",
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
+        "apply-verdict.js",
+        "jd-contact-extractor.js",
         "career-boost-engine.js",
         "recruiter-audit.js",
         "application-validator.js",
@@ -262,12 +265,18 @@
         "autofill-controller.js",
         "content.js"
       ],
-      "css": ["content.css"],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_end"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["autofill-controller.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "autofill-controller.js"
+      ],
       "run_at": "document_end",
       "all_frames": false
     }
@@ -321,6 +330,7 @@
         "cv-formatter-perfect-enhanced.js",
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
+        "apply-verdict.js",
         "career-boost-engine.js",
         "recruiter-audit.js",
         "application-validator.js",
@@ -338,7 +348,15 @@
         "autofill-engine/contents.css",
         "autofill-engine/inter.css"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
-  ]
+  ],
+  "oauth2": {
+    "client_id": "YOUR_CHROME_EXTENSION_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.send"
+    ]
+  }
 }

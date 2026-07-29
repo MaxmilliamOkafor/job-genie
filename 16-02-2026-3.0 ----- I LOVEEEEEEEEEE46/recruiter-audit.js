@@ -1367,6 +1367,243 @@
     return { text: out.join('\n'), fixed };
   }
 
+  // ===================================================================
+  // v11 — YEARS-OF-EXPERIENCE INFLATION GUARD (auto-fix)
+  // -------------------------------------------------------------------
+  // Observed in production: a summary claiming "over 15 years of
+  // experience" for a candidate whose history evidences ~9. Inflated
+  // tenure is the easiest claim on a CV to disprove -- a recruiter just
+  // subtracts the earliest date -- and it reads as dishonest rather than
+  // ambitious. Nothing in the pipeline checked it.
+  //
+  // We cap any claim to what the ORIGINAL CV actually evidences. The
+  // correction is only ever DOWNWARD (we never inflate), and only fires
+  // when the original supplies real evidence, so a sparse profile can't
+  // cause a bogus rewrite.
+  // ===================================================================
+
+  const YEARS_CLAIM_RE = /\b(?:over|more than|nearly|almost|approximately|about|\+?)\s*(\d{1,2})\s*\+?\s*years?\b(?=[^.]{0,40}\b(?:experience|expertise|background)\b)/gi;
+
+  function extractClaimedYears(text) {
+    if (!text) return null;
+    const re = new RegExp(YEARS_CLAIM_RE.source, 'gi');
+    let m;
+    let max = null;
+    while ((m = re.exec(String(text))) !== null) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && n > 0 && n <= 60) max = max === null ? n : Math.max(max, n);
+    }
+    return max;
+  }
+
+  // What the genuine CV can actually support: an explicit claim if present,
+  // otherwise the span from the earliest 4-digit year to today.
+  function evidencedYears(originalCV) {
+    if (!originalCV) return null;
+    const text = String(originalCV);
+    const explicit = extractClaimedYears(text);
+    if (explicit !== null) return explicit;
+    const years = (text.match(/\b(19[89]\d|20[0-4]\d)\b/g) || []).map(Number);
+    if (!years.length) return null;
+    const earliest = Math.min.apply(null, years);
+    const span = new Date().getFullYear() - earliest;
+    return (span > 0 && span <= 60) ? span : null;
+  }
+
+  function capYearsClaim(cvText, originalCV, { tolerance = 2 } = {}) {
+    const out = { text: cvText || '', capped: 0, claimed: null, evidenced: null };
+    if (!cvText || !originalCV) return out;
+    const evidence = evidencedYears(originalCV);
+    const claimed = extractClaimedYears(cvText);
+    out.claimed = claimed;
+    out.evidenced = evidence;
+    if (evidence === null || claimed === null) return out;
+    if (claimed <= evidence + tolerance) return out;   // within honest rounding
+
+    // Rewrite the NUMBER only, preserving surrounding wording.
+    const re = new RegExp(YEARS_CLAIM_RE.source, 'gi');
+    let capped = 0;
+    out.text = cvText.replace(re, (match, num) => {
+      const n = parseInt(num, 10);
+      if (isNaN(n) || n <= evidence + tolerance) return match;
+      capped++;
+      return match.replace(/\d{1,2}/, String(evidence));
+    });
+    out.capped = capped;
+    return out;
+  }
+
+  // ---- Persona drift: is the summary describing a different job? ------
+  // "Client Value Partner" on a CV whose every role is engineering is the
+  // model inventing a persona, not tailoring. Warning only -- legitimate
+  // reframing (Software Engineer -> Senior Software Engineer) must pass.
+  const STOP_TITLE_WORDS = new Set(['senior', 'sr', 'junior', 'jr', 'lead', 'staff', 'principal',
+    'the', 'and', 'of', 'for', 'a', 'an', 'experienced', 'accomplished', 'seasoned', 'with', 'over']);
+
+  function summaryPersonaDrift(cvText, originalCV) {
+    if (!cvText || !originalCV) return null;
+    const m = cvText.match(/(?:PROFESSIONAL SUMMARY|SUMMARY|PROFILE)\s*\n+([^\n]{10,200})/i);
+    if (!m) return null;
+    // Leading noun phrase of the summary, e.g. "Accomplished Client Value
+    // Partner with over 15 years..." -> "Client Value Partner".
+    const lead = m[1].replace(/^(experienced|accomplished|seasoned|results[- ]driven|strategic|innovative|senior)\s+/i, '');
+    const titleGuess = (lead.split(/\s+with\s+|,|\.|\bwho\b/i)[0] || '').trim();
+    if (!titleGuess || titleGuess.split(/\s+/).length > 6) return null;
+    const words = titleGuess.toLowerCase().split(/\s+/)
+      .map((w) => w.replace(/[^a-z]/g, ''))
+      .filter((w) => w.length > 2 && !STOP_TITLE_WORDS.has(w));
+    if (!words.length) return null;
+    const origLower = String(originalCV).toLowerCase();
+    const overlap = words.filter((w) => origLower.includes(w));
+    // No meaningful word from the claimed title appears anywhere in the
+    // genuine CV -> the summary is describing someone else.
+    if (overlap.length === 0) return { claimedTitle: titleGuess.slice(0, 60) };
+    return null;
+  }
+
+  // ===================================================================
+  // v12 — RED-FLAG SCRUBBER (auto-fix)
+  // -------------------------------------------------------------------
+  // Defence-in-depth: these artefacts are produced by the SERVER-side
+  // generator, so the extension must be able to remove them no matter
+  // what arrives. All observed on a real generated CV:
+  //
+  //   a) nonsense keyword tails  "...mentored junior engineers, with SaaS."
+  //                              "...aligning delivery, using team player."
+  //   b) contentless filler bullets
+  //      "Demonstrated Communication Skills, Thought Leadership across
+  //       cross-functional projects, contributing to continuous process
+  //       improvement."
+  //   c) non-technical junk inside TECHNICAL PROFICIENCIES
+  //      ("Self-motivated", "Proactive", "Teams", "ts")
+  //   d) fluff inside CORE COMPETENCIES ("entrepreneurial mindset")
+  //
+  // Every operation here REMOVES noise or corrects casing; none add or
+  // alter a factual claim, so scrubbing can never make the CV less true.
+  // ===================================================================
+
+  // Phrases that are never a sane object of "using X" / "with X" at the
+  // end of an achievement bullet.
+  const NONSENSE_TAIL_PHRASE = new RegExp(
+    '(' + [
+      'team player', 'teamwork', 'mentoring', 'mentorship', 'communication skills?',
+      'thought leadership', 'customer advocacy', 'stakeholder engagement',
+      'c-level executives?', 'executives?', 'organisation design', 'organization design',
+      'solution design', 'ai-based transformation', 'entrepreneurial mindset',
+      'self-motivated', 'proactive', 'accessibility', 'end-to-end', 'teams',
+      'saas', 'supervision(?: of aides)?', 'licensure', 'activity programme',
+      'senior living', 'injections', 'charts', 'service plans', 'compassion',
+      'good judgment', 'resourcefulness', 'influence', 'leadership',
+      'problem solving', 'collaboration', 'adaptability', 'work ethic',
+    ].join('|') + ')', 'i'
+  );
+
+  // ", using X." / " with X." / ", through X and Y." appended to a bullet.
+  const TAIL_RE = /\s*,?\s*(?:using|with|through|via|applying|incorporating|employing|built with|integrating|demonstrating)\s+([^.;]{2,60})\s*\.?\s*$/i;
+
+  function stripNonsenseTails(text) {
+    if (!text) return { text: text || '', stripped: 0 };
+    let stripped = 0;
+    const out = text.split('\n').map((raw) => {
+      const line = raw.trimEnd();
+      if (!/^\s*([\-*•]|\d+\.)\s+/.test(line)) return raw;
+      const m = line.match(TAIL_RE);
+      if (!m) return raw;
+      if (!NONSENSE_TAIL_PHRASE.test(m[1].trim())) return raw;   // keep genuine tech tails
+      stripped++;
+      let cleaned = line.slice(0, line.length - m[0].length).trimEnd();
+      cleaned = cleaned.replace(/[,;:]+$/, '');
+      if (!/[.!?]$/.test(cleaned)) cleaned += '.';
+      return cleaned;
+    }).join('\n');
+    return { text: out, stripped };
+  }
+
+  // Bullets that assert nothing: a chain of competency nouns with no
+  // subject, system, or outcome.
+  const FILLER_BULLET_RE = /^(demonstrated|applied|utilised|utilized|leveraged)\s+[^.]{0,120}\b(across (cross-functional|multiple) projects|contributing to continuous process improvement|driving (measurable )?(results|success)|ensuring (timely )?(project )?(completion|success))\b/i;
+
+  function stripFillerBullets(text) {
+    if (!text) return { text: text || '', removed: 0 };
+    let removed = 0;
+    const lines = text.split('\n');
+    const kept = lines.filter((raw) => {
+      const line = raw.trim();
+      if (!/^([\-*•]|\d+\.)\s+/.test(line)) return true;
+      const body = line.replace(/^([\-*•]|\d+\.)\s+/, '');
+      // Only drop when it has NO number and NO concrete system/tool -- a
+      // bullet with a metric is real content even if it reads generically.
+      if (FILLER_BULLET_RE.test(body) && !/\d/.test(body)) {
+        removed++;
+        return false;
+      }
+      return true;
+    });
+    return { text: kept.join('\n'), removed };
+  }
+
+  // Non-technical entries that must not sit in a technical skills list.
+  const NON_TECHNICAL_SKILL = new RegExp('^(' + [
+    'self-motivated', 'proactive', 'motivated', 'dedicated', 'teams', 'team',
+    'accessibility', 'end-to-end', 'communication', 'collaboration', 'teamwork',
+    'leadership', 'mentoring', 'mentorship', 'problem solving', 'adaptability',
+    'entrepreneurial mindset', 'good judgment', 'good judgement', 'resourcefulness',
+    'influence', 'work ethic', 'growth mindset', 'ownership', 'curiosity',
+    'thought leadership', 'stakeholder engagement', 'customer advocacy',
+    'engineering excellence', 'attention to detail', 'time management',
+  ].join('|') + ')$', 'i');
+
+  // Short lowercase abbreviations that look unprofessional spelled out.
+  const SKILL_EXPANSIONS = { ts: 'TypeScript', js: 'JavaScript', py: 'Python', k8s: 'Kubernetes' };
+
+  function cleanSkillsSection(text) {
+    if (!text) return { text: text || '', removed: 0 };
+    let removed = 0;
+    const re = /^([ \t]*(?:TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS|CORE COMPETENCIES)[ \t]*:?[ \t]*)$/im;
+    const lines = text.split('\n');
+    const out = lines.slice();
+    for (let i = 0; i < lines.length; i++) {
+      if (!re.test(lines[i].trim())) continue;
+      // Clean the comma-separated content lines under this header.
+      for (let j = i + 1; j < lines.length; j++) {
+        const t = lines[j].trim();
+        if (!t) continue;
+        if (/^[A-Z][A-Z &/]{3,}\s*:?\s*$/.test(t)) break;      // next section
+        if (!t.includes(',')) {
+          if (/^[•\-*]/.test(t)) continue;                      // bulleted grid item
+          break;
+        }
+        const items = t.split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+        const kept = [];
+        for (let item of items) {
+          const bare = item.replace(/^[•\-*]\s*/, '').trim();
+          if (NON_TECHNICAL_SKILL.test(bare)) { removed++; continue; }
+          const exp = SKILL_EXPANSIONS[bare.toLowerCase()];
+          if (exp) item = item.replace(bare, exp);
+          kept.push(item);
+        }
+        if (kept.length !== items.length || kept.join(', ') !== t) {
+          out[j] = lines[j].replace(t, kept.join(', '));
+        }
+        break;
+      }
+    }
+    return { text: out.join('\n'), removed };
+  }
+
+  function scrubRedFlags(text) {
+    const a = stripNonsenseTails(text);
+    const b = stripFillerBullets(a.text);
+    const c = cleanSkillsSection(b.text);
+    return {
+      text: c.text,
+      tails: a.stripped,
+      fillers: b.removed,
+      skills: c.removed,
+      total: a.stripped + b.removed + c.removed,
+    };
+  }
+
   function runRecruiterAudit({
     cvText = '',
     coverLetterText = '',
@@ -1414,6 +1651,10 @@
       acronymCasing: flags.acronymCasing !== false,
       // v10
       weakOpenerFix: flags.weakOpenerFix !== false,
+      // v11
+      yearsGuard: flags.yearsGuard !== false,
+      // v12
+      redFlagScrub: flags.redFlagScrub !== false,
     };
 
     let outCV = cvText;
@@ -1742,6 +1983,52 @@
       }
     }
 
+    // v12: scrub server-generated red flags (nonsense keyword tails,
+    // contentless filler bullets, non-technical junk in the skills list).
+    if (f.redFlagScrub && outCV) {
+      try {
+        const r = scrubRedFlags(outCV);
+        if (r.total > 0) {
+          outCV = r.text;
+          const bits = [];
+          if (r.tails) bits.push(`${r.tails} nonsense keyword tail(s)`);
+          if (r.fillers) bits.push(`${r.fillers} contentless bullet(s)`);
+          if (r.skills) bits.push(`${r.skills} non-technical skill entr(y/ies)`);
+          report.fixes.push('red-flags: removed ' + bits.join(', '));
+        }
+      } catch (e) {}
+    }
+
+    // v11: cap inflated years-of-experience claims to what the genuine CV
+    // evidences, and flag a summary that describes a different profession.
+    if (f.yearsGuard && outCV && originalCV) {
+      try {
+        const y = capYearsClaim(outCV, originalCV);
+        if (y.capped > 0) {
+          outCV = y.text;
+          report.fixes.push(`years-claim: capped ${y.claimed} -> ${y.evidenced} years (matches your actual history)`);
+          report.warnings.push({
+            kind: 'years-inflated',
+            severity: 'critical',
+            claimed: y.claimed,
+            evidenced: y.evidenced,
+            note: `The summary claimed ${y.claimed} years of experience but your history evidences about ` +
+              `${y.evidenced}. Corrected to ${y.evidenced} — a recruiter checks this by subtracting your earliest date.`,
+          });
+        }
+        const drift = summaryPersonaDrift(outCV, originalCV);
+        if (drift) {
+          report.warnings.push({
+            kind: 'summary-persona-drift',
+            severity: 'critical',
+            claimedTitle: drift.claimedTitle,
+            note: `The summary presents you as "${drift.claimedTitle}", which appears nowhere in your genuine CV. ` +
+              `Tailoring should reframe your real background, not invent a different profession. Review before submitting.`,
+          });
+        }
+      } catch (e) {}
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -1781,6 +2068,16 @@
     fixAcronymCasing,
     // v10
     fixWeakOpeners,
+    // v12
+    scrubRedFlags,
+    stripNonsenseTails,
+    stripFillerBullets,
+    cleanSkillsSection,
+    // v11
+    capYearsClaim,
+    extractClaimedYears,
+    evidencedYears,
+    summaryPersonaDrift,
   };
 
   global.RecruiterAudit = RecruiterAudit;

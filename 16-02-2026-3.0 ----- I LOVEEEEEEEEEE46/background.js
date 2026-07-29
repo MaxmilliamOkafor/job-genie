@@ -3,6 +3,14 @@
 
 console.log('[ATS Tailor] Background service worker started');
 
+// Cross-origin fetch is only available here, so the published-recruiting-
+// address finder runs in the worker rather than the popup.
+try {
+  importScripts('careers-address-finder.js');
+} catch (e) {
+  console.warn('[ATS Tailor] careers-address-finder load failed:', e && e.message);
+}
+
 // ============ AUTO-TRIGGER ATS DETECTION ============
 // ATS Platform Detection Map - EXCLUDED: Lever, Ashby, Rippling, LinkedIn, Indeed
 // v3.3: EXPANDED with 50+ additional platforms for maximum coverage
@@ -941,18 +949,120 @@ async function unregisterAutofillContentScripts() {
   }
 }
 
-async function syncAutofillRegistrationFromStorage() {
-  const { autofill_enabled } = await new Promise((resolve) =>
-    chrome.storage.local.get(['autofill_enabled'], resolve)
-  );
-  if (autofill_enabled === true) await registerAutofillContentScripts();
-  else await unregisterAutofillContentScripts();
+// ===================================================================
+// Native Indeed autofill (lightweight, separate from the heavy vendor).
+// Indeed is denylisted for the 7.5 MB vendor bundle because it crashes
+// Indeed's SPA -- so we register a small dedicated filler there instead,
+// gated on the SAME `autofill_enabled` toggle. It self-checks the toggle
+// at runtime too, so it can never fire while the toggle is off.
+// ===================================================================
+const INDEED_SCRIPT_ID = 'jg-indeed-autofill';
+const LINKEDIN_SCRIPT_ID = 'jg-linkedin-autofill';
+
+// Both site fillers share autofill-core.js (field intelligence) and must
+// load it FIRST -- content-script file order is guaranteed by Chrome.
+async function _registerSiteFiller(id, files, matches, allFrames) {
+  const scriptDef = {
+    id,
+    js: ['autofill-core.js'].concat(files),
+    matches,
+    runAt: 'document_idle',
+    allFrames: !!allFrames,
+    persistAcrossSessions: true,
+  };
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+    if (existing && existing.length) await chrome.scripting.updateContentScripts([scriptDef]);
+    else await chrome.scripting.registerContentScripts([scriptDef]);
+    console.log('[JG-Autofill] registered:', id);
+  } catch (e) {
+    console.warn('[JG-Autofill] register failed for ' + id + ':', e.message);
+  }
+}
+
+async function _unregisterSiteFiller(id) {
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [id] });
+    console.log('[JG-Autofill] unregistered:', id);
+  } catch (e) {
+    // Ignore: already not registered.
+  }
+}
+
+// Indeed rides the MASTER autofill toggle.
+const registerIndeedAutofill = () => _registerSiteFiller(
+  INDEED_SCRIPT_ID, ['indeed-autofill.js'],
+  ['https://*.indeed.com/*', 'https://smartapply.indeed.com/*'],
+  true                       // apply form renders inside an iframe
+);
+const unregisterIndeedAutofill = () => _unregisterSiteFiller(INDEED_SCRIPT_ID);
+
+// LinkedIn Easy Apply has its OWN dedicated toggle, so it can run without
+// pulling in the heavy vendor engine (which is denylisted on linkedin.com
+// because it crashes the SPA).
+const registerLinkedInAutofill = () => _registerSiteFiller(
+  LINKEDIN_SCRIPT_ID, ['linkedin-autofill.js'],
+  ['https://*.linkedin.com/*'],
+  false
+);
+const unregisterLinkedInAutofill = () => _unregisterSiteFiller(LINKEDIN_SCRIPT_ID);
+
+// ===================================================================
+// SINGLE-AUTHORITY TOGGLE SYNC (the fix for "the toggle messes up").
+// -------------------------------------------------------------------
+// register/unregister are async. Firing them directly from rapid
+// storage.onChanged events raced: on->off->on could apply out of order
+// and leave the engine registered while the toggle reads OFF (or the
+// reverse). We now funnel EVERY trigger through one promise-chained lock
+// that, each turn, reads the LIVE toggle value and drives the registered
+// state to match it. Last write always wins; state can never desync.
+// ===================================================================
+let _syncChain = Promise.resolve();
+let _syncPending = false;
+
+function syncAutofillRegistrationFromStorage() {
+  // Coalesce bursts: if a sync is already queued behind the running one,
+  // don't stack more -- the queued run will read the latest value anyway.
+  if (_syncPending) return _syncChain;
+  _syncPending = true;
+  _syncChain = _syncChain.then(async () => {
+    _syncPending = false;
+    let enabled = false;
+    let linkedinEnabled = false;
+    try {
+      const r = await new Promise((resolve) =>
+        chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve)
+      );
+      enabled = r && r.autofill_enabled === true;
+      linkedinEnabled = r && r.linkedin_autofill_enabled === true;
+    } catch (e) {}
+    try {
+      // Master toggle: vendor engine + Indeed filler.
+      if (enabled) {
+        await registerAutofillContentScripts();
+        await registerIndeedAutofill();
+      } else {
+        await unregisterAutofillContentScripts();
+        await unregisterIndeedAutofill();
+      }
+      // LinkedIn Easy Apply: independent toggle.
+      if (linkedinEnabled) await registerLinkedInAutofill();
+      else await unregisterLinkedInAutofill();
+
+      console.log('[JG-Autofill] Toggle sync applied: autofill =', enabled, '| linkedin =', linkedinEnabled);
+    } catch (e) {
+      console.warn('[JG-Autofill] Toggle sync error:', e && e.message);
+    }
+  }).catch(() => { _syncPending = false; });
+  return _syncChain;
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes.autofill_enabled) return;
-  if (changes.autofill_enabled.newValue === true) registerAutofillContentScripts();
-  else unregisterAutofillContentScripts();
+  if (area !== 'local') return;
+  if (!changes.autofill_enabled && !changes.linkedin_autofill_enabled) return;
+  // Always re-derive from live state -- never trust the event's newValue
+  // in isolation (it can arrive out of order under rapid toggling).
+  syncAutofillRegistrationFromStorage();
 });
 
 chrome.runtime.onStartup.addListener(syncAutofillRegistrationFromStorage);
@@ -960,3 +1070,35 @@ chrome.runtime.onInstalled.addListener(syncAutofillRegistrationFromStorage);
 
 // Also sync at service-worker load so manual Chrome reloads pick up the state.
 syncAutofillRegistrationFromStorage();
+
+
+// ===================================================================
+// PUBLISHED RECRUITING ADDRESS LOOKUP
+// -------------------------------------------------------------------
+// Fallback for the follow-up email when a posting carries no contact:
+// find a candidate-facing mailbox the employer published on its own
+// site (careers@, talent@, recruiting@...). Only ever returns an address
+// that appears on a public page of the company's own domain -- nothing is
+// guessed, constructed, or looked up in a contact database.
+// ===================================================================
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.action !== 'JG_FIND_CAREERS_EMAIL') return;
+  (async () => {
+    try {
+      if (typeof CareersAddressFinder === 'undefined') {
+        sendResponse({ ok: false, error: 'finder-unavailable' });
+        return;
+      }
+      const r = await CareersAddressFinder.find({
+        companyName: message.companyName || '',
+        jdUrl: message.jdUrl || '',
+        maxPages: 4,
+      });
+      console.log('[JG-Careers] lookup:', message.companyName, '->', r.email || '(none)');
+      sendResponse({ ok: true, ...r });
+    } catch (e) {
+      sendResponse({ ok: false, error: String((e && e.message) || e) });
+    }
+  })();
+  return true;   // async response
+});
