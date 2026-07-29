@@ -76,6 +76,58 @@
     return '';
   }
 
+  // Role LOCATION. Matters because the same title is often open in several
+  // offices -- "Client Value Partner" alone is ambiguous at a global
+  // company, "Client Value Partner, Stockholm" is not.
+  function extractLocation(text) {
+    const t = String(text || '');
+    const labelled = [
+      /\b(?:location|office|work location|based in|city)\s*[:\-]\s*([A-Z][A-Za-z .'\-]{2,40}(?:,\s*[A-Z][A-Za-z .'\-]{2,40}){0,2})/,
+      /\b(?:based in|located in|role is based in)\s+([A-Z][A-Za-z .'\-]{2,40}(?:,\s*[A-Z][A-Za-z .'\-]{2,40}){0,1})/,
+    ];
+    for (const re of labelled) {
+      const m = t.match(re);
+      if (m && m[1]) return m[1].replace(/\s+/g, ' ').trim();
+    }
+    // Postings usually print "City, Country" in the header block.
+    const head = t.slice(0, 600);
+    const m2 = head.match(/^\s*([A-Z][A-Za-z .'\-]{2,30},\s*[A-Z][A-Za-z .'\-]{2,30})\s*$/m);
+    if (m2 && m2[1] && !/^(the|we|our|about|apply|job|role)\b/i.test(m2[1])) {
+      return m2[1].replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  // Department / team, when the posting names one.
+  function extractDepartment(text) {
+    const t = String(text || '');
+    const patterns = [
+      /\b(?:department|team|function|business unit|org)\s*[:\-]\s*([A-Z][A-Za-z &/'\-]{2,40})/,
+      /\bpart of (?:the|our)\s+([A-Z][A-Za-z &/'\-]{2,40})\s+(?:team|department|organisation|organization)/,
+      /\bjoin (?:the|our)\s+([A-Z][A-Za-z &/'\-]{2,40})\s+team\b/,
+    ];
+    for (const re of patterns) {
+      const m = t.match(re);
+      if (m && m[1]) return m[1].replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  /**
+   * Everything that helps a recruiter find THIS application, as ordered
+   * "Label: value" lines. Only includes what was actually found, so the
+   * email never carries an empty field.
+   */
+  function buildReferenceLines(d) {
+    const lines = [];
+    if (d.title) lines.push('Role: ' + d.title);
+    if (d.jobId) lines.push('Job ID: ' + d.jobId);
+    if (d.location) lines.push('Location: ' + d.location);
+    if (d.department) lines.push('Team: ' + d.department);
+    if (d.url) lines.push('Posting: ' + d.url);
+    return lines;
+  }
+
   // A named hiring contact, only when the posting states one.
   function extractContactName(text) {
     const t = String(text || '');
@@ -127,20 +179,29 @@
     found.sort((a, b) => b.score - a.score);
 
     const best = found.length ? found[0] : null;
-    return {
+    const result = {
       email: best ? best.email : '',
       emailSource: best ? 'job-description' : '',
       allEmails: found.map((f) => f.email).slice(0, 5),
       jobId: extractJobId(jdText, url),
       contactName: extractContactName(jdText),
+      location: opts.location || extractLocation(jdText),
+      department: extractDepartment(jdText),
       title: opts.title || '',
       company: opts.company || '',
       url,
       hasPublishedEmail: !!best,
     };
+    // Whatever we found that helps them locate the application.
+    result.referenceLines = buildReferenceLines(result);
+    result.referenceBlock = result.referenceLines.join('\n');
+    return result;
   }
 
-  const JDContactExtractor = { extract, extractJobId, extractContactName };
+  const JDContactExtractor = {
+    extract, extractJobId, extractContactName,
+    extractLocation, extractDepartment, buildReferenceLines,
+  };
   global.JDContactExtractor = JDContactExtractor;
   if (typeof module !== 'undefined' && module.exports) module.exports = JDContactExtractor;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

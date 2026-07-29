@@ -36,12 +36,16 @@
   // that makes the application easy to find is the whole job.
   const DEFAULT_TEMPLATE = {
     subject: 'Application submitted — {{job_title}}{{job_id_suffix}}',
+    // (add {{job_location}} to the subject if you apply to multi-office roles)
     body: [
       'Dear {{greeting_name}},',
       '',
       'I submitted my application for the {{job_title}} role at {{company}} today{{job_id_sentence}}.',
       '',
-      'A quick summary in case it helps you place my application: I am {{headline}}. I have attached nothing here — my CV and cover letter went through your application portal, filed under {{my_name}} ({{my_email}}).',
+      'Details to help you locate it:',
+      '{{reference_block}}',
+      '',
+      'It was submitted through your application portal under {{my_name}} ({{my_email}}). In short, I am {{headline}}.',
       '',
       'I would welcome the chance to discuss how my background fits what your team needs. Happy to share anything further that would be useful.',
       '',
@@ -91,6 +95,12 @@
       job_id_suffix: jobId ? ' (Job ID ' + jobId + ')' : '',
       job_id_sentence: jobId ? ', reference ' + jobId : '',
       greeting_name: first || 'Hiring Team',
+      job_location: c.location || '',
+      job_department: c.department || '',
+      job_url: c.url || '',
+      // Every locator we found, as ready-to-paste lines. This is what
+      // actually lets a recruiter pull up the application in seconds.
+      reference_block: (c.referenceBlock || '').trim(),
       my_name: c.myName || '',
       my_email: c.myEmail || '',
       my_phone: c.myPhone || '',

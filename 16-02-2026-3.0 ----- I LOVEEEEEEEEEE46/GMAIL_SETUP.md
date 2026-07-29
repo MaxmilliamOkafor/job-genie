@@ -131,6 +131,10 @@ the default). Available tokens:
 | `{{my_name}}` `{{my_email}}` `{{my_phone}}` `{{my_linkedin}}` | Your profile details |
 | `{{headline}}` | One-line fit summary |
 | `{{today}}` | Today's date |
+| `{{job_location}}` | Role location (disambiguates a title open in several offices) |
+| `{{job_department}}` | Team / department, when stated |
+| `{{job_url}}` | Direct posting URL |
+| `{{reference_block}}` | **All locators found**, as ready-to-paste lines (Role / Job ID / Location / Team / Posting) |
 
 Empty tokens collapse cleanly — no stray "(Job ID )" when a posting has none.
 
