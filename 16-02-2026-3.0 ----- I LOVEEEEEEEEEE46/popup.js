@@ -1967,6 +1967,32 @@ class ATSTailor {
     };
   }
 
+  // Prior contact with this employer, shown before sending. A recruiter
+  // sees the whole thread history, so the user should too.
+  async followupShowHistory() {
+    if (typeof FollowupEmail === 'undefined') return;
+    const el = document.getElementById('followupResult');
+    if (!el) return;
+    try {
+      const ctx = await this.followupContext();
+      if (!ctx.email && !ctx.company) return;
+      const jobKey = (this.currentJob?.url || ctx.title || '') + '|' + ctx.email;
+      const policy = await FollowupEmail.checkSendPolicy({
+        company: ctx.company, email: ctx.email, jobKey,
+      });
+      if (!policy.history.length) { el.textContent = ''; return; }
+
+      const lines = policy.history.map((h) =>
+        '• ' + new Date(h.at).toLocaleDateString('en-GB') + ' — ' + (h.title || 'a role') + ' → ' + h.to);
+      const head = policy.blocked
+        ? '🚫 Sending not recommended: ' + policy.reasons[0]
+        : '⚠️ You have contacted ' + (ctx.company || 'this company') + ' before:';
+      el.textContent = head + '\n' + lines.join('\n');
+      el.style.whiteSpace = 'pre-wrap';
+      el.style.color = policy.blocked ? '#ff6b6b' : '#ffaa00';
+    } catch (e) { /* history display must never break the panel */ }
+  }
+
   // Runtime OAuth config: the client ID lives in extension storage on this
   // device, so nothing needs committing to a public repo.
   async followupSaveClientId(clear) {
@@ -2157,13 +2183,40 @@ class ATSTailor {
 
       if (!ctx.email) { setMsg('No recipient. Add an address the employer published, or leave blank to skip.', '#ff6b6b'); return; }
       const jobKey = (this.currentJob?.url || ctx.title || '') + '|' + ctx.email;
-      if (await FollowupEmail.alreadySent(jobKey)) {
-        setMsg('Already sent a follow-up for this posting — not sending twice.', '#ffaa00');
-        return;
+
+      // Anti-spam policy: email is permanent in the recipient's mailbox and
+      // they see every past note in one thread. Check history across the
+      // whole COMPANY, not just this posting.
+      const policy = await FollowupEmail.checkSendPolicy({
+        company: ctx.company, email: ctx.email, jobKey,
+      });
+      if (policy.blocked) {
+        const hist = policy.history.length
+          ? '\n\nPrevious notes to this company:\n' + policy.history
+              .map((h) => '• ' + new Date(h.at).toLocaleDateString('en-GB') + ' — ' + (h.title || 'a role') + ' → ' + h.to)
+              .join('\n')
+          : '';
+        // Hard stop by default. Overriding is possible but must be a
+        // deliberate, informed choice -- this is the exact behaviour that
+        // gets a sender flagged at a company they want to work for.
+        const proceed = confirm(
+          'Not recommended — sending anyway risks being flagged as spam:\n\n' +
+          policy.reasons.map((r) => '• ' + r).join('\n') + hist +
+          '\n\nSend regardless?'
+        );
+        if (!proceed) {
+          setMsg('Not sent. ' + policy.reasons[0], '#ffaa00');
+          return;
+        }
+      } else if (policy.warnings.length) {
+        setMsg(policy.warnings[0], '#ffaa00');
       }
+
       setMsg('Sending…');
       await FollowupEmail.send({ to: ctx.email, subject, body, fromName: ctx.myName });
-      await FollowupEmail.markSent(jobKey, { to: ctx.email, title: ctx.title, jobId: ctx.jobId });
+      await FollowupEmail.markSent(jobKey, {
+        to: ctx.email, title: ctx.title, jobId: ctx.jobId, company: ctx.company,
+      });
       setMsg('Follow-up sent to ' + ctx.email + ' ✓', '#00c864');
       this.showToast('Follow-up email sent', 'success');
     } catch (e) {
@@ -2206,6 +2259,9 @@ class ATSTailor {
         }
       }
       console.log('[ATS Tailor] JD contact:', detected.email || '(none)', '| jobId:', detected.jobId || '(none)');
+      // Show prior contact with this employer up front, so the decision is
+      // informed before the Send button is even considered.
+      this.followupShowHistory();
     } catch (e) {
       console.warn('[ATS Tailor] followupDetectContact failed:', e && e.message);
     }

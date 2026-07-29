@@ -651,6 +651,100 @@
     });
   }
 
+  // ===================================================================
+  // SEND POLICY -- the anti-spam guard
+  // -------------------------------------------------------------------
+  // Email is permanent in the recipient's mailbox. A recruiter opening a
+  // thread sees EVERY note you have ever sent them, so five near-identical
+  // "I applied today" messages across five roles at one company reads as a
+  // blast and gets the sender flagged -- which poisons every future
+  // application to that employer, not just this one.
+  //
+  // Per-posting dedupe is not enough, because the same careers@ inbox
+  // serves every role. These limits are deliberately conservative: the
+  // downside of one unsent follow-up is nothing; the downside of being
+  // marked a spammer at a company you want to work at is permanent.
+  // ===================================================================
+  const SEND_POLICY = {
+    perRecipientCooldownDays: 14,   // same inbox: leave two weeks between notes
+    perRecipientMaxTotal: 3,        // and never more than three, ever
+    perCompanyWindowDays: 30,       // same employer: at most two notes a month
+    perCompanyMaxInWindow: 2,
+  };
+
+  const DAY_MS = 86400000;
+
+  function _normCompany(c) {
+    return String(c || '').toLowerCase().replace(/\b(inc|llc|ltd|limited|gmbh|plc|corp|corporation|co|company|group|holdings)\b/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  function _readLog() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([KEY_SENT_LOG], (r) => resolve((r && r[KEY_SENT_LOG]) || {}));
+      } catch (e) { resolve({}); }
+    });
+  }
+
+  /**
+   * Should we send to this recipient/company right now?
+   * @returns {{allowed, blocked, reasons:[], warnings:[], history:[]}}
+   */
+  async function checkSendPolicy({ company, email, jobKey } = {}) {
+    const log = await _readLog();
+    const entries = Object.keys(log).map((k) => Object.assign({ key: k }, log[k]))
+      .filter((e) => e && e.at);
+    const now = Date.now();
+    const addr = String(email || '').toLowerCase();
+    const comp = _normCompany(company);
+
+    const toSameAddress = entries.filter((e) => String(e.to || '').toLowerCase() === addr && addr);
+    const toSameCompany = entries.filter((e) => comp && _normCompany(e.company) === comp);
+
+    const reasons = [];
+    const warnings = [];
+
+    if (jobKey && log[jobKey]) {
+      reasons.push('You already sent a follow-up for this exact posting on ' +
+        new Date(log[jobKey].at).toLocaleDateString('en-GB') + '.');
+    }
+
+    const lastToAddr = toSameAddress.length
+      ? Math.max.apply(null, toSameAddress.map((e) => new Date(e.at).getTime()))
+      : 0;
+    if (lastToAddr) {
+      const days = Math.floor((now - lastToAddr) / DAY_MS);
+      if (days < SEND_POLICY.perRecipientCooldownDays) {
+        reasons.push('You emailed ' + email + ' ' + (days === 0 ? 'today' : days + ' day(s) ago') +
+          '. Sending again this soon reads as a blast — wait ' +
+          (SEND_POLICY.perRecipientCooldownDays - days) + ' more day(s).');
+      }
+    }
+    if (toSameAddress.length >= SEND_POLICY.perRecipientMaxTotal) {
+      reasons.push('You have already sent ' + toSameAddress.length + ' notes to ' + email +
+        '. That inbox has enough from you — further emails will hurt, not help.');
+    }
+
+    const recentCompany = toSameCompany.filter((e) =>
+      now - new Date(e.at).getTime() < SEND_POLICY.perCompanyWindowDays * DAY_MS);
+    if (recentCompany.length >= SEND_POLICY.perCompanyMaxInWindow) {
+      reasons.push('You have sent ' + recentCompany.length + ' follow-ups to ' + (company || 'this company') +
+        ' in the last ' + SEND_POLICY.perCompanyWindowDays + ' days. They can see all of them in one thread.');
+    } else if (recentCompany.length > 0) {
+      warnings.push('Heads up: you emailed ' + (company || 'this company') + ' ' + recentCompany.length +
+        ' time(s) recently (' + recentCompany.map((e) => e.title || 'a role').join(', ') +
+        '). Consider referencing that instead of writing as a first contact.');
+    }
+
+    const history = toSameCompany
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 6)
+      .map((e) => ({ at: e.at, to: e.to, title: e.title || '', jobId: e.jobId || '' }));
+
+    return { allowed: reasons.length === 0, blocked: reasons.length > 0, reasons, warnings, history };
+  }
+
   // Guard against sending twice for the same posting.
   function alreadySent(jobKey) {
     return new Promise((resolve) => {
@@ -685,7 +779,7 @@
     isConnected, connect, disconnect, diagnose, authMode,
     loadOAuthConfig, saveOAuthConfig, redirectUri,
     send, sendTest, buildRaw,
-    alreadySent, markSent,
+    alreadySent, markSent, checkSendPolicy, SEND_POLICY,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.FollowupEmail;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

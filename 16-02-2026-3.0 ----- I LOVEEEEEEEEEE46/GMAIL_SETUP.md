@@ -167,8 +167,34 @@ only needed if you publish this for other people.
 - Not found → it says so, and suggests the company's published careers address
   or messaging the recruiter on LinkedIn. It does not look up private contact
   details.
-- One follow-up per posting: a second attempt for the same job is refused, so
-  you can't accidentally double-email a recruiter.
+## Anti-spam limits (important)
+
+Email is permanent in the recipient's mailbox. When a recruiter opens your
+message they see **every note you have ever sent them** in one thread — so
+several near-identical "I applied today" emails across different roles at one
+company reads as a blast, and being flagged poisons every *future* application
+to that employer, not just the current one.
+
+Per-posting dedupe isn't enough, because one `careers@` inbox usually serves
+every role. So the extension tracks history per **recipient** and per
+**company**:
+
+| Limit | Value |
+|---|---|
+| Same inbox — minimum gap between notes | 14 days |
+| Same inbox — maximum ever | 3 |
+| Same company — maximum per 30 days | 2 |
+| Same posting | 1, always |
+
+Before you send, the panel shows any prior contact with that employer (dates,
+roles, addresses). If a limit is hit, sending is **blocked** with the reason;
+you can override via a confirmation, but it is deliberately a conscious choice.
+
+Company names are normalised, so "Celonis" and "Celonis GmbH" count as the same
+employer. To change the thresholds, edit `SEND_POLICY` in `followup-email.js`.
+
+When you have written to a company recently, prefer referencing that earlier
+application rather than sending a fresh "first contact" note.
 
 ## Templates
 
