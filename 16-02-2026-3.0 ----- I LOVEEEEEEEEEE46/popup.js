@@ -2108,15 +2108,63 @@ class ATSTailor {
             (detected.jobId ? ' · Job ID ' + detected.jobId : '');
           info.style.color = '#00c864';
         } else {
-          info.textContent = 'No contact email published in this posting' +
-            (detected.jobId ? ' (Job ID ' + detected.jobId + ' detected)' : '') +
-            '. Use the company careers address if they list one, or message the recruiter on LinkedIn.';
+          info.textContent = 'No email in this posting' +
+            (detected.jobId ? ' (Job ID ' + detected.jobId + ')' : '') +
+            ' — checking the company\'s published careers address…';
           info.style.color = '#ffaa00';
+          // Automatic fallback: look for a candidate-facing mailbox the
+          // employer published on its own site. No manual step.
+          this.followupFindCareersAddress();
         }
       }
       console.log('[ATS Tailor] JD contact:', detected.email || '(none)', '| jobId:', detected.jobId || '(none)');
     } catch (e) {
       console.warn('[ATS Tailor] followupDetectContact failed:', e && e.message);
+    }
+  }
+
+  // Automatic fallback when the posting has no contact email: ask the
+  // background worker (the only context with cross-origin fetch) for a
+  // candidate-facing mailbox the employer published on its own website.
+  followupFindCareersAddress() {
+    const info = document.getElementById('followupDetected');
+    try {
+      chrome.runtime.sendMessage({
+        action: 'JG_FIND_CAREERS_EMAIL',
+        companyName: this.currentJob?.company || '',
+        jdUrl: this.currentJob?.url || '',
+      }, (resp) => {
+        if (chrome.runtime.lastError || !resp || !resp.ok) {
+          if (info) {
+            info.textContent = 'No contact email published for this role, and none found on the company site. ' +
+              'You can paste an address into the field above.';
+            info.style.color = '#ffaa00';
+          }
+          return;
+        }
+        const detected = this.generatedDocuments?.jdContact;
+        if (resp.email) {
+          if (detected) {
+            detected.email = resp.email;
+            detected.emailSource = 'company-careers-page';
+          }
+          const toEl = document.getElementById('followupTo');
+          if (toEl && !toEl.value) toEl.value = resp.email;
+          if (info) {
+            info.textContent = '✓ Company\'s published recruiting address: ' + resp.email +
+              (detected && detected.jobId ? ' · Job ID ' + detected.jobId : '') +
+              ' (found on ' + (resp.source || 'their site') + ')';
+            info.style.color = '#00c864';
+          }
+          console.log('[ATS Tailor] careers address:', resp.email, 'from', resp.source);
+        } else if (info) {
+          info.textContent = 'No contact email published for this role, and none found on the company site. ' +
+            'You can paste an address into the field above.';
+          info.style.color = '#ffaa00';
+        }
+      });
+    } catch (e) {
+      console.warn('[ATS Tailor] careers lookup failed:', e && e.message);
     }
   }
 

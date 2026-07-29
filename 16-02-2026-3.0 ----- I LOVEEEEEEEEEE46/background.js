@@ -3,6 +3,14 @@
 
 console.log('[ATS Tailor] Background service worker started');
 
+// Cross-origin fetch is only available here, so the published-recruiting-
+// address finder runs in the worker rather than the popup.
+try {
+  importScripts('careers-address-finder.js');
+} catch (e) {
+  console.warn('[ATS Tailor] careers-address-finder load failed:', e && e.message);
+}
+
 // ============ AUTO-TRIGGER ATS DETECTION ============
 // ATS Platform Detection Map - EXCLUDED: Lever, Ashby, Rippling, LinkedIn, Indeed
 // v3.3: EXPANDED with 50+ additional platforms for maximum coverage
@@ -1062,3 +1070,35 @@ chrome.runtime.onInstalled.addListener(syncAutofillRegistrationFromStorage);
 
 // Also sync at service-worker load so manual Chrome reloads pick up the state.
 syncAutofillRegistrationFromStorage();
+
+
+// ===================================================================
+// PUBLISHED RECRUITING ADDRESS LOOKUP
+// -------------------------------------------------------------------
+// Fallback for the follow-up email when a posting carries no contact:
+// find a candidate-facing mailbox the employer published on its own
+// site (careers@, talent@, recruiting@...). Only ever returns an address
+// that appears on a public page of the company's own domain -- nothing is
+// guessed, constructed, or looked up in a contact database.
+// ===================================================================
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || message.action !== 'JG_FIND_CAREERS_EMAIL') return;
+  (async () => {
+    try {
+      if (typeof CareersAddressFinder === 'undefined') {
+        sendResponse({ ok: false, error: 'finder-unavailable' });
+        return;
+      }
+      const r = await CareersAddressFinder.find({
+        companyName: message.companyName || '',
+        jdUrl: message.jdUrl || '',
+        maxPages: 4,
+      });
+      console.log('[JG-Careers] lookup:', message.companyName, '->', r.email || '(none)');
+      sendResponse({ ok: true, ...r });
+    } catch (e) {
+      sendResponse({ ok: false, error: String((e && e.message) || e) });
+    }
+  })();
+  return true;   // async response
+});
