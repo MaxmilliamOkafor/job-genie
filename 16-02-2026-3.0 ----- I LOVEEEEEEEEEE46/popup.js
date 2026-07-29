@@ -826,6 +826,19 @@ class ATSTailor {
       this.showToast(enabled ? '💼 LinkedIn Easy Apply autofill enabled' : 'LinkedIn autofill disabled', 'success');
     });
 
+    // ---- Application follow-up email ----------------------------------
+    document.getElementById('followupEnabledToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ followup_enabled: enabled });
+      this.showToast(enabled ? '✉️ Follow-up email enabled' : 'Follow-up email disabled', 'success');
+    });
+    document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
+    document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
+    document.getElementById('followupSaveBtn')?.addEventListener('click', () => this.followupSaveTemplate());
+    document.getElementById('followupResetBtn')?.addEventListener('click', () => this.followupResetTemplate());
+    document.getElementById('followupTestBtn')?.addEventListener('click', () => this.followupSend({ test: true }));
+    document.getElementById('followupSendBtn')?.addEventListener('click', () => this.followupSend({ test: false }));
+
     // NEW: Automatic Autofill Toggle (Workday panel)
     document.getElementById('workdayAutofillToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
@@ -1290,7 +1303,7 @@ class ATSTailor {
   // ============ AUTOFILL SETTINGS ============
   async loadAutofillSettings() {
     const result = await new Promise(resolve => {
-      chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve);
+      chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled', 'followup_enabled'], resolve);
     });
 
     // Default OFF: matches "Toggle off to save API usage" messaging.
@@ -1302,6 +1315,11 @@ class ATSTailor {
     // LinkedIn Easy Apply is an independent preference (also default OFF).
     const liToggle = document.getElementById('linkedinAutofillToggle');
     if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
+    // Follow-up email: preference, saved template, and live Gmail status.
+    const fuToggle = document.getElementById('followupEnabledToggle');
+    if (fuToggle) fuToggle.checked = result.followup_enabled === true;
+    this.followupLoadTemplate();
+    this.followupRefreshStatus();
     // DOCX is now the only attach format; the selector was removed and
     // attach_format is hard-pinned to 'docx' inside the tailor pipeline.
   }
@@ -1915,6 +1933,193 @@ class ATSTailor {
    * section under the AI Match Analysis card. Only appears when there is
    * something actionable; removed entirely when there are no warnings.
    */
+  // ============ APPLICATION FOLLOW-UP EMAIL ============
+
+  // Context for token expansion: job details from the current posting plus
+  // the user's own contact details from their profile.
+  async followupContext() {
+    const profile = await new Promise((resolve) =>
+      chrome.storage.local.get(['ats_profile'], (r) => resolve((r && r.ats_profile) || {}))
+    );
+    const detected = this.generatedDocuments?.jdContact || {};
+    const first = profile.first_name || profile.firstName || '';
+    const last = profile.last_name || profile.lastName || '';
+    return {
+      email: (document.getElementById('followupTo')?.value || detected.email || '').trim(),
+      jobId: detected.jobId || '',
+      contactName: detected.contactName || '',
+      title: this.currentJob?.title || detected.title || '',
+      company: this.currentJob?.company || detected.company || '',
+      myName: [first, last].filter(Boolean).join(' ').trim(),
+      myEmail: profile.email || this.session?.user?.email || '',
+      myPhone: profile.phone || '',
+      myLinkedin: profile.linkedin || '',
+      headline: (this.generatedDocuments?.applyVerdict?.score >= 75)
+        ? 'a close match for this role on the requirements you listed'
+        : 'a candidate whose background maps onto the core requirements you listed',
+    };
+  }
+
+  async followupRefreshStatus() {
+    const el = document.getElementById('followupGmailStatus');
+    if (!el || typeof FollowupEmail === 'undefined') return;
+    try {
+      const ok = await FollowupEmail.isConnected();
+      el.textContent = ok ? 'Gmail: connected ✓ (sends from your own account)' : 'Gmail: not connected — click Connect Gmail';
+      el.style.color = ok ? '#00c864' : '#ffaa00';
+    } catch (e) {
+      el.textContent = 'Gmail: unavailable — ' + (e.message || e);
+      el.style.color = '#ff6b6b';
+    }
+  }
+
+  async followupConnectGmail() {
+    if (typeof FollowupEmail === 'undefined') return;
+    try {
+      await FollowupEmail.connect();
+      this.showToast('Gmail connected', 'success');
+    } catch (e) {
+      this.showToast('Gmail connect failed — run Diagnose setup', 'error');
+      await this.followupDiagnose();
+    }
+    this.followupRefreshStatus();
+  }
+
+  // Surfaces the precise misconfiguration rather than a generic OAuth error.
+  async followupDiagnose() {
+    const out = document.getElementById('followupDiagnostics');
+    if (!out || typeof FollowupEmail === 'undefined') return;
+    out.style.display = 'block';
+    out.textContent = 'Running checks…';
+    try {
+      const d = await FollowupEmail.diagnose();
+      const lines = [
+        d.ok ? '✅ ' + d.summary : '⚠️  ' + d.summary,
+        '',
+        'Extension ID: ' + (d.extensionId || '(unknown)'),
+        'Client ID:    ' + (d.clientId || '(not set)'),
+        '',
+      ];
+      for (const c of d.checks) {
+        lines.push((c.ok ? '  ✓ ' : '  ✗ ') + c.name);
+        if (!c.ok && c.fix) lines.push('      → ' + c.fix);
+      }
+      out.textContent = lines.join('\n');
+    } catch (e) {
+      out.textContent = 'Diagnostics failed: ' + (e.message || e);
+    }
+  }
+
+  async followupLoadTemplate() {
+    if (typeof FollowupEmail === 'undefined') return;
+    const tpl = await FollowupEmail.loadTemplate();
+    const s = document.getElementById('followupSubject');
+    const b = document.getElementById('followupBody');
+    if (s) s.value = tpl.subject;
+    if (b) b.value = tpl.body;
+  }
+
+  async followupSaveTemplate() {
+    if (typeof FollowupEmail === 'undefined') return;
+    await FollowupEmail.saveTemplate({
+      subject: document.getElementById('followupSubject')?.value || '',
+      body: document.getElementById('followupBody')?.value || '',
+    });
+    this.showToast('Template saved', 'success');
+  }
+
+  async followupResetTemplate() {
+    if (typeof FollowupEmail === 'undefined') return;
+    const tpl = await FollowupEmail.resetTemplate();
+    const s = document.getElementById('followupSubject');
+    const b = document.getElementById('followupBody');
+    if (s) s.value = tpl.subject;
+    if (b) b.value = tpl.body;
+    this.showToast('Template reset to default', 'success');
+  }
+
+  // Renders the CURRENT editor content (not the saved copy) so the user
+  // always previews/sends exactly what is on screen.
+  async followupSend({ test }) {
+    const result = document.getElementById('followupResult');
+    const setMsg = (msg, color) => { if (result) { result.textContent = msg; result.style.color = color || ''; } };
+    if (typeof FollowupEmail === 'undefined') { setMsg('Follow-up module not loaded', '#ff6b6b'); return; }
+
+    try {
+      const ctx = await this.followupContext();
+      const tokens = FollowupEmail.buildTokens(ctx);
+      const subject = FollowupEmail.render(document.getElementById('followupSubject')?.value || '', tokens)
+        .replace(/\s{2,}/g, ' ').trim();
+      let body = FollowupEmail.render(document.getElementById('followupBody')?.value || '', tokens);
+      body = body.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '').trim();
+
+      if (test) {
+        if (!ctx.myEmail) { setMsg('No address on your profile to send the test to', '#ff6b6b'); return; }
+        setMsg('Sending test…');
+        await FollowupEmail.send({
+          to: ctx.myEmail,
+          subject: '[TEST] ' + subject,
+          body: 'Test of your Job Genie follow-up template. A recruiter would receive everything below.\n\n' +
+            '----------------------------------------\n\n' + body,
+          fromName: ctx.myName,
+        });
+        setMsg('Test sent to ' + ctx.myEmail + ' ✓', '#00c864');
+        return;
+      }
+
+      if (!ctx.email) { setMsg('No recipient. Add an address the employer published, or leave blank to skip.', '#ff6b6b'); return; }
+      const jobKey = (this.currentJob?.url || ctx.title || '') + '|' + ctx.email;
+      if (await FollowupEmail.alreadySent(jobKey)) {
+        setMsg('Already sent a follow-up for this posting — not sending twice.', '#ffaa00');
+        return;
+      }
+      setMsg('Sending…');
+      await FollowupEmail.send({ to: ctx.email, subject, body, fromName: ctx.myName });
+      await FollowupEmail.markSent(jobKey, { to: ctx.email, title: ctx.title, jobId: ctx.jobId });
+      setMsg('Follow-up sent to ' + ctx.email + ' ✓', '#00c864');
+      this.showToast('Follow-up email sent', 'success');
+    } catch (e) {
+      setMsg('Send failed: ' + (e.message || e), '#ff6b6b');
+    }
+  }
+
+  // Called after tailoring: read the posting for a PUBLISHED contact email
+  // and the job/requisition ID, then surface it in the composer.
+  followupDetectContact() {
+    try {
+      if (typeof JDContactExtractor === 'undefined') return;
+      const jdText = this.currentJob?.description || this.currentJob?.jdText || '';
+      const detected = JDContactExtractor.extract({
+        jdText,
+        url: this.currentJob?.url || '',
+        title: this.currentJob?.title || '',
+        company: this.currentJob?.company || '',
+        ownEmail: this.session?.user?.email || '',
+      });
+      this.generatedDocuments.jdContact = detected;
+
+      const toEl = document.getElementById('followupTo');
+      const info = document.getElementById('followupDetected');
+      if (toEl && detected.email && !toEl.value) toEl.value = detected.email;
+      if (info) {
+        if (detected.hasPublishedEmail) {
+          info.textContent = '✓ Published in the posting: ' + detected.email +
+            (detected.contactName ? ' (' + detected.contactName + ')' : '') +
+            (detected.jobId ? ' · Job ID ' + detected.jobId : '');
+          info.style.color = '#00c864';
+        } else {
+          info.textContent = 'No contact email published in this posting' +
+            (detected.jobId ? ' (Job ID ' + detected.jobId + ' detected)' : '') +
+            '. Use the company careers address if they list one, or message the recruiter on LinkedIn.';
+          info.style.color = '#ffaa00';
+        }
+      }
+      console.log('[ATS Tailor] JD contact:', detected.email || '(none)', '| jobId:', detected.jobId || '(none)');
+    } catch (e) {
+      console.warn('[ATS Tailor] followupDetectContact failed:', e && e.message);
+    }
+  }
+
   // Tailoring-focus panel. Rendered ABOVE the quality notes: it tells the
   // user what to LEAD WITH for this specific role. Guidance only -- this
   // is tailoring software, so it never gates or discourages an application.
@@ -3832,6 +4037,9 @@ class ATSTailor {
               this.generatedDocuments.applyVerdict = verdict;
               console.log('[ATS Tailor] Tailoring focus:', verdict.focus, '|', verdict.summary);
               this.renderApplyVerdict(verdict);
+              // Read the posting for a PUBLISHED recruiter email + job ID
+              // so the follow-up composer is ready if the user wants it.
+              this.followupDetectContact();
             } catch (e) {
               console.warn('[ATS Tailor] Apply verdict failed:', e && e.message);
             }
