@@ -179,19 +179,28 @@ Per-posting dedupe isn't enough, because one `careers@` inbox usually serves
 every role. So the extension tracks history per **recipient** and per
 **company**:
 
-| Limit | Value |
+| Rule | Value |
 |---|---|
-| Same inbox — minimum gap between notes | 14 days |
-| Same inbox — maximum ever | 3 |
-| Same company — maximum per 30 days | 2 |
+| First notes to a company — no gap required | **3** |
+| After that — gap between notes | **5 days** |
+| Backstop — maximum per 30 days | 6 |
 | Same posting | 1, always |
 
-Before you send, the panel shows any prior contact with that employer (dates,
-roles, addresses). If a limit is hit, sending is **blocked** with the reason;
-you can override via a confirmation, but it is deliberately a conscious choice.
+So you can follow up on three roles at one company straight away (applying to
+several at once is normal), and from the fourth onwards a 5-day gap applies.
+
+Over the limit, the email is **skipped** — nothing is sent, no dialog, and the
+panel tells you the date that company becomes eligible again:
+
+> ⏭️ Skipped — Last note to Celonis was today. Eligible again on 03/08/2026.
+
+Before you send, the panel also shows prior contact with that employer (dates,
+roles, addresses) and how much of the burst allowance is left.
 
 Company names are normalised, so "Celonis" and "Celonis GmbH" count as the same
-employer. To change the thresholds, edit `SEND_POLICY` in `followup-email.js`.
+employer. To change the thresholds, edit `SEND_POLICY` in `followup-email.js` —
+but keep the 30-day backstop above what the burst plus the gap can produce, or
+it will silently override the gap and impose a month-long wait instead.
 
 When you have written to a company recently, prefer referencing that earlier
 application rather than sending a fresh "first contact" note.

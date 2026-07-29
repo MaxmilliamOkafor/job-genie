@@ -1984,12 +1984,16 @@ class ATSTailor {
 
       const lines = policy.history.map((h) =>
         '• ' + new Date(h.at).toLocaleDateString('en-GB') + ' — ' + (h.title || 'a role') + ' → ' + h.to);
-      const head = policy.blocked
-        ? '🚫 Sending not recommended: ' + policy.reasons[0]
-        : '⚠️ You have contacted ' + (ctx.company || 'this company') + ' before:';
+      const when = policy.nextEligibleAt
+        ? ' Eligible again ' + new Date(policy.nextEligibleAt).toLocaleDateString('en-GB') + '.'
+        : '';
+      const head = policy.skip
+        ? '⏭️ Will skip — ' + policy.reasons[0] + when
+        : '⚠️ You have contacted ' + (ctx.company || 'this company') + ' before' +
+          (policy.burstRemaining > 0 ? ' (' + policy.burstRemaining + ' more allowed before the gap applies)' : '') + ':';
       el.textContent = head + '\n' + lines.join('\n');
       el.style.whiteSpace = 'pre-wrap';
-      el.style.color = policy.blocked ? '#ff6b6b' : '#ffaa00';
+      el.style.color = policy.skip ? '#ff6b6b' : '#ffaa00';
     } catch (e) { /* history display must never break the panel */ }
   }
 
@@ -2190,27 +2194,17 @@ class ATSTailor {
       const policy = await FollowupEmail.checkSendPolicy({
         company: ctx.company, email: ctx.email, jobKey,
       });
-      if (policy.blocked) {
-        const hist = policy.history.length
-          ? '\n\nPrevious notes to this company:\n' + policy.history
-              .map((h) => '• ' + new Date(h.at).toLocaleDateString('en-GB') + ' — ' + (h.title || 'a role') + ' → ' + h.to)
-              .join('\n')
+      // Over the limit: skip quietly. No dialog, nothing sent -- just say
+      // why and when this company is eligible again.
+      if (policy.skip) {
+        const when = policy.nextEligibleAt
+          ? ' Eligible again on ' + new Date(policy.nextEligibleAt).toLocaleDateString('en-GB') + '.'
           : '';
-        // Hard stop by default. Overriding is possible but must be a
-        // deliberate, informed choice -- this is the exact behaviour that
-        // gets a sender flagged at a company they want to work for.
-        const proceed = confirm(
-          'Not recommended — sending anyway risks being flagged as spam:\n\n' +
-          policy.reasons.map((r) => '• ' + r).join('\n') + hist +
-          '\n\nSend regardless?'
-        );
-        if (!proceed) {
-          setMsg('Not sent. ' + policy.reasons[0], '#ffaa00');
-          return;
-        }
-      } else if (policy.warnings.length) {
-        setMsg(policy.warnings[0], '#ffaa00');
+        setMsg('Skipped — ' + policy.reasons[0] + when, '#ffaa00');
+        console.log('[ATS Tailor] follow-up skipped:', policy.reasons[0]);
+        return;
       }
+      if (policy.warnings.length) setMsg(policy.warnings[0], '#ffaa00');
 
       setMsg('Sending…');
       await FollowupEmail.send({ to: ctx.email, subject, body, fromName: ctx.myName });

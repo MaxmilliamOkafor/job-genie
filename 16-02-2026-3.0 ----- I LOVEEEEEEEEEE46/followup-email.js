@@ -665,11 +665,22 @@
   // downside of one unsent follow-up is nothing; the downside of being
   // marked a spammer at a company you want to work at is permanent.
   // ===================================================================
+  // What actually triggers a spam judgement is DENSITY, not lifetime total:
+  // three notes in one week reads badly, three across three months is just
+  // a candidate who wants to work there. So the first few notes are free
+  // (applying to several roles at once is normal and legitimate), then a
+  // short gap applies, and a rolling window caps the overall rate.
+  //
+  // Over the limit we SKIP rather than nag: no dialog, nothing sent, and
+  // the panel says when the company becomes eligible again.
   const SEND_POLICY = {
-    perRecipientCooldownDays: 14,   // same inbox: leave two weeks between notes
-    perRecipientMaxTotal: 3,        // and never more than three, ever
-    perCompanyWindowDays: 30,       // same employer: at most two notes a month
-    perCompanyMaxInWindow: 2,
+    perCompanyBurst: 3,             // first 3 notes to a company: no gap required
+    perCompanyCooldownDays: 5,      // after that, 5 days between notes
+    // Backstop only. It must stay ABOVE what the burst + gap can produce
+    // (3 free + one every 5 days), otherwise the window would silently
+    // override the gap and impose a month-long wait instead of 5 days.
+    perCompanyMaxInWindow: 6,
+    perCompanyWindowDays: 30,
   };
 
   const DAY_MS = 86400000;
@@ -704,45 +715,62 @@
 
     const reasons = [];
     const warnings = [];
-
-    if (jobKey && log[jobKey]) {
-      reasons.push('You already sent a follow-up for this exact posting on ' +
-        new Date(log[jobKey].at).toLocaleDateString('en-GB') + '.');
-    }
-
-    const lastToAddr = toSameAddress.length
-      ? Math.max.apply(null, toSameAddress.map((e) => new Date(e.at).getTime()))
-      : 0;
-    if (lastToAddr) {
-      const days = Math.floor((now - lastToAddr) / DAY_MS);
-      if (days < SEND_POLICY.perRecipientCooldownDays) {
-        reasons.push('You emailed ' + email + ' ' + (days === 0 ? 'today' : days + ' day(s) ago') +
-          '. Sending again this soon reads as a blast — wait ' +
-          (SEND_POLICY.perRecipientCooldownDays - days) + ' more day(s).');
-      }
-    }
-    if (toSameAddress.length >= SEND_POLICY.perRecipientMaxTotal) {
-      reasons.push('You have already sent ' + toSameAddress.length + ' notes to ' + email +
-        '. That inbox has enough from you — further emails will hurt, not help.');
-    }
-
-    const recentCompany = toSameCompany.filter((e) =>
-      now - new Date(e.at).getTime() < SEND_POLICY.perCompanyWindowDays * DAY_MS);
-    if (recentCompany.length >= SEND_POLICY.perCompanyMaxInWindow) {
-      reasons.push('You have sent ' + recentCompany.length + ' follow-ups to ' + (company || 'this company') +
-        ' in the last ' + SEND_POLICY.perCompanyWindowDays + ' days. They can see all of them in one thread.');
-    } else if (recentCompany.length > 0) {
-      warnings.push('Heads up: you emailed ' + (company || 'this company') + ' ' + recentCompany.length +
-        ' time(s) recently (' + recentCompany.map((e) => e.title || 'a role').join(', ') +
-        '). Consider referencing that instead of writing as a first contact.');
-    }
+    let nextEligibleAt = 0;
 
     const history = toSameCompany
       .sort((a, b) => new Date(b.at) - new Date(a.at))
-      .slice(0, 6)
+      .slice(0, 8)
       .map((e) => ({ at: e.at, to: e.to, title: e.title || '', jobId: e.jobId || '' }));
 
-    return { allowed: reasons.length === 0, blocked: reasons.length > 0, reasons, warnings, history };
+    // 1. Never twice for the same posting -- that is pure duplication.
+    if (jobKey && log[jobKey]) {
+      return {
+        allowed: false, skip: true, sameposting: true,
+        reasons: ['Already followed up on this exact posting (' +
+          new Date(log[jobKey].at).toLocaleDateString('en-GB') + ') — skipping.'],
+        warnings, history, nextEligibleAt: 0,
+      };
+    }
+
+    const companyCount = toSameCompany.length;
+    const lastToCompany = companyCount
+      ? Math.max.apply(null, toSameCompany.map((e) => new Date(e.at).getTime()))
+      : 0;
+    const inWindow = toSameCompany.filter((e) =>
+      now - new Date(e.at).getTime() < SEND_POLICY.perCompanyWindowDays * DAY_MS);
+
+    // 2. Rolling-rate cap always applies -- this is the real spam signal.
+    if (inWindow.length >= SEND_POLICY.perCompanyMaxInWindow) {
+      const oldestInWindow = Math.min.apply(null, inWindow.map((e) => new Date(e.at).getTime()));
+      nextEligibleAt = oldestInWindow + SEND_POLICY.perCompanyWindowDays * DAY_MS;
+      reasons.push('Already sent ' + inWindow.length + ' notes to ' + (company || 'this company') +
+        ' in the last ' + SEND_POLICY.perCompanyWindowDays + ' days — skipping to stay out of their spam filter.');
+    } else if (companyCount >= SEND_POLICY.perCompanyBurst && lastToCompany) {
+      // 3. Past the free burst, require a short gap between notes.
+      const days = Math.floor((now - lastToCompany) / DAY_MS);
+      if (days < SEND_POLICY.perCompanyCooldownDays) {
+        nextEligibleAt = lastToCompany + SEND_POLICY.perCompanyCooldownDays * DAY_MS;
+        reasons.push('Last note to ' + (company || 'this company') + ' was ' +
+          (days === 0 ? 'today' : days + ' day(s) ago') + ' — skipping until the ' +
+          SEND_POLICY.perCompanyCooldownDays + '-day gap has passed.');
+      }
+    }
+
+    // Inside the burst allowance: fine to send, but say so, because writing
+    // as a first contact when they already have notes from you reads oddly.
+    if (!reasons.length && companyCount > 0) {
+      warnings.push('You have emailed ' + (company || 'this company') + ' ' + companyCount +
+        ' time(s) before (' + toSameCompany.slice(0, 3).map((e) => e.title || 'a role').join(', ') +
+        '). Consider referencing that rather than writing as a first contact.');
+    }
+
+    return {
+      allowed: reasons.length === 0,
+      skip: reasons.length > 0,
+      reasons, warnings, history, nextEligibleAt,
+      sentToCompany: companyCount,
+      burstRemaining: Math.max(0, SEND_POLICY.perCompanyBurst - companyCount),
+    };
   }
 
   // Guard against sending twice for the same posting.
