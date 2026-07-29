@@ -835,6 +835,10 @@ class ATSTailor {
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
     document.getElementById('followupSaveBtn')?.addEventListener('click', () => this.followupSaveTemplate());
+    document.getElementById('followupTemplateSelect')?.addEventListener('change', (e) => this.followupSelectTemplate(e.target.value));
+    document.getElementById('followupNewBtn')?.addEventListener('click', () => this.followupNewTemplate(false));
+    document.getElementById('followupDupBtn')?.addEventListener('click', () => this.followupNewTemplate(true));
+    document.getElementById('followupDeleteBtn')?.addEventListener('click', () => this.followupDeleteTemplate());
     document.getElementById('followupResetBtn')?.addEventListener('click', () => this.followupResetTemplate());
     document.getElementById('followupTestBtn')?.addEventListener('click', () => this.followupSend({ test: true }));
     document.getElementById('followupSendBtn')?.addEventListener('click', () => this.followupSend({ test: false }));
@@ -2010,32 +2014,76 @@ class ATSTailor {
     }
   }
 
+  // Paint the selector + editor from the stored library.
   async followupLoadTemplate() {
     if (typeof FollowupEmail === 'undefined') return;
-    const tpl = await FollowupEmail.loadTemplate();
+    const { templates, activeId, active } = await FollowupEmail.listTemplates();
+    const sel = document.getElementById('followupTemplateSelect');
+    if (sel) {
+      sel.innerHTML = templates
+        .map((t) => '<option value="' + t.id + '"' + (t.id === activeId ? ' selected' : '') + '>' +
+          String(t.name).replace(/[<>&]/g, '') + '</option>')
+        .join('');
+    }
+    this.followupFillEditor(active);
+  }
+
+  followupFillEditor(tpl) {
+    if (!tpl) return;
+    const n = document.getElementById('followupTemplateName');
     const s = document.getElementById('followupSubject');
     const b = document.getElementById('followupBody');
-    if (s) s.value = tpl.subject;
-    if (b) b.value = tpl.body;
+    if (n) n.value = tpl.name || '';
+    if (s) s.value = tpl.subject || '';
+    if (b) b.value = tpl.body || '';
+    this._followupActiveId = tpl.id;
+  }
+
+  async followupSelectTemplate(id) {
+    if (typeof FollowupEmail === 'undefined') return;
+    const tpl = await FollowupEmail.setActiveTemplate(id);
+    this.followupFillEditor(tpl);
   }
 
   async followupSaveTemplate() {
     if (typeof FollowupEmail === 'undefined') return;
-    await FollowupEmail.saveTemplate({
+    const saved = await FollowupEmail.saveTemplate({
+      id: this._followupActiveId,
+      name: document.getElementById('followupTemplateName')?.value || '',
       subject: document.getElementById('followupSubject')?.value || '',
       body: document.getElementById('followupBody')?.value || '',
     });
-    this.showToast('Template saved', 'success');
+    await this.followupLoadTemplate();
+    // Editing a preset forks a copy; say so rather than silently renaming.
+    this.showToast(saved.name ? 'Saved as "' + saved.name + '"' : 'Template saved', 'success');
+  }
+
+  async followupNewTemplate(duplicate) {
+    if (typeof FollowupEmail === 'undefined') return;
+    const base = document.getElementById('followupTemplateName')?.value || 'New template';
+    const name = duplicate ? base + ' (copy)' : 'New template';
+    const tpl = await FollowupEmail.createTemplate(name, duplicate ? this._followupActiveId : undefined);
+    await this.followupLoadTemplate();
+    this.showToast('Created "' + tpl.name + '"', 'success');
+  }
+
+  async followupDeleteTemplate() {
+    if (typeof FollowupEmail === 'undefined') return;
+    try {
+      const next = await FollowupEmail.deleteTemplate(this._followupActiveId);
+      if (!next) { this.showToast('Nothing to delete', 'error'); return; }
+      await this.followupLoadTemplate();
+      this.showToast('Template deleted', 'success');
+    } catch (e) {
+      this.showToast(e.message || 'Could not delete', 'error');
+    }
   }
 
   async followupResetTemplate() {
     if (typeof FollowupEmail === 'undefined') return;
-    const tpl = await FollowupEmail.resetTemplate();
-    const s = document.getElementById('followupSubject');
-    const b = document.getElementById('followupBody');
-    if (s) s.value = tpl.subject;
-    if (b) b.value = tpl.body;
-    this.showToast('Template reset to default', 'success');
+    await FollowupEmail.resetTemplate();
+    await this.followupLoadTemplate();
+    this.showToast('Built-in presets restored (your own templates kept)', 'success');
   }
 
   // Renders the CURRENT editor content (not the saved copy) so the user

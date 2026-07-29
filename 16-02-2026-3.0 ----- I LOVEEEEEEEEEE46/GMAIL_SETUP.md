@@ -117,10 +117,28 @@ only needed if you publish this for other people.
 - One follow-up per posting: a second attempt for the same job is refused, so
   you can't accidentally double-email a recruiter.
 
-## Editing the template
+## Templates
 
-Edit subject/body directly in the panel and press **Save** (**Reset** restores
-the default). Available tokens:
+Three presets ship built in:
+
+| Preset | Use it when |
+|---|---|
+| **Standard follow-up** (default) | Most applications. States the application, gives the locators, one line of relevance. |
+| **Concise (3 lines)** | Senior/busy recruiters, or high-volume applying. Just the facts. |
+| **With relevance hook** | Roles you genuinely match — adds one line on your strongest relevant experience. |
+
+Pick one from the **Template** dropdown. **New** starts a fresh template,
+**Duplicate** copies the current one, **Delete** removes your own (presets
+can't be deleted). Editing a preset automatically saves it as *your copy*, so
+the originals are always there — **Reset** restores the presets and keeps your
+own templates.
+
+Keep it short. The purpose is to help a recruiter *locate your application*,
+not to re-pitch your CV.
+
+## Variables
+
+Type these anywhere in the subject or body:
 
 | Token | Fills with |
 |---|---|
@@ -135,8 +153,12 @@ the default). Available tokens:
 | `{{job_department}}` | Team / department, when stated |
 | `{{job_url}}` | Direct posting URL |
 | `{{reference_block}}` | **All locators found**, as ready-to-paste lines (Role / Job ID / Location / Team / Posting) |
+| `{{recipient_name}}` | Contact's full name, else "Hiring Team" |
+| `{{recipient_first_name}}` | Contact's first name, else "Hiring Team" — used in the greeting |
+| `{{recipient_email}}` | The address being written to |
+| `{{company_name}}` | Same as `{{company}}` |
+| `{{job_role}}` | Same as `{{job_title}}` |
+| `{{highlight}}` | Your strongest relevant experience (used by the hook preset) |
 
-Empty tokens collapse cleanly — no stray "(Job ID )" when a posting has none.
-
-Keep it short. The purpose is to help a recruiter *locate your application*,
-not to re-pitch your CV.
+Empty tokens collapse cleanly — no stray "(Job ID )" when a posting has none,
+and no "Dear ," when no contact name was published.

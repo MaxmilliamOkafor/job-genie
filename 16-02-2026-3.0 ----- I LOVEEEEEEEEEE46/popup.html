@@ -205,12 +205,24 @@
             <div id="followupDetected" style="margin-top:4px;opacity:.8;"></div>
           </div>
 
+          <div style="margin-top:10px;">
+            <label style="display:block;font-weight:600;margin-bottom:3px;">Template</label>
+            <select id="followupTemplateSelect" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;"></select>
+            <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">
+              <input type="text" id="followupTemplateName" placeholder="Template name" style="flex:2;min-width:120px;box-sizing:border-box;padding:5px 7px;border-radius:6px;" />
+              <button id="followupNewBtn" class="btn-secondary" style="flex:1;min-width:64px;">New</button>
+              <button id="followupDupBtn" class="btn-secondary" style="flex:1;min-width:82px;">Duplicate</button>
+              <button id="followupDeleteBtn" class="btn-secondary" style="flex:1;min-width:64px;">Delete</button>
+            </div>
+            <p style="margin:4px 0 0;opacity:.7;">Editing a built-in preset saves it as your own copy, so the originals stay available.</p>
+          </div>
+
           <div style="margin-top:8px;">
             <label style="display:block;font-weight:600;margin-bottom:3px;">Subject</label>
             <input type="text" id="followupSubject" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;" />
             <label style="display:block;font-weight:600;margin:6px 0 3px;">Body</label>
             <textarea id="followupBody" rows="11" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;font-family:inherit;"></textarea>
-            <p style="margin:4px 0 0;opacity:.75;">Tokens: <code>{{job_title}}</code> <code>{{company}}</code> <code>{{job_id}}</code> <code>{{greeting_name}}</code> <code>{{my_name}}</code> <code>{{my_email}}</code> <code>{{my_phone}}</code> <code>{{my_linkedin}}</code> <code>{{headline}}</code> <code>{{today}}</code> <code>{{job_location}}</code> <code>{{job_department}}</code> <code>{{job_url}}</code> <code>{{reference_block}}</code></p>
+            <p style="margin:4px 0 0;opacity:.75;">Tokens: <code>{{job_title}}</code> <code>{{company}}</code> <code>{{job_id}}</code> <code>{{greeting_name}}</code> <code>{{my_name}}</code> <code>{{my_email}}</code> <code>{{my_phone}}</code> <code>{{my_linkedin}}</code> <code>{{headline}}</code> <code>{{today}}</code> <code>{{job_location}}</code> <code>{{job_department}}</code> <code>{{job_url}}</code> <code>{{reference_block}}</code> <code>{{recipient_name}}</code> <code>{{recipient_first_name}}</code> <code>{{company_name}}</code> <code>{{job_role}}</code> <code>{{highlight}}</code></p>
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
               <button id="followupSaveBtn" class="btn-secondary" style="flex:1;min-width:80px;">Save</button>
               <button id="followupResetBtn" class="btn-secondary" style="flex:1;min-width:80px;">Reset</button>

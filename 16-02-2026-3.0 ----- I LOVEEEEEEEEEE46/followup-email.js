@@ -27,60 +27,215 @@
   'use strict';
 
   const TAG = '[JG-Followup]';
-  const KEY_TEMPLATE = 'followup_template';
+  const KEY_TEMPLATE = 'followup_template';        // legacy single template (migrated)
+  const KEY_TEMPLATES = 'followup_templates';      // template library
+  const KEY_ACTIVE = 'followup_active_template';   // selected template id
   const KEY_ENABLED = 'followup_enabled';
   const KEY_SENT_LOG = 'followup_sent_log';
   const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 
-  // Deliberately plain and short. Recruiters skim; a two-paragraph note
-  // that makes the application easy to find is the whole job.
-  const DEFAULT_TEMPLATE = {
-    subject: 'Application submitted — {{job_title}}{{job_id_suffix}}',
-    // (add {{job_location}} to the subject if you apply to multi-office roles)
-    body: [
-      'Dear {{greeting_name}},',
-      '',
-      'I submitted my application for the {{job_title}} role at {{company}} today{{job_id_sentence}}.',
-      '',
-      'Details to help you locate it:',
-      '{{reference_block}}',
-      '',
-      'It was submitted through your application portal under {{my_name}} ({{my_email}}). In short, I am {{headline}}.',
-      '',
-      'I would welcome the chance to discuss how my background fits what your team needs. Happy to share anything further that would be useful.',
-      '',
-      'Kind regards,',
-      '{{my_name}}',
-      '{{my_phone}}',
-      '{{my_linkedin}}',
-    ].join('\n'),
-  };
+  // ===================================================================
+  // TEMPLATE LIBRARY
+  // -------------------------------------------------------------------
+  // Three presets, all built on the same principle: a follow-up's job is
+  // to make the application EASY TO FIND, not to re-pitch the CV. Short
+  // wins -- recruiters skim, and a wall of text reads as a second
+  // application rather than a helpful note. Users can edit these, add
+  // their own, and switch per application.
+  // ===================================================================
+  const SIGN_OFF = [
+    'Kind regards,',
+    '{{my_name}}',
+    '{{my_phone}}',
+    '{{my_email}}',
+    '{{my_linkedin}}',
+  ].join('\n');
 
-  function loadTemplate() {
+  const BUILT_IN_TEMPLATES = [
+    {
+      id: 'standard',
+      name: 'Standard follow-up (recommended)',
+      builtIn: true,
+      subject: 'Application submitted — {{job_title}}{{job_id_suffix}}',
+      body: [
+        'Dear {{recipient_first_name}},',
+        '',
+        'I applied for the {{job_title}} role at {{company_name}} today and wanted to flag it in case it helps to have it on your radar.',
+        '',
+        'Details to locate my application:',
+        '{{reference_block}}',
+        '',
+        'It came through your application portal under {{my_name}} ({{my_email}}).',
+        '',
+        'I am {{headline}}, and I would be glad to walk through how that maps to what the team needs. Happy to send anything further that would be useful.',
+        '',
+        SIGN_OFF,
+      ].join('\n'),
+    },
+    {
+      id: 'concise',
+      name: 'Concise (3 lines)',
+      builtIn: true,
+      subject: '{{job_title}}{{job_id_suffix}} — application from {{my_name}}',
+      body: [
+        'Dear {{recipient_first_name}},',
+        '',
+        'I submitted an application for {{job_title}} at {{company_name}} today{{job_id_sentence}} — filed under {{my_name}} ({{my_email}}).',
+        '',
+        '{{reference_block}}',
+        '',
+        'Happy to answer anything or share more detail if useful.',
+        '',
+        SIGN_OFF,
+      ].join('\n'),
+    },
+    {
+      id: 'with-hook',
+      name: 'With relevance hook (strong-fit roles)',
+      builtIn: true,
+      subject: 'Application submitted — {{job_title}}{{job_id_suffix}}',
+      body: [
+        'Dear {{recipient_first_name}},',
+        '',
+        'I applied for the {{job_title}} role at {{company_name}} today{{job_id_sentence}}.',
+        '',
+        'Details to locate my application:',
+        '{{reference_block}}',
+        '',
+        'The most relevant part of my background: {{highlight}}',
+        '',
+        'If it would help to discuss how that applies to your roadmap, I am glad to make time. Either way, thank you for considering the application.',
+        '',
+        SIGN_OFF,
+      ].join('\n'),
+    },
+  ];
+
+  function _cloneBuiltIns() {
+    return BUILT_IN_TEMPLATES.map((t) => Object.assign({}, t));
+  }
+
+  // Kept for callers that only want the primary template.
+  const DEFAULT_TEMPLATE = Object.assign({}, BUILT_IN_TEMPLATES[0]);
+
+  function _newId() {
+    return 'tpl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /**
+   * All templates plus the active id. Migrates transparently from the
+   * earlier single-template storage so nothing the user wrote is lost.
+   */
+  function listTemplates() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get([KEY_TEMPLATE], (r) => {
-          const t = r && r[KEY_TEMPLATE];
-          resolve((t && t.subject && t.body) ? t : Object.assign({}, DEFAULT_TEMPLATE));
+        chrome.storage.local.get([KEY_TEMPLATES, KEY_ACTIVE, KEY_TEMPLATE], (r) => {
+          let templates = (r && Array.isArray(r[KEY_TEMPLATES])) ? r[KEY_TEMPLATES] : null;
+          if (!templates || !templates.length) {
+            templates = _cloneBuiltIns();
+            // Migration: preserve a customised single template as "My template".
+            const legacy = r && r[KEY_TEMPLATE];
+            if (legacy && legacy.subject && legacy.body) {
+              templates.push({ id: _newId(), name: 'My template (imported)', subject: legacy.subject, body: legacy.body });
+            }
+          }
+          const activeId = (r && r[KEY_ACTIVE]) || templates[0].id;
+          const active = templates.find((t) => t.id === activeId) || templates[0];
+          resolve({ templates, activeId: active.id, active });
         });
       } catch (e) {
-        resolve(Object.assign({}, DEFAULT_TEMPLATE));
+        const templates = _cloneBuiltIns();
+        resolve({ templates, activeId: templates[0].id, active: templates[0] });
       }
     });
   }
 
-  function saveTemplate(tpl) {
+  function _persist(templates, activeId) {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.set({ [KEY_TEMPLATE]: { subject: tpl.subject || '', body: tpl.body || '' } }, () => resolve(true));
+        chrome.storage.local.set({ [KEY_TEMPLATES]: templates, [KEY_ACTIVE]: activeId }, () => resolve(true));
       } catch (e) {
         resolve(false);
       }
     });
   }
 
-  function resetTemplate() {
-    return saveTemplate(DEFAULT_TEMPLATE).then(() => Object.assign({}, DEFAULT_TEMPLATE));
+  async function setActiveTemplate(id) {
+    const { templates } = await listTemplates();
+    const found = templates.find((t) => t.id === id);
+    await _persist(templates, found ? id : templates[0].id);
+    return found || templates[0];
+  }
+
+  // The active template, resolved. Used by compose().
+  async function loadTemplate() {
+    const { active } = await listTemplates();
+    return active;
+  }
+
+  /**
+   * Save edits to the active (or given) template. Editing a built-in
+   * preset forks it into a user copy, so the pristine presets stay
+   * available to reset back to.
+   */
+  async function saveTemplate(tpl) {
+    const { templates, activeId } = await listTemplates();
+    const id = (tpl && tpl.id) || activeId;
+    const idx = templates.findIndex((t) => t.id === id);
+    const next = {
+      id,
+      name: (tpl && tpl.name) || (idx >= 0 ? templates[idx].name : 'My template'),
+      subject: (tpl && tpl.subject) || '',
+      body: (tpl && tpl.body) || '',
+    };
+
+    if (idx >= 0 && templates[idx].builtIn) {
+      next.id = _newId();
+      next.name = (tpl && tpl.name && tpl.name !== templates[idx].name)
+        ? tpl.name
+        : templates[idx].name.replace(/\s*\(recommended\)$/, '') + ' (edited)';
+      templates.push(next);
+    } else if (idx >= 0) {
+      templates[idx] = next;
+    } else {
+      templates.push(next);
+    }
+    await _persist(templates, next.id);
+    return next;
+  }
+
+  async function createTemplate(name, copyFromId) {
+    const { templates, activeId } = await listTemplates();
+    const src = templates.find((t) => t.id === (copyFromId || activeId)) || templates[0];
+    const next = {
+      id: _newId(),
+      name: name || 'New template',
+      subject: src.subject,
+      body: src.body,
+    };
+    templates.push(next);
+    await _persist(templates, next.id);
+    return next;
+  }
+
+  async function deleteTemplate(id) {
+    const { templates } = await listTemplates();
+    const idx = templates.findIndex((t) => t.id === id);
+    if (idx < 0) return null;
+    if (templates[idx].builtIn) throw new Error('Built-in presets cannot be deleted — edit one to make your own copy');
+    templates.splice(idx, 1);
+    const nextActive = templates[0].id;
+    await _persist(templates, nextActive);
+    return templates.find((t) => t.id === nextActive);
+  }
+
+  // Restore the presets, keeping the user's own templates intact.
+  async function resetTemplate() {
+    const { templates } = await listTemplates();
+    const userOwn = templates.filter((t) => !t.builtIn);
+    const next = _cloneBuiltIns().concat(userOwn);
+    await _persist(next, next[0].id);
+    return next[0];
   }
 
   // ---- token expansion -------------------------------------------------
@@ -95,6 +250,16 @@
       job_id_suffix: jobId ? ' (Job ID ' + jobId + ')' : '',
       job_id_sentence: jobId ? ', reference ' + jobId : '',
       greeting_name: first || 'Hiring Team',
+      // Recipient. recipient_first_name degrades to "Hiring Team" so a
+      // greeting never reads "Dear ,".
+      recipient_name: (c.contactName || '').trim() || 'Hiring Team',
+      recipient_first_name: first || 'Hiring Team',
+      recipient_email: c.email || '',
+      // Friendly aliases -- both {{company}} and {{company_name}} work.
+      company_name: c.company || 'your team',
+      job_role: c.title || 'the advertised role',
+      my_title: c.myTitle || '',
+      highlight: c.highlight || (c.headline || 'a background that maps onto the core requirements you listed'),
       job_location: c.location || '',
       job_department: c.department || '',
       job_url: c.url || '',
@@ -331,6 +496,8 @@
     DEFAULT_TEMPLATE,
     KEY_ENABLED,
     loadTemplate, saveTemplate, resetTemplate,
+    listTemplates, setActiveTemplate, createTemplate, deleteTemplate,
+    BUILT_IN_TEMPLATES,
     buildTokens, render, compose,
     isConnected, connect, disconnect, diagnose,
     send, sendTest, buildRaw,
