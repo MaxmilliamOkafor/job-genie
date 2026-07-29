@@ -834,6 +834,9 @@ class ATSTailor {
     });
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
+    document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
+    document.getElementById('followupClearClientBtn')?.addEventListener('click', () => this.followupSaveClientId(true));
+    document.getElementById('followupCopyRedirectBtn')?.addEventListener('click', () => this.followupCopyRedirect());
     document.getElementById('followupSaveBtn')?.addEventListener('click', () => this.followupSaveTemplate());
     document.getElementById('followupTemplateSelect')?.addEventListener('change', (e) => this.followupSelectTemplate(e.target.value));
     document.getElementById('followupNewBtn')?.addEventListener('click', () => this.followupNewTemplate(false));
@@ -1964,13 +1967,50 @@ class ATSTailor {
     };
   }
 
+  // Runtime OAuth config: the client ID lives in extension storage on this
+  // device, so nothing needs committing to a public repo.
+  async followupSaveClientId(clear) {
+    if (typeof FollowupEmail === 'undefined') return;
+    const el = document.getElementById('followupClientId');
+    const value = clear ? '' : (el?.value || '').trim();
+    await FollowupEmail.saveOAuthConfig({ clientId: value });
+    if (clear && el) el.value = '';
+    this.showToast(clear ? 'Client ID cleared' : 'Client ID saved to this device', 'success');
+    this.followupRefreshStatus();
+  }
+
+  async followupCopyRedirect() {
+    if (typeof FollowupEmail === 'undefined') return;
+    const uri = FollowupEmail.redirectUri();
+    try {
+      await navigator.clipboard.writeText(uri);
+      this.showToast('Redirect URI copied', 'success');
+    } catch (e) {
+      this.showToast(uri, 'success');   // clipboard blocked: show it to copy manually
+    }
+  }
+
   async followupRefreshStatus() {
     const el = document.getElementById('followupGmailStatus');
     if (!el || typeof FollowupEmail === 'undefined') return;
     try {
-      const ok = await FollowupEmail.isConnected();
-      el.textContent = ok ? 'Gmail: connected ✓ (sends from your own account)' : 'Gmail: not connected — click Connect Gmail';
-      el.style.color = ok ? '#00c864' : '#ffaa00';
+      const [ok, mode] = await Promise.all([FollowupEmail.isConnected(), FollowupEmail.authMode()]);
+      const via = mode === 'runtime' ? ' [client ID on this device]'
+        : mode === 'manifest' ? ' [client ID from manifest]' : '';
+      if (ok) {
+        el.textContent = 'Gmail: connected ✓ sends from your own account' + via;
+        el.style.color = '#00c864';
+      } else if (mode === 'unconfigured') {
+        el.textContent = 'Gmail: no client ID yet — paste one below, then Connect';
+        el.style.color = '#ffaa00';
+      } else {
+        el.textContent = 'Gmail: not connected — click Connect Gmail' + via;
+        el.style.color = '#ffaa00';
+      }
+      // Reflect a stored client ID without echoing it in full.
+      const cfg = await FollowupEmail.loadOAuthConfig();
+      const idEl = document.getElementById('followupClientId');
+      if (idEl && cfg.clientId && !idEl.value) idEl.value = cfg.clientId;
     } catch (e) {
       el.textContent = 'Gmail: unavailable — ' + (e.message || e);
       el.style.color = '#ff6b6b';

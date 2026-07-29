@@ -295,8 +295,142 @@
     };
   }
 
+  // ===================================================================
+  // GMAIL AUTH -- two paths
+  // -------------------------------------------------------------------
+  // A) Runtime-configured (preferred when the repo is public): the user
+  //    pastes a client_id into the extension; nothing is committed. Uses
+  //    launchWebAuthFlow with the IMPLICIT flow, so there is no
+  //    client_secret anywhere -- an extension cannot keep a secret, so the
+  //    right answer is to not have one. Tokens are short-lived (~1h) and
+  //    re-issued by re-running the flow.
+  // B) Manifest-configured: chrome.identity.getAuthToken, which can only
+  //    read client_id from the manifest. Simpler, and Chrome manages the
+  //    token cache, but ties auth to the signed-in Chrome profile.
+  //
+  // Note for the record: an OAuth client_id is NOT a secret. For the
+  // Chrome-Extension client type there is no secret at all -- the
+  // extension ID is what Google validates. Path A exists to keep a public
+  // repo clean and to allow a non-Chrome-profile Google account, not
+  // because a leaked client_id is dangerous.
+  // ===================================================================
+  const KEY_OAUTH = 'followup_oauth';          // { clientId }
+  const KEY_TOKEN = 'followup_oauth_token';    // { access_token, expires_at }
+
+  function loadOAuthConfig() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([KEY_OAUTH], (r) => resolve((r && r[KEY_OAUTH]) || {}));
+      } catch (e) {
+        resolve({});
+      }
+    });
+  }
+
+  function saveOAuthConfig(cfg) {
+    return new Promise((resolve) => {
+      try {
+        const clientId = String((cfg && cfg.clientId) || '').trim();
+        chrome.storage.local.set({ [KEY_OAUTH]: { clientId } }, () => resolve(true));
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  // The redirect the Google client must whitelist. Derived, not typed, so
+  // it can't be got wrong.
+  function redirectUri() {
+    try {
+      if (chrome.identity && chrome.identity.getRedirectURL) return chrome.identity.getRedirectURL();
+    } catch (e) {}
+    return 'https://' + (chrome.runtime && chrome.runtime.id) + '.chromiumapp.org/';
+  }
+
+  function _cachedToken() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([KEY_TOKEN], (r) => {
+          const t = r && r[KEY_TOKEN];
+          // 60s safety margin so a token can't expire mid-request.
+          if (t && t.access_token && t.expires_at && t.expires_at - 60000 > Date.now()) resolve(t.access_token);
+          else resolve('');
+        });
+      } catch (e) {
+        resolve('');
+      }
+    });
+  }
+
+  function _storeToken(accessToken, expiresInSec) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({
+          [KEY_TOKEN]: {
+            access_token: accessToken,
+            expires_at: Date.now() + (Number(expiresInSec || 3600) * 1000),
+          },
+        }, () => resolve(true));
+      } catch (e) {
+        resolve(true);
+      }
+    });
+  }
+
+  function _clearToken() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.remove([KEY_TOKEN], () => resolve(true));
+      } catch (e) {
+        resolve(true);
+      }
+    });
+  }
+
+  async function getTokenViaWebFlow(interactive) {
+    const { clientId } = await loadOAuthConfig();
+    if (!clientId) throw new Error('No Gmail client ID saved — paste one into the extension and click Save');
+
+    const cached = await _cachedToken();
+    if (cached) return cached;
+    if (!interactive) throw new Error('Gmail authorisation expired — click Connect Gmail');
+
+    const url = 'https://accounts.google.com/o/oauth2/v2/auth' +
+      '?client_id=' + encodeURIComponent(clientId) +
+      '&response_type=token' +
+      '&redirect_uri=' + encodeURIComponent(redirectUri()) +
+      '&scope=' + encodeURIComponent(GMAIL_SCOPE) +
+      '&prompt=consent';
+
+    const redirect = await new Promise((resolve, reject) => {
+      try {
+        chrome.identity.launchWebAuthFlow({ url, interactive: true }, (responseUrl) => {
+          const err = chrome.runtime.lastError;
+          if (err || !responseUrl) {
+            reject(new Error((err && err.message) || 'Authorisation window was closed'));
+            return;
+          }
+          resolve(responseUrl);
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+
+    // Implicit flow returns the token in the URL fragment.
+    const frag = String(redirect).split('#')[1] || '';
+    const params = new URLSearchParams(frag);
+    const token = params.get('access_token');
+    if (!token) {
+      const oauthErr = params.get('error') || new URLSearchParams(String(redirect).split('?')[1] || '').get('error');
+      throw new Error('Google did not return a token' + (oauthErr ? ' (' + oauthErr + ')' : ''));
+    }
+    await _storeToken(token, params.get('expires_in'));
+    return token;
+  }
+
   // ---- Gmail auth + send ----------------------------------------------
-  function getAuthToken(interactive) {
+  function getAuthTokenFromManifest(interactive) {
     return new Promise((resolve, reject) => {
       try {
         if (!chrome.identity || !chrome.identity.getAuthToken) {
@@ -317,6 +451,24 @@
     });
   }
 
+  // Prefer the runtime-configured path when the user has saved a client ID
+  // (nothing committed, any Google account); fall back to the manifest.
+  async function getAuthToken(interactive) {
+    const { clientId } = await loadOAuthConfig();
+    if (clientId) return getTokenViaWebFlow(interactive);
+    return getAuthTokenFromManifest(interactive);
+  }
+
+  async function authMode() {
+    const { clientId } = await loadOAuthConfig();
+    if (clientId) return 'runtime';
+    let manifest = {};
+    try { manifest = chrome.runtime.getManifest() || {}; } catch (e) {}
+    const mid = manifest.oauth2 && manifest.oauth2.client_id;
+    if (mid && !/YOUR_|REPLACE|xxxx/i.test(mid)) return 'manifest';
+    return 'unconfigured';
+  }
+
   function isConnected() {
     return getAuthToken(false).then(() => true).catch(() => false);
   }
@@ -328,6 +480,34 @@
   async function diagnose() {
     const checks = [];
     const add = (ok, name, fix) => checks.push({ ok, name, fix: ok ? '' : fix });
+
+    const mode = await authMode();
+    // Runtime path: only the saved client ID and the whitelisted redirect
+    // matter. The manifest checks below are irrelevant in that mode, so
+    // don't report them as failures.
+    if (mode === 'runtime') {
+      const cfg = await loadOAuthConfig();
+      add(!!cfg.clientId, 'client ID saved on this device', 'Paste your OAuth client ID and click Save client ID.');
+      add(true, 'redirect URI: ' + redirectUri(), '');
+      let tokenOk = false; let tokenErr = '';
+      try { await getAuthToken(false); tokenOk = true; } catch (e) { tokenErr = (e && e.message) || String(e); }
+      add(tokenOk, 'Gmail authorisation present',
+        'Click Connect Gmail. If Google shows redirect_uri_mismatch, add EXACTLY "' + redirectUri() +
+        '" to your Web-application OAuth client\'s Authorised redirect URIs. ' +
+        'If it shows access_denied, add your account under OAuth consent screen -> Test users and ' +
+        'confirm the Gmail API is ENABLED. (' + tokenErr + ')');
+      const failed = checks.filter((c) => !c.ok);
+      return {
+        ok: failed.length === 0,
+        mode,
+        extensionId: (chrome.runtime && chrome.runtime.id) || '',
+        clientId: cfg.clientId || '',
+        checks,
+        summary: failed.length === 0
+          ? 'Gmail is connected and ready to send (client ID stored on this device).'
+          : failed.length + ' issue(s) to fix: ' + failed.map((c) => c.name).join('; '),
+      };
+    }
 
     // 1. manifest wiring
     let manifest = {};
@@ -389,7 +569,7 @@
   }
 
   function disconnect() {
-    return getAuthToken(false)
+    return _clearToken().then(() => getAuthTokenFromManifest(false))
       .then((token) => new Promise((resolve) => {
         try {
           chrome.identity.removeCachedAuthToken({ token }, () => resolve(true));
@@ -444,6 +624,9 @@
       // A stale cached token is the common failure; clear it so the next
       // attempt re-prompts cleanly instead of failing silently forever.
       if (res.status === 401) {
+        // Evict from whichever cache issued it so the next attempt
+        // re-prompts instead of failing forever.
+        await _clearToken();
         try { chrome.identity.removeCachedAuthToken({ token }, () => {}); } catch (e) {}
       }
       throw new Error('Gmail send failed (' + res.status + '): ' + txt.slice(0, 300));
@@ -499,7 +682,8 @@
     listTemplates, setActiveTemplate, createTemplate, deleteTemplate,
     BUILT_IN_TEMPLATES,
     buildTokens, render, compose,
-    isConnected, connect, disconnect, diagnose,
+    isConnected, connect, disconnect, diagnose, authMode,
+    loadOAuthConfig, saveOAuthConfig, redirectUri,
     send, sendTest, buildRaw,
     alreadySent, markSent,
   };

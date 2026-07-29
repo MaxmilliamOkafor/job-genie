@@ -20,6 +20,59 @@ mailbox, which is what you actually want for a job follow-up.
 
 ---
 
+## Two ways to configure — pick one
+
+**Option A — paste the client ID into the extension (recommended for a public
+repo).** Nothing is committed; the ID lives in this browser's extension storage.
+Works with any Google account, not just the one Chrome is signed into. Use a
+**Web application** OAuth client. → jump to **Option A** below.
+
+**Option B — client ID in `manifest.json`.** Slightly simpler, Chrome manages
+the token cache, but the ID sits in your repo and auth is tied to the
+signed-in Chrome profile. Use a **Chrome Extension** OAuth client. → Steps 1–4.
+
+### Is the client ID a secret?
+
+**No.** In both flows here there is no client *secret* at all — Google
+validates the extension ID (Option B) or the registered redirect URI
+(Option A), not a shared secret. An OAuth client ID is designed to ship
+publicly inside client-side apps. Option A exists to keep a public repo tidy
+and to free you from the Chrome-profile account, not because a leaked client
+ID is dangerous.
+
+What you must **never** commit is the **`.pem` private key** from the
+ID-pinning step. (The `"key"` field in `manifest.json` is only the public
+half — that one is safe.)
+
+---
+
+## Option A — paste the client ID (no repo changes)
+
+1. **Enable the Gmail API**: <https://console.cloud.google.com/> → your project
+   → **APIs & Services → Library** → **Gmail API** → **Enable**.
+2. Extension popup → **Application Follow-up Email** → **Copy redirect URI**.
+   It looks like `https://<your-extension-id>.chromiumapp.org/`.
+3. **Credentials → Create credentials → OAuth client ID** → application type
+   **Web application** → under **Authorised redirect URIs** paste the URI from
+   step 2, exactly as copied.
+4. **OAuth consent screen** → add the scope `.../auth/gmail.send`, and while the
+   app is in **Testing** add your own Google account under **Test users**.
+5. Paste the client ID into the extension's **Gmail client ID** field → **Save
+   client ID** → **Connect Gmail**.
+
+The status line will read *connected ✓ … [client ID on this device]*. **Clear**
+removes it. Tokens are short-lived (about an hour) and re-issued silently; if
+one expires you'll be asked to reconnect.
+
+> If Google says `redirect_uri_mismatch`, the URI in the Cloud Console doesn't
+> match byte-for-byte — re-copy it with the button and paste again. Note that
+> the extension ID (and therefore the URI) changes if the extension is unpacked
+> from a different folder, unless you pin it as in Step 1 below.
+
+---
+
+## Option B — client ID in the manifest
+
 ## Step 1 — Pin your extension ID (do this FIRST)
 
 **This is the step that breaks most Gmail-API setups.** An unpacked extension
