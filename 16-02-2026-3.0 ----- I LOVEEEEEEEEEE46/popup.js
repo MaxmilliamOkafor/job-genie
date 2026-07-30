@@ -832,6 +832,8 @@ class ATSTailor {
       chrome.storage.local.set({ followup_enabled: enabled });
       this.showToast(enabled ? '✉️ Follow-up email enabled' : 'Follow-up email disabled', 'success');
     });
+    document.getElementById('linkedinRunNowBtn')?.addEventListener('click', () => this.runSiteAutofill('linkedin'));
+    document.getElementById('indeedRunNowBtn')?.addEventListener('click', () => this.runSiteAutofill('indeed'));
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
     document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
@@ -1965,6 +1967,57 @@ class ATSTailor {
         ? 'a close match for this role on the requirements you listed'
         : 'a candidate whose background maps onto the core requirements you listed',
     };
+  }
+
+  // Manual "fill now" for the per-site fillers. Injects the scripts into the
+  // active tab first, so it works even when the tab predates the toggle
+  // being switched on (registerContentScripts only covers later loads).
+  async runSiteAutofill(site) {
+    const out = document.getElementById('autofillRunResult');
+    const say = (msg, color) => { if (out) { out.textContent = msg; out.style.color = color || ''; } };
+    const cfg = site === 'linkedin'
+      ? { host: 'linkedin.com', files: ['autofill-core.js', 'linkedin-autofill.js'],
+          action: 'JG_LINKEDIN_AUTOFILL_RUN', key: 'linkedin_autofill_enabled',
+          label: 'LinkedIn Easy Apply', hint: 'Open an Easy Apply dialog first.' }
+      : { host: 'indeed.com', files: ['autofill-core.js', 'indeed-autofill.js'],
+          action: 'JG_INDEED_AUTOFILL_RUN', key: 'autofill_enabled',
+          label: 'Indeed', hint: 'Open an Indeed application page first.' };
+
+    try {
+      const enabled = await new Promise((r) => chrome.storage.local.get([cfg.key], (x) => r(x && x[cfg.key] === true)));
+      if (!enabled) { say('Turn the ' + cfg.label + ' toggle ON first.', '#ffaa00'); return; }
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.id) { say('No active tab.', '#ff6b6b'); return; }
+      if (!String(tab.url || '').includes(cfg.host)) {
+        say('Open a ' + cfg.label + ' page in this tab first.', '#ffaa00');
+        return;
+      }
+
+      say('Filling…');
+      // allFrames: LinkedIn frames some employers' forms (Broadbean etc.).
+      try {
+        await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: cfg.files });
+      } catch (e) { /* already present is fine */ }
+
+      const replies = await new Promise((resolve) => {
+        let done = false;
+        const results = [];
+        // Ask every frame; the one holding the form answers with a count.
+        chrome.tabs.sendMessage(tab.id, { action: cfg.action }, (resp) => {
+          void chrome.runtime.lastError;
+          if (resp) results.push(resp);
+          if (!done) { done = true; resolve(results); }
+        });
+        setTimeout(() => { if (!done) { done = true; resolve(results); } }, 3000);
+      });
+
+      const filled = replies.reduce((n, r) => n + (r && r.filled ? r.filled : 0), 0);
+      if (filled > 0) say('Filled ' + filled + ' field(s). Review before submitting.', '#00c864');
+      else say('No fields filled. ' + cfg.hint + ' Values you already typed are never overwritten.', '#ffaa00');
+    } catch (e) {
+      say('Failed: ' + (e.message || e), '#ff6b6b');
+    }
   }
 
   // Prior contact with this employer, shown before sending. A recruiter
