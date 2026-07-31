@@ -989,22 +989,61 @@ async function _unregisterSiteFiller(id) {
   }
 }
 
+/**
+ * registerContentScripts only affects pages loaded AFTER registration, so
+ * flipping a toggle while the target site is already open used to do
+ * nothing until a manual reload -- which reads as "the toggle doesn't
+ * work". Inject into matching tabs that are already open.
+ */
+async function _injectIntoOpenTabs(files, urlPatterns, allFrames) {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: urlPatterns });
+  } catch (e) {
+    return;
+  }
+  for (const tab of tabs) {
+    if (!tab.id) continue;
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: !!allFrames },
+        files,
+      });
+      console.log('[JG-Autofill] injected into open tab', tab.id, tab.url && tab.url.slice(0, 60));
+    } catch (e) {
+      // Restricted or discarded tab -- skip quietly.
+    }
+  }
+}
+
+const INDEED_FILES = ['autofill-core.js', 'indeed-autofill.js'];
+const INDEED_MATCHES = ['https://*.indeed.com/*', 'https://smartapply.indeed.com/*'];
+const LINKEDIN_FILES = ['autofill-core.js', 'linkedin-autofill.js'];
+const LINKEDIN_MATCHES = ['https://*.linkedin.com/*'];
+
 // Indeed rides the MASTER autofill toggle.
-const registerIndeedAutofill = () => _registerSiteFiller(
-  INDEED_SCRIPT_ID, ['indeed-autofill.js'],
-  ['https://*.indeed.com/*', 'https://smartapply.indeed.com/*'],
-  true                       // apply form renders inside an iframe
-);
+const registerIndeedAutofill = async () => {
+  await _registerSiteFiller(
+    INDEED_SCRIPT_ID, ['indeed-autofill.js'], INDEED_MATCHES,
+    true                     // apply form renders inside an iframe
+  );
+  await _injectIntoOpenTabs(INDEED_FILES, INDEED_MATCHES, true);
+};
 const unregisterIndeedAutofill = () => _unregisterSiteFiller(INDEED_SCRIPT_ID);
 
 // LinkedIn Easy Apply has its OWN dedicated toggle, so it can run without
 // pulling in the heavy vendor engine (which is denylisted on linkedin.com
 // because it crashes the SPA).
-const registerLinkedInAutofill = () => _registerSiteFiller(
-  LINKEDIN_SCRIPT_ID, ['linkedin-autofill.js'],
-  ['https://*.linkedin.com/*'],
-  false
-);
+// allFrames: LinkedIn wraps some employers' forms (Broadbean and similar)
+// in an iframe inside the Easy Apply modal, so the top frame alone is not
+// enough. Each frame self-gates on actually finding the modal.
+const registerLinkedInAutofill = async () => {
+  await _registerSiteFiller(
+    LINKEDIN_SCRIPT_ID, ['linkedin-autofill.js'], LINKEDIN_MATCHES,
+    true
+  );
+  await _injectIntoOpenTabs(LINKEDIN_FILES, LINKEDIN_MATCHES, true);
+};
 const unregisterLinkedInAutofill = () => _unregisterSiteFiller(LINKEDIN_SCRIPT_ID);
 
 // ===================================================================

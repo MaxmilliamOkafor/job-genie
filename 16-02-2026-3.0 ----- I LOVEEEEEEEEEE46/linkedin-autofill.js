@@ -137,6 +137,10 @@
   try {
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg && msg.action === 'JG_LINKEDIN_AUTOFILL_RUN') {
+        // With allFrames injection every frame receives this, but only the
+        // FIRST sendResponse is delivered -- so a frame without the modal
+        // must stay silent or it masks the frame that has the form.
+        if (!findEasyApplyModal()) return false;
         _lastSignature = '';
         runFill('run-now').then((n) => sendResponse({ ok: true, filled: n }));
         return true;

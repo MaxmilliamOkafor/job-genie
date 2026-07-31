@@ -99,6 +99,9 @@
   try {
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg && msg.action === 'JG_INDEED_AUTOFILL_RUN') {
+        // Only the frame holding the application form should answer -- the
+        // first sendResponse wins, so silent frames avoid masking it.
+        if (!isIndeedApplyPage()) return false;
         runFill('run-now').then((n) => sendResponse({ ok: true, filled: n }));
         return true;
       }
