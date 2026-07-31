@@ -2113,6 +2113,13 @@ class ATSTailor {
         sub = via + ' · click Connect Gmail to authorise.';
       }
       this.followupSetStatus(cls, title, sub);
+      // Show the exact redirect URI -- registering a mismatching one is the
+      // single most common cause of the OAuth flow failing.
+      const rEl = document.getElementById('followupRedirectUri');
+      if (rEl) {
+        rEl.value = FollowupEmail.redirectUri();
+        rEl.onclick = () => rEl.select();
+      }
       // Reflect a stored client ID without echoing it in full.
       const cfg = await FollowupEmail.loadOAuthConfig();
       const idEl = document.getElementById('followupClientId');

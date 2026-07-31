@@ -407,7 +407,15 @@
         chrome.identity.launchWebAuthFlow({ url, interactive: true }, (responseUrl) => {
           const err = chrome.runtime.lastError;
           if (err || !responseUrl) {
-            reject(new Error((err && err.message) || 'Authorisation window was closed'));
+            // Google renders redirect_uri_mismatch as an error PAGE inside
+            // the auth window, so Chrome only reports "window closed" once
+            // the user dismisses it. Name the likely cause rather than
+            // leaving them with a dead end.
+            reject(new Error(
+              ((err && err.message) || 'Authorisation window closed') +
+              ' — if Google showed "Error 400: redirect_uri_mismatch", add this EXACT URI to your ' +
+              'Web application client\'s Authorised redirect URIs: ' + redirectUri()
+            ));
             return;
           }
           resolve(responseUrl);
