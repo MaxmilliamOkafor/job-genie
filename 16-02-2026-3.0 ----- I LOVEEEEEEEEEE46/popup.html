@@ -192,60 +192,111 @@
         </div>
         <p class="setting-help">After you submit, if the job posting <strong>published</strong> a recruiter email, offers to send a short note from your Gmail with the job title and Job ID so they can find your application. Nothing sends without your click.</p>
 
-        <details id="followupPanel" style="margin:6px 0 10px;font-size:11px;">
-          <summary style="cursor:pointer;font-weight:600;">✉️ Gmail &amp; email template — setup and test</summary>
+        <details id="followupPanel" class="fu-panel">
+          <summary>✉️ Gmail &amp; email template — setup and test</summary>
+          <div class="fu-body">
 
-          <div style="margin-top:8px;">
-            <div id="followupGmailStatus" style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.04);">Gmail: checking…</div>
-            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-              <button id="followupConnectBtn" class="btn-secondary" style="flex:1;min-width:110px;">Connect Gmail</button>
-              <button id="followupDiagnoseBtn" class="btn-secondary" style="flex:1;min-width:110px;">Diagnose setup</button>
-            </div>
-            <pre id="followupDiagnostics" style="display:none;white-space:pre-wrap;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,0.25);border-radius:6px;max-height:190px;overflow:auto;font-size:10px;line-height:1.4;"></pre>
-
-            <div style="margin-top:8px;padding:7px 8px;border-radius:6px;background:rgba(255,255,255,0.03);">
-              <label style="display:block;font-weight:600;margin-bottom:3px;">Gmail client ID (paste here — kept on this device only)</label>
-              <input type="text" id="followupClientId" placeholder="1234567890-abcdef.apps.googleusercontent.com" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;" />
-              <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">
-                <button id="followupSaveClientBtn" class="btn-secondary" style="flex:1;min-width:90px;">Save client ID</button>
-                <button id="followupClearClientBtn" class="btn-secondary" style="flex:1;min-width:90px;">Clear</button>
-                <button id="followupCopyRedirectBtn" class="btn-secondary" style="flex:1;min-width:130px;">Copy redirect URI</button>
+            <!-- 1. Connection -->
+            <div class="fu-card">
+              <div class="fu-card-title">Gmail connection</div>
+              <div id="followupGmailStatus" class="fu-status">
+                <span class="fu-dot"></span>
+                <span class="fu-status-text">Checking…</span>
               </div>
-              <p style="margin:5px 0 0;opacity:.75;">Stored in this browser's extension storage — never committed to your repo. Use a <strong>Web application</strong> OAuth client and add the redirect URI above to it. A client ID is not a secret (there's no client secret in this flow), but keeping it out of a public repo is tidier.</p>
-            </div>
-          </div>
+              <div class="fu-actions">
+                <button id="followupConnectBtn" class="fu-btn fu-btn-primary">Connect Gmail</button>
+                <button id="followupDiagnoseBtn" class="fu-btn">Diagnose setup</button>
+              </div>
+              <pre id="followupDiagnostics" class="fu-diagnostics"></pre>
 
-          <div style="margin-top:10px;">
-            <label style="display:block;font-weight:600;margin-bottom:3px;">Recipient (auto-filled from the posting when published)</label>
-            <input type="email" id="followupTo" placeholder="recruiter@company.com" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;" />
-            <div id="followupDetected" style="margin-top:4px;opacity:.8;"></div>
-          </div>
-
-          <div style="margin-top:10px;">
-            <label style="display:block;font-weight:600;margin-bottom:3px;">Template</label>
-            <select id="followupTemplateSelect" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;"></select>
-            <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">
-              <input type="text" id="followupTemplateName" placeholder="Template name" style="flex:2;min-width:120px;box-sizing:border-box;padding:5px 7px;border-radius:6px;" />
-              <button id="followupNewBtn" class="btn-secondary" style="flex:1;min-width:64px;">New</button>
-              <button id="followupDupBtn" class="btn-secondary" style="flex:1;min-width:82px;">Duplicate</button>
-              <button id="followupDeleteBtn" class="btn-secondary" style="flex:1;min-width:64px;">Delete</button>
+              <div class="fu-field" style="margin-top:10px;">
+                <label class="fu-label" for="followupClientId">
+                  Client ID <span class="fu-hint">stored on this device only</span>
+                </label>
+                <input type="text" id="followupClientId" class="fu-input fu-input-mono"
+                       placeholder="1234567890-abcdef.apps.googleusercontent.com" />
+              </div>
+              <div class="fu-actions">
+                <button id="followupSaveClientBtn" class="fu-btn">Save</button>
+                <button id="followupClearClientBtn" class="fu-btn">Clear</button>
+              </div>
+              <div class="fu-actions">
+                <button id="followupCopyRedirectBtn" class="fu-btn fu-btn-wide">Copy redirect URI</button>
+              </div>
+              <p class="fu-note">Never committed to your repo. Use a <strong>Web application</strong>
+                OAuth client and add the redirect URI to it. See GMAIL_SETUP.md.</p>
             </div>
-            <p style="margin:4px 0 0;opacity:.7;">Editing a built-in preset saves it as your own copy, so the originals stay available.</p>
-          </div>
 
-          <div style="margin-top:8px;">
-            <label style="display:block;font-weight:600;margin-bottom:3px;">Subject</label>
-            <input type="text" id="followupSubject" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;" />
-            <label style="display:block;font-weight:600;margin:6px 0 3px;">Body</label>
-            <textarea id="followupBody" rows="11" style="width:100%;box-sizing:border-box;padding:5px 7px;border-radius:6px;font-family:inherit;"></textarea>
-            <p style="margin:4px 0 0;opacity:.75;">Tokens: <code>{{job_title}}</code> <code>{{company}}</code> <code>{{job_id}}</code> <code>{{greeting_name}}</code> <code>{{my_name}}</code> <code>{{my_email}}</code> <code>{{my_phone}}</code> <code>{{my_linkedin}}</code> <code>{{headline}}</code> <code>{{today}}</code> <code>{{job_location}}</code> <code>{{job_department}}</code> <code>{{job_url}}</code> <code>{{reference_block}}</code> <code>{{recipient_name}}</code> <code>{{recipient_first_name}}</code> <code>{{company_name}}</code> <code>{{job_role}}</code> <code>{{highlight}}</code></p>
-            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-              <button id="followupSaveBtn" class="btn-secondary" style="flex:1;min-width:80px;">Save</button>
-              <button id="followupResetBtn" class="btn-secondary" style="flex:1;min-width:80px;">Reset</button>
-              <button id="followupTestBtn" class="btn-secondary" style="flex:1;min-width:110px;">Send test to me</button>
-              <button id="followupSendBtn" class="btn-primary" style="flex:1;min-width:110px;">Send follow-up</button>
+            <!-- 2. Recipient -->
+            <div class="fu-card">
+              <div class="fu-card-title">Recipient</div>
+              <div class="fu-field">
+                <label class="fu-label" for="followupTo">
+                  To <span class="fu-hint">auto-filled when the posting publishes one</span>
+                </label>
+                <input type="email" id="followupTo" class="fu-input" placeholder="recruiter@company.com" />
+              </div>
+              <div id="followupDetected" class="fu-note"></div>
             </div>
-            <div id="followupResult" style="margin-top:6px;"></div>
+
+            <!-- 3. Message -->
+            <div class="fu-card">
+              <div class="fu-card-title">Message template</div>
+
+              <div class="fu-field">
+                <label class="fu-label" for="followupTemplateSelect">Template</label>
+                <select id="followupTemplateSelect" class="fu-select"></select>
+              </div>
+              <div class="fu-field" style="margin-top:9px;">
+                <label class="fu-label" for="followupTemplateName">Name</label>
+                <input type="text" id="followupTemplateName" class="fu-input" placeholder="Template name" />
+              </div>
+              <div class="fu-actions">
+                <button id="followupNewBtn" class="fu-btn">New</button>
+                <button id="followupDupBtn" class="fu-btn">Duplicate</button>
+                <button id="followupDeleteBtn" class="fu-btn fu-btn-danger">Delete</button>
+              </div>
+              <p class="fu-note">Editing a built-in preset saves it as your own copy — the originals stay available.</p>
+
+              <div class="fu-field" style="margin-top:10px;">
+                <label class="fu-label" for="followupSubject">Subject</label>
+                <input type="text" id="followupSubject" class="fu-input" />
+              </div>
+              <div class="fu-field">
+                <label class="fu-label" for="followupBody">
+                  Body <span class="fu-hint">click a variable to insert it</span>
+                </label>
+                <textarea id="followupBody" class="fu-textarea" rows="12"></textarea>
+              </div>
+
+              <div class="fu-tokens" id="followupTokens">
+                <button class="fu-token" type="button">{{job_title}}</button>
+                <button class="fu-token" type="button">{{company_name}}</button>
+                <button class="fu-token" type="button">{{job_id}}</button>
+                <button class="fu-token" type="button">{{reference_block}}</button>
+                <button class="fu-token" type="button">{{recipient_name}}</button>
+                <button class="fu-token" type="button">{{recipient_first_name}}</button>
+                <button class="fu-token" type="button">{{job_location}}</button>
+                <button class="fu-token" type="button">{{job_url}}</button>
+                <button class="fu-token" type="button">{{highlight}}</button>
+                <button class="fu-token" type="button">{{my_name}}</button>
+                <button class="fu-token" type="button">{{my_email}}</button>
+                <button class="fu-token" type="button">{{my_phone}}</button>
+                <button class="fu-token" type="button">{{my_linkedin}}</button>
+                <button class="fu-token" type="button">{{today}}</button>
+              </div>
+
+              <div class="fu-actions">
+                <button id="followupSaveBtn" class="fu-btn">Save</button>
+                <button id="followupResetBtn" class="fu-btn">Reset presets</button>
+              </div>
+              <div class="fu-actions">
+                <button id="followupTestBtn" class="fu-btn">Send test to me</button>
+                <button id="followupSendBtn" class="fu-btn fu-btn-primary">Send follow-up</button>
+              </div>
+              <div id="followupResult" class="fu-result"></div>
+            </div>
+
           </div>
         </details>
 

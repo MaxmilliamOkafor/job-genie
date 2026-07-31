@@ -840,6 +840,10 @@ class ATSTailor {
     document.getElementById('followupClearClientBtn')?.addEventListener('click', () => this.followupSaveClientId(true));
     document.getElementById('followupCopyRedirectBtn')?.addEventListener('click', () => this.followupCopyRedirect());
     document.getElementById('followupSaveBtn')?.addEventListener('click', () => this.followupSaveTemplate());
+    document.getElementById('followupTokens')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.fu-token');
+      if (btn) this.followupInsertToken(btn.textContent.trim());
+    });
     document.getElementById('followupTemplateSelect')?.addEventListener('change', (e) => this.followupSelectTemplate(e.target.value));
     document.getElementById('followupNewBtn')?.addEventListener('click', () => this.followupNewTemplate(false));
     document.getElementById('followupDupBtn')?.addEventListener('click', () => this.followupNewTemplate(true));
@@ -1985,12 +1989,12 @@ class ATSTailor {
 
     try {
       const enabled = await new Promise((r) => chrome.storage.local.get([cfg.key], (x) => r(x && x[cfg.key] === true)));
-      if (!enabled) { say('Turn the ' + cfg.label + ' toggle ON first.', '#ffaa00'); return; }
+      if (!enabled) { say('Turn the ' + cfg.label + ' toggle ON first.', 'var(--warning)'); return; }
 
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.id) { say('No active tab.', '#ff6b6b'); return; }
+      if (!tab || !tab.id) { say('No active tab.', 'var(--error)'); return; }
       if (!String(tab.url || '').includes(cfg.host)) {
-        say('Open a ' + cfg.label + ' page in this tab first.', '#ffaa00');
+        say('Open a ' + cfg.label + ' page in this tab first.', 'var(--warning)');
         return;
       }
 
@@ -2013,11 +2017,26 @@ class ATSTailor {
       });
 
       const filled = replies.reduce((n, r) => n + (r && r.filled ? r.filled : 0), 0);
-      if (filled > 0) say('Filled ' + filled + ' field(s). Review before submitting.', '#00c864');
-      else say('No fields filled. ' + cfg.hint + ' Values you already typed are never overwritten.', '#ffaa00');
+      if (filled > 0) say('Filled ' + filled + ' field(s). Review before submitting.', 'var(--success)');
+      else say('No fields filled. ' + cfg.hint + ' Values you already typed are never overwritten.', 'var(--warning)');
     } catch (e) {
-      say('Failed: ' + (e.message || e), '#ff6b6b');
+      say('Failed: ' + (e.message || e), 'var(--error)');
     }
+  }
+
+  // Insert a variable at the caret in whichever field was last focused,
+  // so chips work for the subject as well as the body.
+  followupInsertToken(token) {
+    const body = document.getElementById('followupBody');
+    const subject = document.getElementById('followupSubject');
+    const el = (document.activeElement === subject) ? subject : body;
+    if (!el) return;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + token + el.value.slice(end);
+    const caret = start + token.length;
+    el.focus();
+    try { el.setSelectionRange(caret, caret); } catch (e) {}
   }
 
   // Prior contact with this employer, shown before sending. A recruiter
@@ -2046,7 +2065,7 @@ class ATSTailor {
           (policy.burstRemaining > 0 ? ' (' + policy.burstRemaining + ' more allowed before the gap applies)' : '') + ':';
       el.textContent = head + '\n' + lines.join('\n');
       el.style.whiteSpace = 'pre-wrap';
-      el.style.color = policy.skip ? '#ff6b6b' : '#ffaa00';
+      el.style.color = policy.skip ? 'var(--error)' : 'var(--warning)';
     } catch (e) { /* history display must never break the panel */ }
   }
 
@@ -2078,25 +2097,44 @@ class ATSTailor {
     if (!el || typeof FollowupEmail === 'undefined') return;
     try {
       const [ok, mode] = await Promise.all([FollowupEmail.isConnected(), FollowupEmail.authMode()]);
-      const via = mode === 'runtime' ? ' [client ID on this device]'
-        : mode === 'manifest' ? ' [client ID from manifest]' : '';
+      const via = mode === 'runtime' ? 'Client ID stored on this device'
+        : mode === 'manifest' ? 'Client ID from manifest' : '';
+      let cls = 'is-warn';
+      let title = 'Not connected';
+      let sub = 'Click Connect Gmail to authorise.';
       if (ok) {
-        el.textContent = 'Gmail: connected ✓ sends from your own account' + via;
-        el.style.color = '#00c864';
+        cls = 'is-ok';
+        title = 'Connected';
+        sub = 'Sends from your own account' + (via ? ' · ' + via : '');
       } else if (mode === 'unconfigured') {
-        el.textContent = 'Gmail: no client ID yet — paste one below, then Connect';
-        el.style.color = '#ffaa00';
-      } else {
-        el.textContent = 'Gmail: not connected — click Connect Gmail' + via;
-        el.style.color = '#ffaa00';
+        title = 'Not configured';
+        sub = 'Paste a client ID below, then Connect.';
+      } else if (via) {
+        sub = via + ' · click Connect Gmail to authorise.';
       }
+      this.followupSetStatus(cls, title, sub);
       // Reflect a stored client ID without echoing it in full.
       const cfg = await FollowupEmail.loadOAuthConfig();
       const idEl = document.getElementById('followupClientId');
       if (idEl && cfg.clientId && !idEl.value) idEl.value = cfg.clientId;
     } catch (e) {
-      el.textContent = 'Gmail: unavailable — ' + (e.message || e);
-      el.style.color = '#ff6b6b';
+      this.followupSetStatus('is-error', 'Unavailable', (e.message || String(e)).slice(0, 120));
+    }
+  }
+
+  // Renders the connection pill: state class, headline, and sub-line.
+  followupSetStatus(cls, title, sub) {
+    const el = document.getElementById('followupGmailStatus');
+    if (!el) return;
+    el.className = 'fu-status ' + (cls || '');
+    el.innerHTML = '<span class="fu-dot"></span><span class="fu-status-text"></span>';
+    const t = el.querySelector('.fu-status-text');
+    t.textContent = title || '';
+    if (sub) {
+      const s2 = document.createElement('span');
+      s2.className = 'fu-status-sub';
+      s2.textContent = sub;
+      t.appendChild(s2);
     }
   }
 
@@ -2214,7 +2252,7 @@ class ATSTailor {
   async followupSend({ test }) {
     const result = document.getElementById('followupResult');
     const setMsg = (msg, color) => { if (result) { result.textContent = msg; result.style.color = color || ''; } };
-    if (typeof FollowupEmail === 'undefined') { setMsg('Follow-up module not loaded', '#ff6b6b'); return; }
+    if (typeof FollowupEmail === 'undefined') { setMsg('Follow-up module not loaded', 'var(--error)'); return; }
 
     try {
       const ctx = await this.followupContext();
@@ -2225,7 +2263,7 @@ class ATSTailor {
       body = body.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '').trim();
 
       if (test) {
-        if (!ctx.myEmail) { setMsg('No address on your profile to send the test to', '#ff6b6b'); return; }
+        if (!ctx.myEmail) { setMsg('No address on your profile to send the test to', 'var(--error)'); return; }
         setMsg('Sending test…');
         await FollowupEmail.send({
           to: ctx.myEmail,
@@ -2234,11 +2272,11 @@ class ATSTailor {
             '----------------------------------------\n\n' + body,
           fromName: ctx.myName,
         });
-        setMsg('Test sent to ' + ctx.myEmail + ' ✓', '#00c864');
+        setMsg('Test sent to ' + ctx.myEmail + ' ✓', 'var(--success)');
         return;
       }
 
-      if (!ctx.email) { setMsg('No recipient. Add an address the employer published, or leave blank to skip.', '#ff6b6b'); return; }
+      if (!ctx.email) { setMsg('No recipient. Add an address the employer published, or leave blank to skip.', 'var(--error)'); return; }
       const jobKey = (this.currentJob?.url || ctx.title || '') + '|' + ctx.email;
 
       // Anti-spam policy: email is permanent in the recipient's mailbox and
@@ -2253,21 +2291,21 @@ class ATSTailor {
         const when = policy.nextEligibleAt
           ? ' Eligible again on ' + new Date(policy.nextEligibleAt).toLocaleDateString('en-GB') + '.'
           : '';
-        setMsg('Skipped — ' + policy.reasons[0] + when, '#ffaa00');
+        setMsg('Skipped — ' + policy.reasons[0] + when, 'var(--warning)');
         console.log('[ATS Tailor] follow-up skipped:', policy.reasons[0]);
         return;
       }
-      if (policy.warnings.length) setMsg(policy.warnings[0], '#ffaa00');
+      if (policy.warnings.length) setMsg(policy.warnings[0], 'var(--warning)');
 
       setMsg('Sending…');
       await FollowupEmail.send({ to: ctx.email, subject, body, fromName: ctx.myName });
       await FollowupEmail.markSent(jobKey, {
         to: ctx.email, title: ctx.title, jobId: ctx.jobId, company: ctx.company,
       });
-      setMsg('Follow-up sent to ' + ctx.email + ' ✓', '#00c864');
+      setMsg('Follow-up sent to ' + ctx.email + ' ✓', 'var(--success)');
       this.showToast('Follow-up email sent', 'success');
     } catch (e) {
-      setMsg('Send failed: ' + (e.message || e), '#ff6b6b');
+      setMsg('Send failed: ' + (e.message || e), 'var(--error)');
     }
   }
 
@@ -2294,12 +2332,12 @@ class ATSTailor {
           info.textContent = '✓ Published in the posting: ' + detected.email +
             (detected.contactName ? ' (' + detected.contactName + ')' : '') +
             (detected.jobId ? ' · Job ID ' + detected.jobId : '');
-          info.style.color = '#00c864';
+          info.style.color = 'var(--success)';
         } else {
           info.textContent = 'No email in this posting' +
             (detected.jobId ? ' (Job ID ' + detected.jobId + ')' : '') +
             ' — checking the company\'s published careers address…';
-          info.style.color = '#ffaa00';
+          info.style.color = 'var(--warning)';
           // Automatic fallback: look for a candidate-facing mailbox the
           // employer published on its own site. No manual step.
           this.followupFindCareersAddress();
@@ -2329,7 +2367,7 @@ class ATSTailor {
           if (info) {
             info.textContent = 'No contact email published for this role, and none found on the company site. ' +
               'You can paste an address into the field above.';
-            info.style.color = '#ffaa00';
+            info.style.color = 'var(--warning)';
           }
           return;
         }
@@ -2345,13 +2383,13 @@ class ATSTailor {
             info.textContent = '✓ Company\'s published recruiting address: ' + resp.email +
               (detected && detected.jobId ? ' · Job ID ' + detected.jobId : '') +
               ' (found on ' + (resp.source || 'their site') + ')';
-            info.style.color = '#00c864';
+            info.style.color = 'var(--success)';
           }
           console.log('[ATS Tailor] careers address:', resp.email, 'from', resp.source);
         } else if (info) {
           info.textContent = 'No contact email published for this role, and none found on the company site. ' +
             'You can paste an address into the field above.';
-          info.style.color = '#ffaa00';
+          info.style.color = 'var(--warning)';
         }
       });
     } catch (e) {
@@ -2374,8 +2412,8 @@ class ATSTailor {
         host.insertBefore(panel, host.firstChild);
       }
       const COLORS = {
-        light: { bg: 'rgba(0,200,100,0.10)', bd: '#00c864', fg: '#00c864' },
-        targeted: { bg: 'rgba(255,170,0,0.10)', bd: '#ffaa00', fg: '#ffaa00' },
+        light: { bg: 'rgba(0,200,100,0.10)', bd: 'var(--success)', fg: 'var(--success)' },
+        targeted: { bg: 'rgba(255,170,0,0.10)', bd: 'var(--warning)', fg: 'var(--warning)' },
         heavy: { bg: 'rgba(56,139,253,0.12)', bd: '#388bfd', fg: '#6cb1ff' },
       };
       const c = COLORS[v.focus] || COLORS.targeted;
