@@ -347,6 +347,89 @@
     return 'https://' + (chrome.runtime && chrome.runtime.id) + '.chromiumapp.org/';
   }
 
+  // Google treats ".../" and "..." as two DIFFERENT redirect URIs and matches
+  // them byte-for-byte, but Chrome intercepts the whole chromiumapp.org
+  // origin either way. So whichever variant the user actually pasted into
+  // the Cloud Console is the one we must send. Rather than making the user
+  // guess -- the single most common way this setup fails -- we probe both
+  // and use whichever Google accepts.
+  function redirectUriVariants() {
+    const base = redirectUri().replace(/\/+$/, '');
+    return [base + '/', base];
+  }
+
+  function buildAuthUrl(clientId, uri) {
+    return 'https://accounts.google.com/o/oauth2/v2/auth' +
+      '?client_id=' + encodeURIComponent(clientId) +
+      '&response_type=token' +
+      '&redirect_uri=' + encodeURIComponent(uri) +
+      '&scope=' + encodeURIComponent(GMAIL_SCOPE) +
+      '&prompt=consent';
+  }
+
+  // Google renders every setup failure as an HTML error PAGE inside the auth
+  // popup. chrome.identity cannot read that page, so all Chrome ever reports
+  // back is "the user closed the window" -- which is why this has been a dead
+  // end. We can, however, fetch the same URL ourselves and read the page.
+  // Credentials are omitted deliberately: parameter validation happens before
+  // sign-in, so an anonymous request still surfaces the real error, and we
+  // never touch the user's Google cookies.
+  function classifyAuthPage(text, status) {
+    const t = String(text || '');
+    if (/redirect_uri_mismatch/i.test(t)) return { code: 'redirect_uri_mismatch' };
+    if (/deleted_client/i.test(t)) return { code: 'deleted_client' };
+    if (/invalid_client|OAuth client was not found/i.test(t)) return { code: 'invalid_client' };
+    if (/invalid_scope/i.test(t)) return { code: 'invalid_scope' };
+    if (/admin_policy_enforced/i.test(t)) return { code: 'admin_policy_enforced' };
+    if (/org_internal/i.test(t)) return { code: 'org_internal' };
+    if (/access_denied|has not completed the Google verification/i.test(t)) return { code: 'access_denied' };
+    // A 400 we can't name is still a definite failure; anything else means
+    // Google was happy enough to move on to sign-in/consent.
+    if (status === 400) return { code: 'unknown_400' };
+    return { code: 'ok' };
+  }
+
+  async function probeRedirect(clientId, uri) {
+    try {
+      const res = await fetch(buildAuthUrl(clientId, uri), {
+        credentials: 'omit',
+        redirect: 'follow',
+      });
+      return classifyAuthPage(await res.text(), res.status);
+    } catch (e) {
+      // Network/CSP failure tells us nothing about the config -- don't
+      // block the real flow on it.
+      return { code: 'unprobeable', detail: (e && e.message) || String(e) };
+    }
+  }
+
+  // Returns the redirect URI Google accepts, or throws naming the exact fix.
+  async function resolveRedirectUri(clientId) {
+    const variants = redirectUriVariants();
+    const results = [];
+    for (const uri of variants) {
+      const r = await probeRedirect(clientId, uri);
+      results.push({ uri, code: r.code });
+      if (r.code === 'ok' || r.code === 'unprobeable') return uri;
+      // These are client-level faults; trying the other slash won't help.
+      if (r.code === 'invalid_client' || r.code === 'deleted_client') {
+        throw new Error(
+          'Google rejected the client ID itself (' + r.code + '). The ID saved here does not match a live ' +
+          'OAuth client in your project — re-copy it from Google Cloud Console → Credentials.'
+        );
+      }
+    }
+    if (results.every((r) => r.code === 'redirect_uri_mismatch')) {
+      throw new Error(
+        'redirect_uri_mismatch — neither redirect URI is registered on your OAuth client. ' +
+        'In Google Cloud Console → Credentials → your Web application client → Authorised redirect URIs ' +
+        '(NOT Authorised JavaScript origins), add:\n  ' + variants[0] + '\nthen Save and wait ~60s.'
+      );
+    }
+    const first = results[0] || {};
+    throw new Error('Google rejected the authorisation request (' + (first.code || 'unknown') + ').');
+  }
+
   function _cachedToken() {
     return new Promise((resolve) => {
       try {
@@ -395,26 +478,24 @@
     if (cached) return cached;
     if (!interactive) throw new Error('Gmail authorisation expired — click Connect Gmail');
 
-    const url = 'https://accounts.google.com/o/oauth2/v2/auth' +
-      '?client_id=' + encodeURIComponent(clientId) +
-      '&response_type=token' +
-      '&redirect_uri=' + encodeURIComponent(redirectUri()) +
-      '&scope=' + encodeURIComponent(GMAIL_SCOPE) +
-      '&prompt=consent';
+    // Find the variant Google accepts BEFORE opening the window. This throws
+    // with the precise, actionable cause instead of letting the user hit an
+    // opaque error page.
+    const uri = await resolveRedirectUri(clientId);
+    const url = buildAuthUrl(clientId, uri);
 
     const redirect = await new Promise((resolve, reject) => {
       try {
         chrome.identity.launchWebAuthFlow({ url, interactive: true }, (responseUrl) => {
           const err = chrome.runtime.lastError;
           if (err || !responseUrl) {
-            // Google renders redirect_uri_mismatch as an error PAGE inside
-            // the auth window, so Chrome only reports "window closed" once
-            // the user dismisses it. Name the likely cause rather than
-            // leaving them with a dead end.
+            // The preflight already cleared the config, so a failure here is
+            // almost always consent-side: account not on the test-user list,
+            // or the window genuinely dismissed.
             reject(new Error(
               ((err && err.message) || 'Authorisation window closed') +
-              ' — if Google showed "Error 400: redirect_uri_mismatch", add this EXACT URI to your ' +
-              'Web application client\'s Authorised redirect URIs: ' + redirectUri()
+              ' — the redirect URI checked out, so if Google showed a block screen, add your Google ' +
+              'account under OAuth consent screen → Test users and confirm the Gmail API is enabled.'
             ));
             return;
           }
@@ -496,14 +577,38 @@
     if (mode === 'runtime') {
       const cfg = await loadOAuthConfig();
       add(!!cfg.clientId, 'client ID saved on this device', 'Paste your OAuth client ID and click Save client ID.');
-      add(true, 'redirect URI: ' + redirectUri(), '');
+
+      // Ask Google directly which redirect URI it accepts, so this reports
+      // the actual cause rather than a list of things it might be.
+      const variants = redirectUriVariants();
+      if (cfg.clientId) {
+        const probes = [];
+        for (const uri of variants) probes.push({ uri, code: (await probeRedirect(cfg.clientId, uri)).code });
+        const good = probes.find((p) => p.code === 'ok');
+        const clientBad = probes.find((p) => p.code === 'invalid_client' || p.code === 'deleted_client');
+        const unprobeable = probes.every((p) => p.code === 'unprobeable');
+
+        add(!clientBad, 'client ID recognised by Google',
+          'Google says the client does not exist (' + (clientBad && clientBad.code) +
+          '). Re-copy the ID from Cloud Console → Credentials.');
+
+        if (unprobeable) {
+          add(true, 'redirect URI (could not verify — offline?): ' + variants[0], '');
+        } else {
+          add(!!good, good ? 'redirect URI registered: ' + good.uri : 'redirect URI registered',
+            'NOT registered. In Cloud Console → Credentials → your Web application client → ' +
+            'Authorised redirect URIs (not Authorised JavaScript origins), add exactly:  ' + variants[0] +
+            '  — then Save and wait ~60s.');
+        }
+      } else {
+        add(true, 'redirect URI: ' + variants[0], '');
+      }
+
       let tokenOk = false; let tokenErr = '';
       try { await getAuthToken(false); tokenOk = true; } catch (e) { tokenErr = (e && e.message) || String(e); }
       add(tokenOk, 'Gmail authorisation present',
-        'Click Connect Gmail. If Google shows redirect_uri_mismatch, add EXACTLY "' + redirectUri() +
-        '" to your Web-application OAuth client\'s Authorised redirect URIs. ' +
-        'If it shows access_denied, add your account under OAuth consent screen -> Test users and ' +
-        'confirm the Gmail API is ENABLED. (' + tokenErr + ')');
+        'Click Connect Gmail and complete the Google consent screen. If Google blocks it, add your ' +
+        'account under OAuth consent screen → Test users and confirm the Gmail API is ENABLED. (' + tokenErr + ')');
       const failed = checks.filter((c) => !c.ok);
       return {
         ok: failed.length === 0,
@@ -813,7 +918,7 @@
     BUILT_IN_TEMPLATES,
     buildTokens, render, compose,
     isConnected, connect, disconnect, diagnose, authMode,
-    loadOAuthConfig, saveOAuthConfig, redirectUri,
+    loadOAuthConfig, saveOAuthConfig, redirectUri, redirectUriVariants, probeRedirect,
     send, sendTest, buildRaw,
     alreadySent, markSent, checkSendPolicy, SEND_POLICY,
   };
