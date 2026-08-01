@@ -179,7 +179,6 @@
       // Build contact parts - REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location] (ALWAYS both)
       const extractedLocDedup = (extractedJobLocation && !/^Dublin,?\s*IE$/i.test(extractedJobLocation)) ? extractedJobLocation : '';
       const contactParts = [location, formattedPhone, email, extractedLocDedup].filter(Boolean);
-      const contactParts = [location, formattedPhone, email, extractedJobLocation].filter(Boolean);
       const linkParts = [linkedin, github].filter(Boolean);
 
       return {
