@@ -155,11 +155,6 @@
           data.certifications = Array.isArray(candidateData.certifications)
             ? candidateData.certifications
             : (typeof candidateData.certifications === 'string' ? [candidateData.certifications] : []);
-        
-        if (candidateData.certifications) {
-          data.certifications = Array.isArray(candidateData.certifications) 
-            ? candidateData.certifications 
-            : [candidateData.certifications];
         }
       }
 
@@ -599,173 +594,30 @@
       });
     },
 
-    // ============ ENFORCE INTERVIEW-GRADE EXPERIENCE DEPTH ============
-    // HARD RULE: Every role gets minimum 5 detailed, keyword-rich bullets.
-    // Synthetic bullets use diverse templates so they never repeat the same pattern.
-    // Ensures deeper roles (4th and 5th entries) contain at least 4 strong bullets each
-    // while naturally reinforcing important keywords across the CV.
+    // ============ CLEAN EXPERIENCE BULLETS (honesty-preserving) ============
+    // DISABLED FABRICATOR. The previous version ("enforce interview-grade
+    // depth") synthesised template bullets with invented outcomes and fake
+    // metrics ("reduced turnaround time by 30%+") and appended keyword
+    // tails to real bullets -- the exact red-flag content the recruiter
+    // audit exists to catch. Bullets are the candidate's own record: this
+    // now only normalises them (strip bullet glyphs, trim, dedupe). It
+    // never adds, pads, or rewrites a bullet.
     enforceInterviewGradeExperienceDepth(cvData, keywordBuckets = {}) {
       if (!cvData?.experience || !Array.isArray(cvData.experience)) return cvData;
 
       const clone = JSON.parse(JSON.stringify(cvData));
-      const allKeywords = Array.isArray(keywordBuckets.allKeywords) ? keywordBuckets.allKeywords : [];
-      const highPriority = Array.isArray(keywordBuckets.highPriority) ? keywordBuckets.highPriority : [];
-      const mediumPriority = Array.isArray(keywordBuckets.mediumPriority) ? keywordBuckets.mediumPriority : [];
-
-      const priorityPool = [...highPriority, ...mediumPriority, ...allKeywords]
-        .filter(Boolean)
-        .map(k => String(k).trim())
-        .filter(k => k.length > 1);
-      // Keep up to 30 keywords for variety across all roles
-      const kwPool = [...new Set(priorityPool)].slice(0, 30);
-
-      // 12 diverse action verbs to avoid repetition
-      const actionVerbs = [
-        'Led', 'Architected', 'Delivered', 'Optimised', 'Implemented',
-        'Directed', 'Spearheaded', 'Established', 'Drove', 'Streamlined',
-        'Orchestrated', 'Transformed'
-      ];
-
-      // 10 diverse bullet templates - each produces a structurally different sentence
-      // Placeholders: {verb}, {kwA}, {kwB}, {kwC}, {title}, {company}, {outcome}
-      const bulletTemplates = [
-        '{verb} end-to-end {kwA} strategy across multiple workstreams, integrating {kwB} to achieve {outcome}.',
-        'Owned {kwA} delivery pipeline from planning through release, applying {kwB} and {kwC} to consistently exceed sprint targets and quality benchmarks.',
-        'Built and scaled a {kwA} framework that reduced turnaround time by 30%+, while embedding {kwB} best practices across the team.',
-        '{verb} cross-functional initiatives spanning {kwA} and {kwB}, partnering with senior stakeholders to deliver measurable improvements in {outcome}.',
-        'Designed and executed {kwA} solutions in collaboration with engineering and product teams, resulting in strengthened {kwB} capabilities and {outcome}.',
-        '{verb} adoption of {kwA} tooling and processes, mentoring junior team members on {kwB} while driving {outcome} across the department.',
-        'Introduced data-driven {kwA} workflows that improved reporting accuracy, using {kwB} to inform decision-making and achieve {outcome}.',
-        'Managed competing priorities across {kwA} and {kwB} programmes, maintaining delivery velocity and {outcome} under tight deadlines.',
-        '{verb} migration and modernisation of legacy {kwA} systems, applying {kwB} principles to improve maintainability and reduce operational overhead by 25%+.',
-        'Championed continuous improvement through {kwA} initiatives, aligning {kwB} and {kwC} capabilities with organisational goals and {outcome}.'
-      ];
-
-      // 8 diverse outcome phrases
-      const outcomes = [
-        'improved system reliability and delivery predictability',
-        'reduced cycle time and strengthened release quality',
-        'increased stakeholder confidence and transparent execution',
-        'accelerated roadmap delivery while maintaining technical rigour',
-        'measurable gains in operational efficiency and business outcomes',
-        'enhanced team productivity and cross-functional alignment',
-        'consistent on-time delivery and reduced production incidents',
-        'higher customer satisfaction scores and stronger SLA adherence'
-      ];
-
-      // Keyword picker that cycles through pool without immediate repeats
-      let kwIndex = 0;
-      const pickKeyword = (offset = 0) => {
-        if (kwPool.length === 0) return 'cross-functional collaboration';
-        const idx = (kwIndex + offset) % kwPool.length;
-        return kwPool[idx];
-      };
-
-      const generateRoleBullet = (role, roleIdx, slot) => {
-        const title = role?.title || role?.position || 'engineering role';
-        const company = role?.company || role?.organization || 'the organisation';
-
-        // Rotate through templates so consecutive bullets use different structures
-        const templateIdx = (roleIdx * 5 + slot) % bulletTemplates.length;
-        const template = bulletTemplates[templateIdx];
-
-        const verb = actionVerbs[(roleIdx * 3 + slot) % actionVerbs.length];
-        const kwA = pickKeyword(roleIdx * 5 + slot);
-        const kwB = pickKeyword(roleIdx * 5 + slot + 1);
-        const kwC = pickKeyword(roleIdx * 5 + slot + 2);
-        const outcome = outcomes[(roleIdx * 2 + slot) % outcomes.length];
-
-        // Advance keyword index so the next role/slot picks different keywords
-        kwIndex = (kwIndex + 3) % Math.max(kwPool.length, 1);
-
-        return template
-          .replace('{verb}', verb)
-          .replace('{kwA}', kwA)
-          .replace('{kwB}', kwB)
-          .replace('{kwC}', kwC)
-          .replace('{title}', title)
-          .replace('{company}', company)
-          .replace('{outcome}', outcome);
-      };
-
-      // HARD RULE: minimum 5 bullets per role, no exceptions
-      const TARGET_MIN = 5;
-
-        .filter(k => k.length > 1)
-        .slice(0, 18);
-
-      const actionVerbs = ['Led', 'Architected', 'Delivered', 'Optimised', 'Scaled', 'Implemented', 'Directed'];
-      const outcomes = [
-        'improving system reliability and delivery predictability',
-        'reducing cycle time and strengthening release quality',
-        'increasing stakeholder confidence through transparent execution',
-        'accelerating roadmap delivery while maintaining technical quality',
-        'improving operational efficiency and measurable business outcomes'
-      ];
-
-      const generateRoleBullet = (role, idx, slot) => {
-        const title = role?.title || role?.position || 'engineering role';
-        const company = role?.company || role?.organization || 'the organisation';
-        const kwA = priorityPool[(idx * 3 + slot) % Math.max(priorityPool.length, 1)] || 'cross-functional collaboration';
-        const kwB = priorityPool[(idx * 3 + slot + 1) % Math.max(priorityPool.length, 1)] || 'stakeholder management';
-        const verb = actionVerbs[(idx + slot) % actionVerbs.length];
-        const outcome = outcomes[(idx + slot) % outcomes.length];
-
-        return `${verb} ${kwA} initiatives in ${title} at ${company}, applying ${kwB} to deliver high-impact programmes and ${outcome}.`;
-      };
-
-      clone.experience = clone.experience.map((role, idx) => {
+      clone.experience = clone.experience.map((role) => {
         const bullets = Array.isArray(role?.bullets)
-          ? role.bullets.filter(Boolean).map(b => String(b).replace(/^[-•*▪]\s*/, '').trim()).filter(Boolean)
+          ? role.bullets.filter(Boolean).map(b => String(b).replace(/^[-\u2022*\u25aa]\s*/, '').trim()).filter(Boolean)
           : [];
-
-        const targetMin = idx >= 3 && idx <= 4 ? 4 : (idx <= 2 ? 5 : 3);
         const deduped = [];
         const seen = new Set();
         bullets.forEach(b => {
           const key = b.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-          if (key && !seen.has(key)) {
-            seen.add(key);
-            deduped.push(b);
-          }
+          if (key && !seen.has(key)) { seen.add(key); deduped.push(b); }
         });
-
-        // Inject keywords into existing bullets that lack them
-        if (kwPool.length > 0) {
-          deduped.forEach((bullet, bIdx) => {
-            const lower = bullet.toLowerCase();
-            const hasKeyword = kwPool.some(kw => lower.includes(kw.toLowerCase()));
-            if (!hasKeyword && bullet.length > 20) {
-              const kw = pickKeyword(idx * 5 + bIdx);
-              // Append keyword phrase naturally at the end
-              if (bullet.endsWith('.')) {
-                deduped[bIdx] = bullet.slice(0, -1) + `, incorporating ${kw} best practices.`;
-              } else {
-                deduped[bIdx] = bullet + `, incorporating ${kw} best practices.`;
-              }
-            }
-          });
-        }
-
-        // Generate synthetic bullets to reach TARGET_MIN
-        let attempts = 0;
-        while (deduped.length < TARGET_MIN && attempts < 10) {
-        while (deduped.length < targetMin) {
-          const generated = generateRoleBullet(role, idx, deduped.length);
-          const key = generated.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-          if (!seen.has(key)) {
-            seen.add(key);
-            deduped.push(generated);
-          }
-          attempts++;
-          } else {
-            break;
-          }
-        }
-
         return { ...role, bullets: deduped };
       });
-
       return clone;
     },
 
@@ -949,120 +801,6 @@
       return experience;
     },
 
-    _legacyInjectAllKeywordsIntoExperience_disabled(experience, keywordsByPriority) {
-      if (!experience || experience.length === 0) return experience;
-
-      const { high = [], medium = [], low = [], all = [] } = keywordsByPriority;
-      const allKeywords = all.length > 0 ? all : [...high, ...medium, ...low];
-
-      // Track keyword mentions with priority-based targets
-      const mentions = {};
-      const targets = {};
-      const maxMentions = {};
-
-      high.forEach(kw => { mentions[kw] = 0; targets[kw] = 4; maxMentions[kw] = 6; });
-      medium.forEach(kw => { mentions[kw] = 0; targets[kw] = 3; maxMentions[kw] = 5; });
-      low.forEach(kw => { mentions[kw] = 0; targets[kw] = 1; maxMentions[kw] = 2; });
-
-      // For keywords not categorized, default to medium priority targets
-      allKeywords.forEach(kw => {
-        if (mentions[kw] === undefined) {
-          mentions[kw] = 0;
-          targets[kw] = 2;
-          maxMentions[kw] = 3;
-        }
-      });
-
-      // Count existing mentions
-      experience.forEach(job => {
-        (Array.isArray(job.bullets) ? job.bullets : []).forEach(bullet => {
-        job.bullets.forEach(bullet => {
-          allKeywords.forEach(kw => {
-            if (bullet.toLowerCase().includes(kw.toLowerCase())) {
-              mentions[kw]++;
-            }
-          });
-        });
-      });
-
-      // Natural injection phrases - UPDATED: No banned words (removed leveraging, utilizing)
-      const phrases = [
-        'implementing', 'applying', 'through', 'incorporating',
-        'via', 'using', 'with', 'employing'
-      ];
-      const getPhrase = () => phrases[Math.floor(Math.random() * phrases.length)];
-
-      // AGGRESSIVE injection: process all bullets, inject until all keywords have enough mentions
-      return experience.map((job, jobIndex) => {
-        const maxKeywordsPerBullet = Math.max(2, 4 - jobIndex);
-
-        const safeBullets = Array.isArray(job.bullets) ? job.bullets : [];
-        const enhancedBullets = safeBullets.map((bullet) => {
-        const enhancedBullets = job.bullets.map((bullet) => {
-          const needsMore = allKeywords.filter(kw => {
-            const current = mentions[kw];
-            const target = targets[kw] || 2;
-            const inBullet = bullet.toLowerCase().includes(kw.toLowerCase());
-            return current < target && !inBullet;
-          });
-
-          if (needsMore.length === 0) return bullet;
-
-          let enhanced = bullet;
-
-          const sorted = [
-            ...needsMore.filter(kw => high.includes(kw)),
-            ...needsMore.filter(kw => medium.includes(kw)),
-            ...needsMore.filter(kw => low.includes(kw))
-          ];
-
-          const toInject = sorted.slice(0, maxKeywordsPerBullet);
-
-          toInject.forEach(kw => {
-            if (mentions[kw] >= (maxMentions[kw] || 5)) return;
-
-            const kwLower = kw.toLowerCase();
-            const enhancedLower = enhanced.toLowerCase();
-            if (enhancedLower.includes(kwLower)) return;
-
-            const phrase = getPhrase();
-
-            // Strategy 1: After action verb
-            const verbMatch = enhanced.match(/^(Led|Managed|Developed|Built|Created|Implemented|Designed|Engineered|Delivered|Owned|Optimised|Automated|Directed|Shaped|Drove|Established)\b/i);
-            if (verbMatch) {
-              const idx = verbMatch[0].length;
-              enhanced = `${enhanced.slice(0, idx)} ${kw}-focused${enhanced.slice(idx)}`;
-              mentions[kw]++;
-              return;
-            }
-
-            // Strategy 2: Before first comma
-            const commaIdx = enhanced.indexOf(',');
-            if (commaIdx > 15 && commaIdx < enhanced.length * 0.6) {
-              enhanced = `${enhanced.slice(0, commaIdx)}, ${phrase} ${kw}${enhanced.slice(commaIdx)}`;
-              mentions[kw]++;
-              return;
-            }
-
-            // Strategy 3: Before period at end
-            if (enhanced.endsWith('.')) {
-              enhanced = `${enhanced.slice(0, -1)}, ${phrase} ${kw}.`;
-              mentions[kw]++;
-              return;
-            }
-
-            // Strategy 4: GUARANTEED - just append
-            enhanced = `${enhanced}, ${phrase} ${kw}`;
-            mentions[kw]++;
-          });
-
-          return enhanced;
-        });
-
-        return { ...job, bullets: enhancedBullets };
-      });
-    },
-
     // Legacy function for backward compatibility
     injectKeywordsIntoExperience(experience, keywords, options = {}) {
       return this.injectAllKeywordsIntoExperience(experience, { high: keywords, all: keywords });
@@ -1230,7 +968,6 @@
             y += 2;
 
             (Array.isArray(job.bullets) ? job.bullets : []).forEach(bullet => {
-            job.bullets.forEach(bullet => {
               const bulletText = `${ATS_SPEC.bullets.char} ${bullet}`;
               const bulletLines = doc.splitTextToSize(bulletText, contentWidth - ATS_SPEC.bullets.indent);
               bulletLines.forEach((line, lineIdx) => {
@@ -1536,42 +1273,11 @@
 
       // === PARAGRAPH 4: Compelling close — confident, not passive ===
       const para4 = `I am confident that my combination of technical capability, leadership instinct, and track record of delivery would make a meaningful contribution to ${company}. I would welcome the opportunity to discuss how my background aligns with your goals, and how I can add value from day one. Thank you for your time and consideration.`;
-      // === PARAGRAPH 1: Positioning ===
-      const kw1 = highPriority[0] || 'software engineering';
-      const kw2 = highPriority[1] || 'delivery excellence';
-      const years = this.extractYearsExperience(data.summary) || '7+';
-
-      const para1 = `I am writing to express my interest in the ${jobTitle} position at ${company}. With ${years} years of progressive experience across complex delivery environments, I bring a track record of leading ${kw1} initiatives and sustaining ${kw2} at scale.`;
-      addText(para1, false, font.body);
-      y += 18;
-
-      // === PARAGRAPH 2: Evidence and impact ===
-      const kw3 = highPriority[2] || 'stakeholder management';
-      const kw4 = highPriority[3] || 'cross-functional collaboration';
-      const topBullet = data.experience?.[0]?.bullets?.[0] || 'driving efficiency improvements of 30%+';
-
-      const para2 = `At ${topExp}, I delivered high-impact outcomes including ${this.extractAchievement(topBullet)}. I work closely with engineering, product, and business stakeholders, combining ${kw3} with ${kw4} to translate strategic objectives into measurable results.`;
-      addText(para2, false, font.body);
-      y += 18;
-
-      // === PARAGRAPH 3: Skills alignment ===
-      const kw5 = highPriority[4] || 'technical leadership';
-      const kw6 = highPriority[5] || 'problem-solving';
-      const kw7 = highPriority[6] || 'communication';
-
-      const para3 = `My recent work has centred on ${kw5}, with sustained focus on ${kw6}, ${kw7}, and disciplined operational delivery. This combination allows me to contribute from day one, raise team performance, and strengthen quality standards across the organisation.`;
-      addText(para3, false, font.body);
-      y += 18;
-
-      // === PARAGRAPH 4: Close with intent ===
-      const kw8 = highPriority[7] || 'execution excellence';
-      const para4 = `I would welcome the opportunity to discuss how I can support ${company} in achieving its goals through ${kw8}, dependable ownership, and consistent delivery. Thank you for your time and consideration.`;
       addText(para4, false, font.body);
       y += 20;
 
       // === CLOSING ===
       addText('Yours sincerely,', false, font.body);
-      addText('Sincerely,', false, font.body);
       y += 16;
       addText(name, true, font.body);
 
@@ -1607,10 +1313,6 @@
                                    'organization', 'n/a', 'unknown', '', 'employer'];
       const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim()))
         ? rawCompany
-      const invalidCompanyNames = ['company', 'your company', 'the company', 'your organization', 
-                                   'organization', 'n/a', 'unknown', '', 'employer'];
-      const company = (rawCompany && !invalidCompanyNames.includes(rawCompany.toLowerCase().trim())) 
-        ? rawCompany 
         : 'the hiring organization';
       // ROBUST: Ensure keywords is always an array before slicing
       const keywordsArray = Array.isArray(keywords) ? keywords : (keywords?.all || keywords?.highPriority || []);
