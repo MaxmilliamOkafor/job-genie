@@ -188,7 +188,7 @@
     if (/country|nationality|citizenship/.test(l) && !/code|phone|dial/.test(l)) return _country(P);
     if (/address|street/.test(l) && !/email/.test(l)) return P.address || '';
     // Location FIELDS only -- not eligibility questions mentioning "location".
-    if (/location|where .*(you|do you) (live|based)|based in/.test(l) && !/authoriz|sponsor|relocat|eligib|stated|willing/.test(l)) {
+    if (/location|where .*(you|do you) (live|based)|based in/.test(l) && !/authoriz|authoris|sponsor|relocat|eligib|stated|willing/.test(l)) {
       return P.city ? (P.city + (P.state ? ', ' + P.state : '')) : '';
     }
 
@@ -203,13 +203,13 @@
     if (/graduation|grad.?year|grad.?date/.test(l)) return P.graduation_year || P.grad_year || '';
     if (/company|employer|organisation|organization/.test(l) && !/why|about/.test(l)) return P.current_company || P.company || '';
     // "role" appears inside eligibility questions ("...of this role?").
-    if (/job.?title|current.?title|\btitle\b|\bposition\b|\brole\b/.test(l) && !/company|authoriz|eligib|sponsor|apply|hear|why/.test(l)) {
+    if (/job.?title|current.?title|\btitle\b|\bposition\b|\brole\b/.test(l) && !/company|authoriz|authoris|eligib|sponsor|apply|hear|why/.test(l)) {
       return P.current_title || P.title || '';
     }
 
     // --- standard screening answers ----------------------------------
     if (/years .*(experience|exp)|experience .*years|how many years/.test(l)) return P.years || DEFAULTS.years;
-    if (/authoriz|legally .*(work|entitled)|eligible to work|work .*(right|permit).*(yes|no)?/.test(l)) return P.work_authorized || DEFAULTS.authorized;
+    if (/authoriz|authoris|legally .*(work|entitled)|eligible to work|right to work|work .*(right|permit).*(yes|no)?/.test(l)) return P.work_authorized || DEFAULTS.authorized;
     if (/sponsor|visa|immigration|work.?permit/.test(l)) return P.sponsorship || DEFAULTS.sponsorship;
     if (/relocat|willing to move/.test(l)) return DEFAULTS.relocation;
     if (/remote|work from home|hybrid|on.?site/.test(l)) return DEFAULTS.remote;

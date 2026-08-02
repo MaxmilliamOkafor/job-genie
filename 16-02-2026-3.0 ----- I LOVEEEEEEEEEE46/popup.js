@@ -826,6 +826,36 @@ class ATSTailor {
       this.showToast(enabled ? '💼 LinkedIn Easy Apply autofill enabled' : 'LinkedIn autofill disabled', 'success');
     });
 
+    // Auto-advance: fills AND navigates. Turning it OFF must also clear
+    // auto-submit, or a later re-enable would silently resume submitting.
+    document.getElementById('linkedinAutoAdvanceToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      const patch = { linkedin_autoadvance_enabled: enabled };
+      if (!enabled) patch.linkedin_autosubmit_enabled = false;
+      chrome.storage.local.set(patch, () => this.syncLinkedInAutoUI());
+      this.showToast(enabled ? '⏩ Auto-advance enabled' : 'Auto-advance disabled', 'success');
+    });
+
+    // Auto-submit sends a real application to a real employer and cannot be
+    // undone, so it requires auto-advance and confirms once before arming.
+    document.getElementById('linkedinAutoSubmitToggle')?.addEventListener('change', async (e) => {
+      const enabled = !!e.target?.checked;
+      if (enabled) {
+        const adv = await new Promise((r) => chrome.storage.local.get(['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled === true)));
+        if (!adv) {
+          e.target.checked = false;
+          this.showToast('Turn on Auto-advance first', 'error');
+          return;
+        }
+        if (!confirm('Auto-submit will send applications to employers with no further review.\n\nSubmitted applications cannot be recalled, and a wrong answer to a question (work authorisation, notice period, salary) is sent as-is.\n\nTurn it on?')) {
+          e.target.checked = false;
+          return;
+        }
+      }
+      chrome.storage.local.set({ linkedin_autosubmit_enabled: enabled });
+      this.showToast(enabled ? '🚀 Auto-submit ARMED' : 'Auto-submit off', enabled ? 'warning' : 'success');
+    });
+
     // ---- Application follow-up email ----------------------------------
     document.getElementById('followupEnabledToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
@@ -896,6 +926,7 @@ class ATSTailor {
     this.loadWorkdaySettings();
     this.loadLocationSettings();
     this.loadAutofillSettings();
+    this.bindLinkedInFlowResults();
     this.loadSavedResponsesStats();
     
     // Check and show Workday snapshot panel if on Workday
@@ -1319,7 +1350,8 @@ class ATSTailor {
   // ============ AUTOFILL SETTINGS ============
   async loadAutofillSettings() {
     const result = await new Promise(resolve => {
-      chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled', 'followup_enabled'], resolve);
+      chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled',
+        'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled', 'followup_enabled'], resolve);
     });
 
     // Default OFF: matches "Toggle off to save API usage" messaging.
@@ -1331,6 +1363,11 @@ class ATSTailor {
     // LinkedIn Easy Apply is an independent preference (also default OFF).
     const liToggle = document.getElementById('linkedinAutofillToggle');
     if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
+    const advToggle = document.getElementById('linkedinAutoAdvanceToggle');
+    if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled === true;
+    const subToggle = document.getElementById('linkedinAutoSubmitToggle');
+    if (subToggle) subToggle.checked = result.linkedin_autosubmit_enabled === true;
+    this.syncLinkedInAutoUI();
     // Follow-up email: preference, saved template, and live Gmail status.
     const fuToggle = document.getElementById('followupEnabledToggle');
     if (fuToggle) fuToggle.checked = result.followup_enabled === true;
@@ -1979,6 +2016,52 @@ class ATSTailor {
   // Manual "fill now" for the per-site fillers. Injects the scripts into the
   // active tab first, so it works even when the tab predates the toggle
   // being switched on (registerContentScripts only covers later loads).
+  // Auto-submit is meaningless without auto-advance; show that in the UI
+  // rather than letting the user arm a switch that cannot fire.
+  syncLinkedInAutoUI() {
+    chrome.storage.local.get(['linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled'], (r) => {
+      const adv = r?.linkedin_autoadvance_enabled === true;
+      const sub = document.getElementById('linkedinAutoSubmitToggle');
+      const help = document.getElementById('linkedinAutoSubmitHelp');
+      if (sub) {
+        sub.disabled = !adv;
+        if (!adv) sub.checked = false;
+      }
+      if (help) help.style.opacity = adv ? '' : '0.55';
+    });
+  }
+
+  // The content script reports how a hands-free run ended.
+  bindLinkedInFlowResults() {
+    try {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (!msg || msg.action !== 'JG_LINKEDIN_FLOW_RESULT') return;
+        const out = document.getElementById('autofillRunResult');
+        if (out) {
+          out.textContent = this.describeFlowResult(msg.result);
+          out.style.color = ['submitted', 'at-submit'].includes(msg.result?.status)
+            ? 'var(--success)' : 'var(--warning)';
+        }
+      });
+    } catch (e) {}
+  }
+
+  describeFlowResult(r) {
+    if (!r) return '';
+    const n = r.steps || 0;
+    switch (r.status) {
+      case 'submitted': return 'Application submitted after ' + n + ' step(s).';
+      case 'at-submit': return 'Filled ' + n + ' step(s). ' + r.detail;
+      case 'needs-you': return r.detail;
+      case 'stuck':     return r.detail;
+      case 'no-modal':  return 'No Easy Apply dialog open.';
+      case 'off':       return r.detail;
+      case 'no-button': return 'Filled ' + n + ' step(s), then found no Next button.';
+      case 'max-steps': return r.detail;
+      default:          return r.detail || r.status;
+    }
+  }
+
   async runSiteAutofill(site) {
     const out = document.getElementById('autofillRunResult');
     const say = (msg, color) => { if (out) { out.textContent = msg; out.style.color = color || ''; } };

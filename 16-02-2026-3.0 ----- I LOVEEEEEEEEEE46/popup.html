@@ -170,7 +170,38 @@
             </label>
           </div>
         </div>
-        <p class="setting-help">When ON, fills the LinkedIn Easy Apply dialog from your profile as each step appears. It never clicks Continue or Submit - you review and submit. Runs only on linkedin.com.</p>
+        <p class="setting-help">When ON, fills the LinkedIn Easy Apply dialog from your profile as each step appears. Runs only on linkedin.com.</p>
+
+        <!-- Auto-advance: fills AND clicks through the steps -->
+        <div class="setting-row autofill-setting">
+          <div class="toggle-row">
+            <span class="toggle-label">
+              <span class="setting-icon">⏩</span>
+              Auto-advance Easy Apply steps
+            </span>
+            <label class="toggle-switch" for="linkedinAutoAdvanceToggle" aria-label="Toggle auto-advance through Easy Apply steps">
+              <input type="checkbox" id="linkedinAutoAdvanceToggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <p class="setting-help">Fills each step then clicks Next/Review automatically, with no clicking from you. It stops on its own at the final Submit, or earlier if a required question has no answer in your profile.</p>
+
+        <!-- Auto-submit: the irreversible one, deliberately separate -->
+        <div class="setting-row autofill-setting">
+          <div class="toggle-row">
+            <span class="toggle-label">
+              <span class="setting-icon">🚀</span>
+              Auto-submit the application
+            </span>
+            <label class="toggle-switch" for="linkedinAutoSubmitToggle" aria-label="Toggle automatic submission of the application">
+              <input type="checkbox" id="linkedinAutoSubmitToggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <p class="setting-help" id="linkedinAutoSubmitHelp">Also presses Submit, so an application is sent end to end with no input from you. Sending cannot be undone and goes to a real employer, so this is separate from auto-advance. Requires auto-advance to be ON.</p>
+
         <div style="display:flex;gap:6px;margin:0 0 8px;">
           <button id="linkedinRunNowBtn" class="btn-secondary" style="flex:1;">💼 Fill Easy Apply now</button>
           <button id="indeedRunNowBtn" class="btn-secondary" style="flex:1;">Fill Indeed now</button>
