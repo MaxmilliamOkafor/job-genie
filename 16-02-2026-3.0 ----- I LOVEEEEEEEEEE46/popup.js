@@ -839,6 +839,9 @@ class ATSTailor {
     document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
     document.getElementById('followupClearClientBtn')?.addEventListener('click', () => this.followupSaveClientId(true));
     document.getElementById('followupCopyRedirectBtn')?.addEventListener('click', () => this.followupCopyRedirect());
+    document.getElementById('followupOpenConsoleBtn')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: 'https://console.cloud.google.com/apis/credentials' });
+    });
     document.getElementById('followupSaveBtn')?.addEventListener('click', () => this.followupSaveTemplate());
     document.getElementById('followupTokens')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.fu-token');
@@ -873,7 +876,7 @@ class ATSTailor {
       });
     });
 
-    // (Settings panel "Run Now" button has been removed — the toggle
+    // (Settings panel "Run Now" button has been removed - the toggle
     // above is the single source of truth for AI Page Autofill.)
 
     // NEW: Manual Autofill Button (Workday panel)
@@ -967,7 +970,7 @@ class ATSTailor {
     const isCover = type === 'cover';
     const sourceText = isCover ? this.generatedDocuments.coverLetter : this.generatedDocuments.cv;
     if (!sourceText) {
-      this.showToast(`No ${isCover ? 'cover letter' : 'CV'} content yet — tailor first.`, 'error');
+      this.showToast(`No ${isCover ? 'cover letter' : 'CV'} content yet - tailor first.`, 'error');
       return;
     }
     if (typeof DocxGenerator === 'undefined') {
@@ -1364,7 +1367,7 @@ class ATSTailor {
       if (response?.success) {
         this.showToast(`✅ Autofill complete! Filled ${response.filledCount || 0} fields`, 'success');
       } else if (response?.blocked) {
-        this.showToast('AI Page Autofill is OFF — turn it on to run autofill', 'error');
+        this.showToast('AI Page Autofill is OFF - turn it on to run autofill', 'error');
       } else {
         this.showToast(response?.error || 'Autofill failed', 'error');
       }
@@ -2055,12 +2058,12 @@ class ATSTailor {
       if (!policy.history.length) { el.textContent = ''; return; }
 
       const lines = policy.history.map((h) =>
-        '• ' + new Date(h.at).toLocaleDateString('en-GB') + ' — ' + (h.title || 'a role') + ' → ' + h.to);
+        '• ' + new Date(h.at).toLocaleDateString('en-GB') + ' - ' + (h.title || 'a role') + ' → ' + h.to);
       const when = policy.nextEligibleAt
         ? ' Eligible again ' + new Date(policy.nextEligibleAt).toLocaleDateString('en-GB') + '.'
         : '';
       const head = policy.skip
-        ? '⏭️ Will skip — ' + policy.reasons[0] + when
+        ? '⏭️ Will skip - ' + policy.reasons[0] + when
         : '⚠️ You have contacted ' + (ctx.company || 'this company') + ' before' +
           (policy.burstRemaining > 0 ? ' (' + policy.burstRemaining + ' more allowed before the gap applies)' : '') + ':';
       el.textContent = head + '\n' + lines.join('\n');
@@ -2151,7 +2154,7 @@ class ATSTailor {
       await FollowupEmail.connect();
       this.showToast('Gmail connected', 'success');
     } catch (e) {
-      this.showToast('Gmail connect failed — run Diagnose setup', 'error');
+      this.showToast('Gmail connect failed - run Diagnose setup', 'error');
       await this.followupDiagnose();
     }
     this.followupRefreshStatus();
@@ -2298,7 +2301,7 @@ class ATSTailor {
         const when = policy.nextEligibleAt
           ? ' Eligible again on ' + new Date(policy.nextEligibleAt).toLocaleDateString('en-GB') + '.'
           : '';
-        setMsg('Skipped — ' + policy.reasons[0] + when, 'var(--warning)');
+        setMsg('Skipped - ' + policy.reasons[0] + when, 'var(--warning)');
         console.log('[ATS Tailor] follow-up skipped:', policy.reasons[0]);
         return;
       }
@@ -2343,7 +2346,7 @@ class ATSTailor {
         } else {
           info.textContent = 'No email in this posting' +
             (detected.jobId ? ' (Job ID ' + detected.jobId + ')' : '') +
-            ' — checking the company\'s published careers address…';
+            ' - checking the company\'s published careers address…';
           info.style.color = 'var(--warning)';
           // Automatic fallback: look for a candidate-facing mailbox the
           // employer published on its own site. No manual step.
@@ -2470,17 +2473,17 @@ class ATSTailor {
       }
       const LABELS = {
         'metrics-density-too-high': (w) =>
-          `${w.statBullets}/${w.totalBullets} bullets carry big precise stats — reads as fabricated. Ground 2-3 qualitatively.`,
+          `${w.statBullets}/${w.totalBullets} bullets carry big precise stats - reads as fabricated. Ground 2-3 qualitatively.`,
         'gpa-on-uk-ie-degree': (w) =>
-          `UK/IE degree shown with US-style GPA — drop the "${(w.samples && w.samples[0] && w.samples[0].gpa) || '/4.00'}" suffix.`,
+          `UK/IE degree shown with US-style GPA - drop the "${(w.samples && w.samples[0] && w.samples[0].gpa) || '/4.00'}" suffix.`,
         'certs-scattered': (w) =>
-          `Certs span ${(w.domains || []).length} unrelated domains (${(w.domains || []).join(', ')}) — reads as padding. Trim to 3-7 on-target.`,
+          `Certs span ${(w.domains || []).length} unrelated domains (${(w.domains || []).join(', ')}) - reads as padding. Trim to 3-7 on-target.`,
         'hiring-company-in-wrong-bullet': (w) => {
           const s = (w.samples && w.samples[0]) || {};
-          return `🚨 CRITICAL: bullet under "${s.employer || '?'}" mentions "${w.hiringCompany || s.hiringCompany || '?'}" — that's a fabrication a recruiter will flag. Edit before submitting.`;
+          return `🚨 CRITICAL: bullet under "${s.employer || '?'}" mentions "${w.hiringCompany || s.hiringCompany || '?'}" - that's a fabrication a recruiter will flag. Edit before submitting.`;
         },
         'potentially-fabricated-keywords': (w) =>
-          `Review before submitting — ${w.count} keyword(s) not in your original CV: ${(w.samples || []).join(', ')}`,
+          `Review before submitting - ${w.count} keyword(s) not in your original CV: ${(w.samples || []).join(', ')}`,
         'unquantified-bullets': (w) =>
           w.restoreHints && w.restoreHints.length
             ? `🚨 ${w.note || 'Tailored CV lost all metrics.'} (${w.count}/${w.totalBullets} bullets unquantified)`
@@ -2494,7 +2497,7 @@ class ATSTailor {
         'first-six-seconds': (w) => `CV top section missing: ${(w.missing || []).join(', ')}`,
         'buzzword-words-flagged': (w) => `Buzzwords to rewrite manually: ${(w.words || []).join(', ')}`,
         'cover-letter-too-long': (w) => `Cover letter is ${w.wordCount} words (target ≤ ${w.target})`,
-        'cover-letter-self-heavy': (w) => `Cover letter talks about you ${w.iCount}x vs them ${w.youCount}x — add company focus`,
+        'cover-letter-self-heavy': (w) => `Cover letter talks about you ${w.iCount}x vs them ${w.youCount}x - add company focus`,
       };
       const items = warnings
         .map((w) => {
@@ -2504,7 +2507,7 @@ class ATSTailor {
         })
         .join('');
       panel.innerHTML =
-        `<summary style="cursor:pointer;">📋 ${warnings.length} quality note(s) — click to review</summary>` +
+        `<summary style="cursor:pointer;">📋 ${warnings.length} quality note(s) - click to review</summary>` +
         `<ul style="margin:6px 0 2px 16px;padding:0;">${items}</ul>`;
     } catch (e) {
       console.warn('[Popup] renderAuditWarnings failed:', e.message);
@@ -2741,7 +2744,7 @@ class ATSTailor {
               <summary>
                 <div class="coverage-left">
                   <div class="coverage-keyword">${this.escapeHtml(i.keyword)}</div>
-                  <div class="coverage-meta">${i.finalCount || 0}x • ${sections.join(', ') || '—'}</div>
+                  <div class="coverage-meta">${i.finalCount || 0}x • ${sections.join(', ') || ' - '}</div>
                 </div>
                 <span class="coverage-badge">${badge}</span>
               </summary>
@@ -3555,7 +3558,7 @@ class ATSTailor {
         // trips believability checks. Inject at most ONE keyword per bullet,
         // into at most half the bullets, and only keywords that fit a
         // natural "using X" frame (short noun phrases). Everything else
-        // falls through to the Summary / Skills steps below — a cleaner and
+        // falls through to the Summary / Skills steps below - a cleaner and
         // equally strong ATS signal than stuffed bullets.
         const fitsUsingFrame = (kw) => {
           const k = (kw || '').trim();
@@ -3620,7 +3623,7 @@ class ATSTailor {
     }
     
     // STEP 3: Inject ALL remaining into EXISTING Skills section ONLY
-    // CRITICAL FIX v4.0: NEVER create a second SKILLS section — only merge into existing one
+    // CRITICAL FIX v4.0: NEVER create a second SKILLS section - only merge into existing one
     // Filter soft skills OUT of skills section (they belong in experience bullets only)
     if (remaining.length > 0) {
       // Filter: only inject technical/hard keywords into skills section, NOT soft skills
@@ -3685,7 +3688,7 @@ class ATSTailor {
             }
           }
 
-          // Format as clean comma-separated list — use SAME header as before (no rename)
+          // Format as clean comma-separated list - use SAME header as before (no rename)
           tailoredCV = tailoredCV.substring(0, skillsStart) +
                        skillsHeader + '\n' + newSkills.join(', ') +
                        tailoredCV.substring(skillsEnd);
@@ -3964,7 +3967,7 @@ class ATSTailor {
           description: this.currentJob.description || '',
           // Job-derived city sent explicitly so the server's smartLocation
           // uses it as Priority 1 (deterministic) instead of re-extracting
-          // from raw text. NEVER the profile fallback — that would pin every
+          // from raw text. NEVER the profile fallback - that would pin every
           // CV header to the home city.
           extractedCity: (() => {
             const appLoc = this.getApplicationLocation();
@@ -4533,11 +4536,11 @@ class ATSTailor {
         // Step 3: year-only ranges -> "January YYYY ..." (only applies to
         // YEARS NOT already preceded by a month name -- the negative
         // lookbehind prevents reprocessing "January 2023 - Present").
-        cvText = cvText.replace(/(?<![A-Za-z]\s)\b((?:19|20)\d{2})\s*[–—-]\s*Present\b/gi, (m, y) => `January ${y} - Present`);
-        cvText = cvText.replace(/(?<![A-Za-z]\s)\b((?:19|20)\d{2})\s*[–—-]\s*((?:19|20)\d{2})\b/g, (m, s, e) => `January ${s} - January ${e}`);
+        cvText = cvText.replace(/(?<![A-Za-z]\s)\b((?:19|20)\d{2})\s*[– - -]\s*Present\b/gi, (m, y) => `January ${y} - Present`);
+        cvText = cvText.replace(/(?<![A-Za-z]\s)\b((?:19|20)\d{2})\s*[– - -]\s*((?:19|20)\d{2})\b/g, (m, s, e) => `January ${s} - January ${e}`);
         // Step 4: normalise any remaining en/em dash range separators
         // between "Month YYYY" tokens to plain hyphens.
-        cvText = cvText.replace(/(\b[A-Za-z]+ (?:19|20)\d{2})\s*[–—]\s*(Present|[A-Za-z]+ (?:19|20)\d{2})\b/g, '$1 - $2');
+        cvText = cvText.replace(/(\b[A-Za-z]+ (?:19|20)\d{2})\s*[– - ]\s*(Present|[A-Za-z]+ (?:19|20)\d{2})\b/g, '$1 - $2');
         this.generatedDocuments.cv = cvText;
         console.log('[ATS Tailor] Converted dates to "Month YYYY" format');
       }
@@ -5393,7 +5396,7 @@ class ATSTailor {
       );
       const matches = [...fixedText.matchAll(sectionRegex)];
       if (matches.length > 1) {
-        // Found duplicate section — merge second occurrence into first
+        // Found duplicate section - merge second occurrence into first
         // Find the content of the second section
         const secondStart = matches[1].index;
         const headerLen = matches[1][0].length;
