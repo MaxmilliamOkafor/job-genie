@@ -355,6 +355,11 @@
     const scope = root || doc;
     const seenRadio = new Set();
     let filled = 0;
+    // Counted so callers can tell "nothing to do" apart from "nothing
+    // found". A step whose fields the site already prefilled reports
+    // filled=0, which is success, not failure.
+    let alreadySet = 0;
+    let answerable = 0;
 
     const controls = scope.querySelectorAll('input, select, textarea, [role="combobox"]');
     for (const el of controls) {
@@ -369,6 +374,7 @@
         if (!label) continue;
         const value = answerFor(label, profile, o);
         if (!value) continue;
+        answerable++;
 
         if (el.tagName === 'SELECT') {
           if (fillSelect(el, value)) filled++;
@@ -386,13 +392,16 @@
         } else if (el.getAttribute('role') === 'combobox' && el.tagName !== 'INPUT') {
           if (await fillCustomDropdown(el, value)) filled++;
         } else {
-          if (String(el.value || '').trim()) continue;   // respect user input
+          if (String(el.value || '').trim()) { alreadySet++; continue; }  // respect user input
           setValue(el, value);
           filled++;
         }
       } catch (e) { /* one bad field must never abort the pass */ }
     }
-    return filled;
+    // answerable = fields we had an answer for; alreadySet = of those, the
+    // ones the site had already populated. filled=0 with alreadySet>0 means
+    // the step was complete, not that the fill failed.
+    return { filled, alreadySet, answerable };
   }
 
   // Shared profile loader: Job Genie profile merged with the autofill

@@ -1984,11 +1984,11 @@ class ATSTailor {
     const say = (msg, color) => { if (out) { out.textContent = msg; out.style.color = color || ''; } };
     const cfg = site === 'linkedin'
       ? { host: 'linkedin.com', files: ['autofill-core.js', 'linkedin-autofill.js'],
-          action: 'JG_LINKEDIN_AUTOFILL_RUN', key: 'linkedin_autofill_enabled',
-          label: 'LinkedIn Easy Apply', hint: 'Open an Easy Apply dialog first.' }
+          fn: '__JG_LINKEDIN_FILL_NOW__', key: 'linkedin_autofill_enabled',
+          label: 'LinkedIn Easy Apply', hint: 'No Easy Apply dialog found on this page. Open one first.' }
       : { host: 'indeed.com', files: ['autofill-core.js', 'indeed-autofill.js'],
-          action: 'JG_INDEED_AUTOFILL_RUN', key: 'autofill_enabled',
-          label: 'Indeed', hint: 'Open an Indeed application page first.' };
+          fn: '__JG_INDEED_FILL_NOW__', key: 'autofill_enabled',
+          label: 'Indeed', hint: 'No Indeed application form found on this page. Open one first.' };
 
     try {
       const enabled = await new Promise((r) => chrome.storage.local.get([cfg.key], (x) => r(x && x[cfg.key] === true)));
@@ -2007,21 +2007,46 @@ class ATSTailor {
         await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: cfg.files });
       } catch (e) { /* already present is fine */ }
 
-      const replies = await new Promise((resolve) => {
-        let done = false;
-        const results = [];
-        // Ask every frame; the one holding the form answers with a count.
-        chrome.tabs.sendMessage(tab.id, { action: cfg.action }, (resp) => {
-          void chrome.runtime.lastError;
-          if (resp) results.push(resp);
-          if (!done) { done = true; resolve(results); }
+      // executeScript returns one result PER FRAME. chrome.tabs.sendMessage
+      // delivers only the first frame's reply, so a silent frame could mask
+      // the frame actually holding the form.
+      let frameResults = [];
+      try {
+        const raw = await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          func: (fnName) => {
+            const fn = window[fnName];
+            return fn ? fn() : { found: false, filled: 0, alreadySet: 0, answerable: 0, why: 'not-loaded' };
+          },
+          args: [cfg.fn],
         });
-        setTimeout(() => { if (!done) { done = true; resolve(results); } }, 3000);
-      });
+        frameResults = (raw || []).map((r) => r && r.result).filter(Boolean);
+      } catch (e) {
+        say('Could not reach the page: ' + (e.message || e), 'var(--error)');
+        return;
+      }
 
-      const filled = replies.reduce((n, r) => n + (r && r.filled ? r.filled : 0), 0);
-      if (filled > 0) say('Filled ' + filled + ' field(s). Review before submitting.', 'var(--success)');
-      else say('No fields filled. ' + cfg.hint + ' Values you already typed are never overwritten.', 'var(--warning)');
+      const hit = frameResults.find((r) => r.found) || {};
+      const filled = frameResults.reduce((n, r) => n + (r.filled || 0), 0);
+      const alreadySet = frameResults.reduce((n, r) => n + (r.alreadySet || 0), 0);
+
+      if (filled > 0) {
+        say('Filled ' + filled + ' field(s). Review before submitting.', 'var(--success)');
+      } else if (hit.found && alreadySet > 0) {
+        // The common case on LinkedIn's contact step, which LinkedIn
+        // prefills from the profile. Nothing was wrong.
+        say('Nothing to fill: all ' + alreadySet + ' field(s) on this step already had values. '
+          + 'Continue to the next step and press this again.', 'var(--success)');
+      } else if (hit.found) {
+        say('Found the form, but no field on this step matched your profile. '
+          + 'Later steps usually have more.', 'var(--warning)');
+      } else if (frameResults.some((r) => r.why === 'no-profile')) {
+        say('Your profile is empty. Fill in name, email and phone first.', 'var(--warning)');
+      } else if (frameResults.some((r) => r.why === 'not-loaded')) {
+        say('Autofill did not load on this page. Reload the tab and try again.', 'var(--warning)');
+      } else {
+        say(cfg.hint + ' Values you already typed are never overwritten.', 'var(--warning)');
+      }
     } catch (e) {
       say('Failed: ' + (e.message || e), 'var(--error)');
     }

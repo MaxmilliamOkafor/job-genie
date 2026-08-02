@@ -85,36 +85,51 @@
   let _lastSignature = '';
   let _busy = false;
 
+  // Every early return carries a REASON. The popup used to receive a bare
+  // 0 for "no modal", "toggle off" and "every field was already filled by
+  // LinkedIn" alike, and reported all three as "No fields filled. Open an
+  // Easy Apply dialog first." -- which is actively wrong on the contact
+  // step, where LinkedIn prefills name, phone and email from the profile.
   async function runFill(reason) {
+    const none = (why) => ({ found: false, filled: 0, alreadySet: 0, answerable: 0, why });
     const C = core();
-    if (!C) { log('AutofillCore not loaded'); return 0; }
-    if (_busy) return 0;
+    if (!C) return none('core-missing');
+    if (_busy) return none('busy');
 
-    if (!(await C.isToggleOn(TOGGLE))) return 0;      // dedicated toggle
+    if (!(await C.isToggleOn(TOGGLE))) return none('toggle-off');
     const modal = findEasyApplyModal();
-    if (!modal) return 0;                              // only inside Easy Apply
+    if (!modal) return none('no-modal');
 
     const sig = stepSignature(modal);
-    if (sig === _lastSignature && reason !== 'run-now') return 0;  // step already filled
+    if (sig === _lastSignature && reason !== 'run-now') return none('step-already-done');
 
     _busy = true;
     try {
       const profile = await C.loadProfile();
       if (!profile || !(profile.first_name || profile.firstName || profile.email)) {
         log('no profile data -- skipping');
-        return 0;
+        return none('no-profile');
       }
-      const filled = await C.fillContainer(modal, profile, {});
+      const r = await C.fillContainer(modal, profile, {});
       _lastSignature = sig;
-      if (filled > 0) log('filled ' + filled + ' field(s) on this step (' + reason + ')');
-      return filled;
+      if (r.filled > 0) log('filled ' + r.filled + ' field(s) on this step (' + reason + ')');
+      return { found: true, filled: r.filled, alreadySet: r.alreadySet, answerable: r.answerable, why: 'ok' };
     } catch (e) {
       log('fill error:', e && e.message);
-      return 0;
+      return none('error:' + (e && e.message));
     } finally {
       _busy = false;
     }
   }
+
+  // Direct entry point for the popup's "Fill Easy Apply now".
+  // chrome.tabs.sendMessage delivers only the FIRST frame's reply, so a
+  // silent frame could mask the one holding the form. executeScript
+  // returns a result per frame, so the popup can see them all.
+  window.__JG_LINKEDIN_FILL_NOW__ = function () {
+    _lastSignature = '';
+    return runFill('run-now');
+  };
 
   // ---- lifecycle -------------------------------------------------------
   let _debounce = null;
@@ -142,7 +157,7 @@
         // must stay silent or it masks the frame that has the form.
         if (!findEasyApplyModal()) return false;
         _lastSignature = '';
-        runFill('run-now').then((n) => sendResponse({ ok: true, filled: n }));
+        runFill('run-now').then((r) => sendResponse(Object.assign({ ok: true }, r)));
         return true;
       }
     });
