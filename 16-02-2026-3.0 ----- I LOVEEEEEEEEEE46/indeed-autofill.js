@@ -55,28 +55,29 @@
   let _busy = false;
 
   async function runFill(reason) {
+    const none = (why) => ({ found: false, filled: 0, alreadySet: 0, answerable: 0, why });
     const C = core();
-    if (!C) { log('AutofillCore not loaded'); return 0; }
-    if (_busy) return 0;
-    if (!(await C.isToggleOn(TOGGLE))) { return 0; }
-    if (!isIndeedApplyPage()) return 0;
+    if (!C) return none('core-missing');
+    if (_busy) return none('busy');
+    if (!(await C.isToggleOn(TOGGLE))) return none('toggle-off');
+    if (!isIndeedApplyPage()) return none('no-apply-page');
 
     _busy = true;
     try {
       const profile = await C.loadProfile();
       if (!profile || !(profile.first_name || profile.firstName || profile.email)) {
         log('no profile data -- skipping');
-        return 0;
+        return none('no-profile');
       }
-      const filled = await C.fillContainer(applyRoot(), profile, {});
-      if (filled > 0 && filled !== _lastCount) {
-        log('filled ' + filled + ' field(s) (' + reason + ')');
-        _lastCount = filled;
+      const r = await C.fillContainer(applyRoot(), profile, {});
+      if (r.filled > 0 && r.filled !== _lastCount) {
+        log('filled ' + r.filled + ' field(s) (' + reason + ')');
+        _lastCount = r.filled;
       }
-      return filled;
+      return { found: true, filled: r.filled, alreadySet: r.alreadySet, answerable: r.answerable, why: 'ok' };
     } catch (e) {
       log('fill error:', e && e.message);
-      return 0;
+      return none('error:' + (e && e.message));
     } finally {
       _busy = false;
     }
@@ -102,11 +103,15 @@
         // Only the frame holding the application form should answer -- the
         // first sendResponse wins, so silent frames avoid masking it.
         if (!isIndeedApplyPage()) return false;
-        runFill('run-now').then((n) => sendResponse({ ok: true, filled: n }));
+        runFill('run-now').then((r) => sendResponse(Object.assign({ ok: true }, r)));
         return true;
       }
     });
   } catch (e) {}
+
+  // Direct entry point for the popup's "Fill Indeed now" (see the
+  // LinkedIn module for why executeScript beats sendMessage here).
+  window.__JG_INDEED_FILL_NOW__ = function () { return runFill('run-now'); };
 
   function watch() {
     if (!document.body) return;
