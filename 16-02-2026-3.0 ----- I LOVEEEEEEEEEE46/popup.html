@@ -154,7 +154,7 @@
             </label>
           </div>
         </div>
-        <p class="setting-help">When ON, the autofill engine fills application forms automatically. When OFF, the engine is fully disabled — no API calls, no form interaction.</p>
+        <p class="setting-help">When ON, the autofill engine fills application forms automatically. When OFF, the engine is fully disabled - no API calls, no form interaction.</p>
 
         <!-- LinkedIn Easy Apply Toggle - independent of the master switch,
              because the heavy engine is denylisted on linkedin.com -->
@@ -170,7 +170,7 @@
             </label>
           </div>
         </div>
-        <p class="setting-help">When ON, fills the LinkedIn Easy Apply dialog from your profile as each step appears. It never clicks Continue or Submit — you review and submit. Runs only on linkedin.com.</p>
+        <p class="setting-help">When ON, fills the LinkedIn Easy Apply dialog from your profile as each step appears. It never clicks Continue or Submit - you review and submit. Runs only on linkedin.com.</p>
         <div style="display:flex;gap:6px;margin:0 0 8px;">
           <button id="linkedinRunNowBtn" class="btn-secondary" style="flex:1;">💼 Fill Easy Apply now</button>
           <button id="indeedRunNowBtn" class="btn-secondary" style="flex:1;">Fill Indeed now</button>
@@ -193,7 +193,7 @@
         <p class="setting-help">After you submit, if the job posting <strong>published</strong> a recruiter email, offers to send a short note from your Gmail with the job title and Job ID so they can find your application. Nothing sends without your click.</p>
 
         <details id="followupPanel" class="fu-panel">
-          <summary>✉️ Gmail &amp; email template — setup and test</summary>
+          <summary>✉️ Gmail &amp; email template - setup and test</summary>
           <div class="fu-body">
 
             <!-- 1. Connection -->
@@ -229,8 +229,13 @@
               <div class="fu-actions">
                 <button id="followupCopyRedirectBtn" class="fu-btn fu-btn-wide">Copy redirect URI</button>
               </div>
+              <div class="fu-actions">
+                <button id="followupOpenConsoleBtn" class="fu-btn fu-btn-wide">Open Google Console credentials ↗</button>
+              </div>
               <p class="fu-note">Never committed to your repo. Use a <strong>Web application</strong>
-                OAuth client and add the redirect URI to it. See GMAIL_SETUP.md.</p>
+                OAuth client, and paste the redirect URI under
+                <strong>Authorised redirect URIs</strong> - not Authorised JavaScript origins.
+                See GMAIL_SETUP.md.</p>
             </div>
 
             <!-- 2. Recipient -->
@@ -262,7 +267,7 @@
                 <button id="followupDupBtn" class="fu-btn">Duplicate</button>
                 <button id="followupDeleteBtn" class="fu-btn fu-btn-danger">Delete</button>
               </div>
-              <p class="fu-note">Editing a built-in preset saves it as your own copy — the originals stay available.</p>
+              <p class="fu-note">Editing a built-in preset saves it as your own copy - the originals stay available.</p>
 
               <div class="fu-field" style="margin-top:10px;">
                 <label class="fu-label" for="followupSubject">Subject</label>
@@ -866,19 +871,19 @@
             <div class="debug-section-title">📊 Parsed CV Info</div>
             <div class="debug-row">
               <span class="debug-label">File Type:</span>
-              <span class="debug-value" id="parsedCVFileType">—</span>
+              <span class="debug-value" id="parsedCVFileType"> - </span>
             </div>
             <div class="debug-row">
               <span class="debug-label">File Size:</span>
-              <span class="debug-value" id="parsedCVFileSize">—</span>
+              <span class="debug-value" id="parsedCVFileSize"> - </span>
             </div>
             <div class="debug-row">
               <span class="debug-label">Text Length:</span>
-              <span class="debug-value" id="parsedCVTextLength">—</span>
+              <span class="debug-value" id="parsedCVTextLength"> - </span>
             </div>
             <div class="debug-row">
               <span class="debug-label">Parse Time:</span>
-              <span class="debug-value" id="parsedCVTime">—</span>
+              <span class="debug-value" id="parsedCVTime"> - </span>
             </div>
           </div>
           <div class="debug-section">
@@ -907,7 +912,7 @@
             </div>
             <div class="debug-row">
               <span class="debug-label">Time:</span>
-              <span class="debug-value" id="smokeTestTime">—</span>
+              <span class="debug-value" id="smokeTestTime"> - </span>
             </div>
             <p class="debug-help">Generates CV using built-in 3-role fixture (Meta, Google, AWS) and validates in under 3 seconds.</p>
             <button id="runSmokeTest" class="btn btn-accent btn-full">

@@ -56,7 +56,7 @@
       id: 'standard',
       name: 'Standard follow-up (recommended)',
       builtIn: true,
-      subject: 'Application submitted — {{job_title}}{{job_id_suffix}}',
+      subject: 'Application submitted - {{job_title}}{{job_id_suffix}}',
       body: [
         'Dear {{recipient_first_name}},',
         '',
@@ -76,11 +76,11 @@
       id: 'concise',
       name: 'Concise (3 lines)',
       builtIn: true,
-      subject: '{{job_title}}{{job_id_suffix}} — application from {{my_name}}',
+      subject: '{{job_title}}{{job_id_suffix}} - application from {{my_name}}',
       body: [
         'Dear {{recipient_first_name}},',
         '',
-        'I submitted an application for {{job_title}} at {{company_name}} today{{job_id_sentence}} — filed under {{my_name}} ({{my_email}}).',
+        'I submitted an application for {{job_title}} at {{company_name}} today{{job_id_sentence}} - filed under {{my_name}} ({{my_email}}).',
         '',
         '{{reference_block}}',
         '',
@@ -93,7 +93,7 @@
       id: 'with-hook',
       name: 'With relevance hook (strong-fit roles)',
       builtIn: true,
-      subject: 'Application submitted — {{job_title}}{{job_id_suffix}}',
+      subject: 'Application submitted - {{job_title}}{{job_id_suffix}}',
       body: [
         'Dear {{recipient_first_name}},',
         '',
@@ -222,7 +222,7 @@
     const { templates } = await listTemplates();
     const idx = templates.findIndex((t) => t.id === id);
     if (idx < 0) return null;
-    if (templates[idx].builtIn) throw new Error('Built-in presets cannot be deleted — edit one to make your own copy');
+    if (templates[idx].builtIn) throw new Error('Built-in presets cannot be deleted - edit one to make your own copy');
     templates.splice(idx, 1);
     const nextActive = templates[0].id;
     await _persist(templates, nextActive);
@@ -314,7 +314,7 @@
   // repo clean and to allow a non-Chrome-profile Google account, not
   // because a leaked client_id is dangerous.
   // ===================================================================
-  const KEY_OAUTH = 'followup_oauth';          // { clientId }
+  const KEY_OAUTH = 'followup_oauth';          // { clientId, redirectUri }
   const KEY_TOKEN = 'followup_oauth_token';    // { access_token, expires_at }
 
   function loadOAuthConfig() {
@@ -327,11 +327,22 @@
     });
   }
 
-  function saveOAuthConfig(cfg) {
+  // Merges rather than replaces. A bare {clientId} save used to wipe the
+  // cached redirectUri, forcing a full re-probe on the next send.
+  async function saveOAuthConfig(cfg) {
+    const prev = await loadOAuthConfig();
+    const next = Object.assign({}, prev);
+    if (cfg && cfg.clientId !== undefined) {
+      const id = String(cfg.clientId || '').trim();
+      // A changed client ID invalidates the redirect that was verified
+      // against the old one.
+      if (id !== prev.clientId) next.redirectUri = '';
+      next.clientId = id;
+    }
+    if (cfg && cfg.redirectUri !== undefined) next.redirectUri = String(cfg.redirectUri || '');
     return new Promise((resolve) => {
       try {
-        const clientId = String((cfg && cfg.clientId) || '').trim();
-        chrome.storage.local.set({ [KEY_OAUTH]: { clientId } }, () => resolve(true));
+        chrome.storage.local.set({ [KEY_OAUTH]: next }, () => resolve(true));
       } catch (e) {
         resolve(false);
       }
@@ -358,13 +369,13 @@
     return [base + '/', base];
   }
 
-  function buildAuthUrl(clientId, uri) {
+  function buildAuthUrl(clientId, uri, prompt) {
     return 'https://accounts.google.com/o/oauth2/v2/auth' +
       '?client_id=' + encodeURIComponent(clientId) +
       '&response_type=token' +
       '&redirect_uri=' + encodeURIComponent(uri) +
       '&scope=' + encodeURIComponent(GMAIL_SCOPE) +
-      '&prompt=consent';
+      '&prompt=' + encodeURIComponent(prompt || 'consent');
   }
 
   // Google renders every setup failure as an HTML error PAGE inside the auth
@@ -404,7 +415,20 @@
   }
 
   // Returns the redirect URI Google accepts, or throws naming the exact fix.
+  // The verified answer is cached: probing on every send would add a network
+  // round-trip to each email and re-ask a question whose answer changes only
+  // when the user edits their Cloud Console client.
   async function resolveRedirectUri(clientId) {
+    const cfg = await loadOAuthConfig();
+    if (cfg.redirectUri && redirectUriVariants().indexOf(cfg.redirectUri) !== -1) {
+      return cfg.redirectUri;
+    }
+    const uri = await _probeForRedirectUri(clientId);
+    await saveOAuthConfig({ redirectUri: uri });
+    return uri;
+  }
+
+  async function _probeForRedirectUri(clientId) {
     const variants = redirectUriVariants();
     const results = [];
     for (const uri of variants) {
@@ -415,13 +439,13 @@
       if (r.code === 'invalid_client' || r.code === 'deleted_client') {
         throw new Error(
           'Google rejected the client ID itself (' + r.code + '). The ID saved here does not match a live ' +
-          'OAuth client in your project — re-copy it from Google Cloud Console → Credentials.'
+          'OAuth client in your project - re-copy it from Google Cloud Console → Credentials.'
         );
       }
     }
     if (results.every((r) => r.code === 'redirect_uri_mismatch')) {
       throw new Error(
-        'redirect_uri_mismatch — neither redirect URI is registered on your OAuth client. ' +
+        'redirect_uri_mismatch - neither redirect URI is registered on your OAuth client. ' +
         'In Google Cloud Console → Credentials → your Web application client → Authorised redirect URIs ' +
         '(NOT Authorised JavaScript origins), add:\n  ' + variants[0] + '\nthen Save and wait ~60s.'
       );
@@ -470,31 +494,74 @@
     });
   }
 
+  // Implicit-flow tokens last ~1 hour and there is no refresh token to
+  // exchange. But once the user has granted the scope, Google will reissue
+  // silently for prompt=none -- no window, no consent screen. Without this
+  // the connection "drops" every hour and the user has to click Connect
+  // again, which is the difference between a setup that works once and one
+  // that keeps working.
+  async function _trySilentToken(clientId) {
+    let uri = '';
+    try {
+      uri = await resolveRedirectUri(clientId);
+    } catch (e) {
+      return '';   // config problem -- let the interactive path report it
+    }
+    const url = buildAuthUrl(clientId, uri, 'none');
+    const responseUrl = await new Promise((resolve) => {
+      try {
+        chrome.identity.launchWebAuthFlow({ url, interactive: false }, (r) => {
+          // lastError must be read to stop Chrome logging it as unchecked.
+          const ignored = chrome.runtime.lastError;
+          resolve(ignored ? '' : (r || ''));
+        });
+      } catch (e) {
+        resolve('');
+      }
+    });
+    if (!responseUrl) return '';
+    const params = new URLSearchParams(String(responseUrl).split('#')[1] || '');
+    const token = params.get('access_token');
+    if (!token) return '';
+    await _storeToken(token, params.get('expires_in'));
+    return token;
+  }
+
   async function getTokenViaWebFlow(interactive) {
     const { clientId } = await loadOAuthConfig();
-    if (!clientId) throw new Error('No Gmail client ID saved — paste one into the extension and click Save');
+    if (!clientId) throw new Error('No Gmail client ID saved - paste one into the extension and click Save');
 
     const cached = await _cachedToken();
     if (cached) return cached;
-    if (!interactive) throw new Error('Gmail authorisation expired — click Connect Gmail');
+
+    // Silent reissue first, in BOTH modes: it turns an expired token into a
+    // no-op instead of a re-consent, and it makes isConnected() honest.
+    const silent = await _trySilentToken(clientId);
+    if (silent) return silent;
+
+    if (!interactive) throw new Error('Gmail authorisation expired - click Connect Gmail');
 
     // Find the variant Google accepts BEFORE opening the window. This throws
     // with the precise, actionable cause instead of letting the user hit an
     // opaque error page.
     const uri = await resolveRedirectUri(clientId);
-    const url = buildAuthUrl(clientId, uri);
+    const url = buildAuthUrl(clientId, uri, 'consent');
 
     const redirect = await new Promise((resolve, reject) => {
       try {
         chrome.identity.launchWebAuthFlow({ url, interactive: true }, (responseUrl) => {
           const err = chrome.runtime.lastError;
           if (err || !responseUrl) {
+            // Drop the cached redirect so the next attempt re-probes: if the
+            // user edited their Cloud Console client, the cached answer is
+            // now stale and would otherwise fail identically forever.
+            saveOAuthConfig({ redirectUri: '' });
             // The preflight already cleared the config, so a failure here is
             // almost always consent-side: account not on the test-user list,
             // or the window genuinely dismissed.
             reject(new Error(
               ((err && err.message) || 'Authorisation window closed') +
-              ' — the redirect URI checked out, so if Google showed a block screen, add your Google ' +
+              ' - the redirect URI checked out, so if Google showed a block screen, add your Google ' +
               'account under OAuth consent screen → Test users and confirm the Gmail API is enabled.'
             ));
             return;
@@ -523,7 +590,7 @@
     return new Promise((resolve, reject) => {
       try {
         if (!chrome.identity || !chrome.identity.getAuthToken) {
-          reject(new Error('chrome.identity unavailable — add the "identity" permission and an oauth2 client_id to manifest.json'));
+          reject(new Error('chrome.identity unavailable - add the "identity" permission and an oauth2 client_id to manifest.json'));
           return;
         }
         chrome.identity.getAuthToken({ interactive: !!interactive, scopes: [GMAIL_SCOPE] }, (token) => {
@@ -593,12 +660,12 @@
           '). Re-copy the ID from Cloud Console → Credentials.');
 
         if (unprobeable) {
-          add(true, 'redirect URI (could not verify — offline?): ' + variants[0], '');
+          add(true, 'redirect URI (could not verify - offline?): ' + variants[0], '');
         } else {
           add(!!good, good ? 'redirect URI registered: ' + good.uri : 'redirect URI registered',
             'NOT registered. In Cloud Console → Credentials → your Web application client → ' +
             'Authorised redirect URIs (not Authorised JavaScript origins), add exactly:  ' + variants[0] +
-            '  — then Save and wait ~60s.');
+            ' - then Save and wait ~60s.');
         }
       } else {
         add(true, 'redirect URI: ' + variants[0], '');
@@ -659,7 +726,7 @@
     }
     add(tokenOk, 'Gmail authorisation present',
       tokenErr.indexOf('not granted') !== -1 || tokenErr.indexOf('interactive') !== -1
-        ? 'Not authorised yet — click Connect Gmail and complete the Google consent screen.'
+        ? 'Not authorised yet - click Connect Gmail and complete the Google consent screen.'
         : 'Token request failed: ' + tokenErr + '. If it mentions "bad client id", the manifest client_id ' +
           'does not match a Chrome-Extension OAuth client for extension ID ' + extId + '. ' +
           'If it mentions access_denied, add your Google account under OAuth consent screen -> Test users, ' +
@@ -840,7 +907,7 @@
       return {
         allowed: false, skip: true, sameposting: true,
         reasons: ['Already followed up on this exact posting (' +
-          new Date(log[jobKey].at).toLocaleDateString('en-GB') + ') — skipping.'],
+          new Date(log[jobKey].at).toLocaleDateString('en-GB') + ') - skipping.'],
         warnings, history, nextEligibleAt: 0,
       };
     }
@@ -857,14 +924,14 @@
       const oldestInWindow = Math.min.apply(null, inWindow.map((e) => new Date(e.at).getTime()));
       nextEligibleAt = oldestInWindow + SEND_POLICY.perCompanyWindowDays * DAY_MS;
       reasons.push('Already sent ' + inWindow.length + ' notes to ' + (company || 'this company') +
-        ' in the last ' + SEND_POLICY.perCompanyWindowDays + ' days — skipping to stay out of their spam filter.');
+        ' in the last ' + SEND_POLICY.perCompanyWindowDays + ' days - skipping to stay out of their spam filter.');
     } else if (companyCount >= SEND_POLICY.perCompanyBurst && lastToCompany) {
       // 3. Past the free burst, require a short gap between notes.
       const days = Math.floor((now - lastToCompany) / DAY_MS);
       if (days < SEND_POLICY.perCompanyCooldownDays) {
         nextEligibleAt = lastToCompany + SEND_POLICY.perCompanyCooldownDays * DAY_MS;
         reasons.push('Last note to ' + (company || 'this company') + ' was ' +
-          (days === 0 ? 'today' : days + ' day(s) ago') + ' — skipping until the ' +
+          (days === 0 ? 'today' : days + ' day(s) ago') + ' - skipping until the ' +
           SEND_POLICY.perCompanyCooldownDays + '-day gap has passed.');
       }
     }
