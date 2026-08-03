@@ -171,6 +171,11 @@
       dialogs: [...document.querySelectorAll('[role="dialog"], dialog, .artdeco-modal')].slice(0, 5).map(brief),
       footerButtons: btns,
       inputsOnPage: document.querySelectorAll('input, select, textarea').length,
+      easyApplyCandidates: _easyApplyCandidates().slice(0, 8).map((c) => ({
+        why: c.why, ok: c.ok, txt: c.txt.slice(0, 45), aria: c.aria.slice(0, 60),
+        chosen: c.el === findEasyApplyLaunch(),
+      })),
+      launchFound: !!findEasyApplyLaunch(),
       modalFound: !!modal,
       modal: brief(modal),
       inputsInModal: modal ? modal.querySelectorAll('input, select, textarea').length : 0,
@@ -344,19 +349,73 @@
   // It requires the literal words "Easy Apply". A plain "Apply" button
   // hands off to the employer's own site in a new tab, which is a
   // different flow entirely and must never be clicked automatically.
+  function _easyApplyCandidates() {
+    const out = [];
+    const seen = new Set();
+    const add = (b, why) => {
+      if (!b || seen.has(b)) return;
+      seen.add(b);
+      const txt = (b.textContent || '').replace(/\s+/g, ' ').trim();
+      const aria = (b.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+      out.push({ el: b, txt, aria, why,
+        ok: _rendered(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' });
+    };
+    // Known CTA hooks first -- these are unambiguous.
+    for (const b of document.querySelectorAll(
+      '.jobs-apply-button, [data-live-test-job-apply-button], [data-control-name*="jobdetails_topcard_inapply" i]'
+    )) add(b, 'cta-hook');
+    // Then anything clickable that LOOKS like the CTA.
+    for (const b of document.querySelectorAll('button, [role="button"], a[role="link"]')) add(b, 'scan');
+    return out;
+  }
+
+  // The left-hand results list repeats "Easy Apply" as a label under every
+  // card, and those cards are themselves clickable. Matching on "contains
+  // Easy Apply anywhere" therefore selected a job card, whose click merely
+  // switches the visible job -- no dialog, and it looked like the button
+  // was broken. So the match is anchored and length-bounded: the CTA says
+  // "Easy Apply" and almost nothing else.
+  function _looksLikeEasyApplyCta(c) {
+    if (!c.ok) return false;
+    if (c.el.closest('[role="dialog"], dialog, .artdeco-modal')) return false;
+    // A real CTA is a short button; a job card carries the whole listing.
+    if (/^easy apply\b/i.test(c.aria)) return true;
+    if (/\beasy apply\b/i.test(c.aria) && c.aria.length < 120) return true;
+    if (/^easy apply$/i.test(c.txt)) return true;
+    if (/^easy apply\b/i.test(c.txt) && c.txt.length <= 40) return true;
+    return false;
+  }
+
   function findEasyApplyLaunch() {
-    for (const b of document.querySelectorAll('button, [role="button"], a.jobs-apply-button')) {
+    const cands = _easyApplyCandidates();
+    // A known CTA hook is preferred, but it must STILL say "Easy Apply".
+    // LinkedIn uses .jobs-apply-button for the external apply too, and that
+    // one opens the employer's site in a new tab. Matching a bare "Apply"
+    // here would spawn tabs while browsing. Missing a CTA is recoverable;
+    // clicking the wrong one is not, so the words are required on every
+    // path.
+    const hook = cands.find((c) => c.why === 'cta-hook' && c.ok
+      && !c.el.closest('[role="dialog"], dialog, .artdeco-modal')
+      && /\beasy apply\b/i.test(c.txt + ' ' + c.aria));
+    if (hook) return hook.el;
+    const match = cands.find(_looksLikeEasyApplyCta);
+    return match ? match.el : null;
+  }
+
+  // LinkedIn's buttons are React components that sometimes listen on
+  // pointer events rather than click, and the visible target can be a
+  // <span> inside the button. Fire the full sequence on the innermost
+  // element, then fall back to .click() on the button itself.
+  function _robustClick(el) {
+    const target = el.querySelector('span, svg') || el;
+    const opts = { bubbles: true, cancelable: true, view: window };
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
       try {
-        if (!_rendered(b)) continue;
-        if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
-        // Skip anything already inside the dialog (its footer says "Apply").
-        if (b.closest('[role="dialog"], dialog, .artdeco-modal')) continue;
-        const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))
-          .replace(/\s+/g, ' ').trim();
-        if (/easy apply/i.test(txt)) return b;
+        const Ctor = type.startsWith('pointer') && window.PointerEvent ? window.PointerEvent : window.MouseEvent;
+        target.dispatchEvent(new Ctor(type, opts));
       } catch (e) {}
     }
-    return null;
+    try { el.click(); } catch (e) {}
   }
 
   // Clicks Easy Apply and waits for the dialog to mount.
@@ -364,7 +423,7 @@
     if (findEasyApplyModal()) return true;
     const btn = findEasyApplyLaunch();
     if (!btn) return false;
-    btn.click();
+    _robustClick(btn);
     log('clicked Easy Apply to open the dialog');
     const deadline = Date.now() + STEP_TIMEOUT_MS;
     while (Date.now() < deadline) {

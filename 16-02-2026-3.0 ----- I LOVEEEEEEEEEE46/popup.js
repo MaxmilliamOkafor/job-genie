@@ -2055,11 +2055,37 @@ class ATSTailor {
       case 'at-submit': return 'Filled ' + n + ' step(s). ' + r.detail;
       case 'needs-you': return r.detail;
       case 'stuck':     return r.detail;
-      case 'no-modal':  return 'No Easy Apply dialog open.';
+      // detail distinguishes "no Easy Apply button on this job" from
+      // "clicked it and the dialog never came up" -- discarding it here
+      // reduced three different causes to one useless sentence.
+      case 'no-modal':  return r.detail || 'No Easy Apply dialog open.';
       case 'off':       return r.detail;
       case 'no-button': return 'Filled ' + n + ' step(s), then found no Next button.';
       case 'max-steps': return r.detail;
       default:          return r.detail || r.status;
+    }
+  }
+
+  // What the page actually looked like, summarised for the panel and
+  // dumped in full to the page console.
+  async linkedinDiagSuffix(tabId) {
+    try {
+      const d = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => (window.__JG_LINKEDIN_DIAGNOSE__ ? window.__JG_LINKEDIN_DIAGNOSE__() : null),
+      });
+      const info = (d || []).map((x) => x && x.result).filter(Boolean);
+      const best = info.find((i) => i.launchFound || i.modalFound)
+        || info.find((i) => i.easyApplyCandidates && i.easyApplyCandidates.length)
+        || info[0];
+      if (!best) return '';
+      console.log('[JG] LinkedIn diagnostic:', JSON.stringify(info, null, 2));
+      return ' [EasyApply button: ' + (best.launchFound ? 'found' : 'NOT found')
+        + ', dialog: ' + (best.modalFound ? 'open' : 'none')
+        + ', candidates: ' + (best.easyApplyCandidates || []).length
+        + '] Full details in the page console (F12).';
+    } catch (e) {
+      return '';
     }
   }
 
@@ -2126,7 +2152,11 @@ class ATSTailor {
           || frameResults.find((r) => r && r.status) || null;
         if (flow) {
           const good = ['submitted', 'at-submit'].includes(flow.status);
-          say(this.describeFlowResult(flow), good ? 'var(--success)' : 'var(--warning)');
+          let msg = this.describeFlowResult(flow);
+          // A failure to even open the dialog is the case that used to go
+          // quiet, so attach what was actually on the page.
+          if (flow.status === 'no-modal') msg += await this.linkedinDiagSuffix(tab.id);
+          say(msg, good ? 'var(--success)' : 'var(--warning)');
           return;
         }
       }
@@ -2152,24 +2182,7 @@ class ATSTailor {
       } else {
         // Detection failed. Rather than leave the user guessing, report what
         // was actually on the page so the cause is visible.
-        let diag = '';
-        if (site === 'linkedin') {
-          try {
-            const d = await chrome.scripting.executeScript({
-              target: { tabId: tab.id, allFrames: true },
-              func: () => (window.__JG_LINKEDIN_DIAGNOSE__ ? window.__JG_LINKEDIN_DIAGNOSE__() : null),
-            });
-            const info = (d || []).map((x) => x && x.result).filter(Boolean);
-            const best = info.find((i) => i.footerButtons.length) || info[0];
-            if (best) {
-              diag = ' [dialogs:' + best.dialogs.length
-                + ' buttons:' + best.footerButtons.length
-                + ' inputs:' + best.inputsOnPage + ']';
-              console.log('[JG] LinkedIn detection diagnostic:', JSON.stringify(info, null, 2));
-              diag += ' Details in the page console (F12).';
-            }
-          } catch (e) {}
-        }
+        const diag = site === 'linkedin' ? await this.linkedinDiagSuffix(tab.id) : '';
         say(cfg.hint + diag, 'var(--warning)');
       }
     } catch (e) {
