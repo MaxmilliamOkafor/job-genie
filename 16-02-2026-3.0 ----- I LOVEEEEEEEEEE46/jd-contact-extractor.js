@@ -176,19 +176,55 @@
       const score = _scoreEmail(e);
       if (score > 0) found.push({ email: e, score });
     }
+    // PAGE-PUBLISHED SOURCES.
+    // The text scan only sees visible prose. An employer who puts their
+    // address behind a mailto: link, or declares it in schema.org
+    // JobPosting data for Google Jobs, has published it MORE deliberately
+    // than one who mentions it mid-paragraph -- so those outrank a prose
+    // match of equal quality. Still only addresses the page itself
+    // contains: nothing is guessed, constructed, or looked up.
+    // Deliberately SMALL. The base score already encodes the thing that
+    // matters most -- a named human (95) outranks a shared recruiting
+    // inbox (90) -- and a source bonus big enough to overturn that would
+    // send the note to careers@ instead of the recruiter. So the bonus
+    // only separates equals: a mailto talent@ beats a prose talent@, but
+    // never beats aoife.byrne@.
+    const SOURCE_BONUS = { mailto: 3, 'json-ld': 2, meta: 1 };
+    let harvested = opts.pageSources || null;
+    if (!harvested && typeof global !== 'undefined' && global.JDContactSources) {
+      try { harvested = global.JDContactSources.harvest(); } catch (e) {}
+    }
+    if (harvested && Array.isArray(harvested.emails)) {
+      for (const h of harvested.emails) {
+        const key = String(h.email || '').toLowerCase();
+        if (!key || key === own) continue;
+        const base = _scoreEmail(h.email);
+        if (base <= 0) continue;                 // noreply/legal rejected as ever
+        const score = base + (SOURCE_BONUS[h.source] || 0);
+        const existing = found.find((f) => f.email.toLowerCase() === key);
+        if (existing) { existing.score = Math.max(existing.score, score); existing.source = h.source; }
+        else { seen.add(key); found.push({ email: h.email, score, source: h.source }); }
+      }
+    }
+
     found.sort((a, b) => b.score - a.score);
 
     const best = found.length ? found[0] : null;
+    // A name from the LinkedIn hiring-team card or JSON-LD, when the prose
+    // did not name anyone. Name only -- no address is derived from it.
+    const harvestedName = (harvested && harvested.names && harvested.names.length)
+      ? harvested.names[0].name : '';
+
     const result = {
       email: best ? best.email : '',
-      emailSource: best ? 'job-description' : '',
+      emailSource: best ? (best.source || 'job-description') : '',
       allEmails: found.map((f) => f.email).slice(0, 5),
-      jobId: extractJobId(jdText, url),
-      contactName: extractContactName(jdText),
+      jobId: extractJobId(jdText, url) || (harvested && harvested.jobId) || '',
+      contactName: extractContactName(jdText) || harvestedName,
       location: opts.location || extractLocation(jdText),
       department: extractDepartment(jdText),
       title: opts.title || '',
-      company: opts.company || '',
+      company: opts.company || (harvested && harvested.org) || '',
       url,
       hasPublishedEmail: !!best,
     };
