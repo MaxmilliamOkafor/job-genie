@@ -165,8 +165,46 @@ async function logApiUsage(supabase: any, userId: string, functionName: string, 
   }
 }
 
+/**
+ * Strip job-posting noise (requisition numbers, JR-/REQ-/R- codes,
+ * employment-type / location suffixes) from a JD title, while keeping
+ * legitimate digits like "Dynamics 365" or "SAP S/4HANA".
+ */
+function normaliseJobTitle(raw: string): string {
+  let t = String(raw || "").trim();
+
+  // Leading "(1526) ", "[1526] ", "1526 - ", "#88213 " style prefixes
+  t = t.replace(/^\s*[\(\[\{]\s*#?\d{3,}\s*[\)\]\}]\s*[-–—:|]?\s*/, "");
+  t = t.replace(/^\s*#?\d{4,}\s*[-–—:|]\s*/, "");
+
+  // Requisition codes anywhere: JR-104882, REQ 88213, R-1234, Req #88213, Job ID: 1234
+  t = t.replace(/\b(?:job\s*id|requisition(?:\s*(?:id|no\.?|number))?|req(?:uisition)?|jr|jobreq)\b\s*[#:\-–—]?\s*\d{2,}[A-Za-z]?\b/gi, " ");
+  t = t.replace(/\b(?:JR|REQ|R)[-_]\d{2,}[A-Za-z]?\b/gi, " ");
+  t = t.replace(/\s*[#(\[]\s*\d{3,}\s*[)\]]?\s*/g, " ");
+
+  // Parenthetical employment-type / location / seniority noise
+  const noise = /(remote|hybrid|on[-\s]?site|onsite|full[-\s]?time|part[-\s]?time|contract(?:or)?|permanent|perm|temporary|temp|fixed[-\s]?term|internship|intern|w2|c2c|ftc|maternity cover|\d+\s*months?|m\/f\/d|m\/w\/d|f\/m\/d|d\/f\/m|all genders|any gender)/i;
+  t = t.replace(/[\(\[]([^)\]]*)[\)\]]/g, (m, inner: string) =>
+    noise.test(String(inner)) ? " " : m,
+  );
+
+  // Trailing employment-type / noise suffixes after a separator
+  t = t.replace(
+    /\s*[-–—|,\/]\s*(remote|hybrid|on[-\s]?site|onsite|full[-\s]?time|part[-\s]?time|contract(?:or)?|permanent|temporary|fixed[-\s]?term|internship|intern|m\/f\/d|m\/w\/d|f\/m\/d|all genders)\s*$/gi,
+    "",
+  );
+
+  // Trailing bare requisition-ish number ("Senior Engineer 104882")
+  t = t.replace(/\s+\d{4,}$/g, "");
+
+  // Tidy separators / whitespace
+  t = t.replace(/\s{2,}/g, " ").replace(/\s*[-–—|,\/:]+\s*$/g, "").replace(/^\s*[-–—|,\/:]+\s*/g, "").trim();
+
+  return t || String(raw || "").trim();
+}
+
 function validateRequest(data: any): TailorRequest {
-  const jobTitle = validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle");
+  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"));
   const company = validateString(data.company, MAX_STRING_SHORT, "company");
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
   const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, "requirements");
