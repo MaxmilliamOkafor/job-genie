@@ -2388,7 +2388,11 @@ NEVER claim to have skills the candidate lacks. Instead, demonstrate transferabi
 ---
 PHASE 4: VERIFICATION (Critical — do this before outputting)
 After rewriting, run this internal checklist:
-[ ] Does the exact job title appear in the summary?
+[ ] Does the summary open with something the CV evidences (no unsupported title claim, no bare title opener)?
+[ ] Are stated years of experience <= what the employment dates prove?
+[ ] Are there zero ", using X" / ", with X" keyword tails on bullets?
+[ ] Does every sentence start with a capital letter and read grammatically?
+[ ] Is the job title free of requisition numbers / posting noise?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
 [ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
