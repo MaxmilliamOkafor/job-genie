@@ -299,8 +299,17 @@
       const GRID_TABS = [0, 3370, 6740];
       // Navy bullet character used inline within each grid cell. We
       // build the runs by hand so a <w:tab/> can separate the cells.
+      //
+      // The trailing space is load-bearing, not cosmetic. Parsers differ
+      // on <w:tab/>: some emit "\t", others drop it entirely. When it is
+      // dropped, adjacent cells glue together and a skills row extracts as
+      // "Project Management•  Quality Assurance•  Risk Management" -- one
+      // unmatchable blob instead of three skills, in the section the ATS
+      // scores most directly. A real space inside the run (xml:space is
+      // already "preserve") guarantees a word boundary survives whatever
+      // the parser does with the tab, and is invisible at a tab stop.
       const gridCellRuns = (item) =>
-        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 });
+        run('•  ', { color: C.NAVY, sz: 22 }) + run(item + ' ', { color: C.BODY, sz: 21 });
       // Render an array of competency strings as paragraphs of 3 columns.
       // Final row pads to 3 cells with empty strings so the trailing tab
       // alignment stays consistent for both human and parser.
