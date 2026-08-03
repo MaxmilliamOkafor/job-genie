@@ -2018,6 +2018,7 @@ class ATSTailor {
       myEmail: profile.email || this.session?.user?.email || '',
       myPhone: profile.phone || '',
       myLinkedin: profile.linkedin || '',
+      country: profile.country || '',
       headline: (this.generatedDocuments?.applyVerdict?.score >= 75)
         ? 'a close match for this role on the requirements you listed'
         : 'a candidate whose background maps onto the core requirements you listed',
