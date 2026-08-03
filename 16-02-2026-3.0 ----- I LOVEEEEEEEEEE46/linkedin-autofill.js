@@ -49,10 +49,82 @@
   function core() { return window.AutofillCore; }
 
   // ---- Easy Apply dialog detection ------------------------------------
-  // LinkedIn rotates class names frequently, so we lead with stable
-  // semantics (role=dialog + an Easy Apply signature) and keep the class
-  // hooks only as secondary hints.
+  // Matching container classes is fragile: LinkedIn rotates them, ships
+  // A/B variants, and has been migrating to native <dialog> and SDUI
+  // surfaces. So detection is INVERTED -- find the thing that barely ever
+  // changes (the footer button that advances or submits the application),
+  // then walk UP to whatever contains it. A step with no such button is
+  // not a step we could drive anyway.
+
+  // Rendered at all? Deliberately looser than a visibility check: the
+  // container can legitimately be a zero-size wrapper around a visible
+  // panel, and rejecting those was one way detection failed.
+  function _rendered(el) {
+    try {
+      if (!el || !el.isConnected) return false;
+      const st = getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden') return false;
+      if (el.getClientRects().length > 0) return true;
+      return st.position === 'fixed' || !!el.offsetParent;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const FOOTER_BTN_SEL = [
+    '[aria-label*="Continue to next step" i]',
+    '[aria-label*="Review your application" i]',
+    '[aria-label*="Submit application" i]',
+    '[aria-label*="next step" i]',
+    '[data-easy-apply-next-button]',
+    '[data-live-test-easy-apply-next-button]',
+    '[data-live-test-easy-apply-submit-button]',
+    '[data-control-name*="continue_unify" i]',
+    '[data-control-name*="submit_unify" i]',
+  ].join(',');
+
+  const CONTAINER_SEL = [
+    '.jobs-easy-apply-modal', '[data-test-modal][role="dialog"]', '[role="dialog"]',
+    '.artdeco-modal', 'dialog', '[data-sdui-screen]', 'form', '.jobs-easy-apply-content',
+  ].join(',');
+
+  function _containerFor(btn) {
+    // Nearest recognised shell...
+    const shell = btn.closest(CONTAINER_SEL);
+    if (shell && _rendered(shell)) return shell;
+    // ...otherwise climb until we hold the questions as well as the button.
+    let n = btn.parentElement;
+    for (let i = 0; n && i < 8; i++, n = n.parentElement) {
+      if (n.querySelector('input, select, textarea') && _rendered(n)) return n;
+    }
+    return btn.parentElement || null;
+  }
+
   function findEasyApplyModal() {
+    // 1. Button-first. The most reliable signal on the page.
+    for (const btn of document.querySelectorAll(FOOTER_BTN_SEL)) {
+      try {
+        if (!_rendered(btn)) continue;
+        const c = _containerFor(btn);
+        if (c) return c;
+      } catch (e) {}
+    }
+
+    // 2. Text-first fallback: a button labelled by its text, not aria.
+    for (const btn of document.querySelectorAll('button, [role="button"]')) {
+      try {
+        if (!_rendered(btn)) continue;
+        const t = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (!/^(next|continue|review|submit application|submit your application|send application)/.test(t)) continue;
+        const c = _containerFor(btn);
+        // Guard against unrelated "Next" buttons elsewhere on the page.
+        if (c && /apply|contact info|resume|work authoris|work authoriz/i.test((c.textContent || '').slice(0, 800))) {
+          return c;
+        }
+      } catch (e) {}
+    }
+
+    // 3. Container-first, as before, for a step with no footer button yet.
     const candidates = document.querySelectorAll(
       '.jobs-easy-apply-modal, [data-test-modal][role="dialog"], [role="dialog"], .artdeco-modal,' +
       // A native <dialog> carries an IMPLICIT dialog role, so [role="dialog"]
@@ -62,19 +134,48 @@
     );
     for (const el of candidates) {
       try {
-        if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') continue;
-        const label = (el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '').slice(0, 400);
-        // Signature of the apply flow: the wording or the step controls.
-        if (/easy apply|apply to |submit application|review your application|contact info|resume/i.test(label)) {
-          return el;
-        }
-        if (el.querySelector('[aria-label*="next step" i], [aria-label*="Review your application" i], [aria-label*="Submit application" i]')) {
-          return el;
-        }
+        if (!_rendered(el)) continue;
+        const label = (el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '').slice(0, 600);
+        if (/easy apply|apply to |submit application|review your application|contact info/i.test(label)) return el;
       } catch (e) {}
     }
     return null;
   }
+
+  // Reports what is actually on the page so a detection failure can be
+  // diagnosed from a screenshot instead of guessed at. Read-only.
+  window.__JG_LINKEDIN_DIAGNOSE__ = function () {
+    const brief = (el) => {
+      if (!el) return null;
+      return {
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        cls: (el.className && String(el.className).slice(0, 80)) || '',
+        role: el.getAttribute('role') || '',
+        rendered: _rendered(el),
+        rects: el.getClientRects ? el.getClientRects().length : -1,
+      };
+    };
+    const btns = [...document.querySelectorAll('button, [role="button"]')]
+      .filter((b) => _rendered(b))
+      .map((b) => ({
+        text: (b.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40),
+        aria: (b.getAttribute('aria-label') || '').slice(0, 50),
+      }))
+      .filter((b) => /next|continue|review|submit|apply/i.test(b.text + ' ' + b.aria))
+      .slice(0, 10);
+    const modal = findEasyApplyModal();
+    return {
+      url: location.href.slice(0, 120),
+      frames: window.top === window ? 'top' : 'iframe',
+      dialogs: [...document.querySelectorAll('[role="dialog"], dialog, .artdeco-modal')].slice(0, 5).map(brief),
+      footerButtons: btns,
+      inputsOnPage: document.querySelectorAll('input, select, textarea').length,
+      modalFound: !!modal,
+      modal: brief(modal),
+      inputsInModal: modal ? modal.querySelectorAll('input, select, textarea').length : 0,
+    };
+  };
 
   function isLinkedInJobsPage() {
     const h = (location.hostname || '').toLowerCase();

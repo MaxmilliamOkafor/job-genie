@@ -2129,7 +2129,27 @@ class ATSTailor {
       } else if (frameResults.some((r) => r.why === 'not-loaded')) {
         say('Autofill did not load on this page. Reload the tab and try again.', 'var(--warning)');
       } else {
-        say(cfg.hint + ' Values you already typed are never overwritten.', 'var(--warning)');
+        // Detection failed. Rather than leave the user guessing, report what
+        // was actually on the page so the cause is visible.
+        let diag = '';
+        if (site === 'linkedin') {
+          try {
+            const d = await chrome.scripting.executeScript({
+              target: { tabId: tab.id, allFrames: true },
+              func: () => (window.__JG_LINKEDIN_DIAGNOSE__ ? window.__JG_LINKEDIN_DIAGNOSE__() : null),
+            });
+            const info = (d || []).map((x) => x && x.result).filter(Boolean);
+            const best = info.find((i) => i.footerButtons.length) || info[0];
+            if (best) {
+              diag = ' [dialogs:' + best.dialogs.length
+                + ' buttons:' + best.footerButtons.length
+                + ' inputs:' + best.inputsOnPage + ']';
+              console.log('[JG] LinkedIn detection diagnostic:', JSON.stringify(info, null, 2));
+              diag += ' Details in the page console (F12).';
+            }
+          } catch (e) {}
+        }
+        say(cfg.hint + diag, 'var(--warning)');
       }
     } catch (e) {
       say('Failed: ' + (e.message || e), 'var(--error)');
