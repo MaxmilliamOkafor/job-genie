@@ -336,6 +336,54 @@
     return { changed: false, modal: findEasyApplyModal() || modal };
   }
 
+  // ---- opening the dialog ----------------------------------------------
+  // The flow used to begin only once the modal was already open, so on a
+  // job listing it correctly reported "no dialog" and did nothing useful.
+  // This finds the Easy Apply button on the listing and presses it.
+  //
+  // It requires the literal words "Easy Apply". A plain "Apply" button
+  // hands off to the employer's own site in a new tab, which is a
+  // different flow entirely and must never be clicked automatically.
+  function findEasyApplyLaunch() {
+    for (const b of document.querySelectorAll('button, [role="button"], a.jobs-apply-button')) {
+      try {
+        if (!_rendered(b)) continue;
+        if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
+        // Skip anything already inside the dialog (its footer says "Apply").
+        if (b.closest('[role="dialog"], dialog, .artdeco-modal')) continue;
+        const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''))
+          .replace(/\s+/g, ' ').trim();
+        if (/easy apply/i.test(txt)) return b;
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  // Clicks Easy Apply and waits for the dialog to mount.
+  async function openEasyApply() {
+    if (findEasyApplyModal()) return true;
+    const btn = findEasyApplyLaunch();
+    if (!btn) return false;
+    btn.click();
+    log('clicked Easy Apply to open the dialog');
+    const deadline = Date.now() + STEP_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await sleep(250);
+      if (findEasyApplyModal()) return true;
+    }
+    return false;
+  }
+
+  // The job this page is showing, so a run is never repeated for the same
+  // posting. Without this, browsing listings with auto-advance on would
+  // re-fire on every DOM change.
+  function currentJobId() {
+    const m = /[?&]currentJobId=(\d+)/.exec(location.href)
+      || /\/jobs\/view\/(\d+)/.exec(location.pathname);
+    return m ? m[1] : location.pathname;
+  }
+  const _attempted = new Set();
+
   let _running = false;
 
   async function runAutoFlow(reason) {
@@ -346,8 +394,20 @@
     if (!(await C.isToggleOn(TOGGLE))) return done('off', 'LinkedIn autofill toggle is off');
     if (!(await C.isToggleOn(AUTO_TOGGLE))) return done('off', 'auto-advance toggle is off');
 
+    // Open the dialog ourselves if it is not up yet. This is the step that
+    // was missing: on a job listing the flow reported "no dialog" and
+    // stopped, when what the user wants is for it to press Easy Apply.
     let modal = findEasyApplyModal();
-    if (!modal) return done('no-modal', 'no Easy Apply dialog open');
+    if (!modal) {
+      const opened = await openEasyApply();
+      if (!opened) {
+        return done('no-modal', findEasyApplyLaunch()
+          ? 'The Easy Apply dialog did not open.'
+          : 'No Easy Apply button on this job. It may be an external "Apply" that goes to the company site.');
+      }
+      modal = findEasyApplyModal();
+      if (!modal) return done('no-modal', 'The dialog opened but could not be read.');
+    }
 
     const allowSubmit = await C.isToggleOn(SUBMIT_TOGGLE);
     _running = true;
@@ -410,6 +470,13 @@
 
   window.__JG_LINKEDIN_AUTO_FLOW__ = function () { return runAutoFlow('run-now'); };
 
+  // "Apply now" from the popup: press Easy Apply, then run the flow. Used
+  // when auto-advance is on, so one click applies from a job listing.
+  window.__JG_LINKEDIN_APPLY_NOW__ = function () {
+    _attempted.add(currentJobId());
+    return runAutoFlow('apply-now');
+  };
+
   // ---- lifecycle -------------------------------------------------------
   // With auto-advance on, opening Easy Apply should complete the flow with
   // no click at all. Fall back to a single fill pass when it is off.
@@ -418,15 +485,28 @@
     clearTimeout(_debounce);
     _debounce = setTimeout(async () => {
       const C = core();
-      if (C && findEasyApplyModal() && (await C.isToggleOn(AUTO_TOGGLE))) {
-        if (_running) return;
+      if (!C) return;
+      if (_running) return;
+
+      if (await C.isToggleOn(AUTO_TOGGLE)) {
+        const open = findEasyApplyModal();
+        // Not open yet: only start if this job has an Easy Apply button we
+        // have not already tried. The per-job guard is what stops browsing
+        // a results list from re-firing on every DOM change, and stops a
+        // dismissed dialog from being reopened underneath the user.
+        if (!open) {
+          const jobId = currentJobId();
+          if (_attempted.has(jobId)) return;
+          if (!findEasyApplyLaunch()) return;
+          _attempted.add(jobId);
+        }
         const r = await runAutoFlow(reason);
         log('auto-advance finished:', r.status, r.detail);
         try { chrome.runtime.sendMessage({ action: 'JG_LINKEDIN_FLOW_RESULT', result: r }); } catch (e) {}
         return;
       }
       runFill(reason);
-    }, 500);
+    }, 700);
   }
 
   // Toggle flipped ON mid-session -> fill the open step immediately.
