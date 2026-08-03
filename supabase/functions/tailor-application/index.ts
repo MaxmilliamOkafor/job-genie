@@ -2341,6 +2341,25 @@ employer. Example: applying to AMD, a Meta bullet must never say "AMD"
 or "AMD's commercial products" or "AMD-based solutions". The candidate
 worked at Meta, not AMD.
 
+RULE 14 — NO KEYWORD TAILS ON BULLETS (hard ban)
+NEVER append a trailing keyword clause to a bullet purely to place a
+keyword. Banned patterns include ", using stakeholder management.",
+", with time-management.", ", showing collaboration skills." — any
+", using X" / ", with X" / ", showing X" / ", demonstrating X" tail
+grafted onto an otherwise complete sentence.
+Keywords belong in the summary and the skills sections, OR inside a
+bullet where they describe what was actually done, integrated into the
+sentence's grammar. If a keyword cannot be integrated grammatically and
+truthfully, leave it out of the bullet.
+
+RULE 15 — CLEAN SENTENCE CASING AND GRAMMAR
+Every sentence — in the summary, bullets, and cover letter — MUST begin
+with a capital letter and be a grammatically complete sentence. Never
+emit fragments like "...and data analytics. ability to lead
+cross-functional teams..." (lowercase sentence start mid-paragraph).
+When a JD phrase is spliced into prose, re-case and re-word it so the
+sentence reads naturally.
+
 RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
 ATS systems and recruiters give the highest weight to the first 1-2 bullets of each role.
