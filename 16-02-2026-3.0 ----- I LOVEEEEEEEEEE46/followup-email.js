@@ -58,7 +58,7 @@
       builtIn: true,
       subject: 'Application submitted - {{job_title}}{{job_id_suffix}}',
       body: [
-        'Dear {{recipient_first_name}},',
+        'Dear {{greeting_name}},',
         '',
         'I applied for the {{job_title}} role at {{company_name}} today and wanted to flag it in case it helps to have it on your radar.',
         '',
@@ -66,6 +66,7 @@
         '{{reference_block}}',
         '',
         'It came through your application portal under {{my_name}} ({{my_email}}).',
+        '{{attachment_note}}',
         '',
         'I am {{headline}}, and I would be glad to walk through how that maps to what the team needs. Happy to send anything further that would be useful.',
         '',
@@ -78,11 +79,12 @@
       builtIn: true,
       subject: '{{job_title}}{{job_id_suffix}} - application from {{my_name}}',
       body: [
-        'Dear {{recipient_first_name}},',
+        'Dear {{greeting_name}},',
         '',
         'I submitted an application for {{job_title}} at {{company_name}} today{{job_id_sentence}} - filed under {{my_name}} ({{my_email}}).',
         '',
         '{{reference_block}}',
+        '{{attachment_note}}',
         '',
         'Happy to answer anything or share more detail if useful.',
         '',
@@ -95,12 +97,14 @@
       builtIn: true,
       subject: 'Application submitted - {{job_title}}{{job_id_suffix}}',
       body: [
-        'Dear {{recipient_first_name}},',
+        'Dear {{greeting_name}},',
         '',
         'I applied for the {{job_title}} role at {{company_name}} today{{job_id_sentence}}.',
         '',
         'Details to locate my application:',
         '{{reference_block}}',
+        '',
+        '{{attachment_note}}',
         '',
         'The most relevant part of my background: {{highlight}}',
         '',
@@ -249,11 +253,15 @@
       job_id: jobId,
       job_id_suffix: jobId ? ' (Job ID ' + jobId + ')' : '',
       job_id_sentence: jobId ? ', reference ' + jobId : '',
-      greeting_name: first || 'Hiring Team',
+      // Defaults to "Hiring Manager": a wrong name is a worse first
+      // impression than no name, and a generic greeting is unremarkable in
+      // an application. {{recipient_first_name}} stays available for anyone
+      // who wants to use a name they trust.
+      greeting_name: 'Hiring Manager',
       // Recipient. recipient_first_name degrades to "Hiring Team" so a
       // greeting never reads "Dear ,".
-      recipient_name: (c.contactName || '').trim() || 'Hiring Team',
-      recipient_first_name: first || 'Hiring Team',
+      recipient_name: (c.contactName || '').trim() || 'Hiring Manager',
+      recipient_first_name: first || 'Hiring Manager',
       recipient_email: c.email || '',
       // Friendly aliases -- both {{company}} and {{company_name}} work.
       company_name: c.company || 'your team',
@@ -266,6 +274,11 @@
       // Every locator we found, as ready-to-paste lines. This is what
       // actually lets a recruiter pull up the application in seconds.
       reference_block: (c.referenceBlock || '').trim(),
+      // Empty unless files are really attached, so the note never claims
+      // an attachment that is not there.
+      attachment_note: (c.attachmentNames && c.attachmentNames.length)
+        ? 'I have attached my CV' + (c.attachmentNames.length > 1 ? ' and cover letter' : '') + ' for convenience.'
+        : '',
       my_name: c.myName || '',
       my_email: c.myEmail || '',
       my_phone: c.myPhone || '',
@@ -280,6 +293,75 @@
       const v = tokens[k.toLowerCase()];
       return v === undefined || v === null ? '' : String(v);
     });
+  }
+
+  // ===================================================================
+  // POST-RENDER TIDY
+  // -------------------------------------------------------------------
+  // A first impression is one shot, so the note must never show the seams
+  // of the template. Substituting an empty token leaves debris that a
+  // recruiter reads as carelessness:
+  //
+  //   "Dear ,"                    (no contact name)
+  //   "Details to locate ...:"    followed by nothing
+  //   a signature with blank lines where the phone and LinkedIn were
+  //   "(Job ID )" or a stray ", reference ."
+  //
+  // Rather than ask the user to hand-maintain conditionals, the renderer
+  // removes anything that ended up empty.
+  // ===================================================================
+  function _lineIsOnlyTokens(rawLine) {
+    const stripped = String(rawLine).replace(/\{\{\s*[a-z_]+\s*\}\}/gi, '').trim();
+    // Only tokens, or tokens plus trivial punctuation/labels.
+    return /\{\{/.test(rawLine) && (stripped === '' || /^[\s,;:.\-|()\[\]]*$/.test(stripped));
+  }
+
+  function renderBlock(template, tokens) {
+    const rawLines = String(template || '').split('\n');
+    const out = [];
+    for (let i = 0; i < rawLines.length; i++) {
+      const raw = rawLines[i];
+      const line = render(raw, tokens);
+
+      // A line made only of tokens that rendered to nothing is dropped
+      // entirely -- this is what keeps the signature tight when there is
+      // no phone or LinkedIn on the profile.
+      if (_lineIsOnlyTokens(raw) && !line.trim()) continue;
+
+      // A label line ("Details to locate my application:") whose content
+      // is the next line, where that next line is an empty token, would
+      // otherwise introduce a heading for nothing.
+      if (/:\s*$/.test(line.trim()) && i + 1 < rawLines.length) {
+        const nextRaw = rawLines[i + 1];
+        if (_lineIsOnlyTokens(nextRaw) && !render(nextRaw, tokens).trim()) {
+          i++;                       // skip the empty content line too
+          continue;                  // and drop the label
+        }
+      }
+
+      out.push(line);
+    }
+
+    return out.join('\n')
+      // Empty parenthetical/bracket left by a missing value.
+      .replace(/\(\s*\)/g, '')
+      .replace(/\[\s*\]/g, '')
+      // Dangling separators before punctuation.
+      .replace(/[ \t]+([,.;:])/g, '$1')
+      .replace(/,\s*([.,])/g, '$1')
+      // Repeated punctuation from an absent clause.
+      .replace(/([,;:])\1+/g, '$1')
+      .replace(/\.\s*\./g, '.')
+      // Trailing spaces, then collapse blank runs.
+      .replace(/[ \t]+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  // Any token left unsubstituted is a bug that must never reach a
+  // recipient. Callers use this as a final gate before sending.
+  function findUnfilledTokens(text) {
+    return [...new Set((String(text || '').match(/\{\{\s*[a-z_]+\s*\}\}/gi) || []))];
   }
 
   async function compose(ctx) {
@@ -760,20 +842,78 @@
 
   // RFC 2822 message, base64url encoded as the Gmail API requires. UTF-8
   // safe: btoa() alone corrupts non-ASCII names/accents.
-  function buildRaw({ to, subject, body, fromName }) {
-    const headers = [
-      'To: ' + to,
-      'Subject: ' + subject,
-      'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: 8bit',
-    ];
-    if (fromName) headers.unshift('From: ' + fromName);
-    const mime = headers.join('\r\n') + '\r\n\r\n' + body;
-    const bytes = new TextEncoder().encode(mime);
+  function _b64url(str) {
+    const bytes = new TextEncoder().encode(str);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  // Base64 bodies must be wrapped at 76 chars per RFC 2045. Some servers
+  // reject or silently corrupt a single unbroken line.
+  function _wrap76(b64) {
+    return String(b64 || '').replace(/[\r\n]/g, '').replace(/(.{1,76})/g, '$1\r\n').trim();
+  }
+
+  function _mimeTypeFor(filename) {
+    const ext = String(filename || '').toLowerCase().split('.').pop();
+    if (ext === 'pdf') return 'application/pdf';
+    if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (ext === 'doc') return 'application/msword';
+    if (ext === 'txt') return 'text/plain';
+    return 'application/octet-stream';
+  }
+
+  // RFC 2047 encoded-word, so accented names in a filename or subject do
+  // not arrive as mojibake.
+  function _encodeHeader(v) {
+    const s = String(v || '');
+    if (/^[\x20-\x7E]*$/.test(s)) return s;
+    return '=?UTF-8?B?' + _b64url(s).replace(/-/g, '+').replace(/_/g, '/') + '?=';
+  }
+
+  /**
+   * attachments: [{ filename, base64, mimeType? }]
+   * Produces text/plain when there is nothing to attach, and
+   * multipart/mixed when there is.
+   */
+  function buildRaw({ to, subject, body, fromName, attachments }) {
+    const files = (attachments || []).filter((a) => a && a.base64 && a.filename);
+    const head = [];
+    if (fromName) head.push('From: ' + _encodeHeader(fromName));
+    head.push('To: ' + to);
+    head.push('Subject: ' + _encodeHeader(subject));
+    head.push('MIME-Version: 1.0');
+
+    if (!files.length) {
+      head.push('Content-Type: text/plain; charset="UTF-8"');
+      head.push('Content-Transfer-Encoding: 8bit');
+      return _b64url(head.join('\r\n') + '\r\n\r\n' + body);
+    }
+
+    const boundary = 'jg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    head.push('Content-Type: multipart/mixed; boundary="' + boundary + '"');
+
+    const parts = [
+      '--' + boundary,
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      body,
+    ];
+    for (const f of files) {
+      const name = _encodeHeader(f.filename);
+      parts.push(
+        '--' + boundary,
+        'Content-Type: ' + (f.mimeType || _mimeTypeFor(f.filename)) + '; name="' + name + '"',
+        'Content-Transfer-Encoding: base64',
+        'Content-Disposition: attachment; filename="' + name + '"',
+        '',
+        _wrap76(f.base64)
+      );
+    }
+    parts.push('--' + boundary + '--', '');
+    return _b64url(head.join('\r\n') + '\r\n\r\n' + parts.join('\r\n'));
   }
 
   function _validEmail(e) {
@@ -830,13 +970,13 @@
     });
   }
 
-  async function send({ to, subject, body, fromName }) {
+  async function send({ to, subject, body, fromName, attachments }) {
     if (!_validEmail(to)) throw new Error('A valid recipient address is required');
     if (!String(subject || '').trim()) throw new Error('Subject is required');
     if (!String(body || '').trim()) throw new Error('Body is required');
 
     const token = await getAuthToken(true);
-    const raw = buildRaw({ to: to.trim(), subject, body, fromName });
+    const raw = buildRaw({ to: to.trim(), subject, body, fromName, attachments });
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: {
@@ -1029,7 +1169,7 @@
     loadTemplate, saveTemplate, resetTemplate,
     listTemplates, setActiveTemplate, createTemplate, deleteTemplate,
     BUILT_IN_TEMPLATES,
-    buildTokens, render, compose,
+    buildTokens, render, renderBlock, findUnfilledTokens, compose,
     isConnected, connect, disconnect, diagnose, authMode,
     loadOAuthConfig, saveOAuthConfig, redirectUri, redirectUriVariants, probeRedirect,
     buildComposeUrl, openCompose,
