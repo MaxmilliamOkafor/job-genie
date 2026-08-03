@@ -49,6 +49,7 @@
   // value rather than leaving a gap (see the post-render tidy).
   const SIGN_OFF = [
     'Kind regards,',
+    '',
     '{{my_first_name}}',
     '{{my_phone}}',
     '{{my_email}}',
@@ -253,6 +254,9 @@
   function _prettyPhone(raw, country) {
     let p = String(raw || '').trim();
     if (!p) return '';
+    // Already written in international form WITH grouping: the user chose
+    // that spacing, so respect it rather than imposing ours.
+    if (/^\+/.test(p) && /\s/.test(p)) return p;
     const isIE = !country || /ireland|^ie$/i.test(String(country).trim());
     let digits = p.replace(/[^\d+]/g, '');
     if (!digits.startsWith('+')) {
@@ -271,12 +275,15 @@
   function _prettyLinkedIn(raw) {
     let v = String(raw || '').trim();
     if (!v) return '';
-    if (/^https?:\/\//i.test(v)) return v;
+    // Canonical LinkedIn profile URLs carry a trailing slash; keep it, so
+    // the signature matches what the user copies from their own profile.
+    const slash = (u) => (/\/in\/[^/]+$/i.test(u) ? u + '/' : u);
+    if (/^https?:\/\//i.test(v)) return slash(v);
     v = v.replace(/^\/+/, '');
-    if (/^linkedin\.com/i.test(v)) return 'https://www.' + v;
-    if (/^www\.linkedin\.com/i.test(v)) return 'https://' + v;
-    if (!/[./]/.test(v)) return 'https://www.linkedin.com/in/' + v;   // bare handle
-    return 'https://' + v;
+    if (/^www\.linkedin\.com/i.test(v)) return slash('https://' + v);
+    if (/^linkedin\.com/i.test(v)) return slash('https://www.' + v);
+    if (!/[./]/.test(v)) return 'https://www.linkedin.com/in/' + v + '/';   // bare handle
+    return slash('https://' + v);
   }
 
   function buildTokens(ctx) {
