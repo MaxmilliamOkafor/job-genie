@@ -2313,9 +2313,17 @@ class ATSTailor {
     if (typeof FollowupEmail === 'undefined') return;
     const el = document.getElementById('followupClientId');
     const value = clear ? '' : (el?.value || '').trim();
+    if (clear) {
+      // Clearing the ID must also drop the live access token. Removing the
+      // ID alone left a usable token in storage, so the extension could
+      // still send mail after the user believed they had disconnected.
+      // saveOAuthConfig already invalidates the cached redirect URI when
+      // the client ID changes.
+      try { await FollowupEmail.disconnect(); } catch (e) {}
+    }
     await FollowupEmail.saveOAuthConfig({ clientId: value });
     if (clear && el) el.value = '';
-    this.showToast(clear ? 'Client ID cleared' : 'Client ID saved to this device', 'success');
+    this.showToast(clear ? 'Client ID and saved Gmail authorisation cleared' : 'Client ID saved to this device', 'success');
     this.followupRefreshStatus();
   }
 
