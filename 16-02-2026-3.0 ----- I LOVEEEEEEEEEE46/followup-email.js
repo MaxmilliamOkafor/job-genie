@@ -43,17 +43,18 @@
   // application rather than a helpful note. Users can edit these, add
   // their own, and switch per application.
   // ===================================================================
-  // Signature block. First name only: a follow-up is a short personal
-  // note, and the full legal name already appears on the attached CV.
-  // Each line is its own token so renderBlock drops the ones with no
-  // value rather than leaving a gap (see the post-render tidy).
+  // Signature block, written out literally rather than as tokens, so the
+  // template editor shows the exact text that will be sent. Tokens are
+  // still available ({{my_first_name}}, {{my_phone}}, {{my_email}},
+  // {{my_linkedin}}) for anyone who prefers the signature to follow their
+  // stored profile automatically.
   const SIGN_OFF = [
     'Kind regards,',
     '',
-    '{{my_first_name}}',
-    '{{my_phone}}',
-    '{{my_email}}',
-    '{{my_linkedin}}',
+    'Maxmilliam',
+    '+353 874 261 508',
+    'Maxokafordev@gmail.com',
+    'https://www.linkedin.com/in/maxokafor/',
   ].join('\n');
 
   const BUILT_IN_TEMPLATES = [
@@ -140,6 +141,28 @@
       try {
         chrome.storage.local.get([KEY_TEMPLATES, KEY_ACTIVE, KEY_TEMPLATE], (r) => {
           let templates = (r && Array.isArray(r[KEY_TEMPLATES])) ? r[KEY_TEMPLATES] : null;
+          // Upgrade the signature in stored PRESETS only. Without this the
+          // new literal block would never appear for anyone who already
+          // has templates saved -- they would keep seeing {{my_first_name}}
+          // in the editor and have to press Reset. Restricted to templates
+          // still flagged builtIn, and only where the exact old token block
+          // is present, so nothing a user has written is touched.
+          if (templates && templates.length) {
+            const OLD_SIGN_OFFS = [
+              'Kind regards,\n\n{{my_first_name}}\n{{my_phone}}\n{{my_email}}\n{{my_linkedin}}',
+              'Kind regards,\n{{my_first_name}}\n{{my_phone}}\n{{my_email}}\n{{my_linkedin}}',
+              'Kind regards,\n{{my_name}}\n{{my_phone}}\n{{my_email}}\n{{my_linkedin}}',
+            ];
+            templates = templates.map((t) => {
+              if (!t || !t.builtIn || typeof t.body !== 'string') return t;
+              for (const oldBlock of OLD_SIGN_OFFS) {
+                if (t.body.includes(oldBlock)) {
+                  return Object.assign({}, t, { body: t.body.replace(oldBlock, SIGN_OFF) });
+                }
+              }
+              return t;
+            });
+          }
           if (!templates || !templates.length) {
             templates = _cloneBuiltIns();
             // Migration: preserve a customised single template as "My template".
