@@ -366,9 +366,26 @@
   // not there, applications get filtered as "not interested in this role".
   // ===================================================================
 
+  // Postings carry requisition numbers, locations and employment-type
+  // noise in the title field. Writing that verbatim into a CV produced
+  // "(1526) Microsoft Dynamics 365 Project Manager Experienced Microsoft
+  // Dynamics 365 Project Manager with..." -- the req number leaked, and
+  // because the raw string never matched the summary's own wording, the
+  // title was ALSO prepended, so it appeared twice.
+  function normaliseJobTitle(raw) {
+    let t = String(raw || '').trim().replace(/\s+/g, ' ');
+    t = t.replace(/^[\s\-|,]*\(?\s*(?:req(?:uisition)?\.?\s*(?:id|no\.?|#)?\s*)?[#]?\d{3,10}\s*\)?[\s\-|,:]*/i, '');
+    t = t.replace(/^[\s\-|,]*\b(?:JR|R|REQ|JOB)[-_]?\d{3,10}\b[\s\-|,:]*/i, '');
+    t = t.replace(/[\s\-|,(]*\b(?:req(?:uisition)?\.?\s*(?:id|no\.?|#)?\s*)?[#]?\d{4,10}\)?\s*$/i, '');
+    t = t.replace(/\s*[-|(]\s*(remote|hybrid|on-?site|full[- ]?time|part[- ]?time|contract|permanent|temporary|fte)\b[^)]*\)?\s*$/i, '');
+    t = t.replace(/\s*[-|]\s*[A-Z][a-z]+(?:,\s*[A-Z]{2,})?\s*$/, '');
+    t = t.replace(/[\s\-|,:]+$/, '').replace(/^[\s\-|,:]+/, '');
+    return t.replace(/\s+/g, ' ').trim();
+  }
+
   function echoJobTitle(text, jdTitle, { kind = 'cv' } = {}) {
     if (!text || !jdTitle) return { text: text || '', injected: false };
-    const cleanedTitle = String(jdTitle).trim().replace(/\s+/g, ' ');
+    const cleanedTitle = normaliseJobTitle(jdTitle);
     if (cleanedTitle.length < 3 || cleanedTitle.length > 80) {
       return { text, injected: false };
     }
@@ -437,14 +454,20 @@
         return { text: text.replace(re, cleanedTitle), injected: true };
       }
     }
-    // No similar title to merge into: emit the exact title as a clean
-    // headline line under the summary header (no label).
-    const summaryRe = /(SUMMARY|PROFESSIONAL SUMMARY|PROFILE)\s*\n/i;
-    if (summaryRe.test(text)) {
-      const out = text.replace(summaryRe, (m) => `${m}${cleanedTitle}\n`);
-      return { text: out, injected: true };
-    }
-    return { text, injected: false };
+    // NO SIMILAR TITLE TO MERGE INTO.
+    //
+    // The old behaviour prepended the JD title as a headline. On a genuine
+    // pivot that manufactures a claim the CV cannot support -- a Software
+    // Engineer whose summary suddenly announces "Microsoft Dynamics 365
+    // Project Manager", with no Dynamics 365 anywhere beneath it. A
+    // recruiter reads that as a lie in the first line and stops, which is
+    // the exact outcome the tailoring is supposed to avoid.
+    //
+    // Mirroring the JD's vocabulary is legitimate; asserting a job history
+    // the candidate does not have is not. So when there is nothing to
+    // merge into, the summary is left alone and the mismatch is reported
+    // instead, for the user to decide on.
+    return { text, injected: false, titleUnsupported: true, normalisedTitle: cleanedTitle };
   }
 
   // ===================================================================
@@ -1499,7 +1522,57 @@
   );
 
   // ", using X." / " with X." / ", through X and Y." appended to a bullet.
-  const TAIL_RE = /\s*,?\s*(?:using|with|through|via|applying|incorporating|employing|built with|integrating|demonstrating)\s+([^.;]{2,60})\s*\.?\s*$/i;
+  // The stuffed tail is always bolted on as a separate clause, so it is
+  // preceded by a COMMA. That comma is what distinguishes it from the
+  // candidate's own prose: in
+  //   "Mentored junior engineers through code reviews and design
+  //    discussions, with time-management."
+  // the "through ..." clause is real content and the ", with ..." is the
+  // graft. Matching without requiring the comma swallowed both and left
+  // "Mentored junior engineers." -- deleting the substance and keeping
+  // only the husk.
+  const CONNECTOR = '(?:using|with|through|via|applying|incorporating|employing|built with|integrating|demonstrating|showing|highlighting|reflecting|showcasing)';
+  const TAIL_RE = new RegExp('\\s*,\\s*' + CONNECTOR + '\\s+([^.;,]{2,70})\\s*\\.?\\s*$', 'i');
+  // Without a comma, only strip phrases already known to be filler.
+  const TAIL_RE_LOOSE = new RegExp('\\s*,?\\s*' + CONNECTOR + '\\s+([^.;]{2,70})\\s*\\.?\\s*$', 'i');
+
+  // Deciding by a LIST OF BAD PHRASES leaks: every soft-skill noun anyone
+  // ever appends has to be enumerated first. A real CV showed
+  // "using stakeholder management", "with time-management",
+  // "using client management", "with digital transformation" and
+  // "showing strong problem-solving abilities" all surviving, because the
+  // list happened to contain "stakeholder engagement" and "problem
+  // solving" but not those.
+  //
+  // Inverted: KEEP a trailing clause only when it names something
+  // concrete -- a real technology, a product name, or a number. Anything
+  // else bolted onto the end of a bullet by a connector verb is keyword
+  // stuffing, and reads that way to a recruiter.
+  const TECH_TOKEN = new RegExp('\\b(' + [
+    'aws','azure','gcp','kubernetes','k8s','docker','terraform','ansible','jenkins',
+    'python','java','javascript','typescript','golang','rust','scala','c\\+\\+','sql','nosql',
+    'react','angular','vue','node(?:\\.js)?','django','flask','spring','rails','\\.net',
+    'spark','kafka','airflow','hadoop','snowflake','databricks','dbt','redshift','bigquery',
+    'tensorflow','pytorch','scikit-?learn','keras','mlflow','sagemaker','hugging ?face',
+    'postgres(?:ql)?','mysql','mongodb','redis','elasticsearch','cassandra','dynamodb',
+    'git(?:hub|lab)?','ci/?cd','devops','graphql','rest','grpc','api','microservices',
+    'linux','bash','kafka','rabbitmq','tableau','power ?bi','looker','salesforce',
+    'sap','dynamics ?365','servicenow','workday','jira','confluence','figma',
+    'terraform','pulumi','prometheus','grafana','datadog','splunk','openai','llm','rag',
+  ].join('|') + ')\\b', 'i');
+
+  function _tailIsConcrete(phrase) {
+    const p = String(phrase || '').trim();
+    if (!p) return false;
+    if (/\d/.test(p)) return true;                 // a metric or version
+    if (TECH_TOKEN.test(p)) return true;           // a named technology
+    // A product-style proper noun the generator would not have invented,
+    // e.g. "Azure DevOps", "GitHub Actions". Requires internal capitals or
+    // two capitalised words, not just a sentence-initial capital.
+    if (/[a-z][A-Z]/.test(p)) return true;
+    if (/\b[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(p)) return true;
+    return false;
+  }
 
   function stripNonsenseTails(text) {
     if (!text) return { text: text || '', stripped: 0 };
@@ -1507,9 +1580,18 @@
     const out = text.split('\n').map((raw) => {
       const line = raw.trimEnd();
       if (!/^\s*([\-*•]|\d+\.)\s+/.test(line)) return raw;
-      const m = line.match(TAIL_RE);
-      if (!m) return raw;
-      if (!NONSENSE_TAIL_PHRASE.test(m[1].trim())) return raw;   // keep genuine tech tails
+      // Comma-anchored graft: strip unless it names something concrete.
+      let m = line.match(TAIL_RE);
+      let phrase = m ? m[1].trim() : '';
+      if (m && _tailIsConcrete(phrase) && !NONSENSE_TAIL_PHRASE.test(phrase)) return raw;
+      if (!m) {
+        // No comma: this is probably the candidate's own prose, so only
+        // remove it when the phrase is a known filler noun.
+        m = line.match(TAIL_RE_LOOSE);
+        if (!m) return raw;
+        phrase = m[1].trim();
+        if (!NONSENSE_TAIL_PHRASE.test(phrase)) return raw;
+      }
       stripped++;
       let cleaned = line.slice(0, line.length - m[0].length).trimEnd();
       cleaned = cleaned.replace(/[,;:]+$/, '');
@@ -2038,7 +2120,7 @@
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,
-    echoJobTitle,
+    echoJobTitle, normaliseJobTitle,
     firstSixSecondsCheck,
     // v2
     stripFillers,

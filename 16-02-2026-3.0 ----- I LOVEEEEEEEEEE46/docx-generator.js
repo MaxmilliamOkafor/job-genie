@@ -141,7 +141,14 @@
         const target = isEmail ? `mailto:${seg}` : (/^https?:\/\//i.test(seg) ? seg : `https://${seg}`);
         const id = `rIdLink${relsCollector.length + 1}`;
         relsCollector.push({ id, target });
-        pieces.push(`<w:hyperlink r:id="${id}">${run(seg, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
+        // Display without scheme/www/trailing slash. The full URL stays as
+        // the hyperlink TARGET, so nothing is lost, but the visible line
+        // drops from ~110 characters to ~75. At full width that is merely
+        // tidier; on a phone the long form wrapped mid-URL and made the
+        // header look broken, which is where a recruiter's eye lands first.
+        // "linkedin.com/in/name" remains fully parseable to every ATS.
+        const display = isEmail ? seg : seg.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
+        pieces.push(`<w:hyperlink r:id="${id}">${run(display, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
       } else {
         // Phone segments get normalised (strip stray colon, group digits).
         const display = looksLikePhone(seg) ? normalizePhoneToken(seg) : seg;
