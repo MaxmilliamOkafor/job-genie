@@ -225,7 +225,10 @@
         "https://*.pinpointhq.com/*",
         "https://*.zohorecruit.com/*",
         "https://www.metacareers.com/*",
-        "https://explore.jobs.netflix.net/*"
+        "https://explore.jobs.netflix.net/*",
+        "https://*.occupop.com/*",
+        "https://*.wellfound.com/*",
+        "https://*.otta.com/*"
       ],
       "js": [
         "debug-logger.js",
@@ -288,6 +291,18 @@
       ],
       "js": [
         "gmail-compose-attach.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://*.linkedin.com/*",
+        "https://*.indeed.com/*",
+        "https://*.glassdoor.com/*"
+      ],
+      "js": [
+        "jd-contact-sources.js"
       ],
       "run_at": "document_idle",
       "all_frames": false
