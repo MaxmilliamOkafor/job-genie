@@ -43,9 +43,13 @@
   // application rather than a helpful note. Users can edit these, add
   // their own, and switch per application.
   // ===================================================================
+  // Signature block. First name only: a follow-up is a short personal
+  // note, and the full legal name already appears on the attached CV.
+  // Each line is its own token so renderBlock drops the ones with no
+  // value rather than leaving a gap (see the post-render tidy).
   const SIGN_OFF = [
     'Kind regards,',
-    '{{my_name}}',
+    '{{my_first_name}}',
     '{{my_phone}}',
     '{{my_email}}',
     '{{my_linkedin}}',
@@ -243,6 +247,38 @@
   }
 
   // ---- token expansion -------------------------------------------------
+  // "0874261508" -> "+353 874 261 508". Only converts a leading 0 when we
+  // know the country; otherwise the number is left exactly as the user
+  // typed it, because guessing a dialling code is worse than plain digits.
+  function _prettyPhone(raw, country) {
+    let p = String(raw || '').trim();
+    if (!p) return '';
+    const isIE = !country || /ireland|^ie$/i.test(String(country).trim());
+    let digits = p.replace(/[^\d+]/g, '');
+    if (!digits.startsWith('+')) {
+      if (isIE && /^0\d{8,10}$/.test(digits)) digits = '+353' + digits.slice(1);
+      else if (isIE && /^\d{9}$/.test(digits)) digits = '+353' + digits;
+      else return p;                       // unknown shape: leave untouched
+    }
+    const m = /^\+(\d{1,3})(\d+)$/.exec(digits);
+    if (!m) return p;
+    const body = m[2].replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+    return '+' + m[1] + ' ' + body;
+  }
+
+  // A profile URL in a signature should be clickable in every mail client,
+  // which means it needs the scheme.
+  function _prettyLinkedIn(raw) {
+    let v = String(raw || '').trim();
+    if (!v) return '';
+    if (/^https?:\/\//i.test(v)) return v;
+    v = v.replace(/^\/+/, '');
+    if (/^linkedin\.com/i.test(v)) return 'https://www.' + v;
+    if (/^www\.linkedin\.com/i.test(v)) return 'https://' + v;
+    if (!/[./]/.test(v)) return 'https://www.linkedin.com/in/' + v;   // bare handle
+    return 'https://' + v;
+  }
+
   function buildTokens(ctx) {
     const c = ctx || {};
     const jobId = (c.jobId || '').trim();
@@ -280,9 +316,13 @@
         ? 'I have attached my CV' + (c.attachmentNames.length > 1 ? ' and cover letter' : '') + ' for convenience.'
         : '',
       my_name: c.myName || '',
+      my_first_name: String(c.myName || '').trim().split(/\s+/)[0] || '',
       my_email: c.myEmail || '',
-      my_phone: c.myPhone || '',
-      my_linkedin: c.myLinkedin || '',
+      // Presented, not raw. A signature is the last thing read, so a
+      // bare "0874261508" or a scheme-less profile URL undercuts an
+      // otherwise careful note.
+      my_phone: _prettyPhone(c.myPhone, c.country),
+      my_linkedin: _prettyLinkedIn(c.myLinkedin),
       headline: c.headline || 'a candidate whose background maps closely to this role',
       today: new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }),
     };
