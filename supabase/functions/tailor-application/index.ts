@@ -2279,17 +2279,20 @@ RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
 
 RULE 7 — SUMMARY REWRITE (worth ~8 points)
 Rewrite the professional summary to:
-1. Open with the exact job title from the JD (verbatim, not paraphrased)
+1. Open with what the candidate demonstrably IS, per RULE 1. Use the JD's
+   title wording only if an equivalent title exists in their work history;
+   on a pivot, use their real discipline plus JD domain vocabulary. Never
+   lead with a bare title claim as the opening words.
 2. Reference 2-3 of the most-repeated hard skill keywords from the JD
 3. Mirror the company's value language (e.g. "gaming communities", "data-driven decisions", "petabyte-scale systems")
 4. Keep to 3-4 sentences maximum
-5. CRITICAL — YEARS OF EXPERIENCE MUST MATCH JD REQUIREMENT EXACTLY:
-   - If the JD says "3+ years", say "3+ years" in the summary
-   - If the JD says "5+ years", say "5+ years"
-   - If the JD says "7+ years", say "7+ years"
-   - NEVER claim more years than the JD asks for — use the JD's own number
-   - If the JD does not specify years, omit years from the summary entirely
-    - This prevents ATS "Job Level Match" penalties for over-qualification
+5. CRITICAL — YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
+   - DERIVE the number of years from the candidate's ACTUAL employment
+     dates in the CV.
+   - NEVER state a number higher than that, even if the JD asks for more.
+   - If the evidenced number is LOWER than the JD's requirement, state the
+     real number or omit years entirely. NEVER inflate to match the JD.
+   - If neither the JD nor the CV supports a clear number, omit years.
 
 RULE 8 — CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
 Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the JD's most critical requirements.
