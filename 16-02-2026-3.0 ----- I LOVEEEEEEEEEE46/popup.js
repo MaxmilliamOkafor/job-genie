@@ -928,6 +928,7 @@ class ATSTailor {
     this.loadLocationSettings();
     this.loadAutofillSettings();
     this.bindLinkedInFlowResults();
+    this.bindGmailAttachResults();
     this.loadSavedResponsesStats();
     
     // Check and show Workday snapshot panel if on Workday
@@ -2208,6 +2209,49 @@ class ATSTailor {
     }
   }
 
+  // The Gmail page reports whether the drop actually took. If it did not,
+  // fall back to downloading the files so they can be dragged in -- one
+  // action, rather than a silently missing attachment.
+  bindGmailAttachResults() {
+    try {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (!msg || msg.action !== 'JG_GMAIL_ATTACH_RESULT') return;
+        const el = document.getElementById('followupResult');
+        if (msg.ok) {
+          if (el) {
+            el.textContent = 'Attached ' + msg.count + ' file(s) in Gmail. Review and press Send.';
+            el.style.color = 'var(--success)';
+          }
+          return;
+        }
+        if (el) {
+          el.textContent = 'Gmail would not accept the attachment automatically. '
+            + 'Downloading the files so you can drag them into the message.';
+          el.style.color = 'var(--warning)';
+        }
+        this.downloadFollowupAttachments();
+      });
+    } catch (e) {}
+  }
+
+  // Guaranteed fallback: put the documents on disk so they can be dragged
+  // into the compose window.
+  downloadFollowupAttachments() {
+    for (const f of this.followupAttachments()) {
+      try {
+        const bin = atob(f.base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+        chrome.downloads
+          ? chrome.downloads.download({ url, filename: f.filename, saveAs: false })
+          : Object.assign(document.createElement('a'), { href: url, download: f.filename }).click();
+      } catch (e) {
+        console.warn('[JG] could not download attachment', f.filename, e);
+      }
+    }
+  }
+
   // Insert a variable at the caret in whichever field was last focused,
   // so chips work for the subject as well as the body.
   followupInsertToken(token) {
@@ -2483,11 +2527,29 @@ class ATSTailor {
         setMsg('Careful - ' + policy.reasons[0] + when + ' Opening anyway; consider not sending.', 'var(--warning)');
       }
 
+      // Gmail's compose URL has no parameter for files, so hand them to
+      // the content script on mail.google.com instead: it attaches them
+      // the same way a person would, by dropping them on the compose
+      // window. Written BEFORE the tab opens so they are already waiting.
+      const files = this.followupAttachments();
+      if (files.length) {
+        await new Promise((r) => chrome.storage.local.set({
+          followup_pending_attachments: {
+            at: Date.now(),
+            files: files.map((f) => ({ filename: f.filename, base64: f.base64 })),
+          },
+        }, r));
+      }
+
       await FollowupEmail.openCompose({ to: ctx.email, subject, body });
       // Logged only after the compose window opens, so the history stays
       // an honest record of notes the user actually acted on.
       await FollowupEmail.markSent(jobKey, { company: ctx.company, email: ctx.email, via: 'compose' });
-      if (!policy.skip) setMsg('Opened in Gmail. Review it and press Send.', 'var(--success)');
+      if (!policy.skip) {
+        setMsg(files.length
+          ? 'Opened in Gmail with ' + files.length + ' attachment(s). Review and press Send.'
+          : 'Opened in Gmail. Review it and press Send.', 'var(--success)');
+      }
     } catch (e) {
       setMsg('Could not open Gmail: ' + (e.message || e), 'var(--error)');
     }
