@@ -165,8 +165,46 @@ async function logApiUsage(supabase: any, userId: string, functionName: string, 
   }
 }
 
+/**
+ * Strip job-posting noise (requisition numbers, JR-/REQ-/R- codes,
+ * employment-type / location suffixes) from a JD title, while keeping
+ * legitimate digits like "Dynamics 365" or "SAP S/4HANA".
+ */
+function normaliseJobTitle(raw: string): string {
+  let t = String(raw || "").trim();
+
+  // Leading "(1526) ", "[1526] ", "1526 - ", "#88213 " style prefixes
+  t = t.replace(/^\s*[\(\[\{]\s*#?\d{3,}\s*[\)\]\}]\s*[-–—:|]?\s*/, "");
+  t = t.replace(/^\s*#?\d{4,}\s*[-–—:|]\s*/, "");
+
+  // Requisition codes anywhere: JR-104882, REQ 88213, R-1234, Req #88213, Job ID: 1234
+  t = t.replace(/\b(?:job\s*id|requisition(?:\s*(?:id|no\.?|number))?|req(?:uisition)?|jr|jobreq)\b\s*[#:\-–—]?\s*\d{2,}[A-Za-z]?\b/gi, " ");
+  t = t.replace(/\b(?:JR|REQ|R)[-_]\d{2,}[A-Za-z]?\b/gi, " ");
+  t = t.replace(/\s*[#(\[]\s*\d{3,}\s*[)\]]?\s*/g, " ");
+
+  // Parenthetical employment-type / location / seniority noise
+  const noise = /(remote|hybrid|on[-\s]?site|onsite|full[-\s]?time|part[-\s]?time|contract(?:or)?|permanent|perm|temporary|temp|fixed[-\s]?term|internship|intern|w2|c2c|ftc|maternity cover|\d+\s*months?|m\/f\/d|m\/w\/d|f\/m\/d|d\/f\/m|all genders|any gender)/i;
+  t = t.replace(/[\(\[]([^)\]]*)[\)\]]/g, (m, inner: string) =>
+    noise.test(String(inner)) ? " " : m,
+  );
+
+  // Trailing employment-type / noise suffixes after a separator
+  t = t.replace(
+    /\s*[-–—|,\/]\s*(remote|hybrid|on[-\s]?site|onsite|full[-\s]?time|part[-\s]?time|contract(?:or)?|permanent|temporary|fixed[-\s]?term|internship|intern|m\/f\/d|m\/w\/d|f\/m\/d|all genders)\s*$/gi,
+    "",
+  );
+
+  // Trailing bare requisition-ish number ("Senior Engineer 104882")
+  t = t.replace(/\s+\d{4,}$/g, "");
+
+  // Tidy separators / whitespace
+  t = t.replace(/\s{2,}/g, " ").replace(/\s*[-–—|,\/:]+\s*$/g, "").replace(/^\s*[-–—|,\/:]+\s*/g, "").trim();
+
+  return t || String(raw || "").trim();
+}
+
 function validateRequest(data: any): TailorRequest {
-  const jobTitle = validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle");
+  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"));
   const company = validateString(data.company, MAX_STRING_SHORT, "company");
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
   const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, "requirements");
@@ -2181,8 +2219,19 @@ original CV, even if that means missing a keyword.
 If a Rule 3 / Rule 9 / Rule 10 instruction conflicts with Rule 0,
 Rule 0 wins. Lose the keyword, save the candidate's credibility.
 
-RULE 1 — JOB TITLE IN SUMMARY (Searchability fix, worth ~5 points)
-The EXACT job title from the job description MUST appear in the professional summary. Do not paraphrase it. Write it verbatim.
+RULE 1 — JOB TITLE IN SUMMARY (evidence-capped)
+The summary must never assert a job title the rest of the CV cannot support.
+- If the candidate's own work history contains the SAME or a CLOSELY
+  EQUIVALENT title, the summary MAY use the JD's wording for it.
+- If it does NOT (a genuine career pivot), the summary MUST NOT claim that
+  title. Instead, mirror the JD's vocabulary through skills and domain
+  language that the CV genuinely evidences, and open with what the
+  candidate actually is (e.g. "Software engineer with data analytics and
+  delivery experience across ...").
+- NEVER open the summary with a bare title claim as its first words.
+- The job title may never appear in a requisition-number form; posting
+  noise (req numbers, JR-/REQ- codes, "(Remote)") must never appear in
+  the CV or cover letter.
 
 RULE 2 — SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
 The skills section must be completely replaced. Rewrite it as:
@@ -2230,17 +2279,20 @@ RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
 
 RULE 7 — SUMMARY REWRITE (worth ~8 points)
 Rewrite the professional summary to:
-1. Open with the exact job title from the JD (verbatim, not paraphrased)
+1. Open with what the candidate demonstrably IS, per RULE 1. Use the JD's
+   title wording only if an equivalent title exists in their work history;
+   on a pivot, use their real discipline plus JD domain vocabulary. Never
+   lead with a bare title claim as the opening words.
 2. Reference 2-3 of the most-repeated hard skill keywords from the JD
 3. Mirror the company's value language (e.g. "gaming communities", "data-driven decisions", "petabyte-scale systems")
 4. Keep to 3-4 sentences maximum
-5. CRITICAL — YEARS OF EXPERIENCE MUST MATCH JD REQUIREMENT EXACTLY:
-   - If the JD says "3+ years", say "3+ years" in the summary
-   - If the JD says "5+ years", say "5+ years"
-   - If the JD says "7+ years", say "7+ years"
-   - NEVER claim more years than the JD asks for — use the JD's own number
-   - If the JD does not specify years, omit years from the summary entirely
-    - This prevents ATS "Job Level Match" penalties for over-qualification
+5. CRITICAL — YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
+   - DERIVE the number of years from the candidate's ACTUAL employment
+     dates in the CV.
+   - NEVER state a number higher than that, even if the JD asks for more.
+   - If the evidenced number is LOWER than the JD's requirement, state the
+     real number or omit years entirely. NEVER inflate to match the JD.
+   - If neither the JD nor the CV supports a clear number, omit years.
 
 RULE 8 — CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
 Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the JD's most critical requirements.
@@ -2289,6 +2341,25 @@ employer. Example: applying to AMD, a Meta bullet must never say "AMD"
 or "AMD's commercial products" or "AMD-based solutions". The candidate
 worked at Meta, not AMD.
 
+RULE 14 — NO KEYWORD TAILS ON BULLETS (hard ban)
+NEVER append a trailing keyword clause to a bullet purely to place a
+keyword. Banned patterns include ", using stakeholder management.",
+", with time-management.", ", showing collaboration skills." — any
+", using X" / ", with X" / ", showing X" / ", demonstrating X" tail
+grafted onto an otherwise complete sentence.
+Keywords belong in the summary and the skills sections, OR inside a
+bullet where they describe what was actually done, integrated into the
+sentence's grammar. If a keyword cannot be integrated grammatically and
+truthfully, leave it out of the bullet.
+
+RULE 15 — CLEAN SENTENCE CASING AND GRAMMAR
+Every sentence — in the summary, bullets, and cover letter — MUST begin
+with a capital letter and be a grammatically complete sentence. Never
+emit fragments like "...and data analytics. ability to lead
+cross-functional teams..." (lowercase sentence start mid-paragraph).
+When a JD phrase is spliced into prose, re-case and re-word it so the
+sentence reads naturally.
+
 RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
 ATS systems and recruiters give the highest weight to the first 1-2 bullets of each role.
@@ -2317,7 +2388,11 @@ NEVER claim to have skills the candidate lacks. Instead, demonstrate transferabi
 ---
 PHASE 4: VERIFICATION (Critical — do this before outputting)
 After rewriting, run this internal checklist:
-[ ] Does the exact job title appear in the summary?
+[ ] Does the summary open with something the CV evidences (no unsupported title claim, no bare title opener)?
+[ ] Are stated years of experience <= what the employment dates prove?
+[ ] Are there zero ", using X" / ", with X" keyword tails on bullets?
+[ ] Does every sentence start with a capital letter and read grammatically?
+[ ] Is the job title free of requisition numbers / posting noise?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
 [ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
