@@ -863,6 +863,61 @@ function isRegionNotCity(v) {
   return REGION_ONLY_RE.test(String(v || '').replace(/[.,]+$/, '').trim());
 }
 
+// NOT A PLACE AT ALL.
+// Postings leave these in the location field constantly, and every one of
+// them used to be treated as a city name and written into the CV header:
+//   "N/A"       -> "N/a, IE"
+//   "TBD"       -> "Tbd, IE"
+//   "undefined" -> "Undefined, IE"
+//   "{city}"    -> "{city}, IE"
+// The first line a recruiter reads is not the place to discover that a
+// scraper missed a field.
+const NON_PLACE_RE = new RegExp('^\\s*(?:' + [
+  'n\\/?a', 'tbd', 'tba', 'to be (?:determined|confirmed|advised)',
+  'unknown', 'unspecified', 'not specified', 'none', 'null', 'undefined',
+  'nil', 'no location', 'location', 'anywhere', 'flexible', 'any',
+  'confidential', 'undisclosed', 'various', 'multiple', 'other',
+  // Work-mode words are a working arrangement, not an address.
+  'remote', 'hybrid', 'on-?site', 'onsite', 'wfh', 'virtual', 'work from home',
+  'full[- ]?time', 'part[- ]?time', 'contract', 'permanent', 'temporary',
+].join('|') + ')\\s*$', 'i');
+
+function isNonPlace(v) {
+  const s = String(v == null ? '' : v).replace(/[.,;:\-]+$/, '').trim();
+  if (!s) return true;
+  if (NON_PLACE_RE.test(s)) return true;
+  // Template placeholders left unsubstituted: {city}, [Location], <city>.
+  if (/^[\{\[<].*[\}\]>]$/.test(s)) return true;
+  // No letters at all means no place name.
+  if (!/[a-z\u00C0-\u024F]/i.test(s)) return true;
+  // Implausible length. The longest genuine place names run to about 60
+  // characters, and the fullest real shape we handle
+  // ("Dublin, County Dublin, Ireland") is 30. Anything past 80 is a
+  // scraped paragraph, not an address, and it used to be written into the
+  // CV header verbatim.
+  if (s.length > 80) return true;
+  // A single token longer than any real place name.
+  if (!/[\s,]/.test(s) && s.length > 40) return true;
+  return false;
+}
+
+// Working arrangements attached to a real place: "Hybrid - Paris",
+// "Paris (Hybrid)", "On-site - Madrid". The place must survive and the
+// arrangement must not: "Hybrid - Paris, FR" in a CV header reads as a
+// mistake, and "Paris (Hybrid)" previously collapsed to "Hybrid, IE",
+// losing the city altogether.
+const WORK_MODE_RE = /\b(?:fully\s+)?(?:remote|hybrid|on-?site|onsite|wfh|virtual|work\s*from\s*home|in-?office|flexible)\b/gi;
+
+function stripWorkMode(v) {
+  return String(v || '')
+    .replace(/[([]\s*(?:fully\s+)?(?:remote|hybrid|on-?site|onsite|wfh|virtual|in-?office|flexible)[^)\]]*[)\]]/gi, ' ')
+    .replace(WORK_MODE_RE, ' ')
+    .replace(/\s*[-–—|,/]\s*[-–—|,/]\s*/g, ', ')
+    .replace(/^\s*[-–—|,/]+\s*|\s*[-–—|,/]+\s*$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dublin, IE') {
   const fallback = (defaultLocation || 'Dublin, IE').trim() || 'Dublin, IE';
   const raw = (rawLocation || '').trim();
@@ -870,11 +925,23 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
   // RULE 5: No location → profile fallback
   if (!raw) return fallback;
 
-  // RULE 0: a region/territory is not somewhere a person is based.
+  // RULE 0a: not a place at all (N/A, TBD, undefined, a bare work mode).
+  if (isNonPlace(raw)) return fallback;
+
+  // RULE 0b: a region/territory is not somewhere a person is based.
   if (isRegionNotCity(raw)) return fallback;
   // Also catches "Latin America, US" once a country code has been appended.
   const beforeComma = raw.split(',')[0];
   if (isRegionNotCity(beforeComma)) return fallback;
+
+  // RULE 0c: strip the working arrangement, keep the place. Done BEFORE
+  // parsing so "Paris (Hybrid)" resolves on "Paris" rather than matching
+  // "Hybrid" as the city.
+  const stripped = stripWorkMode(raw);
+  if (isNonPlace(stripped) || isRegionNotCity(stripped)) return fallback;
+  if (stripped && stripped !== raw) {
+    return normalizeJobLocationForApplication(stripped, fallback);
+  }
 
   // RULE 1: "Remote" alone → profile fallback
   if (/^\s*remote\s*$/i.test(raw)) {
@@ -1138,6 +1205,8 @@ if (typeof window !== 'undefined') {
     deduplicateAndFormat,
     forceCityCountryFormat,
     isRecognizedPlace,
+    isNonPlace,
+    stripWorkMode,
   };
 }
 
