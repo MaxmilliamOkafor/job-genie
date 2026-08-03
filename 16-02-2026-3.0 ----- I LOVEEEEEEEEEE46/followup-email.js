@@ -71,7 +71,7 @@
         'Details to locate my application:',
         '{{reference_block}}',
         '',
-        'It came through your application portal under {{my_name}} ({{my_email}}).',
+        'I have submitted my application through the careers page under {{my_name}} ({{my_email}}).',
         '{{attachment_note}}',
         '',
         'I am {{headline}}, and I would be glad to walk through how that maps to what the team needs. Happy to send anything further that would be useful.',
@@ -148,6 +148,10 @@
           // still flagged builtIn, and only where the exact old token block
           // is present, so nothing a user has written is touched.
           if (templates && templates.length) {
+            const OLD_LINES = [
+              ['It came through your application portal under {{my_name}} ({{my_email}}).',
+               'I have submitted my application through the careers page under {{my_name}} ({{my_email}}).'],
+            ];
             const OLD_SIGN_OFFS = [
               'Kind regards,\n\n{{my_first_name}}\n{{my_phone}}\n{{my_email}}\n{{my_linkedin}}',
               'Kind regards,\n{{my_first_name}}\n{{my_phone}}\n{{my_email}}\n{{my_linkedin}}',
@@ -155,12 +159,14 @@
             ];
             templates = templates.map((t) => {
               if (!t || !t.builtIn || typeof t.body !== 'string') return t;
+              let body = t.body;
               for (const oldBlock of OLD_SIGN_OFFS) {
-                if (t.body.includes(oldBlock)) {
-                  return Object.assign({}, t, { body: t.body.replace(oldBlock, SIGN_OFF) });
-                }
+                if (body.includes(oldBlock)) { body = body.replace(oldBlock, SIGN_OFF); break; }
               }
-              return t;
+              for (const [from, to] of OLD_LINES) {
+                if (body.includes(from)) body = body.replace(from, to);
+              }
+              return body === t.body ? t : Object.assign({}, t, { body });
             });
           }
           if (!templates || !templates.length) {
