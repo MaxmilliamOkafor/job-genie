@@ -2091,6 +2091,17 @@ class ATSTailor {
         await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: cfg.files });
       } catch (e) { /* already present is fine */ }
 
+      // With auto-advance armed, the button should APPLY from a job
+      // listing: press Easy Apply, fill every step, advance. Otherwise it
+      // just fills whatever step is already open.
+      let entryFn = cfg.fn;
+      let flowMode = false;
+      if (site === 'linkedin') {
+        const adv = await new Promise((r) => chrome.storage.local.get(
+          ['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled === true)));
+        if (adv) { entryFn = '__JG_LINKEDIN_APPLY_NOW__'; flowMode = true; }
+      }
+
       // executeScript returns one result PER FRAME. chrome.tabs.sendMessage
       // delivers only the first frame's reply, so a silent frame could mask
       // the frame actually holding the form.
@@ -2102,12 +2113,22 @@ class ATSTailor {
             const fn = window[fnName];
             return fn ? fn() : { found: false, filled: 0, alreadySet: 0, answerable: 0, why: 'not-loaded' };
           },
-          args: [cfg.fn],
+          args: [entryFn],
         });
         frameResults = (raw || []).map((r) => r && r.result).filter(Boolean);
       } catch (e) {
         say('Could not reach the page: ' + (e.message || e), 'var(--error)');
         return;
+      }
+
+      if (flowMode) {
+        const flow = frameResults.find((r) => r && r.status && r.status !== 'no-modal')
+          || frameResults.find((r) => r && r.status) || null;
+        if (flow) {
+          const good = ['submitted', 'at-submit'].includes(flow.status);
+          say(this.describeFlowResult(flow), good ? 'var(--success)' : 'var(--warning)');
+          return;
+        }
       }
 
       const hit = frameResults.find((r) => r.found) || {};
