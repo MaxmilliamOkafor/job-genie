@@ -3152,3 +3152,21 @@ body::-webkit-scrollbar-thumb {
 
 /* Full-width action, for labels too long to share a row without clipping. */
 .fu-btn-wide { flex: 1 1 100%; }
+
+/* Follow-up: attachment opt-in */
+.fu-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary, #e8eaed);
+  cursor: pointer;
+  user-select: none;
+}
+.fu-check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent, #6c8cff);
+  cursor: pointer;
+  flex-shrink: 0;
+}

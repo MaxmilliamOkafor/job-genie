@@ -2011,7 +2011,25 @@ class ATSTailor {
       headline: (this.generatedDocuments?.applyVerdict?.score >= 75)
         ? 'a close match for this role on the requirements you listed'
         : 'a candidate whose background maps onto the core requirements you listed',
+      attachmentNames: this.followupAttachments().map((a) => a.filename),
     };
+  }
+
+  // The tailored CV and cover letter already generated for THIS job, ready
+  // to attach. Only files that actually exist are returned, so
+  // {{attachment_note}} can never claim an attachment that is not there.
+  followupAttachments() {
+    if (document.getElementById('followupAttachToggle')?.checked === false) return [];
+    const g = this.generatedDocuments || {};
+    const safe = (n, fallback) => String(n || fallback).replace(/[\r\n"]/g, '').trim() || fallback;
+    const out = [];
+    if (g.cvPdf) {
+      out.push({ filename: safe(g.cvFileName, 'CV.pdf'), base64: g.cvPdf });
+    }
+    if (g.coverPdf) {
+      out.push({ filename: safe(g.coverFileName, 'Cover_Letter.pdf'), base64: g.coverPdf });
+    }
+    return out;
   }
 
   // Manual "fill now" for the per-site fillers. Injects the scripts into the
@@ -2434,10 +2452,19 @@ class ATSTailor {
     try {
       const ctx = await this.followupContext();
       const tokens = FollowupEmail.buildTokens(ctx);
-      const subject = FollowupEmail.render(document.getElementById('followupSubject')?.value || '', tokens)
+      // renderBlock drops lines whose tokens resolved to nothing, so an
+      // absent Job ID or phone number leaves no trace in the message.
+      const subject = FollowupEmail.renderBlock(document.getElementById('followupSubject')?.value || '', tokens)
         .replace(/\s{2,}/g, ' ').trim();
-      let body = FollowupEmail.render(document.getElementById('followupBody')?.value || '', tokens);
-      body = body.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '').trim();
+      const body = FollowupEmail.renderBlock(document.getElementById('followupBody')?.value || '', tokens);
+
+      // Final gate: an unsubstituted token must never reach a recruiter.
+      const leftover = FollowupEmail.findUnfilledTokens(subject + '\n' + body);
+      if (leftover.length) {
+        setMsg('Not sent - unknown variable(s) in your template: ' + leftover.join(' ')
+          + '. Remove them or use one of the listed variables.', 'var(--error)');
+        return;
+      }
 
       if (!ctx.email) {
         setMsg('No recipient. Add an address the employer published in the posting.', 'var(--error)');
@@ -2474,10 +2501,19 @@ class ATSTailor {
     try {
       const ctx = await this.followupContext();
       const tokens = FollowupEmail.buildTokens(ctx);
-      const subject = FollowupEmail.render(document.getElementById('followupSubject')?.value || '', tokens)
+      // renderBlock drops lines whose tokens resolved to nothing, so an
+      // absent Job ID or phone number leaves no trace in the message.
+      const subject = FollowupEmail.renderBlock(document.getElementById('followupSubject')?.value || '', tokens)
         .replace(/\s{2,}/g, ' ').trim();
-      let body = FollowupEmail.render(document.getElementById('followupBody')?.value || '', tokens);
-      body = body.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '').trim();
+      const body = FollowupEmail.renderBlock(document.getElementById('followupBody')?.value || '', tokens);
+
+      // Final gate: an unsubstituted token must never reach a recruiter.
+      const leftover = FollowupEmail.findUnfilledTokens(subject + '\n' + body);
+      if (leftover.length) {
+        setMsg('Not sent - unknown variable(s) in your template: ' + leftover.join(' ')
+          + '. Remove them or use one of the listed variables.', 'var(--error)');
+        return;
+      }
 
       if (test) {
         if (!ctx.myEmail) { setMsg('No address on your profile to send the test to', 'var(--error)'); return; }
@@ -2515,7 +2551,8 @@ class ATSTailor {
       if (policy.warnings.length) setMsg(policy.warnings[0], 'var(--warning)');
 
       setMsg('Sending…');
-      await FollowupEmail.send({ to: ctx.email, subject, body, fromName: ctx.myName });
+      const files = this.followupAttachments();
+      await FollowupEmail.send({ to: ctx.email, subject, body, fromName: ctx.myName, attachments: files });
       await FollowupEmail.markSent(jobKey, {
         to: ctx.email, title: ctx.title, jobId: ctx.jobId, company: ctx.company,
       });
