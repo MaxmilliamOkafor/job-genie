@@ -882,6 +882,14 @@ class ATSTailor {
     document.getElementById('followupDupBtn')?.addEventListener('click', () => this.followupNewTemplate(true));
     document.getElementById('followupDeleteBtn')?.addEventListener('click', () => this.followupDeleteTemplate());
     document.getElementById('followupResetBtn')?.addEventListener('click', () => this.followupResetTemplate());
+    // The only toggle with no handler and no persistence: unchecking it was
+    // forgotten as soon as the popup closed, so it silently re-armed itself
+    // on every open. Now stored and restored like the rest.
+    document.getElementById('followupAttachToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ followup_attach_enabled: enabled });
+      this.showToast(enabled ? 'Documents will be attached' : 'Documents will not be attached', 'success');
+    });
     document.getElementById('followupComposeBtn')?.addEventListener('click', () => this.followupCompose());
     document.getElementById('followupTestBtn')?.addEventListener('click', () => this.followupSend({ test: true }));
     document.getElementById('followupSendBtn')?.addEventListener('click', () => this.followupSend({ test: false }));
@@ -1353,7 +1361,8 @@ class ATSTailor {
   async loadAutofillSettings() {
     const result = await new Promise(resolve => {
       chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled',
-        'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled', 'followup_enabled'], resolve);
+        'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled', 'followup_enabled',
+        'followup_attach_enabled'], resolve);
     });
 
     // Default OFF: matches "Toggle off to save API usage" messaging.
@@ -1373,6 +1382,9 @@ class ATSTailor {
     // Follow-up email: preference, saved template, and live Gmail status.
     const fuToggle = document.getElementById('followupEnabledToggle');
     if (fuToggle) fuToggle.checked = result.followup_enabled === true;
+    // Defaults ON: attaching the tailored documents is the useful case.
+    const atToggle = document.getElementById('followupAttachToggle');
+    if (atToggle) atToggle.checked = result.followup_attach_enabled !== false;
     this.followupLoadTemplate();
     this.followupRefreshStatus();
     // DOCX is now the only attach format; the selector was removed and
