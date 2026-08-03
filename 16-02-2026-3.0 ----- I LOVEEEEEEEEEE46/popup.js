@@ -2023,13 +2023,23 @@ class ATSTailor {
     if (document.getElementById('followupAttachToggle')?.checked === false) return [];
     const g = this.generatedDocuments || {};
     const safe = (n, fallback) => String(n || fallback).replace(/[\r\n"]/g, '').trim() || fallback;
+
+    // DOCX FIRST. attach_format is hard-pinned to docx in the tailor
+    // pipeline, so cvDocx/coverDocx are the fields that are actually
+    // populated; cvPdf/coverPdf are frequently empty. Reading only the PDF
+    // fields silently produced zero attachments -- the email went out with
+    // nothing on it and said so to nobody.
+    const pick = (docx, docxName, pdf, pdfName, fallbackBase) => {
+      if (docx) return { filename: safe(docxName, fallbackBase + '.docx'), base64: docx };
+      if (pdf) return { filename: safe(pdfName, fallbackBase + '.pdf'), base64: pdf };
+      return null;
+    };
+
     const out = [];
-    if (g.cvPdf) {
-      out.push({ filename: safe(g.cvFileName, 'CV.pdf'), base64: g.cvPdf });
-    }
-    if (g.coverPdf) {
-      out.push({ filename: safe(g.coverFileName, 'Cover_Letter.pdf'), base64: g.coverPdf });
-    }
+    const cv = pick(g.cvDocx, g.cvDocxFileName, g.cvPdf, g.cvFileName, 'CV');
+    if (cv) out.push(cv);
+    const cover = pick(g.coverDocx, g.coverDocxFileName, g.coverPdf, g.coverFileName, 'Cover_Letter');
+    if (cover) out.push(cover);
     return out;
   }
 
@@ -2580,14 +2590,23 @@ class ATSTailor {
       if (test) {
         if (!ctx.myEmail) { setMsg('No address on your profile to send the test to', 'var(--error)'); return; }
         setMsg('Sending test…');
+        // A test must be a BYTE-EXACT replica of what the recruiter gets.
+        // It previously prepended an explanatory preamble and a [TEST]
+        // subject prefix, and -- worse -- omitted the attachments
+        // entirely, so the one thing the test existed to verify was the
+        // one thing it could not show. Same subject, same body, same
+        // files; only the recipient differs.
+        const testFiles = this.followupAttachments();
         await FollowupEmail.send({
           to: ctx.myEmail,
-          subject: '[TEST] ' + subject,
-          body: 'Test of your Job Genie follow-up template. A recruiter would receive everything below.\n\n' +
-            '----------------------------------------\n\n' + body,
+          subject,
+          body,
           fromName: ctx.myName,
+          attachments: testFiles,
         });
-        setMsg('Test sent to ' + ctx.myEmail + ' ✓', 'var(--success)');
+        setMsg('Test sent to ' + ctx.myEmail
+          + (testFiles.length ? ' with ' + testFiles.length + ' attachment(s)' : ' (no documents generated yet, so nothing attached)')
+          + ' ✓', 'var(--success)');
         return;
       }
 
