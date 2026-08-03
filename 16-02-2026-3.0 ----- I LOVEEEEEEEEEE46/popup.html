@@ -244,8 +244,11 @@
                 <label class="fu-label" for="followupClientId">
                   Client ID <span class="fu-hint">stored on this device only</span>
                 </label>
+                <!-- Placeholder must not resemble a real credential: a
+                     realistic-looking fake ID reads as a stored value and
+                     makes users think one is embedded in the extension. -->
                 <input type="text" id="followupClientId" class="fu-input fu-input-mono"
-                       placeholder="1234567890-abcdef.apps.googleusercontent.com" />
+                       placeholder="Paste your Google OAuth client ID here" />
               </div>
               <div class="fu-actions">
                 <button id="followupSaveClientBtn" class="fu-btn">Save</button>
