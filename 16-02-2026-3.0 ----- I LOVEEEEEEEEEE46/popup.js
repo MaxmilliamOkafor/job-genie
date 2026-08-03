@@ -2613,6 +2613,54 @@ class ATSTailor {
     }
   }
 
+  // Sends the follow-up as the final step of a tailoring run, so a found
+  // address needs no separate click. followup_enabled was previously
+  // written to storage but never READ: the toggle did nothing and the only
+  // ways to send were the two buttons.
+  //
+  // ORDER MATTERS. This runs after buildDocxArtifact() and after the
+  // documents are persisted, because the note attaches the tailored CV and
+  // cover letter. Sending before they exist would deliver an email that
+  // promises attachments it does not carry, so the documents are treated
+  // as a precondition, not a bonus.
+  //
+  // A queue-until-submitted variant was written first and removed: nothing
+  // in the extension records that an application was actually submitted,
+  // so the gate could never open and the note would never have gone out.
+  // A feature that cannot fire is worse than one that fires a few minutes
+  // before the user presses Submit.
+  async autoSendFollowup() {
+    try {
+      if (typeof FollowupEmail === 'undefined') return;
+      const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
+      if (cfg.followup_enabled !== true) return;
+
+      const ctx = await this.followupContext();
+      if (!ctx.email) {
+        console.log('[ATS Tailor] follow-up: no published address on this posting, nothing sent');
+        return;
+      }
+
+      // The documents are the point of the note. If neither was produced,
+      // hold off rather than send an empty-handed email.
+      const files = this.followupAttachments();
+      if (!files.length) {
+        console.log('[ATS Tailor] follow-up held: no tailored documents to attach yet');
+        this.showToast('Follow-up not sent - no documents were generated', 'warning');
+        return;
+      }
+
+      // followupSend applies the company-level anti-spam policy, so a
+      // repeat employer is skipped quietly rather than mailed twice.
+      await this.followupSend({ test: false });
+      console.log('[ATS Tailor] follow-up sent automatically to', ctx.email,
+        'with', files.length, 'attachment(s)');
+    } catch (e) {
+      // A failed note must never look like a failed tailoring run.
+      console.warn('[ATS Tailor] auto follow-up skipped:', e && e.message);
+    }
+  }
+
   async followupSend({ test }) {
     const result = document.getElementById('followupResult');
     const setMsg = (msg, color) => { if (result) { result.textContent = msg; result.style.color = color || ''; } };
@@ -5061,6 +5109,9 @@ class ATSTailor {
       updateProgress(100, 'Complete! 100% keyword match achieved.');
 
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
+
+      // Documents exist and are stored: the note can now carry them.
+      await this.autoSendFollowup();
 
       const elapsed = (Date.now() - startTime) / 1000;
       this.stats.today++;
