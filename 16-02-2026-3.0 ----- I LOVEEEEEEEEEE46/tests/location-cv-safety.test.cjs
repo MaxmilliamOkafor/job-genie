@@ -1,4 +1,15 @@
-const M=require('../universal-location-strategy.js');
+// The parent package.json sets "type": "module", so require()ing the .js
+// directly yields an empty object: Node treats it as ESM and module.exports
+// never applies. Evaluate it in a CommonJS wrapper instead.
+const M=(() => {
+  const fs=require('fs'), path=require('path'), Module=require('module');
+  const file=path.join(__dirname, '..', 'universal-location-strategy.js');
+  const m=new Module(file, null);
+  m.filename=file;
+  m.paths=Module._nodeModulePaths(path.dirname(file));
+  m._compile(fs.readFileSync(file, 'utf8'), file);
+  return m.exports;
+})();
 const L=(v)=>M.normalizeJobLocationForApplication(v,'Dublin, IE');
 let BAD=0;
 const rows=[];
