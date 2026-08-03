@@ -309,12 +309,35 @@
     return slash('https://' + v);
   }
 
+  // The JD title field carries requisition numbers and posting noise. That
+  // was already stripped on the CV path, but the email built its tokens
+  // straight from the raw string, so a note went out reading "I applied
+  // for the (1526) Microsoft Dynamics 365 Project Manager role". Reuse the
+  // audit's normaliser when it is loaded; the fallback covers the common
+  // shapes so the email is never worse than the CV.
+  function _cleanTitle(raw) {
+    const t = String(raw || '').trim();
+    if (!t) return '';
+    try {
+      if (global.RecruiterAudit && typeof global.RecruiterAudit.normaliseJobTitle === 'function') {
+        return global.RecruiterAudit.normaliseJobTitle(t);
+      }
+    } catch (e) {}
+    return t
+      .replace(/^[\s\-|,]*\(?\s*(?:req(?:uisition)?\.?\s*(?:id|no\.?|#)?\s*)?[#]?\d{3,10}\s*\)?[\s\-|,:]*/i, '')
+      .replace(/^[\s\-|,]*\b(?:JR|R|REQ|JOB)[-_]?\d{3,10}\b[\s\-|,:]*/i, '')
+      .replace(/[\s\-|,(]*\b(?:req(?:uisition)?\.?\s*(?:id|no\.?|#)?\s*)?[#]?\d{4,10}\)?\s*$/i, '')
+      .replace(/[\s\-|,:]+$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function buildTokens(ctx) {
     const c = ctx || {};
     const jobId = (c.jobId || '').trim();
     const first = (c.contactName || '').trim().split(/\s+/)[0] || '';
     return {
-      job_title: c.title || 'the advertised role',
+      job_title: _cleanTitle(c.title) || 'the advertised role',
       company: c.company || 'your team',
       job_id: jobId,
       job_id_suffix: jobId ? ' (Job ID ' + jobId + ')' : '',
@@ -331,7 +354,7 @@
       recipient_email: c.email || '',
       // Friendly aliases -- both {{company}} and {{company_name}} work.
       company_name: c.company || 'your team',
-      job_role: c.title || 'the advertised role',
+      job_role: _cleanTitle(c.title) || 'the advertised role',
       my_title: c.myTitle || '',
       highlight: c.highlight || (c.headline || 'a background that maps onto the core requirements you listed'),
       job_location: c.location || '',
@@ -1239,7 +1262,7 @@
     loadTemplate, saveTemplate, resetTemplate,
     listTemplates, setActiveTemplate, createTemplate, deleteTemplate,
     BUILT_IN_TEMPLATES,
-    buildTokens, render, renderBlock, findUnfilledTokens, compose,
+    buildTokens, render, renderBlock, findUnfilledTokens, compose, _cleanTitle,
     isConnected, connect, disconnect, diagnose, authMode,
     loadOAuthConfig, saveOAuthConfig, redirectUri, redirectUriVariants, probeRedirect,
     buildComposeUrl, openCompose,
