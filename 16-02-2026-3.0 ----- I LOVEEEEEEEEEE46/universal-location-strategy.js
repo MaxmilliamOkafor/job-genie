@@ -844,12 +844,37 @@ function normalizeLocationForCV(rawLocation, fallbackLocation = 'Dublin, IE') {
  * RULE 4: "USA"/"United States" alone → California default
  * RULE 5: No location → profile fallback
  */
+// A CONTINENT OR REGION IS NOT AN ADDRESS.
+// Postings frequently set the location field to a sales territory
+// ("Latin America", "EMEA", "APAC", "North America"). Passing that
+// through produced a CV header reading "Latin America, US" -- not a
+// place anyone lives, and an immediate credibility problem in the first
+// line a recruiter reads. A region carries no city, so the only correct
+// answer is the candidate's real base.
+const REGION_ONLY_RE = new RegExp('^\\s*(?:' + [
+  'latin america','south america','north america','central america','americas',
+  'emea','apac','apj','anz','eu','europe','western europe','eastern europe',
+  'middle east','africa','asia','asia[- ]pacific','oceania','nordics','benelux',
+  'dach','iberia','global','worldwide','international','multiple locations',
+  'various locations','united states and canada','us/canada',
+].join('|') + ')\\s*$', 'i');
+
+function isRegionNotCity(v) {
+  return REGION_ONLY_RE.test(String(v || '').replace(/[.,]+$/, '').trim());
+}
+
 function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dublin, IE') {
   const fallback = (defaultLocation || 'Dublin, IE').trim() || 'Dublin, IE';
   const raw = (rawLocation || '').trim();
 
   // RULE 5: No location → profile fallback
   if (!raw) return fallback;
+
+  // RULE 0: a region/territory is not somewhere a person is based.
+  if (isRegionNotCity(raw)) return fallback;
+  // Also catches "Latin America, US" once a country code has been appended.
+  const beforeComma = raw.split(',')[0];
+  if (isRegionNotCity(beforeComma)) return fallback;
 
   // RULE 1: "Remote" alone → profile fallback
   if (/^\s*remote\s*$/i.test(raw)) {
