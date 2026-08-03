@@ -1993,9 +1993,18 @@ class ATSTailor {
   // Context for token expansion: job details from the current posting plus
   // the user's own contact details from their profile.
   async followupContext() {
-    const profile = await new Promise((resolve) =>
-      chrome.storage.local.get(['ats_profile'], (r) => resolve((r && r.ats_profile) || {}))
+    const stored = await new Promise((resolve) =>
+      chrome.storage.local.get(['ats_profile', 'ats_lastJob'], (r) => resolve(r || {}))
     );
+    const profile = stored.ats_profile || {};
+    // Job detection nulls currentJob whenever it fails, and it fails on
+    // plenty of pages the user has open when they send the note (Gmail, a
+    // LinkedIn search-results URL, a reloaded popup). That wiped the
+    // company, so {{company_name}} fell back to "your team" and
+    // {{job_title}} to "the advertised role" -- the note lost the two
+    // details that make it worth sending. Fall back to the last job we
+    // actually tailored for, which is the job the documents belong to.
+    const job = this.currentJob || stored.ats_lastJob || {};
     const detected = this.generatedDocuments?.jdContact || {};
     const first = profile.first_name || profile.firstName || '';
     const last = profile.last_name || profile.lastName || '';
@@ -2003,8 +2012,8 @@ class ATSTailor {
       email: (document.getElementById('followupTo')?.value || detected.email || '').trim(),
       jobId: detected.jobId || '',
       contactName: detected.contactName || '',
-      title: this.currentJob?.title || detected.title || '',
-      company: this.currentJob?.company || detected.company || '',
+      title: this.currentJob?.title || job.title || detected.title || '',
+      company: this.currentJob?.company || job.company || detected.company || '',
       myName: [first, last].filter(Boolean).join(' ').trim(),
       myEmail: profile.email || this.session?.user?.email || '',
       myPhone: profile.phone || '',
@@ -2012,6 +2021,7 @@ class ATSTailor {
       headline: (this.generatedDocuments?.applyVerdict?.score >= 75)
         ? 'a close match for this role on the requirements you listed'
         : 'a candidate whose background maps onto the core requirements you listed',
+      jobUrl: this.currentJob?.url || job.url || '',
       attachmentNames: this.followupAttachments().map((a) => a.filename),
     };
   }
@@ -2286,7 +2296,7 @@ class ATSTailor {
     try {
       const ctx = await this.followupContext();
       if (!ctx.email && !ctx.company) return;
-      const jobKey = (this.currentJob?.url || ctx.title || '') + '|' + ctx.email;
+      const jobKey = (this.currentJob?.url || ctx.jobUrl || ctx.title || '') + '|' + ctx.email;
       const policy = await FollowupEmail.checkSendPolicy({
         company: ctx.company, email: ctx.email, jobKey,
       });
