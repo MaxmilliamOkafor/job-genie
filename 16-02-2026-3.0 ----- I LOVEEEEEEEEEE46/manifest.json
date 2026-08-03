@@ -257,6 +257,7 @@
         "strategic-keyword-integration.js",
         "qualification-threshold-engine.js",
         "apply-verdict.js",
+        "jd-contact-sources.js",
         "jd-contact-extractor.js",
         "career-boost-engine.js",
         "recruiter-audit.js",
