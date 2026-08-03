@@ -882,6 +882,7 @@ class ATSTailor {
     document.getElementById('followupDupBtn')?.addEventListener('click', () => this.followupNewTemplate(true));
     document.getElementById('followupDeleteBtn')?.addEventListener('click', () => this.followupDeleteTemplate());
     document.getElementById('followupResetBtn')?.addEventListener('click', () => this.followupResetTemplate());
+    document.getElementById('followupComposeBtn')?.addEventListener('click', () => this.followupCompose());
     document.getElementById('followupTestBtn')?.addEventListener('click', () => this.followupSend({ test: true }));
     document.getElementById('followupSendBtn')?.addEventListener('click', () => this.followupSend({ test: false }));
 
@@ -2367,6 +2368,50 @@ class ATSTailor {
 
   // Renders the CURRENT editor content (not the saved copy) so the user
   // always previews/sends exactly what is on screen.
+  // No-setup send path: open Gmail's own compose window with the note
+  // already written. Uses the same context, template and anti-spam policy
+  // as the API path -- the only difference is that the user presses Send,
+  // so no OAuth client, redirect URI or Cloud Console project is involved.
+  async followupCompose() {
+    const result = document.getElementById('followupResult');
+    const setMsg = (msg, color) => { if (result) { result.textContent = msg; result.style.color = color || ''; } };
+    if (typeof FollowupEmail === 'undefined') { setMsg('Follow-up module not loaded', 'var(--error)'); return; }
+
+    try {
+      const ctx = await this.followupContext();
+      const tokens = FollowupEmail.buildTokens(ctx);
+      const subject = FollowupEmail.render(document.getElementById('followupSubject')?.value || '', tokens)
+        .replace(/\s{2,}/g, ' ').trim();
+      let body = FollowupEmail.render(document.getElementById('followupBody')?.value || '', tokens);
+      body = body.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+$/gm, '').trim();
+
+      if (!ctx.email) {
+        setMsg('No recipient. Add an address the employer published in the posting.', 'var(--error)');
+        return;
+      }
+
+      // Same company-level anti-spam guard as the silent path. Opening a
+      // window is not sending, so an over-limit case warns instead of
+      // blocking -- the user can still see the draft and decide.
+      const jobKey = (this.currentJob?.url || ctx.title || '') + '|' + ctx.email;
+      const policy = await FollowupEmail.checkSendPolicy({ company: ctx.company, email: ctx.email, jobKey });
+      if (policy.skip) {
+        const when = policy.nextEligibleAt
+          ? ' Eligible again on ' + new Date(policy.nextEligibleAt).toLocaleDateString('en-GB') + '.'
+          : '';
+        setMsg('Careful - ' + policy.reasons[0] + when + ' Opening anyway; consider not sending.', 'var(--warning)');
+      }
+
+      await FollowupEmail.openCompose({ to: ctx.email, subject, body });
+      // Logged only after the compose window opens, so the history stays
+      // an honest record of notes the user actually acted on.
+      await FollowupEmail.markSent(jobKey, { company: ctx.company, email: ctx.email, via: 'compose' });
+      if (!policy.skip) setMsg('Opened in Gmail. Review it and press Send.', 'var(--success)');
+    } catch (e) {
+      setMsg('Could not open Gmail: ' + (e.message || e), 'var(--error)');
+    }
+  }
+
   async followupSend({ test }) {
     const result = document.getElementById('followupResult');
     const setMsg = (msg, color) => { if (result) { result.textContent = msg; result.style.color = color || ''; } };

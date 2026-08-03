@@ -784,6 +784,52 @@
    * Send one message from the user's own Gmail account.
    * Requires an explicit recipient -- never derives one.
    */
+  // ===================================================================
+  // NO-SETUP PATH: open the note in Gmail's own compose window
+  // -------------------------------------------------------------------
+  // The API path needs a Google Cloud project, an OAuth client and a
+  // registered redirect URI. That is a lot of console work to send one
+  // email, and it is the step that blocks people indefinitely.
+  //
+  // Gmail's compose URL needs NONE of it. The user is already signed in
+  // to Gmail in this browser, so this opens a compose window with the
+  // recipient, subject and body already written, and they press Send.
+  // Same mailbox, same Sent folder, same deliverability as the API path.
+  // The only difference is one click, and no credentials anywhere.
+  //
+  // authuser=0 targets the first signed-in account; Gmail rewrites it if
+  // the user is in a different profile, which is the correct behaviour.
+  // ===================================================================
+  function buildComposeUrl({ to, subject, body }) {
+    const q = new URLSearchParams({
+      view: 'cm',
+      fs: '1',
+      to: String(to || '').trim(),
+      su: String(subject || ''),
+      body: String(body || ''),
+    });
+    return 'https://mail.google.com/mail/?' + q.toString();
+  }
+
+  // Opens the prefilled compose tab. Resolves once the tab exists; it
+  // deliberately does NOT claim the mail was sent, because the user still
+  // has to press Send and may edit or abandon it.
+  function openCompose({ to, subject, body }) {
+    if (!_validEmail(to)) throw new Error('A valid recipient address is required');
+    const url = buildComposeUrl({ to, subject, body });
+    return new Promise((resolve) => {
+      try {
+        chrome.tabs.create({ url }, (tab) => {
+          void chrome.runtime.lastError;
+          resolve({ ok: true, opened: true, tabId: tab && tab.id });
+        });
+      } catch (e) {
+        try { global.open(url, '_blank'); } catch (e2) {}
+        resolve({ ok: true, opened: true });
+      }
+    });
+  }
+
   async function send({ to, subject, body, fromName }) {
     if (!_validEmail(to)) throw new Error('A valid recipient address is required');
     if (!String(subject || '').trim()) throw new Error('Subject is required');
@@ -986,6 +1032,7 @@
     buildTokens, render, compose,
     isConnected, connect, disconnect, diagnose, authMode,
     loadOAuthConfig, saveOAuthConfig, redirectUri, redirectUriVariants, probeRedirect,
+    buildComposeUrl, openCompose,
     send, sendTest, buildRaw,
     alreadySent, markSent, checkSendPolicy, SEND_POLICY,
   };

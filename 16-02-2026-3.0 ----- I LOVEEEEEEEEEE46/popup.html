@@ -333,9 +333,19 @@
                 <button id="followupResetBtn" class="fu-btn">Reset presets</button>
               </div>
               <div class="fu-actions">
-                <button id="followupTestBtn" class="fu-btn">Send test to me</button>
-                <button id="followupSendBtn" class="fu-btn fu-btn-primary">Send follow-up</button>
+                <button id="followupComposeBtn" class="fu-btn fu-btn-primary fu-btn-wide">
+                  Open in Gmail (no setup needed)
+                </button>
               </div>
+              <p class="fu-note">Opens Gmail with the note already written, ready to send.
+                Needs no Google client ID, no OAuth and no Cloud Console: you are already
+                signed in to Gmail. Press Send yourself.</p>
+              <div class="fu-actions">
+                <button id="followupTestBtn" class="fu-btn">Send test to me</button>
+                <button id="followupSendBtn" class="fu-btn">Send follow-up</button>
+              </div>
+              <p class="fu-note">These two send silently through the Gmail API and need the
+                connection above to be set up.</p>
               <div id="followupResult" class="fu-result"></div>
             </div>
 
