@@ -882,6 +882,14 @@ class ATSTailor {
     document.getElementById('followupDupBtn')?.addEventListener('click', () => this.followupNewTemplate(true));
     document.getElementById('followupDeleteBtn')?.addEventListener('click', () => this.followupDeleteTemplate());
     document.getElementById('followupResetBtn')?.addEventListener('click', () => this.followupResetTemplate());
+    // The only toggle with no handler and no persistence: unchecking it was
+    // forgotten as soon as the popup closed, so it silently re-armed itself
+    // on every open. Now stored and restored like the rest.
+    document.getElementById('followupAttachToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ followup_attach_enabled: enabled });
+      this.showToast(enabled ? 'Documents will be attached' : 'Documents will not be attached', 'success');
+    });
     document.getElementById('followupComposeBtn')?.addEventListener('click', () => this.followupCompose());
     document.getElementById('followupTestBtn')?.addEventListener('click', () => this.followupSend({ test: true }));
     document.getElementById('followupSendBtn')?.addEventListener('click', () => this.followupSend({ test: false }));
@@ -1353,7 +1361,8 @@ class ATSTailor {
   async loadAutofillSettings() {
     const result = await new Promise(resolve => {
       chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled',
-        'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled', 'followup_enabled'], resolve);
+        'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled', 'followup_enabled',
+        'followup_attach_enabled'], resolve);
     });
 
     // Default OFF: matches "Toggle off to save API usage" messaging.
@@ -1373,6 +1382,9 @@ class ATSTailor {
     // Follow-up email: preference, saved template, and live Gmail status.
     const fuToggle = document.getElementById('followupEnabledToggle');
     if (fuToggle) fuToggle.checked = result.followup_enabled === true;
+    // Defaults ON: attaching the tailored documents is the useful case.
+    const atToggle = document.getElementById('followupAttachToggle');
+    if (atToggle) atToggle.checked = result.followup_attach_enabled !== false;
     this.followupLoadTemplate();
     this.followupRefreshStatus();
     // DOCX is now the only attach format; the selector was removed and
@@ -2610,6 +2622,54 @@ class ATSTailor {
       }
     } catch (e) {
       setMsg('Could not open Gmail: ' + (e.message || e), 'var(--error)');
+    }
+  }
+
+  // Sends the follow-up as the final step of a tailoring run, so a found
+  // address needs no separate click. followup_enabled was previously
+  // written to storage but never READ: the toggle did nothing and the only
+  // ways to send were the two buttons.
+  //
+  // ORDER MATTERS. This runs after buildDocxArtifact() and after the
+  // documents are persisted, because the note attaches the tailored CV and
+  // cover letter. Sending before they exist would deliver an email that
+  // promises attachments it does not carry, so the documents are treated
+  // as a precondition, not a bonus.
+  //
+  // A queue-until-submitted variant was written first and removed: nothing
+  // in the extension records that an application was actually submitted,
+  // so the gate could never open and the note would never have gone out.
+  // A feature that cannot fire is worse than one that fires a few minutes
+  // before the user presses Submit.
+  async autoSendFollowup() {
+    try {
+      if (typeof FollowupEmail === 'undefined') return;
+      const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
+      if (cfg.followup_enabled !== true) return;
+
+      const ctx = await this.followupContext();
+      if (!ctx.email) {
+        console.log('[ATS Tailor] follow-up: no published address on this posting, nothing sent');
+        return;
+      }
+
+      // The documents are the point of the note. If neither was produced,
+      // hold off rather than send an empty-handed email.
+      const files = this.followupAttachments();
+      if (!files.length) {
+        console.log('[ATS Tailor] follow-up held: no tailored documents to attach yet');
+        this.showToast('Follow-up not sent - no documents were generated', 'warning');
+        return;
+      }
+
+      // followupSend applies the company-level anti-spam policy, so a
+      // repeat employer is skipped quietly rather than mailed twice.
+      await this.followupSend({ test: false });
+      console.log('[ATS Tailor] follow-up sent automatically to', ctx.email,
+        'with', files.length, 'attachment(s)');
+    } catch (e) {
+      // A failed note must never look like a failed tailoring run.
+      console.warn('[ATS Tailor] auto follow-up skipped:', e && e.message);
     }
   }
 
@@ -5061,6 +5121,9 @@ class ATSTailor {
       updateProgress(100, 'Complete! 100% keyword match achieved.');
 
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
+
+      // Documents exist and are stored: the note can now carry them.
+      await this.autoSendFollowup();
 
       const elapsed = (Date.now() - startTime) / 1000;
       this.stats.today++;
