@@ -2219,8 +2219,19 @@ original CV, even if that means missing a keyword.
 If a Rule 3 / Rule 9 / Rule 10 instruction conflicts with Rule 0,
 Rule 0 wins. Lose the keyword, save the candidate's credibility.
 
-RULE 1 — JOB TITLE IN SUMMARY (Searchability fix, worth ~5 points)
-The EXACT job title from the job description MUST appear in the professional summary. Do not paraphrase it. Write it verbatim.
+RULE 1 — JOB TITLE IN SUMMARY (evidence-capped)
+The summary must never assert a job title the rest of the CV cannot support.
+- If the candidate's own work history contains the SAME or a CLOSELY
+  EQUIVALENT title, the summary MAY use the JD's wording for it.
+- If it does NOT (a genuine career pivot), the summary MUST NOT claim that
+  title. Instead, mirror the JD's vocabulary through skills and domain
+  language that the CV genuinely evidences, and open with what the
+  candidate actually is (e.g. "Software engineer with data analytics and
+  delivery experience across ...").
+- NEVER open the summary with a bare title claim as its first words.
+- The job title may never appear in a requisition-number form; posting
+  noise (req numbers, JR-/REQ- codes, "(Remote)") must never appear in
+  the CV or cover letter.
 
 RULE 2 — SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
 The skills section must be completely replaced. Rewrite it as:
