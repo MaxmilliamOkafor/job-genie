@@ -2013,7 +2013,7 @@ class ATSTailor {
       jobId: detected.jobId || '',
       contactName: detected.contactName || '',
       title: this.currentJob?.title || job.title || detected.title || '',
-      company: this.currentJob?.company || job.company || detected.company || '',
+      company: this.resolveCompanyName(this.currentJob || job, detected),
       myName: [first, last].filter(Boolean).join(' ').trim(),
       myEmail: profile.email || this.session?.user?.email || '',
       myPhone: profile.phone || '',
@@ -2025,6 +2025,35 @@ class ATSTailor {
       jobUrl: this.currentJob?.url || job.url || '',
       attachmentNames: this.followupAttachments().map((a) => a.filename),
     };
+  }
+
+  // The cover letter says "at Nortal" while the email said "at your team",
+  // because they resolved the company differently: the cover letter runs a
+  // multi-strategy extractor with a placeholder blocklist, the email just
+  // read jobData.company. Same posting, two answers, and the email got the
+  // useless one. Use the cover letter's extractor so both agree.
+  //
+  // It returns 'the hiring organization' when it cannot find a name; that
+  // is a placeholder, not an answer, so it is mapped back to empty and
+  // renderBlock drops the phrase rather than writing something vacuous.
+  resolveCompanyName(job, detected) {
+    const PLACEHOLDER = /^(the hiring organi[sz]ation|your team|the company|unknown|n\/a)$/i;
+    const clean = (v) => {
+      const s = String(v || '').trim();
+      return (!s || PLACEHOLDER.test(s)) ? '' : s;
+    };
+    const direct = clean(job && job.company);
+    if (direct) return direct;
+    try {
+      const gen = (typeof CoverLetterGenerator !== 'undefined') ? CoverLetterGenerator : window.CoverLetterGenerator;
+      if (gen && typeof gen.extractCompanyName === 'function') {
+        const found = clean(gen.extractCompanyName(job || {}));
+        if (found) return found;
+      }
+    } catch (e) {}
+    return clean(detected && detected.company)
+      || clean(this.generatedDocuments && this.generatedDocuments.company)
+      || '';
   }
 
   // The tailored CV and cover letter already generated for THIS job, ready
