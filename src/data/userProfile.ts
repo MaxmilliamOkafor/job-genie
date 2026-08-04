@@ -138,7 +138,7 @@ Maxmilliam Okafor`,
       company: "Accenture",
       location: "Dublin, Ireland",
       startDate: "2021-04",
-      endDate: "2022-12",
+      endDate: "2022-07",
       description: "",
       skills: ["Azure", "GCP", "Docker", "Kubernetes", "CI/CD", "Azure DevOps", "GitHub Actions", "Jira", "Confluence"],
       bullets: [
