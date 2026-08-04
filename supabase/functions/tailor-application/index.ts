@@ -2616,7 +2616,7 @@ ${
       {
         "company": "[Company Name]",
         "title": "[Job Title]",
-        "dates": "[MM/YYYY – MM/YYYY or MM/YYYY – Present]",
+        "dates": "[Month YYYY - Month YYYY or Month YYYY - Present]",
         "bullets": ["bullet1 with metrics", "bullet2", "bullet3"]
       }
     ],
