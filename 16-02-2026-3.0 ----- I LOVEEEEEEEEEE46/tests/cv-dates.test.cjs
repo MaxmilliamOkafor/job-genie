@@ -21,7 +21,10 @@ const extract=(mode)=>xml.replace(/<w:tab\/>/g,mode).replace(/<\/w:p>/g,'\n').re
 
 t('MM/YYYY range is recognised as a date', !/01\/2023/.test(xml), 'raw MM/YYYY still present -> isDateLine missed it');
 t('rendered as readable month-year', /Jan 2023/.test(xml) && /Feb 2024/.test(xml), 'not prettified');
-t('en dash between start and end', /Jan 2023 \u2013 Present/.test(extract('\t')), 'range separator wrong');
+// Plain hyphen: ATS date parsers are documented against it, and an en
+// dash is a needless gamble in the field where a parse failure costs an
+// employment record.
+t('plain hyphen separator, not an en dash', /Jan 2023 - Present/.test(extract('\t')) && !/\u2013/.test(extract('\t')), 'separator wrong');
 t('right-aligned tab stop used', /w:val="right"/.test(xml));
 for (const [label,mode] of [['dropped',''],['as \\t','\t'],['as space',' ']]) {
   const line=extract(mode).split('\n').find(l=>/Software Engineer/.test(l))||'';

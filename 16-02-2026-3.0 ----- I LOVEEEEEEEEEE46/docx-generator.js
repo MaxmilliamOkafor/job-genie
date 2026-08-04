@@ -241,7 +241,11 @@
       return (MONTHS[idx] ? MONTHS[idx] + ' ' + m[2] : p);
     };
     const parts = String(t).split(/\s*[-–—]\s*/);
-    if (parts.length === 2) return one(parts[0]) + ' \u2013 ' + one(parts[1]);
+    // Plain hyphen, not an en dash. The dash is typographically nicer, but
+    // ATS date parsers are documented against "Month YYYY - Month YYYY"
+    // and a en dash is a needless compatibility gamble in the one field
+    // where a parse failure costs an employment record.
+    if (parts.length === 2) return one(parts[0]) + ' - ' + one(parts[1]);
     return one(t);
   }
 
