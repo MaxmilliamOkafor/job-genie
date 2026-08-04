@@ -470,6 +470,102 @@
     return { text, injected: false, titleUnsupported: true, normalisedTitle: cleanedTitle };
   }
 
+
+  // ===================================================================
+  // STRICT REVERSE-CHRONOLOGICAL ORDER (opt-in)
+  // -------------------------------------------------------------------
+  // ATS date checks read the sequence of START dates and expect them
+  // strictly descending. Concurrent work legitimately breaks that: a
+  // part-time contract begun after a still-current full-time role sorts
+  // ABOVE it by start date, even though the full-time role is the
+  // candidate's primary position.
+  //
+  // So this is OPT-IN, not automatic. Enabling it clears the flag without
+  // altering a single date; the cost is that the first entry a recruiter
+  // reads may be a part-time contract rather than the current role. That
+  // is a judgement about audience, not a correctness fix, so the choice
+  // stays with the user.
+  // ===================================================================
+  const ROLE_DATE_RE = /^\s*(?:([A-Za-z]{3,9})\.?\s+(\d{4})|(\d{1,2})\/(\d{4})|(\d{4}))\s*[-\u2013\u2014]\s*(present|current|.+)$/i;
+
+  function _startMonths(dateLine) {
+    const m = ROLE_DATE_RE.exec(String(dateLine || ''));
+    if (!m) return null;
+    const MON = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12,
+      january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12 };
+    if (m[1]) return (parseInt(m[2],10) * 12) + (MON[m[1].toLowerCase()] || 1);
+    if (m[3]) return (parseInt(m[4],10) * 12) + parseInt(m[3],10);
+    if (m[5]) return (parseInt(m[5],10) * 12) + 1;
+    return null;
+  }
+
+  // Splits WORK EXPERIENCE into role blocks and sorts them by start date,
+  // newest first. Dates themselves are never touched.
+  function sortExperienceByStartDate(cvText) {
+    const text = String(cvText || '');
+    const lines = text.split('\n');
+    const HEAD_RE = /^(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT(?: HISTORY)?)\s*:?\s*$/i;
+    const ANY_HEAD_RE = /^[A-Z][A-Z &/]{3,}\s*:?\s*$/;
+
+    let start = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (HEAD_RE.test(lines[i].trim())) { start = i + 1; break; }
+    }
+    if (start < 0) return { text, sorted: false, reason: 'no experience section' };
+
+    let end = lines.length;
+    for (let i = start; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (t && ANY_HEAD_RE.test(t) && !HEAD_RE.test(t)) { end = i; break; }
+    }
+
+    // A block starts at a non-empty line that follows a blank line, and
+    // must contain a parseable date to be sortable at all.
+    const blocks = [];
+    let cur = null;
+    for (let i = start; i < end; i++) {
+      const raw = lines[i];
+      const t = raw.trim();
+      if (!t) { if (cur) cur.lines.push(raw); continue; }
+      const isBullet = /^([\-*\u2022]|\d+\.)\s+/.test(t);
+      if (!isBullet && (!cur || cur.closed)) { cur = { lines: [raw], startAt: null, closed: false }; blocks.push(cur); }
+      else if (cur) { cur.lines.push(raw); }
+      if (cur && cur.startAt === null) {
+        const sm = _startMonths(t);
+        if (sm !== null) cur.startAt = sm;
+      }
+      if (cur && isBullet) cur.sawBullet = true;
+      if (cur && cur.sawBullet && !isBullet && !/^([\-*\u2022]|\d+\.)/.test(t) && _startMonths(t) === null && cur.startAt !== null) {
+        // A new non-bullet line after bullets begins the next role.
+        cur.closed = true;
+        cur = { lines: [raw], startAt: null, closed: false };
+        cur.lines = [raw];
+        blocks[blocks.length - 1].lines.pop();
+        blocks.push(cur);
+      }
+    }
+
+    const datable = blocks.filter((b) => b.startAt !== null);
+    if (datable.length < 2) return { text, sorted: false, reason: 'fewer than two dated roles' };
+
+    const before = datable.map((b) => b.startAt);
+    const isDescending = before.every((v, i) => i === 0 || before[i - 1] >= v);
+    if (isDescending) return { text, sorted: false, reason: 'already in start-date order' };
+
+    const order = blocks.slice().sort((a, b) => {
+      if (a.startAt === null || b.startAt === null) return 0;
+      return b.startAt - a.startAt;
+    });
+    const body = order.map((b) => b.lines.join('\n').replace(/\s+$/, '')).join('\n\n');
+    // Reassembling dropped the blank line that separated the last role
+    // from the next section heading, so bullets ran straight into
+    // EDUCATION and the section boundary was lost to the parser.
+    const tail = lines.slice(end);
+    const sep = (tail.length && tail[0].trim()) ? [''] : [];
+    const out = lines.slice(0, start).concat(body.split('\n'), sep, tail).join('\n');
+    return { text: out.replace(/\n{3,}/g, '\n\n'), sorted: true, roles: datable.length };
+  }
+
   // ===================================================================
   // 5. FIRST-SIX-SECONDS CHECK
   // -------------------------------------------------------------------
@@ -1742,11 +1838,26 @@
       yearsGuard: flags.yearsGuard !== false,
       // v12
       redFlagScrub: flags.redFlagScrub !== false,
+      // v13 -- OPT-IN. Default OFF: reordering can demote a current role
+      // beneath a concurrent contract, which is an audience judgement, not
+      // a correctness fix.
+      strictDateOrder: flags.strictDateOrder === true,
     };
 
     let outCV = cvText;
     let outCL = coverLetterText;
     const report = { fixes: [], warnings: [], timingMs: 0 };
+
+    // v13: strict reverse-chronological order, when the user has asked for
+    // it. Runs before every other pass so the rest of the audit sees the
+    // final role order. Changes ORDER only -- never a date value.
+    if (f.strictDateOrder) {
+      const sorted = sortExperienceByStartDate(outCV);
+      if (sorted.sorted) {
+        outCV = sorted.text;
+        report.fixes.push('Sorted ' + sorted.roles + ' roles into strict start-date order (no dates changed)');
+      }
+    }
 
     // v8: guarantee the SELECTED PROJECTS section from structured profile
     // data (auto-fix). Runs first so every later audit sees the projects
@@ -2125,7 +2236,7 @@
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,
-    echoJobTitle, normaliseJobTitle,
+    echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2
     stripFillers,
