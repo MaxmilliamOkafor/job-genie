@@ -1210,7 +1210,12 @@
       blocks.push(lines.join('\n'));
     }
     if (blocks.length === 0) return '';
-    return `SELECTED PROJECTS\n\n${blocks.join('\n\n')}`;
+    // "PROJECTS" verbatim. ATS heading checks match against a fixed list
+    // (Awards, Certifications, Education, Experience, Projects, Skills,
+    // Summary...) and "SELECTED PROJECTS" is not on it, so the section was
+    // flagged as a non-standard heading that scanners may ignore -- which
+    // would discard the whole section. The word "Selected" bought nothing.
+    return `PROJECTS\n\n${blocks.join('\n\n')}`;
   }
 
   function ensureProjectsSection(cvText, projects) {

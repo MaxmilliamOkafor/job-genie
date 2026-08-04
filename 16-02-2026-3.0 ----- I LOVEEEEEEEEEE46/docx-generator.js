@@ -147,7 +147,16 @@
         // tidier; on a phone the long form wrapped mid-URL and made the
         // header look broken, which is where a recruiter's eye lands first.
         // "linkedin.com/in/name" remains fully parseable to every ATS.
-        const display = isEmail ? seg : seg.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
+        // Keep the scheme. Dropping it shortened the line nicely, but an
+        // ATS profile check looks for a URL and a bare "linkedin.com/in/x"
+        // can read as plain text -- a scan came back flagging "Some
+        // employers require a LinkedIn profile" on a CV that had one.
+        // Detection beats tidiness, so only "www." and the trailing slash
+        // go: still ~12 characters shorter than the raw value.
+        const display = isEmail ? seg
+          : (/^https?:\/\//i.test(seg) ? seg : 'https://' + seg)
+              .replace(/^(https?:\/\/)www\./i, '$1')
+              .replace(/\/+$/, '');
         pieces.push(`<w:hyperlink r:id="${id}">${run(display, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
       } else {
         // Phone segments get normalised (strip stray colon, group digits).
