@@ -75,7 +75,14 @@
     // paragraph with tab-aligned items reads in linear order to every ATS
     // parser while LOOKING like a 3-column grid to the human eye.
     if (Array.isArray(opts.tabs) && opts.tabs.length) {
-      const stops = opts.tabs.map((pos) => `<w:tab w:val="left" w:pos="${pos}"/>`).join('');
+      // Accepts a plain number (left stop, used by the competencies grid)
+      // or { pos, val } for an explicit alignment -- the role line needs a
+      // RIGHT stop so dates sit flush to the margin.
+      const stops = opts.tabs.map((tb) => {
+        const pos = (tb && typeof tb === 'object') ? tb.pos : tb;
+        const val = (tb && typeof tb === 'object' && tb.val) ? tb.val : 'left';
+        return `<w:tab w:val="${val}" w:pos="${pos}"/>`;
+      }).join('');
       ppr.push(`<w:tabs>${stops}</w:tabs>`);
     }
     const sp = [];
@@ -210,10 +217,32 @@
   }
 
   // Is this line a date range? ("January 2023 - Present", "2021 - 2022")
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
   function isDateLine(t) {
-    return /^[A-Za-z]{3,9}\.?\s+\d{4}\s*[-–—]\s*(present|[A-Za-z]{3,9}\.?\s+\d{4})$/i.test(t) ||
-      /^\d{4}\s*[-–—]\s*(present|\d{4})$/i.test(t) ||
+    return /^[A-Za-z]{3,9}\.?\s+\d{4}\s*[-–—]\s*(present|current|[A-Za-z]{3,9}\.?\s+\d{4})$/i.test(t) ||
+      /^\d{4}\s*[-–—]\s*(present|current|\d{4})$/i.test(t) ||
+      // MM/YYYY ranges: "01/2023 - Present", "04/2021 - 12/2022". These were
+      // NOT matched, so every date in a generated CV fell through to the
+      // generic body branch and rendered as ordinary text -- unstyled, and
+      // not recognised as a date by the layout.
+      /^\d{1,2}\/\d{4}\s*[-–—]\s*(present|current|\d{1,2}\/\d{4})$/i.test(t) ||
       /^[A-Za-z]{3,9}\.?\s+\d{4}$/.test(t) && t.length < 22;
+  }
+
+  // "01/2023 - Present" -> "Jan 2023 - Present". Month names are
+  // unambiguous across regions and are the form ATS date parsers document,
+  // whereas a bare 01/2023 has to be inferred.
+  function prettyDateRange(t) {
+    const one = (p) => {
+      const m = /^(\d{1,2})\/(\d{4})$/.exec(String(p).trim());
+      if (!m) return String(p).trim();
+      const idx = parseInt(m[1], 10) - 1;
+      return (MONTHS[idx] ? MONTHS[idx] + ' ' + m[2] : p);
+    };
+    const parts = String(t).split(/\s*[-–—]\s*/);
+    if (parts.length === 2) return one(parts[0]) + ' \u2013 ' + one(parts[1]);
+    return one(t);
   }
 
   // ---- CV text -> DOCX paragraphs --------------------------------------
@@ -368,7 +397,7 @@
         // -> date (muted italic). Date lines detected anywhere.
         if (inExperience) {
           if (isDateLine(t)) {
-            out.push(paragraph(run(t, { italic: true, color: C.MUTED, sz: 19 }), { spacingAfter: 40 }));
+            out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: 19 }), { spacingAfter: 40 }));
             continue;
           }
           if (roleState === 'expectCompany') {
@@ -377,6 +406,27 @@
             continue;
           }
           if (roleState === 'expectTitle') {
+            // Put the dates on the SAME line as the job title, right
+            // aligned. Three stacked lines per role (company / title /
+            // dates) wasted a line each and left the date orphaned from the
+            // role it belongs to; parsers bind a date to the nearest
+            // title far more reliably when they share a line.
+            //
+            // The trailing space before the tab is the same guard the
+            // competencies grid needs: parsers that drop <w:tab/> would
+            // otherwise glue "Software EngineerJan 2023".
+            const next = (lines[i + 1] || '').trim();
+            if (isDateLine(next)) {
+              out.push(paragraph(
+                run(t + ' ', { bold: true, color: C.BODY, sz: 21 })
+                  + '<w:r><w:tab/></w:r>'
+                  + run(prettyDateRange(next), { italic: true, color: C.MUTED, sz: 19 }),
+                { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 30 }
+              ));
+              i++;                       // the date line is consumed
+              roleState = 'inRole';
+              continue;
+            }
             out.push(paragraph(run(t, { bold: true, color: C.BODY, sz: 21 }), { spacingAfter: 20 }));
             roleState = 'inRole';
             continue;
