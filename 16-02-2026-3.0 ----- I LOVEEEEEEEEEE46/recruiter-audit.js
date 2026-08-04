@@ -1838,19 +1838,25 @@
       yearsGuard: flags.yearsGuard !== false,
       // v12
       redFlagScrub: flags.redFlagScrub !== false,
-      // v13 -- OPT-IN. Default OFF: reordering can demote a current role
-      // beneath a concurrent contract, which is an audience judgement, not
-      // a correctness fix.
-      strictDateOrder: flags.strictDateOrder === true,
+      // v13 -- ON by default. This was briefly opt-in on the belief that
+      // sorting could demote a current role beneath a concurrent
+      // part-time contract. It can, but only when concurrency exists, and
+      // the pass is a no-op whenever the order is already correct: it
+      // returns the text byte-identical rather than rewriting it. So the
+      // switch only ever mattered for CVs that were genuinely out of
+      // order, which is exactly the case it should fix. Pass
+      // { strictDateOrder: false } to suppress it.
+      strictDateOrder: flags.strictDateOrder !== false,
     };
 
     let outCV = cvText;
     let outCL = coverLetterText;
     const report = { fixes: [], warnings: [], timingMs: 0 };
 
-    // v13: strict reverse-chronological order, when the user has asked for
-    // it. Runs before every other pass so the rest of the audit sees the
-    // final role order. Changes ORDER only -- never a date value.
+    // v13: strict reverse-chronological order. Runs before every other
+    // pass so the rest of the audit sees the final role order. Changes
+    // ORDER only -- never a date value -- and does nothing at all when the
+    // roles are already newest-first.
     if (f.strictDateOrder) {
       const sorted = sortExperienceByStartDate(outCV);
       if (sorted.sorted) {
