@@ -1,0 +1,63 @@
+{
+"update_url": "https://clients2.google.com/service/update2/crx",
+
+  "manifest_version": 3,
+  "name": "Closely: Email Finder & LI Data Scraper",
+  "description": "Closely Surfer is an extension that helps you find and scrape information from LI profiles. Find Email Address.",
+  "version": "1.2.3",
+  "author": "Closely",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnXAm89qJmfUXeBamB7ZDnstK1wFeC4HeNuYF/Xoka0VTu3nn+Ww7kCBGfJoqcVzZidyAW42wGBu5taizyy6irGiQtUi2fpaaqTnRhkRvUZH4e5F5AAOXMKrBxTjvruGtSdO5yGYCYPXi6lz8Y4VQAXDfCjcVXMJo5OMhLKp/LcIIUjfmNZ6i6Mn4EYOfiueeQPwDXH18tn2Bgoq6NMOSw0jSIYkMPdmQHSfv9FUDsGapzPzarzPMBY/VhxKOBqMfpEVP5O1rFBezvikUyxsqI3m/WpK1GjHUmSBmUwDX0Ii9+kgCIv0ki2EYTBAYXhD6JDPPC4rL7Ull1Lrimp5hwwIDAQAB",
+  "oauth2": {
+    "client_id": "231631241199-c7bbkpqkqkneem782rrp7iflnu91juha.apps.googleusercontent.com",
+    "scopes":["email", "profile"]
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+
+  "action": {
+    "default_icon": "icons/logo.png",
+    "default_title": "Closely Surfer: LinkedIn Data Scraper",
+    "default_popup": "popup.html"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "content_scripts": [{
+    "js": ["constants.js", "helpers.js", "apiUrls.js", "withdrawInvitation.js", "lidParser.js", "snParser.js", "snListExporter.js", "postParser.js", "crmIntegration.js", "peopleSearch.js", "syncAccount.js", "linkedin.js"],
+    "css": ["widget.css"],
+    "matches": ["https://www.linkedin.com/*"]
+  },{
+    "js": ["constants.js", "closely.js"],
+    "matches": ["https://app.closelyhq.com/*"]
+  }],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "permissions": ["storage", "tabs", "cookies", "identity"],
+
+  "externally_connectable": {
+    "matches": ["https://app.closelyhq.com/*", "https://api.closelyhq.com/*"]
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "components/*",
+        "images/*",
+        "icons/*",
+        "pages/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "host_permissions": ["https://*.closelyhq.com/*", "https://www.linkedin.com/*"]
+}

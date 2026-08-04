@@ -1,0 +1,117 @@
+<div class="cly--content-sync cly--hidden">
+    <div class="cly--content-feader"></div>
+    <div class="cly--content-modal-wrapper cly--flex cly--flex-c">
+        <div class="cly--content-modal">
+            <div class="cly--sync-close">&times;</div>
+
+            <div class="cly--sync-step cly--sync-propmt">
+                <div class="cly--flex cly--flex-c cly--sync-logos">
+                    <img src="" class="cly--sync-logo" alt="" />
+                    <div class="cly--sync-arrows cly--flex cly--flex-c">
+                        <img src="" class="cly--sync-arrow" alt="" />
+                        <img src="" class="cly--sync-arrow" alt="" />
+                    </div>
+                    <img src="" class="cly--sync-li-logo" alt="" />
+                </div>
+
+                <div class="cly--sync-block">
+                    <div class="cly--sync-new">
+                        <div class="cly--sync-header">Connect your LinkedIn account</div>
+                        <div class="cly--sync-text">
+                            To enable automation of your outreach on LinkedIn, it is necessary to connect your LinkedIn account
+                            <span class="cly--sync-acc"></span> with Closely
+                        </div>
+                        <div class="cly--sync-submit">
+                            <button class="cly--sync-submit-button">Connect my account</button>
+                            <div class="cly--sync-logout">
+                                <a href="https://www.linkedin.com/m/logout/">Change LinkedIn account</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cly--sync-exs cly--hidden">
+                        <div class="cly--sync-header">Update your LinkedIn account</div>
+                        <div class="cly--sync-text">Account <span class="cly--sync-acc"></span> already registered</div>
+                        <div class="cly--sync-submit">
+                            <button class="cly--sync-submit-button">Update my account</button>
+                            <div class="cly--sync-logout">
+                                <a href="https://www.linkedin.com/m/logout/">Change LinkedIn account</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cly--resync-block cly--hidden">
+                    <div class="cly--sync-header">Sync your<br />LinkedIn account</div>
+                    <div class="cly--sync-text">
+                        To continue automation of your outreach on LinkedIn, it is necessary to sync your LinkedIn account
+                        <span class="cly--sync-acc"></span> with Closely
+                    </div>
+                    <div class="cly--sync-submit">
+                        <button class="cly--sync-submit-button">Sync my account</button>
+                    </div>
+                </div>
+
+                <div class="cly--resync-wrong-block cly--hidden">
+                    <div class="cly--sync-header">Change account</div>
+                    <div class="cly--sync-text">You are trying to sync <span class="cly--resync-acc"></span> account, but signed in to <span class="cly--sync-acc"></span> account.</div>
+                    <div class="cly--sync-submit">
+                        <div class="cly--sync-logout">
+                            <a href="https://www.linkedin.com/m/logout/">
+                                <button>Change LinkedIn account</button>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cly--sync-step cly--sync-fetching cly--hidden">
+                <div class="cly--laptop cly--laptop-loading-container"></div>
+                <div class="cly--sync-header">We`re <span class="cly--sync-progress">syncing</span> your LinkedIn account <span class="cly--sync-acc"></span></div>
+                <div class="cly--sync-text">Please wait a few seconds while we sync your data</div>
+            </div>
+
+            <div class="cly--sync-step cly--sync-error cly--hidden">
+                <div class="cly--laptop cly--laptop-error-container"></div>
+                <div class="cly--sync-header">An error occurred...</div>
+                <div class="cly--sync-text cly--sync-text-error"></div>
+                <div class="cly--sync-generror">
+                    <div class="cly--sync-text">Try again or contact Closely team to fix the problem</div>
+                    <div class="cly--sync-submit">
+                        <button class="cly--sync-submit-button cly--sync-retry-button">Try again</button>
+                    </div>
+                </div>
+                <div class="cly--sync-409error cly--hidden">
+                    <div class="cly--sync-text">Change LinkedIn account to fix the problem</div>
+                    <div class="cly--sync-submit">
+                        <a class="cly--sync-logout-button" href="https://www.linkedin.com/m/logout/">
+                            <button>Change LinkedIn account</button>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cly--sync-step cly--sync-success cly--hidden">
+                <div class="cly--user-wrapper">
+                    <div class="cly--user-picture-wrapper">
+                        <div class="cly--user-picture"></div>
+                        <svg class="cly--success-icon" width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <g>
+                                <path
+                                    fill="#14DCBC"
+                                    d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16Zm-1.463-4.412h.058c.295 0 .53-.115.766-.345l5.301-5.061c.354-.403.413-.978 0-1.38-.412-.403-1-.403-1.413 0L6.772 9.057 5.3 7.16c-.354-.403-.943-.518-1.414-.173-.412.345-.53.978-.177 1.38l2.12 2.818c.177.23.413.402.708.402Z"
+                                    fill-rule="evenodd"
+                                ></path>
+                            </g>
+                        </svg>
+                    </div>
+                    <div class="cly--user-name"></div>
+                </div>
+                <div class="cly--sync-header">Account was successfully <span class="cly--sync-complete">added</span> 😊</div>
+                <div class="cly--sync-submit">
+                    <button class="cly--sync-go-to-dashboard">Go to dashboard</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

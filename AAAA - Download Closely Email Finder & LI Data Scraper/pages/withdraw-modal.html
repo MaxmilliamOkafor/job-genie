@@ -1,0 +1,61 @@
+<div class="cly--withdraw-modal">
+    <div class="cly--withdraw-modal-item cly--withdraw-settings">
+        <div class="cly--modal-title">Withdraw invitations</div>
+        <form class="cly--withdraw-form">
+            <label class="cly--label" for="all">
+                <div class="cly--flex">
+                    <input class="cly--vishidden cly--radio-input" type="radio" name="requests" id="all" checked data-opt="all" />
+                    <div class="cly--radio"></div>
+                    <div class="cly--label-text">Withdraw all requests</div>
+                </div>
+            </label>
+
+            <label class="cly--label" for="age">
+                <div class="cly--flex">
+                    <input class="cly--vishidden cly--radio-input" type="radio" name="requests" id="age" data-opt="days" />
+                    <div class="cly--radio"></div>
+                    <div class="cly--label-text">
+                        Withdraw requests sent older than <input name="cly--age" class="cly--input cly--innput-age" type="number" value="14" min="1" /> day<span class="cly--plur">s</span>
+                    </div>
+                </div>
+            </label>
+
+            <div class="cly--flex cly--flex-end cly--buttons">
+                <button class="cly--button cly--button-light cly--button-cancel">Cancel</button>
+                <button class="cly--button cly--button-start-withdraw">Withdraw</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="cly--withdraw-modal-item cly--withdraw-inprogress">
+        <div class="cly--laptop-loading-container"></div>
+        <div class="cly--withdraw-progress-text">Withdrawing invitations…</div>
+        <div class="cly--withdraw-advice">Please don't leave this page.</div>
+        <div class="cly--withdraw-progress">
+            <div class="cly--withdraw-progress-bar"></div>
+            <div class="cly--withdraw-progress-bar-text"></div>
+        </div>
+        <div class="cly--flex cly--flex-c">
+            <button class="cly--button cly--button-light cly--button-cancel">Cancel</button>
+        </div>
+    </div>
+
+    <div class="cly--withdraw-modal-item cly--withdraw-success">
+        <div class="cly--laptop-success-container"></div>
+        <div class="cly--withdraw-progress-text">Done!</div>
+        <div class="cly--withdraw-advice cly--success-all">All your invitations are canceled.</div>
+        <div class="cly--withdraw-advice cly--success-days">Your invitations sent older than <span class="cly--withdraw-age">14 days</span> are canceled.</div>
+        <div class="cly--flex cly--flex-c cly--buttons-pair">
+            <button class="cly--button cly--button-cancel">Got it</button>
+        </div>
+    </div>
+
+    <div class="cly--withdraw-modal-item cly--withdraw-error">
+        <div class="cly--laptop-error-container"></div>
+        <div class="cly--withdraw-progress-text">An error occurred...</div>
+        <div class="cly--withdraw-advice">Something went wrong while collecting sent invitations.</div>
+        <div class="cly--flex cly--flex-c cly--buttons-pair">
+            <button class="cly--button cly--button-cancel">Okay :(</button>
+        </div>
+    </div>
+</div>

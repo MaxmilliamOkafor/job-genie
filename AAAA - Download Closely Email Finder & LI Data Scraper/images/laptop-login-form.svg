@@ -1,0 +1,74 @@
+<svg
+    id="login"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    viewBox="0 0 98.010000 42.350000"
+    shape-rendering="geometricPrecision"
+    text-rendering="geometricPrecision"
+>
+    <style>
+        <![CDATA[#login-form_ts {animation: login-form_ts__ts 3000ms linear 1 normal forwards}@keyframes login-form_ts__ts { 0% {transform: translate(49.005001px,21.174999px) scale(0.500000,0.500000);animation-timing-function: cubic-bezier(0.420000,0,1,1)} 10% {transform: translate(49.005001px,21.174999px) scale(1,1)} 100% {transform: translate(49.005001px,21.174999px) scale(1,1)} }#login-form {animation: login-form_c_o 3000ms linear 1 normal forwards}@keyframes login-form_c_o { 0% {opacity: 0} 16.666667% {opacity: 1} 100% {opacity: 1} }#login-circle1 {animation: login-circle1_c_o 3000ms linear 1 normal forwards}@keyframes login-circle1_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 46.666667% {opacity: 1} 100% {opacity: 1} }#login-circle2 {animation: login-circle2_c_o 3000ms linear 1 normal forwards}@keyframes login-circle2_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 60% {opacity: 1} 100% {opacity: 1} }#login-circle3 {animation: login-circle3_c_o 3000ms linear 1 normal forwards}@keyframes login-circle3_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 63.333333% {opacity: 1} 100% {opacity: 1} }#login-circle4 {animation: login-circle4_c_o 3000ms linear 1 normal forwards}@keyframes login-circle4_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 66.666667% {opacity: 1} 100% {opacity: 1} }#login-circle5 {animation: login-circle5_c_o 3000ms linear 1 normal forwards}@keyframes login-circle5_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 80% {opacity: 1} 100% {opacity: 1} }#login-circle6 {animation: login-circle6_c_o 3000ms linear 1 normal forwards}@keyframes login-circle6_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 86.666667% {opacity: 1} 100% {opacity: 1} }#login-circle7 {animation: login-circle7_c_o 3000ms linear 1 normal forwards}@keyframes login-circle7_c_o { 0% {opacity: 0} 33.333333% {opacity: 0;animation-timing-function: step-end} 100% {opacity: 1} }]]>
+    </style>
+    <g id="login-form_ts" transform="translate(49.005001,21.174999) scale(0.500000,0.500000)">
+        <g id="login-form" transform="translate(-49.005001,-21.174999)" opacity="0">
+            <g id="login-button">
+                <path
+                    id="login-path1"
+                    d="M95.880000,1C96.177042,1,96.461919,1.118000,96.671960,1.328040C96.882000,1.538081,97,1.822958,97,2.120000L97,15.880000C97,16.177042,96.882000,16.461919,96.671960,16.671960C96.461919,16.882000,96.177042,17,95.880000,17L2.120000,17C1.501441,17,1,16.498559,1,15.880000L1,2.120000C1,1.822958,1.118000,1.538081,1.328040,1.328040C1.538081,1.118000,1.822958,1,2.120000,1L95.880000,1M95.880000,0L2.120000,0C0.949156,0,0,0.949156,0,2.120000L0,15.880000C0,17.050844,0.949156,18,2.120000,18L95.880000,18C96.442259,18,96.981489,17.776643,97.379066,17.379066C97.776643,16.981489,98,16.442259,98,15.880000L98,2.120000C98,1.557741,97.776643,1.018511,97.379066,0.620934C96.981489,0.223357,96.442259,-0,95.880000,0Z"
+                    fill="#A771FE"
+                    stroke="none"
+                    stroke-width="1"
+                />
+                <circle id="login-circle1" r="2" transform="matrix(1 0 0 1 9 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+                <circle id="login-circle2" r="2" transform="matrix(1 0 0 1 16 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+                <circle id="login-circle3" r="2" transform="matrix(1 0 0 1 23 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+                <circle id="login-circle4" r="2" transform="matrix(1 0 0 1 30 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+                <circle id="login-circle5" r="2" transform="matrix(1 0 0 1 37 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+                <circle id="login-circle6" r="2" transform="matrix(1 0 0 1 44 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+                <circle id="login-circle7" r="2" transform="matrix(1 0 0 1 51 9)" opacity="0" fill="#A771FE" stroke="none" stroke-width="1" />
+            </g>
+            <g id="login-password">
+                <rect
+                    id="login-rect1"
+                    width="98"
+                    height="18"
+                    rx="2.120000"
+                    ry="2.120000"
+                    transform="matrix(1 0 0 1 0.01000000000000 24.35000000000000)"
+                    fill="#A771FE"
+                    stroke="none"
+                    stroke-width="1"
+                />
+                <path
+                    id="login-path2"
+                    d="M31.880000,29.760000L33.390000,29.760000L33.390000,35.660000L37,35.660000L37,37L31.900000,37Z"
+                    fill="rgb(255,255,255)"
+                    stroke="none"
+                    stroke-width="1"
+                />
+                <path
+                    id="login-path3"
+                    d="M44.530000,36.320000C43.894564,36.916314,43.039299,37.220730,42.170000,37.160000C41.301037,37.218287,40.446719,36.914208,39.810000,36.320000C39.038650,35.519213,38.642599,34.429166,38.720000,33.320000C38.630825,32.209213,39.028581,31.114471,39.810000,30.320000C40.446719,29.725792,41.301037,29.421713,42.170000,29.480000C43.039299,29.419270,43.894564,29.723686,44.530000,30.320000C45.316064,31.111533,45.714623,32.208484,45.620000,33.320000C45.702554,34.429883,45.305762,35.521971,44.530000,36.320000ZM43.590000,35.220000C43.974291,34.675128,44.161250,34.015480,44.120000,33.350000C44.161250,32.684520,43.974291,32.024872,43.590000,31.480000C43.254329,31.038365,42.724297,30.788279,42.170000,30.810000C41.618494,30.790933,41.090979,31.036115,40.750000,31.470000C40.361255,32.016527,40.173958,32.680901,40.220000,33.350000C40.173795,34.016004,40.361215,34.677282,40.750000,35.220000C41.103408,35.637736,41.622825,35.878667,42.170000,35.878667C42.717175,35.878667,43.236592,35.637736,43.590000,35.220000Z"
+                    fill="rgb(255,255,255)"
+                    stroke="none"
+                    stroke-width="1"
+                />
+                <path
+                    id="login-path4"
+                    d="M52.610000,32C52.510555,31.549271,52.196799,31.175752,51.770000,31C51.511726,30.886102,51.232267,30.828166,50.950000,30.830000C50.396957,30.817213,49.869073,31.060852,49.520000,31.490000C49.101158,32.068726,48.902583,32.777922,48.960000,33.490000C48.891323,34.172685,49.108546,34.853315,49.560000,35.370000C49.932326,35.723710,50.426447,35.920642,50.940000,35.920000C51.394516,35.938118,51.838561,35.780553,52.180000,35.480000C52.503307,35.183006,52.715071,34.784185,52.780000,34.350000L51.110000,34.350000L51.110000,33.090000L54.110000,33.090000L54.110000,37L53.110000,37L52.960000,36.100000C52.738118,36.378261,52.475094,36.621053,52.180000,36.820000C51.735838,37.072328,51.230551,37.196919,50.720000,37.180000C49.828102,37.206466,48.969344,36.841037,48.370000,36.180000C47.707623,35.433741,47.366263,34.456373,47.420000,33.460000C47.381193,32.432849,47.739289,31.430180,48.420000,30.660000C49.074186,29.950902,50.005918,29.563594,50.970000,29.600000C51.763343,29.563526,52.543602,29.811790,53.170000,30.300000C53.726259,30.719724,54.087378,31.348071,54.170000,32.040000Z"
+                    fill="rgb(255,255,255)"
+                    stroke="none"
+                    stroke-width="1"
+                />
+                <path id="login-path5" d="M57.920000,37L56.420000,37L56.420000,29.800000L57.920000,29.800000Z" fill="rgb(255,255,255)" stroke="none" stroke-width="1" />
+                <path
+                    id="login-path6"
+                    d="M60.300000,29.760000L61.880000,29.760000L64.730000,34.760000L64.730000,29.760000L66.140000,29.760000L66.140000,37L64.630000,37L61.700000,31.850000L61.700000,37L60.300000,37Z"
+                    fill="rgb(255,255,255)"
+                    stroke="none"
+                    stroke-width="1"
+                />
+            </g>
+        </g>
+    </g>
+</svg>

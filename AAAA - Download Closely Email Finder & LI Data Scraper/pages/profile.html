@@ -1,0 +1,376 @@
+<div class="cly--content-profile cly--loading">
+    <div class="cly--content">
+        <div class="cly--content-senction">
+            <div class="cly--flex">
+                <div class="cly--profile-photo">
+                    <img class="cly--profile-photo-img" src="" alt="" />
+                </div>
+                <div class="cly--flex-1">
+                    <div class="cly--profile-name"></div>
+                    <div class="cly--profile-job"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cly--profile-contacts">
+            <div class="cly--profile-contacts-list">
+                <div class="cly--flex cly--profile-contacts-list-item">
+                    <div class="cly--contact-type cly--dummy-block"></div>
+                    <div class="cly--contact-text cly--contact-text-1 cly--dummy-block">
+                        <div class="cly--contact-text-inner"></div>
+                    </div>
+                </div>
+                <div class="cly--flex cly--profile-contacts-list-item">
+                    <div class="cly--contact-type cly--dummy-block"></div>
+                    <div class="cly--contact-text cly--contact-text-2 cly--dummy-block"></div>
+                </div>
+            </div>
+            <button class="cly--profile-contacts-open cly--button-small cly--button-100 cly--dummy-button" disabled>Show contact details</button>
+            <div class="cly--contacts-fetching"></div>
+        </div>
+
+        <div class="cly--profile-integration-wrapper">
+            <div class="hs--sync">
+                <button class="cly--button-small cly--button-transparent cly--button-100 hs--contact-sync">
+                    <img width="16" src="" class="cly--integration-logo" />
+                    <span>Sync with</span> <span class="cly--integration-name">Hubspot</span>
+                    <span class="cly--button-fetching">
+                        <span>
+                            <svg width="16px" height="16px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                                <circle fill="none" stroke="#A771FE" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                            </svg>
+                        </span>
+                    </span>
+                </button>
+            </div>
+
+            <div class="hs--sync-owners">
+                <div class="cly--button cly--button-small cly--button-transparent cly--button-100 cly--show-options">
+                    <img width="16" src="" class="cly--integration-logo" />
+                    Sync with <span class="cly--integration-name">Hubspot</span>
+                    <span class="cly--button-fetching">
+                    <span>
+                        <svg width="16px" height="16px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                            <circle fill="none" stroke="#A771FE" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                        </svg>
+                    </span>
+                </span>
+                </div>
+            </div>
+
+            <div class="hs--synced">
+                <div class="cly--flex">
+                    <div class="cly--synced-opts" style="flex: 3">
+                        <div class="cly--button cly--button-small cly--button-light cly--button-100">
+                            <svg width="16" class="sc-dkPtRN dHFEWw" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="check_2">
+                                <g>
+                                    <path
+                                        fill="#fff"
+                                        d="M4.94 11.705 1.625 8.39A.951.951 0 1 0 .279 9.737l3.992 3.992a.95.95 0 0 0 1.346 0L15.721 3.626a.951.951 0 1 0-1.347-1.347L4.94 11.705Z"
+                                        fill-rule="evenodd"
+                                    ></path>
+                                </g>
+                            </svg>
+                            <span class="hs--synced-timer"></span>
+                            <img style="margin-left: 5px; margin-right: 0" src="" class="cly--integration-logo" alt="" width="16" />
+
+                            <div class="cly--sync-error cly--hidden">
+                                <svg class="cly--invalid-icon" width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="invalid"><g><path fill="#FF6A61" d="M8 0C3.589 0 0 3.589 0 8s3.589 8 8 8 8-3.589 8-8-3.589-8-8-8m0 14.4A6.407 6.407 0 0 1 1.6 8c0-3.529 2.871-6.4 6.4-6.4 3.529 0 6.4 2.871 6.4 6.4 0 3.529-2.871 6.4-6.4 6.4m0-5.6a.8.8 0 0 0 .8-.8V4.8a.8.8 0 1 0-1.6 0V8a.8.8 0 0 0 .8.8m0 1.52a.88.88 0 1 0 0 1.76.88.88 0 0 0 0-1.76" fill-rule="evenodd"></path></g></svg>
+                                <div class="cly--tooltip cly--sync-error-message"></div>
+                            </div>
+
+                            <div class="cly--options">
+                                <div class="cly--option cly--flex hs--contact-link-missing">
+                                    <svg width="12px" height="12px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                                        <circle fill="none" stroke="#7A869A" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                                    </svg>
+                                    <div>
+                                        <div class="cly--option-title" style="color: #7a869a">View on<span class="cly--integration-name">Hubspot</span></div>
+                                    </div>
+                                </div>
+                                <a href="" class="cly--option cly--flex hs--contact-link cly--hidden" target="_blank" rel="noreferrer">
+                                    <svg width="12" viewBox="0 0 16 16" height="12" xmlns="http://www.w3.org/2000/svg">
+                                        <g>
+                                            <path
+                                                fill="#04133B"
+                                                d="M15 0a1 1 0 0 1 1 1v5a1 1 0 0 1-2 0V3.41l-5.29 5.3a1 1 0 0 1-1.42 0 1 1 0 0 1 0-1.42L12.59 2H10a1 1 0 0 1 0-2zm0 9a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h5a1 1 0 0 1 0 2H2v12h12v-4a1 1 0 0 1 1-1z"
+                                                fill-rule="evenodd"
+                                            ></path>
+                                        </g>
+                                    </svg>
+                                    <div class="cly--option-title">View on<span class="cly--integration-name">Hubspot</span></div>
+                                </a>
+
+                                <div class="cly--option cly--flex hs--contact-sync">
+                                    <svg width="12" color="#04133B" class="sc-dkPtRN etargQ" viewBox="0 0 16 16" height="12" xmlns="http://www.w3.org/2000/svg" data-name="reset">
+                                        <g>
+                                            <path
+                                                fill="#04133B"
+                                                d="M13.09 5.187l-2.91 3h2.183c0 2.481-1.957 4.5-4.363 4.5a4.173 4.173 0 01-2.035-.523l-1.063 1.094a5.63 5.63 0 003.098.93c3.215 0 5.82-2.684 5.82-6H16l-2.91-3zm-9.453 3c0-2.48 1.957-4.5 4.363-4.5.734 0 1.434.188 2.035.524l1.063-1.094A5.63 5.63 0 008 2.187c-3.215 0-5.82 2.684-5.82 6H0l2.91 3 2.91-3H3.637zm0 0"
+                                                fill-rule="evenodd"
+                                            ></path>
+                                        </g>
+                                    </svg>
+                                    <div class="cly--option-title">Resync</div>
+                                </div>
+
+                                <div class="cly--option cly--flex cly--show-options cly--hidden">
+                                    <svg width="12" color="#04133B" class="sc-dkPtRN etargQ" viewBox="0 0 16 16" height="12" xmlns="http://www.w3.org/2000/svg" data-name="reset">
+                                        <g>
+                                            <path
+                                                fill="#04133B"
+                                                d="M13.09 5.187l-2.91 3h2.183c0 2.481-1.957 4.5-4.363 4.5a4.173 4.173 0 01-2.035-.523l-1.063 1.094a5.63 5.63 0 003.098.93c3.215 0 5.82-2.684 5.82-6H16l-2.91-3zm-9.453 3c0-2.48 1.957-4.5 4.363-4.5.734 0 1.434.188 2.035.524l1.063-1.094A5.63 5.63 0 008 2.187c-3.215 0-5.82 2.684-5.82 6H0l2.91 3 2.91-3H3.637zm0 0"
+                                                fill-rule="evenodd"
+                                            ></path>
+                                        </g>
+                                    </svg>
+                                    <div class="cly--option-title">Resync</div>
+                                </div>
+
+                            </div>
+                            <span class="cly--button-fetching">
+                                <span>
+                                    <svg width="16px" height="16px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                                        <circle fill="none" stroke="#A771FE" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                                    </svg>
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="hs--no-deals" style="flex: 2; padding-left: 10px">
+                        <button class="cly--button-small cly--button-outlined cly--button-100 hs--deal-create">Create deal</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cly--relative">
+                <div class="cly--options-fader"></div>
+                <div class="cly--options hs--select-options" style="padding: 5px">
+                    <div class="cly--flex" style="gap: 6px">
+                        <div class="cly--select cly--flex-1">
+                            <select class="hs--select hs--select-owner cly--placeholder" name="select-owner">
+                                <option hidden selected value="">Select owner</option>
+                            </select>
+                            <div class="cly--select-focus"></div>
+                        </div>
+                        <button class="cly--button hs--contact-sync" style="min-width: auto">
+                            Sync
+                            <span class="cly--button-fetching">
+                            <span>
+                                <svg width="16px" height="16px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                                    <circle fill="none" stroke="#A771FE" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                                </svg>
+                            </span>
+                        </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hs--deal-wrapper">
+                <div class="hs--deal cly--flex cly--flex-align-start">
+                    <img src="" width="16" height="16" alt="" class="cly--integration-logo" />
+                    <div class="cly--flex-1">
+                        <a href="" target="_blank" rel="noreferrer" class="hs--deal-link hs--deal-title"></a>
+                        <div class="css-1qa1a31">Pipeline: <span class="css-1f1h1xc hs--deal-pipeline"></span></div>
+                        <div class="css-1qa1a31">Stage: <span class="css-1f1h1xc hs--deal-stage"></span></div>
+                        <div class="css-1qa1a31">Owned by: <span class="css-1f1h1xc hs--deal-owner"></span></div>
+                    </div>
+                    <div class="cly--button cly--button-small cly--button-icon cly--button-transparent">
+                        <svg width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <g>
+                                <path
+                                    fill="#04133B"
+                                    d="M8 12c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM6 8c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm0-6c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2z"
+                                    fill-rule="evenodd"
+                                ></path>
+                            </g>
+                        </svg>
+                        <div class="cly--options cly--options-right">
+                            <a href="" target="_blank" rel="noreferrer" class="cly--option cly--flex hs--deal-link">
+                                <svg width="12" viewBox="0 0 16 16" height="12" xmlns="http://www.w3.org/2000/svg">
+                                    <g>
+                                        <path
+                                            fill="#04133B"
+                                            d="M15 0a1 1 0 0 1 1 1v5a1 1 0 0 1-2 0V3.41l-5.29 5.3a1 1 0 0 1-1.42 0 1 1 0 0 1 0-1.42L12.59 2H10a1 1 0 0 1 0-2zm0 9a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h5a1 1 0 0 1 0 2H2v12h12v-4a1 1 0 0 1 1-1z"
+                                            fill-rule="evenodd"
+                                        ></path>
+                                    </g>
+                                </svg>
+                                <div class="cly--option-title">View on<span class="cly--integration-name">Hubspot</span></div>
+                            </a>
+                            <div class="cly--option cly--flex hs--deal-create">
+                                <svg width="12" color="#04133B" class="sc-dkPtRN etargQ" viewBox="0 0 16 16" height="12" xmlns="http://www.w3.org/2000/svg" data-name="reset">
+                                    <g>
+                                        <path
+                                            fill="#04133B"
+                                            d="m9.95 2.67 3.254 3.27-8.239 8.28-3.253-3.27L9.95 2.67Zm5.724-.789L14.222.423a1.435 1.435 0 0 0-2.034 0l-1.39 1.397 3.254 3.27 1.622-1.63a1.119 1.119 0 0 0 0-1.579ZM.009 15.546a.371.371 0 0 0 .448.443l3.627-.884-3.253-3.27-.822 3.711Z"
+                                            fill-rule="evenodd"
+                                        ></path>
+                                    </g>
+                                </svg>
+                                <div class="cly--option-title">Edit</div>
+                            </div>
+                            <div class="cly--option cly--flex hs--confirm-delete-button">
+                                <svg width="12" color="#04133B" class="sc-dkPtRN etargQ" viewBox="0 0 16 16" height="12" xmlns="http://www.w3.org/2000/svg" data-name="reset">
+                                    <g>
+                                        <path
+                                            fill="#FF6A61"
+                                            d="m12.887181,2.422387l-2.024,0l0,-1.278a0.464,0.464 0 0 0 -0.478,-0.457c-0.026,0 -0.043,0.008 -0.051,0.017a0.066,0.066 0 0 0 -0.035,-0.017l-4.824,0c-0.265,0 -0.47,0.2 -0.47,0.457l0,1.278l-2.032,0c-0.58,0 -1.033,0.44 -1.033,1.005l0,1.643l0.896,0l0,9.357c0,0.564 0.444,0.996 1.025,0.996l8.138,0c0.58,0 1.033,-0.432 1.033,-0.996l0,-9.357l0.888,0l0,-1.643c0,-0.565 -0.453,-1.005 -1.033,-1.005zm-6.943,-0.822l3.971,0l0,0.822l-3.97,0l0,-0.822l-0.001,0zm6.14,12.827c0,0.058 -0.026,0.083 -0.085,0.083l-8.138,0c-0.06,0 -0.085,-0.025 -0.085,-0.083l0,-9.357l8.308,0l0,9.357zm0.888,-10.27l-10.085,0l0,-0.73c0,-0.058 0.026,-0.092 0.086,-0.092l9.914,0c0.06,0 0.085,0.034 0.085,0.092l0,0.73z"
+                                            fill-rule="evenodd"
+                                        ></path>
+                                        <path
+                                            fill="#FF6A61"
+                                            d="m9.650181,6.141387l1,0l0,7.555l-1,0l0,-7.555zm-2.186,0l1,0l0,7.555l-1,0l0,-7.555zm-2.186,0l1,0l0,7.555l-1,0l0,-7.555z"
+                                            fill-rule="evenodd"
+                                        ></path>
+                                    </g>
+                                </svg>
+                                <div class="cly--option-title">Delete</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cly--profile-company-section">
+            <div class="cly--profile-company cly--content-block">
+                <div class="cly--company-data">
+                    <div class="cly--flex">
+                        <div class="cly--company-logo">
+                            <img class="cly--company-logo-img" src="" alt="" />
+                        </div>
+                        <div class="cly--flex-1">
+                            <div class="cly--contact-text cly--contact-text-1 cly--dummy-block cly--company-name"></div>
+                            <div class="cly--flex cly--contact-text cly--contact-text-2 cly--dummy-block cly--company-links">
+                                <a class="cly-company-link cly-company-link-website" href="" target="_blank">
+                                    <svg width="12" class="cly--link-icon" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="link">
+                                        <g>
+                                            <path
+                                                fill="#0295F6"
+                                                d="M14.756 7.25l-3.004 3.002a4.242 4.242 0 0 1-6.004 0 4.195 4.195 0 0 1-.645-.856L6.498 8c.067-.067.148-.105.227-.15.097.329.265.642.524.9a2.127 2.127 0 0 0 3.003 0l3.002-3.002a2.124 2.124 0 0 0-3.002-3.003L9.184 3.814a5.332 5.332 0 0 0-2.708-.295L8.75 1.244a4.25 4.25 0 0 1 6.007 0 4.25 4.25 0 0 1-.002 6.007zm-7.94 4.938l-1.068 1.068a2.127 2.127 0 0 1-3.004 0 2.127 2.127 0 0 1 0-3.003l3.004-3.001a2.125 2.125 0 0 1 3.002 0c.26.259.429.57.525.9.08-.046.16-.084.227-.15l1.394-1.395a4.136 4.136 0 0 0-.644-.857 4.247 4.247 0 0 0-6.006 0L1.244 8.752a4.25 4.25 0 0 0 0 6.008 4.249 4.249 0 0 0 6.005 0l2.276-2.276a5.332 5.332 0 0 1-2.709-.296z"
+                                                fill-rule="evenodd"
+                                            ></path>
+                                        </g>
+                                    </svg>
+                                </a>
+                                <a class="cly-company-link cly-company-link-li" href="" target="_blank">
+                                    <svg width="12" class="cly--linkedin-icon" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="linkedin">
+                                        <g>
+                                            <path
+                                                fill="#0a66c2"
+                                                d="M14.553 0H1.447C.648 0 0 .648 0 1.447v13.106C0 15.352.648 16 1.447 16h13.106c.799 0 1.447-.648 1.447-1.447V1.447C16 .648 15.352 0 14.553 0zM4.95 13.815a.421.421 0 0 1-.421.422H2.737a.421.421 0 0 1-.421-.422V6.3c0-.233.188-.422.421-.422H4.53c.233 0 .421.189.421.422v7.515zM3.633 5.17a1.703 1.703 0 1 1 0-3.407 1.703 1.703 0 0 1 0 3.407zm10.688 8.68a.387.387 0 0 1-.387.387H12.01a.387.387 0 0 1-.388-.388v-3.525c0-.526.155-2.305-1.374-2.305-1.186 0-1.426 1.218-1.475 1.764v4.066a.387.387 0 0 1-.387.388h-1.86a.387.387 0 0 1-.388-.388V6.266c0-.214.174-.388.387-.388h1.861c.214 0 .387.174.387.388v.655c.44-.66 1.094-1.169 2.485-1.169 3.08 0 3.063 2.878 3.063 4.46v3.637z"
+                                                fill-rule="evenodd"
+                                            ></path>
+                                        </g>
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cly--company-description">
+                        <div class="cly--company-description-loading">
+                            <div class="cly--contact-text cly--contact-text-2 cly--dummy-block" style="width: 100%"></div>
+                            <div class="cly--contact-text cly--contact-text-2 cly--dummy-block" style="width: 80%"></div>
+                        </div>
+                        <div class="cly--company-description-text"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cly--profile-company-details cly--content-block cly--hidden"></div>
+        </div>
+    </div>
+
+    <div class="cly--content cly--add-deal">
+        <div class="cly--flex cly--deal-heading">
+            <button class="cly--button-outlined cly--button-icon hs--hide-dealform">
+                <svg width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="arrow_left">
+                    <g>
+                        <path
+                            class="main-icon"
+                            fill="#0295F6"
+                            d="m3.76 8.998 3.88 3.225c.42.36.48.99.13 1.41-.36.42-.99.48-1.41.13l-6-4.995c-.268-.257-.363-.44-.36-.77 0-.33.09-.51.36-.77l6-5a1.01 1.01 0 0 1 1.41.13c.35.42.29 1.05-.13 1.41l-3.88 3.23H15a1 1 0 1 1 0 2H3.76Z"
+                            fill-rule="evenodd"
+                        ></path>
+                    </g>
+                </svg>
+            </button>
+            <div class="cly--flex" style="margin-left: 12px">
+                <img width="24" src="" class="css-1sysnl8 cly--integration-logo" alt="" />
+                <div class="ts400 b" style="margin-left: 10px">Create<span class="cly--integration-name">Hubspot</span> deal</div>
+            </div>
+        </div>
+        <div class="cly--deal-fields">
+            <div class="cly--deal-field">
+                <label>Deal name*</label>
+                <input type="text" class="cly--input cly--input-100 hs--deal-name" name="deal" placeholder="Name your deal" minlength="2" required />
+            </div>
+            <div class="cly--deal-field">
+                <label>Pipeline*</label>
+                <div class="cly--select">
+                    <select class="hs--select hs--pipeline cly--placeholder" disabled name="pipeline">
+                        <option hidden selected value="">Select pipeline</option>
+                    </select>
+                    <div class="cly--select-focus"></div>
+                </div>
+            </div>
+            <div class="cly--deal-field">
+                <label>Stage*</label>
+                <div class="cly--select">
+                    <select class="hs--select hs--stage cly--placeholder" disabled name="stage">
+                        <option hidden selected value="">Select stage</option>
+                    </select>
+                    <div class="cly--select-focus"></div>
+                </div>
+            </div>
+            <div class="cly--deal-field">
+                <label>Owner*</label>
+                <div class="cly--select">
+                    <select class="hs--select hs--owner cly--placeholder" disabled name="owner">
+                        <option hidden selected value="">Select owner</option>
+                    </select>
+                    <div class="cly--select-focus"></div>
+                </div>
+            </div>
+        </div>
+        <div class="cly--flex cly--flex-end hs--form-buttons">
+            <button class="cly--button-small cly--button-light hs--hide-dealform">Cancel</button>
+            <button style="margin-left: 10px" class="cly--button-small hs--submit-deal" disabled>
+                Create
+                <span class="cly--button-fetching">
+                    <span>
+                        <svg width="16px" height="16px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                            <circle fill="none" stroke="#A771FE" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                        </svg>
+                    </span>
+                </span>
+            </button>
+        </div>
+    </div>
+
+    <div class="cly--hs-fader"></div>
+    <div class="cly--content-block hs--confirm-delete">
+        <div class="cly--flex cly--deal-heading">
+            <div class="cly--flex">
+                <img width="24" src="" class="css-1sysnl8 cly--integration-logo" alt="" />
+                <div class="ts400 b" style="margin-left: 10px">Delete<span class="cly--integration-name">Hubspot</span> deal</div>
+            </div>
+        </div>
+        <div class="cly--modal-text">Are you sure you want to delete <span class="hs--deal-name"></span>?</div>
+        <div class="cly--modal-buttons cly--flex cly--flex-end">
+            <button class="cly--button-small cly--button-light hs--hide-delete">No</button>
+            <button class="cly--button-small cly--button-red hs--deal-delete" style="margin-left: 5px">
+                Yes, delete<span class="cly--integration-name">Hubspot</span>&nbsp;deal
+                <span class="cly--button-fetching">
+                    <span>
+                        <svg width="16px" height="16px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                            <circle fill="none" stroke="#A771FE" stroke-width="3" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+                        </svg>
+                    </span>
+                </span>
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,155 @@
+<div class="cly--export-modal">
+    <div class="cly--export-modal-loading cly--hidden">
+        <div>
+            <svg width="48px" height="48px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="cly--component-loading-spinner">
+                <circle fill="none" stroke="#A771FE" stroke-width="1" stroke-linecap="round" cx="12" cy="12" r="10"></circle>
+            </svg>
+        </div>
+    </div>
+
+    <div class="cly--export-modal-item cly--export-settings">
+        <form class="cly--export-form">
+            <div class="cly--list-name cly--emails-export-show">
+                <div class="cly--modal-title">Name your list</div>
+                <input name="cly--list-name" class="cly--input cly--input-list-name" placeholder="List with emails from LinkedIn" />
+            </div>
+
+            <div class="cly--modal-title cly--emails-export-hide">How many people would you like to export?</div>
+            <div class="cly--modal-title cly--emails-export-show">How many people would you like to export with emails?</div>
+
+            <div class="cly--flex cly--flex-sb">
+                <div class="cly--input-holder cly--flex-1">
+                    <input name="cly--pplcount" class="cly--input cly--innput-people-export" type="number" min="1" />
+                    <div class="cly--max-number">The maximum number is <span class="cly--max-people"></span></div>
+                </div>
+                <div class="cly--search-export" style="width: 15px"></div>
+                <div class="cly--search-export cly--input-holder" style="width: 80px">
+                    <input name="cly--pplpage" class="cly--input cly--innput-people-page" type="number" min="1" value="1" />
+                    <div class="cly--max-number">Start from page</div>
+                </div>
+            </div>
+
+            <div class="cly--credit-block cly--emails-export-show">
+                <div class="cly--flex cly--flex-align-end">
+                    <div class="cly--credits-use">Credits you use:</div>
+                    <div class="cly--underdash cly--flex-1"></div>
+                    <div class="cly--credits-use cly--credits-number">0</div>
+                </div>
+                <div class="cly--credits-hint">If we're not able to find some of the emails, we'll add unused credits to your account.</div>
+                <div class="cly--credits-error cly--error-block">
+                    <div class="cly--flex cly--flex-align-start">
+                        <svg width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="invalid">
+                            <g>
+                                <path
+                                    fill="#FF6A61"
+                                    d="M8 0C3.589 0 0 3.589 0 8s3.589 8 8 8 8-3.589 8-8-3.589-8-8-8m0 14.4A6.407 6.407 0 0 1 1.6 8c0-3.529 2.871-6.4 6.4-6.4 3.529 0 6.4 2.871 6.4 6.4 0 3.529-2.871 6.4-6.4 6.4m0-5.6a.8.8 0 0 0 .8-.8V4.8a.8.8 0 1 0-1.6 0V8a.8.8 0 0 0 .8.8m0 1.52a.88.88 0 1 0 0 1.76.88.88 0 0 0 0-1.76"
+                                    fill-rule="evenodd"
+                                ></path>
+                            </g>
+                        </svg>
+                        <div class="cly--error-content cly--flex-1">
+                            <div class="cly--error-text">Oops, you have only <span class="cly--credits-num">ХХ</span> credits.</div>
+                            <div class="cly--error-hint">Change the number of people to export or <a class="cly--upgrade-link" target="_blank">Upgrade your plan</a></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cly--buttons-pair">
+                <div class="cly--flex cly--flex-sb">
+                    <button class="cly--button cly--button-light cly--button-cancel">Cancel</button>
+                    <button type="submit" class="cly--button cly--button-start-export">
+                        <span class="cly--emails-export-hide"> Export CSV </span>
+                        <span class="cly--emails-export-show">
+                            <span class="cly--flex">
+                                Next&nbsp;&nbsp;<svg width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="arrow_right">
+                                    <g>
+                                        <path
+                                            fill="#fff"
+                                            d="m12.24 8.998-3.88 3.225c-.42.36-.48.99-.13 1.41.36.42.99.48 1.41.13l6-4.995c.268-.257.363-.44.36-.77 0-.33-.09-.51-.36-.77l-6-5a1.01 1.01 0 0 0-1.41.13c-.35.42-.29 1.05.13 1.41l3.88 3.23H1a1 1 0 0 0 0 2h11.24Z"
+                                            fill-rule="evenodd"
+                                        ></path>
+                                    </g>
+                                </svg>
+                            </span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="cly--export-modal-item cly--export-inprogress">
+        <div class="cly--laptop-loading-container"></div>
+        <div class="cly--export-progress-text"><span class="cly--export-progress-current">0</span> of <span class="cly--export-progress-total">0</span> people exported</div>
+        <div class="cly--export-advice">Please don't leave this page.</div>
+        <div class="cly--flex cly--flex-c cly--buttons-pair">
+            <button class="cly--button cly--button-light cly--button-cancel">Cancel</button>
+            <button type="submit" class="cly--button cly--button-stop-save-export">
+                <span class="cly--emails-export-hide"> Stop and save </span>
+                <span class="cly--emails-export-show"> Stop and add emails </span>
+            </button>
+        </div>
+    </div>
+
+    <div class="cly--export-modal-item cly--export-success">
+        <div class="cly--laptop-success-container"></div>
+        <div class="cly--export-progress-text">Done!</div>
+        <div class="cly--export-progress-text">
+            <span class="cly--export-progress-current">0</span> of <span class="cly--export-progress-total">0</span> people exported
+            <div class="cly--export-people-skipped cly--hidden">
+                <span class="cly--export-skipped">12</span> skipped
+                <div class="cly--why">
+                    ?
+                    <div class="cly--hint">First name is not accessible</div>
+                </div>
+            </div>
+        </div>
+        <div class="cly--export-advice cly--emails-export-hide">Your CSV is ready.</div>
+        <div class="cly--export-advice cly--emails-export-show">Your list is ready for the next step.</div>
+
+        <div class="cly--fetch-error cly--error-block">
+            <div class="cly--flex cly--flex-align-start">
+                <svg width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="invalid">
+                    <g>
+                        <path
+                            fill="#FF6A61"
+                            d="M8 0C3.589 0 0 3.589 0 8s3.589 8 8 8 8-3.589 8-8-3.589-8-8-8m0 14.4A6.407 6.407 0 0 1 1.6 8c0-3.529 2.871-6.4 6.4-6.4 3.529 0 6.4 2.871 6.4 6.4 0 3.529-2.871 6.4-6.4 6.4m0-5.6a.8.8 0 0 0 .8-.8V4.8a.8.8 0 1 0-1.6 0V8a.8.8 0 0 0 .8.8m0 1.52a.88.88 0 1 0 0 1.76.88.88 0 0 0 0-1.76"
+                            fill-rule="evenodd"
+                        ></path>
+                    </g>
+                </svg>
+                <div class="cly--error-content cly--flex-1">
+                    <div class="cly--error-text">Oops, an error occured.</div>
+                    <div class="cly--error-hint">Please try again later or contact Closely team.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cly--flex cly--flex-c cly--buttons-pair">
+            <button class="cly--button cly--button-light cly--button-cancel">Close</button>
+            <button type="submit" class="cly--button cly--button-save-export">
+                <span class="cly--emails-export-hide"> Save CSV </span>
+                <span class="cly--emails-export-show"> Next: Add emails </span>
+            </button>
+        </div>
+    </div>
+
+    <div class="cly--export-modal-item cly--export-error">
+        <div class="cly--laptop-error-container"></div>
+        <div class="cly--export-progress-text">Process was interrupted</div>
+        <div class="cly--export-advice cly--emails-export-hide">
+            You can export <span class="cly--export-progress-current">0</span> of <span class="cly--export-progress-total">0</span> people we already found.
+        </div>
+        <div class="cly--export-advice cly--emails-export-show">
+            You can add emails to collected <span class="cly--export-progress-current">0</span> of <span class="cly--export-progress-total">0</span> people we already found.
+        </div>
+        <div class="cly--flex cly--flex-c cly--buttons-pair">
+            <button class="cly--button cly--button-light cly--button-cancel">Close</button>
+            <button type="submit" class="cly--button cly--button-save-export">
+                <span class="cly--emails-export-hide"> Export collected </span>
+                <span class="cly--emails-export-show"> Add emails to collected </span>
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Closely: Email Finder & LI Data Scraper</title>
+        <link rel="stylesheet" href="login.css" />
+    </head>
+    <body>
+        <div class="wrapper">
+            <img class="logo" alt="" src="images/logo_big.svg" />
+            <div class="form">
+                <div class="heading">Sign in to Closely</div>
+                <form id="login-form">
+                    <label for="email">Email</label>
+                    <input id="email" type="email" placeholder="e.g. your@email.com" autocomplete="new-password" required />
+                    <label for="password">Password</label>
+                    <input id="password" type="password" placeholder="password" autocomplete="new-password" />
+                    <button>Sign in</button>
+                </form>
+            </div>
+            <div class="copy">&copy; Closely - 2021-<span class="year"></span>. Version: <span class="version"></span></div>
+            <div class="toast-wrapper">
+                <div class="toast">
+                    <svg width="16" viewBox="0 0 16 16" height="16" xmlns="http://www.w3.org/2000/svg" data-name="invalid">
+                        <g>
+                            <path
+                                class="main-icon"
+                                fill="#E10C00"
+                                d="M8 0C3.589 0 0 3.589 0 8s3.589 8 8 8 8-3.589 8-8-3.589-8-8-8m0 14.4A6.407 6.407 0 0 1 1.6 8c0-3.529 2.871-6.4 6.4-6.4 3.529 0 6.4 2.871 6.4 6.4 0 3.529-2.871 6.4-6.4 6.4m0-5.6a.8.8 0 0 0 .8-.8V4.8a.8.8 0 1 0-1.6 0V8a.8.8 0 0 0 .8.8m0 1.52a.88.88 0 1 0 0 1.76.88.88 0 0 0 0-1.76"
+                                fill-rule="evenodd"
+                            ></path>
+                        </g>
+                    </svg>
+                    <div class="toast-message"></div>
+                </div>
+            </div>
+        </div>
+        <script src="login.js"></script>
+    </body>
+</html>
