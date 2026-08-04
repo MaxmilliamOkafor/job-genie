@@ -170,6 +170,31 @@ async function logApiUsage(supabase: any, userId: string, functionName: string, 
  * employment-type / location suffixes) from a JD title, while keeping
  * legitimate digits like "Dynamics 365" or "SAP S/4HANA".
  */
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+// Format a stored date token (2023-01, 01/2023, 2023) as "January 2023"; passes through "Present".
+function formatMonthYear(raw?: string): string {
+  const t = (raw || "").toString().trim();
+  if (!t) return "";
+  if (/present|current/i.test(t)) return "Present";
+  let y = "", m = "";
+  const iso = t.match(/^((?:19|20)\d{2})[-\/](\d{1,2})/);
+  const my = t.match(/^(\d{1,2})[-\/]((?:19|20)\d{2})/);
+  if (iso) { y = iso[1]; m = iso[2]; }
+  else if (my) { y = my[2]; m = my[1]; }
+  else return t;
+  const idx = parseInt(m, 10) - 1;
+  return MONTH_NAMES[idx] ? `${MONTH_NAMES[idx]} ${y}` : y;
+}
+// Build an ATS-safe range: "January 2023 - Present" (full month names, plain hyphen).
+function formatDateRangeATS(start?: string, end?: string, fallbackEnd = ""): string {
+  const s = formatMonthYear(start);
+  const e = formatMonthYear(end) || fallbackEnd;
+  if (!s && !e) return "";
+  if (!e) return s;
+  if (!s) return e;
+  return `${s} - ${e}`;
+}
+
 function normaliseJobTitle(raw: string): string {
   let t = String(raw || "").trim();
 
@@ -2430,14 +2455,14 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 === END CRITICAL RULE ===
 
 ABSOLUTE RULES:
-1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (MM/YYYY format) - Only tailor the bullet points
+1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (full month name + year format) - Only tailor the bullet points
 2. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
 2. Location in CV header MUST be the job-derived location: "${smartLocation}" (NO "open to relocation" suffix, NO hardcoded Dublin)
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
 6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
-7. Dates MUST be in MM/YYYY format (e.g., "01/2023 – Present", "04/2021 – 12/2022")
+7. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
 
 HUMANIZED TONE RULES:
 - Active voice only
@@ -2537,7 +2562,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     ███ END DUPLICATION BAN ███
        TITLE REDUNDANCY: If the job title contains a parenthetical qualifier — e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' — do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-    - WORK EXPERIENCE: Keep company/dates (MM/YYYY format e.g. "01/2023 – Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Each role should keep 2-3 quantified results (%, time saved, scale, revenue). If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
+    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Each role should keep 2-3 quantified results (%, time saved, scale, revenue). If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
     - EDUCATION
     - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
@@ -2616,7 +2641,7 @@ ${
       {
         "company": "[Company Name]",
         "title": "[Job Title]",
-        "dates": "[MM/YYYY – MM/YYYY or MM/YYYY – Present]",
+        "dates": "[Month YYYY - Month YYYY or Month YYYY - Present]",
         "bullets": ["bullet1 with metrics", "bullet2", "bullet3"]
       }
     ],
@@ -2850,7 +2875,7 @@ ${
     // so project names, tech stack, and URLs are preserved verbatim (anti-fabrication).
     if (result.tailoredResume && Array.isArray(userProfile.relevantProjects) && userProfile.relevantProjects.length > 0) {
       const buildProjectsSection = (projects: any[]): string => {
-        const lines: string[] = ["SELECTED PROJECTS", ""];
+        const lines: string[] = ["PROJECTS", ""];
         for (const p of projects) {
           if (!p || typeof p !== "object") continue;
           const name = (p.name || "").toString().trim();
@@ -2882,7 +2907,7 @@ ${
       if (projectsBlock) {
         let resume = result.tailoredResume;
         // Strip ALL existing projects sections — case-insensitive and global, looping until no match remains.
-        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
+        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|KEY PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
         while (sectionRegex.test(resume)) {
           resume = resume.replace(sectionRegex, "");
           // Reset lastIndex so the next global search starts from the top of the updated text
@@ -2897,7 +2922,7 @@ ${
         } else {
           result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
         }
-        console.log(`Injected SELECTED PROJECTS section (${userProfile.relevantProjects.length} projects)`);
+        console.log(`Injected PROJECTS section (${userProfile.relevantProjects.length} projects)`);
       }
     }
 
@@ -3270,7 +3295,7 @@ ${
           company: exp?.company || "",
           title: exp?.title || "",
           dates:
-            exp?.dates || `${exp?.startDate || exp?.start_date || ""} – ${exp?.endDate || exp?.end_date || "Present"}`,
+            exp?.dates || formatDateRangeATS(exp?.startDate || exp?.start_date, exp?.endDate || exp?.end_date, "Present"),
           // PRIORITY: Use 'bullets' array first (clean structured data), fallback to 'description'
           bullets:
             Array.isArray(exp?.bullets) && exp.bullets.length > 0
@@ -3287,7 +3312,7 @@ ${
         education: (Array.isArray(userProfile.education) ? userProfile.education : []).map((edu: any) => ({
           degree: edu?.degree || "",
           school: edu?.school || edu?.institution || "",
-          dates: edu?.dates || `${edu?.startDate || ""} – ${edu?.endDate || ""}`,
+          dates: edu?.dates || formatDateRangeATS(edu?.startDate, edu?.endDate),
           gpa: edu?.gpa || "",
         })),
         skills: {
