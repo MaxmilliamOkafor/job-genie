@@ -284,6 +284,76 @@
               <div id="followupDetected" class="fu-note"></div>
             </div>
 
+            <!-- 2b. Contact lookup (opt-in) -->
+            <div class="fu-card">
+              <div class="fu-card-title">Contact lookup <span class="fu-hint">optional</span></div>
+              <p class="fu-note" style="margin-top:0;">
+                Used <strong>only</strong> when the posting, its structured data and the
+                employer's careers page all publish no address. Looks up a recruiter for
+                <em>this</em> company, role and location through <strong>your own</strong>
+                provider account. A looked-up address is a business email from a data
+                provider, not one the recipient gave you - in the EU that needs a lawful
+                basis under GDPR and the responsibility sits with you as sender. It is
+                always shown for review and never overwrites a published address.
+              </p>
+
+              <div class="fu-field">
+                <label class="fu-label" for="enrichEnabledLabel">
+                  Enable lookup <span class="fu-hint">off by default</span>
+                </label>
+                <label class="toggle-switch" for="enrichEnabledToggle" id="enrichEnabledLabel"
+                       aria-label="Toggle contact lookup">
+                  <input type="checkbox" id="enrichEnabledToggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <div class="fu-field" style="margin-top:9px;">
+                <label class="fu-label" for="enrichProvider">Provider</label>
+                <select id="enrichProvider" class="fu-select"></select>
+              </div>
+              <p id="enrichHint" class="fu-note"></p>
+
+              <!-- Providers that issue a key from their dashboard. -->
+              <div id="enrichKeyFields">
+                <div class="fu-field">
+                  <label class="fu-label" for="enrichApiKey">
+                    API key <span class="fu-hint">stored on this device only</span>
+                  </label>
+                  <input type="password" id="enrichApiKey" class="fu-input fu-input-mono"
+                         placeholder="Paste your provider API key here" autocomplete="off" />
+                </div>
+              </div>
+
+              <!-- Closely publishes no dashboard key: its API mints a token
+                   for an account holder. The password is sent once to
+                   Closely's own login endpoint and never stored. -->
+              <div id="enrichAccountFields" style="display:none;">
+                <div class="fu-field">
+                  <label class="fu-label" for="enrichAccountEmail">Provider account email</label>
+                  <input type="email" id="enrichAccountEmail" class="fu-input"
+                         placeholder="you@example.com" autocomplete="off" />
+                </div>
+                <div class="fu-field" style="margin-top:9px;">
+                  <label class="fu-label" for="enrichAccountPassword">
+                    Password <span class="fu-hint">used once to mint a token, never stored</span>
+                  </label>
+                  <input type="password" id="enrichAccountPassword" class="fu-input"
+                         placeholder="Your provider password" autocomplete="off" />
+                </div>
+              </div>
+
+              <div class="fu-actions">
+                <button id="enrichSaveBtn" class="fu-btn fu-btn-primary">Save key</button>
+                <button id="enrichTestBtn" class="fu-btn">Test key</button>
+                <button id="enrichClearBtn" class="fu-btn">Clear</button>
+              </div>
+              <div class="fu-actions">
+                <button id="enrichGetKeyBtn" class="fu-btn fu-btn-wide">Open provider API keys page ↗</button>
+              </div>
+              <div id="enrichStatus" class="fu-note"></div>
+            </div>
+
             <!-- 3. Message -->
             <div class="fu-card">
               <div class="fu-card-title">Message template</div>
@@ -1029,6 +1099,7 @@
   <script src="qualification-threshold-engine.js"></script>
   <script src="apply-verdict.js"></script>
   <script src="jd-contact-extractor.js"></script>
+  <script src="contact-enrichment.js"></script>
   <script src="followup-email.js"></script>
   <script src="cover-letter-generator.js"></script>
   <script src="recruiter-audit.js"></script>

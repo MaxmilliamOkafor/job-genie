@@ -26,7 +26,10 @@ document.body.innerHTML = `
   <p>Questions about this role? <a href="mailto:talent@nortal.com?subject=Role">Get in touch</a></p>
   <p>For accessibility requests contact <a href="mailto:legal@nortal.com">legal</a></p>
   <p>Do not reply to <a href="mailto:noreply@lever.co">this</a></p>
-  <div class="hirer-card__hirer-information"><a href="/in/leekelly">Lee Kelly</a> • 2nd</div>`;
+  <div class="hirer-card__hirer-information">
+    <a href="/in/leekelly">Lee Kelly</a> • 2nd
+    <div class="hirer-card__hirer-job-title">Talent Acquisition Partner at Nortal</div>
+  </div>`;
 
 const h=S.harvest(document);
 console.log('harvested:', JSON.stringify(h,null,1).slice(0,400));
@@ -60,5 +63,27 @@ t('contact name filled', /Aoife Byrne|Lee Kelly/.test(r.contactName), r.contactN
 const r2=E.extract({ jdText:'Enquiries: hr@nortal.com', url:'x', ownEmail:'', pageSources:{emails:[],names:[],org:'',jobId:''} });
 t('degrades to text-only cleanly', r2.email==='hr@nortal.com', r2.email);
 t('never invents an address', E.extract({jdText:'No contact here.',url:'x',ownEmail:'',pageSources:{emails:[],names:[],org:'',jobId:''}}).email==='');
+
+// ---- the poster's profile handle, for opt-in lookup -------------------
+// The handle is not an address and is never turned into one here; it is
+// what lets a user's own provider resolve THAT person instead of guessing
+// at whoever the company search ranks first.
+const poster=h.names.find(n=>n.name==='Lee Kelly');
+t('the poster\'s profile handle is captured', poster&&poster.profile==='leekelly', JSON.stringify(poster));
+t('the poster\'s title is captured', poster&&/Talent Acquisition/.test(poster.title||''), JSON.stringify(poster));
+t('the handle reaches the extractor result',
+  (r.sourceNames||[]).some(n=>n.profile==='leekelly'), JSON.stringify(r.sourceNames));
+t('capturing a handle produces no address',
+  !r.allEmails.some(e=>/leekelly/i.test(e)), JSON.stringify(r.allEmails));
+
+// LinkedIn's opaque URN form is not a public handle and must not be stored
+// as one: it would be looked up as a literal string and never resolve.
+document.body.innerHTML =
+  '<div class="hirer-card__hirer-information"><a href="/in/ACoAAB1234xyzQ">Dana Quinn</a></div>';
+const urn=S.fromLinkedInPoster(document);
+t('an opaque LinkedIn URN is not stored as a handle',
+  urn.length===1&&!urn[0].profile, JSON.stringify(urn));
+t('the name is still kept when the handle is unusable', urn[0]&&urn[0].name==='Dana Quinn', JSON.stringify(urn));
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

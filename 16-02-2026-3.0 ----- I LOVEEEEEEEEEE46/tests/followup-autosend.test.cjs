@@ -24,5 +24,17 @@ t('does not send a test email', !/test: true/.test(fn));
 t('no reference to untracked ats_submitted_jobs', !/ats_submitted_jobs/.test(src));
 t('no orphaned pending-send queue', !/followup_pending_send/.test(src));
 
+// --- detection is async now, so the auto-send must wait for it
+// Contact detection injects into the job tab and may consult a lookup
+// provider. If the send does not await it, a slow page produces "no
+// address" and the note is silently never sent.
+t('contact detection is tracked as a promise',
+  /this\.contactDetection\s*=\s*this\.followupDetectContact\(\)/.test(src), 'fire and forget');
+t('the auto-send waits for contact detection',
+  /async autoSendFollowup\(\)[\s\S]{0,900}await this\.contactDetection/.test(src),
+  'would decide "no address" mid-detection');
+t('waiting for detection cannot fail the send',
+  /try\s*\{\s*await this\.contactDetection;\s*\}\s*catch/.test(src), 'a detection error would abort the note');
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

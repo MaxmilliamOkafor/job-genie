@@ -221,6 +221,11 @@
       allEmails: found.map((f) => f.email).slice(0, 5),
       jobId: extractJobId(jdText, url) || (harvested && harvested.jobId) || '',
       contactName: extractContactName(jdText) || harvestedName,
+      // Every name the page published, with the LinkedIn profile handle
+      // when the hiring-team card carried one. Carried through so an
+      // opt-in lookup can resolve THAT person rather than guessing at the
+      // company. Still name-only: no address is derived from it here.
+      sourceNames: (harvested && harvested.names) ? harvested.names.slice(0, 5) : [],
       location: opts.location || extractLocation(jdText),
       department: extractDepartment(jdText),
       title: opts.title || '',
