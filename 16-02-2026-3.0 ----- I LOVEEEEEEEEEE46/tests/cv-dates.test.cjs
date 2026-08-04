@@ -20,19 +20,21 @@ fs.unlinkSync(tmp);
 const extract=(mode)=>xml.replace(/<w:tab\/>/g,mode).replace(/<\/w:p>/g,'\n').replace(/<[^>]+>/g,'');
 
 t('MM/YYYY range is recognised as a date', !/01\/2023/.test(xml), 'raw MM/YYYY still present -> isDateLine missed it');
-t('rendered as readable month-year', /Jan 2023/.test(xml) && /Feb 2024/.test(xml), 'not prettified');
+t('rendered as full month-year', /January 2023/.test(xml) && /February 2024/.test(xml), 'not prettified');
+t('no numeric month/year survives', !/\d{1,2}\/\d{4}/.test(extract('\t')), 'slash form still present');
+t('abbreviations expanded for consistency', !/\b(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d{4}/.test(extract('\t')), 'mixed abbreviated and full');
 // Plain hyphen: ATS date parsers are documented against it, and an en
 // dash is a needless gamble in the field where a parse failure costs an
 // employment record.
-t('plain hyphen separator, not an en dash', /Jan 2023 - Present/.test(extract('\t')) && !/\u2013/.test(extract('\t')), 'separator wrong');
+t('plain hyphen separator, not an en dash', /January 2023 - Present/.test(extract('\t')) && !/\u2013/.test(extract('\t')), 'separator wrong');
 t('right-aligned tab stop used', /w:val="right"/.test(xml));
 for (const [label,mode] of [['dropped',''],['as \\t','\t'],['as space',' ']]) {
   const line=extract(mode).split('\n').find(l=>/Software Engineer/.test(l))||'';
-  t('title and date share a line when tab is '+label, /Software Engineer/.test(line) && /Jan 2023/.test(line), JSON.stringify(line));
-  t('  title never glues to the date ('+label+')', !/Engineer(Jan|\d)/.test(line), JSON.stringify(line));
+  t('title and date share a line when tab is '+label, /Software Engineer/.test(line) && /January 2023/.test(line), JSON.stringify(line));
+  t('  title never glues to the date ('+label+')', !/Engineer(January|\d)/.test(line), JSON.stringify(line));
 }
 const flat=extract('\t');
-t('each role keeps its own date', /Software Engineer[\s\S]{0,40}Jan 2023/.test(flat) && /part-time\)[\s\S]{0,40}Feb 2024/.test(flat));
-t('no orphaned date-only line remains', !/^\s*Jan 2023 \u2013 Present\s*$/m.test(flat), 'date still on its own line');
+t('each role keeps its own date', /Software Engineer[\s\S]{0,40}January 2023/.test(flat) && /part-time\)[\s\S]{0,40}February 2024/.test(flat));
+t('no orphaned date-only line remains', !/^\s*January 2023 - Present\s*$/m.test(flat), 'date still on its own line');
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);
