@@ -33,5 +33,11 @@ t('handles Month YYYY dates', r3.sorted===true && r3.text.indexOf('New')<r3.text
 t('no experience section is a no-op', RA.sortExperienceByStartDate('SUMMARY\nx').sorted===false);
 t('single role is a no-op', RA.sortExperienceByStartDate(mk([['A','T','01/2020 - Present']])).sorted===false);
 t('empty input is a no-op', RA.sortExperienceByStartDate('').sorted===false);
+// The sorter is now ON by default: no toggle, and a no-op when correct.
+const src=require('fs').readFileSync(path.join(__dirname,'..','recruiter-audit.js'),'utf8');
+t('sorting defaults ON', /strictDateOrder: flags\.strictDateOrder !== false/.test(src), 'still opt-in');
+const html=require('fs').readFileSync(path.join(__dirname,'..','popup.html'),'utf8');
+t('no UI toggle remains', !/strictDateOrderToggle/.test(html), 'toggle still in popup.html');
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);
