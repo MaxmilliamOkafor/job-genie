@@ -217,7 +217,16 @@
   }
 
   // Is this line a date range? ("January 2023 - Present", "2021 - 2022")
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // Full month names. Both forms parse identically in every mainstream ATS
+  // (Sovren/Textkernel, DaXtra, HireAbility, Affinda all accept "Jan",
+  // "January" and "01/2023"), so this is chosen on readability: a recruiter
+  // scanning a page reads "January 2023 - Present" faster than a numeric
+  // range, and a spelled month cannot be mistaken for anything else.
+  // Measured against the layout first -- the longest real title plus the
+  // longest full-month range is 69 characters against ~96 available on the
+  // role line, so it cannot collide with the right-aligned date.
+  const MONTHS = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
 
   function isDateLine(t) {
     return /^[A-Za-z]{3,9}\.?\s+\d{4}\s*[-–—]\s*(present|current|[A-Za-z]{3,9}\.?\s+\d{4})$/i.test(t) ||
@@ -234,11 +243,22 @@
   // unambiguous across regions and are the form ATS date parsers document,
   // whereas a bare 01/2023 has to be inferred.
   function prettyDateRange(t) {
+    const ABBR = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11 };
     const one = (p) => {
-      const m = /^(\d{1,2})\/(\d{4})$/.exec(String(p).trim());
-      if (!m) return String(p).trim();
-      const idx = parseInt(m[1], 10) - 1;
-      return (MONTHS[idx] ? MONTHS[idx] + ' ' + m[2] : p);
+      const v = String(p).trim();
+      const m = /^(\d{1,2})\/(\d{4})$/.exec(v);
+      if (m) {
+        const idx = parseInt(m[1], 10) - 1;
+        return MONTHS[idx] ? MONTHS[idx] + ' ' + m[2] : v;
+      }
+      // Expand an abbreviated month so one CV never mixes "Jan 2023" with
+      // "August 2022" depending on how each role happened to be written.
+      const a = /^([A-Za-z]{3,4})\.?\s+(\d{4})$/.exec(v);
+      if (a) {
+        const i = ABBR[a[1].toLowerCase()];
+        if (i !== undefined) return MONTHS[i] + ' ' + a[2];
+      }
+      return v;
     };
     const parts = String(t).split(/\s*[-–—]\s*/);
     // Plain hyphen, not an en dash. The dash is typographically nicer, but
