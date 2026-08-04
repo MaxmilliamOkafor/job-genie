@@ -2437,7 +2437,7 @@ ABSOLUTE RULES:
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
 6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
-7. Dates MUST be in MM/YYYY format (e.g., "01/2023 – Present", "04/2021 – 12/2022")
+7. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
 
 HUMANIZED TONE RULES:
 - Active voice only
