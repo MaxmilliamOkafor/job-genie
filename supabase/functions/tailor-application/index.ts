@@ -2430,7 +2430,7 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 === END CRITICAL RULE ===
 
 ABSOLUTE RULES:
-1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (MM/YYYY format) - Only tailor the bullet points
+1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (full month name + year format) - Only tailor the bullet points
 2. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
 2. Location in CV header MUST be the job-derived location: "${smartLocation}" (NO "open to relocation" suffix, NO hardcoded Dublin)
 3. NO typos, grammatical errors, or formatting issues
