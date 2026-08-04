@@ -856,6 +856,12 @@ class ATSTailor {
       this.showToast(enabled ? '🚀 Auto-submit ARMED' : 'Auto-submit off', enabled ? 'warning' : 'success');
     });
 
+    document.getElementById('strictDateOrderToggle')?.addEventListener('change', (e) => {
+      const enabled = !!e.target?.checked;
+      chrome.storage.local.set({ cv_strict_date_order: enabled });
+      this.showToast(enabled ? '📅 Strict date order ON' : 'Strict date order OFF', 'success');
+    });
+
     // ---- Application follow-up email ----------------------------------
     document.getElementById('followupEnabledToggle')?.addEventListener('change', (e) => {
       const enabled = !!e.target?.checked;
@@ -1362,7 +1368,7 @@ class ATSTailor {
     const result = await new Promise(resolve => {
       chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled',
         'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled', 'followup_enabled',
-        'followup_attach_enabled'], resolve);
+        'followup_attach_enabled', 'cv_strict_date_order'], resolve);
     });
 
     // Default OFF: matches "Toggle off to save API usage" messaging.
@@ -1385,6 +1391,9 @@ class ATSTailor {
     // Defaults ON: attaching the tailored documents is the useful case.
     const atToggle = document.getElementById('followupAttachToggle');
     if (atToggle) atToggle.checked = result.followup_attach_enabled !== false;
+    // Default OFF: reordering can demote a current role, so it is a choice.
+    const sdToggle = document.getElementById('strictDateOrderToggle');
+    if (sdToggle) sdToggle.checked = result.cv_strict_date_order === true;
     this.followupLoadTemplate();
     this.followupRefreshStatus();
     // DOCX is now the only attach format; the selector was removed and
@@ -5024,9 +5033,10 @@ class ATSTailor {
       // or the caller passes options.recruiterAudit === false.
       if (options.recruiterAudit !== false && typeof RecruiterAudit !== 'undefined' && this.generatedDocuments.cv) {
         try {
-          const profile = await new Promise((resolve) =>
-            chrome.storage.local.get(['ats_profile'], (r) => resolve(r.ats_profile || {}))
+          const stored = await new Promise((resolve) =>
+            chrome.storage.local.get(['ats_profile', 'cv_strict_date_order'], (r) => resolve(r || {}))
           );
+          const profile = stored.ats_profile || {};
           const candidateName = [profile.first_name || profile.firstName, profile.last_name || profile.lastName]
             .filter(Boolean).join(' ').trim();
           const audited = RecruiterAudit.runRecruiterAudit({
@@ -5043,6 +5053,10 @@ class ATSTailor {
             // and silently broke every original-vs-tailored comparison.
             originalCV: this.getOriginalCVText(),
             jobKeywords: this.generatedDocuments.keywords || null,
+            // Opt-in strict reverse-chronological ordering. Off unless the
+            // user has asked for it, because it can place a concurrent
+            // part-time contract above a current full-time role.
+            flags: { strictDateOrder: stored.cv_strict_date_order === true },
             // v8: guarantee the SELECTED PROJECTS section from the profile's
             // structured projects (with verbatim live/code links) so it
             // renders on every generated CV, fully ATS-parseable.
