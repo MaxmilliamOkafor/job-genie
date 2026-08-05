@@ -2744,7 +2744,11 @@ class ATSTailor {
     } catch (e) {
       // A failed note must never look like a failed tailoring run, but it
       // must not look like a successful one either.
-      await outcome('failed', 'Follow-up could not be sent: ' + (e && e.message ? e.message : e), 'error');
+      try {
+        await outcome('failed', 'Follow-up could not be sent: ' + (e && e.message ? e.message : e), 'error');
+      } catch (reportError) {
+        console.warn('[ATS Tailor] could not report follow-up failure:', reportError && reportError.message);
+      }
     }
   }
 
@@ -2854,16 +2858,20 @@ class ATSTailor {
   // Called after tailoring: read the posting for a PUBLISHED contact email
   // and the job/requisition ID, then surface it in the composer.
   async followupDetectContact() {
-    // Clear FIRST. Without this, a run whose detection fails leaves the
-    // previous job's recipient in place, and the note for this application
-    // goes to a recruiter at the last company. A missing address is a
-    // skipped email; a stale one is an email to the wrong employer.
-    this.jdContact = null;
-    if (this.generatedDocuments) this.generatedDocuments.jdContact = null;
-    const toEl0 = document.getElementById('followupTo');
-    if (toEl0 && toEl0.dataset.autofilled === '1') { toEl0.value = ''; delete toEl0.dataset.autofilled; }
-
     try {
+      // Clear FIRST. Without this, a run whose detection fails leaves the
+      // previous job's recipient in place, and the note for this
+      // application goes to a recruiter at the last company. A missing
+      // address is a skipped email; a stale one is an email to the wrong
+      // employer.
+      this.jdContact = null;
+      if (this.generatedDocuments) this.generatedDocuments.jdContact = null;
+      const toEl0 = document.getElementById('followupTo');
+      if (toEl0 && toEl0.dataset && toEl0.dataset.autofilled === '1') {
+        toEl0.value = '';
+        delete toEl0.dataset.autofilled;
+      }
+
       if (typeof JDContactExtractor === 'undefined') return;
       const jdText = this.currentJob?.description || this.currentJob?.jdText || '';
       const detected = JDContactExtractor.extract({
@@ -5086,7 +5094,19 @@ class ATSTailor {
     // panel. It runs unconditionally, and starting it here also overlaps
     // the tab read and any provider call with document generation instead
     // of waiting until after it. autoSendFollowup awaits the promise.
-    this.contactDetection = this.followupDetectContact();
+    // Guarded on BOTH sides. Hoisting this out of the ApplyVerdict block
+    // was meant to stop another feature's failure from costing the
+    // application its recipient -- but it left the call itself unprotected
+    // in the middle of the tailoring path, where a synchronous throw kills
+    // the run and a rejected promise nobody awaits surfaces as an
+    // unhandled error. Finding the recipient must never be able to stop
+    // the CV being written.
+    this.contactDetection = Promise.resolve()
+      .then(() => this.followupDetectContact())
+      .catch((e) => {
+        console.warn('[ATS Tailor] contact detection failed (tailoring continues):', e && e.message);
+        return null;
+      });
 
     const startTime = Date.now();
     const btn = document.getElementById('tailorBtn');
@@ -6002,7 +6022,15 @@ class ATSTailor {
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
 
       // Documents exist and are stored: the note can now carry them.
-      await this.autoSendFollowup();
+      // Same rule as detection -- the follow-up is an extra, and it must
+      // not be able to fail a tailoring run that has already produced both
+      // documents. Anything thrown here would surface as a failed tailor.
+      try {
+        await this.autoSendFollowup();
+      } catch (followupError) {
+        console.warn('[ATS Tailor] follow-up step failed (documents are fine):',
+          followupError && followupError.message);
+      }
 
       const elapsed = (Date.now() - startTime) / 1000;
       this.stats.today++;
