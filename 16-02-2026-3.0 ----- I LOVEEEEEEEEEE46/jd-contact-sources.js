@@ -67,6 +67,7 @@
     const emails = [];
     const names = [];
     let org = '';
+    let orgUrl = '';
     let jobId = '';
     try {
       for (const el of doc.querySelectorAll('script[type="application/ld+json"]')) {
@@ -77,6 +78,15 @@
         for (const p of hits) {
           const ho = p.hiringOrganization;
           if (!org) org = _clean(typeof ho === 'string' ? ho : (ho && ho.name));
+          // The employer's OWN website, which most ATS emit for Google
+          // Jobs. On a Greenhouse or Workday posting the page's own host
+          // is the ATS vendor's, shared by thousands of employers, so this
+          // is the only structured way to learn whose mail domain to
+          // prefer for this application.
+          if (!orgUrl && ho && typeof ho === 'object') {
+            const same = Array.isArray(ho.sameAs) ? ho.sameAs[0] : ho.sameAs;
+            orgUrl = _clean(ho.url || same);
+          }
           if (!jobId) {
             jobId = _clean(p.identifier && (typeof p.identifier === 'string' ? p.identifier : p.identifier.value));
           }
@@ -98,7 +108,7 @@
         }
       }
     } catch (e) {}
-    return { emails, names, org, jobId };
+    return { emails, names, org, orgUrl, jobId };
   }
 
   // ---- 3. LinkedIn job poster ------------------------------------------
@@ -208,7 +218,7 @@
    */
   function harvest(doc) {
     const d = doc || (typeof document !== 'undefined' ? document : null);
-    if (!d) return { emails: [], names: [], org: '', jobId: '' };
+    if (!d) return { emails: [], names: [], org: '', orgUrl: '', jobId: '' };
 
     const ld = fromJsonLd(d);
     const meta = fromMeta(d);
@@ -243,6 +253,7 @@
       emails: uniqueEmails,
       names: uniqueNames,
       org: ld.org || meta.org || '',
+      orgUrl: ld.orgUrl || '',
       jobId: ld.jobId || '',
     };
   }

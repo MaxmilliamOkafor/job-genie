@@ -466,7 +466,12 @@ t('the handle from the search is resolved through the confirmed endpoint',
   CALLS.some(c=>/contacts\/find/.test(c.url)&&/aoifebyrne/.test(c.init.body||'')),
   JSON.stringify(CALLS.map(c=>c.url)));
 t('the working endpoint is remembered',
-  (STORE['enrichment_config'].searchEndpoints||{}).closely==='https://api.closelyhq.com/explorer/contacts/search',
+  ((STORE['enrichment_config'].searchEndpoints||{}).closely||{}).url==='https://api.closelyhq.com/explorer/contacts/search',
+  JSON.stringify(STORE['enrichment_config'].searchEndpoints));
+// Their confirmed endpoint rejects JSON, so the probe must settle on the
+// encoding that actually answered rather than assuming one.
+t('the encoding that worked is remembered too',
+  ((STORE['enrichment_config'].searchEndpoints||{}).closely||{}).contentType==='application/x-www-form-urlencoded',
   JSON.stringify(STORE['enrichment_config'].searchEndpoints));
 
 // Probing must happen once, not on every lookup.
@@ -519,6 +524,41 @@ t('an opaque URN is rejected rather than looked up', rp.reason==='bad-profile', 
 await reset({});
 rp=await E.resolveProfile('https://www.linkedin.com/in/aoifebyrne');
 t('resolveProfile respects the master switch', rp.reason==='disabled', JSON.stringify(rp));
+
+// ---- 16h. a work address, not somebody's private mailbox ---------------
+// Providers hand back personal addresses freely: ContactOut will return a
+// gmail.com address and put "find work email" behind a separate action. A
+// job follow-up landing in a private inbox is both less likely to be read
+// and reads as a cold approach.
+t('a freemail address is recognised as personal', E.isPersonalEmail('garenright@gmail.com'));
+t('a company address is not', !E.isPersonalEmail('gary.enright@nortal.com'));
+t('case and subdomains do not fool it', E.isPersonalEmail('X@GMail.com')&&!E.isPersonalEmail('a@mail.nortal.com'));
+
+const ctxD={company:'Nortal',domain:'nortal.com'};
+t('a work address outranks a personal one for the same title',
+  E.scoreCandidate({title:'Recruiter',email:'a@nortal.com'},{},ctxD)
+  > E.scoreCandidate({title:'Recruiter',email:'a@gmail.com'},{},ctxD));
+t('the employer\'s own domain outranks another company address',
+  E.scoreCandidate({title:'Recruiter',email:'a@nortal.com'},{},ctxD)
+  > E.scoreCandidate({title:'Recruiter',email:'a@elsewhere.com'},{},ctxD));
+
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+RESPOND=()=>reply(200,{data:{entries:[
+  {full_name:'Gary Enright',title:'Product Director',emails:['garenright@gmail.com','gary.enright@nortal.com']},
+]}});
+r=await E.findContacts({company:'Nortal',domain:'nortal.com',linkedinProfiles:['gary-enright']});
+t('the work address is chosen when both are returned',
+  r.results[0].email==='gary.enright@nortal.com', JSON.stringify(r.results.map(x=>x.email)));
+
+// A personal address is still better than nothing, but must be flagged.
+RESPOND=()=>reply(200,{data:{entries:[
+  {full_name:'Gary Enright',title:'Product Director',emails:['garenright@gmail.com']},
+]}});
+await E.clearCache();
+let be=await E.bestEmail({company:'Nortal',domain:'nortal.com',linkedinProfiles:['gary-enright']});
+t('a personal-only result is still returned', be.email==='garenright@gmail.com', JSON.stringify(be));
+t('and is flagged as personal', be.personal===true, JSON.stringify(be));
 
 // ---- 17. the trace explains what happened ------------------------------
 // A lookup that never fired must not look like one that found nobody.

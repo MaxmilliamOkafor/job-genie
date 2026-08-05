@@ -866,6 +866,7 @@ class ATSTailor {
     document.getElementById('indeedRunNowBtn')?.addEventListener('click', () => this.runSiteAutofill('indeed'));
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
+    document.getElementById('followupPreflightBtn')?.addEventListener('click', () => this.followupPreflight());
     document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
     document.getElementById('followupClearClientBtn')?.addEventListener('click', () => this.followupSaveClientId(true));
     document.getElementById('followupCopyRedirectBtn')?.addEventListener('click', () => this.followupCopyRedirect());
@@ -3087,6 +3088,146 @@ class ATSTailor {
     }
   }
 
+  /**
+   * Every precondition a follow-up depends on, checked in order, each with
+   * the specific thing to change when it fails.
+   *
+   * This exists because the failure that cost fifteen applications was not
+   * any single broken step -- it was that no screen showed which step was
+   * broken. Each area had its own diagnostic and none of them covered the
+   * chain, so finding the answer meant knowing in advance where to look.
+   *
+   * Sends nothing and spends no provider credits.
+   */
+  async followupPreflight() {
+    const out = document.getElementById('followupPreflight');
+    const lines = [];
+    const flush = () => { if (out) out.textContent = lines.join('\n'); };
+    const say = (s) => { lines.push(s); flush(); };
+    let blockers = 0;
+    const ok = (label, detail) => say('  OK    ' + label + (detail ? '  -  ' + detail : ''));
+    const bad = (label, fix) => { blockers++; say('  STOP  ' + label + '\n           fix: ' + fix); };
+    const note = (label, detail) => say('  note  ' + label + (detail ? '  -  ' + detail : ''));
+
+    say('Checking…'); lines.length = 0;
+
+    try {
+      // 1. Modules. A file missing from popup.html is invisible at runtime.
+      const missing = [
+        ['JDContactExtractor', typeof JDContactExtractor !== 'undefined'],
+        ['FollowupEmail', typeof FollowupEmail !== 'undefined'],
+        ['ContactEnrichment', typeof ContactEnrichment !== 'undefined'],
+        ['JGProfileMemory', typeof JGProfileMemory !== 'undefined'],
+      ].filter(([, present]) => !present).map(([n]) => n);
+      if (missing.length) bad('Modules not loaded: ' + missing.join(', '),
+        'reload the extension at chrome://extensions (the files are not being loaded)');
+      else ok('All modules loaded');
+
+      // 2. The master switch. Off here means nothing sends, however much
+      //    else works -- and it was silent about it.
+      const st = await new Promise((r) => chrome.storage.local.get(
+        ['followup_enabled', 'followup_attach_enabled', 'followup_last_outcome'], (x) => r(x || {})));
+      if (st.followup_enabled === true) ok('Follow-up email is ON');
+      else bad('Follow-up email is OFF, so nothing will send',
+        'turn on "Application Follow-up Email" in Settings');
+      if (st.followup_attach_enabled === false) {
+        note('Attachments are OFF', 'the note would go without your CV and cover letter');
+      } else ok('Attachments are ON');
+
+      // 3. Gmail. Without a token the send fails at the last step.
+      let gmailReady = false;
+      let gmailMode = '';
+      try {
+        gmailReady = typeof FollowupEmail !== 'undefined' && !!(await FollowupEmail.isConnected());
+        gmailMode = typeof FollowupEmail !== 'undefined' ? await FollowupEmail.authMode() : '';
+      } catch (e) { gmailReady = false; }
+      if (gmailReady) ok('Gmail connected', gmailMode ? 'via ' + gmailMode + ' client' : '');
+      else if (gmailMode === 'unconfigured') {
+        // No OAuth client at all: the API send cannot work, but the compose
+        // path can, and it needs no Cloud Console project.
+        bad('No Gmail OAuth client configured',
+          'either paste a client ID above, or use "Open in Gmail" to send by hand');
+      } else {
+        bad('Gmail not connected', 'press "Connect Gmail" above, then re-run this check');
+      }
+
+      // 4. A job in front of us.
+      const job = this.currentJob || {};
+      const company = this.enrichCompanyName();
+      if (job.title || company) {
+        ok('Job detected', (company || '?') + ' - ' + (job.title || 'untitled'));
+      } else {
+        bad('No job detected on this page',
+          'open the job posting itself, then reopen this popup');
+      }
+
+      // 5. Documents. The note is held rather than sent empty-handed.
+      const files = this.followupAttachments();
+      if (files.length) ok('Documents ready', files.map((f) => f.filename).join(', '));
+      else note('No tailored documents yet',
+        'run "Extract & Apply Keywords to CV" first - the note is held until both exist');
+
+      // 6. A recipient, and where it would come from.
+      const detected = this.jdContact || this.generatedDocuments?.jdContact || {};
+      const typed = (document.getElementById('followupTo')?.value || '').trim();
+      if (detected.email || typed) {
+        ok('Recipient', (detected.email || typed)
+          + ' (' + (detected.emailSource || 'typed by you') + ')');
+      } else {
+        note('No recipient yet', 'nothing published on this posting; the lookup below decides');
+      }
+
+      // 7. The lookup, and what it has to work with.
+      if (typeof ContactEnrichment !== 'undefined') {
+        const cfg = await ContactEnrichment.loadConfig();
+        if (cfg.enabled !== true) {
+          note('Contact lookup is OFF',
+            'published addresses still work; switch it on to search when none is published');
+        } else {
+          const withCred = [];
+          for (const p of ContactEnrichment.listProviders()) {
+            const c = await ContactEnrichment.getCred(p.id);
+            if (c && (c.apiKey || c.token)) withCred.push(p.label);
+          }
+          if (withCred.length) ok('Contact lookup ON', 'credentials: ' + withCred.join(', '));
+          else bad('Contact lookup is ON but no provider has a credential',
+            'sign in to Closely, or paste a ContactOut/Hunter/Apollo key, in Contact lookup below');
+
+          const handles = await this.followupProfileHandles();
+          if (handles.length) ok('LinkedIn profiles available', handles.slice(0, 3).join(', '));
+          else note('No LinkedIn profile for this employer',
+            'open a recruiter\'s profile, or visit a few - browsed profiles are remembered and matched later');
+        }
+      }
+
+      // 8. Can we read the job page at all? An injection failure here is
+      //    why published mailto links and JSON-LD went unseen for so long.
+      const sources = await this.followupHarvestPageSources();
+      if (sources === null) {
+        note('Could not read the job page',
+          'a restricted page (chrome:// or the Web Store) blocks this; open the posting itself');
+      } else {
+        ok('Job page readable',
+          sources.emails.length + ' published address(es), ' + sources.names.length + ' name(s)');
+      }
+
+      // 9. What happened last time, so a past silent skip is visible now.
+      if (st.followup_last_outcome) {
+        const o = st.followup_last_outcome;
+        note('Last follow-up (' + new Date(o.at).toLocaleString('en-GB') + ')', o.message);
+      }
+
+      say('');
+      say(blockers === 0
+        ? 'No blockers. Tailor a job and the follow-up will send if an address is found,'
+          + '\nand skip quietly if none is.'
+        : blockers + ' blocker(s) above would stop a follow-up. Fix those first.');
+    } catch (e) {
+      say('');
+      say('Check failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+
   // Runs the real lookup against the job in the current tab and prints
   // every step: what the job resolved to, what the page already published,
   // which providers were tried or skipped and why, and what came back.
@@ -3130,7 +3271,7 @@ class ATSTailor {
         title: this.currentJob?.title || '',
         location: this.currentJob?.location || '',
         domain: this.followupCompanyDomain(),
-        linkedinProfiles: this.followupPosterProfiles(),
+        linkedinProfiles: await this.followupProfileHandles(),
       };
       say('');
       say('Searching for:');
@@ -3138,9 +3279,11 @@ class ATSTailor {
       say('  role     : ' + (ctx.title || '(unknown)'));
       say('  location : ' + (ctx.location || '(none)'));
       say('  domain   : ' + (ctx.domain || '(none)'));
-      say('  poster   : ' + (ctx.linkedinProfiles.length
+      const activeProfile = await this.activeLinkedInProfile();
+      say('  profiles : ' + (ctx.linkedinProfiles.length
         ? ctx.linkedinProfiles.join(', ')
-        : '(none - this page names nobody)'));
+          + (activeProfile ? '   (' + activeProfile + ' is the profile open in this tab)' : '')
+        : '(none - no profile open and this page names nobody)'));
 
       say('');
       say('Running lookup (this spends provider credits)…');
@@ -3389,7 +3532,7 @@ class ATSTailor {
         title: this.currentJob?.title || '',
         location: this.currentJob?.location || '',
         domain: this.followupCompanyDomain(),
-        linkedinProfiles: this.followupPosterProfiles(),
+        linkedinProfiles: await this.followupProfileHandles(),
       };
 
       const hit = await ContactEnrichment.bestEmail(ctx);
@@ -3424,7 +3567,7 @@ class ATSTailor {
       if (info) {
         // Labelled honestly. This is not an address the employer published,
         // and the user is the one who decides whether to write to it.
-        info.textContent = 'Looked up (not published): ' + hit.email
+        info.textContent = (hit.personal ? 'Looked up, PERSONAL mailbox: ' : 'Looked up (not published): ') + hit.email
           + (hit.name ? ' - ' + hit.name : '')
           + (hit.title ? ', ' + hit.title : '')
           + '. Review before sending.';
@@ -3461,7 +3604,11 @@ class ATSTailor {
     try {
       const published = (this.jdContact || this.generatedDocuments?.jdContact)?.email || '';
       if (published.indexOf('@') !== -1) return published.split('@')[1].toLowerCase();
-      const url = this.currentJob?.url || '';
+      // The employer's own site, as declared in the posting's JSON-LD.
+      // Checked before the page URL because on an ATS host the page URL
+      // belongs to the ATS vendor, not the employer.
+      const declared = (this.jdContact || this.generatedDocuments?.jdContact)?.orgUrl || '';
+      const url = declared || this.currentJob?.url || '';
       const host = url ? new URL(url).hostname.replace(/^www\./, '').toLowerCase() : '';
       // Only the employer's own site identifies them; an ATS host is shared
       // by thousands of employers and would look up the ATS vendor instead.
@@ -3473,6 +3620,80 @@ class ATSTailor {
   // LinkedIn profile handles for whoever posted the role, harvested from
   // the page by jd-contact-sources.js. A provider that resolves a specific
   // person beats any company-wide guess.
+  // Every LinkedIn profile handle worth resolving for this application:
+  // whoever the posting named, plus the profile you are actually looking
+  // at. Standing on someone's profile is the clearest possible statement
+  // of who you want to reach, and it needs no search endpoint to work --
+  // the handle is right there in the tab's own URL.
+  async followupProfileHandles() {
+    const out = this.followupPosterProfiles();
+
+    // Profiles you looked at earlier whose headline names this employer.
+    // This is the one that needs nothing of you at the moment of applying:
+    // looking at recruiters is already part of job hunting, so the handle
+    // is usually known before the application is even started.
+    const company = this.enrichCompanyName();
+    if (company && typeof JGProfileMemory !== 'undefined') {
+      try {
+        for (const p of await JGProfileMemory.forCompany(company)) {
+          if (p.handle && out.indexOf(p.handle) === -1) out.push(p.handle);
+        }
+      } catch (e) {}
+    }
+
+    // Any LinkedIn profile open in ANY tab, not only the focused one --
+    // the application is what you are looking at while tailoring, so
+    // requiring the profile to be focused would mean switching away.
+    for (const h of await this.openLinkedInProfiles()) {
+      if (out.indexOf(h) === -1) out.push(h);
+    }
+
+    // The FOCUSED profile goes first regardless: having it in front of you
+    // is the most deliberate statement of who you mean.
+    const active = await this.activeLinkedInProfile();
+    if (active) {
+      const at = out.indexOf(active);
+      if (at !== -1) out.splice(at, 1);
+      out.unshift(active);
+    }
+    return out;
+  }
+
+  // Handles of every LinkedIn profile open in any window. Reads tab URLs
+  // only -- no tab is opened, focused or navigated.
+  async openLinkedInProfiles() {
+    try {
+      const tabs = await chrome.tabs.query({ url: 'https://*.linkedin.com/in/*' });
+      const out = [];
+      for (const t of (tabs || [])) {
+        const m = String(t.url || '').match(/\/in\/([^/?#]+)/);
+        if (!m) continue;
+        const slug = decodeURIComponent(m[1]).trim();
+        if (!slug || /^ACo[A-Za-z0-9_-]+$/.test(slug)) continue;
+        if (out.indexOf(slug) === -1) out.push(slug);
+      }
+      return out;
+    } catch (e) { return []; }
+  }
+
+  // The handle of the LinkedIn profile in the current tab, or ''.
+  //
+  // This reads the URL of a page you navigated to yourself. It does not
+  // drive LinkedIn, open tabs, or touch its internal APIs -- doing that at
+  // application volume is what gets accounts restricted.
+  async activeLinkedInProfile() {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const url = (tabs && tabs[0] && tabs[0].url) || '';
+      if (!/^https:\/\/(www\.)?linkedin\.com\/in\//i.test(url)) return '';
+      const m = url.match(/\/in\/([^/?#]+)/);
+      if (!m) return '';
+      const slug = decodeURIComponent(m[1]).trim();
+      // The opaque URN form is not a public handle and resolves to nothing.
+      return /^ACo[A-Za-z0-9_-]+$/.test(slug) ? '' : slug;
+    } catch (e) { return ''; }
+  }
+
   followupPosterProfiles() {
     try {
       const names = (this.jdContact || this.generatedDocuments?.jdContact)?.sourceNames

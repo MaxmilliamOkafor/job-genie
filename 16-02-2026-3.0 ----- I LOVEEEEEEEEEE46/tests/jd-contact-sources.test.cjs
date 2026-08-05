@@ -114,5 +114,34 @@ const h2=S.harvest(document);
 t('harvest keeps profile links', h2.names.some(n=>n.profile==='aoifebyrne'), JSON.stringify(h2.names));
 t('harvest keeps a handle with no name', h2.names.some(n=>n.profile==='leekelly'), JSON.stringify(h2.names));
 
+// ---- the employer's own domain, on an ATS host ------------------------
+// On a Greenhouse or Workday posting the page's host belongs to the ATS
+// vendor, shared by thousands of employers. The posting's structured data
+// is the only reliable statement of whose mail domain this application
+// belongs to -- which is what decides between a work address and someone's
+// personal mailbox.
+document.body.innerHTML = `
+  <script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org","@type":"JobPosting","title":"Project Manager",
+    "hiringOrganization":{"@type":"Organization","name":"Some Employer",
+                          "sameAs":"https://www.some-employer.com"}
+  })}</script>`;
+const orgH=S.harvest(document);
+t('the employer website is taken from the posting\'s structured data',
+  orgH.orgUrl==='https://www.some-employer.com', orgH.orgUrl);
+t('it is carried through to the extractor result',
+  E.extract({jdText:'',url:'https://boards.greenhouse.io/x/jobs/1',ownEmail:'',pageSources:orgH}).orgUrl
+    ==='https://www.some-employer.com');
+
+// url wins over sameAs when both are present, and neither invents one.
+document.body.innerHTML = `
+  <script type="application/ld+json">${JSON.stringify({
+    "@type":"JobPosting","hiringOrganization":{"name":"X","url":"https://x.example",
+                                               "sameAs":["https://linkedin.com/company/x"]}
+  })}</script>`;
+t('the declared url is preferred over sameAs', S.harvest(document).orgUrl==='https://x.example');
+document.body.innerHTML = '<p>No structured data at all.</p>';
+t('no structured data means no invented domain', S.harvest(document).orgUrl==='');
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

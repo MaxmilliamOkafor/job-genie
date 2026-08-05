@@ -143,6 +143,36 @@ t('a resolved profile feeds the same follow-up as a detected one',
 t('profile links in the posting body are harvested',
   /fromProfileLinks/.test(read('jd-contact-sources.js')), 'ATS postings yield no handles');
 
+// A profile open in the tab is the clearest statement of who to reach, and
+// needs no search endpoint -- the handle is in the URL.
+t('the profile open in the tab is used automatically',
+  /activeLinkedInProfile\(\)/.test(popupJs)&&/followupProfileHandles\(\)/.test(popupJs), 'requires pasting');
+t('the open profile is preferred over a harvested guess',
+  /out\.unshift\(active\)/.test(popupJs), 'a guess could outrank a deliberate choice');
+t('only real profile URLs are accepted',
+  /linkedin\\.com\\\/in\\\//.test(popupJs)||/linkedin\\.com/.test(popupJs), 'would match any tab');
+t('LinkedIn is read from the tab URL, never driven',
+  !/tabs\.create\([^)]*linkedin/i.test(popupJs), 'automating LinkedIn risks the account');
+t('a personal mailbox is flagged before it is used',
+  /isPersonalEmail/.test(enrich)&&/PERSONAL mailbox/.test(popupJs), 'would silently email a private inbox');
+
+// Requiring the profile to be OPEN is a manual step in disguise. Profiles
+// browsed earlier, and profiles open in any tab, remove it.
+const mem=read('linkedin-profile-memory.js');
+t('profiles browsed earlier are remembered',
+  /linkedin_profiles_seen/.test(mem)&&/forCompany/.test(mem), 'nothing is remembered');
+t('the memory is consulted when applying',
+  /JGProfileMemory\.forCompany\(company\)/.test(popupJs), 'remembered profiles never used');
+t('the profile memory runs on LinkedIn profiles',
+  (m.content_scripts||[]).some(cs=>(cs.js||[]).includes('linkedin-profile-memory.js')
+    &&cs.matches.some(x=>/linkedin\.com\/in/.test(x))), 'never records anything');
+t('it is loaded by the popup so forCompany is callable',
+  /<script src="linkedin-profile-memory\.js">/.test(popupHtml), 'would be undefined');
+t('a profile open in ANY tab counts, not only the focused one',
+  /openLinkedInProfiles\(\)/.test(popupJs)&&/linkedin\.com\/in\/\*/.test(popupJs), 'forces a tab switch');
+t('the profile memory never sends anything anywhere',
+  !/fetch\(|XMLHttpRequest/.test(mem), 'must be local storage only');
+
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.
 t('enrichment runs only after the careers-page fallback',
