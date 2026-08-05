@@ -74,6 +74,24 @@
     return parts.filter(Boolean).join('&');
   }
 
+  // A personal mailbox is the wrong address for a job application. It is
+  // less likely to be read in a work context, and arriving there uninvited
+  // reads as a cold approach rather than a follow-up. Providers return
+  // these freely -- ContactOut will hand back a gmail.com address and put
+  // "find work email" behind a separate action -- so the preference has to
+  // be applied here.
+  const FREEMAIL = new Set([
+    'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk', 'hotmail.com',
+    'hotmail.co.uk', 'outlook.com', 'live.com', 'msn.com', 'aol.com',
+    'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com',
+    'gmx.com', 'gmx.net', 'yandex.com', 'mail.com', 'zoho.com',
+  ]);
+  function isPersonalEmail(v) {
+    const at = String(v || '').lastIndexOf('@');
+    if (at === -1) return false;
+    return FREEMAIL.has(String(v).slice(at + 1).toLowerCase().trim());
+  }
+
   // A provider that has no address for someone still returns a row. These
   // are placeholders, not addresses, and must never reach a recruiter.
   const PLACEHOLDER_RE = /^(email_not_unlocked|not_unlocked|locked|hidden|unavailable|domain_only|SEARCH)@|^(SEARCH|LOCKED)$/i;
@@ -168,6 +186,17 @@
     // below the title signal so a confident wrong person never wins.
     if (typeof person.confidence === 'number') s += Math.round(person.confidence / 10);
     if (person.verified) s += 5;
+
+    // A work address at the employer's own domain is the one that belongs
+    // in a job follow-up. A personal mailbox is a last resort, not a tie.
+    if (person.email) {
+      if (isPersonalEmail(person.email)) s -= 20;
+      else {
+        s += 6;
+        const dom = String((ctx && ctx.domain) || '').toLowerCase();
+        if (dom && person.email.toLowerCase().endsWith('@' + dom)) s += 8;
+      }
+    }
     return s;
   }
 
@@ -1025,6 +1054,7 @@
       email: top.email,
       name: top.name || '',
       title: top.title || '',
+      personal: isPersonalEmail(top.email),
       source: 'enriched',
       provider: r.source || '',
       alternatives: r.results.slice(1),
@@ -1081,7 +1111,7 @@
   global.ContactEnrichment = {
     listProviders, loadConfig, saveConfig, saveKey, clearKey, getCred, resolveProfile,
     createKey, testKey, refreshCred,
-    buildQueries, functionTitles, scoreCandidate, isRealEmail,
+    buildQueries, functionTitles, scoreCandidate, isRealEmail, isPersonalEmail,
     findContacts, bestEmail, clearCache,
     PROVIDERS, TITLE_TIERS,
   };

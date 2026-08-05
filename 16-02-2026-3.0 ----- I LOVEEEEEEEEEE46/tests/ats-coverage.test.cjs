@@ -143,6 +143,19 @@ t('a resolved profile feeds the same follow-up as a detected one',
 t('profile links in the posting body are harvested',
   /fromProfileLinks/.test(read('jd-contact-sources.js')), 'ATS postings yield no handles');
 
+// A profile open in the tab is the clearest statement of who to reach, and
+// needs no search endpoint -- the handle is in the URL.
+t('the profile open in the tab is used automatically',
+  /activeLinkedInProfile\(\)/.test(popupJs)&&/followupProfileHandles\(\)/.test(popupJs), 'requires pasting');
+t('the open profile is preferred over a harvested guess',
+  /out\.unshift\(active\)/.test(popupJs), 'a guess could outrank a deliberate choice');
+t('only real profile URLs are accepted',
+  /linkedin\\.com\\\/in\\\//.test(popupJs)||/linkedin\\.com/.test(popupJs), 'would match any tab');
+t('LinkedIn is read from the tab URL, never driven',
+  !/tabs\.create\([^)]*linkedin/i.test(popupJs), 'automating LinkedIn risks the account');
+t('a personal mailbox is flagged before it is used',
+  /isPersonalEmail/.test(enrich)&&/PERSONAL mailbox/.test(popupJs), 'would silently email a private inbox');
+
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.
 t('enrichment runs only after the careers-page fallback',

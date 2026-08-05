@@ -3130,7 +3130,7 @@ class ATSTailor {
         title: this.currentJob?.title || '',
         location: this.currentJob?.location || '',
         domain: this.followupCompanyDomain(),
-        linkedinProfiles: this.followupPosterProfiles(),
+        linkedinProfiles: await this.followupProfileHandles(),
       };
       say('');
       say('Searching for:');
@@ -3138,9 +3138,11 @@ class ATSTailor {
       say('  role     : ' + (ctx.title || '(unknown)'));
       say('  location : ' + (ctx.location || '(none)'));
       say('  domain   : ' + (ctx.domain || '(none)'));
-      say('  poster   : ' + (ctx.linkedinProfiles.length
+      const activeProfile = await this.activeLinkedInProfile();
+      say('  profiles : ' + (ctx.linkedinProfiles.length
         ? ctx.linkedinProfiles.join(', ')
-        : '(none - this page names nobody)'));
+          + (activeProfile ? '   (' + activeProfile + ' is the profile open in this tab)' : '')
+        : '(none - no profile open and this page names nobody)'));
 
       say('');
       say('Running lookup (this spends provider credits)…');
@@ -3389,7 +3391,7 @@ class ATSTailor {
         title: this.currentJob?.title || '',
         location: this.currentJob?.location || '',
         domain: this.followupCompanyDomain(),
-        linkedinProfiles: this.followupPosterProfiles(),
+        linkedinProfiles: await this.followupProfileHandles(),
       };
 
       const hit = await ContactEnrichment.bestEmail(ctx);
@@ -3424,7 +3426,7 @@ class ATSTailor {
       if (info) {
         // Labelled honestly. This is not an address the employer published,
         // and the user is the one who decides whether to write to it.
-        info.textContent = 'Looked up (not published): ' + hit.email
+        info.textContent = (hit.personal ? 'Looked up, PERSONAL mailbox: ' : 'Looked up (not published): ') + hit.email
           + (hit.name ? ' - ' + hit.name : '')
           + (hit.title ? ', ' + hit.title : '')
           + '. Review before sending.';
@@ -3473,6 +3475,38 @@ class ATSTailor {
   // LinkedIn profile handles for whoever posted the role, harvested from
   // the page by jd-contact-sources.js. A provider that resolves a specific
   // person beats any company-wide guess.
+  // Every LinkedIn profile handle worth resolving for this application:
+  // whoever the posting named, plus the profile you are actually looking
+  // at. Standing on someone's profile is the clearest possible statement
+  // of who you want to reach, and it needs no search endpoint to work --
+  // the handle is right there in the tab's own URL.
+  async followupProfileHandles() {
+    const out = this.followupPosterProfiles();
+    const active = await this.activeLinkedInProfile();
+    // The open profile goes first: it is a deliberate choice, where a
+    // harvested handle is an inference from the page.
+    if (active && out.indexOf(active) === -1) out.unshift(active);
+    return out;
+  }
+
+  // The handle of the LinkedIn profile in the current tab, or ''.
+  //
+  // This reads the URL of a page you navigated to yourself. It does not
+  // drive LinkedIn, open tabs, or touch its internal APIs -- doing that at
+  // application volume is what gets accounts restricted.
+  async activeLinkedInProfile() {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const url = (tabs && tabs[0] && tabs[0].url) || '';
+      if (!/^https:\/\/(www\.)?linkedin\.com\/in\//i.test(url)) return '';
+      const m = url.match(/\/in\/([^/?#]+)/);
+      if (!m) return '';
+      const slug = decodeURIComponent(m[1]).trim();
+      // The opaque URN form is not a public handle and resolves to nothing.
+      return /^ACo[A-Za-z0-9_-]+$/.test(slug) ? '' : slug;
+    } catch (e) { return ''; }
+  }
+
   followupPosterProfiles() {
     try {
       const names = (this.jdContact || this.generatedDocuments?.jdContact)?.sourceNames
