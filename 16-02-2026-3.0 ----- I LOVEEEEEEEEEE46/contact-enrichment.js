@@ -49,6 +49,15 @@
 
   function _clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 
+  // The public handle out of a LinkedIn URL. Rejects the opaque URN form,
+  // which is not a public handle and resolves to nothing.
+  function _profileSlugFromUrl(url) {
+    const m = String(url || '').match(/\/in\/([^/?#]+)/);
+    if (!m) return '';
+    const slug = _clean(decodeURIComponent(m[1]));
+    return /^ACo[A-Za-z0-9_-]+$/.test(slug) ? '' : slug;
+  }
+
   // A provider that has no address for someone still returns a row. These
   // are placeholders, not addresses, and must never reach a recruiter.
   const PLACEHOLDER_RE = /^(email_not_unlocked|not_unlocked|locked|hidden|unavailable|domain_only|SEARCH)@|^(SEARCH|LOCKED)$/i;
@@ -188,32 +197,66 @@
       label: 'ContactOut',
       keyKind: 'api-key',
       keyUrl: 'https://contactout.com/dashboard/api',
-      hint: 'Dashboard -> API. Paid plans only.',
+      hint: 'Dashboard -> API. Searches LinkedIn profiles by company, role and '
+        + 'location, then resolves verified work emails.',
+      // v1, not v2, and the key travels in a `token` header. ContactOut also
+      // accepts x-api-key on some endpoints, so both are sent -- an ignored
+      // header costs nothing, and a wrong one costs every lookup.
+      // Accept is required or the API can answer with a non-JSON body.
       request: (q, cred) => ({
-        url: 'https://api.contactout.com/v2/people/search',
+        url: 'https://api.contactout.com/v1/people/search',
         init: {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': cred.apiKey },
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            token: cred.apiKey,
+            'x-api-key': cred.apiKey,
+          },
           body: JSON.stringify({
             company: q.company ? [q.company] : undefined,
             job_title: q.titles,
             location: q.location ? [q.location] : undefined,
-            page: 1,
+            // People who hold the title NOW. Without this the search happily
+            // returns someone who was a recruiter there four years ago, and
+            // the note goes to a stranger at a company they have left.
+            current_titles_only: true,
+            // Filtered at the source rather than only penalised in scoring:
+            // a sales rep whose title contains "talent" is pure noise here.
+            exclude_job_titles: ['Sales', 'Business Development', 'Account Executive'],
             reveal_info: true,
+            page: 1,
           }),
         },
       }),
       parse: (json) => {
         const rows = (json && (json.profiles || json.data || json.results)) || [];
+        // The search answers with an object keyed by profile id as often as
+        // with an array.
         const list = Array.isArray(rows) ? rows : Object.values(rows);
-        return list.map((p) => ({
-          name: _clean(p.full_name || p.name),
-          title: _clean(p.title || p.job_title),
-          company: _clean(p.company || p.company_name),
-          location: _clean(p.location),
-          email: _clean(Array.isArray(p.work_email) ? p.work_email[0]
-            : (p.work_email || (Array.isArray(p.email) ? p.email[0] : p.email))),
-        }));
+        return list.map((p) => {
+          const ci = p.contact_info || p.contactInfo || p;
+          const pick = (v) => (Array.isArray(v) ? v : (v ? [v] : []));
+          // Work addresses first: a personal Gmail is both less likely to be
+          // read for a job and less welcome to receive it there.
+          const emails = []
+            .concat(pick(ci.work_emails), pick(ci.work_email))
+            .concat(pick(ci.emails), pick(ci.email))
+            .filter(Boolean);
+          return {
+            name: _clean(p.full_name || p.name),
+            title: _clean(p.title || p.job_title || p.headline),
+            company: _clean(typeof p.company === 'string' ? p.company : (p.company && p.company.name))
+              || _clean(p.company_name),
+            location: _clean(p.location),
+            email: _clean(emails[0]),
+            // Kept so a result with no inline address can still be resolved
+            // through the profile endpoint, which returns a VERIFIED work
+            // address. See _resolveProfiles.
+            profile: _clean(p.li_vanity || p.linkedin_vanity)
+              || _profileSlugFromUrl(p.linkedin_url || p.li_url || p.url),
+          };
+        });
       },
       // ContactOut can also resolve a single LinkedIn profile, which means
       // it covers BOTH cases on its own: the named job poster where the
@@ -226,13 +269,18 @@
         url: 'https://api.contactout.com/v1/people/linkedin?profile='
           + encodeURIComponent('https://www.linkedin.com/in/' + slug)
           + '&email_type=work',
-        init: { method: 'GET', headers: { 'x-api-key': cred.apiKey } },
+        init: {
+          method: 'GET',
+          headers: { Accept: 'application/json', token: cred.apiKey, 'x-api-key': cred.apiKey },
+        },
       }),
       parseProfile: (json) => {
         const p = (json && (json.profile || json.data || json)) || {};
+        const ci = p.contact_info || p.contactInfo || p;
+        const pick = (v) => (Array.isArray(v) ? v : (v ? [v] : []));
         const emails = []
-          .concat(p.work_email || [])
-          .concat(p.email || [])
+          .concat(pick(ci.work_email), pick(ci.work_emails))
+          .concat(pick(ci.email), pick(ci.emails))
           .filter(Boolean);
         const company = typeof p.company === 'string'
           ? p.company : _clean(p.company && p.company.name);
@@ -246,7 +294,10 @@
       },
       test: (cred) => ({
         url: 'https://api.contactout.com/v1/stats',
-        init: { method: 'GET', headers: { 'x-api-key': cred.apiKey } },
+        init: {
+          method: 'GET',
+          headers: { Accept: 'application/json', token: cred.apiKey, 'x-api-key': cred.apiKey },
+        },
       }),
     },
 
@@ -641,9 +692,12 @@
       if (r.reason && r.reason !== 'no-match') lastReason = r.reason;
     }
 
-    // De-duplicate on address, keeping the best-scoring appearance.
+    // De-duplicate on address, keeping the best-scoring appearance. The
+    // isRealEmail guard is belt-and-braces: the search step deliberately
+    // keeps address-less rows so they can be resolved, and none of those
+    // may survive into something that gets mailed.
     const byEmail = new Map();
-    for (const p of collected) {
+    for (const p of collected.filter((x) => isRealEmail(x.email))) {
       const k = p.email.toLowerCase();
       if (!byEmail.has(k) || byEmail.get(k).score < p.score) byEmail.set(k, p);
     }
@@ -668,7 +722,7 @@
     let calls = 0;
 
     // Runs one request and normalises every failure mode into a reason.
-    const call = async (req, parse, q) => {
+    const call = async (req, parse, q, opts2) => {
       calls++;
       let res;
       try { res = await fetch(req.url, req.init); }
@@ -689,9 +743,13 @@
       const json = await res.json().catch(() => null);
       let rows = [];
       try { rows = parse(json) || []; } catch (e) { rows = []; }
+      // The search step keeps rows that carry a LinkedIn handle but no
+      // address, because those are exactly the ones worth resolving. Every
+      // other caller wants addresses only.
+      const keepEmpty = !!(opts2 && opts2.keepEmpty);
       return {
         rows: rows
-          .filter((p) => isRealEmail(p.email))
+          .filter((p) => isRealEmail(p.email) || (keepEmpty && p.profile))
           .map((p) => Object.assign({}, p, { score: scoreCandidate(p, q || {}, ctx) })),
       };
     };
@@ -714,12 +772,38 @@
 
     if (!out.length && provider.searchByCompany !== false && provider.request) {
       for (const q of buildQueries(ctx)) {
-        const r = await call(provider.request(q, cred), provider.parse, q);
+        // The search identifies WHO. It does not always carry a usable
+        // address, and the one it does carry is not necessarily verified.
+        const r = await call(provider.request(q, cred), provider.parse, q, { keepEmpty: true });
         if (r.fatal) return { results: [], reason: r.fatal, calls };
-        if (r.rows.length) {
-          for (const p of r.rows) out.push(Object.assign({}, p, { provider: id }));
-          break;
+        if (!r.rows.length) continue;
+
+        // Rank first, then resolve. Resolving costs a credit per profile,
+        // so it is spent on the two best matches rather than on everyone
+        // the search happened to return.
+        const ranked = r.rows
+          .map((p) => Object.assign({}, p, { score: scoreCandidate(p, q, ctx) }))
+          .sort((a, b) => b.score - a.score);
+
+        for (const p of ranked) {
+          if (isRealEmail(p.email)) { out.push(Object.assign({}, p, { provider: id })); continue; }
+          // No inline address: resolve the profile the search found. This
+          // is the step that returns a VERIFIED work address, which is the
+          // whole point of going through a provider rather than guessing
+          // firstname.lastname@company.com.
+          if (p.profile && provider.lookupByProfile && out.length < 2) {
+            const rp = await call(provider.lookupByProfile(p.profile, cred), provider.parseProfile, q);
+            if (rp.fatal) break;
+            for (const hit of rp.rows) {
+              out.push(Object.assign({}, p, hit, {
+                provider: id,
+                score: p.score + 6,          // verified beats an inline guess
+                verifiedVia: 'profile',
+              }));
+            }
+          }
         }
+        if (out.length) break;
       }
     }
     return { results: out, reason: out.length ? '' : 'no-match', calls };

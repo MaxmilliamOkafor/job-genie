@@ -106,7 +106,7 @@ t('the on-demand run bypasses the cache',
 // ContactOut is the default because it covers both cases with one key.
 t('ContactOut is the default provider', /\|\| 'contactout'/.test(enrich), 'default is something else');
 t('ContactOut resolves a named poster as well as searching a company',
-  /contactout:[\s\S]{0,3000}lookupByProfile/.test(enrich), 'company search only');
+  /contactout:[\s\S]{0,6000}lookupByProfile/.test(enrich), 'company search only');
 
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.

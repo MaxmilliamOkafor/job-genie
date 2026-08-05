@@ -306,6 +306,70 @@ t('a verified work address is explicitly requested',
 t('the key is sent as x-api-key',
   CALLS[0].init.headers['x-api-key']==='co-key', JSON.stringify(CALLS[0].init.headers));
 
+// ---- 16b. the search request is the one ContactOut documents -----------
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'co-key'});
+CALLS=[];
+RESPOND=()=>reply(200,{profiles:{}});
+await E.findContacts({company:'Nortal',title:'Project Manager',location:'Dublin, Ireland'});
+let req=CALLS[0], body=JSON.parse(req.init.body);
+t('search hits the v1 people/search endpoint',
+  req.url==='https://api.contactout.com/v1/people/search', req.url);
+t('the key is sent in the token header', req.init.headers.token==='co-key', JSON.stringify(req.init.headers));
+t('Accept is set, or the API may not answer with JSON',
+  req.init.headers.Accept==='application/json', JSON.stringify(req.init.headers));
+t('company is an array', Array.isArray(body.company)&&body.company[0]==='Nortal', JSON.stringify(body.company));
+t('job_title is an array of the targeted titles',
+  Array.isArray(body.job_title)&&/Recruiter/i.test(body.job_title.join(' ')), JSON.stringify(body.job_title));
+t('location is an array', Array.isArray(body.location)&&body.location[0]==='Dublin, Ireland', JSON.stringify(body.location));
+// Someone who WAS a recruiter there four years ago is a stranger now.
+t('only people currently holding the title are searched',
+  body.current_titles_only===true, JSON.stringify(body.current_titles_only));
+t('sales titles are excluded at the source',
+  Array.isArray(body.exclude_job_titles)&&body.exclude_job_titles.some(x=>/Sales/i.test(x)),
+  JSON.stringify(body.exclude_job_titles));
+
+// ---- 16c. search then resolve: the two-step that gets a VERIFIED email --
+// The search says WHO. The profile endpoint returns a verified work
+// address. A search row with no inline address is worth resolving, not
+// discarding -- that row is often the right person.
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'co-key'});
+CALLS=[];
+RESPOND=(url)=>/people\/linkedin/.test(url)
+  ? reply(200,{profile:{full_name:'Aoife Byrne',title:'Technical Recruiter',
+      location:'Dublin, Ireland',contact_info:{work_email:['aoife.byrne@nortal.com']}}})
+  : reply(200,{profiles:{
+      p1:{full_name:'Sean Murphy',title:'Head of Sales',location:'Dublin, Ireland',
+          li_vanity:'seanmurphy',contact_info:{emails:['sean@nortal.com']}},
+      p2:{full_name:'Aoife Byrne',title:'Technical Recruiter',location:'Dublin, Ireland',
+          li_vanity:'aoifebyrne',contact_info:{}},
+    }});
+r=await E.findContacts({company:'Nortal',title:'PM',location:'Dublin, Ireland'});
+t('a search row with no inline address is still resolved',
+  r.ok&&r.results.some(x=>x.email==='aoife.byrne@nortal.com'), JSON.stringify(r.results));
+t('the resolved recruiter outranks the inline sales address',
+  r.results[0].email==='aoife.byrne@nortal.com', JSON.stringify(r.results.map(x=>x.email+' '+x.score)));
+t('the resolution went through the profile endpoint',
+  CALLS.some(c=>/people\/linkedin.*aoifebyrne/.test(c.url)), JSON.stringify(CALLS.map(c=>c.url)));
+t('a verified address is marked as verified',
+  r.results[0].verifiedVia==='profile', JSON.stringify(r.results[0]));
+
+// Resolving costs a credit each, so it is not spent on the whole page.
+t('resolution is limited, not run on every search row',
+  CALLS.filter(c=>/people\/linkedin/.test(c.url)).length<=2,
+  String(CALLS.filter(c=>/people\/linkedin/.test(c.url)).length));
+
+// An address-less row that cannot be resolved must never reach a send.
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'co-key'});
+RESPOND=(url)=>/people\/linkedin/.test(url)
+  ? reply(200,{profile:{full_name:'Aoife Byrne',contact_info:{}}})
+  : reply(200,{profiles:{p1:{full_name:'Aoife Byrne',title:'Recruiter',li_vanity:'aoifebyrne',contact_info:{}}}});
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('an unresolvable row yields no address rather than a blank one',
+  r.results.length===0&&r.reason==='no-match', JSON.stringify(r));
+
 // ---- 17. the trace explains what happened ------------------------------
 // A lookup that never fired must not look like one that found nobody.
 await reset({enabled:true,provider:'closely'});
