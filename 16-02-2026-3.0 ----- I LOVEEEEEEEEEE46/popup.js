@@ -2678,10 +2678,39 @@ class ATSTailor {
   // A feature that cannot fire is worse than one that fires a few minutes
   // before the user presses Submit.
   async autoSendFollowup() {
+    // Every exit from this method is recorded and shown. Fifteen
+    // applications produced fifteen console lines nobody reads and no
+    // visible difference between "switched off", "nobody to write to" and
+    // "sent" -- so a silently disabled toggle looked exactly like a working
+    // one that found no addresses.
+    const outcome = async (state, message, level) => {
+      console.log('[ATS Tailor] follow-up:', state, '-', message);
+      try {
+        await chrome.storage.local.set({
+          followup_last_outcome: { at: Date.now(), state, message, job: this.currentJob?.title || '' },
+        });
+      } catch (e) {}
+      const el = document.getElementById('followupResult');
+      if (el) {
+        el.textContent = message;
+        el.style.color = level === 'error' ? 'var(--error)'
+          : level === 'success' ? 'var(--success)' : 'var(--warning)';
+      }
+      if (level) this.showToast(message, level === 'success' ? 'success' : 'warning');
+    };
+
     try {
-      if (typeof FollowupEmail === 'undefined') return;
+      if (typeof FollowupEmail === 'undefined') {
+        await outcome('module-missing', 'Follow-up module did not load, so no note was sent.', 'error');
+        return;
+      }
       const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
-      if (cfg.followup_enabled !== true) return;
+      if (cfg.followup_enabled !== true) {
+        await outcome('disabled',
+          'Follow-up email is switched off, so no note was sent. Turn on '
+          + '"Application Follow-up Email" in Settings.', 'warning');
+        return;
+      }
 
       // Contact detection started earlier in the tailoring run and reaches
       // into the job tab. Let it finish before deciding there is nobody to
@@ -2690,7 +2719,9 @@ class ATSTailor {
 
       const ctx = await this.followupContext();
       if (!ctx.email) {
-        console.log('[ATS Tailor] follow-up: no published address on this posting, nothing sent');
+        const enrichState = await this.followupEnrichmentState();
+        await outcome('no-recipient',
+          'No address found for this role, so no note was sent. ' + enrichState, 'warning');
         return;
       }
 
@@ -2698,20 +2729,45 @@ class ATSTailor {
       // hold off rather than send an empty-handed email.
       const files = this.followupAttachments();
       if (!files.length) {
-        console.log('[ATS Tailor] follow-up held: no tailored documents to attach yet');
-        this.showToast('Follow-up not sent - no documents were generated', 'warning');
+        await outcome('no-documents',
+          'Follow-up not sent - no tailored documents were generated to attach.', 'warning');
         return;
       }
 
       // followupSend applies the company-level anti-spam policy, so a
       // repeat employer is skipped quietly rather than mailed twice.
       await this.followupSend({ test: false });
-      console.log('[ATS Tailor] follow-up sent automatically to', ctx.email,
-        'with', files.length, 'attachment(s)');
+      await outcome('sent', 'Follow-up sent to ' + ctx.email + ' with '
+        + files.length + ' attachment(s).', 'success');
     } catch (e) {
-      // A failed note must never look like a failed tailoring run.
-      console.warn('[ATS Tailor] auto follow-up skipped:', e && e.message);
+      // A failed note must never look like a failed tailoring run, but it
+      // must not look like a successful one either.
+      await outcome('failed', 'Follow-up could not be sent: ' + (e && e.message ? e.message : e), 'error');
     }
+  }
+
+  // One line explaining why no address turned up, so "no email was found"
+  // is actionable instead of a dead end.
+  async followupEnrichmentState() {
+    if (typeof ContactEnrichment === 'undefined') return 'Contact lookup is unavailable.';
+    try {
+      const cfg = await ContactEnrichment.loadConfig();
+      if (cfg.enabled !== true) {
+        return 'The posting published none, and contact lookup is switched off '
+          + '(Settings -> Contact lookup).';
+      }
+      const providers = ContactEnrichment.listProviders();
+      const withKeys = [];
+      for (const p of providers) {
+        const cred = await ContactEnrichment.getCred(p.id);
+        if (cred && (cred.apiKey || cred.token)) withKeys.push(p.label);
+      }
+      if (!withKeys.length) {
+        return 'The posting published none, and no lookup provider has a key saved.';
+      }
+      return 'The posting published none, and ' + withKeys.join(' / ')
+        + ' returned nobody. Use "Find contact for this job now" in Settings to see why.';
+    } catch (e) { return ''; }
   }
 
   async followupSend({ test }) {
@@ -4713,6 +4769,22 @@ class ATSTailor {
 
     this._tailoringInProgress = true;
 
+    // Find the recruiter NOW, as its own step.
+    //
+    // This used to live at the end of the ApplyVerdict block, inside the
+    // qualification-threshold branch. That gave it four independent ways to
+    // never run -- QualificationThresholdEngine missing, the threshold call
+    // throwing, ApplyVerdict missing, or evaluate()/renderApplyVerdict()
+    // throwing -- and every one of them was caught and logged as a verdict
+    // failure. The result was a tailoring run that completed perfectly and
+    // silently never looked for anybody to send it to.
+    //
+    // Finding the recipient is not a side effect of the tailoring-focus
+    // panel. It runs unconditionally, and starting it here also overlaps
+    // the tab read and any provider call with document generation instead
+    // of waiting until after it. autoSendFollowup awaits the promise.
+    this.contactDetection = this.followupDetectContact();
+
     const startTime = Date.now();
     const btn = document.getElementById('tailorBtn');
     const progressContainer = document.getElementById('progressContainer');
@@ -5260,14 +5332,9 @@ class ATSTailor {
               this.generatedDocuments.applyVerdict = verdict;
               console.log('[ATS Tailor] Tailoring focus:', verdict.focus, '|', verdict.summary);
               this.renderApplyVerdict(verdict);
-              // Read the posting for a PUBLISHED recruiter email + job ID
-              // so the follow-up composer is ready if the user wants it.
-              // Detection reaches into the job tab and may consult a lookup
-              // provider, so it is genuinely asynchronous. The promise is
-              // kept because the auto-send later in this same run depends
-              // on its result: without it, the note would decide "no
-              // address" while detection was still in flight.
-              this.contactDetection = this.followupDetectContact();
+              // Contact detection deliberately does NOT live here: see the
+              // top of tailorDocuments. A failure in this block must not
+              // cost the application its recipient.
             } catch (e) {
               console.warn('[ATS Tailor] Apply verdict failed:', e && e.message);
             }
