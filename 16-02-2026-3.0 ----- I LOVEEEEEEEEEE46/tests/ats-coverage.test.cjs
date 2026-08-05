@@ -56,10 +56,92 @@ t('contact-enrichment is loaded by the popup',
 t('contact-enrichment is packaged', war.includes('contact-enrichment.js'), 'not in web_accessible_resources');
 t('the enrichment settings card exists', /id="enrichProvider"/.test(popupHtml)&&/id="enrichApiKey"/.test(popupHtml));
 t('every enrichment control has a handler',
-  ['enrichEnabledToggle','enrichProvider','enrichSaveBtn','enrichTestBtn','enrichClearBtn','enrichGetKeyBtn']
+  ['enrichEnabledToggle','enrichProvider','enrichSaveBtn','enrichTestBtn','enrichClearBtn','enrichGetKeyBtn',
+   'enrichFindNowBtn','enrichSwitchBtn','enrichMoreLink']
     .every(id=>new RegExp("getElementById\\('"+id+"'\\)\\?\\.addEventListener").test(popupJs)),
   'a decorative control would silently do nothing');
 t('the enrichment UI is restored on open', /this\.enrichInitUI\(\)/.test(popupJs), 'settings would look unset');
+
+// ---- the settings card has to be usable, not just present -------------
+const popupCss=read('popup.css');
+const enrich=read('contact-enrichment.js');
+// `flex: 1` means basis 0, so a button is laid out narrower than its own
+// label; white-space:nowrap then forbids wrapping and the label paints
+// over the next button ("Sign in and create key" over "Test key").
+const fuBtn=(popupCss.match(/\.fu-btn\s*\{[^}]*\}/)||[''])[0];
+t('action buttons size from their label, so long ones wrap instead of overlapping',
+  /flex:\s*1\s+1\s+auto/.test(fuBtn)&&!/flex:\s*1\s*;/.test(fuBtn), fuBtn.replace(/\s+/g,' ').slice(0,140));
+t('the action row is allowed to wrap',
+  /\.fu-actions\s*\{[^}]*flex-wrap:\s*wrap/.test(popupCss), 'buttons would be forced onto one line');
+
+// A connected account must look connected. Empty email and password boxes
+// left on screen read as "not signed in" when a working token is stored.
+t('a connected account is shown as connected',
+  /id="enrichConnected"/.test(popupHtml)&&/enrichRenderCredState/.test(popupJs), 'no connected state');
+t('the sign-in fields are hidden once a token exists',
+  /show\('enrichAccountFields',\s*isAccount\s*&&\s*!connected\)/.test(popupJs), 'blank credential boxes persist');
+t('the connected row names the account',
+  /accountEmail/.test(popupJs)&&/accountEmail/.test(enrich), 'user cannot tell which account is connected');
+t('the account can be changed without disconnecting first',
+  /id="enrichSwitchBtn"/.test(popupHtml)&&/enrichSwitching\s*=\s*true/.test(popupJs), 'no way back to the sign-in form');
+t('signing in collapses the form',
+  /enrichSwitching = false;[\s\S]{0,200}enrichRenderCredState/.test(popupJs), 'form stays open after success');
+t('clearing the key brings the sign-in form back',
+  /async enrichClearKey\(\)[\s\S]{0,1200}enrichRenderCredState/.test(popupJs), 'no way to sign in again');
+// The stored credential must remain a token, never the password.
+t('the password is still never part of the stored credential',
+  /delete clean\.password/.test(enrich), 'password could reach storage');
+
+// A silent lookup is the failure mode that cannot be diagnosed: one that
+// never fired looks identical to one that ran and found nobody.
+t('the lookup can be run on demand and explains itself',
+  /id="enrichFindNowBtn"/.test(popupHtml)&&/async enrichFindNow\(\)/.test(popupJs), 'no way to verify it works');
+t('the diagnostic reports which providers were tried',
+  /r\.trace/.test(popupJs)&&/trace\.push/.test(enrich), 'no trace to report');
+t('a skipped provider is recorded rather than omitted',
+  /skipped, no key saved/.test(enrich)&&/no credits used/.test(enrich), 'silent skip');
+t('the on-demand run bypasses the cache',
+  /findContacts\(ctx,\s*\{\s*noCache:\s*true\s*\}\)/.test(popupJs), 'would report a stale answer');
+
+// ContactOut is the default because it covers both cases with one key.
+t('ContactOut is the default provider', /\|\| 'contactout'/.test(enrich), 'default is something else');
+t('ContactOut resolves a named poster as well as searching a company',
+  /contactout:[\s\S]{0,6000}lookupByProfile/.test(enrich), 'company search only');
+
+// generatedDocuments is reassigned wholesale mid-run, so anything parked on
+// it during detection was silently discarded before the send.
+t('the detected contact has a home that survives the run',
+  /this\.jdContact = detected/.test(popupJs), 'parked on generatedDocuments only');
+t('every reader prefers the durable copy',
+  !/(?<!this\.jdContact \|\| )this\.generatedDocuments\?\.jdContact/.test(popupJs), 'a reader still reads the wiped copy');
+
+// A missing address skips an email; a stale one emails the wrong employer.
+t('detection clears the previous job first',
+  /async followupDetectContact\(\)\s*\{[\s\S]{0,400}this\.jdContact = null/.test(popupJs), 'stale contact can leak');
+t('an auto-filled recipient is cleared for the next job',
+  /dataset\.autofilled/.test(popupJs), 'previous employer stays in the To field');
+t('an address the user typed is never cleared',
+  /toEl0\.dataset\.autofilled === '1'/.test(popupJs), 'would discard a manual address');
+
+// resolveCompanyName takes (job, detected); called bare it returned nothing
+// and every lookup short-circuited on 'no-company'.
+t('the lookup resolves the company through the shared extractor',
+  /enrichCompanyName\(\)/.test(popupJs)&&/this\.resolveCompanyName\(job, detected\)/.test(popupJs),
+  'company would be empty');
+t('no caller invokes resolveCompanyName with no arguments',
+  !/resolveCompanyName\(\)/.test(popupJs), 'returns nothing, kills the lookup');
+
+// Closely holds a subscription and a token but publishes no search API.
+t('Closely probes for a search endpoint rather than giving up',
+  /searchProbe/.test(enrich)&&/_resolveSearchEndpoint/.test(enrich), 'profile-only forever');
+t('the probe result is remembered either way',
+  /searchEndpoints/.test(enrich), 'would re-probe on every lookup');
+t('naming a person directly is always available',
+  /id="enrichProfileUrl"/.test(popupHtml)&&/async enrichResolveProfile\(\)/.test(popupJs), 'no manual path');
+t('a resolved profile feeds the same follow-up as a detected one',
+  /enrichResolveProfile\(\)[\s\S]{0,2000}this\.jdContact = Object\.assign/.test(popupJs), 'result goes nowhere');
+t('profile links in the posting body are harvested',
+  /fromProfileLinks/.test(read('jd-contact-sources.js')), 'ATS postings yield no handles');
 
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.
@@ -75,7 +157,6 @@ t('a looked-up address is labelled as not published',
 // Every provider host the module calls must be permitted, or the fetch is
 // blocked by CORS and the failure looks like "no match".
 const hosts=(m.host_permissions||[]).join(' ');
-const enrich=read('contact-enrichment.js');
 const apiHosts=[...new Set((enrich.match(/https:\/\/api\.[a-z0-9.]+/g)||[]))];
 for(const h of apiHosts) t('host permission for '+h, hosts.includes(h.replace('https://','')), h+' not permitted');
 t('at least one provider host is declared', apiHosts.length>0);
