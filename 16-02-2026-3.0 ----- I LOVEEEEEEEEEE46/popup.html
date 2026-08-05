@@ -370,6 +370,14 @@
               <div class="fu-actions">
                 <button id="enrichGetKeyBtn" class="fu-btn fu-btn-wide">Open provider API keys page ↗</button>
               </div>
+              <div class="fu-actions">
+                <!-- Runs the real lookup against the job in the current tab
+                     and reports every step. Without this, a lookup that
+                     silently never fired is indistinguishable from one that
+                     ran and found nobody. -->
+                <button id="enrichFindNowBtn" class="fu-btn fu-btn-wide">Find contact for this job now</button>
+              </div>
+              <pre id="enrichDiagnostics" class="fu-diagnostics"></pre>
               <div id="enrichStatus" class="fu-note"></div>
             </div>
 

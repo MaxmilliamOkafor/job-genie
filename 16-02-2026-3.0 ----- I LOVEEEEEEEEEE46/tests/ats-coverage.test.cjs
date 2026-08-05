@@ -56,7 +56,8 @@ t('contact-enrichment is loaded by the popup',
 t('contact-enrichment is packaged', war.includes('contact-enrichment.js'), 'not in web_accessible_resources');
 t('the enrichment settings card exists', /id="enrichProvider"/.test(popupHtml)&&/id="enrichApiKey"/.test(popupHtml));
 t('every enrichment control has a handler',
-  ['enrichEnabledToggle','enrichProvider','enrichSaveBtn','enrichTestBtn','enrichClearBtn','enrichGetKeyBtn']
+  ['enrichEnabledToggle','enrichProvider','enrichSaveBtn','enrichTestBtn','enrichClearBtn','enrichGetKeyBtn',
+   'enrichFindNowBtn','enrichSwitchBtn','enrichMoreLink']
     .every(id=>new RegExp("getElementById\\('"+id+"'\\)\\?\\.addEventListener").test(popupJs)),
   'a decorative control would silently do nothing');
 t('the enrichment UI is restored on open', /this\.enrichInitUI\(\)/.test(popupJs), 'settings would look unset');
@@ -90,6 +91,22 @@ t('clearing the key brings the sign-in form back',
 // The stored credential must remain a token, never the password.
 t('the password is still never part of the stored credential',
   /delete clean\.password/.test(enrich), 'password could reach storage');
+
+// A silent lookup is the failure mode that cannot be diagnosed: one that
+// never fired looks identical to one that ran and found nobody.
+t('the lookup can be run on demand and explains itself',
+  /id="enrichFindNowBtn"/.test(popupHtml)&&/async enrichFindNow\(\)/.test(popupJs), 'no way to verify it works');
+t('the diagnostic reports which providers were tried',
+  /r\.trace/.test(popupJs)&&/trace\.push/.test(enrich), 'no trace to report');
+t('a skipped provider is recorded rather than omitted',
+  /skipped, no key saved/.test(enrich)&&/no credits used/.test(enrich), 'silent skip');
+t('the on-demand run bypasses the cache',
+  /findContacts\(ctx,\s*\{\s*noCache:\s*true\s*\}\)/.test(popupJs), 'would report a stale answer');
+
+// ContactOut is the default because it covers both cases with one key.
+t('ContactOut is the default provider', /\|\| 'contactout'/.test(enrich), 'default is something else');
+t('ContactOut resolves a named poster as well as searching a company',
+  /contactout:[\s\S]{0,3000}lookupByProfile/.test(enrich), 'company search only');
 
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.

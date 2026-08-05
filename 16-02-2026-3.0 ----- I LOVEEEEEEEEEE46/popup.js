@@ -902,6 +902,7 @@ class ATSTailor {
     document.getElementById('enrichSaveBtn')?.addEventListener('click', () => this.enrichSaveKey());
     document.getElementById('enrichTestBtn')?.addEventListener('click', () => this.enrichTestKey());
     document.getElementById('enrichClearBtn')?.addEventListener('click', () => this.enrichClearKey());
+    document.getElementById('enrichFindNowBtn')?.addEventListener('click', () => this.enrichFindNow());
     document.getElementById('enrichMoreLink')?.addEventListener('click', (e) => {
       e.preventDefault();
       const more = document.getElementById('enrichMore');
@@ -3013,6 +3014,101 @@ class ATSTailor {
       set(t.message, t.ok ? 'var(--success)' : 'var(--error)');
     } catch (e) {
       set('Test failed: ' + (e.message || e), 'var(--error)');
+    }
+  }
+
+  // Runs the real lookup against the job in the current tab and prints
+  // every step: what the job resolved to, what the page already published,
+  // which providers were tried or skipped and why, and what came back.
+  //
+  // This exists because the useful failure is the silent one. A lookup that
+  // never fired -- because the posting already had an address, or because
+  // the only provider with a key needs a LinkedIn poster the page does not
+  // have -- looks exactly like a lookup that ran and found nobody, and
+  // spends no credits either way.
+  async enrichFindNow() {
+    const out = document.getElementById('enrichDiagnostics');
+    const lines = [];
+    const write = () => { if (out) out.textContent = lines.join('\n'); };
+    const say = (s) => { lines.push(s); write(); };
+
+    if (typeof ContactEnrichment === 'undefined') { say('Enrichment module not loaded.'); return; }
+    say('Checking…');
+    lines.length = 0;
+
+    try {
+      const cfg = await ContactEnrichment.loadConfig();
+      say('Lookup enabled: ' + (cfg.enabled === true ? 'yes' : 'NO - switch it on above'));
+
+      // What the page already published. If this has an address, enrichment
+      // is correctly skipped during a real run and no credits are spent.
+      const published = this.generatedDocuments?.jdContact || null;
+      if (!published) {
+        say('No job scanned yet in this popup. Run "Extract & Apply Keywords to CV" first,');
+        say('or open the job page and reopen this popup.');
+      } else {
+        say('Published address on the posting: ' + (published.email || 'none'));
+        if (published.email && published.hasPublishedEmail) {
+          say('');
+          say('The posting already publishes an address, so a real run uses that and');
+          say('never calls a provider. That is why no credits are spent.');
+        }
+      }
+
+      const ctx = {
+        company: this.resolveCompanyName ? this.resolveCompanyName() : (this.currentJob?.company || ''),
+        title: this.currentJob?.title || '',
+        location: this.currentJob?.location || '',
+        domain: this.followupCompanyDomain(),
+        linkedinProfiles: this.followupPosterProfiles(),
+      };
+      say('');
+      say('Searching for:');
+      say('  company  : ' + (ctx.company || '(unknown - a lookup cannot run without this)'));
+      say('  role     : ' + (ctx.title || '(unknown)'));
+      say('  location : ' + (ctx.location || '(none)'));
+      say('  domain   : ' + (ctx.domain || '(none)'));
+      say('  poster   : ' + (ctx.linkedinProfiles.length
+        ? ctx.linkedinProfiles.join(', ')
+        : '(none - this page names nobody)'));
+
+      say('');
+      say('Running lookup (this spends provider credits)…');
+      // noCache so the result reflects the providers right now, not a
+      // week-old answer. This is the button for "is it actually working".
+      const r = await ContactEnrichment.findContacts(ctx, { noCache: true });
+
+      say('');
+      for (const line of (r.trace || [])) say('  ' + line);
+
+      say('');
+      if (r.results && r.results.length) {
+        say('Found ' + r.results.length + ':');
+        for (const p of r.results) {
+          say('  ' + p.email + '  -  ' + (p.name || '?') + (p.title ? ', ' + p.title : '')
+            + '  [' + (p.provider || '?') + (p.source === 'job-poster' ? ', named poster' : '') + ']');
+        }
+        say('');
+        say('The top one is what a follow-up would use, and only when the posting');
+        say('publishes nothing itself.');
+      } else {
+        const why = {
+          disabled: 'Lookup is switched off.',
+          'no-api-key': 'No provider has a key saved.',
+          'needs-named-poster': 'The only provider with a key can resolve a named LinkedIn '
+            + 'poster, and this page names nobody. Add a ContactOut, Hunter or Apollo key.',
+          'no-company': 'No employer name could be determined, so there was nothing to search.',
+          'bad-api-key': 'Every provider rejected its key.',
+          'rate-limited': 'Rate limited by the provider.',
+          'out-of-credits': 'The provider reports no credits left.',
+          network: 'Could not reach the provider.',
+          'no-match': 'The providers ran and returned nobody matching.',
+        }[r.reason] || ('Nothing found (' + (r.reason || 'unknown') + ').');
+        say('Result: ' + why);
+      }
+    } catch (e) {
+      say('');
+      say('Diagnostic failed: ' + (e && e.message ? e.message : String(e)));
     }
   }
 

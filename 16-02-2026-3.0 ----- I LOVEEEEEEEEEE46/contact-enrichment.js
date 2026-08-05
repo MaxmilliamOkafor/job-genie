@@ -215,6 +215,35 @@
             : (p.work_email || (Array.isArray(p.email) ? p.email[0] : p.email))),
         }));
       },
+      // ContactOut can also resolve a single LinkedIn profile, which means
+      // it covers BOTH cases on its own: the named job poster where the
+      // page has a hiring-team card, and a company search where it does
+      // not. That is why it is the default.
+      // email_type=work is required -- without it the response carries no
+      // real-time verified work address, which is the only kind worth
+      // writing to about a job.
+      lookupByProfile: (slug, cred) => ({
+        url: 'https://api.contactout.com/v1/people/linkedin?profile='
+          + encodeURIComponent('https://www.linkedin.com/in/' + slug)
+          + '&email_type=work',
+        init: { method: 'GET', headers: { 'x-api-key': cred.apiKey } },
+      }),
+      parseProfile: (json) => {
+        const p = (json && (json.profile || json.data || json)) || {};
+        const emails = []
+          .concat(p.work_email || [])
+          .concat(p.email || [])
+          .filter(Boolean);
+        const company = typeof p.company === 'string'
+          ? p.company : _clean(p.company && p.company.name);
+        return emails.map((em) => ({
+          name: _clean(p.full_name || p.name),
+          title: _clean(p.title || p.headline),
+          company,
+          location: _clean(p.location),
+          email: _clean(em),
+        }));
+      },
       test: (cred) => ({
         url: 'https://api.contactout.com/v1/stats',
         init: { method: 'GET', headers: { 'x-api-key': cred.apiKey } },
@@ -374,7 +403,7 @@
   /** Store a pasted key for one provider. Never touches the others. */
   async function saveKey(providerId, cred) {
     const cfg = await loadConfig();
-    const id = providerId || cfg.provider || 'hunter';
+    const id = providerId || cfg.provider || 'contactout';
     const clean = Object.assign({}, cred);
     if (clean.apiKey) clean.apiKey = _clean(clean.apiKey);
     delete clean.password;                        // never persisted, ever
@@ -471,7 +500,7 @@
    * what the provider said, so a wrong key is nameable rather than silent.
    */
   async function testKey(providerId) {
-    const id = providerId || (await loadConfig()).provider || 'hunter';
+    const id = providerId || (await loadConfig()).provider || 'contactout';
     const provider = PROVIDERS[id];
     if (!provider || !provider.test) return { ok: false, message: 'No test available for this provider.' };
     let cred = await getCred(id);
@@ -569,30 +598,45 @@
     //
     // Order: whatever the user selected, then any other provider they have
     // a key for. Every provider is tried before reporting nothing found.
+    // A running account of what was tried and why. Without it a lookup that
+    // quietly does nothing is indistinguishable from one that ran and found
+    // nobody, and the user has no way to tell which.
+    const trace = [];
     const chain = [];
     let credentialledButUnusable = 0;
-    const first = o.provider || cfg.provider || 'hunter';
+    const first = o.provider || cfg.provider || 'contactout';
     for (const id of [first].concat(Object.keys(PROVIDERS))) {
       if (chain.indexOf(id) !== -1 || !PROVIDERS[id]) continue;
-      if (!hasCred(await getCred(id), PROVIDERS[id])) continue;
+      if (!hasCred(await getCred(id), PROVIDERS[id])) {
+        trace.push(PROVIDERS[id].label + ': skipped, no key saved');
+        continue;
+      }
       // A provider that can only resolve a named profile is pointless when
       // the page named nobody. Skipping it saves a wasted call.
       const usable = PROVIDERS[id].searchByCompany !== false || (ctx.linkedinProfiles || []).length;
-      if (usable) chain.push(id); else credentialledButUnusable++;
+      if (usable) chain.push(id);
+      else {
+        credentialledButUnusable++;
+        trace.push(PROVIDERS[id].label + ': skipped, it can only resolve a named LinkedIn '
+          + 'poster and this page named nobody (no credits used)');
+      }
     }
     if (!chain.length) {
       // Distinguishing these matters: "add a key" is wrong advice for
       // someone who has a working Closely account but is looking at a
       // Workday posting, where there is no named poster to resolve.
       return credentialledButUnusable
-        ? { ok: false, results: [], reason: 'needs-named-poster' }
-        : { ok: false, results: [], reason: 'no-api-key' };
+        ? { ok: false, results: [], reason: 'needs-named-poster', trace }
+        : { ok: false, results: [], reason: 'no-api-key', trace };
     }
 
     const collected = [];
     let lastReason = 'no-match';
     for (const id of chain) {
       const r = await _findWith(id, ctx, o);
+      trace.push(PROVIDERS[id].label + ': ' + (r.results.length
+        ? r.results.length + ' contact(s) found'
+        : (r.reason || 'nothing found')) + ' after ' + (r.calls || 0) + ' request(s)');
       if (r.results.length) { collected.push.apply(collected, r.results); break; }
       if (r.reason && r.reason !== 'no-match') lastReason = r.reason;
     }
@@ -610,20 +654,22 @@
       // "Nobody matched" is a successful lookup with an empty answer; only
       // a provider that actually failed is not ok. Collapsing the two would
       // make a rejected key look like an employer with no recruiters.
-      return { ok: lastReason === 'no-match', results: [], reason: lastReason, triedProviders: chain };
+      return { ok: lastReason === 'no-match', results: [], reason: lastReason, triedProviders: chain, trace };
     }
     log('found ' + results.length + ' contact(s) at ' + (ctx.company || 'the posting')
       + ' via ' + (results[0].provider || chain[0]));
-    return { ok: true, results, source: results[0].provider || chain[0], triedProviders: chain };
+    return { ok: true, results, source: results[0].provider || chain[0], triedProviders: chain, trace };
   }
 
-  /** One provider's attempt. Returns { results, reason } and never throws. */
+  /** One provider's attempt. Returns { results, reason, calls } and never throws. */
   async function _findWith(id, ctx, o) {
     const provider = PROVIDERS[id];
     let cred = await getCred(id);
+    let calls = 0;
 
     // Runs one request and normalises every failure mode into a reason.
     const call = async (req, parse, q) => {
+      calls++;
       let res;
       try { res = await fetch(req.url, req.init); }
       catch (e) { return { fatal: 'network' }; }
@@ -658,7 +704,7 @@
     if (provider.lookupByProfile && profiles.length) {
       for (const slug of profiles.slice(0, 3)) {
         const r = await call(provider.lookupByProfile(slug, cred), provider.parseProfile, {});
-        if (r.fatal) return { results: [], reason: r.fatal };
+        if (r.fatal) return { results: [], reason: r.fatal, calls };
         // A named poster outranks anyone a company search turns up.
         for (const p of r.rows) {
           out.push(Object.assign({}, p, { score: p.score + 40, source: 'job-poster', provider: id }));
@@ -669,14 +715,14 @@
     if (!out.length && provider.searchByCompany !== false && provider.request) {
       for (const q of buildQueries(ctx)) {
         const r = await call(provider.request(q, cred), provider.parse, q);
-        if (r.fatal) return { results: [], reason: r.fatal };
+        if (r.fatal) return { results: [], reason: r.fatal, calls };
         if (r.rows.length) {
           for (const p of r.rows) out.push(Object.assign({}, p, { provider: id }));
           break;
         }
       }
     }
-    return { results: out, reason: out.length ? '' : 'no-match' };
+    return { results: out, reason: out.length ? '' : 'no-match', calls };
   }
 
   /**

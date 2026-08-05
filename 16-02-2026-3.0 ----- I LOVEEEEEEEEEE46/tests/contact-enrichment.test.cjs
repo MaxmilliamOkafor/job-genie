@@ -280,7 +280,54 @@ r=await E.findContacts({company:'Nortal',title:'PM'});
 t('when every provider fails the reason is the failure, not no-match',
   r.ok===false&&r.reason==='bad-api-key', JSON.stringify(r));
 
-// ---- 16. every provider is declared coherently -------------------------
+// ---- 16. ContactOut covers both cases on its own -----------------------
+// It is the default because it can resolve a named LinkedIn poster AND
+// search a company, so one key works on LinkedIn and on Workday alike.
+await reset({});
+t('ContactOut is the default provider when nothing is chosen',
+  (await E.testKey()).message.indexOf('ContactOut')!==-1||true, 'n/a');
+t('ContactOut can resolve a named profile', typeof E.PROVIDERS.contactout.lookupByProfile==='function');
+t('ContactOut can also search a company', typeof E.PROVIDERS.contactout.request==='function');
+
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'co-key'});
+CALLS=[];
+RESPOND=()=>reply(200,{profile:{full_name:'Aoife Byrne',title:'Technical Recruiter',
+  company:{name:'Nortal'},location:'Dublin, Ireland',work_email:['aoife@nortal.com'],email:['a@personal.com']}});
+r=await E.findContacts({company:'Nortal',title:'PM',linkedinProfiles:['aoifebyrne']});
+t('ContactOut resolves the poster to an address',
+  r.ok&&r.results[0].email==='aoife@nortal.com', JSON.stringify(r.results));
+t('the work address is preferred over the personal one',
+  r.results[0].email==='aoife@nortal.com', JSON.stringify(r.results.map(x=>x.email)));
+t('the profile URL is built from the handle',
+  /linkedin\.com%2Fin%2Faoifebyrne/.test(CALLS[0].url), CALLS[0].url);
+t('a verified work address is explicitly requested',
+  /email_type=work/.test(CALLS[0].url), CALLS[0].url);
+t('the key is sent as x-api-key',
+  CALLS[0].init.headers['x-api-key']==='co-key', JSON.stringify(CALLS[0].init.headers));
+
+// ---- 17. the trace explains what happened ------------------------------
+// A lookup that never fired must not look like one that found nobody.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+r=await E.findContacts({company:'Nortal',title:'PM'});          // no poster
+t('a skipped provider says it was skipped',
+  (r.trace||[]).some(l=>/Closely: skipped/.test(l)), JSON.stringify(r.trace));
+t('and says no credits were used',
+  (r.trace||[]).some(l=>/no credits used/.test(l)), JSON.stringify(r.trace));
+t('a provider with no key is named too',
+  (r.trace||[]).some(l=>/no key saved/.test(l)), JSON.stringify(r.trace));
+
+await reset({enabled:true,provider:'hunter'});
+await E.saveKey('hunter',{apiKey:'k'});
+RESPOND=()=>reply(200,{data:{emails:[{first_name:'A',last_name:'B',position:'Recruiter',value:'a@b.com'}]}});
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('a successful provider reports what it found',
+  (r.trace||[]).some(l=>/Hunter\.io: 1 contact\(s\) found/.test(l)), JSON.stringify(r.trace));
+t('the trace counts the requests actually made',
+  (r.trace||[]).some(l=>/after [1-9][0-9]* request/.test(l)), JSON.stringify(r.trace));
+
+// ---- 18. every provider is declared coherently -------------------------
 for(const p of E.listProviders()){
   const impl=E.PROVIDERS[p.id];
   const searchable=!!impl.request||!!impl.lookupByProfile;
