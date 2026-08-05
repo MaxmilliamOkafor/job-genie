@@ -197,6 +197,101 @@
     return out;
   }
 
+  // ---- 3c. addresses written as plain text in the posting --------------
+  // The most common way an employer publishes a contact, and the one this
+  // module could not see: "Questions? Email careers@example.com", typed
+  // out, not linked. Nothing above finds it -- mailto only catches links,
+  // JSON-LD only catches structured data.
+  //
+  // The text extractor covered this, but only over whatever ended up in
+  // currentJob.description, which on some ATS is a truncated summary. This
+  // reads the rendered posting, so an address in the body is found whether
+  // or not the description captured it.
+  const TEXT_EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}/g;
+
+  // Prose that runs into an address without a space -- "…@example.com.For
+  // questions" -- makes the domain absorb the next word, and the result is
+  // an address that does not exist. Trailing punctuation goes, and a final
+  // Capitalised label after a real TLD is sentence text, not a subdomain.
+  const TLD_THEN_SENTENCE = /^(.+@[A-Za-z0-9.-]+\.(?:com|org|net|io|ai|co|us|uk|ie|eu|de|fr|es|it|nl|se|no|dk|fi|pl|ca|au|nz|in|jp|gov|edu|mil|info|biz|health|jobs|careers|tech|dev|app|cloud|group|global|life|world|works|team|solutions|[a-z]{2,3}))\.?(?:[A-Z][A-Za-z]*)$/;
+  function _tidyEmail(raw) {
+    let e = String(raw || '').replace(/[.,;:!?)\]}>'"«»]+$/, '');
+    const m = TLD_THEN_SENTENCE.exec(e);
+    if (m) e = m[1];
+    return e;
+  }
+
+  // Where the posting actually lives, per ATS, so page furniture (nav,
+  // cookie banners, "other jobs at this company") is not mistaken for the
+  // description.
+  const CONTENT_SELECTORS = [
+    '#content', '.job__description', '.job-post', '[class*="job-post"]',
+    '[class*="job__description"]', '[data-testid*="jobDescription"]',
+    '#job-details', '.jobDisplayContentContainer', '.description',
+    '[class*="jobDescription"]', 'main', 'article',
+  ];
+
+  function _contentRoots(doc) {
+    const roots = [];
+    for (const sel of CONTENT_SELECTORS) {
+      try {
+        for (const el of doc.querySelectorAll(sel)) {
+          if (el && !roots.includes(el)) roots.push(el);
+        }
+      } catch (e) {}
+    }
+    // Nothing recognised: the whole body is better than giving up, because
+    // a missed address costs an application.
+    if (!roots.length && doc.body) roots.push(doc.body);
+    return roots.slice(0, 6);
+  }
+
+  function fromPageText(doc) {
+    const out = [];
+    const seen = new Set();
+    try {
+      for (const root of _contentRoots(doc)) {
+        let text = '';
+        try {
+          // Clone so removing chrome does not alter the page the user sees.
+          const clone = root.cloneNode(true);
+          for (const junk of clone.querySelectorAll('script, style, noscript, nav, footer, header')) {
+            junk.remove();
+          }
+          // textContent runs block elements together with no separator, so
+          // "<p>…@example.com</p><p>For questions…</p>" reads as
+          // "…@example.comFor questions" and the address absorbs the next
+          // sentence. Put the boundary back before reading.
+          for (const block of clone.querySelectorAll('p, div, li, br, h1, h2, h3, h4, h5, h6, tr, td, section')) {
+            try { block.parentNode.insertBefore(clone.ownerDocument.createTextNode(' '), block.nextSibling); }
+            catch (e) {}
+          }
+          text = _clean(clone.textContent);
+        } catch (e) { text = _clean(root.textContent); }
+        if (!text) continue;
+
+        let m;
+        const re = new RegExp(TEXT_EMAIL_RE.source, 'g');
+        while ((m = re.exec(text)) !== null) {
+          const addr = _tidyEmail(m[0]);
+          if (!addr || addr.indexOf('@') === -1) continue;
+          const key = addr.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          // The surrounding sentence is what tells the scorer whether this
+          // is a hiring contact or an accessibility/legal mailbox.
+          const from = Math.max(0, m.index - 120);
+          out.push({
+            email: addr,
+            context: text.slice(from, m.index + addr.length + 120),
+            source: 'page-text',
+          });
+        }
+      }
+    } catch (e) {}
+    return out;
+  }
+
   // ---- 4. meta tags -----------------------------------------------------
   function fromMeta(doc) {
     const out = { org: '', emails: [] };
@@ -225,7 +320,8 @@
     const emails = []
       .concat(fromMailtoLinks(d))       // explicitly made clickable
       .concat(ld.emails)                // declared as the application contact
-      .concat(meta.emails);
+      .concat(meta.emails)
+      .concat(fromPageText(d));         // typed into the posting body
 
     // De-duplicate, keeping the earliest (highest-intent) source.
     const seen = new Set();
@@ -258,7 +354,7 @@
     };
   }
 
-  global.JDContactSources = { harvest, fromMailtoLinks, fromJsonLd, fromLinkedInPoster, fromProfileLinks, fromMeta };
+  global.JDContactSources = { harvest, fromMailtoLinks, fromJsonLd, fromLinkedInPoster, fromProfileLinks, fromPageText, fromMeta, _tidyEmail };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.JDContactSources;
   try { console.log(TAG, 'ready'); } catch (e) {}
 })(typeof window !== 'undefined' ? window : globalThis);
