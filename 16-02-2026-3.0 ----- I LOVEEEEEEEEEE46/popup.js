@@ -2053,7 +2053,7 @@ class ATSTailor {
     // details that make it worth sending. Fall back to the last job we
     // actually tailored for, which is the job the documents belong to.
     const job = this.currentJob || stored.ats_lastJob || {};
-    const detected = this.generatedDocuments?.jdContact || {};
+    const detected = this.jdContact || this.generatedDocuments?.jdContact || {};
     const first = profile.first_name || profile.firstName || '';
     const last = profile.last_name || profile.lastName || '';
     return {
@@ -2852,6 +2852,15 @@ class ATSTailor {
   // Called after tailoring: read the posting for a PUBLISHED contact email
   // and the job/requisition ID, then surface it in the composer.
   async followupDetectContact() {
+    // Clear FIRST. Without this, a run whose detection fails leaves the
+    // previous job's recipient in place, and the note for this application
+    // goes to a recruiter at the last company. A missing address is a
+    // skipped email; a stale one is an email to the wrong employer.
+    this.jdContact = null;
+    if (this.generatedDocuments) this.generatedDocuments.jdContact = null;
+    const toEl0 = document.getElementById('followupTo');
+    if (toEl0 && toEl0.dataset.autofilled === '1') { toEl0.value = ''; delete toEl0.dataset.autofilled; }
+
     try {
       if (typeof JDContactExtractor === 'undefined') return;
       const jdText = this.currentJob?.description || this.currentJob?.jdText || '';
@@ -2867,11 +2876,15 @@ class ATSTailor {
         // mailto links and JSON-LD applicationContact never counted.
         pageSources: await this.followupHarvestPageSources(),
       });
-      this.generatedDocuments.jdContact = detected;
+      // Durable home. generatedDocuments is reassigned wholesale later in
+      // the tailoring run, which discarded whatever detection had found --
+      // the recipient was located and then thrown away before the send.
+      this.jdContact = detected;
+      if (this.generatedDocuments) this.generatedDocuments.jdContact = detected;
 
       const toEl = document.getElementById('followupTo');
       const info = document.getElementById('followupDetected');
-      if (toEl && detected.email && !toEl.value) toEl.value = detected.email;
+      if (toEl && detected.email && !toEl.value) { toEl.value = detected.email; toEl.dataset.autofilled = '1'; }
       if (info) {
         if (detected.hasPublishedEmail) {
           info.textContent = '✓ Published in the posting: ' + detected.email +
@@ -3098,7 +3111,7 @@ class ATSTailor {
 
       // What the page already published. If this has an address, enrichment
       // is correctly skipped during a real run and no credits are spent.
-      const published = this.generatedDocuments?.jdContact || null;
+      const published = this.jdContact || this.generatedDocuments?.jdContact || null;
       if (!published) {
         say('No job scanned yet in this popup. Run "Extract & Apply Keywords to CV" first,');
         say('or open the job page and reopen this popup.');
@@ -3112,7 +3125,7 @@ class ATSTailor {
       }
 
       const ctx = {
-        company: this.resolveCompanyName ? this.resolveCompanyName() : (this.currentJob?.company || ''),
+        company: this.enrichCompanyName(),
         title: this.currentJob?.title || '',
         location: this.currentJob?.location || '',
         domain: this.followupCompanyDomain(),
@@ -3267,14 +3280,14 @@ class ATSTailor {
           this.followupEnrich();
           return;
         }
-        const detected = this.generatedDocuments?.jdContact;
+        const detected = this.jdContact || this.generatedDocuments?.jdContact;
         if (resp.email) {
           if (detected) {
             detected.email = resp.email;
             detected.emailSource = 'company-careers-page';
           }
           const toEl = document.getElementById('followupTo');
-          if (toEl && !toEl.value) toEl.value = resp.email;
+          if (toEl && !toEl.value) { toEl.value = resp.email; toEl.dataset.autofilled = '1'; }
           if (info) {
             info.textContent = '✓ Company\'s published recruiting address: ' + resp.email +
               (detected && detected.jobId ? ' · Job ID ' + detected.jobId : '') +
@@ -3320,7 +3333,7 @@ class ATSTailor {
       }
 
       const ctx = {
-        company: this.resolveCompanyName ? this.resolveCompanyName() : (this.currentJob?.company || ''),
+        company: this.enrichCompanyName(),
         title: this.currentJob?.title || '',
         location: this.currentJob?.location || '',
         domain: this.followupCompanyDomain(),
@@ -3346,7 +3359,7 @@ class ATSTailor {
         return;
       }
 
-      const detected = this.generatedDocuments?.jdContact;
+      const detected = this.jdContact || this.generatedDocuments?.jdContact;
       if (detected && !detected.email) {
         detected.email = hit.email;
         detected.contactName = hit.name || detected.contactName;
@@ -3354,7 +3367,7 @@ class ATSTailor {
         detected.hasPublishedEmail = false;
       }
       const toEl = document.getElementById('followupTo');
-      if (toEl && !toEl.value) toEl.value = hit.email;
+      if (toEl && !toEl.value) { toEl.value = hit.email; toEl.dataset.autofilled = '1'; }
 
       if (info) {
         // Labelled honestly. This is not an address the employer published,
@@ -3372,12 +3385,29 @@ class ATSTailor {
     }
   }
 
+  // resolveCompanyName takes (job, detected). Called bare it resolved to
+  // nothing, so ctx.company was empty and every lookup short-circuited on
+  // 'no-company' before a request was made. Same extractor the cover letter
+  // and the email template use, so all three name the employer identically.
+  enrichCompanyName() {
+    try {
+      const job = this.currentJob || {};
+      const detected = this.jdContact || this.generatedDocuments?.jdContact || {};
+      if (typeof this.resolveCompanyName === 'function') {
+        return this.resolveCompanyName(job, detected) || '';
+      }
+      return job.company || detected.company || '';
+    } catch (e) {
+      return this.currentJob?.company || '';
+    }
+  }
+
   // The employer's mail domain, when the posting itself gives one away.
   // Hunter searches far more accurately by domain than by company name,
   // where "Meta" matches a dozen unrelated companies.
   followupCompanyDomain() {
     try {
-      const published = this.generatedDocuments?.jdContact?.email || '';
+      const published = (this.jdContact || this.generatedDocuments?.jdContact)?.email || '';
       if (published.indexOf('@') !== -1) return published.split('@')[1].toLowerCase();
       const url = this.currentJob?.url || '';
       const host = url ? new URL(url).hostname.replace(/^www\./, '').toLowerCase() : '';
@@ -3393,7 +3423,7 @@ class ATSTailor {
   // person beats any company-wide guess.
   followupPosterProfiles() {
     try {
-      const names = this.generatedDocuments?.jdContact?.sourceNames
+      const names = (this.jdContact || this.generatedDocuments?.jdContact)?.sourceNames
         || this.currentJob?.contactNames || [];
       return names.map((n) => n && n.profile).filter(Boolean);
     } catch (e) { return []; }

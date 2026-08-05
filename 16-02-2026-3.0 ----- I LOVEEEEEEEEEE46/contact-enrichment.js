@@ -45,6 +45,7 @@
   const KEY_CFG = 'enrichment_config';     // { provider, enabled, keys:{ id:{...} } }
   const KEY_CACHE = 'enrichment_cache';
   const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // a week; people change jobs
+  const MISS_TTL_MS = 2 * 60 * 60 * 1000;         // a miss is usually a fixable setup problem
   const log = (...a) => { try { console.log(TAG, ...a); } catch (e) {} };
 
   function _clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
@@ -465,6 +466,10 @@
     // the dropdown. Only seed it when nothing has been chosen at all.
     if (!cfg.provider) cfg.provider = id;
     await _writeConfig(cfg);
+    // Misses recorded while this key was missing or wrong are now stale:
+    // keeping them would mean a corrected key changed nothing until they
+    // expired. Positive results are discarded too, which costs one lookup.
+    await clearCache();
     return true;
   }
 
@@ -571,6 +576,14 @@
           : 'Key rejected by ' + provider.label + ' (401/403). Check you copied the whole key.' };
       }
       if (res.status === 429) return { ok: false, message: provider.label + ' rate limit reached. Try again later.' };
+      // A missing status endpoint says nothing about the key. Reporting it
+      // as a failure would send someone hunting for a new key when the one
+      // they have is fine -- the only test that proves a key is the lookup
+      // itself, which "Find contact for this job now" runs.
+      if (res.status === 404 || res.status === 405) {
+        return { ok: true, message: provider.label + ' has no status endpoint to check, so the key '
+          + 'could not be confirmed here. Use "Find contact for this job now" to test it for real.' };
+      }
       if (!res.ok) return { ok: false, message: provider.label + ' returned HTTP ' + res.status + '.' };
       const json = await res.json().catch(() => null);
       const extra = provider.parseTest ? provider.parseTest(json) : null;
@@ -584,7 +597,12 @@
   // Lookups cost credits, the same employer is applied to more than once,
   // and a recruiter does not change weekly.
   function _cacheKey(ctx) {
-    return _clean(ctx && ctx.company).toLowerCase() + '|' + _clean(ctx && ctx.title).toLowerCase();
+    // The poster handle is part of the key. Without it, two postings that
+    // both failed to yield a company name shared the single key "|" and
+    // returned each other's answers.
+    return _clean(ctx && ctx.company).toLowerCase()
+      + '|' + _clean(ctx && ctx.title).toLowerCase()
+      + '|' + ((ctx && ctx.linkedinProfiles) || []).join(',').toLowerCase();
   }
 
   function readCache(ctx) {
@@ -593,7 +611,13 @@
         chrome.storage.local.get([KEY_CACHE], (r) => {
           const all = (r && r[KEY_CACHE]) || {};
           const hit = all[_cacheKey(ctx)];
-          resolve(hit && hit.at && Date.now() - hit.at < CACHE_TTL_MS ? (hit.results || []) : null);
+          if (!hit || !hit.at) { resolve(null); return; }
+          // A found recruiter is good for a week. A MISS is not: it is
+          // usually a key that was missing, wrong or out of credits at the
+          // time, and caching that for a week meant fixing the key changed
+          // nothing for the next seven days. Retry misses the same day.
+          const ttl = (hit.results && hit.results.length) ? CACHE_TTL_MS : MISS_TTL_MS;
+          resolve(Date.now() - hit.at < ttl ? (hit.results || []) : null);
         });
       } catch (e) { resolve(null); }
     });

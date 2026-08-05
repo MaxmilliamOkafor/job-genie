@@ -108,6 +108,29 @@ t('ContactOut is the default provider', /\|\| 'contactout'/.test(enrich), 'defau
 t('ContactOut resolves a named poster as well as searching a company',
   /contactout:[\s\S]{0,6000}lookupByProfile/.test(enrich), 'company search only');
 
+// generatedDocuments is reassigned wholesale mid-run, so anything parked on
+// it during detection was silently discarded before the send.
+t('the detected contact has a home that survives the run',
+  /this\.jdContact = detected/.test(popupJs), 'parked on generatedDocuments only');
+t('every reader prefers the durable copy',
+  !/(?<!this\.jdContact \|\| )this\.generatedDocuments\?\.jdContact/.test(popupJs), 'a reader still reads the wiped copy');
+
+// A missing address skips an email; a stale one emails the wrong employer.
+t('detection clears the previous job first',
+  /async followupDetectContact\(\)\s*\{[\s\S]{0,400}this\.jdContact = null/.test(popupJs), 'stale contact can leak');
+t('an auto-filled recipient is cleared for the next job',
+  /dataset\.autofilled/.test(popupJs), 'previous employer stays in the To field');
+t('an address the user typed is never cleared',
+  /toEl0\.dataset\.autofilled === '1'/.test(popupJs), 'would discard a manual address');
+
+// resolveCompanyName takes (job, detected); called bare it returned nothing
+// and every lookup short-circuited on 'no-company'.
+t('the lookup resolves the company through the shared extractor',
+  /enrichCompanyName\(\)/.test(popupJs)&&/this\.resolveCompanyName\(job, detected\)/.test(popupJs),
+  'company would be empty');
+t('no caller invokes resolveCompanyName with no arguments',
+  !/resolveCompanyName\(\)/.test(popupJs), 'returns nothing, kills the lookup');
+
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.
 t('enrichment runs only after the careers-page fallback',

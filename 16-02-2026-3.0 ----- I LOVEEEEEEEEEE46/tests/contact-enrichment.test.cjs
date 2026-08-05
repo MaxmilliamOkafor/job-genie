@@ -370,6 +370,72 @@ r=await E.findContacts({company:'Nortal',title:'PM'});
 t('an unresolvable row yields no address rather than a blank one',
   r.results.length===0&&r.reason==='no-match', JSON.stringify(r));
 
+// ---- 16d. the cache must not lock in a fixable failure -----------------
+// A miss is usually a key that was missing, wrong or out of credits. Held
+// for a week, fixing the key changed nothing for seven days.
+await reset({enabled:true,provider:'hunter'});
+await E.saveKey('hunter',{apiKey:'k'});
+CALLS=[];
+RESPOND=()=>reply(200,{data:{emails:[]}});
+r=await E.findContacts({company:'Nowhere Ltd',title:'PM'});
+t('a miss is recorded', r.reason==='no-match', JSON.stringify(r));
+let n0=CALLS.length;
+r=await E.findContacts({company:'Nowhere Ltd',title:'PM'});
+t('an immediate retry is still served from cache (credits are not free)',
+  CALLS.length===n0, CALLS.length+' vs '+n0);
+// Age the miss past the short window but well inside the week-long one.
+let cache=STORE['enrichment_cache'];
+Object.keys(cache).forEach(k=>{cache[k].at=Date.now()-3*60*60*1000;});
+STORE['enrichment_cache']=cache;
+r=await E.findContacts({company:'Nowhere Ltd',title:'PM'});
+t('a few hours later the miss is retried, not replayed for a week',
+  CALLS.length>n0, CALLS.length+' vs '+n0);
+
+// A hit is worth keeping for the full week.
+await reset({enabled:true,provider:'hunter'});
+await E.saveKey('hunter',{apiKey:'k'});
+RESPOND=()=>reply(200,{data:{emails:[{first_name:'A',last_name:'B',position:'Recruiter',value:'a@b.com'}]}});
+await E.findContacts({company:'Nortal',title:'PM'});
+cache=STORE['enrichment_cache'];
+Object.keys(cache).forEach(k=>{cache[k].at=Date.now()-3*60*60*1000;});
+STORE['enrichment_cache']=cache;
+CALLS=[];
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('a found recruiter is still cached hours later', r.source==='cache'&&CALLS.length===0, JSON.stringify(r.source));
+
+// Saving a key invalidates misses recorded while it was missing or wrong.
+await reset({enabled:true,provider:'hunter'});
+await E.saveKey('hunter',{apiKey:'wrong'});
+RESPOND=()=>reply(200,{data:{emails:[]}});
+await E.findContacts({company:'Nortal',title:'PM'});
+await E.saveKey('hunter',{apiKey:'correct'});
+CALLS=[];
+RESPOND=()=>reply(200,{data:{emails:[{first_name:'A',last_name:'B',position:'Recruiter',value:'a@b.com'}]}});
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('correcting the key retries immediately instead of replaying the miss',
+  r.ok&&r.results.length===1&&CALLS.length>0, JSON.stringify(r));
+
+// Two postings that both failed to yield a company name shared one key.
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'k'});
+RESPOND=()=>reply(200,{profile:{full_name:'A',contact_info:{work_email:['a@one.com']}}});
+await E.findContacts({linkedinProfiles:['personone']});
+RESPOND=()=>reply(200,{profile:{full_name:'B',contact_info:{work_email:['b@two.com']}}});
+r=await E.findContacts({linkedinProfiles:['persontwo']});
+t('two company-less postings do not share a cache entry',
+  r.results[0]&&r.results[0].email==='b@two.com', JSON.stringify(r.results));
+
+// ---- 16e. a missing status endpoint is not a bad key -------------------
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'k'});
+RESPOND=()=>reply(404,{});
+tk=await E.testKey('contactout');
+t('a 404 on the status endpoint does not condemn a working key',
+  tk.ok===true&&/could not be confirmed/i.test(tk.message), tk.message);
+RESPOND=()=>reply(401,{});
+tk=await E.testKey('contactout');
+t('a genuinely rejected key is still reported', tk.ok===false, tk.message);
+
 // ---- 17. the trace explains what happened ------------------------------
 // A lookup that never fired must not look like one that found nobody.
 await reset({enabled:true,provider:'closely'});
