@@ -333,6 +333,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "jg-trace.js",
         "icons/*.png",
         "content.css",
         "bulk-apply.html",

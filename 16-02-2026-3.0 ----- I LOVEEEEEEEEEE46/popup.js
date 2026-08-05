@@ -7,22 +7,49 @@ const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 // ============ GLOBAL ERROR HANDLER: Prevent extension crashes ============
-// Catches unhandled promise rejections that would otherwise crash the extension
+// These used to console.error and nothing else. The popup's console is
+// wiped every time the popup closes, and the debug export only carries the
+// content script's log -- so a crash here left no evidence at all, and
+// "it crashed" could not be turned into a cause.
+//
+// Errors are now kept in a small ring buffer in storage and shown by
+// "Run full check", so reporting a crash is copy and paste.
+const JG_ERR_KEY = 'popup_error_log';
+const JG_ERR_MAX = 25;
+
+function jgRecordError(kind, err, extra) {
+  const entry = {
+    at: Date.now(),
+    kind,
+    message: (err && err.message) || String(err || 'unknown'),
+    // The stack is the whole point: it names the function and line.
+    stack: String((err && err.stack) || '').split('\n').slice(0, 6).join('\n'),
+    where: extra || '',
+  };
+  try { console.error('[ATS Tailor]', kind, entry.message, err); } catch (e) {}
+  try { if (window.JGTrace) window.JGTrace.error('window', err, kind + ' ' + (extra || '')); } catch (e) {}
+  try {
+    chrome.storage.local.get([JG_ERR_KEY], (r) => {
+      const log = ((r && r[JG_ERR_KEY]) || []).concat([entry]).slice(-JG_ERR_MAX);
+      chrome.storage.local.set({ [JG_ERR_KEY]: log });
+    });
+  } catch (e) {}
+}
+
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('[ATS Tailor] Unhandled promise rejection:', event.reason);
-  event.preventDefault(); // Prevent the error from crashing the extension
-  
-  // Show user-friendly error message
-  const errorMessage = event.reason?.message || 'An unexpected error occurred';
+  jgRecordError('unhandled-rejection', event.reason);
+  // Kept: an unhandled rejection must not take the popup down. It is now
+  // recorded first, so suppressing it no longer hides it.
+  event.preventDefault();
+  const errorMessage = (event.reason && event.reason.message) || 'An unexpected error occurred';
   if (window.atsTailor?.showToast) {
     window.atsTailor.showToast(`Error: ${errorMessage.substring(0, 100)}`, 'error');
   }
 });
 
-// Global error handler for synchronous errors
 window.addEventListener('error', (event) => {
-  console.error('[ATS Tailor] Unhandled error:', event.error);
-  // Don't prevent default for these - let them be logged
+  jgRecordError('error', event.error || event.message,
+    (event.filename || '') + (event.lineno ? ':' + event.lineno : ''));
 });
 
 // ============ GLOBAL DATE NORMALISATION: any → "Month YYYY" ============
@@ -867,6 +894,13 @@ class ATSTailor {
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
     document.getElementById('followupPreflightBtn')?.addEventListener('click', () => this.followupPreflight());
+    document.getElementById('traceCopyBtn')?.addEventListener('click', () => this.traceExport('copy'));
+    document.getElementById('traceSaveBtn')?.addEventListener('click', () => this.traceExport('download'));
+    document.getElementById('traceClearBtn')?.addEventListener('click', () => {
+      if (window.JGTrace) window.JGTrace.clear();
+      chrome.storage.local.remove(['popup_error_log']);
+      this.showToast('Trace cleared', 'success');
+    });
     document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
     document.getElementById('followupClearClientBtn')?.addEventListener('click', () => this.followupSaveClientId(true));
     document.getElementById('followupCopyRedirectBtn')?.addEventListener('click', () => this.followupCopyRedirect());
@@ -3096,6 +3130,32 @@ class ATSTailor {
     }
   }
 
+  // The trace is only useful if it can leave the popup. Copy for pasting
+  // into a report, download for anything too long to paste.
+  async traceExport(how) {
+    if (!window.JGTrace) { this.showToast('Tracer not loaded', 'error'); return; }
+    try {
+      const text = window.JGTrace.asText();
+      if (how === 'copy') {
+        await navigator.clipboard.writeText(text);
+        this.showToast('Trace copied (' + window.JGTrace.snapshot().entries + ' entries)', 'success');
+        return;
+      }
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      await chrome.downloads.download({
+        url,
+        filename: 'job-genie-trace-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt',
+        saveAs: true,
+      });
+      // Revoking immediately can cancel the download in flight.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      this.showToast('Trace downloaded', 'success');
+    } catch (e) {
+      this.showToast('Could not export trace: ' + (e.message || e), 'error');
+    }
+  }
+
   /**
    * Every precondition a follow-up depends on, checked in order, each with
    * the specific thing to change when it fails.
@@ -3219,7 +3279,23 @@ class ATSTailor {
           sources.emails.length + ' published address(es), ' + sources.names.length + ' name(s)');
       }
 
-      // 9. What happened last time, so a past silent skip is visible now.
+      // 9. Anything that actually threw. This is the evidence a crash
+      //    report needs, and it survives the popup being closed.
+      const errLog = await new Promise((r) => chrome.storage.local.get(
+        ['popup_error_log'], (x) => r((x && x.popup_error_log) || [])));
+      if (errLog.length) {
+        say('');
+        say('Recent errors (' + errLog.length + ', newest last) - copy these when reporting:');
+        for (const e of errLog.slice(-5)) {
+          say('  ' + new Date(e.at).toLocaleTimeString('en-GB') + '  ' + e.kind + ': ' + e.message
+            + (e.where ? '  @ ' + e.where : ''));
+          if (e.stack) for (const l of e.stack.split('\n').slice(1, 3)) say('      ' + l.trim());
+        }
+      } else {
+        ok('No errors recorded since the extension was loaded');
+      }
+
+      // 10. What happened last time, so a past silent skip is visible now.
       if (st.followup_last_outcome) {
         const o = st.followup_last_outcome;
         note('Last follow-up (' + new Date(o.at).toLocaleString('en-GB') + ')', o.message);
@@ -8675,5 +8751,11 @@ ATSTailor.prototype.copyDebugReport = function() {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   // Store global reference for error handler access
+  // Trace BEFORE constructing: instrumenting the prototype first means the
+  // constructor's own calls are recorded too, and startup is where several
+  // of the hardest failures have been.
+  try {
+    if (window.JGTrace) window.JGTrace.instrument(ATSTailor.prototype, 'popup');
+  } catch (e) { console.warn('[ATS Tailor] trace instrumentation skipped:', e && e.message); }
   window.atsTailor = new ATSTailor();
 });
