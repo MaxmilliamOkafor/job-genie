@@ -890,6 +890,25 @@ class ATSTailor {
       chrome.storage.local.set({ followup_attach_enabled: enabled });
       this.showToast(enabled ? 'Documents will be attached' : 'Documents will not be attached', 'success');
     });
+    // Contact lookup (opt-in). Off by default and only ever consulted when
+    // nothing was published; see followupEnrich().
+    document.getElementById('enrichEnabledToggle')?.addEventListener('change', async (e) => {
+      const enabled = !!e.target?.checked;
+      if (typeof ContactEnrichment !== 'undefined') await ContactEnrichment.saveConfig({ enabled });
+      this.showToast(enabled ? 'Contact lookup enabled' : 'Contact lookup disabled', 'success');
+      this.enrichRefreshStatus();
+    });
+    document.getElementById('enrichProvider')?.addEventListener('change', (e) => this.enrichSelectProvider(e.target.value));
+    document.getElementById('enrichSaveBtn')?.addEventListener('click', () => this.enrichSaveKey());
+    document.getElementById('enrichTestBtn')?.addEventListener('click', () => this.enrichTestKey());
+    document.getElementById('enrichClearBtn')?.addEventListener('click', () => this.enrichClearKey());
+    document.getElementById('enrichGetKeyBtn')?.addEventListener('click', async () => {
+      if (typeof ContactEnrichment === 'undefined') return;
+      const id = document.getElementById('enrichProvider')?.value || '';
+      const p = ContactEnrichment.listProviders().find((x) => x.id === id);
+      if (p && p.keyUrl) chrome.tabs.create({ url: p.keyUrl });
+    });
+
     document.getElementById('followupComposeBtn')?.addEventListener('click', () => this.followupCompose());
     document.getElementById('followupTestBtn')?.addEventListener('click', () => this.followupSend({ test: true }));
     document.getElementById('followupSendBtn')?.addEventListener('click', () => this.followupSend({ test: false }));
@@ -1387,6 +1406,7 @@ class ATSTailor {
     if (atToggle) atToggle.checked = result.followup_attach_enabled !== false;
     this.followupLoadTemplate();
     this.followupRefreshStatus();
+    this.enrichInitUI();
     // DOCX is now the only attach format; the selector was removed and
     // attach_format is hard-pinned to 'docx' inside the tailor pipeline.
   }
@@ -2647,6 +2667,11 @@ class ATSTailor {
       const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
       if (cfg.followup_enabled !== true) return;
 
+      // Contact detection started earlier in the tailoring run and reaches
+      // into the job tab. Let it finish before deciding there is nobody to
+      // write to, or a slow page turns into a silently unsent note.
+      if (this.contactDetection) { try { await this.contactDetection; } catch (e) {} }
+
       const ctx = await this.followupContext();
       if (!ctx.email) {
         console.log('[ATS Tailor] follow-up: no published address on this posting, nothing sent');
@@ -2754,7 +2779,7 @@ class ATSTailor {
 
   // Called after tailoring: read the posting for a PUBLISHED contact email
   // and the job/requisition ID, then surface it in the composer.
-  followupDetectContact() {
+  async followupDetectContact() {
     try {
       if (typeof JDContactExtractor === 'undefined') return;
       const jdText = this.currentJob?.description || this.currentJob?.jdText || '';
@@ -2764,6 +2789,11 @@ class ATSTailor {
         title: this.currentJob?.title || '',
         company: this.currentJob?.company || '',
         ownEmail: this.session?.user?.email || '',
+        // Harvested from the JOB PAGE, not from this popup. Without it the
+        // extractor would call JDContactSources.harvest() against the
+        // popup's own document, which publishes no employer contacts, so
+        // mailto links and JSON-LD applicationContact never counted.
+        pageSources: await this.followupHarvestPageSources(),
       });
       this.generatedDocuments.jdContact = detected;
 
@@ -2795,6 +2825,218 @@ class ATSTailor {
     }
   }
 
+  // ---- contact lookup settings -----------------------------------------
+  // Populates the provider list and restores whatever is already saved, so
+  // reopening the popup shows the real state rather than an empty form.
+  async enrichInitUI() {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const sel = document.getElementById('enrichProvider');
+    if (!sel) return;
+    try {
+      const providers = ContactEnrichment.listProviders();
+      const cfg = await ContactEnrichment.loadConfig();
+      const current = cfg.provider || providers[0].id;
+
+      sel.innerHTML = providers
+        .map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
+      sel.value = current;
+
+      const t = document.getElementById('enrichEnabledToggle');
+      if (t) t.checked = cfg.enabled === true;
+
+      this.enrichSelectProvider(current);
+    } catch (e) {
+      console.warn('[ATS Tailor] enrichment UI init failed:', e && e.message);
+    }
+  }
+
+  // Key-style and account-style providers need different fields. Showing
+  // an "API key" box for Closely, which issues none, is what sends people
+  // hunting for a key that does not exist.
+  async enrichSelectProvider(id) {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const p = ContactEnrichment.listProviders().find((x) => x.id === id);
+    if (!p) return;
+    await ContactEnrichment.saveConfig({ provider: id });
+
+    const keyFields = document.getElementById('enrichKeyFields');
+    const acctFields = document.getElementById('enrichAccountFields');
+    const isAccount = p.keyKind === 'account';
+    if (keyFields) keyFields.style.display = isAccount ? 'none' : '';
+    if (acctFields) acctFields.style.display = isAccount ? '' : 'none';
+
+    const hint = document.getElementById('enrichHint');
+    if (hint) hint.textContent = p.hint || '';
+    const saveBtn = document.getElementById('enrichSaveBtn');
+    if (saveBtn) saveBtn.textContent = isAccount ? 'Sign in and create key' : 'Save key';
+    const getBtn = document.getElementById('enrichGetKeyBtn');
+    if (getBtn) getBtn.textContent = isAccount ? 'Open provider site ↗' : 'Open provider API keys page ↗';
+
+    // The saved secret is never written back into the field: a stored key
+    // must not be readable from the popup, only replaceable.
+    const keyInput = document.getElementById('enrichApiKey');
+    if (keyInput) keyInput.value = '';
+    const pw = document.getElementById('enrichAccountPassword');
+    if (pw) pw.value = '';
+
+    this.enrichRefreshStatus();
+  }
+
+  async enrichRefreshStatus() {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const el = document.getElementById('enrichStatus');
+    if (!el) return;
+    try {
+      const cfg = await ContactEnrichment.loadConfig();
+      const id = document.getElementById('enrichProvider')?.value || cfg.provider;
+      const p = ContactEnrichment.listProviders().find((x) => x.id === id);
+      const cred = await ContactEnrichment.getCred(id);
+      const saved = !!(cred && (cred.apiKey || cred.token));
+
+      if (!saved) {
+        el.textContent = 'No key saved for ' + (p ? p.label : id) + '.';
+        el.style.color = 'var(--warning)';
+      } else if (cfg.enabled !== true) {
+        el.textContent = 'Key saved for ' + (p ? p.label : id) + ', but lookup is switched off.';
+        el.style.color = 'var(--warning)';
+      } else {
+        el.textContent = 'Key saved for ' + (p ? p.label : id) + '. Used only when nothing is published.';
+        el.style.color = 'var(--success)';
+      }
+    } catch (e) { /* status is cosmetic */ }
+  }
+
+  async enrichSaveKey() {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const el = document.getElementById('enrichStatus');
+    const set = (msg, color) => { if (el) { el.textContent = msg; el.style.color = color || ''; } };
+    const id = document.getElementById('enrichProvider')?.value || '';
+    const p = ContactEnrichment.listProviders().find((x) => x.id === id);
+    if (!p) return;
+
+    try {
+      if (p.keyKind === 'account') {
+        const emailEl = document.getElementById('enrichAccountEmail');
+        const pwEl = document.getElementById('enrichAccountPassword');
+        const email = (emailEl?.value || '').trim();
+        const password = pwEl?.value || '';
+        if (!email || !password) { set('Enter your ' + p.label + ' email and password.', 'var(--error)'); return; }
+
+        set('Signing in to ' + p.label + '…');
+        const r = await ContactEnrichment.createKey(id, { email, password });
+        // Clear the password field the moment the exchange is done. It was
+        // never persisted; this stops it sitting in the DOM afterwards.
+        if (pwEl) pwEl.value = '';
+        set(r.message || (r.ok ? 'Connected.' : 'Could not connect.'), r.ok ? 'var(--success)' : 'var(--error)');
+        if (r.ok) this.showToast(p.label + ' connected', 'success');
+        return;
+      }
+
+      const keyEl = document.getElementById('enrichApiKey');
+      const apiKey = (keyEl?.value || '').trim();
+      if (!apiKey) { set('Paste your ' + p.label + ' API key first.', 'var(--error)'); return; }
+      await ContactEnrichment.saveKey(id, { apiKey });
+      if (keyEl) keyEl.value = '';
+      set('Key saved. Testing…');
+      const t = await ContactEnrichment.testKey(id);
+      set(t.message, t.ok ? 'var(--success)' : 'var(--error)');
+      this.showToast(t.ok ? p.label + ' key saved' : 'Key saved but not accepted', t.ok ? 'success' : 'error');
+    } catch (e) {
+      set('Could not save: ' + (e.message || e), 'var(--error)');
+    }
+  }
+
+  async enrichTestKey() {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const el = document.getElementById('enrichStatus');
+    const set = (msg, color) => { if (el) { el.textContent = msg; el.style.color = color || ''; } };
+    const id = document.getElementById('enrichProvider')?.value || '';
+    set('Testing…');
+    try {
+      const t = await ContactEnrichment.testKey(id);
+      set(t.message, t.ok ? 'var(--success)' : 'var(--error)');
+    } catch (e) {
+      set('Test failed: ' + (e.message || e), 'var(--error)');
+    }
+  }
+
+  async enrichClearKey() {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const id = document.getElementById('enrichProvider')?.value || '';
+    await ContactEnrichment.clearKey(id);
+    await ContactEnrichment.clearCache();
+    const keyEl = document.getElementById('enrichApiKey');
+    if (keyEl) keyEl.value = '';
+    const pwEl = document.getElementById('enrichAccountPassword');
+    if (pwEl) pwEl.value = '';
+    this.showToast('Key and cached lookups cleared', 'success');
+    this.enrichRefreshStatus();
+  }
+
+  // Runs JDContactSources against the JOB TAB and merges what every frame
+  // published. Per-frame matters: Greenhouse and Lever postings are
+  // routinely embedded in an iframe on the employer's own careers page, and
+  // the mailto link is inside that frame, not the top document.
+  // (executeScript returns one result per frame; tabs.sendMessage would
+  // deliver only the first frame's reply.)
+  async followupHarvestPageSources() {
+    const EMPTY = { emails: [], names: [], org: '', jobId: '' };
+    try {
+      if (!chrome?.scripting?.executeScript) return null;
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs && tabs[0] && tabs[0].id;
+      if (!tabId) return null;
+
+      // The module is a content script on the ATS domains but not on every
+      // employer's own site, so make sure it is present before calling it.
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId, allFrames: true },
+          files: ['jd-contact-sources.js'],
+        });
+      } catch (e) { /* already injected, or a frame we may not touch */ }
+
+      const frames = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => {
+          try { return window.JDContactSources ? window.JDContactSources.harvest() : null; }
+          catch (e) { return null; }
+        },
+      });
+
+      const merged = { emails: [], names: [], org: '', jobId: '' };
+      for (const f of (frames || [])) {
+        const r = f && f.result;
+        if (!r) continue;
+        merged.emails.push.apply(merged.emails, r.emails || []);
+        merged.names.push.apply(merged.names, r.names || []);
+        if (!merged.org) merged.org = r.org || '';
+        if (!merged.jobId) merged.jobId = r.jobId || '';
+      }
+      // De-duplicate across frames: an embedded posting often repeats the
+      // parent page's contact details.
+      const seenE = new Set();
+      merged.emails = merged.emails.filter((e) => {
+        const k = String(e.email || '').toLowerCase();
+        if (!k || seenE.has(k)) return false;
+        seenE.add(k); return true;
+      });
+      const seenN = new Set();
+      merged.names = merged.names.filter((n) => {
+        const k = String(n.name || '').toLowerCase();
+        if (!k || seenN.has(k)) return false;
+        seenN.add(k); return true;
+      });
+
+      console.log('[ATS Tailor] page sources:', merged.emails.length, 'email(s),',
+        merged.names.length, 'name(s) across', (frames || []).length, 'frame(s)');
+      return merged.emails.length || merged.names.length || merged.org || merged.jobId ? merged : EMPTY;
+    } catch (e) {
+      console.warn('[ATS Tailor] page source harvest failed:', e && e.message);
+      return null;
+    }
+  }
+
   // Automatic fallback when the posting has no contact email: ask the
   // background worker (the only context with cross-origin fetch) for a
   // candidate-facing mailbox the employer published on its own website.
@@ -2807,11 +3049,9 @@ class ATSTailor {
         jdUrl: this.currentJob?.url || '',
       }, (resp) => {
         if (chrome.runtime.lastError || !resp || !resp.ok) {
-          if (info) {
-            info.textContent = 'No contact email published for this role, and none found on the company site. ' +
-              'You can paste an address into the field above.';
-            info.style.color = 'var(--warning)';
-          }
+          // Nothing published anywhere. Last resort, and only if the user
+          // switched it on and supplied their own provider key.
+          this.followupEnrich();
           return;
         }
         const detected = this.generatedDocuments?.jdContact;
@@ -2829,15 +3069,117 @@ class ATSTailor {
             info.style.color = 'var(--success)';
           }
           console.log('[ATS Tailor] careers address:', resp.email, 'from', resp.source);
-        } else if (info) {
-          info.textContent = 'No contact email published for this role, and none found on the company site. ' +
-            'You can paste an address into the field above.';
-          info.style.color = 'var(--warning)';
+        } else {
+          this.followupEnrich();
         }
       });
     } catch (e) {
       console.warn('[ATS Tailor] careers lookup failed:', e && e.message);
+      this.followupEnrich();
     }
+  }
+
+  // Last resort, reached only when the posting, its structured data and the
+  // employer's own careers page all published nothing. Uses the user's own
+  // enrichment provider account, scoped by this job's company, role and
+  // location so the result is someone who can act on THIS application.
+  //
+  // An enriched address never overwrites one already in the To field: a
+  // published address is both more accurate and more welcome.
+  async followupEnrich() {
+    const info = document.getElementById('followupDetected');
+    const nothing = () => {
+      if (info) {
+        info.textContent = 'No contact email published for this role, and none found on the company site. '
+          + 'You can paste an address into the field above.';
+        info.style.color = 'var(--warning)';
+      }
+    };
+
+    if (typeof ContactEnrichment === 'undefined') { nothing(); return; }
+    try {
+      const cfg = await ContactEnrichment.loadConfig();
+      if (cfg.enabled !== true) { nothing(); return; }
+
+      if (info) {
+        info.textContent = 'Nothing published for this role - checking your contact lookup provider…';
+        info.style.color = 'var(--warning)';
+      }
+
+      const ctx = {
+        company: this.resolveCompanyName ? this.resolveCompanyName() : (this.currentJob?.company || ''),
+        title: this.currentJob?.title || '',
+        location: this.currentJob?.location || '',
+        domain: this.followupCompanyDomain(),
+        linkedinProfiles: this.followupPosterProfiles(),
+      };
+
+      const hit = await ContactEnrichment.bestEmail(ctx);
+      if (!hit.email) {
+        const why = {
+          'no-api-key': 'No API key saved for your lookup provider - add one in Settings.',
+          'bad-api-key': 'Your lookup provider rejected the saved key.',
+          'rate-limited': 'Your lookup provider is rate limiting - try again shortly.',
+          'out-of-credits': 'Your lookup provider is out of credits.',
+          'no-company': 'Could not determine the employer name for a lookup.',
+          network: 'Could not reach your lookup provider.',
+        }[hit.reason];
+        if (why && info) { info.textContent = why; info.style.color = 'var(--error)'; }
+        else nothing();
+        return;
+      }
+
+      const detected = this.generatedDocuments?.jdContact;
+      if (detected && !detected.email) {
+        detected.email = hit.email;
+        detected.contactName = hit.name || detected.contactName;
+        detected.emailSource = 'enriched';
+        detected.hasPublishedEmail = false;
+      }
+      const toEl = document.getElementById('followupTo');
+      if (toEl && !toEl.value) toEl.value = hit.email;
+
+      if (info) {
+        // Labelled honestly. This is not an address the employer published,
+        // and the user is the one who decides whether to write to it.
+        info.textContent = 'Looked up (not published): ' + hit.email
+          + (hit.name ? ' - ' + hit.name : '')
+          + (hit.title ? ', ' + hit.title : '')
+          + '. Review before sending.';
+        info.style.color = 'var(--warning)';
+      }
+      console.log('[ATS Tailor] enriched contact:', hit.email, 'via', hit.provider);
+    } catch (e) {
+      console.warn('[ATS Tailor] enrichment failed:', e && e.message);
+      nothing();
+    }
+  }
+
+  // The employer's mail domain, when the posting itself gives one away.
+  // Hunter searches far more accurately by domain than by company name,
+  // where "Meta" matches a dozen unrelated companies.
+  followupCompanyDomain() {
+    try {
+      const published = this.generatedDocuments?.jdContact?.email || '';
+      if (published.indexOf('@') !== -1) return published.split('@')[1].toLowerCase();
+      const url = this.currentJob?.url || '';
+      const host = url ? new URL(url).hostname.replace(/^www\./, '').toLowerCase() : '';
+      // Only the employer's own site identifies them; an ATS host is shared
+      // by thousands of employers and would look up the ATS vendor instead.
+      const ATS = /(greenhouse|lever|workday|myworkdayjobs|smartrecruiters|taleo|icims|workable|teamtailor|ashbyhq|bamboohr|recruitee|jazzhr|jobvite|successfactors|personio|eightfold|avature|csod|brassring|ultipro|linkedin|indeed|glassdoor)\./;
+      return host && !ATS.test(host) ? host : '';
+    } catch (e) { return ''; }
+  }
+
+  // LinkedIn profile handles for whoever posted the role, harvested from
+  // the page by jd-contact-sources.js. A provider that resolves a specific
+  // person beats any company-wide guess.
+  followupPosterProfiles() {
+    try {
+      const names = this.generatedDocuments?.jdContact?.sourceNames
+        || this.currentJob?.contactNames || [];
+      return names.map((n) => n && n.profile).filter(Boolean);
+    } catch (e) { return []; }
   }
 
   // Tailoring-focus panel. Rendered ABOVE the quality notes: it tells the
@@ -4759,7 +5101,12 @@ class ATSTailor {
               this.renderApplyVerdict(verdict);
               // Read the posting for a PUBLISHED recruiter email + job ID
               // so the follow-up composer is ready if the user wants it.
-              this.followupDetectContact();
+              // Detection reaches into the job tab and may consult a lookup
+              // provider, so it is genuinely asynchronous. The promise is
+              // kept because the auto-send later in this same run depends
+              // on its result: without it, the note would decide "no
+              // address" while detection was still in flight.
+              this.contactDetection = this.followupDetectContact();
             } catch (e) {
               console.warn('[ATS Tailor] Apply verdict failed:', e && e.message);
             }

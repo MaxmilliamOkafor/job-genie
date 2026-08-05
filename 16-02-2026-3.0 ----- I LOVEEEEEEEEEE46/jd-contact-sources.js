@@ -105,6 +105,20 @@
   // "Meet the hiring team" names the person who posted the role. This is a
   // NAME source only -- LinkedIn never publishes the address, and this
   // module will not construct one.
+  //
+  // The public profile slug from the card's own href is captured alongside
+  // the name. It is not an address and is not treated as one; it is the
+  // handle a user's own enrichment provider needs in order to look this
+  // person up under their own account, and without it the only fallback is
+  // a company-wide guess at who might be handling the role.
+  function _profileSlug(href) {
+    const m = String(href || '').match(/\/in\/([^/?#]+)/);
+    if (!m) return '';
+    const slug = _clean(decodeURIComponent(m[1]));
+    // Reject LinkedIn's opaque URN form: it is not a public profile handle.
+    return /^ACo[A-Za-z0-9_-]+$/.test(slug) ? '' : slug;
+  }
+
   function fromLinkedInPoster(doc) {
     const names = [];
     try {
@@ -112,11 +126,19 @@
         '.hirer-card__hirer-information, [class*="hirer-card"], [data-test-id*="hirer"], .jobs-poster__name'
       );
       for (const card of cards) {
-        const link = card.querySelector('a[href*="/in/"]') || card;
+        const anchor = card.querySelector('a[href*="/in/"]');
+        const link = anchor || card;
         const txt = _clean(link.textContent).split('•')[0].trim();
         // A person's name, not a job title or a sentence.
         if (/^[A-Z][a-zA-Z'’.-]+(?:\s+[A-Z][a-zA-Z'’.-]+){1,3}$/.test(txt) && txt.length <= 60) {
-          names.push({ name: txt, source: 'linkedin-poster' });
+          const entry = { name: txt, source: 'linkedin-poster' };
+          const slug = _profileSlug(anchor && anchor.getAttribute('href'));
+          if (slug) entry.profile = slug;
+          // The line under the name is usually their title, which tells the
+          // scorer whether this is a recruiter or the hiring manager.
+          const sub = card.querySelector('.hirer-card__hirer-job-title, [class*="job-title"], [class*="subtitle"]');
+          if (sub) entry.title = _clean(sub.textContent).slice(0, 120);
+          names.push(entry);
         }
       }
     } catch (e) {}
