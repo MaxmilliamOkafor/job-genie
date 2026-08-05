@@ -3486,11 +3486,53 @@ class ATSTailor {
   // the handle is right there in the tab's own URL.
   async followupProfileHandles() {
     const out = this.followupPosterProfiles();
+
+    // Profiles you looked at earlier whose headline names this employer.
+    // This is the one that needs nothing of you at the moment of applying:
+    // looking at recruiters is already part of job hunting, so the handle
+    // is usually known before the application is even started.
+    const company = this.enrichCompanyName();
+    if (company && typeof JGProfileMemory !== 'undefined') {
+      try {
+        for (const p of await JGProfileMemory.forCompany(company)) {
+          if (p.handle && out.indexOf(p.handle) === -1) out.push(p.handle);
+        }
+      } catch (e) {}
+    }
+
+    // Any LinkedIn profile open in ANY tab, not only the focused one --
+    // the application is what you are looking at while tailoring, so
+    // requiring the profile to be focused would mean switching away.
+    for (const h of await this.openLinkedInProfiles()) {
+      if (out.indexOf(h) === -1) out.push(h);
+    }
+
+    // The FOCUSED profile goes first regardless: having it in front of you
+    // is the most deliberate statement of who you mean.
     const active = await this.activeLinkedInProfile();
-    // The open profile goes first: it is a deliberate choice, where a
-    // harvested handle is an inference from the page.
-    if (active && out.indexOf(active) === -1) out.unshift(active);
+    if (active) {
+      const at = out.indexOf(active);
+      if (at !== -1) out.splice(at, 1);
+      out.unshift(active);
+    }
     return out;
+  }
+
+  // Handles of every LinkedIn profile open in any window. Reads tab URLs
+  // only -- no tab is opened, focused or navigated.
+  async openLinkedInProfiles() {
+    try {
+      const tabs = await chrome.tabs.query({ url: 'https://*.linkedin.com/in/*' });
+      const out = [];
+      for (const t of (tabs || [])) {
+        const m = String(t.url || '').match(/\/in\/([^/?#]+)/);
+        if (!m) continue;
+        const slug = decodeURIComponent(m[1]).trim();
+        if (!slug || /^ACo[A-Za-z0-9_-]+$/.test(slug)) continue;
+        if (out.indexOf(slug) === -1) out.push(slug);
+      }
+      return out;
+    } catch (e) { return []; }
   }
 
   // The handle of the LinkedIn profile in the current tab, or ''.
