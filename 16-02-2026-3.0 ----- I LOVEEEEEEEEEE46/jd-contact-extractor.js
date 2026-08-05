@@ -230,6 +230,10 @@
       department: extractDepartment(jdText),
       title: opts.title || '',
       company: opts.company || (harvested && harvested.org) || '',
+      // The employer's own website, when the posting's structured data
+      // names it. On an ATS host this is the only reliable way to know
+      // whose mail domain belongs to this application.
+      orgUrl: (harvested && harvested.orgUrl) || '',
       url,
       hasPublishedEmail: !!best,
     };

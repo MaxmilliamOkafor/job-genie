@@ -3463,7 +3463,11 @@ class ATSTailor {
     try {
       const published = (this.jdContact || this.generatedDocuments?.jdContact)?.email || '';
       if (published.indexOf('@') !== -1) return published.split('@')[1].toLowerCase();
-      const url = this.currentJob?.url || '';
+      // The employer's own site, as declared in the posting's JSON-LD.
+      // Checked before the page URL because on an ATS host the page URL
+      // belongs to the ATS vendor, not the employer.
+      const declared = (this.jdContact || this.generatedDocuments?.jdContact)?.orgUrl || '';
+      const url = declared || this.currentJob?.url || '';
       const host = url ? new URL(url).hostname.replace(/^www\./, '').toLowerCase() : '';
       // Only the employer's own site identifies them; an ATS host is shared
       // by thousands of employers and would look up the ATS vendor instead.
