@@ -224,11 +224,58 @@
   // Where the posting actually lives, per ATS, so page furniture (nav,
   // cookie banners, "other jobs at this company") is not mistaken for the
   // description.
+  // Where the posting body lives, per ATS. Ordered most specific first so
+  // the description is preferred over the page it sits in; the generic
+  // patterns and the body fallback mean an unknown ATS still works, just
+  // with more surrounding text to filter.
   const CONTENT_SELECTORS = [
-    '#content', '.job__description', '.job-post', '[class*="job-post"]',
-    '[class*="job__description"]', '[data-testid*="jobDescription"]',
-    '#job-details', '.jobDisplayContentContainer', '.description',
-    '[class*="jobDescription"]', 'main', 'article',
+    // Greenhouse (both the classic boards and job-boards.greenhouse.io)
+    '.job__description', '#content', '#app_body', '.opening',
+    // Lever
+    '.posting-page', '[data-qa="job-description"]', '.section-wrapper',
+    // Workday
+    '[data-automation-id="jobPostingDescription"]', '[data-automation-id="job-posting-details"]',
+    // Ashby
+    '.ashby-job-posting-content', '[class*="_description"]',
+    // SmartRecruiters
+    '#st-jobDescription', '.job-sections', '.jobad-main',
+    // iCIMS
+    '.iCIMS_JobContent', '.iCIMS_InfoMsg_Job',
+    // Taleo
+    '#requisitionDescriptionInterface', '.joblayouttoken',
+    // Workable
+    '[data-ui="job-description"]', '[data-ui="overview"]',
+    // Teamtailor
+    '[data-controller*="job"]', '.block-body',
+    // Jobvite / BambooHR / Indeed all use this id
+    '#jobDescriptionText', '.jv-job-detail-description',
+    // SuccessFactors / SAP
+    '.jobDescription', '.jobDisplayContentContainer',
+    // Personio, Recruitee, JazzHR, Breezy, Rippling, Pinpoint, Dover, Occupop
+    '#job-description', '.job-description', '.job-ad', '.position',
+    // Eightfold / Avature
+    '[class*="jobDescription"]', '.job-details',
+    // Wellfound / Otta
+    '[class*="JobDescription"]', '[data-testid*="job-description"]',
+    // LinkedIn
+    '.jobs-description__content', '.description__text', '.show-more-less-html',
+    // Generic, standards-based, and last-resort structural
+    '[itemprop="description"]', '[id*="job-description" i]', '[class*="job-description" i]',
+    '[data-testid*="description" i]', '[aria-label*="job description" i]',
+    'main', 'article',
+  ];
+
+  // Regions that belong to the PAGE, not this posting. "Other openings"
+  // and "similar jobs" carry other roles -- and sometimes other companies'
+  // contact details -- which must never become this application's
+  // recipient.
+  const EXCLUDE_SELECTORS = [
+    'script', 'style', 'noscript', 'nav', 'footer', 'header',
+    '[class*="similar" i]', '[class*="related" i]', '[class*="other-job" i]',
+    '[class*="more-job" i]', '[class*="recommend" i]', '[id*="similar" i]',
+    '[class*="cookie" i]', '[class*="consent" i]', '[class*="banner" i]',
+    '[class*="newsletter" i]', '[class*="subscribe" i]', '[role="navigation"]',
+    '[role="banner"]', '[role="contentinfo"]',
   ];
 
   function _contentRoots(doc) {
@@ -255,8 +302,8 @@
         try {
           // Clone so removing chrome does not alter the page the user sees.
           const clone = root.cloneNode(true);
-          for (const junk of clone.querySelectorAll('script, style, noscript, nav, footer, header')) {
-            junk.remove();
+          for (const sel of EXCLUDE_SELECTORS) {
+            try { for (const junk of clone.querySelectorAll(sel)) junk.remove(); } catch (e) {}
           }
           // textContent runs block elements together with no separator, so
           // "<p>…@example.com</p><p>For questions…</p>" reads as
