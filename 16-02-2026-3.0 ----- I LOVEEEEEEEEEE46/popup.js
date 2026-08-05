@@ -4424,9 +4424,16 @@ class ATSTailor {
     const elapsed = performance.now() - startTime;
     console.log(`[ATS Tailor] Keyword extraction completed in ${elapsed.toFixed(1)}ms, total: ${keywords.all?.length || 0}`);
     
-    // Cache the result
-    if (jobUrl) {
+    // Cache the result -- but never an EMPTY one. Caching a failure keyed
+    // by URL means every later attempt on that job replays it without
+    // re-extracting, so one bad run poisons the posting for the whole
+    // cache window. That is the shape of "it worked, then it kept failing
+    // on the same role".
+    if (jobUrl && keywords.all && keywords.all.length) {
       this.keywordCache.set(jobUrl, { keywords, timestamp: Date.now() });
+    } else if (jobUrl) {
+      // Drop any earlier empty entry so the next attempt starts clean.
+      this.keywordCache.delete(jobUrl);
     }
     
     return keywords;
@@ -4707,6 +4714,16 @@ class ATSTailor {
         };
         
         console.log('[ATS Tailor] AI extracted', keywords.all.length, 'keywords');
+        // An empty result is a FAILURE, not an answer. The service returns
+        // 200 with nothing when it is rate limited, out of quota, or the
+        // model returned no usable JSON -- and returning that as success
+        // skipped the retries below and the caller's local fallback, so a
+        // transient backend hiccup became a hard "could not extract
+        // keywords". Repeatedly tailoring one role is exactly what
+        // provokes it.
+        if (!keywords.all.length && attempt < MAX_RETRIES) {
+          throw new Error('AI returned no keywords (attempt ' + (attempt + 1) + ')');
+        }
         return keywords;
         
       } catch (error) {
@@ -5260,17 +5277,38 @@ class ATSTailor {
       
       // FIRST: Call AI Extract Keywords (equivalent to clicking the AI Extract button)
       let keywords = null;
+      let aiFailure = '';
       try {
         keywords = await this.performAIKeywordExtraction();
         console.log('[ATS Tailor] Step 1 - AI Extracted keywords:', keywords?.all?.length || 0);
       } catch (aiError) {
-        // Silent fallback to local extraction if AI fails - no warning needed
-        console.log('[ATS Tailor] Using local keyword extraction');
-        keywords = this.extractKeywordsOptimized(this.currentJob.description);
+        aiFailure = (aiError && aiError.message) || String(aiError);
+        console.log('[ATS Tailor] AI extraction unavailable:', aiFailure);
       }
-      
+
+      // The fallback was conditioned on the AI THROWING. A call that
+      // succeeded and returned an empty list bypassed it entirely, so a
+      // rate-limited or quota-exhausted backend produced a hard failure
+      // even though local extraction would have worked offline. Fall back
+      // on an empty result too -- what matters is having no keywords, not
+      // how we came to have none.
+      if (!keywords || !Array.isArray(keywords.all) || keywords.all.length === 0) {
+        console.log('[ATS Tailor] Falling back to local keyword extraction');
+        try {
+          keywords = this.extractKeywordsOptimized(this.currentJob.description);
+          console.log('[ATS Tailor] Local extraction produced', keywords?.all?.length || 0, 'keywords');
+        } catch (localError) {
+          console.warn('[ATS Tailor] Local extraction also failed:', localError && localError.message);
+        }
+      }
+
       if (!keywords || !keywords.all || keywords.all.length === 0) {
-        throw new Error('Could not extract keywords from job description');
+        // Name the actual cause. "Could not extract keywords" sent people
+        // looking at the job page when the service was the problem.
+        throw new Error('Could not extract keywords from this posting'
+          + (aiFailure ? ' (AI service: ' + aiFailure + ')' : '')
+          + '. Local extraction found none either - the description may be an image, '
+          + 'or behind a "show more" link that has not been expanded.');
       }
       
       // Store keywords immediately for UI
