@@ -375,16 +375,20 @@
                      and reports every step. Without this, a lookup that
                      silently never fired is indistinguishable from one that
                      ran and found nobody. -->
-                <button id="enrichFindNowBtn" class="fu-btn fu-btn-wide">Find contact for this job now</button>
+                <button id="enrichFindNowBtn" class="fu-btn fu-btn-wide">Test the lookup on this job (diagnostic)</button>
               </div>
+              <p class="fu-note">The lookup runs <strong>automatically</strong> during tailoring - this
+                button is only for checking what it does and why. If nothing is found anywhere,
+                the follow-up is skipped for that application rather than sent to a guess.</p>
 
-              <!-- The path that always works, whatever the provider can or
-                   cannot search: you name the person, it returns their
-                   verified work address. Useful when the posting names
-                   nobody but you found the recruiter yourself. -->
+              <!-- Manual override, not the main path. Everything above runs
+                   without it; this exists for the case where the automatic
+                   search finds nobody but you already know who to write to. -->
+              <details style="margin-top:9px;">
+                <summary class="fu-label" style="cursor:pointer;">Manual override: resolve a specific person</summary>
               <div class="fu-field" style="margin-top:9px;">
                 <label class="fu-label" for="enrichProfileUrl">
-                  Or resolve a LinkedIn profile <span class="fu-hint">paste a profile URL</span>
+                  LinkedIn profile URL <span class="fu-hint">only needed if the automatic search found nobody</span>
                 </label>
                 <input type="text" id="enrichProfileUrl" class="fu-input"
                        placeholder="https://www.linkedin.com/in/their-handle" />
@@ -392,6 +396,7 @@
               <div class="fu-actions">
                 <button id="enrichResolveProfileBtn" class="fu-btn fu-btn-wide">Get this person's email</button>
               </div>
+              </details>
               <pre id="enrichDiagnostics" class="fu-diagnostics"></pre>
               <div id="enrichStatus" class="fu-note"></div>
             </div>

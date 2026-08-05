@@ -466,7 +466,12 @@ t('the handle from the search is resolved through the confirmed endpoint',
   CALLS.some(c=>/contacts\/find/.test(c.url)&&/aoifebyrne/.test(c.init.body||'')),
   JSON.stringify(CALLS.map(c=>c.url)));
 t('the working endpoint is remembered',
-  (STORE['enrichment_config'].searchEndpoints||{}).closely==='https://api.closelyhq.com/explorer/contacts/search',
+  ((STORE['enrichment_config'].searchEndpoints||{}).closely||{}).url==='https://api.closelyhq.com/explorer/contacts/search',
+  JSON.stringify(STORE['enrichment_config'].searchEndpoints));
+// Their confirmed endpoint rejects JSON, so the probe must settle on the
+// encoding that actually answered rather than assuming one.
+t('the encoding that worked is remembered too',
+  ((STORE['enrichment_config'].searchEndpoints||{}).closely||{}).contentType==='application/x-www-form-urlencoded',
   JSON.stringify(STORE['enrichment_config'].searchEndpoints));
 
 // Probing must happen once, not on every lookup.

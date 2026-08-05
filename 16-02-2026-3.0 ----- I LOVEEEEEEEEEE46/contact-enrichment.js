@@ -59,6 +59,21 @@
     return /^ACo[A-Za-z0-9_-]+$/.test(slug) ? '' : slug;
   }
 
+  // Closely's own serialize(): nested values become bracketed keys, so
+  // { company: ['Nortal'] } is company[0]=Nortal. Matching their house
+  // style matters -- their confirmed endpoint rejects JSON.
+  function _formEncode(obj, prefix) {
+    const parts = [];
+    for (const k of Object.keys(obj || {})) {
+      const key = prefix ? prefix + '[' + k + ']' : k;
+      const v = obj[k];
+      if (v === undefined || v === null) continue;
+      if (typeof v === 'object') parts.push(_formEncode(v, key));
+      else parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(v));
+    }
+    return parts.filter(Boolean).join('&');
+  }
+
   // A provider that has no address for someone still returns a row. These
   // are placeholders, not addresses, and must never reach a recruiter.
   const PLACEHOLDER_RE = /^(email_not_unlocked|not_unlocked|locked|hidden|unavailable|domain_only|SEARCH)@|^(SEARCH|LOCKED)$/i;
@@ -370,15 +385,25 @@
         'https://api.closelyhq.com/leadfinder/search',
         'https://api.closelyhq.com/explorer/search',
       ],
-      searchBody: (q) => JSON.stringify({
-        company: q.company ? [q.company] : undefined,
-        job_title: q.titles,
-        location: q.location ? [q.location] : undefined,
-        page: 1,
-        limit: 10,
-      }),
-      searchHeaders: (cred) => ({
-        'Content-Type': 'application/json',
+      // Closely's confirmed endpoint posts form-urlencoded with bracket
+      // notation (their own serialize()), NOT JSON. A probe that only spoke
+      // JSON would fail even on a correct path, so both encodings are
+      // tried, form first because that is their house style.
+      searchEncodings: (q) => {
+        const fields = {
+          company: q.company ? [q.company] : [],
+          job_title: q.titles || [],
+          location: q.location ? [q.location] : [],
+          page: 1,
+          limit: 10,
+        };
+        return [
+          { contentType: 'application/x-www-form-urlencoded', body: _formEncode(fields) },
+          { contentType: 'application/json', body: JSON.stringify(fields) },
+        ];
+      },
+      searchHeaders: (cred, contentType) => ({
+        'Content-Type': contentType,
         Accept: 'application/json',
         Authorization: 'Bearer ' + cred.token,
       }),
@@ -807,35 +832,49 @@
   async function _resolveSearchEndpoint(id, provider, cred, ctx) {
     const cfg = await loadConfig();
     const known = (cfg.searchEndpoints || {})[id];
-    if (known !== undefined) return known || '';
+    if (known !== undefined) return known || null;
 
-    let found = '';
+    let found = null;
     const q = (buildQueries(ctx) || [])[0] || { company: ctx.company, titles: ['Recruiter'] };
+    const encodings = provider.searchEncodings(q);
+
+    outer:
     for (const url of provider.searchProbe) {
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: provider.searchHeaders(cred),
-          body: provider.searchBody(q),
-        });
-        // Not this path. Keep looking.
-        if (res.status === 404 || res.status === 405 || res.status === 501) continue;
-        // A real credential problem is not an endpoint problem: stop, and
-        // record nothing so a fixed token can probe again.
-        if (res.status === 401 || res.status === 403) return '';
-        if (!res.ok) continue;
-        const json = await res.json().catch(() => null);
-        if (!json) continue;
-        // It answered with JSON this parser understands. Good enough.
-        found = url;
-        break;
-      } catch (e) { /* network: try the next one */ }
+      for (const enc of encodings) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: provider.searchHeaders(cred, enc.contentType),
+            body: enc.body,
+          });
+          // Not this path at all: skip its other encoding too.
+          if (res.status === 404 || res.status === 501) continue outer;
+          // Right path, wrong encoding or wrong shape: try the next encoding.
+          if (res.status === 405 || res.status === 415 || res.status === 422) continue;
+          // A credential problem is not an endpoint problem. Stop and record
+          // nothing, so a refreshed token probes again instead of being
+          // stuck with a false "no endpoint".
+          if (res.status === 401 || res.status === 403) return null;
+          if (!res.ok) continue;
+          const json = await res.json().catch(() => null);
+          if (!json) continue;
+          // It answered with JSON. Only accept it if the parser can find
+          // people in it -- an endpoint that exists but returns something
+          // unrelated is not a search.
+          let rows = [];
+          try { rows = provider.parseSearch(json) || []; } catch (e) { rows = []; }
+          if (!rows.length && !(json.data || json.entries || json.profiles || json.results)) continue;
+          found = { url, contentType: enc.contentType };
+          break outer;
+        } catch (e) { /* network: try the next candidate */ }
+      }
     }
 
     const next = await loadConfig();
-    next.searchEndpoints = Object.assign({}, next.searchEndpoints, { [id]: found });
+    next.searchEndpoints = Object.assign({}, next.searchEndpoints, { [id]: found || '' });
     await _writeConfig(next);
-    log(found ? 'search endpoint for ' + id + ': ' + found : 'no search endpoint for ' + id);
+    log(found ? 'search endpoint for ' + id + ': ' + found.url + ' (' + found.contentType + ')'
+      : 'no search endpoint for ' + id);
     return found;
   }
 
@@ -900,11 +939,17 @@
     // probing per install and never repeats.
     if (!out.length && !profiles.length && provider.searchProbe && ctx.company) {
       const endpoint = await _resolveSearchEndpoint(id, provider, cred, ctx);
-      if (endpoint) {
+      if (endpoint && endpoint.url) {
         for (const q of buildQueries(ctx)) {
+          const enc = provider.searchEncodings(q)
+            .find((e) => e.contentType === endpoint.contentType) || provider.searchEncodings(q)[0];
           const r = await call({
-            url: endpoint,
-            init: { method: 'POST', headers: provider.searchHeaders(cred), body: provider.searchBody(q) },
+            url: endpoint.url,
+            init: {
+              method: 'POST',
+              headers: provider.searchHeaders(cred, enc.contentType),
+              body: enc.body,
+            },
           }, provider.parseSearch, q, { keepEmpty: true });
           if (r.fatal) return { results: [], reason: r.fatal, calls };
           if (!r.rows.length) continue;
