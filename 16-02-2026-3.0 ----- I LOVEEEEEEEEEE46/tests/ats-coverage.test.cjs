@@ -61,6 +61,36 @@ t('every enrichment control has a handler',
   'a decorative control would silently do nothing');
 t('the enrichment UI is restored on open', /this\.enrichInitUI\(\)/.test(popupJs), 'settings would look unset');
 
+// ---- the settings card has to be usable, not just present -------------
+const popupCss=read('popup.css');
+const enrich=read('contact-enrichment.js');
+// `flex: 1` means basis 0, so a button is laid out narrower than its own
+// label; white-space:nowrap then forbids wrapping and the label paints
+// over the next button ("Sign in and create key" over "Test key").
+const fuBtn=(popupCss.match(/\.fu-btn\s*\{[^}]*\}/)||[''])[0];
+t('action buttons size from their label, so long ones wrap instead of overlapping',
+  /flex:\s*1\s+1\s+auto/.test(fuBtn)&&!/flex:\s*1\s*;/.test(fuBtn), fuBtn.replace(/\s+/g,' ').slice(0,140));
+t('the action row is allowed to wrap',
+  /\.fu-actions\s*\{[^}]*flex-wrap:\s*wrap/.test(popupCss), 'buttons would be forced onto one line');
+
+// A connected account must look connected. Empty email and password boxes
+// left on screen read as "not signed in" when a working token is stored.
+t('a connected account is shown as connected',
+  /id="enrichConnected"/.test(popupHtml)&&/enrichRenderCredState/.test(popupJs), 'no connected state');
+t('the sign-in fields are hidden once a token exists',
+  /show\('enrichAccountFields',\s*isAccount\s*&&\s*!connected\)/.test(popupJs), 'blank credential boxes persist');
+t('the connected row names the account',
+  /accountEmail/.test(popupJs)&&/accountEmail/.test(enrich), 'user cannot tell which account is connected');
+t('the account can be changed without disconnecting first',
+  /id="enrichSwitchBtn"/.test(popupHtml)&&/enrichSwitching\s*=\s*true/.test(popupJs), 'no way back to the sign-in form');
+t('signing in collapses the form',
+  /enrichSwitching = false;[\s\S]{0,200}enrichRenderCredState/.test(popupJs), 'form stays open after success');
+t('clearing the key brings the sign-in form back',
+  /async enrichClearKey\(\)[\s\S]{0,1200}enrichRenderCredState/.test(popupJs), 'no way to sign in again');
+// The stored credential must remain a token, never the password.
+t('the password is still never part of the stored credential',
+  /delete clean\.password/.test(enrich), 'password could reach storage');
+
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.
 t('enrichment runs only after the careers-page fallback',
@@ -75,7 +105,6 @@ t('a looked-up address is labelled as not published',
 // Every provider host the module calls must be permitted, or the fetch is
 // blocked by CORS and the failure looks like "no match".
 const hosts=(m.host_permissions||[]).join(' ');
-const enrich=read('contact-enrichment.js');
 const apiHosts=[...new Set((enrich.match(/https:\/\/api\.[a-z0-9.]+/g)||[]))];
 for(const h of apiHosts) t('host permission for '+h, hosts.includes(h.replace('https://','')), h+' not permitted');
 t('at least one provider host is declared', apiHosts.length>0);

@@ -902,6 +902,21 @@ class ATSTailor {
     document.getElementById('enrichSaveBtn')?.addEventListener('click', () => this.enrichSaveKey());
     document.getElementById('enrichTestBtn')?.addEventListener('click', () => this.enrichTestKey());
     document.getElementById('enrichClearBtn')?.addEventListener('click', () => this.enrichClearKey());
+    document.getElementById('enrichMoreLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const more = document.getElementById('enrichMore');
+      if (!more) return;
+      const open = more.style.display !== 'none';
+      more.style.display = open ? 'none' : '';
+      e.target.textContent = open ? 'How it works' : 'Hide';
+    });
+    // Re-reveals the sign-in fields without discarding the working token,
+    // so a mistyped account can be replaced without first disconnecting.
+    document.getElementById('enrichSwitchBtn')?.addEventListener('click', async () => {
+      this.enrichSwitching = true;
+      await this.enrichRenderCredState();
+      document.getElementById('enrichAccountEmail')?.focus();
+    });
     document.getElementById('enrichGetKeyBtn')?.addEventListener('click', async () => {
       if (typeof ContactEnrichment === 'undefined') return;
       const id = document.getElementById('enrichProvider')?.value || '';
@@ -2859,18 +2874,10 @@ class ATSTailor {
     if (!p) return;
     await ContactEnrichment.saveConfig({ provider: id });
 
-    const keyFields = document.getElementById('enrichKeyFields');
-    const acctFields = document.getElementById('enrichAccountFields');
-    const isAccount = p.keyKind === 'account';
-    if (keyFields) keyFields.style.display = isAccount ? 'none' : '';
-    if (acctFields) acctFields.style.display = isAccount ? '' : 'none';
-
     const hint = document.getElementById('enrichHint');
     if (hint) hint.textContent = p.hint || '';
-    const saveBtn = document.getElementById('enrichSaveBtn');
-    if (saveBtn) saveBtn.textContent = isAccount ? 'Sign in and create key' : 'Save key';
     const getBtn = document.getElementById('enrichGetKeyBtn');
-    if (getBtn) getBtn.textContent = isAccount ? 'Open provider site ↗' : 'Open provider API keys page ↗';
+    if (getBtn) getBtn.textContent = p.keyKind === 'account' ? 'Open provider site ↗' : 'Open provider API keys page ↗';
 
     // The saved secret is never written back into the field: a stored key
     // must not be readable from the popup, only replaceable.
@@ -2878,8 +2885,51 @@ class ATSTailor {
     if (keyInput) keyInput.value = '';
     const pw = document.getElementById('enrichAccountPassword');
     if (pw) pw.value = '';
+    const emailEl = document.getElementById('enrichAccountEmail');
+    if (emailEl) emailEl.value = '';
 
+    // Switching provider drops any "change account" state from the last one.
+    this.enrichSwitching = false;
+    await this.enrichRenderCredState(id);
     this.enrichRefreshStatus();
+  }
+
+  // Decides which credential controls are on screen. An account-style
+  // provider that is already connected shows WHO it is connected as, not an
+  // empty email and password pair -- blank boxes read as "not signed in"
+  // when a token is sitting in storage and working.
+  async enrichRenderCredState(providerId) {
+    if (typeof ContactEnrichment === 'undefined') return;
+    const id = providerId || document.getElementById('enrichProvider')?.value;
+    const p = ContactEnrichment.listProviders().find((x) => x.id === id);
+    if (!p) return;
+    const cred = await ContactEnrichment.getCred(id);
+
+    const isAccount = p.keyKind === 'account';
+    const connected = isAccount && !!(cred && cred.token) && !this.enrichSwitching;
+
+    const show = (elId, on) => {
+      const el = document.getElementById(elId);
+      if (el) el.style.display = on ? '' : 'none';
+    };
+    show('enrichKeyFields', !isAccount);
+    show('enrichAccountFields', isAccount && !connected);
+    show('enrichConnected', connected);
+    // Nothing to save while connected: the token is already stored. Test
+    // and Clear stay, because those are the two things still worth doing.
+    show('enrichSaveBtn', !connected);
+    show('enrichSwitchRow', connected);
+
+    const saveBtn = document.getElementById('enrichSaveBtn');
+    if (saveBtn) saveBtn.textContent = isAccount ? 'Sign in and create key' : 'Save key';
+
+    const text = document.getElementById('enrichConnectedText');
+    if (text && connected) {
+      const who = cred.accountEmail ? ' as ' + cred.accountEmail : '';
+      const when = cred.at ? ', ' + new Date(cred.at).toLocaleDateString('en-GB') : '';
+      text.textContent = 'Connected to ' + p.label + who + when
+        + '. Your password was not stored - only the token it issued.';
+    }
   }
 
   async enrichRefreshStatus() {
@@ -2928,7 +2978,13 @@ class ATSTailor {
         // never persisted; this stops it sitting in the DOM afterwards.
         if (pwEl) pwEl.value = '';
         set(r.message || (r.ok ? 'Connected.' : 'Could not connect.'), r.ok ? 'var(--success)' : 'var(--error)');
-        if (r.ok) this.showToast(p.label + ' connected', 'success');
+        if (r.ok) {
+          // Signed in: collapse the credential fields into the connected row.
+          this.enrichSwitching = false;
+          if (emailEl) emailEl.value = '';
+          await this.enrichRenderCredState(id);
+          this.showToast(p.label + ' connected', 'success');
+        }
         return;
       }
 
@@ -2969,6 +3025,11 @@ class ATSTailor {
     if (keyEl) keyEl.value = '';
     const pwEl = document.getElementById('enrichAccountPassword');
     if (pwEl) pwEl.value = '';
+    const emailEl = document.getElementById('enrichAccountEmail');
+    if (emailEl) emailEl.value = '';
+    // Disconnected: the sign-in fields come back.
+    this.enrichSwitching = false;
+    await this.enrichRenderCredState(id);
     this.showToast('Key and cached lookups cleared', 'success');
     this.enrichRefreshStatus();
   }

@@ -437,7 +437,11 @@
       if (!cred) {
         return { ok: false, reason: 'no-token', message: _clean(json && json.message) || 'No token returned.' };
       }
-      await saveKey(providerId, cred);
+      // The account address is stored alongside the token so the UI can say
+      // WHICH account is connected. It is the user's own address, not a
+      // secret, and without it a connected state is unverifiable at a
+      // glance. The password is not part of `cred` and never will be.
+      await saveKey(providerId, Object.assign({}, cred, { accountEmail: _clean(creds.email) }));
       log('key created for', providerId);
       return { ok: true, message: provider.label + ' connected. Token stored on this device only.' };
     } catch (e) {

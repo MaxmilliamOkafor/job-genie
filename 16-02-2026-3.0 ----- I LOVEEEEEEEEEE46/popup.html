@@ -288,14 +288,22 @@
             <div class="fu-card">
               <div class="fu-card-title">Contact lookup <span class="fu-hint">optional</span></div>
               <p class="fu-note" style="margin-top:0;">
-                Used <strong>only</strong> when the posting, its structured data and the
-                employer's careers page all publish no address. Looks up a recruiter for
-                <em>this</em> company, role and location through <strong>your own</strong>
-                provider account. A looked-up address is a business email from a data
-                provider, not one the recipient gave you - in the EU that needs a lawful
-                basis under GDPR and the responsibility sits with you as sender. It is
-                always shown for review and never overwrites a published address.
+                Finds a recruiter for this role only when nothing is published anywhere.
+                Always shown for review before sending.
+                <!-- The GDPR point is a real obligation on the sender, so it stays
+                     reachable, but it does not need to be the first thing read. -->
+                <a href="#" class="fu-more" id="enrichMoreLink">How it works</a>
               </p>
+              <div id="enrichMore" class="fu-note" style="display:none;">
+                Runs only after the posting, its structured data and the employer's
+                careers page all publish no address. Searches <strong>your own</strong>
+                provider account for this company, role and location, and never
+                overwrites an address the employer published.
+                <br /><br />
+                A looked-up address is a business email from a data provider, not one
+                the recipient gave you. In the EU that needs a lawful basis under GDPR,
+                and the responsibility sits with you as sender.
+              </div>
 
               <div class="fu-field">
                 <label class="fu-label" for="enrichEnabledLabel">
@@ -343,10 +351,21 @@
                 </div>
               </div>
 
+              <!-- Shown instead of the sign-in fields once a token exists.
+                   Leaving empty email and password boxes on screen reads as
+                   "not signed in" when you are. -->
+              <div id="enrichConnected" class="fu-connected" style="display:none;">
+                <span class="fu-dot fu-dot-ok"></span>
+                <span id="enrichConnectedText">Connected</span>
+              </div>
+
               <div class="fu-actions">
                 <button id="enrichSaveBtn" class="fu-btn fu-btn-primary">Save key</button>
                 <button id="enrichTestBtn" class="fu-btn">Test key</button>
                 <button id="enrichClearBtn" class="fu-btn">Clear</button>
+              </div>
+              <div class="fu-actions" id="enrichSwitchRow" style="display:none;">
+                <button id="enrichSwitchBtn" class="fu-btn fu-btn-wide">Sign in with a different account</button>
               </div>
               <div class="fu-actions">
                 <button id="enrichGetKeyBtn" class="fu-btn fu-btn-wide">Open provider API keys page ↗</button>

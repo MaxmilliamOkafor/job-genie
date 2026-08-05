@@ -3089,8 +3089,15 @@ body::-webkit-scrollbar-thumb {
 /* --- buttons ------------------------------------------------------------ */
 .fu-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .fu-btn {
-  flex: 1;
+  /* Basis auto, not 0. With `flex: 1` the basis is 0, so a button is sized
+     below its label; `white-space: nowrap` then forbids the label from
+     wrapping and it paints over the next button instead. Sizing from the
+     content lets the row's flex-wrap actually fire when the labels do not
+     fit, which is what keeps long labels ("Sign in and create key") on
+     their own line rather than on top of "Test key". */
+  flex: 1 1 auto;
   min-width: 78px;
+  max-width: 100%;
   padding: 7px 10px;
   font-size: 11px;
   font-weight: 600;
@@ -3113,6 +3120,31 @@ body::-webkit-scrollbar-thumb {
 }
 .fu-btn-primary:hover { box-shadow: 0 3px 14px rgba(124, 58, 237, 0.45); color: #fff; }
 .fu-btn-sm { flex: 0 0 auto; min-width: 0; padding: 6px 9px; font-size: 10.5px; }
+
+.fu-more {
+  color: var(--accent-primary, #7c3aed);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fu-more:hover { text-decoration: underline; }
+
+/* --- connected-account row (shown in place of the sign-in fields) ------- */
+.fu-connected {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+.fu-dot-ok { background: var(--success, #22c55e); flex: 0 0 auto; }
 .fu-btn-danger:hover { color: #fff; background: rgba(239, 68, 68, 0.2); border-color: rgba(239,68,68,0.45); }
 
 /* --- token chips (click to insert) -------------------------------------- */
