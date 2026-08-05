@@ -903,6 +903,7 @@ class ATSTailor {
     document.getElementById('enrichTestBtn')?.addEventListener('click', () => this.enrichTestKey());
     document.getElementById('enrichClearBtn')?.addEventListener('click', () => this.enrichClearKey());
     document.getElementById('enrichFindNowBtn')?.addEventListener('click', () => this.enrichFindNow());
+    document.getElementById('enrichResolveProfileBtn')?.addEventListener('click', () => this.enrichResolveProfile());
     document.getElementById('enrichMoreLink')?.addEventListener('click', (e) => {
       e.preventDefault();
       const more = document.getElementById('enrichMore');
@@ -3178,6 +3179,57 @@ class ATSTailor {
     } catch (e) {
       say('');
       say('Diagnostic failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+
+  // Name the person, get their verified work address. Works through
+  // whichever provider holds a credential, and does not depend on that
+  // provider being able to SEARCH -- which is what makes it the reliable
+  // path when a posting names nobody but you found the recruiter yourself.
+  async enrichResolveProfile() {
+    const out = document.getElementById('enrichDiagnostics');
+    const say = (s) => { if (out) out.textContent = s; };
+    if (typeof ContactEnrichment === 'undefined') { say('Enrichment module not loaded.'); return; }
+
+    const raw = (document.getElementById('enrichProfileUrl')?.value || '').trim();
+    if (!raw) { say('Paste a LinkedIn profile URL first.'); return; }
+
+    say('Resolving…');
+    try {
+      const r = await ContactEnrichment.resolveProfile(raw);
+      if (r.ok && r.results.length) {
+        const top = r.results[0];
+        say('Found: ' + top.email + '\n'
+          + (top.name ? top.name : '') + (top.title ? ', ' + top.title : '') + '\n'
+          + 'via ' + (r.source || 'provider') + '\n\n'
+          + 'Put into the To field above. Review before sending.');
+        const toEl = document.getElementById('followupTo');
+        if (toEl) { toEl.value = top.email; toEl.dataset.autofilled = '1'; }
+        // Recorded the same way a detected address is, so the follow-up
+        // and its attachments use it exactly like a published one.
+        this.jdContact = Object.assign({}, this.jdContact || {}, {
+          email: top.email,
+          contactName: top.name || '',
+          emailSource: 'enriched-profile',
+          hasPublishedEmail: false,
+        });
+        if (this.generatedDocuments) this.generatedDocuments.jdContact = this.jdContact;
+        this.showToast('Contact resolved', 'success');
+      } else {
+        say({
+          disabled: 'Contact lookup is switched off.',
+          'bad-profile': 'That does not look like a LinkedIn profile URL. '
+            + 'Use the form https://www.linkedin.com/in/their-handle',
+          'no-api-key': 'No provider has a credential saved.',
+          'bad-api-key': 'The provider rejected the saved credential.',
+          'rate-limited': 'Rate limited - try again shortly.',
+          'out-of-credits': 'The provider reports no credits left.',
+          network: 'Could not reach the provider.',
+          'no-match': 'The provider has no address on file for that profile.',
+        }[r.reason] || ('Nothing found (' + (r.reason || 'unknown') + ').'));
+      }
+    } catch (e) {
+      say('Resolve failed: ' + (e && e.message ? e.message : String(e)));
     }
   }
 

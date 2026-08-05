@@ -224,17 +224,20 @@ t('a working key is confirmed', tk.ok===true, tk.message);
 // Closely resolves a NAMED poster and needs a LinkedIn handle to do it.
 // On a Workday or Taleo posting there is no poster card, so Closely alone
 // would find nothing at all -- a company-search provider has to take over.
-await reset({enabled:true,provider:'closely'});
+// Closely with a KNOWN-absent search endpoint and no named poster has
+// nothing it can do, and must say so rather than burning a call.
+await reset({enabled:true,provider:'closely',searchEndpoints:{closely:''}});
 await E.saveKey('closely',{token:'tok'});
 CALLS=[];
 RESPOND=()=>reply(200,{data:{emails:[]}});
 r=await E.findContacts({company:'Nortal',title:'PM'});          // no profile handle
-t('Closely alone is not called when the page named nobody', CALLS.length===0, JSON.stringify(CALLS.map(c=>c.url)));
+t('Closely is not called when it cannot search and the page named nobody',
+  CALLS.length===0, JSON.stringify(CALLS.map(c=>c.url)));
 t('and it says the page named nobody, not "add a key" (which is wrong advice)',
   r.reason==='needs-named-poster', JSON.stringify(r));
 
 // Same posting, but a company-search key is also saved.
-await reset({enabled:true,provider:'closely'});
+await reset({enabled:true,provider:'closely',searchEndpoints:{closely:''}});
 await E.saveKey('closely',{token:'tok'});
 await E.saveKey('hunter',{apiKey:'h'});
 CALLS=[];
@@ -249,7 +252,7 @@ t('only the usable provider was called',
 t('the answering provider is reported', r.source==='hunter', JSON.stringify(r.source));
 
 // On a LinkedIn posting the named poster wins, and Closely is asked first.
-await reset({enabled:true,provider:'closely'});
+await reset({enabled:true,provider:'closely',searchEndpoints:{closely:''}});
 await E.saveKey('closely',{token:'tok'});
 await E.saveKey('hunter',{apiKey:'h'});
 CALLS=[];
@@ -436,9 +439,90 @@ RESPOND=()=>reply(401,{});
 tk=await E.testKey('contactout');
 t('a genuinely rejected key is still reported', tk.ok===false, tk.message);
 
+// ---- 16f. Closely: probe for a search endpoint, resolve through it -----
+// Closely's confirmed capability is profile -> verified email. Its search
+// is undocumented, so it is probed once with the account's own token and
+// the answer remembered either way.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+CALLS=[];
+RESPOND=(url)=>{
+  if(/explorer\/people\/search/.test(url)) return reply(404,{});
+  if(/explorer\/contacts\/search/.test(url)) return reply(200,{data:{entries:[
+    {lid:'aoifebyrne',full_name:'Aoife Byrne',title:'Technical Recruiter',location:'Dublin, Ireland',emails:[]},
+  ]}});
+  if(/contacts\/find/.test(url)) return reply(200,{data:{entries:[
+    {full_name:'Aoife Byrne',title:'Technical Recruiter',emails:['aoife@nortal.com']},
+  ]}});
+  return reply(404,{});
+};
+r=await E.findContacts({company:'Nortal',title:'PM',location:'Dublin, Ireland'});
+t('Closely now searches by company when its API answers',
+  r.ok&&r.results[0].email==='aoife@nortal.com', JSON.stringify(r));
+t('a 404 endpoint is skipped and the next one tried',
+  CALLS.some(c=>/explorer\/people\/search/.test(c.url))&&CALLS.some(c=>/explorer\/contacts\/search/.test(c.url)),
+  JSON.stringify(CALLS.map(c=>c.url)));
+t('the handle from the search is resolved through the confirmed endpoint',
+  CALLS.some(c=>/contacts\/find/.test(c.url)&&/aoifebyrne/.test(c.init.body||'')),
+  JSON.stringify(CALLS.map(c=>c.url)));
+t('the working endpoint is remembered',
+  (STORE['enrichment_config'].searchEndpoints||{}).closely==='https://api.closelyhq.com/explorer/contacts/search',
+  JSON.stringify(STORE['enrichment_config'].searchEndpoints));
+
+// Probing must happen once, not on every lookup.
+await E.clearCache();
+CALLS=[];
+await E.findContacts({company:'Nortal',title:'PM',location:'Dublin, Ireland'});
+t('a later lookup does not re-probe',
+  !CALLS.some(c=>/explorer\/people\/search/.test(c.url)), JSON.stringify(CALLS.map(c=>c.url)));
+
+// No search endpoint at all: remember that too, and stop asking.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+RESPOND=()=>reply(404,{});
+await E.findContacts({company:'Nortal',title:'PM'});
+t('an absent search endpoint is remembered as absent',
+  (STORE['enrichment_config'].searchEndpoints||{}).closely==='',
+  JSON.stringify(STORE['enrichment_config'].searchEndpoints));
+await E.clearCache();
+CALLS=[];
+await E.findContacts({company:'Nortal',title:'PM'});
+t('and is not probed again', CALLS.length===0, JSON.stringify(CALLS.map(c=>c.url)));
+
+// A rejected token is not an absent endpoint: record nothing so a fixed
+// token can probe again.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'stale'});
+RESPOND=()=>reply(403,{});
+await E.findContacts({company:'Nortal',title:'PM'});
+t('a rejected token does not get recorded as "no endpoint"',
+  ((STORE['enrichment_config'].searchEndpoints)||{}).closely===undefined,
+  JSON.stringify(STORE['enrichment_config'].searchEndpoints));
+
+// ---- 16g. resolveProfile: name the person, get the address -------------
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+RESPOND=()=>reply(200,{data:{entries:[
+  {full_name:'Aoife Byrne',title:'Technical Recruiter',emails:['aoife@nortal.com']},
+]}});
+let rp=await E.resolveProfile('https://www.linkedin.com/in/aoifebyrne?trk=abc');
+t('a pasted profile URL resolves to an address',
+  rp.ok&&rp.results[0].email==='aoife@nortal.com', JSON.stringify(rp));
+t('the handle is extracted from the URL', rp.profile==='aoifebyrne', rp.profile);
+rp=await E.resolveProfile('aoifebyrne');
+t('a bare handle works too', rp.ok&&rp.results.length===1, JSON.stringify(rp));
+rp=await E.resolveProfile('not a url at all');
+t('nonsense is rejected before any request', rp.reason==='bad-profile', JSON.stringify(rp));
+rp=await E.resolveProfile('https://www.linkedin.com/in/ACoAAB1234xyzQ');
+t('an opaque URN is rejected rather than looked up', rp.reason==='bad-profile', JSON.stringify(rp));
+
+await reset({});
+rp=await E.resolveProfile('https://www.linkedin.com/in/aoifebyrne');
+t('resolveProfile respects the master switch', rp.reason==='disabled', JSON.stringify(rp));
+
 // ---- 17. the trace explains what happened ------------------------------
 // A lookup that never fired must not look like one that found nobody.
-await reset({enabled:true,provider:'closely'});
+await reset({enabled:true,provider:'closely',searchEndpoints:{closely:''}});
 await E.saveKey('closely',{token:'tok'});
 r=await E.findContacts({company:'Nortal',title:'PM'});          // no poster
 t('a skipped provider says it was skipped',

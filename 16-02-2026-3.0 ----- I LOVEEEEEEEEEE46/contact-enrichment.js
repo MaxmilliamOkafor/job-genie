@@ -347,12 +347,60 @@
       hint: 'Closely publishes no dashboard API key. Sign in with your Closely '
         + 'account below and Job Genie exchanges it for an API token through '
         + "Closely's own login endpoint. Your password is used once and never stored.",
-      // Closely resolves a contact FROM a LinkedIn profile, not from a
-      // company+title search, so it is only usable when a LinkedIn profile
-      // for the poster is known. jd-contact-sources.js supplies that from
-      // the "meet the hiring team" card; without it Closely has nothing to
-      // look up, and lookupByProfile() is used instead of request().
+      // Closely's CONFIRMED capability is profile -> verified email, the
+      // same second step ContactOut uses and the expensive half of the job.
+      // What it does not publish is the first step: a company/role/location
+      // search that produces candidate profiles. Their extension never
+      // calls one, and no such endpoint is documented.
+      //
+      // searchByCompany stays false so Closely is never asked to do
+      // something it cannot, but searchProbe below looks for a Lead Finder
+      // endpoint once, using the account's own token. If Closely exposes
+      // one, it is used from then on and Closely covers both steps like
+      // ContactOut. If not, profiles come from the page and from whatever
+      // profile the user supplies.
       searchByCompany: false,
+      // Closely's own product name for people search is "Lead Finder", and
+      // auth/me reports has_lead_finder for accounts that have it. These
+      // are the paths their API's own naming implies. Probed once, in
+      // order, with the result remembered so it is never re-probed.
+      searchProbe: [
+        'https://api.closelyhq.com/explorer/people/search',
+        'https://api.closelyhq.com/explorer/contacts/search',
+        'https://api.closelyhq.com/leadfinder/search',
+        'https://api.closelyhq.com/explorer/search',
+      ],
+      searchBody: (q) => JSON.stringify({
+        company: q.company ? [q.company] : undefined,
+        job_title: q.titles,
+        location: q.location ? [q.location] : undefined,
+        page: 1,
+        limit: 10,
+      }),
+      searchHeaders: (cred) => ({
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: 'Bearer ' + cred.token,
+      }),
+      // Tolerant on purpose: an undocumented response shape is the whole
+      // reason this is a probe. Anything carrying a profile handle is
+      // useful, because the handle is what the confirmed endpoint needs.
+      parseSearch: (json) => {
+        const rows = (json && (json.data?.entries || json.entries || json.data
+          || json.profiles || json.results)) || [];
+        const list = Array.isArray(rows) ? rows : Object.values(rows);
+        return list.filter((p) => p && typeof p === 'object').map((p) => ({
+          name: _clean(p.full_name || p.name
+            || [p.first_name || p.firstName, p.last_name || p.lastName].filter(Boolean).join(' ')),
+          title: _clean(p.title || p.job_title || p.headline || p.jobs?.[0]?.position),
+          company: _clean(typeof p.company === 'string' ? p.company
+            : (p.company?.name || p.company_name || p.jobs?.[0]?.company)),
+          location: _clean(p.location || p.country),
+          email: _clean((p.emails || [])[0] || p.email),
+          profile: _clean(p.lid || p.li_vanity || p.public_identifier)
+            || _profileSlugFromUrl(p.linkedin_url || p.profile_url || p.url),
+        }));
+      },
       lookupByProfile: (slug, cred) => ({
         url: 'https://api.closelyhq.com/explorer/contacts/find',
         init: {
@@ -687,8 +735,15 @@
         continue;
       }
       // A provider that can only resolve a named profile is pointless when
-      // the page named nobody. Skipping it saves a wasted call.
-      const usable = PROVIDERS[id].searchByCompany !== false || (ctx.linkedinProfiles || []).length;
+      // the page named nobody. Skipping it saves a wasted call. One with a
+      // search endpoint still has something to try -- unless a previous
+      // probe already established that it has none, in which case it is
+      // back to being profile-only.
+      const p = PROVIDERS[id];
+      const probed = (cfg.searchEndpoints || {})[id];
+      const canSearch = p.searchByCompany !== false
+        || (p.searchProbe && probed !== '' && ctx.company);
+      const usable = canSearch || (ctx.linkedinProfiles || []).length;
       if (usable) chain.push(id);
       else {
         credentialledButUnusable++;
@@ -737,6 +792,51 @@
     log('found ' + results.length + ' contact(s) at ' + (ctx.company || 'the posting')
       + ' via ' + (results[0].provider || chain[0]));
     return { ok: true, results, source: results[0].provider || chain[0], triedProviders: chain, trace };
+  }
+
+  /**
+   * Which search endpoint this provider actually answers on, or ''.
+   *
+   * Only for providers whose search is undocumented but whose account is
+   * real. Each candidate is asked once with the user's own token; a 404 or
+   * 405 means "not this one", anything that parses means "this one". The
+   * answer is stored so the probing happens at most once, and a negative
+   * answer is stored too -- re-probing on every lookup would be noise
+   * against their API for no benefit.
+   */
+  async function _resolveSearchEndpoint(id, provider, cred, ctx) {
+    const cfg = await loadConfig();
+    const known = (cfg.searchEndpoints || {})[id];
+    if (known !== undefined) return known || '';
+
+    let found = '';
+    const q = (buildQueries(ctx) || [])[0] || { company: ctx.company, titles: ['Recruiter'] };
+    for (const url of provider.searchProbe) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: provider.searchHeaders(cred),
+          body: provider.searchBody(q),
+        });
+        // Not this path. Keep looking.
+        if (res.status === 404 || res.status === 405 || res.status === 501) continue;
+        // A real credential problem is not an endpoint problem: stop, and
+        // record nothing so a fixed token can probe again.
+        if (res.status === 401 || res.status === 403) return '';
+        if (!res.ok) continue;
+        const json = await res.json().catch(() => null);
+        if (!json) continue;
+        // It answered with JSON this parser understands. Good enough.
+        found = url;
+        break;
+      } catch (e) { /* network: try the next one */ }
+    }
+
+    const next = await loadConfig();
+    next.searchEndpoints = Object.assign({}, next.searchEndpoints, { [id]: found });
+    await _writeConfig(next);
+    log(found ? 'search endpoint for ' + id + ': ' + found : 'no search endpoint for ' + id);
+    return found;
   }
 
   /** One provider's attempt. Returns { results, reason, calls } and never throws. */
@@ -790,6 +890,40 @@
         // A named poster outranks anyone a company search turns up.
         for (const p of r.rows) {
           out.push(Object.assign({}, p, { score: p.score + 40, source: 'job-poster', provider: id }));
+        }
+      }
+    }
+
+    // A provider with no documented search endpoint but a working account:
+    // look for one once, then use it like any other search. The result --
+    // found or absent -- is remembered, so this costs at most one round of
+    // probing per install and never repeats.
+    if (!out.length && !profiles.length && provider.searchProbe && ctx.company) {
+      const endpoint = await _resolveSearchEndpoint(id, provider, cred, ctx);
+      if (endpoint) {
+        for (const q of buildQueries(ctx)) {
+          const r = await call({
+            url: endpoint,
+            init: { method: 'POST', headers: provider.searchHeaders(cred), body: provider.searchBody(q) },
+          }, provider.parseSearch, q, { keepEmpty: true });
+          if (r.fatal) return { results: [], reason: r.fatal, calls };
+          if (!r.rows.length) continue;
+
+          const ranked = r.rows
+            .map((p) => Object.assign({}, p, { score: scoreCandidate(p, q, ctx) }))
+            .sort((a, b) => b.score - a.score);
+          for (const p of ranked) {
+            if (isRealEmail(p.email)) { out.push(Object.assign({}, p, { provider: id })); continue; }
+            // The handle is the point: hand it to the confirmed endpoint.
+            if (p.profile && provider.lookupByProfile && out.length < 2) {
+              const rp = await call(provider.lookupByProfile(p.profile, cred), provider.parseProfile, q);
+              if (rp.fatal) break;
+              for (const hit of rp.rows) {
+                out.push(Object.assign({}, p, hit, { provider: id, score: p.score + 6, verifiedVia: 'profile' }));
+              }
+            }
+          }
+          if (out.length) break;
         }
       }
     }
@@ -852,8 +986,55 @@
     };
   }
 
+  /**
+   * One named person -> their verified work address, through whichever
+   * provider holds a credential. This is the step every provider here can
+   * do, so it works even where a company search is unavailable.
+   */
+  async function resolveProfile(profileOrUrl, opts) {
+    const o = opts || {};
+    const cfg = await loadConfig();
+    if (cfg.enabled !== true) return { ok: false, results: [], reason: 'disabled' };
+
+    const raw = _clean(profileOrUrl);
+    // A string that LOOKS like a profile URL but yields no usable handle --
+    // an opaque ACo... URN, or a company page -- must be rejected, not
+    // passed through whole. Falling back to the raw input would send the
+    // entire URL to the provider as if it were a handle.
+    const looksLikeUrl = /linkedin\.com|^https?:|\//i.test(raw);
+    const slug = _profileSlugFromUrl(raw) || (looksLikeUrl ? '' : raw.replace(/^@/, ''));
+    if (!slug || /\s/.test(slug) || /^ACo[A-Za-z0-9_-]+$/.test(slug)) {
+      return { ok: false, results: [], reason: 'bad-profile' };
+    }
+
+    const order = [o.provider || cfg.provider || 'contactout'].concat(Object.keys(PROVIDERS));
+    const tried = [];
+    for (const id of order) {
+      const provider = PROVIDERS[id];
+      if (!provider || !provider.lookupByProfile || tried.indexOf(id) !== -1) continue;
+      const cred = await getCred(id);
+      if (!hasCred(cred, provider)) continue;
+      tried.push(id);
+
+      const r = await _findWith(id, { linkedinProfiles: [slug] }, {});
+      if (r.results.length) {
+        return { ok: true, results: r.results, source: id, profile: slug };
+      }
+      if (r.reason && r.reason !== 'no-match') {
+        return { ok: false, results: [], reason: r.reason, source: id, profile: slug };
+      }
+    }
+    return {
+      ok: tried.length > 0,
+      results: [],
+      reason: tried.length ? 'no-match' : 'no-api-key',
+      triedProviders: tried,
+      profile: slug,
+    };
+  }
+
   global.ContactEnrichment = {
-    listProviders, loadConfig, saveConfig, saveKey, clearKey, getCred,
+    listProviders, loadConfig, saveConfig, saveKey, clearKey, getCred, resolveProfile,
     createKey, testKey, refreshCred,
     buildQueries, functionTitles, scoreCandidate, isRealEmail,
     findContacts, bestEmail, clearCache,

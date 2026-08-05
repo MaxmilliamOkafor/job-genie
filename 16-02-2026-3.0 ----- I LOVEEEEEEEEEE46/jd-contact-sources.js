@@ -145,6 +145,48 @@
     return names;
   }
 
+  // ---- 3b. any LinkedIn profile the posting itself links to -------------
+  // The hiring-team card is a LinkedIn-only feature, but employers link a
+  // named recruiter's profile from ATS postings too: "questions? reach out
+  // to <a href="linkedin.com/in/aoifebyrne">Aoife</a>". That is a person
+  // the employer chose to point at, and the handle is what a lookup needs.
+  //
+  // Deliberately narrow: only profile links inside the posting, never the
+  // page's own navigation or share widgets, which link the COMPANY page or
+  // the reader's own profile rather than anybody involved in hiring.
+  function fromProfileLinks(doc) {
+    const out = [];
+    const SKIP = /(share|nav|header|footer|cookie|banner|menu|social|follow)/i;
+    try {
+      for (const a of doc.querySelectorAll('a[href*="linkedin.com/in/"], a[href^="/in/"]')) {
+        const href = a.getAttribute('href') || '';
+        const slug = _profileSlug(href);
+        if (!slug) continue;
+        // Walk a little way up looking for a reason to reject this link.
+        let skip = false;
+        let node = a;
+        for (let i = 0; i < 4 && node; i++) {
+          const id = (node.getAttribute && (node.getAttribute('id') || '')) || '';
+          const cls = (node.getAttribute && (node.getAttribute('class') || '')) || '';
+          const role = (node.getAttribute && (node.getAttribute('role') || '')) || '';
+          if (SKIP.test(id + ' ' + cls + ' ' + role) || /^(nav|header|footer)$/i.test(node.tagName || '')) {
+            skip = true; break;
+          }
+          node = node.parentElement;
+        }
+        if (skip) continue;
+        const txt = _clean(a.textContent).slice(0, 60);
+        const entry = { name: txt, source: 'profile-link', profile: slug };
+        // The link text is often the person's name, but it is just as often
+        // "LinkedIn" or the URL. Keep the handle either way; only claim a
+        // name when it reads like one.
+        if (!/^[A-Z][a-zA-Z'’.-]+(?:\s+[A-Z][a-zA-Z'’.-]+){1,3}$/.test(txt)) entry.name = '';
+        out.push(entry);
+      }
+    } catch (e) {}
+    return out;
+  }
+
   // ---- 4. meta tags -----------------------------------------------------
   function fromMeta(doc) {
     const out = { org: '', emails: [] };
@@ -185,11 +227,14 @@
       uniqueEmails.push(e);
     }
 
-    const names = [].concat(ld.names).concat(fromLinkedInPoster(d));
+    const names = [].concat(ld.names).concat(fromLinkedInPoster(d)).concat(fromProfileLinks(d));
+    // De-duplicate on the handle where there is one, otherwise the name:
+    // the same recruiter often appears both in the hiring card and as a
+    // link in the body, and a nameless profile link is still useful.
     const seenN = new Set();
     const uniqueNames = names.filter((n) => {
-      const k = n.name.toLowerCase();
-      if (seenN.has(k)) return false;
+      const k = (n.profile || n.name || '').toLowerCase();
+      if (!k || seenN.has(k)) return false;
       seenN.add(k);
       return true;
     });
@@ -202,7 +247,7 @@
     };
   }
 
-  global.JDContactSources = { harvest, fromMailtoLinks, fromJsonLd, fromLinkedInPoster, fromMeta };
+  global.JDContactSources = { harvest, fromMailtoLinks, fromJsonLd, fromLinkedInPoster, fromProfileLinks, fromMeta };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.JDContactSources;
   try { console.log(TAG, 'ready'); } catch (e) {}
 })(typeof window !== 'undefined' ? window : globalThis);

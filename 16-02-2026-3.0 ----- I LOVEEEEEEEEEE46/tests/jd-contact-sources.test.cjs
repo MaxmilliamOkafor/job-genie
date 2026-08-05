@@ -85,5 +85,34 @@ t('an opaque LinkedIn URN is not stored as a handle',
   urn.length===1&&!urn[0].profile, JSON.stringify(urn));
 t('the name is still kept when the handle is unusable', urn[0]&&urn[0].name==='Dana Quinn', JSON.stringify(urn));
 
+// ---- profile links in the posting body --------------------------------
+// The hiring-team card is LinkedIn-only. Employers link a named recruiter
+// from ATS postings too, and that handle is what a lookup needs.
+document.body.innerHTML = `
+  <nav class="global-nav"><a href="https://www.linkedin.com/in/sharewidget">Share</a></nav>
+  <div class="job-body">
+    <p>Questions? Reach out to
+       <a href="https://www.linkedin.com/in/aoifebyrne">Aoife Byrne</a>.</p>
+    <p>Our team: <a href="https://www.linkedin.com/in/leekelly?trk=x">LinkedIn</a></p>
+  </div>
+  <footer><a href="/in/footerperson">Follow us</a></footer>`;
+const pl=S.fromProfileLinks(document);
+const slugs=pl.map(x=>x.profile);
+t('a recruiter linked from the posting body is captured', slugs.includes('aoifebyrne'), JSON.stringify(pl));
+t('the linked name is kept when it reads like a name',
+  pl.find(x=>x.profile==='aoifebyrne')?.name==='Aoife Byrne', JSON.stringify(pl));
+t('a handle is kept even when the link text is not a name',
+  slugs.includes('leekelly'), JSON.stringify(pl));
+t('query strings are stripped from the handle', !slugs.some(x=>/[?&]/.test(x)), JSON.stringify(slugs));
+t('navigation links are ignored', !slugs.includes('sharewidget'), JSON.stringify(slugs));
+t('footer links are ignored', !slugs.includes('footerperson'), JSON.stringify(slugs));
+t('no address is produced from a profile link', !JSON.stringify(pl).includes('@'), JSON.stringify(pl));
+
+// The harvest keeps a nameless profile link, which the old name-only
+// de-duplication discarded outright.
+const h2=S.harvest(document);
+t('harvest keeps profile links', h2.names.some(n=>n.profile==='aoifebyrne'), JSON.stringify(h2.names));
+t('harvest keeps a handle with no name', h2.names.some(n=>n.profile==='leekelly'), JSON.stringify(h2.names));
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

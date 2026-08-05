@@ -131,6 +131,18 @@ t('the lookup resolves the company through the shared extractor',
 t('no caller invokes resolveCompanyName with no arguments',
   !/resolveCompanyName\(\)/.test(popupJs), 'returns nothing, kills the lookup');
 
+// Closely holds a subscription and a token but publishes no search API.
+t('Closely probes for a search endpoint rather than giving up',
+  /searchProbe/.test(enrich)&&/_resolveSearchEndpoint/.test(enrich), 'profile-only forever');
+t('the probe result is remembered either way',
+  /searchEndpoints/.test(enrich), 'would re-probe on every lookup');
+t('naming a person directly is always available',
+  /id="enrichProfileUrl"/.test(popupHtml)&&/async enrichResolveProfile\(\)/.test(popupJs), 'no manual path');
+t('a resolved profile feeds the same follow-up as a detected one',
+  /enrichResolveProfile\(\)[\s\S]{0,2000}this\.jdContact = Object\.assign/.test(popupJs), 'result goes nowhere');
+t('profile links in the posting body are harvested',
+  /fromProfileLinks/.test(read('jd-contact-sources.js')), 'ATS postings yield no handles');
+
 // The ordering rule: enrichment is consulted only after the posting, its
 // structured data and the careers page have all come back empty.
 t('enrichment runs only after the careers-page fallback',

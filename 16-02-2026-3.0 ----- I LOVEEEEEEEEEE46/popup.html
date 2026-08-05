@@ -377,6 +377,21 @@
                      ran and found nobody. -->
                 <button id="enrichFindNowBtn" class="fu-btn fu-btn-wide">Find contact for this job now</button>
               </div>
+
+              <!-- The path that always works, whatever the provider can or
+                   cannot search: you name the person, it returns their
+                   verified work address. Useful when the posting names
+                   nobody but you found the recruiter yourself. -->
+              <div class="fu-field" style="margin-top:9px;">
+                <label class="fu-label" for="enrichProfileUrl">
+                  Or resolve a LinkedIn profile <span class="fu-hint">paste a profile URL</span>
+                </label>
+                <input type="text" id="enrichProfileUrl" class="fu-input"
+                       placeholder="https://www.linkedin.com/in/their-handle" />
+              </div>
+              <div class="fu-actions">
+                <button id="enrichResolveProfileBtn" class="fu-btn fu-btn-wide">Get this person's email</button>
+              </div>
               <pre id="enrichDiagnostics" class="fu-diagnostics"></pre>
               <div id="enrichStatus" class="fu-note"></div>
             </div>
