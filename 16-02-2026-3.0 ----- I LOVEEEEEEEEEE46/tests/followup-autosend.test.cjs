@@ -37,7 +37,7 @@ t('no orphaned pending-send queue', !/followup_pending_send/.test(src));
 // provider. If the send does not await it, a slow page produces "no
 // address" and the note is silently never sent.
 t('contact detection is tracked as a promise',
-  /this\.contactDetection\s*=\s*this\.followupDetectContact\(\)/.test(src), 'fire and forget');
+  /this\.contactDetection\s*=[\s\S]{0,120}followupDetectContact\(\)/.test(src), 'fire and forget');
 t('the auto-send waits for contact detection',
   /await this\.contactDetection/.test(fn),
   'would decide "no address" mid-detection');
@@ -50,8 +50,9 @@ t('waiting for detection cannot fail the send',
 // run -- either engine missing, or either call throwing -- each caught and
 // logged as a verdict failure. Fifteen applications completed perfectly and
 // never looked for anybody to send to.
-const detectAt=src.indexOf('this.contactDetection = this.followupDetectContact()');
-t('detection is started exactly once', (src.match(/this\.contactDetection = this\.followupDetectContact\(\)/g)||[]).length===1);
+const detectAt=src.indexOf('this.contactDetection = Promise.resolve()');
+t('detection is started exactly once',
+  (src.match(/this\.contactDetection\s*=\s*Promise\.resolve\(\)/g)||[]).length===1);
 t('detection does not live inside the ApplyVerdict block',
   detectAt < src.indexOf("typeof ApplyVerdict !== 'undefined'"), 'gated behind the verdict panel');
 t('detection does not live inside the qualification-threshold block',
@@ -59,8 +60,26 @@ t('detection does not live inside the qualification-threshold block',
 t('detection runs before document generation starts',
   detectAt < src.indexOf('const startTime = Date.now()'), 'serialised after tailoring');
 t('detection is not wrapped in another feature\'s try/catch',
-  /this\._tailoringInProgress = true;[\s\S]{0,1400}this\.contactDetection = this\.followupDetectContact\(\)/.test(src),
+  /this\._tailoringInProgress = true;[\s\S]{0,1400}this\.contactDetection = Promise\.resolve\(\)/.test(src),
   'not hoisted to the top of the run');
+
+// --- the follow-up must never be able to break the tailoring run
+// Hoisting detection to the top of tailorDocuments moved it OUT of another
+// feature's try block and left it in the middle of the tailoring path with
+// no guard of its own: a synchronous throw kills the run, and a rejected
+// promise nobody awaits surfaces as an unhandled error. The CV is the
+// product; finding a recipient is an extra.
+t('the hoisted detection cannot throw synchronously',
+  /this\.contactDetection = Promise\.resolve\(\)/.test(src), 'a throw would kill the tailoring run');
+t('and cannot leave an unhandled rejection',
+  /this\.contactDetection = Promise\.resolve\(\)[\s\S]{0,400}\.catch\(/.test(src), 'unhandled rejection');
+t('nothing in detection runs outside its own try',
+  /async followupDetectContact\(\)\s*\{\s*\n\s*try \{/.test(src), 'unguarded statements before the try');
+t('the send step is isolated from the tailoring run',
+  /try \{\s*\n\s*await this\.autoSendFollowup\(\);\s*\n\s*\} catch/.test(src),
+  'a failed note would report as a failed tailor');
+t('reporting a failed send cannot itself fail the run',
+  /catch \(reportError\)/.test(src), 'the error reporter can throw too');
 
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

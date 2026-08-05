@@ -27,15 +27,30 @@
   // Local parts that are explicitly recruiting mailboxes -> best target.
   const RECRUITING_LOCAL = /^(careers?|jobs?|recruit(ing|ment)?|talent|talentacquisition|ta|hiring|hr|people|apply|applications?|resumes?|cv)$/i;
 
+  // Mailboxes published for a specific non-hiring purpose. An
+  // accommodation or accessibility inbox exists so a candidate can request
+  // a disability adjustment; a job follow-up sent there misuses it and
+  // lands badly with whoever reads it. Still a published contact, so not
+  // rejected outright -- just never preferred over a hiring inbox.
+  const PURPOSE_LOCAL = /(accommodat|accessib|\bada\b|disabilit|eeo|affirmative|reasonable[-_.]?adjust)/;
+
+  // Words that make a dotted local part a ROLE, not a person. Without this
+  // "accommodations.apply@" matched the firstname.lastname heuristic and
+  // scored above a real careers@ inbox.
+  const ROLE_WORDS = /(accommodat|accessib|disabilit|apply|application|support|help|admin|info|contact|enquir|inquir|general|no[-_.]?reply|do[-_.]?not)/;
+
   function _scoreEmail(email) {
     const [local, domain] = email.toLowerCase().split('@');
     if (!local || !domain) return -1;
     if (BLOCKED_LOCAL.test(local)) return -1;
     if (BLOCKED_DOMAIN.test(domain)) return -1;
+    // Checked before the human-name heuristic below, which it would
+    // otherwise satisfy.
+    if (PURPOSE_LOCAL.test(local)) return 20;
     // A named human on the hiring side gets read; a shared inbox gets
     // triaged. Both are legitimate published targets, so prefer the person.
     if (/(recruit|talent|hiring)/.test(local) && /[._]/.test(local)) return 100;
-    if (/^[a-z]+\.[a-z]+$/.test(local)) return 95;
+    if (/^[a-z]+\.[a-z]+$/.test(local) && !ROLE_WORDS.test(local)) return 95;
     if (/(recruit|talent|hiring|hr|people)/.test(local)) return 90;
     // A dedicated recruiting mailbox is published precisely for applicants.
     if (RECRUITING_LOCAL.test(local)) return 88;

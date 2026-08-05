@@ -238,6 +238,13 @@
                 <button id="followupPreflightBtn" class="fu-btn fu-btn-primary fu-btn-wide">Run full check</button>
               </div>
               <pre id="followupPreflight" class="fu-diagnostics"></pre>
+              <div class="fu-actions">
+                <button id="traceCopyBtn" class="fu-btn">Copy full trace</button>
+                <button id="traceSaveBtn" class="fu-btn">Download trace</button>
+                <button id="traceClearBtn" class="fu-btn">Clear trace</button>
+              </div>
+              <p class="fu-note">The trace records every call, its timing and any error, with
+                passwords, tokens and API keys stripped out. Copy it into a bug report.</p>
             </div>
 
             <!-- 1. Connection -->
@@ -1159,6 +1166,7 @@
   <script src="qualification-threshold-engine.js"></script>
   <script src="apply-verdict.js"></script>
   <script src="jd-contact-extractor.js"></script>
+  <script src="jg-trace.js"></script>
   <script src="contact-enrichment.js"></script>
   <script src="linkedin-profile-memory.js"></script>
   <script src="followup-email.js"></script>

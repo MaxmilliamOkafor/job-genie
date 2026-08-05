@@ -7,22 +7,49 @@ const SUPABASE_URL = 'https://wntpldomgjutwufphnpg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHBsZG9tZ2p1dHd1ZnBobnBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDY0NDAsImV4cCI6MjA4MjE4MjQ0MH0.vOXBQIg6jghsAby2MA1GfE-MNTRZ9Ny1W2kfUHGUzNM';
 
 // ============ GLOBAL ERROR HANDLER: Prevent extension crashes ============
-// Catches unhandled promise rejections that would otherwise crash the extension
+// These used to console.error and nothing else. The popup's console is
+// wiped every time the popup closes, and the debug export only carries the
+// content script's log -- so a crash here left no evidence at all, and
+// "it crashed" could not be turned into a cause.
+//
+// Errors are now kept in a small ring buffer in storage and shown by
+// "Run full check", so reporting a crash is copy and paste.
+const JG_ERR_KEY = 'popup_error_log';
+const JG_ERR_MAX = 25;
+
+function jgRecordError(kind, err, extra) {
+  const entry = {
+    at: Date.now(),
+    kind,
+    message: (err && err.message) || String(err || 'unknown'),
+    // The stack is the whole point: it names the function and line.
+    stack: String((err && err.stack) || '').split('\n').slice(0, 6).join('\n'),
+    where: extra || '',
+  };
+  try { console.error('[ATS Tailor]', kind, entry.message, err); } catch (e) {}
+  try { if (window.JGTrace) window.JGTrace.error('window', err, kind + ' ' + (extra || '')); } catch (e) {}
+  try {
+    chrome.storage.local.get([JG_ERR_KEY], (r) => {
+      const log = ((r && r[JG_ERR_KEY]) || []).concat([entry]).slice(-JG_ERR_MAX);
+      chrome.storage.local.set({ [JG_ERR_KEY]: log });
+    });
+  } catch (e) {}
+}
+
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('[ATS Tailor] Unhandled promise rejection:', event.reason);
-  event.preventDefault(); // Prevent the error from crashing the extension
-  
-  // Show user-friendly error message
-  const errorMessage = event.reason?.message || 'An unexpected error occurred';
+  jgRecordError('unhandled-rejection', event.reason);
+  // Kept: an unhandled rejection must not take the popup down. It is now
+  // recorded first, so suppressing it no longer hides it.
+  event.preventDefault();
+  const errorMessage = (event.reason && event.reason.message) || 'An unexpected error occurred';
   if (window.atsTailor?.showToast) {
     window.atsTailor.showToast(`Error: ${errorMessage.substring(0, 100)}`, 'error');
   }
 });
 
-// Global error handler for synchronous errors
 window.addEventListener('error', (event) => {
-  console.error('[ATS Tailor] Unhandled error:', event.error);
-  // Don't prevent default for these - let them be logged
+  jgRecordError('error', event.error || event.message,
+    (event.filename || '') + (event.lineno ? ':' + event.lineno : ''));
 });
 
 // ============ GLOBAL DATE NORMALISATION: any → "Month YYYY" ============
@@ -867,6 +894,13 @@ class ATSTailor {
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
     document.getElementById('followupPreflightBtn')?.addEventListener('click', () => this.followupPreflight());
+    document.getElementById('traceCopyBtn')?.addEventListener('click', () => this.traceExport('copy'));
+    document.getElementById('traceSaveBtn')?.addEventListener('click', () => this.traceExport('download'));
+    document.getElementById('traceClearBtn')?.addEventListener('click', () => {
+      if (window.JGTrace) window.JGTrace.clear();
+      chrome.storage.local.remove(['popup_error_log']);
+      this.showToast('Trace cleared', 'success');
+    });
     document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
     document.getElementById('followupClearClientBtn')?.addEventListener('click', () => this.followupSaveClientId(true));
     document.getElementById('followupCopyRedirectBtn')?.addEventListener('click', () => this.followupCopyRedirect());
@@ -2744,7 +2778,11 @@ class ATSTailor {
     } catch (e) {
       // A failed note must never look like a failed tailoring run, but it
       // must not look like a successful one either.
-      await outcome('failed', 'Follow-up could not be sent: ' + (e && e.message ? e.message : e), 'error');
+      try {
+        await outcome('failed', 'Follow-up could not be sent: ' + (e && e.message ? e.message : e), 'error');
+      } catch (reportError) {
+        console.warn('[ATS Tailor] could not report follow-up failure:', reportError && reportError.message);
+      }
     }
   }
 
@@ -2854,16 +2892,20 @@ class ATSTailor {
   // Called after tailoring: read the posting for a PUBLISHED contact email
   // and the job/requisition ID, then surface it in the composer.
   async followupDetectContact() {
-    // Clear FIRST. Without this, a run whose detection fails leaves the
-    // previous job's recipient in place, and the note for this application
-    // goes to a recruiter at the last company. A missing address is a
-    // skipped email; a stale one is an email to the wrong employer.
-    this.jdContact = null;
-    if (this.generatedDocuments) this.generatedDocuments.jdContact = null;
-    const toEl0 = document.getElementById('followupTo');
-    if (toEl0 && toEl0.dataset.autofilled === '1') { toEl0.value = ''; delete toEl0.dataset.autofilled; }
-
     try {
+      // Clear FIRST. Without this, a run whose detection fails leaves the
+      // previous job's recipient in place, and the note for this
+      // application goes to a recruiter at the last company. A missing
+      // address is a skipped email; a stale one is an email to the wrong
+      // employer.
+      this.jdContact = null;
+      if (this.generatedDocuments) this.generatedDocuments.jdContact = null;
+      const toEl0 = document.getElementById('followupTo');
+      if (toEl0 && toEl0.dataset && toEl0.dataset.autofilled === '1') {
+        toEl0.value = '';
+        delete toEl0.dataset.autofilled;
+      }
+
       if (typeof JDContactExtractor === 'undefined') return;
       const jdText = this.currentJob?.description || this.currentJob?.jdText || '';
       const detected = JDContactExtractor.extract({
@@ -3088,6 +3130,32 @@ class ATSTailor {
     }
   }
 
+  // The trace is only useful if it can leave the popup. Copy for pasting
+  // into a report, download for anything too long to paste.
+  async traceExport(how) {
+    if (!window.JGTrace) { this.showToast('Tracer not loaded', 'error'); return; }
+    try {
+      const text = window.JGTrace.asText();
+      if (how === 'copy') {
+        await navigator.clipboard.writeText(text);
+        this.showToast('Trace copied (' + window.JGTrace.snapshot().entries + ' entries)', 'success');
+        return;
+      }
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      await chrome.downloads.download({
+        url,
+        filename: 'job-genie-trace-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt',
+        saveAs: true,
+      });
+      // Revoking immediately can cancel the download in flight.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      this.showToast('Trace downloaded', 'success');
+    } catch (e) {
+      this.showToast('Could not export trace: ' + (e.message || e), 'error');
+    }
+  }
+
   /**
    * Every precondition a follow-up depends on, checked in order, each with
    * the specific thing to change when it fails.
@@ -3211,7 +3279,23 @@ class ATSTailor {
           sources.emails.length + ' published address(es), ' + sources.names.length + ' name(s)');
       }
 
-      // 9. What happened last time, so a past silent skip is visible now.
+      // 9. Anything that actually threw. This is the evidence a crash
+      //    report needs, and it survives the popup being closed.
+      const errLog = await new Promise((r) => chrome.storage.local.get(
+        ['popup_error_log'], (x) => r((x && x.popup_error_log) || [])));
+      if (errLog.length) {
+        say('');
+        say('Recent errors (' + errLog.length + ', newest last) - copy these when reporting:');
+        for (const e of errLog.slice(-5)) {
+          say('  ' + new Date(e.at).toLocaleTimeString('en-GB') + '  ' + e.kind + ': ' + e.message
+            + (e.where ? '  @ ' + e.where : ''));
+          if (e.stack) for (const l of e.stack.split('\n').slice(1, 3)) say('      ' + l.trim());
+        }
+      } else {
+        ok('No errors recorded since the extension was loaded');
+      }
+
+      // 10. What happened last time, so a past silent skip is visible now.
       if (st.followup_last_outcome) {
         const o = st.followup_last_outcome;
         note('Last follow-up (' + new Date(o.at).toLocaleString('en-GB') + ')', o.message);
@@ -4340,9 +4424,16 @@ class ATSTailor {
     const elapsed = performance.now() - startTime;
     console.log(`[ATS Tailor] Keyword extraction completed in ${elapsed.toFixed(1)}ms, total: ${keywords.all?.length || 0}`);
     
-    // Cache the result
-    if (jobUrl) {
+    // Cache the result -- but never an EMPTY one. Caching a failure keyed
+    // by URL means every later attempt on that job replays it without
+    // re-extracting, so one bad run poisons the posting for the whole
+    // cache window. That is the shape of "it worked, then it kept failing
+    // on the same role".
+    if (jobUrl && keywords.all && keywords.all.length) {
       this.keywordCache.set(jobUrl, { keywords, timestamp: Date.now() });
+    } else if (jobUrl) {
+      // Drop any earlier empty entry so the next attempt starts clean.
+      this.keywordCache.delete(jobUrl);
     }
     
     return keywords;
@@ -4623,6 +4714,16 @@ class ATSTailor {
         };
         
         console.log('[ATS Tailor] AI extracted', keywords.all.length, 'keywords');
+        // An empty result is a FAILURE, not an answer. The service returns
+        // 200 with nothing when it is rate limited, out of quota, or the
+        // model returned no usable JSON -- and returning that as success
+        // skipped the retries below and the caller's local fallback, so a
+        // transient backend hiccup became a hard "could not extract
+        // keywords". Repeatedly tailoring one role is exactly what
+        // provokes it.
+        if (!keywords.all.length && attempt < MAX_RETRIES) {
+          throw new Error('AI returned no keywords (attempt ' + (attempt + 1) + ')');
+        }
         return keywords;
         
       } catch (error) {
@@ -5086,7 +5187,19 @@ class ATSTailor {
     // panel. It runs unconditionally, and starting it here also overlaps
     // the tab read and any provider call with document generation instead
     // of waiting until after it. autoSendFollowup awaits the promise.
-    this.contactDetection = this.followupDetectContact();
+    // Guarded on BOTH sides. Hoisting this out of the ApplyVerdict block
+    // was meant to stop another feature's failure from costing the
+    // application its recipient -- but it left the call itself unprotected
+    // in the middle of the tailoring path, where a synchronous throw kills
+    // the run and a rejected promise nobody awaits surfaces as an
+    // unhandled error. Finding the recipient must never be able to stop
+    // the CV being written.
+    this.contactDetection = Promise.resolve()
+      .then(() => this.followupDetectContact())
+      .catch((e) => {
+        console.warn('[ATS Tailor] contact detection failed (tailoring continues):', e && e.message);
+        return null;
+      });
 
     const startTime = Date.now();
     const btn = document.getElementById('tailorBtn');
@@ -5164,17 +5277,38 @@ class ATSTailor {
       
       // FIRST: Call AI Extract Keywords (equivalent to clicking the AI Extract button)
       let keywords = null;
+      let aiFailure = '';
       try {
         keywords = await this.performAIKeywordExtraction();
         console.log('[ATS Tailor] Step 1 - AI Extracted keywords:', keywords?.all?.length || 0);
       } catch (aiError) {
-        // Silent fallback to local extraction if AI fails - no warning needed
-        console.log('[ATS Tailor] Using local keyword extraction');
-        keywords = this.extractKeywordsOptimized(this.currentJob.description);
+        aiFailure = (aiError && aiError.message) || String(aiError);
+        console.log('[ATS Tailor] AI extraction unavailable:', aiFailure);
       }
-      
+
+      // The fallback was conditioned on the AI THROWING. A call that
+      // succeeded and returned an empty list bypassed it entirely, so a
+      // rate-limited or quota-exhausted backend produced a hard failure
+      // even though local extraction would have worked offline. Fall back
+      // on an empty result too -- what matters is having no keywords, not
+      // how we came to have none.
+      if (!keywords || !Array.isArray(keywords.all) || keywords.all.length === 0) {
+        console.log('[ATS Tailor] Falling back to local keyword extraction');
+        try {
+          keywords = this.extractKeywordsOptimized(this.currentJob.description);
+          console.log('[ATS Tailor] Local extraction produced', keywords?.all?.length || 0, 'keywords');
+        } catch (localError) {
+          console.warn('[ATS Tailor] Local extraction also failed:', localError && localError.message);
+        }
+      }
+
       if (!keywords || !keywords.all || keywords.all.length === 0) {
-        throw new Error('Could not extract keywords from job description');
+        // Name the actual cause. "Could not extract keywords" sent people
+        // looking at the job page when the service was the problem.
+        throw new Error('Could not extract keywords from this posting'
+          + (aiFailure ? ' (AI service: ' + aiFailure + ')' : '')
+          + '. Local extraction found none either - the description may be an image, '
+          + 'or behind a "show more" link that has not been expanded.');
       }
       
       // Store keywords immediately for UI
@@ -6002,7 +6136,15 @@ class ATSTailor {
       await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
 
       // Documents exist and are stored: the note can now carry them.
-      await this.autoSendFollowup();
+      // Same rule as detection -- the follow-up is an extra, and it must
+      // not be able to fail a tailoring run that has already produced both
+      // documents. Anything thrown here would surface as a failed tailor.
+      try {
+        await this.autoSendFollowup();
+      } catch (followupError) {
+        console.warn('[ATS Tailor] follow-up step failed (documents are fine):',
+          followupError && followupError.message);
+      }
 
       const elapsed = (Date.now() - startTime) / 1000;
       this.stats.today++;
@@ -8647,5 +8789,11 @@ ATSTailor.prototype.copyDebugReport = function() {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   // Store global reference for error handler access
+  // Trace BEFORE constructing: instrumenting the prototype first means the
+  // constructor's own calls are recorded too, and startup is where several
+  // of the hardest failures have been.
+  try {
+    if (window.JGTrace) window.JGTrace.instrument(ATSTailor.prototype, 'popup');
+  } catch (e) { console.warn('[ATS Tailor] trace instrumentation skipped:', e && e.message); }
   window.atsTailor = new ATSTailor();
 });
