@@ -379,7 +379,11 @@
     if (clean.apiKey) clean.apiKey = _clean(clean.apiKey);
     delete clean.password;                        // never persisted, ever
     cfg.keys[id] = Object.assign({}, cfg.keys[id], clean);
-    cfg.provider = id;
+    // Saving a key must NOT silently repoint the active provider: adding a
+    // Hunter key as backup would otherwise demote the Closely account the
+    // user chose to lead with. The provider is set where it is chosen, in
+    // the dropdown. Only seed it when nothing has been chosen at all.
+    if (!cfg.provider) cfg.provider = id;
     await _writeConfig(cfg);
     return true;
   }
@@ -543,13 +547,6 @@
     const o = opts || {};
     const cfg = await loadConfig();
     if (cfg.enabled !== true) return { ok: false, results: [], reason: 'disabled' };
-
-    const id = o.provider || cfg.provider || 'hunter';
-    const provider = PROVIDERS[id];
-    if (!provider) return { ok: false, results: [], reason: 'unknown-provider' };
-
-    let cred = await getCred(id);
-    if (!hasCred(cred, provider)) return { ok: false, results: [], reason: 'no-api-key' };
     if (!ctx || (!ctx.company && !(ctx.linkedinProfiles || []).length)) {
       return { ok: false, results: [], reason: 'no-company' };
     }
@@ -558,6 +555,68 @@
       const cached = await readCache(ctx);
       if (cached) return { ok: true, results: cached, source: 'cache' };
     }
+
+    // Providers cover different situations, so one alone leaves gaps.
+    // Closely resolves a NAMED job poster, which is the most accurate
+    // answer there is -- but it needs a LinkedIn profile handle, which
+    // only a LinkedIn posting supplies. On a Workday or Taleo role there
+    // is no poster card, so a company-search provider has to take over or
+    // there is no address at all.
+    //
+    // Order: whatever the user selected, then any other provider they have
+    // a key for. Every provider is tried before reporting nothing found.
+    const chain = [];
+    let credentialledButUnusable = 0;
+    const first = o.provider || cfg.provider || 'hunter';
+    for (const id of [first].concat(Object.keys(PROVIDERS))) {
+      if (chain.indexOf(id) !== -1 || !PROVIDERS[id]) continue;
+      if (!hasCred(await getCred(id), PROVIDERS[id])) continue;
+      // A provider that can only resolve a named profile is pointless when
+      // the page named nobody. Skipping it saves a wasted call.
+      const usable = PROVIDERS[id].searchByCompany !== false || (ctx.linkedinProfiles || []).length;
+      if (usable) chain.push(id); else credentialledButUnusable++;
+    }
+    if (!chain.length) {
+      // Distinguishing these matters: "add a key" is wrong advice for
+      // someone who has a working Closely account but is looking at a
+      // Workday posting, where there is no named poster to resolve.
+      return credentialledButUnusable
+        ? { ok: false, results: [], reason: 'needs-named-poster' }
+        : { ok: false, results: [], reason: 'no-api-key' };
+    }
+
+    const collected = [];
+    let lastReason = 'no-match';
+    for (const id of chain) {
+      const r = await _findWith(id, ctx, o);
+      if (r.results.length) { collected.push.apply(collected, r.results); break; }
+      if (r.reason && r.reason !== 'no-match') lastReason = r.reason;
+    }
+
+    // De-duplicate on address, keeping the best-scoring appearance.
+    const byEmail = new Map();
+    for (const p of collected) {
+      const k = p.email.toLowerCase();
+      if (!byEmail.has(k) || byEmail.get(k).score < p.score) byEmail.set(k, p);
+    }
+    const results = Array.from(byEmail.values()).sort((a, b) => b.score - a.score).slice(0, 5);
+
+    await writeCache(ctx, results);
+    if (!results.length) {
+      // "Nobody matched" is a successful lookup with an empty answer; only
+      // a provider that actually failed is not ok. Collapsing the two would
+      // make a rejected key look like an employer with no recruiters.
+      return { ok: lastReason === 'no-match', results: [], reason: lastReason, triedProviders: chain };
+    }
+    log('found ' + results.length + ' contact(s) at ' + (ctx.company || 'the posting')
+      + ' via ' + (results[0].provider || chain[0]));
+    return { ok: true, results, source: results[0].provider || chain[0], triedProviders: chain };
+  }
+
+  /** One provider's attempt. Returns { results, reason } and never throws. */
+  async function _findWith(id, ctx, o) {
+    const provider = PROVIDERS[id];
+    let cred = await getCred(id);
 
     // Runs one request and normalises every failure mode into a reason.
     const call = async (req, parse, q) => {
@@ -587,7 +646,7 @@
       };
     };
 
-    const collected = [];
+    const out = [];
 
     // Profile-first: when the posting named the person who posted it, the
     // right answer is that person, not the best guess from a company search.
@@ -595,32 +654,25 @@
     if (provider.lookupByProfile && profiles.length) {
       for (const slug of profiles.slice(0, 3)) {
         const r = await call(provider.lookupByProfile(slug, cred), provider.parseProfile, {});
-        if (r.fatal) return { ok: false, results: [], reason: r.fatal };
+        if (r.fatal) return { results: [], reason: r.fatal };
         // A named poster outranks anyone a company search turns up.
-        for (const p of r.rows) collected.push(Object.assign({}, p, { score: p.score + 40, source: 'job-poster' }));
+        for (const p of r.rows) {
+          out.push(Object.assign({}, p, { score: p.score + 40, source: 'job-poster', provider: id }));
+        }
       }
     }
 
-    if (!collected.length && provider.searchByCompany !== false && provider.request) {
+    if (!out.length && provider.searchByCompany !== false && provider.request) {
       for (const q of buildQueries(ctx)) {
         const r = await call(provider.request(q, cred), provider.parse, q);
-        if (r.fatal) return { ok: false, results: [], reason: r.fatal };
-        if (r.rows.length) { collected.push.apply(collected, r.rows); break; }
+        if (r.fatal) return { results: [], reason: r.fatal };
+        if (r.rows.length) {
+          for (const p of r.rows) out.push(Object.assign({}, p, { provider: id }));
+          break;
+        }
       }
     }
-
-    // De-duplicate on address, keeping the best-scoring appearance.
-    const byEmail = new Map();
-    for (const p of collected) {
-      const k = p.email.toLowerCase();
-      if (!byEmail.has(k) || byEmail.get(k).score < p.score) byEmail.set(k, p);
-    }
-    const results = Array.from(byEmail.values()).sort((a, b) => b.score - a.score).slice(0, 5);
-
-    await writeCache(ctx, results);
-    if (!results.length) return { ok: true, results: [], reason: 'no-match', source: id };
-    log('found ' + results.length + ' contact(s) at ' + (ctx.company || 'the posting'));
-    return { ok: true, results, source: id };
+    return { results: out, reason: out.length ? '' : 'no-match' };
   }
 
   /**

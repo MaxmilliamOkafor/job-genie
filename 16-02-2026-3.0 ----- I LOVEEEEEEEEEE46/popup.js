@@ -3118,6 +3118,10 @@ class ATSTailor {
       if (!hit.email) {
         const why = {
           'no-api-key': 'No API key saved for your lookup provider - add one in Settings.',
+          // Closely resolves a named poster, and this page named nobody.
+          'needs-named-poster': 'This posting names nobody to look up. Closely can only '
+            + 'resolve a named LinkedIn poster - add a Hunter, ContactOut or Apollo key '
+            + 'in Settings to cover postings like this one.',
           'bad-api-key': 'Your lookup provider rejected the saved key.',
           'rate-limited': 'Your lookup provider is rate limiting - try again shortly.',
           'out-of-credits': 'Your lookup provider is out of credits.',

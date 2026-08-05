@@ -220,7 +220,67 @@ RESPOND=()=>reply(200,{data:{}});
 tk=await E.testKey('hunter');
 t('a working key is confirmed', tk.ok===true, tk.message);
 
-// ---- 15. every provider is declared coherently -------------------------
+// ---- 15. providers cover for each other --------------------------------
+// Closely resolves a NAMED poster and needs a LinkedIn handle to do it.
+// On a Workday or Taleo posting there is no poster card, so Closely alone
+// would find nothing at all -- a company-search provider has to take over.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+CALLS=[];
+RESPOND=()=>reply(200,{data:{emails:[]}});
+r=await E.findContacts({company:'Nortal',title:'PM'});          // no profile handle
+t('Closely alone is not called when the page named nobody', CALLS.length===0, JSON.stringify(CALLS.map(c=>c.url)));
+t('and it says the page named nobody, not "add a key" (which is wrong advice)',
+  r.reason==='needs-named-poster', JSON.stringify(r));
+
+// Same posting, but a company-search key is also saved.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+await E.saveKey('hunter',{apiKey:'h'});
+CALLS=[];
+RESPOND=()=>reply(200,{data:{organization:'Nortal',emails:[
+  {first_name:'Aoife',last_name:'Byrne',position:'Technical Recruiter',value:'aoife@nortal.com',confidence:90},
+]}});
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('a company-search provider covers the ATS posting Closely cannot',
+  r.ok&&r.results[0].email==='aoife@nortal.com', JSON.stringify(r));
+t('only the usable provider was called',
+  CALLS.every(c=>/hunter/.test(c.url)), JSON.stringify(CALLS.map(c=>c.url)));
+t('the answering provider is reported', r.source==='hunter', JSON.stringify(r.source));
+
+// On a LinkedIn posting the named poster wins, and Closely is asked first.
+await reset({enabled:true,provider:'closely'});
+await E.saveKey('closely',{token:'tok'});
+await E.saveKey('hunter',{apiKey:'h'});
+CALLS=[];
+RESPOND=(url)=>/closelyhq/.test(url)
+  ? reply(200,{data:{entries:[{full_name:'Lee Kelly',title:'Talent Acquisition Partner',emails:['lee@nortal.com']}]}})
+  : reply(200,{data:{emails:[{first_name:'A',last_name:'B',position:'Recruiter',value:'generic@nortal.com'}]}});
+r=await E.findContacts({company:'Nortal',title:'PM',linkedinProfiles:['leekelly']});
+t('the named poster beats the company search', r.results[0].email==='lee@nortal.com', JSON.stringify(r.results));
+t('the fallback provider is not called once the poster resolves',
+  !CALLS.some(c=>/hunter/.test(c.url)), JSON.stringify(CALLS.map(c=>c.url)));
+
+// A dead key must not sink the whole lookup.
+await reset({enabled:true,provider:'contactout'});
+await E.saveKey('contactout',{apiKey:'expired'});
+await E.saveKey('hunter',{apiKey:'good'});
+CALLS=[];
+RESPOND=(url)=>/contactout/.test(url)
+  ? reply(401,{})
+  : reply(200,{data:{emails:[{first_name:'A',last_name:'B',position:'Recruiter',value:'ok@nortal.com'}]}});
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('one rejected key does not abort the chain', r.ok&&r.results[0].email==='ok@nortal.com', JSON.stringify(r));
+
+// Every key dead: the reason must name the failure, not claim no match.
+await reset({enabled:true,provider:'hunter'});
+await E.saveKey('hunter',{apiKey:'dead'});
+RESPOND=()=>reply(401,{});
+r=await E.findContacts({company:'Nortal',title:'PM'});
+t('when every provider fails the reason is the failure, not no-match',
+  r.ok===false&&r.reason==='bad-api-key', JSON.stringify(r));
+
+// ---- 16. every provider is declared coherently -------------------------
 for(const p of E.listProviders()){
   const impl=E.PROVIDERS[p.id];
   const searchable=!!impl.request||!!impl.lookupByProfile;
