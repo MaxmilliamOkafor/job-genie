@@ -304,56 +304,6 @@
               <div id="followupDetected" class="fu-note"></div>
             </div>
 
-            <!-- ATS account sign-in. ONE email and password, used on every ATS
-                 that makes you register. You set it, so you can sign in by
-                 hand anywhere without looking it up. -->
-            <div class="fu-card">
-              <div class="fu-card-title">ATS account sign-in</div>
-              <p class="fu-note" style="margin-top:0;">Workday, Taleo, iCIMS, SuccessFactors and
-                others make you register before applying. These details create the account and
-                sign back in. Filled only on a recognised ATS, and never over plain http.</p>
-
-              <div class="fu-field">
-                <label class="fu-label" for="atsUseProfileEmail">
-                  Use my profile email <span class="fu-hint">confirmations arrive there</span>
-                </label>
-                <label class="toggle-switch" for="atsUseProfileEmail"
-                       aria-label="Use profile email for ATS accounts">
-                  <input type="checkbox" id="atsUseProfileEmail" />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div class="fu-field" id="atsAccountEmailField" style="margin-top:9px;">
-                <label class="fu-label" for="atsAccountEmail">Account email</label>
-                <input type="email" id="atsAccountEmail" class="fu-input"
-                       placeholder="you@example.com" autocomplete="off" />
-              </div>
-
-              <div class="fu-field" style="margin-top:9px;">
-                <label class="fu-label" for="atsAccountPassword">
-                  Account password <span class="fu-hint">8-20, upper, lower, number, !@#$%^&amp;*</span>
-                </label>
-                <input type="password" id="atsAccountPassword" class="fu-input"
-                       placeholder="Used on every ATS" autocomplete="off" />
-              </div>
-              <div class="fu-actions">
-                <button id="atsAccountSaveBtn" class="fu-btn fu-btn-primary">Save</button>
-                <button id="atsAccountSuggestBtn" class="fu-btn">Suggest one</button>
-                <button id="atsAccountRevealBtn" class="fu-btn">Show</button>
-                <button id="atsAccountClearBtn" class="fu-btn">Clear</button>
-              </div>
-              <div id="atsAccountStatus" class="fu-note"></div>
-              <p class="fu-note">The same password is used on every ATS, so a breach at any one of
-                them exposes the others. That is the trade for a password you can remember and type
-                anywhere. Stored in chrome.storage.local, which is isolated per extension but
-                <strong>not encrypted at rest</strong> - do not reuse a password that matters.</p>
-              <div class="fu-actions">
-                <button id="atsAccountsShowBtn" class="fu-btn fu-btn-wide">Show older per-site passwords</button>
-              </div>
-              <pre id="atsAccountsList" class="fu-diagnostics"></pre>
-            </div>
-
             <!-- 2b. Contact lookup (opt-in) -->
             <div class="fu-card">
               <div class="fu-card-title">Contact lookup <span class="fu-hint">optional</span></div>
@@ -1217,7 +1167,6 @@
   <script src="apply-verdict.js"></script>
   <script src="jd-contact-extractor.js"></script>
   <script src="ats-platforms.js"></script>
-  <script src="ats-account.js"></script>
   <script src="jg-trace.js"></script>
   <script src="contact-enrichment.js"></script>
   <script src="linkedin-profile-memory.js"></script>

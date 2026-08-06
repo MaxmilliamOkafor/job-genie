@@ -894,33 +894,6 @@ class ATSTailor {
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
     document.getElementById('followupPreflightBtn')?.addEventListener('click', () => this.followupPreflight());
-    document.getElementById('atsAccountsShowBtn')?.addEventListener('click', () => this.atsAccountsShow());
-    document.getElementById('atsAccountSaveBtn')?.addEventListener('click', () => this.atsAccountSave());
-    document.getElementById('atsAccountSuggestBtn')?.addEventListener('click', () => {
-      if (typeof ATSAccount === 'undefined') return;
-      const el = document.getElementById('atsAccountPassword');
-      if (el) { el.value = ATSAccount.generatePassword(16); el.type = 'text'; }
-      const st = document.getElementById('atsAccountStatus');
-      if (st) { st.textContent = 'Suggested. Press Save to keep it, and write it down somewhere.'; st.style.color = 'var(--warning)'; }
-    });
-    document.getElementById('atsAccountRevealBtn')?.addEventListener('click', () => {
-      const el = document.getElementById('atsAccountPassword');
-      if (el) el.type = el.type === 'password' ? 'text' : 'password';
-    });
-    document.getElementById('atsAccountClearBtn')?.addEventListener('click', async () => {
-      if (typeof ATSAccount === 'undefined') return;
-      await ATSAccount.saveAccount({ accountEmail: '', accountPassword: '', useProfileEmail: false });
-      ['atsAccountEmail', 'atsAccountPassword'].forEach((id) => {
-        const el = document.getElementById(id); if (el) el.value = '';
-      });
-      this.showToast('ATS account details cleared', 'success');
-      this.atsAccountInit();
-    });
-    document.getElementById('atsUseProfileEmail')?.addEventListener('change', (e) => {
-      const field = document.getElementById('atsAccountEmailField');
-      if (field) field.style.display = e.target.checked ? 'none' : '';
-    });
-    document.getElementById('atsAccountsCopyBtn')?.addEventListener('click', () => this.atsAccountsShow(true));
     document.getElementById('traceCopyBtn')?.addEventListener('click', () => this.traceExport('copy'));
     document.getElementById('traceSaveBtn')?.addEventListener('click', () => this.traceExport('download'));
     document.getElementById('traceClearBtn')?.addEventListener('click', () => {
@@ -1488,7 +1461,6 @@ class ATSTailor {
     this.followupLoadTemplate();
     this.followupRefreshStatus();
     this.enrichInitUI();
-    this.atsAccountInit();
     // DOCX is now the only attach format; the selector was removed and
     // attach_format is hard-pinned to 'docx' inside the tailor pipeline.
   }
@@ -3164,77 +3136,6 @@ class ATSTailor {
   // extension -- the employer keeps them, and the user will eventually sign
   // in by hand, from another machine, or to check an application's status.
   // A password manager that cannot show you the password is a locked box.
-  // The single ATS credential. Restored on open, because a form that
-  // forgets what is already saved reads as "not set up" and gets typed in
-  // again -- which on a site you have already registered with means a
-  // password that no longer matches the account.
-  async atsAccountInit() {
-    if (typeof ATSAccount === 'undefined') return;
-    try {
-      const a = await ATSAccount.loadAccount();
-      const useProfile = document.getElementById('atsUseProfileEmail');
-      if (useProfile) useProfile.checked = !!a.useProfileEmail;
-      const field = document.getElementById('atsAccountEmailField');
-      if (field) field.style.display = a.useProfileEmail ? 'none' : '';
-      const emailEl = document.getElementById('atsAccountEmail');
-      if (emailEl) emailEl.value = a.accountEmail || '';
-      // The password IS shown back, masked. These accounts live at real
-      // employers and are signed into by hand later, so a value that
-      // cannot be recovered is worse than one that can be revealed here.
-      const pwEl = document.getElementById('atsAccountPassword');
-      if (pwEl) { pwEl.value = a.accountPassword || ''; pwEl.type = 'password'; }
-      const st = document.getElementById('atsAccountStatus');
-      if (st) {
-        st.textContent = a.accountPassword
-          ? 'Saved. Used on every ATS that asks you to register.'
-          : 'Not set. Registration forms will be left for you to fill.';
-        st.style.color = a.accountPassword ? 'var(--success)' : 'var(--warning)';
-      }
-    } catch (e) { /* cosmetic */ }
-  }
-
-  async atsAccountSave() {
-    if (typeof ATSAccount === 'undefined') return;
-    const st = document.getElementById('atsAccountStatus');
-    const set = (msg, color) => { if (st) { st.textContent = msg; st.style.color = color || ''; } };
-    const useProfileEmail = !!document.getElementById('atsUseProfileEmail')?.checked;
-    const accountEmail = (document.getElementById('atsAccountEmail')?.value || '').trim();
-    const accountPassword = document.getElementById('atsAccountPassword')?.value || '';
-
-    // Every broken rule at once, rather than one per attempt.
-    const r = await ATSAccount.saveAccount({ useProfileEmail, accountEmail, accountPassword });
-    if (!r.ok) { set(r.problems.join('. ') + '.', 'var(--error)'); return; }
-    set('Saved. Used on every ATS that asks you to register.', 'var(--success)');
-    this.showToast('ATS account saved', 'success');
-  }
-
-  async atsAccountsShow(copy) {
-    const out = document.getElementById('atsAccountsList');
-    const say = (s) => { if (out) out.textContent = s; };
-    if (typeof ATSAccount === 'undefined') { say('Account module not loaded.'); return; }
-    try {
-      const list = await ATSAccount.listCredentials();
-      if (!list.length) {
-        say('No ATS accounts saved yet.\n\nOne is created automatically the first time a site '
-          + 'asks you to register, using your profile email and a fresh password.');
-        return;
-      }
-      const text = list.map((c) =>
-        c.domain + '\n'
-        + '  email    : ' + c.email + '\n'
-        + '  password : ' + c.password + '\n'
-        + '  created  : ' + new Date(c.createdAt || 0).toLocaleDateString('en-GB')
-      ).join('\n\n');
-      say(text);
-      if (copy) {
-        await navigator.clipboard.writeText(text);
-        this.showToast(list.length + ' account(s) copied', 'success');
-      }
-    } catch (e) {
-      say('Could not read saved accounts: ' + (e.message || e));
-    }
-  }
-
   // The trace is only useful if it can leave the popup. Copy for pasting
   // into a report, download for anything too long to paste.
   async traceExport(how) {

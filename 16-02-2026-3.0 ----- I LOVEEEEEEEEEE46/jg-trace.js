@@ -41,11 +41,11 @@
   // Applied to keys AND to values that look like credentials, because a
   // token turns up under plenty of names.
   const SECRET_KEY = /(pass(word)?|token|api_?key|secret|authorization|auth|credential|bearer|refresh)/i;
-  // Whole storage keys whose VALUE is secret regardless of its shape. The
-  // ATS credential vault is keyed by domain, so none of its keys match the
-  // pattern above -- without this the passwords would be traced verbatim
-  // and end up in something the user pastes into a bug report.
-  const SECRET_STORE = /^(ats_accounts|followup_oauth_token|enrichment_config)$/;
+  // Whole storage keys whose VALUE is secret regardless of its shape --
+  // their inner keys are provider names and ids, so none of them match the
+  // pattern above, and without this the tokens would be traced verbatim
+  // into something written to be pasted into a bug report.
+  const SECRET_STORE = /^(followup_oauth_token|enrichment_config)$/;
   const SECRET_VAL = /^(Bearer\s+|ya29\.|eyJ[A-Za-z0-9_-]{10,})/;
 
   function redact(v, depth) {
