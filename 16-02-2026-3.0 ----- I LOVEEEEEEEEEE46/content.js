@@ -2239,40 +2239,25 @@
 
     const hostname = window.location.hostname;
     
-    const platformSelectors = {
-      greenhouse: {
-        title: ['h1.app-title', 'h1.posting-headline', 'h1', '[data-test="posting-title"]'],
-        company: ['#company-name', '.company-name', '.posting-categories strong'],
-        location: ['.location', '.posting-categories .location'],
-        description: ['#content', '.posting', '.posting-description'],
-      },
-      workday: {
-        title: ['h1[data-automation-id="jobPostingHeader"]', 'h1'],
-        company: ['div[data-automation-id="jobPostingCompany"]'],
-        location: ['div[data-automation-id="locations"]'],
-        description: ['div[data-automation-id="jobPostingDescription"]'],
-      },
-      smartrecruiters: {
-        title: ['h1[data-test="job-title"]', 'h1'],
-        company: ['[data-test="job-company-name"]'],
-        location: ['[data-test="job-location"]'],
-        description: ['[data-test="job-description"]'],
-      },
-      workable: {
-        title: ['h1', '[data-ui="job-title"]'],
-        company: ['[data-ui="company-name"]'],
-        location: ['[data-ui="job-location"]'],
-        description: ['[data-ui="job-description"]'],
-      },
-    };
+    // Platform knowledge lives in ats-platforms.js so detection, contact
+    // harvesting and requisition-ID parsing cannot disagree. This used to
+    // carry selectors for four platforms and fell through to og:title
+    // guessing on the other thirty-two -- which produced a truncated
+    // description, and a truncated description is what surfaces as "could
+    // not extract keywords".
+    const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+      : (typeof window !== 'undefined' ? window.ATSPlatforms : null);
 
-    let platformKey = null;
-    if (hostname.includes('greenhouse.io')) platformKey = 'greenhouse';
-    else if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) platformKey = 'workday';
-    else if (hostname.includes('smartrecruiters.com')) platformKey = 'smartrecruiters';
-    else if (hostname.includes('workable.com')) platformKey = 'workable';
+    let platformKey = AP ? AP.detect(hostname, window.location.href) : null;
 
-    const selectors = platformKey ? platformSelectors[platformKey] : null;
+    // Selectors are platform-specific first, then generic, so an ATS that
+    // is not listed still reads rather than failing.
+    const selectors = AP ? {
+      title: AP.selectorsFor(platformKey, 'title'),
+      company: AP.selectorsFor(platformKey, 'company'),
+      location: AP.selectorsFor(platformKey, 'location'),
+      description: AP.selectorsFor(platformKey, 'description'),
+    } : null;
 
     let title = selectors ? getText(selectors.title) : '';
     if (!title) title = getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';

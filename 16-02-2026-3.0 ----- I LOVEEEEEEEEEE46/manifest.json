@@ -235,6 +235,7 @@
         "https://*.otta.com/*"
       ],
       "js": [
+        "ats-platforms.js",
         "debug-logger.js",
         "cache-manager.js",
         "content-quality-engine.js",
@@ -306,6 +307,7 @@
         "https://*.glassdoor.com/*"
       ],
       "js": [
+        "ats-platforms.js",
         "jd-contact-sources.js"
       ],
       "run_at": "document_idle",
@@ -333,6 +335,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "ats-platforms.js",
         "jg-trace.js",
         "icons/*.png",
         "content.css",

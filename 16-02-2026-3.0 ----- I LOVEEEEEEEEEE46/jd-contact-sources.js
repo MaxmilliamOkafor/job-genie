@@ -228,42 +228,26 @@
   // the description is preferred over the page it sits in; the generic
   // patterns and the body fallback mean an unknown ATS still works, just
   // with more surrounding text to filter.
-  const CONTENT_SELECTORS = [
-    // Greenhouse (both the classic boards and job-boards.greenhouse.io)
-    '.job__description', '#content', '#app_body', '.opening',
-    // Lever
-    '.posting-page', '[data-qa="job-description"]', '.section-wrapper',
-    // Workday
-    '[data-automation-id="jobPostingDescription"]', '[data-automation-id="job-posting-details"]',
-    // Ashby
-    '.ashby-job-posting-content', '[class*="_description"]',
-    // SmartRecruiters
-    '#st-jobDescription', '.job-sections', '.jobad-main',
-    // iCIMS
-    '.iCIMS_JobContent', '.iCIMS_InfoMsg_Job',
-    // Taleo
-    '#requisitionDescriptionInterface', '.joblayouttoken',
-    // Workable
-    '[data-ui="job-description"]', '[data-ui="overview"]',
-    // Teamtailor
-    '[data-controller*="job"]', '.block-body',
-    // Jobvite / BambooHR / Indeed all use this id
-    '#jobDescriptionText', '.jv-job-detail-description',
-    // SuccessFactors / SAP
-    '.jobDescription', '.jobDisplayContentContainer',
-    // Personio, Recruitee, JazzHR, Breezy, Rippling, Pinpoint, Dover, Occupop
-    '#job-description', '.job-description', '.job-ad', '.position',
-    // Eightfold / Avature
-    '[class*="jobDescription"]', '.job-details',
-    // Wellfound / Otta
-    '[class*="JobDescription"]', '[data-testid*="job-description"]',
-    // LinkedIn
-    '.jobs-description__content', '.description__text', '.show-more-less-html',
-    // Generic, standards-based, and last-resort structural
-    '[itemprop="description"]', '[id*="job-description" i]', '[class*="job-description" i]',
-    '[data-testid*="description" i]', '[aria-label*="job description" i]',
-    'main', 'article',
-  ];
+  // Description containers come from ats-platforms.js so this cannot
+  // drift from what the job detector reads. The inline list is the
+  // fallback for contexts where that module is not loaded.
+  const CONTENT_SELECTORS = (function () {
+    try {
+      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+        : (typeof global !== 'undefined' ? global.ATSPlatforms : null);
+      if (AP && typeof AP.allDescriptionSelectors === 'function') return AP.allDescriptionSelectors();
+    } catch (e) {}
+    return [
+      '.job__description', '#content', '.posting-page', '[data-qa="job-description"]',
+      '[data-automation-id="jobPostingDescription"]', '.ashby-job-posting-content',
+      '#st-jobDescription', '.iCIMS_JobContent', '#requisitionDescriptionInterface',
+      '[data-ui="job-description"]', '.block-body', '#jobDescriptionText',
+      '.jv-job-detail-description', '.jobDescription', '#job-description',
+      '.job-description', '.job-ad', '.position', '.job-details',
+      '[itemprop="description"]', '[id*="job-description" i]', '[class*="job-description" i]',
+      '[class*="jobDescription"]', '[data-testid*="description" i]', 'main', 'article',
+    ];
+  })();
 
   // Regions that belong to the PAGE, not this posting. "Other openings"
   // and "similar jobs" carry other roles -- and sometimes other companies'

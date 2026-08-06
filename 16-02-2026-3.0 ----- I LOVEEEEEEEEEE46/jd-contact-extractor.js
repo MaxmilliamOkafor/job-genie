@@ -76,6 +76,18 @@
       if (m) return (m[1] || m[0]).trim();
     }
     const u = String(url || '');
+    // Requisition-ID shapes come from ats-platforms.js, which knows all of
+    // them; this file used to know four. A missing Job ID is a follow-up
+    // the recruiter cannot tie to an application.
+    try {
+      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+        : (typeof global !== 'undefined' ? global.ATSPlatforms : null);
+      if (AP && typeof AP.jobIdFromUrl === 'function') {
+        const viaPlatform = AP.jobIdFromUrl(u);
+        if (viaPlatform) return viaPlatform;
+      }
+    } catch (e) {}
+
     const urlPatterns = [
       /greenhouse\.io\/[^/]+\/jobs\/(\d{5,})/i,
       /lever\.co\/[^/]+\/([0-9a-f-]{8,})/i,
