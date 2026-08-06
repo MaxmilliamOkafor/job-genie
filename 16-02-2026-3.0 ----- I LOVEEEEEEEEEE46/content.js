@@ -2259,10 +2259,24 @@
       description: AP.selectorsFor(platformKey, 'description'),
     } : null;
 
-    let title = selectors ? getText(selectors.title) : '';
+    // The employer's OWN structured declaration, where there is one. Most
+    // ATS and nearly every large employer's careers site emit JobPosting
+    // JSON-LD for Google Jobs, and it carries the full description rather
+    // than whatever a selector happens to capture. It is tried first
+    // because it is the only source that is complete by construction --
+    // and it is what makes a platform nobody wrote selectors for read as
+    // well as Greenhouse does.
+    const ld = AP && typeof AP.fromJobPostingLd === 'function'
+      ? AP.fromJobPostingLd(document) : { found: false };
+    if (ld.found) {
+      console.log('[ATS Tailor] JobPosting JSON-LD found:',
+        (ld.description || '').length, 'chars of description');
+    }
+
+    let title = ld.title || (selectors ? getText(selectors.title) : '');
     if (!title) title = getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';
 
-    let company = selectors ? getText(selectors.company) : '';
+    let company = ld.company || (selectors ? getText(selectors.company) : '');
     
     // IMPROVED: Multiple fallback strategies for company extraction
     if (!company) company = getMeta('og:site_name') || '';
@@ -2311,9 +2325,16 @@
       }
     }
 
-    const rawLocation = selectors ? getText(selectors.location) : '';
+    const rawLocation = ld.location || (selectors ? getText(selectors.location) : '');
     const location = stripRemoteFromLocation(rawLocation) || rawLocation;
-    const rawDesc = selectors ? getText(selectors.description) : '';
+
+    // Whichever source gives the FULLER description wins. JSON-LD is
+    // complete by construction, but a few sites emit a one-line summary
+    // there and render the real posting in the page -- and a truncated
+    // description is what surfaces as "could not extract keywords".
+    const cssDesc = (selectors ? getText(selectors.description) : '') || '';
+    const ldDesc = ld.description || '';
+    const rawDesc = ldDesc.length >= cssDesc.length ? ldDesc : cssDesc;
     const description = rawDesc?.trim()?.length > 80 ? rawDesc.trim().substring(0, 3000) : '';
 
     return { title, company, location, description, url: window.location.href, platform: platformKey || hostname };

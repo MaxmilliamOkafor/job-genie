@@ -450,6 +450,83 @@
     return out;
   }
 
+  /**
+   * The posting as the EMPLOYER declared it, from schema.org JobPosting.
+   *
+   * Most ATS and nearly every large employer's own careers site emit this
+   * so the role appears in Google Jobs. It carries the title, the full
+   * description, the company and the location as structured data -- no
+   * selector guessing, no truncation, and it works identically on a
+   * platform nobody has written selectors for.
+   *
+   * This is what makes an unknown ATS, or one of the 73 employer career
+   * sites, read as well as Greenhouse does.
+   */
+  function _stripHtml(html) {
+    return String(html || '')
+      // Block boundaries first, or textContent runs sentences together.
+      .replace(/<\/(p|div|li|h[1-6]|tr|section|br)[^>]*>/gi, '$& ')
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function _walk(node, hits) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach((n) => _walk(n, hits)); return; }
+    if (String(node['@type'] || '').toLowerCase().indexOf('jobposting') !== -1) hits.push(node);
+    for (const k of Object.keys(node)) {
+      if (node[k] && typeof node[k] === 'object') _walk(node[k], hits);
+    }
+  }
+
+  function fromJobPostingLd(doc) {
+    const out = { title: '', company: '', location: '', description: '', jobId: '', found: false };
+    const d = doc || (typeof document !== 'undefined' ? document : null);
+    if (!d) return out;
+    try {
+      for (const el of d.querySelectorAll('script[type="application/ld+json"]')) {
+        let data;
+        try { data = JSON.parse(el.textContent || ''); } catch (e) { continue; }
+        const hits = [];
+        _walk(data, hits);
+        for (const p of hits) {
+          out.found = true;
+          if (!out.title) out.title = _stripHtml(p.title);
+          if (!out.description) out.description = _stripHtml(p.description);
+          if (!out.company) {
+            const ho = p.hiringOrganization;
+            out.company = _stripHtml(typeof ho === 'string' ? ho : (ho && ho.name));
+          }
+          if (!out.location) {
+            const jl = Array.isArray(p.jobLocation) ? p.jobLocation[0] : p.jobLocation;
+            const addr = jl && (jl.address || jl);
+            if (addr) {
+              out.location = [addr.addressLocality, addr.addressRegion, addr.addressCountry]
+                .map((x) => _stripHtml(typeof x === 'string' ? x : (x && x.name)))
+                .filter(Boolean).join(', ');
+            }
+            // Remote roles declare it here instead of in an address.
+            if (!out.location && p.jobLocationType) out.location = 'Remote';
+          }
+          if (!out.jobId) {
+            const id = p.identifier;
+            out.jobId = _stripHtml(typeof id === 'string' ? id : (id && id.value));
+          }
+          if (out.title && out.description && out.company) return out;
+        }
+      }
+    } catch (e) {}
+    return out;
+  }
+
   /** Every description container across all platforms, for page harvesting. */
   function allDescriptionSelectors() {
     const out = [];
@@ -484,6 +561,7 @@
 
   global.ATSPlatforms = {
     PLATFORMS, GENERIC, detect, selectorsFor, allDescriptionSelectors, jobIdFromUrl, list,
+    fromJobPostingLd,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.ATSPlatforms;
 })(typeof window !== 'undefined' ? window : globalThis);
