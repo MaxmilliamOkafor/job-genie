@@ -304,6 +304,26 @@
               <div id="followupDetected" class="fu-note"></div>
             </div>
 
+            <!-- ATS accounts. A generated password is useless if it cannot
+                 be read back: these accounts outlive the extension, and you
+                 have to be able to sign in by hand later. -->
+            <div class="fu-card">
+              <div class="fu-card-title">ATS accounts</div>
+              <p class="fu-note" style="margin-top:0;">Workday, Taleo, iCIMS and others make you
+                register before applying. A <strong>unique</strong> password is generated per site,
+                so a breach at one never exposes the others. Only ever filled on the site it was
+                made for, and never over plain http.</p>
+              <div class="fu-actions">
+                <button id="atsAccountsShowBtn" class="fu-btn">Show saved accounts</button>
+                <button id="atsAccountsCopyBtn" class="fu-btn">Copy all</button>
+              </div>
+              <pre id="atsAccountsList" class="fu-diagnostics"></pre>
+              <p class="fu-note">Stored in chrome.storage.local, which is isolated per extension
+                but <strong>not encrypted at rest</strong> - anyone with access to this computer's
+                Chrome profile can read it. Never put a password you reuse elsewhere in here; let
+                it generate one.</p>
+            </div>
+
             <!-- 2b. Contact lookup (opt-in) -->
             <div class="fu-card">
               <div class="fu-card-title">Contact lookup <span class="fu-hint">optional</span></div>
@@ -1167,6 +1187,7 @@
   <script src="apply-verdict.js"></script>
   <script src="jd-contact-extractor.js"></script>
   <script src="ats-platforms.js"></script>
+  <script src="ats-account.js"></script>
   <script src="jg-trace.js"></script>
   <script src="contact-enrichment.js"></script>
   <script src="linkedin-profile-memory.js"></script>

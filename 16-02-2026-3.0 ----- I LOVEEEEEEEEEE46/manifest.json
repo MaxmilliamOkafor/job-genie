@@ -273,6 +273,7 @@
         "docx-generator.js",
         "workday-handlers.js",
         "autofill-controller.js",
+        "ats-account.js",
         "content.js"
       ],
       "css": [
@@ -335,6 +336,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "ats-account.js",
         "ats-platforms.js",
         "jg-trace.js",
         "icons/*.png",

@@ -894,6 +894,8 @@ class ATSTailor {
     document.getElementById('followupConnectBtn')?.addEventListener('click', () => this.followupConnectGmail());
     document.getElementById('followupDiagnoseBtn')?.addEventListener('click', () => this.followupDiagnose());
     document.getElementById('followupPreflightBtn')?.addEventListener('click', () => this.followupPreflight());
+    document.getElementById('atsAccountsShowBtn')?.addEventListener('click', () => this.atsAccountsShow());
+    document.getElementById('atsAccountsCopyBtn')?.addEventListener('click', () => this.atsAccountsShow(true));
     document.getElementById('traceCopyBtn')?.addEventListener('click', () => this.traceExport('copy'));
     document.getElementById('traceSaveBtn')?.addEventListener('click', () => this.traceExport('download'));
     document.getElementById('traceClearBtn')?.addEventListener('click', () => {
@@ -3129,6 +3131,37 @@ class ATSTailor {
       set(t.message, t.ok ? 'var(--success)' : 'var(--error)');
     } catch (e) {
       set('Test failed: ' + (e.message || e), 'var(--error)');
+    }
+  }
+
+  // Generated passwords have to be readable. These accounts outlive the
+  // extension -- the employer keeps them, and the user will eventually sign
+  // in by hand, from another machine, or to check an application's status.
+  // A password manager that cannot show you the password is a locked box.
+  async atsAccountsShow(copy) {
+    const out = document.getElementById('atsAccountsList');
+    const say = (s) => { if (out) out.textContent = s; };
+    if (typeof ATSAccount === 'undefined') { say('Account module not loaded.'); return; }
+    try {
+      const list = await ATSAccount.listCredentials();
+      if (!list.length) {
+        say('No ATS accounts saved yet.\n\nOne is created automatically the first time a site '
+          + 'asks you to register, using your profile email and a fresh password.');
+        return;
+      }
+      const text = list.map((c) =>
+        c.domain + '\n'
+        + '  email    : ' + c.email + '\n'
+        + '  password : ' + c.password + '\n'
+        + '  created  : ' + new Date(c.createdAt || 0).toLocaleDateString('en-GB')
+      ).join('\n\n');
+      say(text);
+      if (copy) {
+        await navigator.clipboard.writeText(text);
+        this.showToast(list.length + ' account(s) copied', 'success');
+      }
+    } catch (e) {
+      say('Could not read saved accounts: ' + (e.message || e));
     }
   }
 
