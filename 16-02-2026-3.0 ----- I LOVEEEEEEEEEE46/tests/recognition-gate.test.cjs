@@ -71,5 +71,40 @@ for (const host of ['www.indeed.com','www.glassdoor.com','wellfound.com','otta.c
   t(host + ' is not treated as a supported ATS', AP.detect(host,'https://'+host+'/x')==='' , AP.detect(host,''));
 }
 
+// ---- every host a platform claims must actually load scripts ---------
+// Detection knowing a host is not the same as anything running on it. A
+// vendor's alternate domain that resolves but has no content-script match
+// is the same "supported but dead" shape as the recognition gate itself.
+const covers=(patterns, host)=>patterns.some(p=>{
+  const h=p.replace(/^https?:\/\//,'').split('/')[0];
+  if(h==='<all_urls>') return true;
+  const base=h.replace(/^\*\./,'');
+  return host===base || host.endsWith('.'+base);
+});
+const patternsFor=(file)=>{
+  const out=[];
+  for(const cs of manifest.content_scripts) if((cs.js||[]).includes(file)) out.push(...cs.matches);
+  return out;
+};
+const mainPats=patternsFor('content.js');
+const srcPats=patternsFor('jd-contact-sources.js');
+
+for (const p of AP.list()) {
+  for (const h of p.host) {
+    if (h.indexOf('/') !== -1) continue;
+    // A host entry with no dot-separated TLD can never label-match, so it
+    // is dead weight pretending to be coverage.
+    t(p.label+': "'+h+'" is a matchable host', /\.[a-z]{2,}$/i.test(h), 'no TLD - can never match');
+    const probe = /^(jobs|app|recruiting|ats)\./.test(h) ? h : 'careers.'+h;
+    // Contact extraction is what finds the address to email, so it has to
+    // reach every domain a platform claims.
+    t(p.label+': contact sources load on '+h, covers(srcPats, probe), 'no address would ever be found here');
+    // LinkedIn deliberately uses its own path rather than the heavy engine.
+    if (p.id !== 'linkedin') {
+      t(p.label+': job detection loads on '+h, covers(mainPats, probe), 'the page would never be recognised');
+    }
+  }
+}
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

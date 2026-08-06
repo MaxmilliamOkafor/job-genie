@@ -160,7 +160,7 @@
     },
     personio: {
       label: 'Personio',
-      host: ['personio.com', 'personio.de', 'jobs.personio'],
+      host: ['personio.com', 'personio.de'],
       title: ['h1', '.job-title'],
       company: ['[class*="company"]', 'header img'],
       location: ['[class*="location"]', '.job-location'],

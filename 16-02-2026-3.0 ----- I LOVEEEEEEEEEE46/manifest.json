@@ -123,7 +123,13 @@
     "https://*.icims.eu/*",
     "https://*.sapsf.com/*",
     "https://*.sapsf.eu/*",
-    "https://*.dover.io/*"
+    "https://*.dover.io/*",
+    "https://*.cornerstoneondemand.com/*",
+    "https://*.kenexa.com/*",
+    "https://*.ukg.com/*",
+    "https://*.myadp.com/*",
+    "https://*.bullhorncdn.com/*",
+    "https://*.comeet.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -253,7 +259,13 @@
         "https://*.icims.eu/*",
         "https://*.sapsf.com/*",
         "https://*.sapsf.eu/*",
-        "https://*.dover.io/*"
+        "https://*.dover.io/*",
+        "https://*.cornerstoneondemand.com/*",
+        "https://*.kenexa.com/*",
+        "https://*.ukg.com/*",
+        "https://*.myadp.com/*",
+        "https://*.bullhorncdn.com/*",
+        "https://*.comeet.com/*"
       ],
       "js": [
         "ats-platforms.js",
@@ -337,7 +349,13 @@
         "https://*.icims.eu/*",
         "https://*.sapsf.com/*",
         "https://*.sapsf.eu/*",
-        "https://*.dover.io/*"
+        "https://*.dover.io/*",
+        "https://*.cornerstoneondemand.com/*",
+        "https://*.kenexa.com/*",
+        "https://*.ukg.com/*",
+        "https://*.myadp.com/*",
+        "https://*.bullhorncdn.com/*",
+        "https://*.comeet.com/*"
       ],
       "js": [
         "ats-platforms.js",
