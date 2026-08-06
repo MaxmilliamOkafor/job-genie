@@ -231,6 +231,56 @@
 
   console.log('[ATS Tailor] Supported ATS detected - AUTO-TAILOR MODE ACTIVE!');
 
+  // ============ CARRY THE POSTING TO THE APPLICATION PAGE ============
+  // Most ATS show the description at one URL and the FORM at another. By
+  // the time the user is on the form there is no description to extract
+  // keywords from, no company to address an email to, and none of the
+  // addresses printed in the JD body. Capturing here -- on the page that
+  // actually has them -- is what lets the apply page still work.
+  //
+  // Runs on every posting view, including SPA route changes, and captures
+  // the contact sources at the same time so both survive the navigation.
+  let _lastCapturedUrl = '';
+  async function captureJobContext(reason) {
+    try {
+      if (typeof JDContext === 'undefined') return;
+      const url = window.location.href;
+      // An application page has nothing worth capturing, and capturing it
+      // would be the downgrade JDContext exists to prevent.
+      if (JDContext.isApplicationPage(document, url)) return;
+      if (url === _lastCapturedUrl) return;
+
+      const info = extractJobInfo();
+      if (!info || !(info.description || '').trim()) return;
+
+      let sources = null;
+      try {
+        sources = (typeof JDContactSources !== 'undefined') ? JDContactSources.harvest(document) : null;
+      } catch (e) { /* the contact half is optional */ }
+
+      _lastCapturedUrl = url;
+      await JDContext.capture({
+        title: info.title || '',
+        company: info.company || '',
+        location: info.location || '',
+        description: info.description || '',
+        url,
+        emails: (sources && sources.emails) || [],
+        names: (sources && sources.names) || [],
+        org: (sources && sources.org) || '',
+        jobId: (sources && sources.jobId) || '',
+      }, { url });
+      console.log('[ATS Tailor] posting captured for the apply page (' + reason + '):',
+        (info.description || '').length, 'chars,',
+        ((sources && sources.emails) || []).length, 'address(es)');
+    } catch (e) {
+      console.warn('[ATS Tailor] could not capture the posting:', e && e.message);
+    }
+  }
+  // Late enough for client-rendered descriptions to exist.
+  setTimeout(() => captureJobContext('load'), 1500);
+  setTimeout(() => captureJobContext('settle'), 4000);
+
   // ============ CACHE MANAGER INTEGRATION ============
   // Debounced JD extraction to prevent duplicate processing on rapid page changes
   let debouncedExtractJobInfo = null;
@@ -358,7 +408,12 @@
       console.log('[ATS Tailor] Not a supported host, skipping');
       return;
     }
-    
+
+    // SPA route change: many ATS move from posting to form without a page
+    // load, so this is the only chance to capture the description before
+    // it is replaced by the application form.
+    setTimeout(() => captureJobContext('spa'), 1200);
+
     // Skip thank you pages - DO NOT start automation
     if (isThankYouPage(newUrl, true)) {
       console.log('[ATS Tailor] 🛑 SKIPPING Thank You page - no automation');

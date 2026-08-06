@@ -3550,9 +3550,58 @@ class ATSTailor {
 
       console.log('[ATS Tailor] page sources:', merged.emails.length, 'email(s),',
         merged.names.length, 'name(s) across', (frames || []).length, 'frame(s)');
-      return merged.emails.length || merged.names.length || merged.org || merged.jobId ? merged : EMPTY;
+
+      // The address published in the JD body lives on the POSTING. On the
+      // apply page it is simply not in the DOM, so harvesting there finds
+      // nothing and the follow-up is skipped for a role that did publish
+      // an address. Fall back to what was harvested from the posting this
+      // application came from -- same requisition, same tab, same path.
+      const harvested = merged.emails.length || merged.names.length || merged.org || merged.jobId;
+      const carried = await this.followupRecallPageSources(tabs[0], merged);
+      if (carried) return carried;
+      return harvested ? merged : EMPTY;
     } catch (e) {
       console.warn('[ATS Tailor] page source harvest failed:', e && e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Contact sources carried forward from the posting.
+   * Stored alongside the job context, so it is subject to the same
+   * same-posting rule: an address is only ever reused for the job it was
+   * published on. Whatever the live page found still wins -- this only
+   * fills what the apply page cannot have.
+   */
+  async followupRecallPageSources(tab, live) {
+    try {
+      if (typeof JDContext === 'undefined' || !tab) return null;
+      const url = tab.url || '';
+      const hasLive = (live && live.emails && live.emails.length);
+
+      // Remember what this page DID find, so pressing Apply from here
+      // keeps it.
+      if (hasLive || (live && live.names && live.names.length)) {
+        await JDContext.capture(
+          { url, emails: live.emails, names: live.names, org: live.org, jobId: live.jobId },
+          { url, tabId: tab.id }
+        );
+      }
+      if (hasLive) return null;                 // the page answered; nothing to carry
+
+      const remembered = await JDContext.recall(url, { tabId: tab.id });
+      if (!remembered || !(remembered.emails || []).length) return null;
+
+      console.log('[ATS Tailor] contact sources carried from the posting via', remembered._via,
+        '-', remembered.emails.length, 'email(s)');
+      return {
+        emails: remembered.emails || [],
+        names: (live && live.names && live.names.length) ? live.names : (remembered.names || []),
+        org: (live && live.org) || remembered.org || '',
+        jobId: (live && live.jobId) || remembered.jobId || '',
+      };
+    } catch (e) {
+      console.warn('[ATS Tailor] could not carry contact sources:', e && e.message);
       return null;
     }
   }
@@ -4287,17 +4336,27 @@ class ATSTailor {
         func: extractJobInfoFromPageInjected,
       });
 
-      if (results?.[0]?.result) {
-        this.currentJob = results[0].result;
-        
+      // Most ATS put the posting on one page and the FORM on another, and
+      // the apply page has no description, often no company, and none of
+      // the addresses written in the JD body. Reconcile what this page
+      // yields with the posting we captured before Apply was pressed --
+      // matched by requisition id, tab lineage or path lineage, never by
+      // guesswork -- so keywords, tailoring and the contact address still
+      // have a job description to work from.
+      const fresh = results?.[0]?.result || null;
+      const reconciled = await this.reconcileJobContext(fresh, tab);
+
+      if (reconciled && (reconciled.description || reconciled.title)) {
+        this.currentJob = reconciled;
+
         // PERFORMANCE: Limit JD length for faster processing
         if (this.currentJob.description && this.currentJob.description.length > MAX_JD_LENGTH) {
           this.currentJob.description = this.currentJob.description.substring(0, MAX_JD_LENGTH);
         }
-        
+
         await chrome.storage.local.set({ ats_lastJob: this.currentJob });
         this.updateJobDisplay();
-        this.setStatus('Job found!', 'ready');
+        this.setStatus(reconciled._restoredFrom ? 'Job found (from the posting)' : 'Job found!', 'ready');
         return true;
       }
 
@@ -4311,6 +4370,32 @@ class ATSTailor {
       this.updateJobDisplay();
       this.setStatus('Detection failed', 'error');
       return false;
+    }
+  }
+
+  /**
+   * The page's reading of the job, completed from the posting it came
+   * from. Safe by construction: JDContext only ever returns a context
+   * that resolves to the SAME posting (same requisition id, same tab
+   * within the lineage window, or the same domain and path), so this can
+   * never attach one employer's description to another's application.
+   *
+   * Failing open matters here -- if the context store is unavailable the
+   * caller must still get the page's own reading, not nothing.
+   */
+  async reconcileJobContext(fresh, tab) {
+    try {
+      if (typeof JDContext === 'undefined') return fresh;
+      const url = (tab && tab.url) || (fresh && fresh.url) || '';
+      const tabId = tab && tab.id;
+      const merged = await JDContext.reconcile(fresh || {}, { url, tabId });
+      if (merged && merged._restoredFrom) {
+        console.log('[ATS Tailor] job context restored from', merged._restoredFrom, 'via', merged._via);
+      }
+      return merged;
+    } catch (e) {
+      console.warn('[ATS Tailor] job context unavailable:', e && e.message);
+      return fresh;
     }
   }
 

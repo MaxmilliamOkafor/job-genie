@@ -267,6 +267,7 @@
       ],
       "js": [
         "ats-platforms.js",
+        "jd-context.js",
         "debug-logger.js",
         "cache-manager.js",
         "content-quality-engine.js",
@@ -367,6 +368,7 @@
     {
       "resources": [
         "ats-platforms.js",
+        "jd-context.js",
         "jg-trace.js",
         "icons/*.png",
         "content.css",

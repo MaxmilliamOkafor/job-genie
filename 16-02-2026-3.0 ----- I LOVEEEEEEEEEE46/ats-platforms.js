@@ -305,7 +305,11 @@
       company: ['[class*="company"]', 'header img'],
       location: ['[class*="location"]'],
       description: ['[class*="jobDescription"]', '.job-description', '[class*="description"]'],
-      jobId: /dayforcehcm\.com\/.*?\/Posting\/View\/(\d+)/i,
+      // View AND Apply: Dayforce moves from Posting/View/<id> to
+      // Posting/Apply/<id>, and matching only the first meant the
+      // application page carried no requisition id to tie it back to the
+      // posting it came from.
+      jobId: /dayforcehcm\.com\/.*?\/Posting\/(?:View|Apply|Detail)\/(\d+)/i,
       apply: ['a[href*="Apply"]', 'button[type="submit"]'],
     },
     freshteam: {

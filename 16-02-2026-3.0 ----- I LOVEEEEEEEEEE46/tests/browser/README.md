@@ -12,6 +12,7 @@ over real `https://` origins.
 node tests/browser/platforms.browser.cjs     # detection, JD, gate, email harvest
 node tests/browser/attach.browser.cjs        # CV + cover letter into a real file input
 node tests/browser/easyapply.browser.cjs     # LinkedIn Easy Apply, toggle ON
+node tests/browser/twopage.browser.cjs       # posting -> Apply -> form, on every ATS
 ```
 
 Both skip cleanly (exit 0) when Playwright or a Chromium build is missing,
@@ -54,6 +55,15 @@ fires depends on service-worker state and the toggle defaults. This drives a
 four-step Easy Apply modal end to end — registration, contact step, custom
 questions, the Yes/No screening surface, and submit — and confirms the heavy
 engine is absent from the page.
+
+`twopage.browser.cjs` — most ATS are **two pages**: the description at one
+URL, the form at another. It navigates the way a user does (open the
+posting, press Apply, land on the form) and then asks whether the extension
+still has a description to extract keywords from, a company to address an
+email to, and the address printed in the JD body. It asserts both halves:
+that the apply page genuinely has none of them in its own DOM, and that
+`jd-context.js` supplies them anyway — matched by requisition id, tab
+lineage or path lineage, never by guesswork.
 
 ## LinkedIn: what is deliberate
 
