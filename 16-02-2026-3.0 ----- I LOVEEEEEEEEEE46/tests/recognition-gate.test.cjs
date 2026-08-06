@@ -75,12 +75,31 @@ for (const host of ['www.indeed.com','www.glassdoor.com','wellfound.com','otta.c
 // Detection knowing a host is not the same as anything running on it. A
 // vendor's alternate domain that resolves but has no content-script match
 // is the same "supported but dead" shape as the recognition gate itself.
-const covers=(patterns, host)=>patterns.some(p=>{
-  const h=p.replace(/^https?:\/\//,'').split('/')[0];
-  if(h==='<all_urls>') return true;
-  const base=h.replace(/^\*\./,'');
-  return host===base || host.endsWith('.'+base);
-});
+// Real match-pattern semantics, PATH INCLUDED. The previous version threw
+// the path away and asked only about the host, which reports a pattern
+// scoped to /jobs/* as covering the whole site -- and, in the other
+// direction, cannot tell that a host is matched by a block carrying two
+// helper scripts rather than the block carrying content.js. LinkedIn sat
+// in exactly that blind spot: matched, detected, selectors present, and
+// never tailored.
+const matchesPattern=(pattern, url)=>{
+  if (pattern === '<all_urls>') return true;
+  const m = pattern.match(/^(\*|https?):\/\/([^/]+)(\/.*)$/);
+  if (!m) return false;
+  const scheme=m[1], hostPat=m[2], pathPat=m[3];
+  let u; try { u = new URL(url); } catch (e) { return false; }
+  if (scheme !== '*' && scheme !== u.protocol.replace(':','')) return false;
+  if (hostPat !== '*') {
+    if (hostPat.slice(0,2) === '*.') {
+      const base = hostPat.slice(2);
+      if (u.hostname !== base && !u.hostname.endsWith('.'+base)) return false;
+    } else if (u.hostname !== hostPat) return false;
+  }
+  const re = new RegExp('^' + pathPat.split('*')
+    .map((s)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*') + '$');
+  return re.test(u.pathname + u.search);
+};
+const covers=(patterns, url)=>patterns.some((p)=>matchesPattern(p, url));
 const patternsFor=(file)=>{
   const out=[];
   for(const cs of manifest.content_scripts) if((cs.js||[]).includes(file)) out.push(...cs.matches);
@@ -95,16 +114,43 @@ for (const p of AP.list()) {
     // A host entry with no dot-separated TLD can never label-match, so it
     // is dead weight pretending to be coverage.
     t(p.label+': "'+h+'" is a matchable host', /\.[a-z]{2,}$/i.test(h), 'no TLD - can never match');
-    const probe = /^(jobs|app|recruiting|ats)\./.test(h) ? h : 'careers.'+h;
+    const probeHost = /^(jobs|app|recruiting|ats|www)\./.test(h) ? h : 'careers.'+h;
+    const probe = p.id === 'linkedin'
+      ? 'https://www.'+h+'/jobs/view/5477345004/'
+      : 'https://'+probeHost+'/careers/jobs/5477345004';
     // Contact extraction is what finds the address to email, so it has to
     // reach every domain a platform claims.
     t(p.label+': contact sources load on '+h, covers(srcPats, probe), 'no address would ever be found here');
-    // LinkedIn deliberately uses its own path rather than the heavy engine.
-    if (p.id !== 'linkedin') {
-      t(p.label+': job detection loads on '+h, covers(mainPats, probe), 'the page would never be recognised');
-    }
+    // No exemptions. A platform declared here without content.js reaching
+    // it is a platform that is detected and never tailored.
+    t(p.label+': job detection loads on '+h, covers(mainPats, probe), 'the page would never be recognised');
   }
 }
+
+// LinkedIn is scoped to postings on purpose: the main block loads ~39
+// scripts in every frame, and the feed, messaging and profile pages are
+// not job postings.
+t('LinkedIn postings are covered', covers(mainPats, 'https://www.linkedin.com/jobs/view/5477345004/'));
+t('LinkedIn Easy Apply search pages are covered', covers(mainPats, 'https://www.linkedin.com/jobs/search/?currentJobId=123'));
+t('the LinkedIn feed is NOT', !covers(mainPats, 'https://www.linkedin.com/feed/'),
+  'the tailoring engine would run on every feed page');
+t('LinkedIn messaging is NOT', !covers(mainPats, 'https://www.linkedin.com/messaging/thread/1'));
+
+// Excluded platforms must have nothing injected at all -- not the engine,
+// not the helpers. Loading scripts on a site the user excluded is the
+// thing the exclusion was asked for.
+for (const url of ['https://jobs.lever.co/acme/abc', 'https://jobs.ashbyhq.com/acme/abc',
+                   'https://ats.rippling.com/acme/jobs/abc', 'https://www.indeed.com/viewjob?jk=abc',
+                   'https://www.glassdoor.com/job-listing/pm-JV_1.htm', 'https://wellfound.com/jobs/1',
+                   'https://otta.com/jobs/1']) {
+  const host = new URL(url).hostname;
+  t(host+': the tailoring engine does not load', !covers(mainPats, url), 'excluded platform is still injected');
+  t(host+': contact sources do not load', !covers(srcPats, url), 'excluded platform is still injected');
+}
+
+// The lookalike host that substring matching used to accept.
+t('a Workday lookalike host is not a platform', AP.detect('myworkdayjobs.com.evil.example','https://myworkdayjobs.com.evil.example/x')==='');
+t('a Greenhouse lookalike host is not a platform', AP.detect('greenhouse.io.phish.example','https://greenhouse.io.phish.example/x')==='');
 
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

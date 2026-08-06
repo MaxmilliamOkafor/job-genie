@@ -246,8 +246,6 @@
         "https://www.metacareers.com/*",
         "https://explore.jobs.netflix.net/*",
         "https://*.occupop.com/*",
-        "https://*.wellfound.com/*",
-        "https://*.otta.com/*",
         "https://*.myworkdaysite.com/*",
         "https://*.dayforcehcm.com/*",
         "https://*.freshteam.com/*",
@@ -265,7 +263,8 @@
         "https://*.ukg.com/*",
         "https://*.myadp.com/*",
         "https://*.bullhorncdn.com/*",
-        "https://*.comeet.com/*"
+        "https://*.comeet.com/*",
+        "https://*.linkedin.com/jobs/*"
       ],
       "js": [
         "ats-platforms.js",
@@ -330,37 +329,6 @@
       ],
       "js": [
         "gmail-compose-attach.js"
-      ],
-      "run_at": "document_idle",
-      "all_frames": false
-    },
-    {
-      "matches": [
-        "https://*.linkedin.com/*",
-        "https://*.indeed.com/*",
-        "https://*.glassdoor.com/*",
-        "https://*.myworkdaysite.com/*",
-        "https://*.dayforcehcm.com/*",
-        "https://*.freshteam.com/*",
-        "https://*.gusto.com/*",
-        "https://*.paylocity.com/*",
-        "https://*.comeet.co/*",
-        "https://*.polymer.co/*",
-        "https://*.theresumator.com/*",
-        "https://*.icims.eu/*",
-        "https://*.sapsf.com/*",
-        "https://*.sapsf.eu/*",
-        "https://*.dover.io/*",
-        "https://*.cornerstoneondemand.com/*",
-        "https://*.kenexa.com/*",
-        "https://*.ukg.com/*",
-        "https://*.myadp.com/*",
-        "https://*.bullhorncdn.com/*",
-        "https://*.comeet.com/*"
-      ],
-      "js": [
-        "ats-platforms.js",
-        "jd-contact-sources.js"
       ],
       "run_at": "document_idle",
       "all_frames": false
