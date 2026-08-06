@@ -47,9 +47,14 @@ ${FORM}</body></html>`;
 
 const HOSTS = [];
 for (const [key, p] of Object.entries(AP.PLATFORMS)) {
+  // LinkedIn is not a tailoring target -- the engine that does the
+  // attaching is deliberately kept off linkedin.com because it crashes the
+  // SPA. Easy Apply autofill is what LinkedIn needs, and that has its own
+  // check in easyapply.browser.cjs.
+  if (key === 'linkedin') continue;
   const frag = p.host[0];
   const host = frag.split('.').length > 2 ? frag : 'acme.' + frag;
-  HOSTS.push([p.label, key === 'linkedin' ? 'https://www.linkedin.com/jobs/view/5477345004/' : `https://${host}/careers/jobs/5477345004`]);
+  HOSTS.push([p.label, `https://${host}/careers/jobs/5477345004`]);
 }
 
 const server = https.createServer(
@@ -64,7 +69,7 @@ const DOCX_B64 = 'UEsDBAoAAAAAAMp9Bl0AAAAAAAAAAAAAAAAFABwAd29yZC9VVAkAA0usdGpLrH
   await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
   fs.rmSync('/tmp/pw-attach', { recursive: true, force: true });
   const ctx = await chromium.launchPersistentContext('/tmp/pw-attach', S.launchOptions(PORT, '/tmp/pw-attach'));
-  const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker', { timeout: 20000 });
+  const sw = await S.serviceWorker(ctx);
 
   let pass = 0, fail = 0;
   for (const [label, url] of HOSTS) {

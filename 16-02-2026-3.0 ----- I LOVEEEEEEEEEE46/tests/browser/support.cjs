@@ -101,6 +101,27 @@ function launchOptions(port, profile) {
   };
 }
 
+/**
+ * The extension's service worker, once its chrome.* APIs are actually
+ * bound. The worker context becomes evaluable BEFORE that happens -- a
+ * first evaluate can see a `chrome` carrying only loadTimes and csi -- so
+ * touching chrome.storage immediately fails with a misleading
+ * "Cannot read properties of undefined".
+ */
+async function serviceWorker(ctx, timeoutMs) {
+  const deadline = Date.now() + (timeoutMs || 20000);
+  let sw = ctx.serviceWorkers()[0];
+  if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: deadline - Date.now() });
+  for (;;) {
+    const ready = await sw.evaluate(
+      () => typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.scripting && !!chrome.tabs
+    ).catch(() => false);
+    if (ready) return sw;
+    if (Date.now() > deadline) throw new Error('service worker chrome APIs never became available');
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 function skipUnlessReady(name) {
   const pw = requirePlaywright();
   if (!pw) { console.log('SKIP ' + name + ': playwright not installed'); process.exit(0); }
@@ -108,4 +129,4 @@ function skipUnlessReady(name) {
   return pw;
 }
 
-module.exports = { EXT, requirePlaywright, chromiumPath, certs, loadCjs, launchOptions, skipUnlessReady };
+module.exports = { EXT, requirePlaywright, chromiumPath, certs, loadCjs, launchOptions, skipUnlessReady, serviceWorker };

@@ -138,7 +138,7 @@ const server = https.createServer(
   fs.rmSync('/tmp/pw-run4', { recursive: true, force: true });
 
   const ctx = await chromium.launchPersistentContext('/tmp/pw-run4', S.launchOptions(PORT, '/tmp/pw-run4'));
-  const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker', { timeout: 20000 });
+  const sw = await S.serviceWorker(ctx);
 
   async function probe(url) {
     const page = await ctx.newPage();
@@ -218,11 +218,18 @@ const server = https.createServer(
     const r = await probe(c.url);
     const gateOk = !!(r.gate && r.gate.supportedHost === true);
     const emailOk = (r.emails || []).includes('talent@acme-corp.test');
-    const ok = r.ats === 'object' && r.src === 'object' && r.ext === 'object'
-      && r.platform === c.key
-      && r.ldDesc > 150 && r.cssDesc > 150
-      && /Project Manager/i.test(r.title || '')
-      && gateOk && emailOk && r.fileInputs === 2;
+    // LinkedIn is deliberately NOT a tailoring target: the heavy engine is
+    // denylisted on linkedin.com because it crashes the SPA. What it needs
+    // is Easy Apply autofill -- covered by easyapply.browser.cjs -- plus
+    // the contact sources for the hiring-team card. So it is held to the
+    // detection-and-harvest half of this, not the engine half.
+    const ok = c.key === 'linkedin'
+      ? (r.ats === 'object' && r.src === 'object' && r.platform === 'linkedin' && emailOk)
+      : (r.ats === 'object' && r.src === 'object' && r.ext === 'object'
+        && r.platform === c.key
+        && r.ldDesc > 150 && r.cssDesc > 150
+        && /Project Manager/i.test(r.title || '')
+        && gateOk && emailOk && r.fileInputs === 2);
     ok ? pass++ : fail++;
     if (!ok) failures.push([c.label, r]);
     console.log((ok ? '  PASS  ' : '  FAIL  ') + c.label.padEnd(34)

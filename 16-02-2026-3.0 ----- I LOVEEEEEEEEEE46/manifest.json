@@ -263,8 +263,7 @@
         "https://*.ukg.com/*",
         "https://*.myadp.com/*",
         "https://*.bullhorncdn.com/*",
-        "https://*.comeet.com/*",
-        "https://*.linkedin.com/jobs/*"
+        "https://*.comeet.com/*"
       ],
       "js": [
         "ats-platforms.js",
@@ -329,6 +328,18 @@
       ],
       "js": [
         "gmail-compose-attach.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "comment": "LinkedIn gets the contact sources and nothing else. The heavy tailoring engine is deliberately kept off linkedin.com -- it is denylisted in background.js and autofill-controller.js because it crashes the SPA -- and LinkedIn postings are not tailored here. Easy Apply autofill is a separate, dynamically registered script (jg-linkedin-autofill).",
+      "matches": [
+        "https://*.linkedin.com/*"
+      ],
+      "js": [
+        "ats-platforms.js",
+        "jd-contact-sources.js"
       ],
       "run_at": "document_idle",
       "all_frames": false

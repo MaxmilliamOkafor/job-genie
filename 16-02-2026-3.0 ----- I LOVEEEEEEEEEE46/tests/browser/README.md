@@ -11,6 +11,7 @@ over real `https://` origins.
 ```
 node tests/browser/platforms.browser.cjs     # detection, JD, gate, email harvest
 node tests/browser/attach.browser.cjs        # CV + cover letter into a real file input
+node tests/browser/easyapply.browser.cjs     # LinkedIn Easy Apply, toggle ON
 ```
 
 Both skip cleanly (exit 0) when Playwright or a Chromium build is missing,
@@ -43,6 +44,25 @@ gate.
 
 `attach.browser.cjs` sends the same `attachDocument` message `popup.js` sends
 and reads back `input.files`, on every platform.
+
+`easyapply.browser.cjs` — LinkedIn is **not** a tailoring target. The heavy
+engine is denylisted on `linkedin.com` in both `background.js` and
+`autofill-controller.js` because it crashes the SPA. What LinkedIn needs is
+Easy Apply autofill, and none of that is visible to a manifest test: the
+filler is registered at *runtime* (`jg-linkedin-autofill`), so whether it
+fires depends on service-worker state and the toggle defaults. This drives a
+four-step Easy Apply modal end to end — registration, contact step, custom
+questions, the Yes/No screening surface, and submit — and confirms the heavy
+engine is absent from the page.
+
+## LinkedIn: what is deliberate
+
+- The tailoring engine must NOT load on `linkedin.com`. It crashes the SPA.
+- Easy Apply autofill must fire with the toggle untouched (it ships ON).
+- Contact sources DO load, for the hiring-team card.
+
+`platforms.browser.cjs` and `attach.browser.cjs` therefore hold LinkedIn to
+the detection-and-harvest half only; `easyapply.browser.cjs` covers the rest.
 
 ## Two traps worth knowing about
 

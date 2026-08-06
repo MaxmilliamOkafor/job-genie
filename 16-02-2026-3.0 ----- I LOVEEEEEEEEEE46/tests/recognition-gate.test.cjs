@@ -121,20 +121,47 @@ for (const p of AP.list()) {
     // Contact extraction is what finds the address to email, so it has to
     // reach every domain a platform claims.
     t(p.label+': contact sources load on '+h, covers(srcPats, probe), 'no address would ever be found here');
-    // No exemptions. A platform declared here without content.js reaching
-    // it is a platform that is detected and never tailored.
-    t(p.label+': job detection loads on '+h, covers(mainPats, probe), 'the page would never be recognised');
+    // LinkedIn is the one platform that must NOT get the tailoring engine
+    // -- see below. Everywhere else, a platform declared here without
+    // content.js reaching it is detected and never tailored.
+    if (p.id !== 'linkedin') {
+      t(p.label+': job detection loads on '+h, covers(mainPats, probe), 'the page would never be recognised');
+    }
   }
 }
 
-// LinkedIn is scoped to postings on purpose: the main block loads ~39
-// scripts in every frame, and the feed, messaging and profile pages are
-// not job postings.
-t('LinkedIn postings are covered', covers(mainPats, 'https://www.linkedin.com/jobs/view/5477345004/'));
-t('LinkedIn Easy Apply search pages are covered', covers(mainPats, 'https://www.linkedin.com/jobs/search/?currentJobId=123'));
-t('the LinkedIn feed is NOT', !covers(mainPats, 'https://www.linkedin.com/feed/'),
-  'the tailoring engine would run on every feed page');
-t('LinkedIn messaging is NOT', !covers(mainPats, 'https://www.linkedin.com/messaging/thread/1'));
+// ---- LinkedIn is deliberately NOT tailored ---------------------------
+// The heavy engine is denylisted on linkedin.com in both background.js and
+// autofill-controller.js because it crashes the SPA, and LinkedIn postings
+// are not a tailoring target. What LinkedIn needs is Easy Apply autofill,
+// which is a separate dynamically registered script, plus the contact
+// sources for the hiring-team card.
+t('the tailoring engine does NOT load on LinkedIn',
+  !covers(mainPats, 'https://www.linkedin.com/jobs/view/5477345004/'),
+  'the engine is denylisted on linkedin.com -- it crashes the SPA');
+t('the tailoring engine does NOT load on the LinkedIn feed',
+  !covers(mainPats, 'https://www.linkedin.com/feed/'));
+t('contact sources DO load on LinkedIn postings',
+  covers(srcPats, 'https://www.linkedin.com/jobs/view/5477345004/'),
+  'the hiring-team card would never be read');
+
+// Easy Apply autofill is registered at runtime, not in the manifest, so
+// the manifest alone can never show whether it fires. These are the three
+// things that decide it.
+const backgroundJs=fs.readFileSync(path.join(DIR,'background.js'),'utf8');
+t('a LinkedIn Easy Apply filler is registered at runtime',
+  /LINKEDIN_SCRIPT_ID[\s\S]{0,2000}linkedin-autofill\.js/.test(backgroundJs),
+  'nothing would ever fill the Easy Apply modal');
+t('it ships ON rather than requiring the toggle to be set',
+  /linkedin_autofill_enabled\s*!==\s*false/.test(backgroundJs),
+  'an unset toggle would read as off and Easy Apply would never fire');
+t('it loads autofill-core.js first (field intelligence)',
+  /js:\s*\['autofill-core\.js'\]\.concat/.test(backgroundJs));
+t('it runs in every frame (embedded Easy Apply forms)',
+  /registerLinkedInAutofill[\s\S]{0,300}LINKEDIN_MATCHES,\s*\n?\s*true/.test(backgroundJs),
+  'iframe-wrapped employer forms would be missed');
+t('and the heavy engine stays denylisted on linkedin.com',
+  /AUTOFILL_DENYLIST_HOSTS\s*=\s*\[[^\]]*'linkedin\.com'/.test(backgroundJs));
 
 // Excluded platforms must have nothing injected at all -- not the engine,
 // not the helpers. Loading scripts on a site the user excluded is the
