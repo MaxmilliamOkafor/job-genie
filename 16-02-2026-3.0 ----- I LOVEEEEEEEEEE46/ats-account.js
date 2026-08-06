@@ -172,6 +172,63 @@
   const SIGNUP_HINT = /(create|register|sign\s*up|new account|join|get started)/i;
   const SIGNIN_HINT = /(sign\s*in|log\s*in|login|returning|existing)/i;
 
+  // Exact hooks where an ATS gives them, so recognition does not depend on
+  // heuristics that a redesign breaks. Workday's are stable automation IDs
+  // and are worth preferring over any amount of label matching.
+  const PLATFORM_FIELDS = {
+    workday: {
+      host: /workday|myworkdayjobs/i,
+      email: "input[data-automation-id='email']",
+      password: "input[data-automation-id='password']",
+      confirm: "input[data-automation-id='verifyPassword']",
+      // Workday will NOT create the account unless this is ticked. Filling
+      // the fields and pressing submit without it fails validation, which
+      // looks like a broken form rather than a missed checkbox.
+      agree: "input[data-automation-id='createAccountCheckbox']",
+      submitSignup: "[data-automation-id='createAccountSubmitButton']",
+      submitSignin: "[data-automation-id='signInSubmitButton']",
+      signupForm: '.signUp-formWrap form',
+      signinForm: '.emailLogin-formWrap form',
+      error: "[data-automation-id='errorMessage']",
+    },
+    icims: {
+      host: /icims/i,
+      // iCIMS renders the credential form inside an iframe, which is why
+      // the document-only search below is not enough on its own.
+      error: '.iCIMS_ErrorMessage',
+      signinPage: '.iCIMS_LoginPage',
+    },
+  };
+
+  function _platformFields(hostname) {
+    for (const key of Object.keys(PLATFORM_FIELDS)) {
+      if (PLATFORM_FIELDS[key].host && PLATFORM_FIELDS[key].host.test(String(hostname || ''))) {
+        return Object.assign({ key }, PLATFORM_FIELDS[key]);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Documents to search: this one, plus any same-origin frame. iCIMS puts
+   * its login form in icims_formFrame, so a document-only search finds
+   * nothing there and the account wall looks impassable.
+   */
+  function _documents(doc) {
+    const out = [doc];
+    try {
+      for (const frame of doc.querySelectorAll('iframe')) {
+        try {
+          const inner = frame.contentDocument;
+          // Cross-origin frames throw or return null; that is correct and
+          // this must not attempt to work around it.
+          if (inner && inner.querySelector) out.push(inner);
+        } catch (e) { /* cross-origin, nothing to do */ }
+      }
+    } catch (e) {}
+    return out;
+  }
+
   function _visible(el) {
     try {
       if (!el || el.disabled || el.readOnly) return false;
@@ -198,10 +255,45 @@
    * Returns { kind: 'signup'|'signin'|'none', email, password, confirm,
    *           confirmEmail, submit }
    */
-  function detectForm(doc) {
-    const d = doc || (typeof document !== 'undefined' ? document : null);
+  function detectForm(doc, hostname) {
+    const d0 = doc || (typeof document !== 'undefined' ? document : null);
     const none = { kind: 'none', email: null, password: null, confirm: null, confirmEmail: null, submit: null };
-    if (!d) return none;
+    if (!d0) return none;
+
+    // Search this document and any same-origin frame, first match wins.
+    for (const d of _documents(d0)) {
+      const hit = _detectIn(d, hostname);
+      if (hit.kind !== 'none') return hit;
+    }
+    return none;
+  }
+
+  function _detectIn(d, hostname) {
+    const none = { kind: 'none', email: null, password: null, confirm: null, confirmEmail: null, submit: null };
+    const pf = _platformFields(hostname
+      || (typeof location !== 'undefined' ? location.hostname : ''));
+
+    // Platform hooks first: an exact automation ID beats any heuristic.
+    if (pf && pf.password) {
+      try {
+        const pw = d.querySelector(pf.password);
+        if (pw && _visible(pw)) {
+          const confirm = pf.confirm ? d.querySelector(pf.confirm) : null;
+          const kind = (confirm && _visible(confirm)) ? 'signup' : 'signin';
+          return {
+            kind,
+            email: pf.email ? d.querySelector(pf.email) : null,
+            password: pw,
+            confirm: (confirm && _visible(confirm)) ? confirm : null,
+            confirmEmail: null,
+            agree: pf.agree ? d.querySelector(pf.agree) : null,
+            submit: d.querySelector(kind === 'signup' ? pf.submitSignup : pf.submitSignin),
+            platform: pf.key,
+            doc: d,
+          };
+        }
+      } catch (e) {}
+    }
 
     let passwords = [];
     let emails = [];
@@ -253,7 +345,10 @@
       password: passwords[0] || null,
       confirm: passwords.length >= 2 ? passwords[1] : null,
       confirmEmail,
+      agree: null,
       submit,
+      platform: '',
+      doc: d,
     };
   }
 
@@ -298,10 +393,9 @@
       if (u.username || u.password) return { ok: false, reason: 'credentials-in-url' };
     } catch (e) { return { ok: false, reason: 'unparseable-url' }; }
 
-    const form = detectForm(doc);
-    if (form.kind === 'none') return { ok: false, reason: 'no-credential-form' };
-
     const host = loc.hostname;
+    const form = detectForm(doc, host);
+    if (form.kind === 'none') return { ok: false, reason: 'no-credential-form' };
     let cred = await credentialFor(host);
     let created = false;
 
@@ -328,6 +422,21 @@
     if (form.password && _setValue(form.password, cred.password)) filled.push('password');
     if (form.confirm && _setValue(form.confirm, cred.password)) filled.push('confirm-password');
 
+    // Workday refuses to create the account unless its own "create account"
+    // box is ticked. Without this the fields are all correct, submit is
+    // pressed, and validation fails -- which reads as a broken form rather
+    // than a missed checkbox.
+    if (form.kind === 'signup' && form.agree && !form.agree.checked) {
+      try {
+        form.agree.click();
+        if (!form.agree.checked) {
+          form.agree.checked = true;
+          form.agree.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (form.agree.checked) filled.push('create-account-checkbox');
+      } catch (e) {}
+    }
+
     if (!filled.length) return { ok: false, kind: form.kind, reason: 'nothing-fillable' };
 
     log(form.kind, 'form filled on', registrableDomain(host), '(' + filled.join(', ') + ')');
@@ -337,13 +446,38 @@
       created,
       filled,
       domain: registrableDomain(host),
+      platform: form.platform || '',
       canSubmit: !!form.submit,
     };
   }
 
+  /**
+   * What the site said after a submit, when it says it in a place we know.
+   * A failed registration that looks like success is worse than a visible
+   * failure: the application continues against an account that does not
+   * exist.
+   */
+  function formError(doc, hostname) {
+    const d0 = doc || (typeof document !== 'undefined' ? document : null);
+    if (!d0) return '';
+    const pf = _platformFields(hostname || (typeof location !== 'undefined' ? location.hostname : ''));
+    const selectors = [pf && pf.error, '[role="alert"]', '.error-message', '[class*="errorMessage" i]']
+      .filter(Boolean);
+    for (const d of _documents(d0)) {
+      for (const sel of selectors) {
+        try {
+          const el = d.querySelector(sel);
+          const txt = el && _clean(el.textContent);
+          if (txt) return txt.slice(0, 200);
+        } catch (e) {}
+      }
+    }
+    return '';
+  }
+
   /** Press the form's own submit control. Separate, so filling never submits by itself. */
-  function submitCredentialForm(doc) {
-    const form = detectForm(doc || (typeof document !== 'undefined' ? document : null));
+  function submitCredentialForm(doc, hostname) {
+    const form = detectForm(doc || (typeof document !== 'undefined' ? document : null), hostname);
     if (!form.submit) return false;
     try { form.submit.click(); return true; } catch (e) { return false; }
   }
@@ -363,7 +497,8 @@
   global.ATSAccount = {
     registrableDomain, sameSite, generatePassword,
     credentialFor, ensureCredential, listCredentials, removeCredential,
-    detectForm, fillCredentialForm, submitCredentialForm, isEnabled,
+    detectForm, fillCredentialForm, submitCredentialForm, formError, isEnabled,
+    PLATFORM_FIELDS,
     KEY_VAULT, KEY_ENABLED,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.ATSAccount;

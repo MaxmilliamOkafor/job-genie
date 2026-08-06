@@ -144,6 +144,87 @@ t('the storage caveat is stated, not assumed',
 await A.removeCredential('myworkdayjobs.com');
 t('an account can be forgotten', (await A.listCredentials()).length===0);
 
+// ---- Workday's own hooks, taken from a working implementation --------
+// Its automation IDs are stable; label matching is not. And Workday will
+// not create the account unless its checkbox is ticked -- fill everything
+// correctly, press submit, and validation fails in a way that reads as a
+// broken form.
+STORE={};
+document.body.innerHTML = `
+  <div class="signUp-formWrap"><form>
+    <input data-automation-id="email" type="text" />
+    <input data-automation-id="password" type="password" />
+    <input data-automation-id="verifyPassword" type="password" />
+    <input data-automation-id="createAccountCheckbox" type="checkbox" />
+    <button data-automation-id="createAccountSubmitButton">Create Account</button>
+  </form></div>`;
+let wd = A.detectForm(document, 'acme.wd1.myworkdayjobs.com');
+t('Workday registration is recognised by its automation IDs',
+  wd.kind==='signup' && wd.platform==='workday', JSON.stringify({kind:wd.kind,platform:wd.platform}));
+t('its verifyPassword field is found', !!wd.confirm);
+t('its consent checkbox is found', !!wd.agree);
+t('its submit button is found', !!wd.submit);
+
+r = await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'acme.wd1.myworkdayjobs.com',href:'https://acme.wd1.myworkdayjobs.com/apply'}, email:'me@example.com'});
+t('Workday registration fills', r.ok && r.kind==='signup', JSON.stringify(r));
+t('the create-account box is ticked, or Workday refuses',
+  document.querySelector('[data-automation-id="createAccountCheckbox"]').checked, 'validation would fail');
+t('both password fields match',
+  document.querySelector('[data-automation-id="password"]').value
+  === document.querySelector('[data-automation-id="verifyPassword"]').value);
+
+// Sign-in on Workday: one password field, its own submit button.
+document.body.innerHTML = `
+  <div class="emailLogin-formWrap"><form>
+    <input data-automation-id="email" type="text" />
+    <input data-automation-id="password" type="password" />
+    <button data-automation-id="signInSubmitButton">Sign In</button>
+  </form></div>`;
+wd = A.detectForm(document, 'acme.wd1.myworkdayjobs.com');
+t('Workday sign-in is distinguished from registration', wd.kind==='signin', wd.kind);
+t('and uses the sign-in submit button', !!wd.submit);
+
+// ---- iCIMS renders its form in an iframe -----------------------------
+// A document-only search finds nothing there, and the account wall looks
+// impassable when it is not.
+const frameDoc = new JSDOM(`<body><form>
+  <input type="email" name="email" />
+  <input type="password" name="password" />
+  <button type="submit">Sign In</button>
+</form></body>`).window.document;
+document.body.innerHTML = '<div class="iCIMS_LoginPage"><iframe id="icims_formFrame"></iframe></div>';
+const iframeEl = document.querySelector('iframe');
+Object.defineProperty(iframeEl, 'contentDocument', { get: () => frameDoc });
+t('a credential form inside a same-origin frame is found',
+  A.detectForm(document, 'careers.icims.com').kind==='signin', 'iCIMS would look impassable');
+
+// A cross-origin frame throws on access; that must be handled, not worked
+// around. Rebuild the DOM so this is a fresh element.
+document.body.innerHTML = '<div class="iCIMS_LoginPage"><iframe id="blocked"></iframe></div>';
+Object.defineProperty(document.querySelector('iframe'), 'contentDocument',
+  { configurable: true, get: () => { throw new Error('cross-origin'); } });
+let threw = false, kind = '';
+try { kind = A.detectForm(document, 'careers.icims.com').kind; } catch (e) { threw = true; }
+t('a cross-origin frame is skipped without throwing', !threw && kind === 'none', kind);
+
+// ---- a failed registration must be visible ---------------------------
+document.body.innerHTML = '<div data-automation-id="errorMessage">Email already in use</div>';
+t('an ATS error message is read back',
+  /already in use/.test(A.formError(document, 'acme.wd1.myworkdayjobs.com')),
+  'a failed registration would look like success');
+document.body.innerHTML = '<div role="alert">Password does not meet requirements</div>';
+t('a generic alert is read too', /requirements/.test(A.formError(document, 'careers.example.com')));
+document.body.innerHTML = '<p>All good</p>';
+t('no error means no error', A.formError(document, 'x')==='');
+
+// ---- the generated password must satisfy the strictest rules seen ----
+// SpeedyApply's own validation: 8-20 characters, at least one uppercase.
+for (let i=0;i<50;i++) {
+  const p2=A.generatePassword(16);
+  if (p2.length<8||p2.length>20||!/[A-Z]/.test(p2)) { t('generated passwords pass ATS validation', false, p2); break; }
+  if (i===49) t('generated passwords pass the strictest observed ATS rules', true);
+}
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);
 })();
