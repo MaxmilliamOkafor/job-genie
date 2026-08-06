@@ -281,6 +281,64 @@
   setTimeout(() => captureJobContext('load'), 1500);
   setTimeout(() => captureJobContext('settle'), 4000);
 
+  // A content script cannot see its own tab id, and tab lineage is the
+  // only thing that ties a careers site to the ATS it hands off to when
+  // the two are on different domains. The background worker knows.
+  let _tabIdPromise = null;
+  function myTabId() {
+    if (!_tabIdPromise) {
+      _tabIdPromise = new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ action: 'JG_MY_TAB_ID' }, (r) => {
+            if (chrome.runtime.lastError) return resolve(null);
+            resolve(r && typeof r.tabId === 'number' ? r.tabId : null);
+          });
+        } catch (e) { resolve(null); }
+      });
+    }
+    return _tabIdPromise;
+  }
+
+  /**
+   * The job as this page sees it, completed from the posting it came from.
+   *
+   * The tailoring path reads the CURRENT page, which on a two-page ATS is
+   * the application form: no description to extract keywords from and no
+   * company to address an email to. Wiring only the popup fixed the
+   * manual path and left auto-tailor still reading an empty form, so
+   * every entry point goes through this.
+   *
+   * The page always wins where it has something real; the remembered
+   * posting only fills gaps, and only ever for the SAME posting.
+   */
+  // Exposed for the real-browser check in tests/browser. This lives in
+  // the extension's ISOLATED world, so the page itself cannot see or call
+  // it -- only the extension's own executeScript can.
+  window.__jgExtractJobInfoWithContext = (...a) => extractJobInfoWithContext(...a);
+
+  async function extractJobInfoWithContext(existing) {
+    const info = existing || extractJobInfo();
+    try {
+      if (typeof JDContext === 'undefined') return info;
+      // Nothing to do when this page has the description itself.
+      if ((info.description || '').trim().length > 400) return info;
+      const url = window.location.href;
+      const remembered = await JDContext.recall(url, { tabId: await myTabId() });
+      if (!remembered) return info;
+      const merged = JDContext.merge(info, remembered, {
+        isApplicationPage: JDContext.isApplicationPage(document, url),
+      });
+      if ((merged.description || '').length > (info.description || '').length) {
+        console.log('[ATS Tailor] job description restored from the posting via',
+          remembered._via + ':', (merged.description || '').length, 'chars');
+      }
+      return merged;
+    } catch (e) {
+      console.warn('[ATS Tailor] job context unavailable:', e && e.message);
+      return info;
+    }
+  }
+
   // ============ CACHE MANAGER INTEGRATION ============
   // Debounced JD extraction to prevent duplicate processing on rapid page changes
   let debouncedExtractJobInfo = null;
@@ -800,8 +858,9 @@
             return;
           }
           
-          // ALWAYS extract fresh job info from THIS page's JD
-          const jobInfo = extractJobInfo();
+          // Fresh from THIS page, completed from the posting when this
+          // page is the application form rather than the JD.
+          const jobInfo = await extractJobInfoWithContext();
           const jobTitle = jobInfo.title || 'Role';
           updateBanner(`🔍 Parsing: ${jobTitle.substring(0, 25)}...`, 'working');
           
@@ -2564,7 +2623,7 @@
 
       // Extract job info from page (if not cached)
       if (!jobInfo) {
-        jobInfo = extractJobInfo();
+        jobInfo = await extractJobInfoWithContext();
         // Cache for future use
         if (typeof CacheManager !== 'undefined' && jobInfo.description) {
           CacheManager.setCachedJDResult(jobInfo.description, jobInfo);
@@ -3195,8 +3254,8 @@
         return;
       }
       
-      // Extract job info from page
-      const jobInfo = extractJobInfo();
+      // Extract job info from page (or from the posting it came from)
+      const jobInfo = await extractJobInfoWithContext();
       // CRITICAL: If extractJobInfo couldn't resolve company, use the Tier 1 detection result
       if (!jobInfo.company && tier1Detection.company) {
         jobInfo.company = tier1Detection.company;

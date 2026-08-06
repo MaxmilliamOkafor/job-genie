@@ -149,6 +149,22 @@ const server = https.createServer(S.certs(), (req, res) => {
               } : null;
             }
             out.fileInputs = document.querySelectorAll('input[type=file]').length;
+            // The path that actually matters: what the TAILORING code
+            // gets when it asks this page for the job. Recall working
+            // while this still returns an empty description is the bug
+            // that wiring only the popup left behind.
+            if (typeof window.__jgExtractJobInfoWithContext === 'function') {
+              try {
+                const j = await window.__jgExtractJobInfoWithContext();
+                out.tailorSees = {
+                  desc: (j.description || '').length,
+                  company: j.company || '',
+                  title: j.title || '',
+                };
+              } catch (e) { out.tailorError = String(e && e.message); }
+            } else {
+              out.tailorSees = null;
+            }
             return out;
           },
         });
@@ -160,6 +176,7 @@ const server = https.createServer(S.certs(), (req, res) => {
     await page.close();
 
     const rec = r && r.recalled;
+    const tail = r && r.tailorSees;
     const ok = !!(r && !r.fatal
       && r.ownDesc < 400                    // the apply page really has no JD
       && r.ownEmails === 0                  // and no address of its own
@@ -167,6 +184,9 @@ const server = https.createServer(S.certs(), (req, res) => {
       && rec.company === 'Acme Corp'
       && /Project Manager/i.test(rec.title || '')
       && rec.emails.includes('talent@acme-corp.test')
+      // and the TAILORING path sees it too, not just the store
+      && tail && tail.desc > 300 && tail.company === 'Acme Corp'
+      && /Project Manager/i.test(tail.title || '')
       && r.fileInputs === 2);
     ok ? PASS++ : FAIL++;
     console.log((ok ? '  PASS  ' : '  FAIL  ') + c.label.padEnd(20)
@@ -174,7 +194,8 @@ const server = https.createServer(S.certs(), (req, res) => {
       + 'recalled=' + String(rec ? rec.desc : 0).padEnd(6)
       + 'via=' + String(rec ? rec.via : '-').padEnd(6)
       + 'company=' + String(rec ? rec.company : '-').padEnd(12)
-      + 'email=' + (rec && rec.emails.includes('talent@acme-corp.test') ? 'carried' : 'LOST'));
+      + 'email=' + ((rec && rec.emails.includes('talent@acme-corp.test') ? 'carried' : 'LOST')).padEnd(9)
+      + 'tailorSees=' + String(tail ? tail.desc : 0));
     if (!ok) console.log('          ' + JSON.stringify(r));
   }
 

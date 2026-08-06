@@ -263,12 +263,38 @@
    * context only ever fills gaps. That ordering is what stops a stale
    * context from renaming the job the user is looking at.
    */
-  function merge(fresh, remembered) {
+  // What an application page calls itself. These are page furniture, not
+  // job data -- "Apply" is the <h1> of half the forms on the internet --
+  // and letting one win puts "Apply" in the tailored CV and in the
+  // subject line of the email to the recruiter.
+  const PAGE_LABEL = new RegExp('^(?:' + [
+    'apply', 'apply now', 'application', 'application form', 'apply for this job',
+    'submit', 'submit application', 'career', 'careers', 'job', 'jobs',
+    'login', 'log in', 'sign in', 'signin', 'sign up', 'signup', 'register',
+    'create account', 'candidate portal', 'thank you', 'home', 'untitled',
+  ].join('|') + ')$', 'i');
+
+  function _usable(v) {
+    const s = String(v || '').trim();
+    return (s && !PAGE_LABEL.test(s)) ? s : '';
+  }
+
+  function merge(fresh, remembered, opts) {
+    const o = opts || {};
     const f = fresh || {};
     const r = remembered || {};
     if (!remembered) return f;
-    const pick = (a, b) => (String(a || '').trim() ? a : b);
     const out = Object.assign({}, r, f);
+
+    // On the application page the remembered posting is the authority for
+    // the job's identity: the form page's own title is "Apply" and its
+    // company is guessed from a hostname like recruiting.paylocity.com.
+    // On a posting page the live page wins, as it should.
+    const preferRemembered = !!o.isApplicationPage;
+    const pick = (a, b) => {
+      const A = _usable(a), B = _usable(b);
+      return preferRemembered ? (B || A || '') : (A || B || '');
+    };
     out.title = pick(f.title, r.title);
     out.company = pick(f.company, r.company);
     out.location = pick(f.location, r.location);
@@ -294,7 +320,13 @@
     const o = opts || {};
     const url = o.url || (fresh && fresh.url) || '';
     const remembered = await recall(url, o);
-    const merged = merge(fresh, remembered);
+    // URL-only unless the caller hands us the PAGE's document. The popup
+    // calls this, and its ambient `document` is the popup's own DOM --
+    // inspecting that would answer a question about the wrong page.
+    const onApply = (o.isApplicationPage !== undefined)
+      ? o.isApplicationPage
+      : (o.doc ? isApplicationPage(o.doc, url) : APPLY_URL.test(url));
+    const merged = merge(fresh, remembered, { isApplicationPage: onApply });
     if (url) await capture(merged, { url, tabId: o.tabId });
     return merged;
   }

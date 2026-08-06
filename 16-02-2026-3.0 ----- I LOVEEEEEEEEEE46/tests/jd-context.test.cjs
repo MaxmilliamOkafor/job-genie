@@ -179,6 +179,27 @@ const THIN = { title: 'Apply', company: '', location: '', description: '', url: 
   t('the live page wins on the fields it does have',
     m2.title === 'Senior PM' && m2.company === 'Acme Ireland', m2.title + ' / ' + m2.company);
 
+  // ...but "Apply" is the <h1> of half the forms on the internet, and it
+  // is not a job title. Letting it through puts "Apply" in the tailored
+  // CV and in the subject line of the email to the recruiter.
+  console.log('\nPAGE FURNITURE IS NOT JOB DATA');
+  for (const junk of ['Apply', 'Apply now', 'Application', 'Submit application',
+                      'Careers', 'Login', 'Sign in', 'Create account', 'Thank you']) {
+    const m = JC.merge({ title: junk, description: '', url: APPLY_URL }, recalled);
+    t('"' + junk + '" never becomes the job title',
+      m.title === 'Microsoft Dynamics 365 Project Manager', m.title);
+  }
+  // The company guessed from a hostname like recruiting.paylocity.com.
+  const m3 = JC.merge({ title: 'Apply', company: 'Recruiting', description: '', url: APPLY_URL },
+    recalled, { isApplicationPage: true });
+  t('a hostname-guessed company does not replace the real one on an apply page',
+    m3.company === 'Acme Corp', m3.company);
+  // On a POSTING page the live company still wins -- the page is right there.
+  const m4 = JC.merge({ title: 'Senior PM', company: 'Acme Ireland', description: 'd'.repeat(900), url: JD_URL },
+    recalled, { isApplicationPage: false });
+  t('on a posting page the live page still wins',
+    m4.company === 'Acme Ireland' && m4.title === 'Senior PM', m4.company + ' / ' + m4.title);
+
   console.log('\nNO DOWNGRADE');
   STORE = {};
   await JC.capture(POSTING, { url: JD_URL, tabId: 7 });
