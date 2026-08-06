@@ -7489,6 +7489,46 @@ class ATSTailor {
   }
 
 
+  /**
+   * Deliver an attach request to every frame and report the best outcome.
+   * Frames that do not contain an upload field answer "skipped", which is
+   * information, not failure -- only every frame skipping is a failure.
+   */
+  async attachInAnyFrame(tabId, message) {
+    const ask = (frameId) => new Promise((resolve) => {
+      const opts = (frameId === undefined) ? undefined : { frameId };
+      try {
+        chrome.tabs.sendMessage(tabId, message, opts, (response) => {
+          // Reading lastError stops Chrome logging it as unchecked; a
+          // frame with no content script simply has nothing to say.
+          const ignored = chrome.runtime.lastError;
+          resolve(ignored ? null : response);
+        });
+      } catch (e) { resolve(null); }
+    });
+
+    let frameIds = [];
+    try {
+      // executeScript reports one result per frame, which is how the frame
+      // IDs are discovered without asking for the webNavigation permission.
+      const frames = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => 1,
+      });
+      frameIds = (frames || []).map((f) => f.frameId).filter((id) => id !== undefined);
+    } catch (e) { /* fall back to the top frame below */ }
+
+    if (!frameIds.length) return (await ask(undefined)) || { success: false, message: 'No response from the page' };
+
+    let lastAnswer = null;
+    for (const frameId of frameIds) {
+      const r = await ask(frameId);
+      if (r && r.success) return r;
+      if (r) lastAnswer = r;
+    }
+    return lastAnswer || { success: false, message: 'No upload field found in any frame' };
+  }
+
   async attachDocument(type) {
     // DOCX is the attached file (best ATS parseability). PDF base64 is
     // passed only as a fallback the content script uses if no DOCX exists.
@@ -7511,24 +7551,27 @@ class ATSTailor {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error('No active tab');
 
-      const res = await new Promise((resolve, reject) => {
-        chrome.tabs.sendMessage(
-          tab.id,
-          {
-            action: 'attachDocument',
-            type,
-            docx,            // preferred: DOCX base64
-            pdf: doc,        // fallback only
-            text: textDoc,
-            filename,
-          },
-          (response) => {
-            const err = chrome.runtime.lastError;
-            if (err) return reject(new Error(err.message || 'Send message failed'));
-            resolve(response);
-          }
-        );
-      });
+      const message = {
+        action: 'attachDocument',
+        type,
+        docx,            // preferred: DOCX base64
+        pdf: doc,        // fallback only
+        text: textDoc,
+        filename,
+      };
+
+      // Ask EVERY frame, not just the top one. iCIMS renders its
+      // application inside icims_formFrame, and Greenhouse,
+      // SmartRecruiters and Workable widgets are routinely embedded in a
+      // company's own careers page -- so the upload input is often in a
+      // frame. A top-frame-only send reports "no upload field found" on
+      // exactly those sites.
+      //
+      // sendMessage without a frameId reaches every frame but returns only
+      // the FIRST reply, so one frame's "not here" would mask another
+      // frame's success. Each frame is therefore asked separately and the
+      // run counts as attached if ANY of them managed it.
+      const res = await this.attachInAnyFrame(tab.id, message);
 
       if (res?.success && res?.skipped) {
         this.showToast(res.message || 'Skipped (no upload field)', 'success');
