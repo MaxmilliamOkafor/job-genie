@@ -29,6 +29,11 @@
 (function (global) {
   'use strict';
 
+  // Excluded at the user's request and deliberately absent: Lever, Ashby,
+  // Rippling, Indeed, Glassdoor, Wellfound and Otta. Absence here is what
+  // excludes them -- detection, the recognition gate, contact harvesting
+  // and requisition-ID parsing all read this map, so removing an entry
+  // removes the platform everywhere at once.
   const PLATFORMS = {
     greenhouse: {
       label: 'Greenhouse',
@@ -39,16 +44,6 @@
       description: ['#content', '.job__description', '.posting-description', '.posting', '#app_body'],
       jobId: /greenhouse\.io\/[^/]+\/jobs\/(\d{5,})/i,
       apply: ['#apply_button', '[data-mapped="apply"]', 'button[type="submit"]'],
-    },
-    lever: {
-      label: 'Lever',
-      host: ['lever.co'],
-      title: ['.posting-headline h2', '[data-qa="posting-name"]', 'h2', 'h1'],
-      company: ['.main-header-logo img', '.posting-categories .sort-by-team', '[class*="company"]'],
-      location: ['.posting-categories .location', '.sort-by-location', '[class*="location"]'],
-      description: ['.posting-page', '[data-qa="job-description"]', '.section-wrapper', '.content'],
-      jobId: /lever\.co\/[^/]+\/([0-9a-f-]{8,})/i,
-      apply: ['.postings-btn', 'a[href*="/apply"]', 'button[type="submit"]'],
     },
     workday: {
       label: 'Workday',
@@ -82,16 +77,6 @@
       description: ['[data-ui="job-description"]', '[data-ui="overview"]', '.section--text'],
       jobId: /workable\.com\/[^/]+\/j\/([A-Z0-9]{6,})/i,
       apply: ['[data-ui="apply-button"]', 'button[type="submit"]'],
-    },
-    ashby: {
-      label: 'Ashby',
-      host: ['ashbyhq.com'],
-      title: ['h1', '[class*="_jobTitle"]', '[class*="jobTitle"]'],
-      company: ['[class*="_companyName"]', '[class*="companyName"]', 'header img'],
-      location: ['[class*="_location"]', '[class*="location"]'],
-      description: ['.ashby-job-posting-content', '[class*="_description"]', '[class*="jobDescription"]'],
-      jobId: /ashbyhq\.com\/[^/]+\/([0-9a-f-]{8,})/i,
-      apply: ['[class*="_applyButton"]', 'button[type="submit"]'],
     },
     icims: {
       label: 'iCIMS',
@@ -251,16 +236,6 @@
       location: ['.position-location', '[class*="location"]'],
       description: ['.position', '.description', '[class*="description"]'],
       jobId: /breezy\.hr\/p\/([0-9a-f]+)/i,
-      apply: ['a[href*="apply"]', 'button[type="submit"]'],
-    },
-    rippling: {
-      label: 'Rippling',
-      host: ['rippling.com', 'ats.rippling.com', 'rippling-ats.com'],
-      title: ['h1', '[class*="jobTitle"]', '.job-title'],
-      company: ['[class*="company"]', 'header img'],
-      location: ['[class*="location"]'],
-      description: ['.job-description', '[class*="jobDescription"]', '[class*="description"]'],
-      jobId: /rippling\.com\/.*?\/jobs?\/([0-9a-f-]{8,})/i,
       apply: ['a[href*="apply"]', 'button[type="submit"]'],
     },
     dover: {

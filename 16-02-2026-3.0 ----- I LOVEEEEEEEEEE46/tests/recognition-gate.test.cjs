@@ -39,14 +39,13 @@ for (const cs of manifest.content_scripts) {
 // detection, and were absent from the gate's own list with a comment
 // saying they were excluded on purpose.
 const HOSTS = {
-  greenhouse:'boards.greenhouse.io', lever:'jobs.lever.co', workday:'acme.wd1.myworkdayjobs.com',
-  smartrecruiters:'jobs.smartrecruiters.com', workable:'apply.workable.com', ashby:'jobs.ashbyhq.com',
-  icims:'careers.icims.com', taleo:'acme.taleo.net', teamtailor:'acme.teamtailor.com',
+  greenhouse:'boards.greenhouse.io', workday:'acme.wd1.myworkdayjobs.com',
+  smartrecruiters:'jobs.smartrecruiters.com', workable:'apply.workable.com', icims:'careers.icims.com', taleo:'acme.taleo.net', teamtailor:'acme.teamtailor.com',
   bamboohr:'acme.bamboohr.com', recruitee:'acme.recruitee.com', jazzhr:'acme.applytojob.com',
   jobvite:'jobs.jobvite.com', successfactors:'career5.successfactors.eu', personio:'acme.jobs.personio.de',
   eightfold:'acme.eightfold.ai', avature:'acme.avature.net', cornerstone:'acme.csod.com',
   brassring:'acme.brassring.com', ultipro:'acme.ultipro.com', adp:'workforcenow.adp.com',
-  breezy:'acme.breezy.hr', rippling:'ats.rippling.com', dover:'app.dover.io',
+  breezy:'acme.breezy.hr', dover:'app.dover.io',
   pinpoint:'acme.pinpointhq.com', zohorecruit:'acme.zohorecruit.com', occupop:'acme.occupop.com',
   bullhorn:'acme.bullhornstaffing.com', oracle:'acme.oraclecloud.com', dayforce:'acme.dayforcehcm.com',
   freshteam:'acme.freshteam.com', gusto:'jobs.gusto.com', paylocity:'recruiting.paylocity.com',
@@ -67,7 +66,8 @@ t('Dayforce resolves on its REAL host', AP.detect('acme.dayforcehcm.com','')==='
 t('the stale exclusion note is gone', !/EXCLUDES Lever and Ashby/.test(contentJs));
 
 // ---- and the excluded four must still not be ------------------------
-for (const host of ['www.indeed.com','www.glassdoor.com','wellfound.com','otta.com']) {
+for (const host of ['www.indeed.com','www.glassdoor.com','wellfound.com','otta.com',
+                    'jobs.lever.co','jobs.ashbyhq.com','ats.rippling.com','acme.rippling-ats.com']) {
   t(host + ' is not treated as a supported ATS', AP.detect(host,'https://'+host+'/x')==='' , AP.detect(host,''));
 }
 

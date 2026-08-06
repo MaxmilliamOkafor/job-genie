@@ -138,8 +138,9 @@
 
   const SUPPORTED_HOSTS = [
     // Standard ATS platforms. Kept only as a fallback for when
-    // ats-platforms.js is unavailable; that module is the source of
-    // truth and covers considerably more than this list.
+    // ats-platforms.js is unavailable; that module is the source of truth.
+    // Lever, Ashby and Rippling are deliberately absent from both, along
+    // with Indeed, Glassdoor, Wellfound and Otta.
     'greenhouse.io', 'job-boards.greenhouse.io', 'boards.greenhouse.io',
     'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
     'bullhornstaffing.com', 'bullhorn.com', 'teamtailor.com',

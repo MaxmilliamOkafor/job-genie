@@ -16,13 +16,13 @@ const hostsFor=(file)=>{
 const srcHosts=hostsFor('jd-contact-sources.js');
 const extHosts=hostsFor('jd-contact-extractor.js');
 
-const ATS={'greenhouse.io':'Greenhouse','lever.co':'Lever','myworkdayjobs.com':'Workday',
+const ATS={'greenhouse.io':'Greenhouse','myworkdayjobs.com':'Workday',
  'smartrecruiters.com':'SmartRecruiters','icims.com':'iCIMS','taleo.net':'Taleo',
- 'workable.com':'Workable','teamtailor.com':'Teamtailor','ashbyhq.com':'Ashby',
+ 'workable.com':'Workable','teamtailor.com':'Teamtailor',
  'bullhornstaffing.com':'Bullhorn','jobvite.com':'Jobvite','recruitee.com':'Recruitee',
  'personio.de':'Personio','breezy.hr':'BreezyHR','jazzhr.com':'JazzHR',
  'successfactors.com':'SuccessFactors','oraclecloud.com':'Oracle','eightfold.ai':'Eightfold',
- 'pinpointhq.com':'Pinpoint','occupop.com':'Occupop','rippling.com':'Rippling',
+ 'pinpointhq.com':'Pinpoint','occupop.com':'Occupop',
  'dover.com':'Dover','wellfound.com':'Wellfound','otta.com':'Otta'};
 for(const [d,n] of Object.entries(ATS)) t('contact sources run on '+n, srcHosts.has(d), d+' not registered');
 // LinkedIn is the only site with a hiring-team card; the extractor there

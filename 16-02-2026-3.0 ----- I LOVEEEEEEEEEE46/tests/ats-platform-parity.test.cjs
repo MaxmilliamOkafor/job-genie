@@ -20,11 +20,11 @@ const S=loadCjs('jd-contact-sources.js');
 const E=loadCjs('jd-contact-extractor.js');
 
 // The four the user excluded. Everything else must be complete.
-const EXCLUDED=['indeed','glassdoor','wellfound','otta'];
+const EXCLUDED=['indeed','glassdoor','wellfound','otta','lever','ashby','rippling'];
 const ids=AP.list().map(p=>p.id);
 t('no excluded platform is claimed as supported',
   !ids.some(id=>EXCLUDED.includes(id)), ids.filter(id=>EXCLUDED.includes(id)).join(','));
-t('every remaining ATS is described', ids.length>=28, ids.length+' platforms');
+t('every remaining ATS is described', ids.length>=25, ids.length+' platforms');
 
 // ---- every entry must be complete ------------------------------------
 for (const {id,label} of AP.list()) {
@@ -53,9 +53,9 @@ for (const {id,label} of AP.list()) {
 // ---- hostname detection ----------------------------------------------
 for (const [host, expect] of [
   ['job-boards.greenhouse.io','greenhouse'], ['boards.greenhouse.io','greenhouse'],
-  ['jobs.lever.co','lever'], ['acme.wd1.myworkdayjobs.com','workday'],
+ ['acme.wd1.myworkdayjobs.com','workday'],
   ['careers.smartrecruiters.com','smartrecruiters'], ['apply.workable.com','workable'],
-  ['jobs.ashbyhq.com','ashby'], ['careers-acme.icims.com','icims'],
+  ['careers-acme.icims.com','icims'],
   ['acme.taleo.net','taleo'], ['acme.teamtailor.com','teamtailor'],
   ['acme.bamboohr.com','bamboohr'], ['acme.recruitee.com','recruitee'],
   ['acme.applytojob.com','jazzhr'], ['jobs.jobvite.com','jobvite'],
@@ -63,7 +63,7 @@ for (const [host, expect] of [
   ['acme.eightfold.ai','eightfold'], ['acme.avature.net','avature'],
   ['acme.csod.com','cornerstone'], ['acme.brassring.com','brassring'],
   ['acme.ultipro.com','ultipro'], ['acme.breezy.hr','breezy'],
-  ['ats.rippling.com','rippling'], ['acme.pinpointhq.com','pinpoint'],
+ ['acme.pinpointhq.com','pinpoint'],
   ['acme.zohorecruit.com','zohorecruit'], ['acme.occupop.com','occupop'],
   ['acme.bullhornstaffing.com','bullhorn'], ['acme.oraclecloud.com','oracle'],
   ['www.linkedin.com','linkedin'],
@@ -88,9 +88,7 @@ t('a trailing dot does not defeat matching', AP.detect('greenhouse.io.','')==='g
 // ---- requisition IDs --------------------------------------------------
 for (const [url, expect] of [
   ['https://job-boards.greenhouse.io/array/jobs/5477345004','5477345004'],
-  ['https://jobs.lever.co/acme/1a2b3c4d-5e6f-7890-abcd-ef1234567890','1a2b3c4d-5e6f-7890-abcd-ef1234567890'],
   ['https://acme.wd1.myworkdayjobs.com/en-US/careers/job/Dublin/PM_R-12345','R-12345'],
-  ['https://jobs.ashbyhq.com/acme/1a2b3c4d-5e6f-7890-abcd-ef1234567890','1a2b3c4d-5e6f-7890-abcd-ef1234567890'],
   ['https://careers-acme.icims.com/jobs/12345/pm/job','12345'],
   ['https://acme.teamtailor.com/jobs/123456-project-manager','123456'],
   ['https://career5.successfactors.eu/careers?jobId=98765','98765'],
@@ -129,7 +127,7 @@ for (const [host, platform] of [
   ['acme.myworkdaysite.com','workday'],      // Workday's OTHER tenant domain
   ['careers.icims.eu','icims'],              // EU tenants
   ['career5.sapsf.eu','successfactors'],
-  ['acme.rippling-ats.com','rippling'],
+
   ['acme.theresumator.com','jazzhr'],        // JazzHR's legacy domain
   ['app.dover.io','dover'],
 ]) {
@@ -156,7 +154,7 @@ for (const [host, platform, label] of [
 }
 
 // The four excluded stay excluded even after this expansion.
-for (const excluded of ['indeed','glassdoor','wellfound','otta']) {
+for (const excluded of ['indeed','glassdoor','wellfound','otta','lever','ashby','rippling']) {
   t(excluded+' is still not claimed as a platform',
     !AP.list().some(p=>p.id===excluded), 'was added by mistake');
 }
