@@ -55,7 +55,7 @@
       // myworkdaysite.com is Workday's OTHER tenant domain. Covering
       // only myworkdayjobs.com left half of Workday unsupported while
       // the platform read as done.
-      host: ['workday.com', 'myworkdayjobs.com', 'myworkdaysite.com', 'wd1.', 'wd3.', 'wd5.'],
+      host: ['workday.com', 'myworkdayjobs.com', 'myworkdaysite.com'],
       title: ['h1[data-automation-id="jobPostingHeader"]', '[data-automation-id="jobPostingHeader"]', 'h1'],
       company: ['[data-automation-id="jobPostingCompany"]', '[data-automation-id="company"]'],
       location: ['[data-automation-id="locations"]', '[data-automation-id="jobPostingLocation"]'],
@@ -285,7 +285,7 @@
     },
     zohorecruit: {
       label: 'Zoho Recruit',
-      host: ['zohorecruit.com', 'zoho.com/recruit'],
+      host: ['zohorecruit.com'],
       title: ['h1', '.job-title', '[class*="jobTitle"]'],
       company: ['[class*="company"]', 'header img'],
       location: ['[class*="location"]'],
@@ -407,13 +407,30 @@
     ],
   };
 
-  /** The platform for a hostname, or '' when it is not a known ATS. */
+  /**
+   * The platform for a hostname, or '' when it is not a known ATS.
+   *
+   * Matching is on a DOMAIN-LABEL boundary, not a substring. Substring
+   * matching says myworkdayjobs.com.evil.example is Workday, which is
+   * exactly the shape of a phishing host -- and this answer is used to
+   * decide whether to type a password into a page, so it has to be right.
+   */
+  function _hostMatches(hostname, frag) {
+    if (!hostname || !frag) return false;
+    // A path fragment (jobs.gusto.com style entries never have one, but
+    // zoho.com/recruit does) is checked against the full URL by the caller.
+    if (frag.indexOf('/') !== -1) return false;
+    return hostname === frag || hostname.endsWith('.' + frag);
+  }
+
   function detect(hostname, href) {
-    const h = String(hostname || '').toLowerCase();
+    const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
     const u = String(href || '').toLowerCase();
     for (const key of Object.keys(PLATFORMS)) {
       for (const frag of PLATFORMS[key].host) {
-        if (h.indexOf(frag) !== -1 || (frag.indexOf('/') !== -1 && u.indexOf(frag) !== -1)) return key;
+        if (_hostMatches(h, frag)) return key;
+        // Path-bearing entries identify a platform by URL prefix instead.
+        if (frag.indexOf('/') !== -1 && u.indexOf('//' + frag) !== -1) return key;
       }
     }
     return '';

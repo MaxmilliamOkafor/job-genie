@@ -71,6 +71,20 @@ for (const [host, expect] of [
 
 t('an unknown host is not mis-attributed', AP.detect('careers.some-startup.com','')==='' );
 
+// Detection decides whether a password gets typed into a page, so it has
+// to match on a DOMAIN-LABEL boundary. Substring matching calls
+// myworkdayjobs.com.evil.example Workday, which is the exact shape of a
+// phishing host.
+for (const phish of [
+  'myworkdayjobs.com.evil.example', 'greenhouse.io.attacker.test',
+  'icims.com.phish.example', 'lever.co.badsite.test',
+  'notgreenhouse.io', 'fake-workday.com.evil.co',
+]) t('a look-alike host is not treated as an ATS: '+phish,
+     AP.detect(phish,'https://'+phish+'/job')==='', AP.detect(phish,''));
+t('but a real subdomain still matches', AP.detect('boards.eu.greenhouse.io','')==='greenhouse');
+t('and the bare domain matches', AP.detect('greenhouse.io','')==='greenhouse');
+t('a trailing dot does not defeat matching', AP.detect('greenhouse.io.','')==='greenhouse');
+
 // ---- requisition IDs --------------------------------------------------
 for (const [url, expect] of [
   ['https://job-boards.greenhouse.io/array/jobs/5477345004','5477345004'],

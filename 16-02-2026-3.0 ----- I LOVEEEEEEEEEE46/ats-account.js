@@ -37,7 +37,8 @@
   'use strict';
 
   const TAG = '[JG-Account]';
-  const KEY_VAULT = 'ats_accounts';        // domain -> { email, password, createdAt, platform }
+  const KEY_VAULT = 'ats_accounts';        // legacy per-site store, read-only now
+  const KEY_ACCOUNT = 'autofillAccount';   // { accountEmail, accountPassword, useProfileEmail }
   const KEY_ENABLED = 'ats_account_enabled';
 
   function _clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
@@ -69,7 +70,9 @@
   const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // no I or O: transcription errors
   const LOWER = 'abcdefghijkmnopqrstuvwxyz';  // no l
   const DIGIT = '23456789';                   // no 0 or 1
-  const SYMBOL = '!@#$%*?-_';                 // accepted everywhere tested
+  // Restricted to the set SpeedyApply's validation accepts, so a
+  // suggested password passes the same check a typed one does.
+  const SYMBOL = '!@#$%^&*';
 
   function _randomInt(max) {
     // crypto, not Math.random: a predictable password is not a password.
@@ -98,7 +101,83 @@
     return chars.join('');
   }
 
-  // ---- the vault --------------------------------------------------------
+  // ---- the account ------------------------------------------------------
+  // ONE credential, used on every ATS -- SpeedyApply's model, adopted at
+  // the user's direction. The trade is explicit: a password you set and
+  // remember works on every site and can be typed by hand anywhere,
+  // against the fact that a breach at any one ATS exposes the rest. That
+  // is a choice for the person whose accounts they are.
+  //
+  // Because the same password now opens every account, ONE new guard
+  // becomes essential and is enforced in fillCredentialForm: it is only
+  // ever typed into a recognised ATS. A shared password entered on a
+  // look-alike page would hand over every account at once, where a
+  // per-site password would have cost only that site.
+  const DEFAULT_ACCOUNT = { accountEmail: '', accountPassword: '', useProfileEmail: false };
+
+  // SpeedyApply's own rules, matched exactly, because they were derived
+  // from what these platforms actually accept.
+  const PASSWORD_RULES = [
+    [(v) => v.length >= 8, 'Password is less than 8 characters'],
+    [(v) => v.length <= 20, 'Password is more than 20 characters'],
+    [(v) => /[A-Z]/.test(v), 'Password does not contain an uppercase letter'],
+    [(v) => /[a-z]/.test(v), 'Password does not contain a lowercase letter'],
+    [(v) => /[0-9]/.test(v), 'Password does not contain a number'],
+    [(v) => /[!@#$%^&*]/.test(v), 'Password does not contain a special character'],
+  ];
+
+  /** Every rule the password breaks, so the UI can show them all at once. */
+  function validatePassword(pw) {
+    const v = String(pw == null ? '' : pw).trim();
+    return PASSWORD_RULES.filter(([ok]) => !ok(v)).map(([, msg]) => msg);
+  }
+
+  function validateEmail(email) {
+    const v = _clean(email);
+    return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(v) ? [] : ['Invalid email address'];
+  }
+
+  function loadAccount() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([KEY_ACCOUNT], (r) => {
+          resolve(Object.assign({}, DEFAULT_ACCOUNT, (r && r[KEY_ACCOUNT]) || {}));
+        });
+      } catch (e) { resolve(Object.assign({}, DEFAULT_ACCOUNT)); }
+    });
+  }
+
+  async function saveAccount(patch) {
+    const prev = await loadAccount();
+    const next = Object.assign({}, prev, patch || {});
+    next.accountEmail = _clean(next.accountEmail);
+    next.accountPassword = String(next.accountPassword || '').trim();
+    const problems = []
+      .concat(next.accountPassword ? validatePassword(next.accountPassword) : [])
+      .concat(next.useProfileEmail || !next.accountEmail ? [] : validateEmail(next.accountEmail));
+    if (problems.length) return { ok: false, problems };
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ [KEY_ACCOUNT]: next }, () => resolve({ ok: true, problems: [] }));
+      } catch (e) { resolve({ ok: false, problems: ['Could not save'] }); }
+    });
+  }
+
+  /**
+   * The credential to use on this page: the single stored account, with
+   * the profile email substituted when the user asked for that.
+   */
+  async function accountFor(profileEmail) {
+    const a = await loadAccount();
+    const email = a.useProfileEmail ? _clean(profileEmail) : a.accountEmail;
+    if (!email || !a.accountPassword) return null;
+    return { email, password: a.accountPassword, useProfileEmail: !!a.useProfileEmail };
+  }
+
+  // ---- the legacy per-site vault ---------------------------------------
+  // No longer written to. Kept readable so any password generated under
+  // the previous model can still be recovered -- those accounts exist at
+  // real employers and cannot be reset from here.
   function _readVault() {
     return new Promise((resolve) => {
       try { chrome.storage.local.get([KEY_VAULT], (r) => resolve((r && r[KEY_VAULT]) || {})); }
@@ -396,25 +475,28 @@
     const host = loc.hostname;
     const form = detectForm(doc, host);
     if (form.kind === 'none') return { ok: false, reason: 'no-credential-form' };
-    let cred = await credentialFor(host);
-    let created = false;
 
+    // The guard that one shared password makes essential: this is only
+    // ever typed into a recognised ATS. On a look-alike page a per-site
+    // password would have cost that one site; a shared one hands over
+    // every account at once, so the page has to be somewhere we know.
+    const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+      : (typeof global !== 'undefined' ? global.ATSPlatforms : null);
+    if (AP && typeof AP.detect === 'function') {
+      if (!AP.detect(host, String(loc.href || ''))) {
+        return { ok: false, kind: form.kind, reason: 'not-a-known-ats' };
+      }
+    } else if (!o.allowUnknownHost) {
+      // Without the platform list there is no way to tell an ATS from
+      // anything else, and guessing with a reused password is not worth it.
+      return { ok: false, kind: form.kind, reason: 'platform-list-unavailable' };
+    }
+
+    const cred = await accountFor(o.email || o.profileEmail);
     if (!cred) {
-      // Signing IN with no stored credential means the account was made
-      // elsewhere. Guessing a password would lock it, so stop.
-      if (form.kind === 'signin') return { ok: false, kind: form.kind, reason: 'no-saved-credential' };
-      if (!o.email) return { ok: false, kind: form.kind, reason: 'no-email' };
-      cred = await ensureCredential(host, o.email, o.platform || '');
-      created = true;
+      return { ok: false, kind: form.kind, reason: 'no-account-configured' };
     }
-    if (!cred) return { ok: false, kind: form.kind, reason: 'no-credential' };
-
-    // Rule 1: the credential must belong to THIS site. Belt and braces --
-    // credentialFor already keys on the registrable domain, and this
-    // catches a caller that passed one in.
-    if (cred.domain && !sameSite(cred.domain, host)) {
-      return { ok: false, kind: form.kind, reason: 'domain-mismatch' };
-    }
+    const created = false;
 
     const filled = [];
     if (form.email && _setValue(form.email, cred.email)) filled.push('email');
@@ -498,7 +580,8 @@
     registrableDomain, sameSite, generatePassword,
     credentialFor, ensureCredential, listCredentials, removeCredential,
     detectForm, fillCredentialForm, submitCredentialForm, formError, isEnabled,
-    PLATFORM_FIELDS,
+    loadAccount, saveAccount, accountFor, validatePassword, validateEmail,
+    PASSWORD_RULES, PLATFORM_FIELDS,
     KEY_VAULT, KEY_ENABLED,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.ATSAccount;

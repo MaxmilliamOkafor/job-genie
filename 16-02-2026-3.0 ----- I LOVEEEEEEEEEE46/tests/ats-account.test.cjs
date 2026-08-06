@@ -40,27 +40,55 @@ t('a look-alike domain never matches', !A.sameSite('myworkdayjobs.com','myworkda
 const pw=A.generatePassword(16);
 t('a generated password is the requested length', pw.length===16, pw.length+'');
 t('it satisfies upper/lower/digit/symbol rules',
-  /[A-Z]/.test(pw)&&/[a-z]/.test(pw)&&/[0-9]/.test(pw)&&/[!@#$%*?_-]/.test(pw), pw);
+  /[A-Z]/.test(pw)&&/[a-z]/.test(pw)&&/[0-9]/.test(pw)&&/[!@#$%^&*]/.test(pw), pw);
 t('it avoids characters that get mis-transcribed', !/[IlO01]/.test(pw), pw);
 const many=new Set(); for(let i=0;i<200;i++) many.add(A.generatePassword(16));
 t('passwords are not predictable', many.size===200, many.size+' unique of 200');
 t('length is clamped to what ATS accept',
   A.generatePassword(4).length>=12 && A.generatePassword(999).length<=20);
 
-// ---- one password per site, never reused ------------------------------
+// ---- ONE credential, used everywhere (SpeedyApply's model) -----------
+// The trade is explicit: a password the user sets and remembers works on
+// every site and can be typed by hand anywhere, against a breach at any
+// one ATS exposing the rest.
 STORE={};
-const c1=await A.ensureCredential('acme.wd1.myworkdayjobs.com','me@example.com','workday');
-const c2=await A.ensureCredential('careers.taleo.net','me@example.com','taleo');
-t('each site gets its own password', c1.password!==c2.password);
-t('a breach at one site does not expose the other', c1.password!==c2.password);
-const again=await A.ensureCredential('acme.wd5.myworkdayjobs.com','me@example.com','workday');
-t('the same site keeps its existing password', again.password===c1.password,
-  'a new password would lock the user out of the account they already made');
-t('the real email is used, so confirmations arrive', c1.email==='me@example.com');
-t('a credential is never created without an email',
-  (await A.ensureCredential('example.org',''))===null);
+t('nothing is configured to begin with', (await A.accountFor('me@example.com'))===null);
 
-// ---- RULE 1: only ever filled on its own domain -----------------------
+// Validation matches SpeedyApply's exactly, because it was derived from
+// what these platforms actually accept.
+t('a short password is rejected', A.validatePassword('Ab1!').includes('Password is less than 8 characters'));
+t('a long password is rejected', A.validatePassword('Ab1!'+'x'.repeat(30)).includes('Password is more than 20 characters'));
+t('no uppercase is rejected', A.validatePassword('passw0rd!').includes('Password does not contain an uppercase letter'));
+t('no lowercase is rejected', A.validatePassword('PASSW0RD!').includes('Password does not contain a lowercase letter'));
+t('no number is rejected', A.validatePassword('Password!').includes('Password does not contain a number'));
+t('no special character is rejected', A.validatePassword('Passw0rdd').includes('Password does not contain a special character'));
+t('a valid password passes', A.validatePassword('Passw0rd!').length===0);
+t('every broken rule is reported at once, not one per attempt',
+  A.validatePassword('abc').length>=3, JSON.stringify(A.validatePassword('abc')));
+t('an invalid email is rejected', A.validateEmail('not-an-email').length===1);
+
+let sv = await A.saveAccount({accountEmail:'me@example.com', accountPassword:'weak'});
+t('an invalid password is not saved', !sv.ok&&sv.problems.length, JSON.stringify(sv));
+sv = await A.saveAccount({accountEmail:'me@example.com', accountPassword:'Passw0rd!'});
+t('a valid credential is saved', sv.ok, JSON.stringify(sv));
+
+let acct = await A.accountFor('profile@example.com');
+t('the account email is used by default', acct.email==='me@example.com', JSON.stringify(acct));
+await A.saveAccount({useProfileEmail:true});
+acct = await A.accountFor('profile@example.com');
+t('the profile email is used when asked for', acct.email==='profile@example.com', JSON.stringify(acct));
+t('the same password is used either way', acct.password==='Passw0rd!');
+await A.saveAccount({useProfileEmail:false});
+
+// A suggested password must pass the same check a typed one does.
+let sugBad=0;
+for (let i=0;i<100;i++) if (A.validatePassword(A.generatePassword(16)).length) sugBad++;
+t('suggested passwords pass the same validation as typed ones', sugBad===0, sugBad+' failed');
+
+// ---- RULE 1: only ever typed into a RECOGNISED ATS -------------------
+// One shared password makes this the critical guard. On a look-alike page
+// a per-site password would have cost that one site; a shared one hands
+// over every account at once.
 const form=(kind)=>`<form>
   <input type="email" name="email" />
   ${kind==='signup'?'<input type="email" name="confirmEmail" placeholder="Confirm email" />':''}
@@ -69,37 +97,44 @@ const form=(kind)=>`<form>
   <button type="submit">${kind==='signup'?'Create Account':'Sign In'}</button>
 </form>`;
 
+const APmod=loadCjs('ats-platforms.js');
+global.ATSPlatforms=APmod; global.window.ATSPlatforms=APmod;
+
 document.body.innerHTML=form('signup');
-let r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'acme.wd1.myworkdayjobs.com',href:'https://acme.wd1.myworkdayjobs.com/apply'}, email:'me@example.com'});
-t('a registration form is filled', r.ok&&r.kind==='signup', JSON.stringify(r));
-t('the password field is filled', document.querySelector('input[name="password"]').value.length>=12);
-t('the confirm field matches',
-  document.querySelector('input[name="confirmPassword"]').value===document.querySelector('input[name="password"]').value);
+let r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'acme.wd1.myworkdayjobs.com',href:'https://acme.wd1.myworkdayjobs.com/apply'}});
+t('a registration form on a known ATS is filled', r.ok&&r.kind==='signup', JSON.stringify(r));
+t('the shared password is used', document.querySelector('input[name="password"]').value==='Passw0rd!');
+t('the confirm field matches', document.querySelector('input[name="confirmPassword"]').value==='Passw0rd!');
 t('the confirm-email field matches', document.querySelector('input[name="confirmEmail"]').value==='me@example.com');
 
-// The attack this rule exists to stop.
 document.body.innerHTML=form('signin');
-r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'myworkdayjobs.com.evil.example',href:'https://myworkdayjobs.com.evil.example/login'}, email:'me@example.com'});
-t('a look-alike domain gets nothing', !r.ok, JSON.stringify(r));
-t('and no password reaches the page', document.querySelector('input[name="password"]').value==='' );
+r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'myworkdayjobs.com.evil.example',href:'https://myworkdayjobs.com.evil.example/login'}});
+t('a look-alike domain gets nothing', !r.ok&&r.reason==='not-a-known-ats', JSON.stringify(r));
+t('and no password reaches the page', document.querySelector('input[name="password"]').value==='',
+  'a shared password leaked here opens every ATS account');
+
+document.body.innerHTML=form('signin');
+r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'random-phishing-site.example',href:'https://random-phishing-site.example/login'}});
+t('an unrelated site gets nothing', !r.ok&&r.reason==='not-a-known-ats', JSON.stringify(r));
+
+document.body.innerHTML=form('signin');
+r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'careers.icims.com',href:'https://careers.icims.com/login'}});
+t('sign-in on a known ATS uses the saved credential', r.ok&&r.kind==='signin', JSON.stringify(r));
 
 // ---- RULE 2: never over an insecure or credential-bearing URL ---------
 document.body.innerHTML=form('signup');
-r=await A.fillCredentialForm({document, location:{protocol:'http:',hostname:'acme.wd1.myworkdayjobs.com',href:'http://acme.wd1.myworkdayjobs.com/apply'}, email:'me@example.com'});
+r=await A.fillCredentialForm({document, location:{protocol:'http:',hostname:'acme.wd1.myworkdayjobs.com',href:'http://acme.wd1.myworkdayjobs.com/apply'}});
 t('plain http is refused', !r.ok&&r.reason==='insecure-page', JSON.stringify(r));
 t('nothing was filled over http', document.querySelector('input[name="password"]').value==='' );
-r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'acme.wd1.myworkdayjobs.com',href:'https://user:pw@acme.wd1.myworkdayjobs.com/apply'}, email:'me@example.com'});
-t('a URL carrying embedded credentials is refused',
-  !r.ok&&r.reason==='credentials-in-url', JSON.stringify(r));
+r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'acme.wd1.myworkdayjobs.com',href:'https://user:pw@acme.wd1.myworkdayjobs.com/apply'}});
+t('a URL carrying embedded credentials is refused', !r.ok&&r.reason==='credentials-in-url', JSON.stringify(r));
 
-// ---- signing in to an account made elsewhere --------------------------
-STORE={};
-document.body.innerHTML=form('signin');
-r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'careers.icims.com',href:'https://careers.icims.com/login'}, email:'me@example.com'});
-t('signing in with no saved credential does not guess a password',
-  !r.ok&&r.reason==='no-saved-credential', JSON.stringify(r));
-t('and nothing is typed into the form', document.querySelector('input[name="password"]').value==='',
-  'a wrong password can lock the account');
+// Nothing configured means nothing typed, rather than a blank submission.
+const KEEP=STORE['autofillAccount']; STORE={};
+document.body.innerHTML=form('signup');
+r=await A.fillCredentialForm({document, location:{protocol:'https:',hostname:'acme.wd1.myworkdayjobs.com',href:'https://acme.wd1.myworkdayjobs.com/apply'}});
+t('an unconfigured account fills nothing', !r.ok&&r.reason==='no-account-configured', JSON.stringify(r));
+STORE['autofillAccount']=KEEP;
 
 // ---- form recognition -------------------------------------------------
 document.body.innerHTML=form('signup');
@@ -127,9 +162,9 @@ const traced=JSON.stringify(T.redact({ ats_accounts: STORE['ats_accounts'] }));
 t('the credential vault is redacted from the trace',
   traced.indexOf(STORE['ats_accounts']['myworkdayjobs.com'].password)===-1, traced.slice(0,200));
 t('so is the Gmail token store', JSON.stringify(T.redact({followup_oauth_token:{access_token:'secret123'}})).indexOf('secret123')===-1);
-const acct=fs.readFileSync(path.join(DIR,'ats-account.js'),'utf8');
+const acctSrc=fs.readFileSync(path.join(DIR,'ats-account.js'),'utf8');
 t('the module never logs a password',
-  !/console\.(log|warn|error)\([^)]*password/i.test(acct), 'a password would reach the console');
+  !/console\.(log|warn|error)\([^)]*password/i.test(acctSrc), 'a password would reach the console');
 
 // ---- retrievable, or the generated password is lost -------------------
 const list=await A.listCredentials();
@@ -145,11 +180,11 @@ await A.removeCredential('myworkdayjobs.com');
 t('an account can be forgotten', (await A.listCredentials()).length===0);
 
 // ---- Workday's own hooks, taken from a working implementation --------
+await A.saveAccount({accountEmail:'me@example.com', accountPassword:'Passw0rd!', useProfileEmail:false});
 // Its automation IDs are stable; label matching is not. And Workday will
 // not create the account unless its checkbox is ticked -- fill everything
 // correctly, press submit, and validation fails in a way that reads as a
 // broken form.
-STORE={};
 document.body.innerHTML = `
   <div class="signUp-formWrap"><form>
     <input data-automation-id="email" type="text" />
