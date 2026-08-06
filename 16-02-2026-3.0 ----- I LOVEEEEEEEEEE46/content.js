@@ -137,7 +137,9 @@
   const SUCCESS_BANNER_MSG = '✅ Done! Match: 100% - Files attached!';
 
   const SUPPORTED_HOSTS = [
-    // Standard ATS platforms (EXCLUDES Lever and Ashby per user preference)
+    // Standard ATS platforms. Kept only as a fallback for when
+    // ats-platforms.js is unavailable; that module is the source of
+    // truth and covers considerably more than this list.
     'greenhouse.io', 'job-boards.greenhouse.io', 'boards.greenhouse.io',
     'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
     'bullhornstaffing.com', 'bullhorn.com', 'teamtailor.com',
@@ -186,7 +188,24 @@
     const normalizedHost = hostname.replace(/^www\./, '').toLowerCase();
     const pathname = window.location.pathname.toLowerCase();
 
-    // Pure ATS platforms — always supported
+    // Pure ATS platforms — always supported.
+    //
+    // Read from ats-platforms.js rather than the local list, which had
+    // drifted badly: Lever and Ashby were absent entirely, so their
+    // postings were never recognised however good the selectors were, and
+    // Cornerstone, BrassRing, Avature, Eightfold, Rippling, Dover,
+    // Pinpoint, Zoho, Occupop, Freshteam, Gusto, Paylocity, Comeet and
+    // Polymer were never added. It also said dayforce.com where the real
+    // host is dayforcehcm.com.
+    //
+    // A platform that is detected, registered and has selectors but is
+    // missing from THIS list is still dead, which is the failure this
+    // whole file has hit repeatedly.
+    try {
+      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms : window.ATSPlatforms;
+      if (AP && AP.detect(normalizedHost, window.location.href)) return true;
+    } catch (e) { /* fall through to the static lists below */ }
+
     if (ATS_ONLY_HOSTS.some((h) => normalizedHost === h || normalizedHost.endsWith(`.${h}`))) {
       return true;
     }
