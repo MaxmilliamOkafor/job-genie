@@ -106,5 +106,46 @@ for (const {id,label} of AP.list()) {
     'contact harvesting would miss this platform');
 }
 
+// ---- alternate domains of platforms already "supported" --------------
+// The dangerous gap: the platform reads as done while half its tenants are
+// on a domain nothing is registered for.
+const manifest=JSON.parse(fs.readFileSync(path.join(DIR,'manifest.json'),'utf8'));
+const registered=JSON.stringify(manifest.content_scripts)+JSON.stringify(manifest.host_permissions);
+for (const [host, platform] of [
+  ['acme.myworkdaysite.com','workday'],      // Workday's OTHER tenant domain
+  ['careers.icims.eu','icims'],              // EU tenants
+  ['career5.sapsf.eu','successfactors'],
+  ['acme.rippling-ats.com','rippling'],
+  ['acme.theresumator.com','jazzhr'],        // JazzHR's legacy domain
+  ['app.dover.io','dover'],
+]) {
+  t(host+' resolves to '+platform, AP.detect(host,'https://'+host+'/x')===platform,
+    AP.detect(host,'https://'+host+'/x'));
+  const dom=host.split('.').slice(-2).join('.');
+  t(host+' is registered in the manifest', registered.includes(dom), dom+' not permitted');
+}
+
+// ---- platforms that had no entry at all -------------------------------
+for (const [host, platform, label] of [
+  ['acme.dayforcehcm.com','dayforce','Ceridian Dayforce'],
+  ['acme.freshteam.com','freshteam','Freshteam'],
+  ['jobs.gusto.com','gusto','Gusto'],
+  ['recruiting.paylocity.com','paylocity','Paylocity'],
+  ['www.comeet.co','comeet','Comeet'],
+  ['jobs.polymer.co','polymer','Polymer'],
+]) {
+  t(label+' is detected', AP.detect(host,'https://'+host+'/x')===platform);
+  t(label+' has complete selectors',
+    ['title','company','location','description'].every(f=>(AP.PLATFORMS[platform][f]||[]).length>0));
+  const dom=host.split('.').slice(-2).join('.');
+  t(label+' is registered in the manifest', registered.includes(dom), dom+' not permitted');
+}
+
+// The four excluded stay excluded even after this expansion.
+for (const excluded of ['indeed','glassdoor','wellfound','otta']) {
+  t(excluded+' is still not claimed as a platform',
+    !AP.list().some(p=>p.id===excluded), 'was added by mistake');
+}
+
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

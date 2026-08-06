@@ -111,7 +111,20 @@
     "https://*.netflix.com/*",
     "https://*.amd.com/*",
     "https://www.metacareers.com/*",
-    "https://explore.jobs.netflix.net/*"
+    "https://explore.jobs.netflix.net/*",
+    "https://*.myworkdaysite.com/*",
+    "https://*.dayforcehcm.com/*",
+    "https://*.freshteam.com/*",
+    "https://*.gusto.com/*",
+    "https://*.paylocity.com/*",
+    "https://*.comeet.co/*",
+    "https://*.polymer.co/*",
+    "https://*.rippling-ats.com/*",
+    "https://*.theresumator.com/*",
+    "https://*.icims.eu/*",
+    "https://*.sapsf.com/*",
+    "https://*.sapsf.eu/*",
+    "https://*.dover.io/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -232,7 +245,20 @@
         "https://explore.jobs.netflix.net/*",
         "https://*.occupop.com/*",
         "https://*.wellfound.com/*",
-        "https://*.otta.com/*"
+        "https://*.otta.com/*",
+        "https://*.myworkdaysite.com/*",
+        "https://*.dayforcehcm.com/*",
+        "https://*.freshteam.com/*",
+        "https://*.gusto.com/*",
+        "https://*.paylocity.com/*",
+        "https://*.comeet.co/*",
+        "https://*.polymer.co/*",
+        "https://*.rippling-ats.com/*",
+        "https://*.theresumator.com/*",
+        "https://*.icims.eu/*",
+        "https://*.sapsf.com/*",
+        "https://*.sapsf.eu/*",
+        "https://*.dover.io/*"
       ],
       "js": [
         "ats-platforms.js",
@@ -305,7 +331,20 @@
       "matches": [
         "https://*.linkedin.com/*",
         "https://*.indeed.com/*",
-        "https://*.glassdoor.com/*"
+        "https://*.glassdoor.com/*",
+        "https://*.myworkdaysite.com/*",
+        "https://*.dayforcehcm.com/*",
+        "https://*.freshteam.com/*",
+        "https://*.gusto.com/*",
+        "https://*.paylocity.com/*",
+        "https://*.comeet.co/*",
+        "https://*.polymer.co/*",
+        "https://*.rippling-ats.com/*",
+        "https://*.theresumator.com/*",
+        "https://*.icims.eu/*",
+        "https://*.sapsf.com/*",
+        "https://*.sapsf.eu/*",
+        "https://*.dover.io/*"
       ],
       "js": [
         "ats-platforms.js",
