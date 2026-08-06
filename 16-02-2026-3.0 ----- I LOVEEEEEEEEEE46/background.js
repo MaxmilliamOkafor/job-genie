@@ -1073,7 +1073,8 @@ function syncAutofillRegistrationFromStorage() {
         chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve)
       );
       enabled = r && r.autofill_enabled === true;
-      linkedinEnabled = r && r.linkedin_autofill_enabled === true;
+      // Ships ON; an explicit false still turns it off.
+      linkedinEnabled = !!r && r.linkedin_autofill_enabled !== false;
     } catch (e) {}
     try {
       // Master toggle: vendor engine + Indeed filler.

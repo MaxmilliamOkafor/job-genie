@@ -13,7 +13,10 @@ t('send is called exactly once in the flow', (src.match(/await this\.autoSendFol
 const m=/^  async autoSendFollowup\(\) \{[\s\S]*?\n  \}/m.exec(src);
 t('method exists', !!m);
 const fn=m[0];
-t('gated on the followup_enabled toggle', /followup_enabled/.test(fn) && /!== true\)/.test(fn), fn);
+// The toggle now DEFAULTS ON, so the gate reads "=== false", not
+// "!== true". What matters is that it is read and that it can stop a send.
+t('gated on the followup_enabled toggle',
+  /followup_enabled/.test(fn) && /cfg\.followup_enabled === false/.test(fn) && /return;/.test(fn), fn);
 t('requires a found recipient', /if \(!ctx\.email\)/.test(fn));
 t('requires documents to attach', /followupAttachments\(\)/.test(fn) && /!files\.length/.test(fn), fn);
 t('routes through followupSend, so anti-spam policy applies', /this\.followupSend\(\{ test: false \}\)/.test(fn));

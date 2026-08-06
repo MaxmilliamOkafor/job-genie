@@ -868,7 +868,7 @@ class ATSTailor {
     document.getElementById('linkedinAutoSubmitToggle')?.addEventListener('change', async (e) => {
       const enabled = !!e.target?.checked;
       if (enabled) {
-        const adv = await new Promise((r) => chrome.storage.local.get(['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled === true)));
+        const adv = await new Promise((r) => chrome.storage.local.get(['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled !== false)));
         if (!adv) {
           e.target.checked = false;
           this.showToast('Turn on Auto-advance first', 'error');
@@ -1444,15 +1444,17 @@ class ATSTailor {
     if (workdayToggle) workdayToggle.checked = enabled;
     // LinkedIn Easy Apply is an independent preference (also default OFF).
     const liToggle = document.getElementById('linkedinAutofillToggle');
-    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
+    // These four ship ON. An explicit false still wins, so switching one
+    // off survives a popup reopen; only "never set" means on.
+    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled !== false;
     const advToggle = document.getElementById('linkedinAutoAdvanceToggle');
-    if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled === true;
+    if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled !== false;
     const subToggle = document.getElementById('linkedinAutoSubmitToggle');
-    if (subToggle) subToggle.checked = result.linkedin_autosubmit_enabled === true;
+    if (subToggle) subToggle.checked = result.linkedin_autosubmit_enabled !== false;
     this.syncLinkedInAutoUI();
     // Follow-up email: preference, saved template, and live Gmail status.
     const fuToggle = document.getElementById('followupEnabledToggle');
-    if (fuToggle) fuToggle.checked = result.followup_enabled === true;
+    if (fuToggle) fuToggle.checked = result.followup_enabled !== false;
     // Defaults ON: attaching the tailored documents is the useful case.
     const atToggle = document.getElementById('followupAttachToggle');
     if (atToggle) atToggle.checked = result.followup_attach_enabled !== false;
@@ -2174,7 +2176,7 @@ class ATSTailor {
   // rather than letting the user arm a switch that cannot fire.
   syncLinkedInAutoUI() {
     chrome.storage.local.get(['linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled'], (r) => {
-      const adv = r?.linkedin_autoadvance_enabled === true;
+      const adv = r?.linkedin_autoadvance_enabled !== false;
       const sub = document.getElementById('linkedinAutoSubmitToggle');
       const help = document.getElementById('linkedinAutoSubmitHelp');
       if (sub) {
@@ -2277,7 +2279,7 @@ class ATSTailor {
       let flowMode = false;
       if (site === 'linkedin') {
         const adv = await new Promise((r) => chrome.storage.local.get(
-          ['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled === true)));
+          ['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled !== false)));
         if (adv) { entryFn = '__JG_LINKEDIN_APPLY_NOW__'; flowMode = true; }
       }
 
@@ -2741,7 +2743,7 @@ class ATSTailor {
         return;
       }
       const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
-      if (cfg.followup_enabled !== true) {
+      if (cfg.followup_enabled === false) {
         await outcome('disabled',
           'Follow-up email is switched off, so no note was sent. Turn on '
           + '"Application Follow-up Email" in Settings.', 'warning');
@@ -3195,7 +3197,7 @@ class ATSTailor {
       //    else works -- and it was silent about it.
       const st = await new Promise((r) => chrome.storage.local.get(
         ['followup_enabled', 'followup_attach_enabled', 'followup_last_outcome'], (x) => r(x || {})));
-      if (st.followup_enabled === true) ok('Follow-up email is ON');
+      if (st.followup_enabled !== false) ok('Follow-up email is ON');
       else bad('Follow-up email is OFF, so nothing will send',
         'turn on "Application Follow-up Email" in Settings');
       if (st.followup_attach_enabled === false) {
@@ -3205,11 +3207,20 @@ class ATSTailor {
       // 3. Gmail. Without a token the send fails at the last step.
       let gmailReady = false;
       let gmailMode = '';
+      let gmailLive = false;
       try {
         gmailReady = typeof FollowupEmail !== 'undefined' && !!(await FollowupEmail.isConnected());
         gmailMode = typeof FollowupEmail !== 'undefined' ? await FollowupEmail.authMode() : '';
+        // Connected is about the GRANT. A token expires hourly and is
+        // reissued silently, so a missing one is worth noting, not fixing.
+        if (gmailReady && typeof FollowupEmail.hasLiveToken === 'function') {
+          gmailLive = await FollowupEmail.hasLiveToken();
+        }
       } catch (e) { gmailReady = false; }
-      if (gmailReady) ok('Gmail connected', gmailMode ? 'via ' + gmailMode + ' client' : '');
+      if (gmailReady) {
+        ok('Gmail connected', (gmailMode ? 'via ' + gmailMode + ' client' : '')
+          + (gmailLive ? '' : ' (token expired - it will be reissued silently on the next send)'));
+      }
       else if (gmailMode === 'unconfigured') {
         // No OAuth client at all: the API send cannot work, but the compose
         // path can, and it needs no Cloud Console project.

@@ -418,11 +418,35 @@
     });
   }
 
+  // Preferences that ship ON. Everything else stays opt-in, so this list is
+  // the whole statement of what the extension does without being asked.
+  //
+  // Kept here because isToggleOn is the single place every content script
+  // reads a preference: a default expressed in one script and not another
+  // is how a toggle ends up ON in the popup and OFF in the page.
+  //
+  // Note what this means in practice: with all four on, opening a LinkedIn
+  // Easy Apply job fills it, advances it, submits it, and then emails a
+  // published contact -- end to end, with no click. Submission cannot be
+  // undone and goes to a real employer.
+  const DEFAULT_ON = new Set([
+    'linkedin_autofill_enabled',
+    'linkedin_autoadvance_enabled',
+    'linkedin_autosubmit_enabled',
+    'followup_enabled',
+  ]);
+
   function isToggleOn(key) {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get([key], (r) => resolve(!!(r && r[key] === true)));
+        chrome.storage.local.get([key], (r) => {
+          const v = r && r[key];
+          // An explicit false always wins: turning something off must
+          // survive, which "undefined means on" would otherwise undo.
+          resolve(DEFAULT_ON.has(key) ? v !== false : v === true);
+        });
       } catch (e) {
+        // A storage failure must not silently start submitting applications.
         resolve(false);
       }
     });
@@ -430,7 +454,7 @@
 
   global.AutofillCore = {
     __jg: true,
-    labelFor, questionFor, answerFor, fillContainer, loadProfile, isToggleOn,
+    labelFor, questionFor, answerFor, fillContainer, loadProfile, isToggleOn, DEFAULT_ON,
     setValue, fillSelect, fillRadioGroup, fillCustomDropdown,
     isVisible, optionMatches, escapeSelector, DEFAULTS,
   };

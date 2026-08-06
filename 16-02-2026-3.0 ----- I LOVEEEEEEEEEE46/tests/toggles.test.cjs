@@ -33,7 +33,9 @@ for(const [id,key,owner] of SPEC){
   }
 }
 // followup_enabled must be READ, not just stored -- the original bug.
-t('followup_enabled is acted on, not decorative', js.includes('cfg.followup_enabled !== true)'), 'nothing reads it');
+// Default-on: the gate is "=== false". Still a real gate, still read.
+t('followup_enabled is acted on, not decorative',
+  js.includes('cfg.followup_enabled === false'), 'nothing reads it');
 t('followup_attach_enabled is acted on', js.includes('followup_attach_enabled'));
 // auto-submit must depend on auto-advance
 t('auto-submit requires auto-advance', js.includes('Turn on Auto-advance first'));
