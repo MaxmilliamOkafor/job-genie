@@ -323,11 +323,10 @@
       // Nothing to do when this page has the description itself.
       if ((info.description || '').trim().length > 400) return info;
       const url = window.location.href;
-      const remembered = await JDContext.recall(url, { tabId: await myTabId() });
+      const onApply = JDContext.isApplicationPage(document, url);
+      const remembered = await JDContext.recall(url, { tabId: await myTabId(), isApplicationPage: onApply });
       if (!remembered) return info;
-      const merged = JDContext.merge(info, remembered, {
-        isApplicationPage: JDContext.isApplicationPage(document, url),
-      });
+      const merged = JDContext.merge(info, remembered, { isApplicationPage: onApply });
       if ((merged.description || '').length > (info.description || '').length) {
         console.log('[ATS Tailor] job description restored from the posting via',
           remembered._via + ':', (merged.description || '').length, 'chars');

@@ -67,7 +67,83 @@
   const SUBMIT_TOGGLE = 'linkedin_autosubmit_enabled';
   const MAX_STEPS = 15;              // Easy Apply is never this long
   const STEP_TIMEOUT_MS = 8000;
-  const log = (...a) => { try { console.log(TAG, ...a); } catch (e) {} };
+  // ---- tracing ---------------------------------------------------------
+  // This module runs in the PAGE, not the popup, so the popup's tracer
+  // cannot see any of it -- and the page console is gone the moment the
+  // tab navigates. Every decision is therefore recorded into a ring
+  // buffer in chrome.storage.local, which the popup's trace export reads
+  // back and prints alongside its own. Without it, "the autofill did
+  // nothing" carries no information about WHICH of a dozen early returns
+  // was taken.
+  const TRACE_KEY = 'jg_linkedin_trace';
+  const TRACE_MAX = 400;
+  const _traceBuf = [];
+  let _traceFlush = null;
+  const _t0 = Date.now();
+
+  function trace(event, data) {
+    try {
+      _traceBuf.push({
+        ms: Date.now() - _t0,
+        at: new Date().toISOString(),
+        url: (location.href || '').slice(0, 140),
+        frame: window.top === window ? 'top' : 'iframe',
+        event,
+        data: data === undefined ? undefined : _redact(data),
+      });
+      if (_traceBuf.length > TRACE_MAX) _traceBuf.splice(0, _traceBuf.length - TRACE_MAX);
+      clearTimeout(_traceFlush);
+      _traceFlush = setTimeout(_flushTrace, 400);
+    } catch (e) {}
+  }
+
+  // The profile flows through here. Names and answers are the user's own,
+  // but the trace is written to be pasted into a bug report, so anything
+  // credential-shaped never reaches the buffer.
+  const _SECRET = /(pass(word)?|token|api_?key|secret|auth|bearer|credential)/i;
+  function _redact(v, depth) {
+    const d = depth || 0;
+    if (v === null || v === undefined) return v;
+    const ty = typeof v;
+    if (ty === 'string') return v.length > 160 ? v.slice(0, 160) + '…' : v;
+    if (ty === 'number' || ty === 'boolean') return v;
+    if (ty === 'function') return '[fn]';
+    if (d > 2) return '[…]';
+    if (Array.isArray(v)) return v.slice(0, 12).map((x) => _redact(x, d + 1));
+    if (v && v.nodeType) return '[dom ' + (v.tagName || v.nodeName) + ']';
+    if (ty === 'object') {
+      const out = {};
+      let n = 0;
+      for (const k of Object.keys(v)) {
+        if (n++ > 24) { out['…'] = 'more'; break; }
+        out[k] = _SECRET.test(k) ? '[redacted]' : _redact(v[k], d + 1);
+      }
+      return out;
+    }
+    return String(v);
+  }
+
+  function _flushTrace() {
+    try {
+      chrome.storage.local.get([TRACE_KEY], (r) => {
+        try {
+          const prev = (r && r[TRACE_KEY]) || [];
+          const merged = prev.concat(_traceBuf).slice(-TRACE_MAX);
+          _traceBuf.length = 0;
+          chrome.storage.local.set({ [TRACE_KEY]: merged }, () => {});
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  // Everything already logged to the console is traced too, so the two
+  // never disagree about what happened.
+  const log = (...a) => {
+    try { console.log(TAG, ...a); } catch (e) {}
+    try { trace('log', a.length === 1 ? a[0] : a); } catch (e) {}
+  };
+
+  window.__JG_LINKEDIN_TRACE__ = () => _traceBuf.slice();
 
   function core() { return window.AutofillCore; }
 
@@ -123,13 +199,94 @@
     return btn.parentElement || null;
   }
 
+  /**
+   * Does this container carry the machinery of an application STEP?
+   *
+   * Matching the words "easy apply" alone matched the job pane itself --
+   * the blue CTA on every job page says exactly that. Once the pane was
+   * treated as a dialog, the first button anywhere inside it that looked
+   * like a submit was clicked and the run reported
+   *     "Application submitted after 1 step(s)"
+   * with no dialog ever opened and nothing submitted.
+   *
+   * A real step always has a footer control that advances or sends it.
+   * Nothing else counts.
+   */
+  // Unambiguous on their own -- no other control on LinkedIn says these.
+  const STEP_TEXT = /^(submit application|submit your application|send application|review your application|continue to next step|continue applying)$/;
+  // The real dialog's footer often just says "Next". So does a cookie
+  // banner and a notifications dropdown, which is why this wording only
+  // counts when the container also holds form fields to fill.
+  const WEAK_STEP_TEXT = /^(next|review|continue)$/;
+
+  // A step lives in a dialog. The job pane does not, and that is what
+  // structurally separates the real thing from the page behind it --
+  // far more reliable than any wording, which is shared by both.
+  const DIALOG_SEL = [
+    '.jobs-easy-apply-modal', '[data-test-modal]', '[role="dialog"]', 'dialog',
+    '.artdeco-modal', '[data-sdui-screen]',
+  ].join(',');
+
+  function _isDialogish(el) {
+    try { return !!(el && (el.matches(DIALOG_SEL) || el.closest(DIALOG_SEL))); }
+    catch (e) { return false; }
+  }
+
+  function _hasStepMachinery(el) {
+    try {
+      if (!el) return false;
+      // A labelled footer control is proof by itself.
+      if (el.querySelector(FOOTER_BTN_SEL)) return true;
+      const btns = el.querySelectorAll('button, [role="button"]');
+      for (const b of btns) {
+        const t = (b.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (STEP_TEXT.test(t)) return true;
+      }
+      // Weak wording needs corroboration: something to actually fill.
+      const fields = el.querySelectorAll('input:not([type=hidden]), select, textarea').length;
+      if (!fields) return false;
+      for (const b of btns) {
+        const t = (b.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (WEAK_STEP_TEXT.test(t)) return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** LinkedIn's own confirmation that the application went. */
+  function _submissionConfirmed() {
+    try {
+      const t = (document.body.textContent || '').toLowerCase();
+      return /your application was sent|application sent|application submitted|premium can help you/.test(t);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _describe(el) {
+    if (!el) return null;
+    try {
+      return {
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        cls: String(el.className || '').slice(0, 90),
+        role: el.getAttribute('role') || '',
+        aria: (el.getAttribute('aria-label') || '').slice(0, 60),
+        fields: el.querySelectorAll('input, select, textarea').length,
+        text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90),
+      };
+    } catch (e) { return { err: String(e && e.message) }; }
+  }
+
   function findEasyApplyModal() {
     // 1. Button-first. The most reliable signal on the page.
     for (const btn of document.querySelectorAll(FOOTER_BTN_SEL)) {
       try {
         if (!_rendered(btn)) continue;
         const c = _containerFor(btn);
-        if (c) return c;
+        if (c && _isDialogish(c)) { trace('modal.found', { via: 'footer-aria', el: _describe(c) }); return c; }
       } catch (e) {}
     }
 
@@ -138,10 +295,13 @@
       try {
         if (!_rendered(btn)) continue;
         const t = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        if (!/^(next|continue|review|submit application|submit your application|send application)/.test(t)) continue;
+        // EXACT step wording. "starts with" let anything beginning
+        // "continue…" or "review…" nominate an entire page region as a
+        // dialog.
+        if (!STEP_TEXT.test(t) && !WEAK_STEP_TEXT.test(t)) continue;
         const c = _containerFor(btn);
-        // Guard against unrelated "Next" buttons elsewhere on the page.
-        if (c && /apply|contact info|resume|work authoris|work authoriz/i.test((c.textContent || '').slice(0, 800))) {
+        if (c && _isDialogish(c) && _hasStepMachinery(c)) {
+          trace('modal.found', { via: 'step-text', btn: t, el: _describe(c) });
           return c;
         }
       } catch (e) {}
@@ -158,8 +318,14 @@
     for (const el of candidates) {
       try {
         if (!_rendered(el)) continue;
+        // The WORDS are not enough: "Easy Apply" is the label of the CTA
+        // on every job page, so any rendered dialog near it matched.
+        if (!_hasStepMachinery(el)) continue;
         const label = (el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '').slice(0, 600);
-        if (/easy apply|apply to |submit application|review your application|contact info/i.test(label)) return el;
+        if (/easy apply|apply to |submit application|review your application|contact info/i.test(label)) {
+          trace('modal.found', { via: 'container', el: _describe(el) });
+          return el;
+        }
       } catch (e) {}
     }
     return null;
@@ -265,7 +431,11 @@
   // Easy Apply dialog first." -- which is actively wrong on the contact
   // step, where LinkedIn prefills name, phone and email from the profile.
   async function runFill(reason) {
-    const none = (why) => ({ found: false, filled: 0, alreadySet: 0, answerable: 0, why });
+    const none = (why) => {
+      trace('fill.skipped', { reason, why });
+      return { found: false, filled: 0, alreadySet: 0, answerable: 0, why };
+    };
+    trace('fill.start', { reason });
     const C = core();
     if (!C) return none('core-missing');
     if (_busy) return none('busy');
@@ -286,8 +456,10 @@
       }
       // Before the fields: the resume step blocks Continue on a click,
       // not on a value, so filling everything else still leaves it stuck.
-      selectResumeIfNone(modal);
+      trace('resume.step', { outcome: selectResumeIfNone(modal) });
       const r = await C.fillContainer(modal, profile, {});
+      trace('fill.done', { reason, filled: r.filled, alreadySet: r.alreadySet, answerable: r.answerable,
+        step: sig.slice(0, 120) });
       _lastSignature = sig;
       if (r.filled > 0) log('filled ' + r.filled + ' field(s) on this step (' + reason + ')');
       return { found: true, filled: r.filled, alreadySet: r.alreadySet, answerable: r.answerable, why: 'ok' };
@@ -506,10 +678,51 @@
     }
   }
 
+  // THE "EASY APPLY" SEARCH FILTER IS NOT AN APPLY BUTTON.
+  //
+  // On the jobs search page LinkedIn shows a filter pill whose text is
+  // exactly "Easy Apply". It matched the CTA test perfectly, so the flow
+  // clicked it -- and clicking it re-runs the search with the filter
+  // toggled. That is the "randomly searching or reloading different
+  // roles" that was reported: not an application at all, just the filter
+  // being switched on and off.
+  const FILTER_SCOPE = [
+    '[class*="search-reusables"]', '[class*="filter-pill"]', '[class*="filters-bar"]',
+    '[class*="search-results-header"]', '.jobs-search-box', 'form[role="search"]',
+    '[role="radiogroup"]', '[role="toolbar"]', 'header', 'nav',
+  ].join(',');
+
+  function _isSearchFilter(el) {
+    try {
+      if (!el) return false;
+      if (el.closest(FILTER_SCOPE)) return true;
+      // A filter is a TOGGLE and says so; an apply button never does.
+      if (el.hasAttribute('aria-pressed')) return true;
+      const r = (el.getAttribute('role') || '').toLowerCase();
+      return r === 'radio' || r === 'checkbox' || r === 'switch';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Where a real CTA lives: on the job itself, not in the page chrome.
+  const CTA_SCOPE = [
+    '.jobs-apply-button', '.jobs-search__job-details', '.jobs-details',
+    '.job-view-layout', '.jobs-details__main-content',
+    '[class*="jobs-unified-top-card"]', '[class*="job-details-jobs-unified-top-card"]',
+  ].join(',');
+
+  function _inJobPane(el) {
+    try { return !!(el && el.closest(CTA_SCOPE)); } catch (e) { return false; }
+  }
+
   function _looksLikeEasyApplyCta(c) {
     if (!c.ok) return false;
     if (c.el.closest('[role="dialog"], dialog, .artdeco-modal')) return false;
     if (_isExternalApply(c.el)) return false;
+    // Both required: never a filter, and it must belong to a job.
+    if (_isSearchFilter(c.el)) return false;
+    if (!_inJobPane(c.el)) return false;
     // A real CTA is a short button; a job card carries the whole listing.
     if (/^easy apply\b/i.test(c.aria)) return true;
     if (/\beasy apply\b/i.test(c.aria) && c.aria.length < 120) return true;
@@ -533,6 +746,7 @@
     const hook = cands.find((c) => c.why === 'cta-hook' && c.ok
       && !c.el.closest('[role="dialog"], dialog, .artdeco-modal')
       && !_isExternalApply(c.el)
+      && !_isSearchFilter(c.el)
       && /\beasy apply\b/i.test(c.txt + ' ' + c.aria));
     if (hook) return hook.el;
     const match = cands.find(_looksLikeEasyApplyCta);
@@ -676,7 +890,11 @@
 
   async function runAutoFlow(reason) {
     const C = core();
-    const done = (status, detail, steps) => ({ status, detail: detail || '', steps: steps || 0 });
+    const done = (status, detail, steps) => {
+      trace('flow.end', { reason, status, detail: detail || '', steps: steps || 0 });
+      return { status, detail: detail || '', steps: steps || 0 };
+    };
+    trace('flow.start', { reason, jobId: currentJobId() });
     if (!C) return done('error', 'autofill core not loaded');
     if (_running) return done('busy', 'a run is already in progress');
     if (!(await C.isToggleOn(TOGGLE))) return done('off', 'LinkedIn autofill toggle is off');
@@ -714,6 +932,7 @@
 
         const missing = unansweredRequired(modal);
         if (missing.length) {
+          trace('step.blocked', { step: steps + 1, missing: missing.slice(0, 6) });
           return done('needs-you',
             'Stopped on a required question the profile has no answer for: '
             + missing.slice(0, 3).join('; '), steps);
@@ -729,11 +948,27 @@
         }
 
         const sig = stepSignature(modal);
+        trace('step.click', { kind: btn.kind, step: steps + 1,
+          label: (btn.el.getAttribute('aria-label') || btn.el.textContent || '').trim().slice(0, 60),
+          button: _describe(btn.el), inside: _describe(modal) });
         btn.el.click();
         log('clicked ' + btn.kind + ' (step ' + (steps + 1) + ')');
 
         if (btn.kind === 'submit') {
-          await sleep(1200);
+          await sleep(1400);
+          // Clicking a button is not evidence that an application was
+          // sent. Reporting "Application submitted after 1 step(s)" when
+          // nothing happened is worse than reporting a failure: it looks
+          // like success and hides the bug. Require the dialog to have
+          // closed, the step to have changed, or LinkedIn to say so.
+          const still = findEasyApplyModal();
+          const confirmed = !still || stepSignature(still) !== sig || _submissionConfirmed();
+          if (!confirmed) {
+            trace('submit.unconfirmed', { step: steps + 1 });
+            return done('stuck',
+              'Pressed Submit but nothing on the page changed — the application was NOT sent.',
+              steps + 1);
+          }
           return done('submitted', 'Application submitted.', steps + 1);
         }
 
@@ -809,7 +1044,15 @@
       // The dialog being ALREADY OPEN is the user's decision to apply.
       // Without it there is nothing here to continue.
       const open = findEasyApplyModal();
-      if (!open) return;
+      if (!open) {
+        // The activation rule. Seeing this in the trace is what tells the
+        // difference between "the extension is broken" and "no dialog is
+        // open, which is correct".
+        trace('idle', { reason, why: 'no Easy Apply dialog open -- waiting for the user to press it',
+          easyApplyButtonOnPage: !!findEasyApplyLaunch(), jobId: currentJobId() });
+        return;
+      }
+      trace('active', { reason, jobId: currentJobId() });
 
       if (await C.isToggleOn(AUTO_TOGGLE)) {
         const r = await runAutoFlow(reason);

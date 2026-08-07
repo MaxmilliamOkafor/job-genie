@@ -232,12 +232,20 @@
     const exact = list.find((e) => e.key === key);
     if (exact) return Object.assign({}, exact.job, { _via: 'key' });
 
-    // 2. the same tab, recently -- the user pressed Apply here
-    if (o.tabId !== undefined && o.tabId !== null) {
+    // 2. the same tab, recently -- but ONLY on an application page.
+    //
+    // Tab lineage exists for one situation: a careers site handing off to
+    // an ATS on another domain, where nothing in the URL connects the two.
+    // Applied to any same-tab navigation it is actively wrong -- browsing
+    // from job A to job B in one tab made B inherit A's description and,
+    // worse, A's contact address. An email about job B would have gone to
+    // company A's recruiter.
+    //
+    // A page that carries its own posting needs no lineage; only a form
+    // page does. That is the whole and only case.
+    if (o.isApplicationPage && o.tabId !== undefined && o.tabId !== null) {
       const now = Date.now();
       const sameTab = list.find((e) => e.tabId === o.tabId && (now - e.at) < TAB_LINEAGE_MS);
-      // Cross-domain is legitimate here (a careers site handing off to an
-      // ATS), and the tab is what ties them together.
       if (sameTab) return Object.assign({}, sameTab.job, { _via: 'tab' });
     }
 
@@ -248,7 +256,12 @@
       if (_domain(e.host) !== dom) return false;
       let p = '';
       try { p = new URL(e.url).pathname.toLowerCase().replace(/\/+$/, ''); } catch (e2) { return false; }
-      return p && p !== '/' && path.indexOf(p) === 0;
+      if (!p || p === '/') return false;
+      // The prefix must end on a path SEGMENT boundary. A bare
+      // startsWith makes /jobs/1234 a child of /jobs/123, so two unrelated
+      // postings whose ids share a prefix contaminate each other.
+      if (path === p) return true;
+      return path.indexOf(p + '/') === 0;
     });
     if (under.length) {
       under.sort((a, b) => (b.at - a.at));
@@ -319,13 +332,16 @@
   async function reconcile(fresh, opts) {
     const o = opts || {};
     const url = o.url || (fresh && fresh.url) || '';
-    const remembered = await recall(url, o);
+    // Decided FIRST, because recall needs it too: tab lineage is only
+    // legitimate on a page that carries no posting of its own.
+    //
     // URL-only unless the caller hands us the PAGE's document. The popup
     // calls this, and its ambient `document` is the popup's own DOM --
     // inspecting that would answer a question about the wrong page.
     const onApply = (o.isApplicationPage !== undefined)
       ? o.isApplicationPage
       : (o.doc ? isApplicationPage(o.doc, url) : APPLY_URL.test(url));
+    const remembered = await recall(url, Object.assign({}, o, { isApplicationPage: onApply }));
     const merged = merge(fresh, remembered, { isApplicationPage: onApply });
     if (url) await capture(merged, { url, tabId: o.tabId });
     return merged;

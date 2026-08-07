@@ -215,11 +215,38 @@ const THIN = { title: 'Apply', company: '', location: '', description: '', url: 
   console.log('\nTAB LINEAGE (a careers site handing off to an ATS)');
   STORE = {};
   await JC.capture(POSTING, { url: 'https://careers.acme-corp.test/roles/pm-dublin', tabId: 11 });
-  const cross = await JC.recall('https://boards.greenhouse.io/acme/jobs/5477345004/application', { tabId: 11 });
+  const APPLY = 'https://boards.greenhouse.io/acme/jobs/5477345004/application';
+  const cross = await JC.recall(APPLY, { tabId: 11, isApplicationPage: true });
   t('the posting follows the user across the handoff', !!cross, 'nothing recalled');
   t('  and says so', cross && cross._via === 'tab', cross && cross._via);
-  const otherTab = await JC.recall('https://boards.greenhouse.io/acme/jobs/5477345004/application', { tabId: 99 });
+  const otherTab = await JC.recall(APPLY, { tabId: 99, isApplicationPage: true });
   t('a DIFFERENT tab gets nothing', !otherTab, 'leaked into another tab');
+
+  // The rule that makes tab lineage safe. Without it, browsing from job A
+  // to job B in one tab made B inherit A's description AND A's contact
+  // address -- an email about job B addressed to company A's recruiter.
+  console.log('\nTAB LINEAGE IS ONLY FOR APPLICATION PAGES');
+  STORE = {};
+  await JC.capture(POSTING, { url: JD_URL, tabId: 11 });
+  const nextJob = 'https://boards.greenhouse.io/globex/jobs/9999999999';
+  t('a DIFFERENT posting in the same tab inherits nothing',
+    !(await JC.recall(nextJob, { tabId: 11, isApplicationPage: false })),
+    'the previous job leaked onto an unrelated posting');
+  const leaked = JC.merge({ title: 'Data Engineer', company: 'Globex', description: '', url: nextJob },
+    await JC.recall(nextJob, { tabId: 11, isApplicationPage: false }));
+  t('...so it cannot inherit the other employer\'s address',
+    !(leaked.emails || []).length, JSON.stringify(leaked.emails));
+  t('...and its APPLY page still can, which is the point',
+    !!(await JC.recall(JD_URL + '/apply', { tabId: 11, isApplicationPage: true })));
+
+  console.log('\nPATH LINEAGE NEEDS A SEGMENT BOUNDARY');
+  STORE = {};
+  await JC.capture(POSTING, { url: 'https://boards.greenhouse.io/acme/jobs/123', tabId: 1 });
+  t('/jobs/1234 is not a child of /jobs/123',
+    !(await JC.recall('https://boards.greenhouse.io/acme/jobs/1234', { tabId: 2 })),
+    'sibling ids sharing a prefix contaminated each other');
+  t('/jobs/123/apply still is',
+    !!(await JC.recall('https://boards.greenhouse.io/acme/jobs/123/apply', { tabId: 2 })));
 
   console.log('\nTHE LIMITS (a context must never reach another employer)');
   STORE = {};
