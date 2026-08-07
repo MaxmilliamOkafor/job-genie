@@ -280,7 +280,53 @@
     } catch (e) { return { err: String(e && e.message) }; }
   }
 
+  // Why each dialog-shaped element on the page was accepted or rejected.
+  // Filled on every detection run and reported by the diagnostic, because
+  // "dialog: none" with the dialog plainly open in front of you is not a
+  // diagnosis -- it is the absence of one.
+  let _lastRejections = [];
+
+  /**
+   * What a person sees: a dialog, about an application, with something in
+   * it to fill or a control to advance it.
+   *
+   * Tried BEFORE the button-first paths. Those work backwards from a
+   * footer control and depend on its exact wording, and LinkedIn's varies
+   * -- "Next" here, "Continue to next step" elsewhere, translated on a
+   * non-English interface. The shape does not vary.
+   */
+  const APPLYISH = /apply to |easy apply|contact info|submit application|review your application|additional questions|work authoris|work authoriz|resume|your application/;
+
+  function _directDialog() {
+    _lastRejections = [];
+    for (const el of document.querySelectorAll(DIALOG_SEL)) {
+      let note = null;
+      try {
+        const rendered = _rendered(el);
+        const fields = el.querySelectorAll(
+          'input:not([type=hidden]):not([type=submit]), select, textarea').length;
+        const machinery = _hasStepMachinery(el);
+        const label = ((el.getAttribute('aria-label') || '') + ' '
+          + (el.textContent || '').slice(0, 600)).toLowerCase();
+        const applyish = APPLYISH.test(label);
+        if (rendered && applyish && (machinery || fields)) {
+          trace('modal.found', { via: 'dialog-shape', el: _describe(el) });
+          return el;
+        }
+        note = { el: _describe(el), rendered, fields, machinery, applyish };
+      } catch (e) {
+        note = { err: String(e && e.message) };
+      }
+      _lastRejections.push(note);
+    }
+    return null;
+  }
+
   function findEasyApplyModal() {
+    // 0. The shape, which is what actually identifies it.
+    const direct = _directDialog();
+    if (direct) return direct;
+
     // 1. Button-first. The most reliable signal on the page.
     for (const btn of document.querySelectorAll(FOOTER_BTN_SEL)) {
       try {
@@ -393,6 +439,9 @@
       })),
       launchFound: !!findEasyApplyLaunch(),
       modalFound: !!modal,
+      // Every dialog-shaped element that was NOT accepted, and which
+      // condition it failed. This is the line that names the bug.
+      dialogsRejected: _lastRejections.slice(0, 6),
       modal: brief(modal),
       inputsInModal: modal ? modal.querySelectorAll('input, select, textarea').length : 0,
     };

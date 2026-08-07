@@ -41,6 +41,8 @@ const consts = [
   /const STEP_TEXT = .*;/.exec(src)[0],
   /const WEAK_STEP_TEXT = .*;/.exec(src)[0],
   /const DIALOG_SEL = \[[\s\S]*?\]\.join\(','\);/.exec(src)[0],
+  /const APPLYISH = .*;/.exec(src)[0],
+  'let _lastRejections = [];',
 ].join('\n');
 const body = [
   consts,
@@ -49,6 +51,7 @@ const body = [
   'const _traced = []; function trace(ev, d) { _traced.push([ev, d]); }',
   extract('_rendered'), extract('_containerFor'), extract('_describe'),
   extract('_isDialogish'), extract('_hasStepMachinery'), extract('_submissionConfirmed'),
+  extract('_directDialog'),
   extract('findEasyApplyModal'),
 ].join('\n');
 
@@ -156,6 +159,58 @@ const REAL_DIALOG = `<!doctype html><html><body>
   t('...and it is the dialog, not the job pane behind it',
     !!m && !m.error && /artdeco-modal/.test(String(m.className || '')),
     'matched <' + (m && m.tagName) + ' class="' + (m && m.className) + '">');
+}
+
+// ---- the page from the THIRD screenshot ------------------------------
+// "Apply to Lawrence Harvey" open over the results list, with the
+// Jobright panel and the messaging overlay also present. The popup
+// reported "No Easy Apply dialog found on this page" with the dialog
+// plainly open, so detection is exercised against the whole page rather
+// than the dialog in isolation.
+console.log('\nTHE "APPLY TO LAWRENCE HARVEY" PAGE  (dialog open over the list)');
+const WHOLE_PAGE = `<!doctype html><html><head><title>Jobs | LinkedIn</title></head><body>
+<div class="search-reusables__filter-bar" role="toolbar">
+  <button aria-pressed="true"><span>Easy Apply</span></button></div>
+<div class="scaffold-layout__list"><ul>
+  <li data-occludable-job-id="1"><a class="job-card-container__link" href="/jobs/view/1/">ML Platform Engineer</a></li>
+  <li data-occludable-job-id="2"><a class="job-card-container__link" href="/jobs/view/2/">AI Engineer</a></li>
+  <li data-occludable-job-id="3"><a class="job-card-container__link" href="/jobs/view/3/">AI Developer</a></li>
+</ul></div>
+<div class="jobs-search__job-details">
+  <h1 class="job-details-jobs-unified-top-card__job-title">AI Engineer</h1>
+  <div class="jobs-apply-button"><button aria-label="Easy Apply to AI Engineer"><span>Easy Apply</span></button></div>
+  <aside><button>Tailor my resume</button><button>Show match details</button>
+    <button>Help me stand out</button></aside>
+  <section><h3>People you can reach out to</h3><button>Show all</button></section>
+</div>
+<div role="dialog" class="msg-overlay-conversation-bubble">
+  <header>Messaging</header><textarea></textarea><button>Send</button></div>
+<div class="artdeco-modal artdeco-modal--layer-default" role="dialog"
+     aria-label="Apply to Lawrence Harvey">
+  <h2>Apply to Lawrence Harvey</h2>
+  <progress value="0" max="100"></progress>
+  <h3>Contact info</h3>
+  <img alt="Maxmilliam Okafor">
+  <label for="em">Email address*</label>
+  <select id="em"><option>Maxokafordev@gmail.com</option></select>
+  <label for="cc">Phone country code*</label>
+  <select id="cc"><option>Ireland (+353)</option></select>
+  <label for="ph">Mobile phone number*</label><input id="ph" value="874261508">
+  <p>Submitting this application won't change your LinkedIn profile.</p>
+  <footer><button><span>Next</span></button></footer>
+</div></body></html>`;
+{
+  const m = detect(WHOLE_PAGE);
+  t('the open dialog is found, with the whole page around it',
+    !!m && !m.error && /artdeco-modal/.test(String(m.className || '')),
+    m && m.error ? m.error
+      : 'matched <' + (m && m.tagName) + ' class="' + (m && m.className) + '"> — '
+        + 'the popup said "No Easy Apply dialog found" with this on screen');
+  t('...and it is the application dialog, not the messaging overlay',
+    !!m && !/msg-overlay/.test(String(m.className || '')));
+  t('...and it holds the fields to fill',
+    !!m && !m.error && m.querySelectorAll('input, select').length === 3,
+    'fields: ' + (m && !m.error ? m.querySelectorAll('input, select').length : 'n/a'));
 }
 
 // ---- the manual button must only FILL --------------------------------
