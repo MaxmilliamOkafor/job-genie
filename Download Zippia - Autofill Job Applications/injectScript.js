@@ -1,0 +1,1 @@
+(()=>{var __webpack_exports__={};if(window){window.zippiaJaa={isInstalled:true,lastAccessDate:Date.now(),integrationVersion:1,jaaVersion:"2.9.4.60804"};window.dispatchEvent(new CustomEvent("zippiaJaa:installed"))}})();
