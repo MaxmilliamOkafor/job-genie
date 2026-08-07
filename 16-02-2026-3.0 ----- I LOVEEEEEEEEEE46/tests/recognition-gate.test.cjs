@@ -152,9 +152,9 @@ const backgroundJs=fs.readFileSync(path.join(DIR,'background.js'),'utf8');
 t('a LinkedIn Easy Apply filler is registered at runtime',
   /LINKEDIN_SCRIPT_ID[\s\S]{0,2000}linkedin-autofill\.js/.test(backgroundJs),
   'nothing would ever fill the Easy Apply modal');
-t('it ships ON rather than requiring the toggle to be set',
-  /linkedin_autofill_enabled\s*!==\s*false/.test(backgroundJs),
-  'an unset toggle would read as off and Easy Apply would never fire');
+t('it is OPT-IN: unset means off, so nothing runs unasked',
+  /linkedin_autofill_enabled\s*===\s*true/.test(backgroundJs),
+  'the filler would register on linkedin.com without being switched on');
 t('it loads autofill-core.js first (field intelligence)',
   /js:\s*\['autofill-core\.js'\]\.concat/.test(backgroundJs));
 t('it runs in every frame (embedded Easy Apply forms)',

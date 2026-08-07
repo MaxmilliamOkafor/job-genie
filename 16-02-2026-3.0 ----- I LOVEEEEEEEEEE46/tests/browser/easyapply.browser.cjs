@@ -173,8 +173,15 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
   await sw.evaluate(() => new Promise((res) => chrome.storage.local.remove(
     ['linkedin_autofill_enabled', 'linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled'], () => res(1))));
   await sw.evaluate(() => new Promise((res) => setTimeout(res, 600)));
+  // Opt-in: nothing of ours reaches linkedin.com until the user asks.
+  t('the filler does NOT register with the toggle never touched',
+    !(await registered()).some((x) => x.id === 'jg-linkedin-autofill'),
+    'it armed itself without being switched on');
+
+  await setState({ linkedin_autofill_enabled: true });
+  await sw.evaluate(() => new Promise((res) => setTimeout(res, 700)));
   let reg = (await registered()).find((x) => x.id === 'jg-linkedin-autofill');
-  t('the Easy Apply filler registers with the toggle never touched', !!reg,
+  t('switching it ON registers the Easy Apply filler', !!reg,
     'registered: ' + JSON.stringify(await registered()));
   if (reg) {
     t('  it loads autofill-core.js before linkedin-autofill.js',

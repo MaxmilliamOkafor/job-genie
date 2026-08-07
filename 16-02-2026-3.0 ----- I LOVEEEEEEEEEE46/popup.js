@@ -1449,7 +1449,8 @@ class ATSTailor {
     const liToggle = document.getElementById('linkedinAutofillToggle');
     // These four ship ON. An explicit false still wins, so switching one
     // off survives a popup reopen; only "never set" means on.
-    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled !== false;
+    // Opt-in: off until switched on, unlike the toggles below it.
+    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
     const advToggle = document.getElementById('linkedinAutoAdvanceToggle');
     if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled !== false;
     const subToggle = document.getElementById('linkedinAutoSubmitToggle');
@@ -2246,6 +2247,43 @@ class ATSTailor {
     }
   }
 
+  /**
+   * Is a preference on?
+   *
+   * Some toggles SHIP ON, and a toggle that ships on has no stored value
+   * until the user touches it. Reading those with `=== true` therefore
+   * says OFF for a switch the interface is drawing as ON -- which is
+   * exactly what "Turn the LinkedIn Easy Apply toggle ON first" was,
+   * reported against a toggle that was visibly green.
+   *
+   * The rule matches autofill-core.js isToggleOn(): a default-on
+   * preference is on unless explicitly false; everything else is opt-in.
+   * DEFAULT_ON below mirrors the set there, and a test asserts the two
+   * lists are identical, because this is the second time the two halves
+   * of one decision have disagreed.
+   */
+  async toggleIsOn(key) {
+    const DEFAULT_ON = new Set([
+      // Mirrors autofill-core.js. linkedin_autofill_enabled is absent
+      // there and must stay absent here; a test asserts the two match.
+      'linkedin_autoadvance_enabled',
+      'linkedin_autosubmit_enabled',
+      'followup_enabled',
+    ]);
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([key], (r) => {
+          const v = r && r[key];
+          resolve(DEFAULT_ON.has(key) ? v !== false : v === true);
+        });
+      } catch (e) {
+        // A storage failure must never read as "on" for something that
+        // sends an application.
+        resolve(false);
+      }
+    });
+  }
+
   async runSiteAutofill(site) {
     const out = document.getElementById('autofillRunResult');
     const say = (msg, color) => { if (out) { out.textContent = msg; out.style.color = color || ''; } };
@@ -2258,7 +2296,7 @@ class ATSTailor {
           label: 'Indeed', hint: 'No Indeed application form found on this page. Open one first.' };
 
     try {
-      const enabled = await new Promise((r) => chrome.storage.local.get([cfg.key], (x) => r(x && x[cfg.key] === true)));
+      const enabled = await this.toggleIsOn(cfg.key);
       if (!enabled) { say('Turn the ' + cfg.label + ' toggle ON first.', 'var(--warning)'); return; }
 
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
