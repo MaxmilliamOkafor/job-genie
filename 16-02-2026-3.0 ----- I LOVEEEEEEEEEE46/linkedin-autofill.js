@@ -11,6 +11,24 @@
  *   - ONLY inside the Easy Apply dialog. It never touches feed, search,
  *     messaging, or profile pages.
  *
+ *   - AND ONLY AFTER THE USER PRESSES "EASY APPLY" THEMSELVES.
+ *
+ *     Nothing here opens an application. The automatic path requires the
+ *     dialog to be ALREADY OPEN, because that is the user's decision to
+ *     apply to this job; without it there is nothing to continue and it
+ *     returns immediately.
+ *
+ *     It used to find the Easy Apply button on whatever job the pane was
+ *     showing and press it. Browsing a job board therefore opened an
+ *     application on every role that was looked at, filled it, advanced
+ *     it, and -- auto-submit ships ON -- submitted it. Applications were
+ *     being sent to employers the user was merely scrolling past, and
+ *     that cannot be taken back.
+ *
+ *     It also never clicks a job card, never navigates, and never works
+ *     through a results list. The user chooses the job; this fills the
+ *     form they opened.
+ *
  * THREE INDEPENDENT SWITCHES
  *   linkedin_autofill_enabled    fill the visible step (never navigates)
  *   linkedin_autoadvance_enabled fill, then click Next/Continue/Review and
@@ -27,7 +45,12 @@
  *   - the step not changing after a click (LinkedIn rejected the input)
  *   - the Submit button, unless auto-submit is on
  *   - MAX_STEPS, so a loop can never run away
- *   It never uploads or swaps a resume file.
+ *
+ *   It never uploads a resume file, and never changes a resume that is
+ *   already selected. It WILL pick one when the step has none selected,
+ *   because that step blocks Continue on a click rather than a value --
+ *   so a run that had answered every question correctly still stalled
+ *   there, reported as "stuck" with no field to point at.
  *
  * All field intelligence lives in autofill-core.js -- this module only
  * supplies the LinkedIn-specific scoping and step detection.
@@ -165,9 +188,36 @@
       .filter((b) => /next|continue|review|submit|apply/i.test(b.text + ' ' + b.aria))
       .slice(0, 10);
     const modal = findEasyApplyModal();
+
+    // The results list. Every selector below is a guess at LinkedIn's
+    // current markup, and a guess that has gone stale is invisible from
+    // here -- the sweep simply finds nothing and reports "no job cards".
+    // This says WHICH selector matched and which did not, so one paste
+    // identifies the stale one instead of a round of guessing.
+    const listProbe = {};
+    for (const sel of [
+      'li[data-occludable-job-id]', '[data-occludable-job-id]',
+      '.jobs-search-results__list-item', '.scaffold-layout__list-item',
+      '.job-card-container', 'a.job-card-container__link',
+      'a[href*="/jobs/view/"]',
+      '.jobs-search-results-list__list-item--active', '.job-card-container--active',
+      '.jobs-search__job-details', '.jobs-details', '.job-view-layout',
+      '.jobs-apply-button',
+    ]) {
+      try { listProbe[sel] = document.querySelectorAll(sel).length; } catch (e) { listProbe[sel] = 'err'; }
+    }
+
     return {
       url: location.href.slice(0, 120),
       frames: window.top === window ? 'top' : 'iframe',
+      // What the list driver sees. currentJobId must be a NUMBER on a
+      // list page; '' means the selected card was not identified, and the
+      // per-job dedupe cannot work.
+      list: {
+        currentJobId: (() => { try { return currentJobId(); } catch (e) { return 'err'; } })(),
+        easyApplyLaunch: (() => { try { return !!findEasyApplyLaunch(); } catch (e) { return 'err'; } })(),
+        selectorHits: listProbe,
+      },
       dialogs: [...document.querySelectorAll('[role="dialog"], dialog, .artdeco-modal')].slice(0, 5).map(brief),
       footerButtons: btns,
       inputsOnPage: document.querySelectorAll('input, select, textarea').length,
@@ -234,6 +284,9 @@
         log('no profile data -- skipping');
         return none('no-profile');
       }
+      // Before the fields: the resume step blocks Continue on a click,
+      // not on a value, so filling everything else still leaves it stuck.
+      selectResumeIfNone(modal);
       const r = await C.fillContainer(modal, profile, {});
       _lastSignature = sig;
       if (r.filled > 0) log('filled ' + r.filled + ' field(s) on this step (' + reason + ')');
@@ -296,6 +349,56 @@
   // A required control we could not answer. Advancing past one either fails
   // validation or, worse, submits a blank answer to an employer, so the run
   // stops and hands back to the user instead of guessing.
+  /**
+   * The resume step.
+   *
+   * Easy Apply nearly always has one, and it blocks Continue until a
+   * document is chosen. Nothing here touched it, so a run that had filled
+   * every question correctly stalled on the one step that needed a click
+   * -- reported as "stuck", with no field to point at.
+   *
+   * The boundary stays where it was: an existing SELECTION is never
+   * changed and no file is ever uploaded. This only chooses when nothing
+   * is chosen, which is the difference between blocked and not.
+   */
+  function selectResumeIfNone(modal) {
+    try {
+      const cards = modal.querySelectorAll(
+        '[class*="jobs-document-upload"] input[type="radio"],'
+        + '[class*="document-upload"] input[type="radio"],'
+        + '[class*="resume"] input[type="radio"]');
+      let group = [...cards];
+
+      // Fall back to any radio group whose surroundings talk about a
+      // resume, for markup variants that do not carry those classes.
+      if (!group.length) {
+        for (const r of modal.querySelectorAll('input[type="radio"]')) {
+          const scope = r.closest('fieldset, [role="radiogroup"], section, div');
+          const txt = ((scope && scope.textContent) || '').toLowerCase();
+          if (/resume|\bcv\b|curriculum/.test(txt) && !/cover/.test(txt)) group.push(r);
+        }
+      }
+      if (!group.length) return 'no-resume-step';
+      if (group.some((r) => r.checked)) return 'already-selected';
+
+      const pick = group.find((r) => {
+        try { return core() ? core().isVisible(r) : true; } catch (e) { return true; }
+      }) || group[0];
+      // Click the label where there is one: LinkedIn's radio is often
+      // visually hidden behind a styled card, and clicking the input
+      // directly does not always register with its handler.
+      const label = pick.id
+        ? modal.querySelector('label[for="' + CSS.escape(pick.id) + '"]')
+        : pick.closest('label');
+      (label || pick).click();
+      if (!pick.checked) { try { pick.click(); } catch (e) {} }
+      log('resume selected (none was)');
+      return pick.checked ? 'selected' : 'could-not-select';
+    } catch (e) {
+      return 'error:' + (e && e.message);
+    }
+  }
+
   function unansweredRequired(modal) {
     const out = [];
     const C = core();
@@ -375,14 +478,47 @@
   // switches the visible job -- no dialog, and it looked like the button
   // was broken. So the match is anchored and length-bounded: the CTA says
   // "Easy Apply" and almost nothing else.
+  /**
+   * Does this apply button send the user OFF LinkedIn?
+   *
+   * LinkedIn marks an external apply with an external-link icon inside the
+   * button -- an <svg><use href="...external..."> -- and that marking is
+   * structural, so it holds whatever language the interface is in. The
+   * words "Easy Apply" do not: on a non-English LinkedIn the text check
+   * matches nothing and the CTA is never found.
+   *
+   * (Taken from the Zippia extension's LinkedIn config, which uses this
+   * same icon to find the external button because that is the one IT
+   * wants. Here it is the exact negative signal: icon present means the
+   * button is not ours.)
+   */
+  function _isExternalApply(el) {
+    try {
+      if (!el) return false;
+      const holder = el.closest('.jobs-apply-button') || el;
+      if (holder.querySelector('use[href*="external" i], use[*|href*="external" i]')) return true;
+      // Fallbacks for the same meaning expressed differently.
+      if (el.getAttribute('target') === '_blank') return true;
+      const svg = holder.querySelector('svg[data-test-icon*="external" i], [data-test-icon*="external" i]');
+      return !!svg;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function _looksLikeEasyApplyCta(c) {
     if (!c.ok) return false;
     if (c.el.closest('[role="dialog"], dialog, .artdeco-modal')) return false;
+    if (_isExternalApply(c.el)) return false;
     // A real CTA is a short button; a job card carries the whole listing.
     if (/^easy apply\b/i.test(c.aria)) return true;
     if (/\beasy apply\b/i.test(c.aria) && c.aria.length < 120) return true;
     if (/^easy apply$/i.test(c.txt)) return true;
     if (/^easy apply\b/i.test(c.txt) && c.txt.length <= 40) return true;
+    // Non-English interface: the words never match, but a .jobs-apply-button
+    // that is NOT marked external is still the in-app apply. Restricted to
+    // the known CTA hook, so a stray "Apply" elsewhere can never qualify.
+    if (c.why === 'cta-hook' && c.txt.length <= 40) return true;
     return false;
   }
 
@@ -396,6 +532,7 @@
     // path.
     const hook = cands.find((c) => c.why === 'cta-hook' && c.ok
       && !c.el.closest('[role="dialog"], dialog, .artdeco-modal')
+      && !_isExternalApply(c.el)
       && /\beasy apply\b/i.test(c.txt + ' ' + c.aria));
     if (hook) return hook.el;
     const match = cands.find(_looksLikeEasyApplyCta);
@@ -429,8 +566,28 @@
     while (Date.now() < deadline) {
       await sleep(250);
       if (findEasyApplyModal()) return true;
+      // LinkedIn sometimes puts a starter dialog in between -- a panel
+      // with a single link-styled button that begins the application.
+      // It has none of the footer buttons the modal detector looks for,
+      // so the flow simply timed out on it. (The selector is Zippia's.)
+      if (_clickApplyStarter()) log('cleared the apply-starter dialog');
     }
     return false;
+  }
+
+  function _clickApplyStarter() {
+    try {
+      const starter = document.querySelector(
+        '[aria-labelledby*="jobs-apply-starter" i], [id*="jobs-apply-starter" i]');
+      if (!starter || !_rendered(starter)) return false;
+      const btn = starter.querySelector('button[role="link"], button, [role="button"]');
+      if (!btn || !_rendered(btn) || btn.dataset.jgStarterClicked === '1') return false;
+      btn.dataset.jgStarterClicked = '1';
+      _robustClick(btn);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // The job this page is showing, so a run is never repeated for the same
@@ -445,22 +602,59 @@
    * page after the first attempt and refused to act on any other role --
    * the list looked alive while nothing was ever applied to.
    */
-  function currentJobId() {
-    const m = /[?&]currentJobId=(\d+)/.exec(location.href)
-      || /\/jobs\/view\/(\d+)/.exec(location.pathname);
-    if (m) return m[1];
-    // On the split-pane list the id lives on the selected card.
+  /** The id the DOM says is on screen, ignoring the URL entirely. */
+  function shownJobIdFromDom() {
     try {
       const active = document.querySelector(
         '.jobs-search-results-list__list-item--active, li.jobs-search-results__list-item--active,'
-        + '.job-card-container--active, [aria-current="page"]');
+        + '.job-card-container--active, .jobs-search-results-list__list-item--highlighted,'
+        + '[aria-current="page"]');
       const id = active && cardJobId(active);
       if (id) return id;
-      const paneLink = document.querySelector('.jobs-search__job-details a[href*="/jobs/view/"]');
-      const pm = paneLink && /\/jobs\/view\/(\d+)/.exec(paneLink.getAttribute('href') || '');
-      if (pm) return pm[1];
+      const pane = document.querySelector(
+        '.jobs-search__job-details, .jobs-details, .job-view-layout, .jobs-details__main-content');
+      if (pane) {
+        const d = pane.getAttribute('data-job-id') || pane.getAttribute('data-occludable-job-id');
+        if (d && /^\d+$/.test(String(d))) return String(d);
+        // The pane title's own link, which is where Zippia reads it from:
+        // div.jobs-details h1 a. Checked before the looser sweep because
+        // the title link is unambiguously THIS job, while any other
+        // /jobs/view/ link in the pane may point at a related posting.
+        for (const a of pane.querySelectorAll('h1 a, h1 ~ a, a[href*="/jobs/view/"], a[href*="/jobs/"]')) {
+          // Looser than /jobs/view/(\d+): LinkedIn also serves /jobs/<id>.
+          const pm = /\/jobs\/(?:.*\/)?(\d{6,})/.exec(a.getAttribute('href') || '');
+          if (pm) return pm[1];
+        }
+      }
     } catch (e) {}
-    return '';                          // unknown -- never a shared key
+    return '';
+  }
+
+  function urlJobId() {
+    const m = /[?&]currentJobId=(\d+)/.exec(location.href)
+      || /\/jobs\/view\/(\d+)/.exec(location.pathname);
+    return m ? m[1] : '';
+  }
+
+  function currentJobId() {
+    // On a /jobs/view/ page the URL IS the job. On the split-pane list it
+    // is not: ?currentJobId= is written by LinkedIn when a card is opened,
+    // and it lags -- it still names the job the user arrived on while the
+    // pane already shows another. Reading it first meant every card the
+    // driver clicked looked like "not loaded yet" until the timeout, and
+    // the whole list was skipped except the one job already in the URL.
+    if (/\/jobs\/view\//.test(location.pathname)) return urlJobId();
+    return shownJobIdFromDom() || urlJobId();
+  }
+
+  /**
+   * Is the pane actually showing THIS job? Any of the DOM signals, or the
+   * URL. Deliberately not just currentJobId(): a stale URL parameter must
+   * never be able to veto what the DOM plainly shows.
+   */
+  function paneShowsJob(id) {
+    if (!id) return false;
+    return shownJobIdFromDom() === id || urlJobId() === id;
   }
 
   /** The requisition id a results-list card points at. */
@@ -571,234 +765,60 @@
     return runAutoFlow('apply-now');
   };
 
-  // ---- the results list ------------------------------------------------
-  //
-  // Everything above applies to the job that is OPEN. On
-  // /jobs/search-results/ no job is open -- the right pane is a skeleton
-  // until a card is clicked -- so the flow found no Easy Apply button,
-  // returned "no-modal", and nothing ever happened however many roles
-  // were listed. This walks the list: click a card, wait for its pane,
-  // run the flow, move on.
-  //
-  // BOUNDS, because this submits real applications to real employers and
-  // cannot be undone:
-  //   - a job already applied to is never applied to again, remembered
-  //     across sessions by requisition id. Recruiters see every past
-  //     application from the same candidate, so a duplicate is worse than
-  //     a miss.
-  //   - MAX_JOBS_PER_RUN caps a single sweep.
-  //   - with auto-submit OFF nothing is ever submitted: it fills one job,
-  //     stops, and says so, rather than leaving a trail of half-completed
-  //     dialogs across the whole list.
-  const APPLIED_KEY = 'linkedin_applied_jobs';
-  const APPLIED_TTL_MS = 180 * 24 * 60 * 60 * 1000;   // six months
-  const MAX_JOBS_PER_RUN = 25;
-  const BETWEEN_JOBS_MS = 1500;
-
-  const CARD_SEL = [
-    'li[data-occludable-job-id]', '[data-occludable-job-id]',
-    '.jobs-search-results__list-item', '.scaffold-layout__list-item',
-    '.job-card-container',
-  ].join(',');
-
-  function resultCards() {
-    const seen = new Set();
-    const out = [];
-    for (const el of document.querySelectorAll(CARD_SEL)) {
-      const id = cardJobId(el);
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      out.push({ id, el });
-    }
-    return out;
-  }
-
-  function loadApplied() {
-    return new Promise((resolve) => {
-      try {
-        chrome.storage.local.get([APPLIED_KEY], (r) => {
-          const m = (r && r[APPLIED_KEY]) || {};
-          const now = Date.now();
-          const fresh = {};
-          for (const k of Object.keys(m)) if (now - m[k] < APPLIED_TTL_MS) fresh[k] = m[k];
-          resolve(fresh);
-        });
-      } catch (e) { resolve({}); }
-    });
-  }
-
-  function markApplied(id) {
-    return new Promise((resolve) => {
-      loadApplied().then((m) => {
-        m[id] = Date.now();
-        try { chrome.storage.local.set({ [APPLIED_KEY]: m }, () => resolve(true)); }
-        catch (e) { resolve(false); }
-      });
-    });
-  }
-
-  /**
-   * Has the right-hand pane finished rendering this job?
-   *
-   * Deliberately NOT "is there an Easy Apply button": a role with an
-   * external apply never grows one, so waiting for it burned the full
-   * timeout on every such job. Over a list where a third of the roles
-   * apply off-site that is most of the run spent waiting for something
-   * that was never coming.
-   */
-  function paneRendered(id) {
-    if (currentJobId() !== id) return false;
-    if (findEasyApplyLaunch() || findEasyApplyModal()) return true;
-    const pane = document.querySelector(
-      '.jobs-search__job-details, .jobs-details, .job-view-layout, .jobs-details__main-content');
-    if (!pane) return false;
-    // Any apply CTA at all, or the title: either means the pane is loaded
-    // and we can decide whether this job is ours.
-    if (pane.querySelector('.jobs-apply-button, [class*="apply-button" i], [class*="applyButton" i]')) return true;
-    return !!pane.querySelector('h1, .job-details-jobs-unified-top-card__job-title');
-  }
-
-  async function waitForPane(id, ms) {
-    const until = Date.now() + (ms || 8000);
-    while (Date.now() < until) {
-      if (paneRendered(id)) return true;
-      await sleep(150);
-    }
-    return currentJobId() === id;
-  }
-
-  function cardLink(card) {
-    return card.querySelector('a.job-card-container__link, a.job-card-list__title, a[href*="/jobs/view/"]')
-      || card.querySelector('a') || card;
-  }
-
-  async function runListFlow(reason) {
-    const C = core();
-    const summary = { status: 'ok', applied: 0, skipped: 0, seen: 0, detail: '', stoppedBy: '' };
-    if (!C) { summary.status = 'error'; summary.detail = 'autofill core not loaded'; return summary; }
-    if (_running) { summary.status = 'busy'; return summary; }
-    if (!(await C.isToggleOn(TOGGLE))) { summary.status = 'off'; summary.detail = 'LinkedIn autofill toggle is off'; return summary; }
-    if (!(await C.isToggleOn(AUTO_TOGGLE))) { summary.status = 'off'; summary.detail = 'auto-advance toggle is off'; return summary; }
-
-    const allowSubmit = await C.isToggleOn(SUBMIT_TOGGLE);
-    const applied = await loadApplied();
-    const cards = resultCards();
-    summary.seen = cards.length;
-    if (!cards.length) { summary.status = 'no-jobs'; summary.detail = 'no job cards on this page'; return summary; }
-
-    log('list flow starting over ' + cards.length + ' card(s) (' + reason + ')');
-    for (const card of cards) {
-      if (summary.applied >= MAX_JOBS_PER_RUN) {
-        summary.stoppedBy = 'cap';
-        summary.detail = 'stopped at the ' + MAX_JOBS_PER_RUN + '-application limit for one run';
-        break;
-      }
-      if (applied[card.id]) { summary.skipped++; continue; }
-      if (_attempted.has(card.id)) { summary.skipped++; continue; }
-
-      try { card.el.scrollIntoView({ block: 'center' }); } catch (e) {}
-      await sleep(250);
-      try { cardLink(card.el).click(); } catch (e) { summary.skipped++; continue; }
-
-      const ready = await waitForPane(card.id, 9000);
-      if (!ready) { summary.skipped++; continue; }
-
-      _attempted.add(card.id);
-      if (!findEasyApplyLaunch() && !findEasyApplyModal()) {
-        // An external "Apply" that opens the employer's own site. Not ours.
-        summary.skipped++;
-        continue;
-      }
-
-      _lastSignature = '';
-      const r = await runAutoFlow('list:' + card.id);
-      log('job ' + card.id + ' -> ' + r.status + ' ' + r.detail);
-
-      if (r.status === 'submitted') {
-        summary.applied++;
-        await markApplied(card.id);
-      } else if (r.status === 'at-submit') {
-        // auto-submit is off. Filling the rest of the list would leave a
-        // trail of half-finished dialogs the user has to clean up.
-        summary.status = 'at-submit';
-        summary.stoppedBy = 'auto-submit-off';
-        summary.detail = 'Filled and stopped at the final step. Turn on Auto-submit to have the '
-          + 'rest of the list applied to automatically.';
-        break;
-      } else if (r.status === 'needs-you') {
-        summary.skipped++;
-        summary.detail = r.detail;
-      } else {
-        summary.skipped++;
-      }
-
-      if (!allowSubmit) break;
-      await sleep(BETWEEN_JOBS_MS);
-    }
-
-    if (!summary.detail) {
-      summary.detail = summary.applied + ' applied, ' + summary.skipped + ' skipped, of '
-        + summary.seen + ' listed';
-    }
-    log('list flow finished: ' + JSON.stringify(summary));
-    return summary;
-  }
-
-  function isResultsListPage() {
-    return /\/jobs\/(search|search-results|collections)/.test(location.pathname)
-      && resultCards().length > 0;
-  }
-
-  window.__JG_LINKEDIN_LIST_FLOW__ = function () { return runListFlow('run-now'); };
-
   // ---- lifecycle -------------------------------------------------------
   // With auto-advance on, opening Easy Apply should complete the flow with
   // no click at all. Fall back to a single fill pass when it is off.
   let _debounce = null;
-  let _listRunning = false;
+  let _firstRequestAt = 0;
+  // A plain debounce never fires on a page that never stops mutating, and
+  // LinkedIn never stops mutating: each burst cleared the pending timer,
+  // so the fill was rescheduled forever and ran only if the page happened
+  // to go quiet for a full 700ms. On a live job board it does not.
+  // MAX_WAIT_MS forces a run once the first request is this old, however
+  // much churn has arrived since.
+  const MAX_WAIT_MS = 1500;
+
   function schedule(reason) {
+    const now = Date.now();
+    if (!_firstRequestAt) _firstRequestAt = now;
+    if (now - _firstRequestAt >= MAX_WAIT_MS) {
+      clearTimeout(_debounce);
+      _firstRequestAt = 0;
+      _run(reason);
+      return;
+    }
     clearTimeout(_debounce);
-    _debounce = setTimeout(async () => {
+    _debounce = setTimeout(() => { _firstRequestAt = 0; _run(reason); }, 700);
+  }
+
+  function _run(reason) {
+    return (async () => {
       const C = core();
       if (!C) return;
       if (_running) return;
 
+      // NOTHING AUTOMATIC HAPPENS UNTIL THE USER PRESSES EASY APPLY.
+      //
+      // This used to look for the Easy Apply button on whatever job the
+      // pane was showing and press it. Browsing a job board therefore
+      // opened an application on every role that was looked at, filled
+      // it, advanced it, and -- auto-submit ships ON -- SUBMITTED it. The
+      // user was applying to jobs merely by scrolling past them, which is
+      // both not what was asked for and irreversible.
+      //
+      // The dialog being ALREADY OPEN is the user's decision to apply.
+      // Without it there is nothing here to continue.
+      const open = findEasyApplyModal();
+      if (!open) return;
+
       if (await C.isToggleOn(AUTO_TOGGLE)) {
-        const open = findEasyApplyModal();
-
-        // A results list with nothing open: work through it. Without this
-        // the code below looked for an Easy Apply button on a page that
-        // has none until a card is clicked, gave up, and the whole list
-        // sat there untouched.
-        if (!open && isResultsListPage()) {
-          if (_listRunning) return;
-          _listRunning = true;
-          try {
-            const s = await runListFlow(reason);
-            try { chrome.runtime.sendMessage({ action: 'JG_LINKEDIN_LIST_RESULT', result: s }); } catch (e) {}
-          } finally {
-            _listRunning = false;
-          }
-          return;
-        }
-
-        // Not open yet: only start if this job has an Easy Apply button we
-        // have not already tried. The per-job guard is what stops browsing
-        // a results list from re-firing on every DOM change, and stops a
-        // dismissed dialog from being reopened underneath the user.
-        if (!open) {
-          const jobId = currentJobId();
-          if (jobId && _attempted.has(jobId)) return;
-          if (!findEasyApplyLaunch()) return;
-          if (jobId) _attempted.add(jobId);
-        }
         const r = await runAutoFlow(reason);
         log('auto-advance finished:', r.status, r.detail);
         try { chrome.runtime.sendMessage({ action: 'JG_LINKEDIN_FLOW_RESULT', result: r }); } catch (e) {}
         return;
       }
       runFill(reason);
-    }, 700);
+    })();
   }
 
   // Toggle flipped ON mid-session -> fill the open step immediately.
