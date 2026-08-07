@@ -25,7 +25,7 @@ const manifest = JSON.parse(read('manifest.json'));
 // ---- 1. the rule exists, on LinkedIn -------------------------------
 console.log('LINKEDIN: NOTHING WITHOUT A CLICK');
 t('the automatic path returns unless a dialog is already open',
-  /const open = findEasyApplyModal\(\);[\s\S]{0,400}?if \(!open\)[\s\S]{0,400}?return;/.test(linkedin),
+  /const open = findEasyApplyModal\(\);[\s\S]{0,200}?if \(!open\)[\s\S]{0,1400}?return;/.test(linkedin),
   'the auto path can still act with no dialog open');
 // The guard must come before anything in the AUTOMATIC path that could
 // press the button. Checked inside _run's body rather than by position in
@@ -43,7 +43,7 @@ t('the guard precedes the flow that can press Easy Apply',
   guardAt !== -1 && guardAt < runBody.indexOf('runAutoFlow('),
   'the automatic path can reach runAutoFlow without a dialog open');
 t('and the guard actually returns',
-  /if \(!open\)[\s\S]{0,400}?return;/.test(runBody),
+  /if \(!open\)[\s\S]{0,1400}?return;/.test(runBody),
   'the guard does not stop the path');
 t('the automatic path never calls openEasyApply itself',
   runBody.indexOf('openEasyApply') === -1,

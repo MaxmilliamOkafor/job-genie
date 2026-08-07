@@ -1054,6 +1054,7 @@
   // no click at all. Fall back to a single fill pass when it is off.
   let _debounce = null;
   let _firstRequestAt = 0;
+  let _lastIdleKey = '';
   // A plain debounce never fires on a page that never stops mutating, and
   // LinkedIn never stops mutating: each burst cleared the pending timer,
   // so the fill was rescheduled forever and ran only if the page happened
@@ -1097,8 +1098,17 @@
         // The activation rule. Seeing this in the trace is what tells the
         // difference between "the extension is broken" and "no dialog is
         // open, which is correct".
-        trace('idle', { reason, why: 'no Easy Apply dialog open -- waiting for the user to press it',
-          easyApplyButtonOnPage: !!findEasyApplyLaunch(), jobId: currentJobId() });
+        // Idle is the NORMAL state -- it is true every time the page
+        // mutates without a dialog open. Recording it each time wrote to
+        // storage every few hundred milliseconds for as long as LinkedIn
+        // was open, which is cost with no information: the second
+        // identical line says nothing the first did not.
+        const idleKey = reason + '|' + (currentJobId() || '');
+        if (idleKey !== _lastIdleKey) {
+          _lastIdleKey = idleKey;
+          trace('idle', { reason, why: 'no Easy Apply dialog open -- waiting for the user to press it',
+            easyApplyButtonOnPage: !!findEasyApplyLaunch(), jobId: currentJobId() });
+        }
         return;
       }
       trace('active', { reason, jobId: currentJobId() });
@@ -1141,8 +1151,9 @@
   // Easy Apply is an SPA modal: watch for it opening and for each step
   // re-render. Observing document.body is necessary because the modal is
   // mounted outside the job container.
+  let _obs = null;
   function watch() {
-    if (!document.body) return;
+    if (!document.body || _obs) return;
     // findEasyApplyModal() is a multi-selector querySelectorAll sweep with
     // a visibility check per hit. Running it on EVERY mutation is what
     // made the jobs list unusable: LinkedIn's search page mutates
@@ -1163,16 +1174,59 @@
         else _lastSignature = '';      // modal closed -> reset for next time
       }, 250);
     });
-    try { obs.observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    try { obs.observe(document.body, { childList: true, subtree: true }); _obs = obs; } catch (e) {}
   }
 
-  if (isLinkedInJobsPage() || location.hostname.endsWith('linkedin.com')) {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => { schedule('load'); watch(); });
+  /**
+   * Only the jobs section.
+   *
+   * The script is registered for linkedin.com/*, which is the whole site
+   * -- the feed, messaging, notifications, profiles. There is never an
+   * Easy Apply dialog on any of those, but the observer ran on all of
+   * them for the length of the session: an infinite-scroll feed mutates
+   * without pause, so it swept the DOM every second or so, for hours,
+   * finding nothing. That is the shape of a extension that "gradually
+   * starts messing up" -- no single failure, just steady cost on every
+   * page the user spends time on.
+   */
+  function onJobsSection() {
+    return /\/jobs(\/|$)/.test(location.pathname);
+  }
+
+  function unwatch() {
+    if (!_obs) return;
+    try { _obs.disconnect(); } catch (e) {}
+    _obs = null;
+    clearTimeout(_debounce);
+    _firstRequestAt = 0;
+    log('left the jobs section — watcher stopped');
+  }
+
+  function syncLifecycle(reason) {
+    if (onJobsSection()) {
+      if (!_obs) { watch(); schedule(reason || 'enter-jobs'); }
     } else {
-      schedule('load');
-      watch();
+      unwatch();
     }
+  }
+
+  const start = () => {
+    syncLifecycle('load');
+    // LinkedIn is a single-page app: moving between the feed and the jobs
+    // section never reloads, so the section has to be re-checked. A path
+    // comparison is cheap enough to run forever; a DOM sweep is not.
+    let lastPath = location.pathname;
+    setInterval(() => {
+      if (location.pathname === lastPath) return;
+      lastPath = location.pathname;
+      _attempted.clear();
+      syncLifecycle('spa-nav');
+    }, 1000);
     log('LinkedIn Easy Apply autofill ready (fills only, never submits)');
+  };
+
+  if (location.hostname.endsWith('linkedin.com')) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
   }
 })();
