@@ -13,6 +13,7 @@ node tests/browser/platforms.browser.cjs     # detection, JD, gate, email harves
 node tests/browser/attach.browser.cjs        # CV + cover letter into a real file input
 node tests/browser/easyapply.browser.cjs     # LinkedIn Easy Apply, toggle ON
 node tests/browser/twopage.browser.cjs       # posting -> Apply -> form, on every ATS
+node tests/browser/linkedin-list.browser.cjs # LinkedIn search results, whole list
 ```
 
 Both skip cleanly (exit 0) when Playwright or a Chromium build is missing,
@@ -64,6 +65,14 @@ email to, and the address printed in the JD body. It asserts both halves:
 that the apply page genuinely has none of them in its own DOM, and that
 `jd-context.js` supplies them anyway — matched by requisition id, tab
 lineage or path lineage, never by guesswork.
+
+`linkedin-list.browser.cjs` — the LinkedIn **search-results list**. Everything
+else acts on the job that is already open; on `/jobs/search-results/` none is,
+because the right pane is a skeleton until a card is clicked. This drives a
+six-job split-pane list (two of them external-apply, which must be skipped)
+under a continuous mutation storm, and asserts the bounds as hard as the
+feature: each role applied to exactly once, nothing re-applied to on a second
+visit, and nothing submitted at all with auto-submit off.
 
 ## LinkedIn: what is deliberate
 
