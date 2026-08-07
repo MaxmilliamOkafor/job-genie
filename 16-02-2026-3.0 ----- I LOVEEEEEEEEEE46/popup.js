@@ -1449,7 +1449,8 @@ class ATSTailor {
     const liToggle = document.getElementById('linkedinAutofillToggle');
     // These four ship ON. An explicit false still wins, so switching one
     // off survives a popup reopen; only "never set" means on.
-    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled !== false;
+    // Opt-in: off until switched on, unlike the toggles below it.
+    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
     const advToggle = document.getElementById('linkedinAutoAdvanceToggle');
     if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled !== false;
     const subToggle = document.getElementById('linkedinAutoSubmitToggle');
@@ -2263,7 +2264,8 @@ class ATSTailor {
    */
   async toggleIsOn(key) {
     const DEFAULT_ON = new Set([
-      'linkedin_autofill_enabled',
+      // Mirrors autofill-core.js. linkedin_autofill_enabled is absent
+      // there and must stay absent here; a test asserts the two match.
       'linkedin_autoadvance_enabled',
       'linkedin_autosubmit_enabled',
       'followup_enabled',

@@ -635,12 +635,17 @@
   // reads a preference: a default expressed in one script and not another
   // is how a toggle ends up ON in the popup and OFF in the page.
   //
-  // Note what this means in practice: with all four on, opening a LinkedIn
-  // Easy Apply job fills it, advances it, submits it, and then emails a
-  // published contact -- end to end, with no click. Submission cannot be
+  // Note what this means in practice: once LinkedIn Easy Apply autofill is
+  // switched on, these carry the rest -- an opened Easy Apply dialog is
+  // filled, advanced, submitted, and a published contact emailed. That is
+  // why the LinkedIn toggle itself is opt-in and absent from this set. Submission cannot be
   // undone and goes to a real employer.
   const DEFAULT_ON = new Set([
-    'linkedin_autofill_enabled',
+    // linkedin_autofill_enabled is deliberately NOT here: LinkedIn Easy
+    // Apply autofill is opt-in, so nothing touches an application dialog
+    // until the user turns it on. The two below only ever apply once it
+    // is on -- runAutoFlow checks this toggle first -- so they cannot act
+    // on their own.
     'linkedin_autoadvance_enabled',
     'linkedin_autosubmit_enabled',
     'followup_enabled',

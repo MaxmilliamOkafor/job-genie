@@ -1073,8 +1073,10 @@ function syncAutofillRegistrationFromStorage() {
         chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve)
       );
       enabled = r && r.autofill_enabled === true;
-      // Ships ON; an explicit false still turns it off.
-      linkedinEnabled = !!r && r.linkedin_autofill_enabled !== false;
+      // Opt-in: the Easy Apply filler is not registered at all until the
+      // user switches it on, so nothing of ours reaches linkedin.com
+      // before that.
+      linkedinEnabled = !!r && r.linkedin_autofill_enabled === true;
     } catch (e) {}
     try {
       // Master toggle: vendor engine + Indeed filler.

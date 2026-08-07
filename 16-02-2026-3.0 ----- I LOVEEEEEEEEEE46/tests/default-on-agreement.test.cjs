@@ -64,11 +64,15 @@ for (const key of canonical) {
 // ---- background.js agrees --------------------------------------------
 console.log('\nBACKGROUND');
 const bg = read('background.js');
-t('LinkedIn registration ships ON',
-  /linkedin_autofill_enabled\s*!==\s*false/.test(bg),
-  'the filler would not register until the toggle was flipped by hand');
-t('...and an explicit false still turns it off',
-  /!==\s*false/.test(bg) && !/linkedin_autofill_enabled\s*===\s*true/.test(bg));
+// LinkedIn Easy Apply autofill is OPT-IN, so the service worker must read
+// it as off until it is explicitly on -- the opposite of the default-on
+// rule above, and the reason both directions are tested here.
+t('LinkedIn registration is opt-in',
+  /linkedin_autofill_enabled\s*===\s*true/.test(bg),
+  'the filler would register on linkedin.com without being switched on');
+t('...and it is not in the default-on set either',
+  !core.DEFAULT_ON.has('linkedin_autofill_enabled'),
+  'the page would treat it as on while the worker treated it as off');
 
 // ---- and the opt-in ones stay opt-in ---------------------------------
 // The mirror risk: treating everything as default-on would silently arm

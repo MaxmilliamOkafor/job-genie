@@ -8,13 +8,31 @@ const read=(f)=>fs.readFileSync(path.join(DIR,f),'utf8');
 const popupJs=read('popup.js'), core=read('autofill-core.js'), bg=read('background.js'), fu=read('followup-email.js');
 
 const DEFAULT_ON = [
-  'linkedin_autofill_enabled',
   'linkedin_autoadvance_enabled',
   'linkedin_autosubmit_enabled',
   'followup_enabled',
 ];
 
-// ---- 1. the four ship ON, in every context that reads them ------------
+// LinkedIn Easy Apply autofill is OPT-IN: nothing of ours touches an
+// application dialog until the user switches it on. The two LinkedIn
+// toggles above only ever apply once it is, since runAutoFlow checks it
+// first, so they cannot act on their own.
+const OPT_IN = ['linkedin_autofill_enabled'];
+
+console.log('OPT-IN');
+for (const k of OPT_IN) {
+  t(k + ' is NOT in the default-on set',
+    !new RegExp("'" + k + "'").test((/const DEFAULT_ON = new Set\(\[[\s\S]*?\]\);/.exec(core)||[''])[0]),
+    'it would arm itself without being asked');
+  t(k + ' is read with === true, so unset means off',
+    new RegExp('\\b' + k + '\\s*===\\s*true').test(bg),
+    'the service worker would register the filler by default');
+}
+t('the popup shows it OFF until switched on',
+  /liToggle\.checked = result\.linkedin_autofill_enabled === true/.test(popupJs),
+  'the switch would draw ON while the feature is off');
+
+// ---- 1. the rest ship ON, in every context that reads them ------------
 for (const k of DEFAULT_ON) {
   t(k + ' is declared default-on for content scripts',
     new RegExp("'" + k + "'").test((/const DEFAULT_ON = new Set\(\[[\s\S]*?\]\);/.exec(core)||[''])[0]),
@@ -27,8 +45,14 @@ for (const k of DEFAULT_ON) {
 }
 t('the shared reader honours the default-on set',
   /DEFAULT_ON\.has\(key\) \? v !== false : v === true/.test(core), 'isToggleOn ignores the set');
-t('background honours it too',
-  /linkedin_autofill_enabled !== false/.test(bg), 'the service worker would disagree with the popup');
+// The service worker only decides ONE of these: whether to register the
+// LinkedIn filler at all. The rest are read in the page, by isToggleOn.
+t('the service worker gates registration on the opt-in toggle',
+  /linkedin_autofill_enabled\s*===\s*true/.test(bg),
+  'it would register the filler on linkedin.com without being asked');
+t('and the master autofill switch stays opt-in too',
+  /autofill_enabled\s*===\s*true/.test(bg),
+  'the heavy vendor engine would arm itself');
 
 // Turning something OFF must survive. "Unset means on" would undo it.
 t('an explicit false still wins over the default',
@@ -38,7 +62,7 @@ t('a storage failure does not silently enable auto-submit',
   'a failed read must not start submitting applications');
 
 // The popup restores them the same way.
-for (const [id,key] of [['liToggle','linkedin_autofill_enabled'],['advToggle','linkedin_autoadvance_enabled'],
+for (const [id,key] of [['advToggle','linkedin_autoadvance_enabled'],
                         ['subToggle','linkedin_autosubmit_enabled'],['fuToggle','followup_enabled']]) {
   t('the popup shows ' + key + ' as on by default',
     new RegExp(id + '\\.checked = result\\.' + key + ' !== false').test(popupJs), 'shows off on first open');
