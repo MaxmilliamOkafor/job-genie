@@ -29,6 +29,17 @@ const JOBS = ['4001', '4002', '4003', '4004', '4005', '4006'];
 
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Jobs | LinkedIn</title></head>
 <body>
+<!-- LinkedIn's search filter bar. The "Easy Apply" pill is a button
+     whose text is exactly "Easy Apply": it matched the CTA test, was
+     clicked, and re-ran the search -- the reported "randomly searching
+     or reloading different roles". -->
+<div class="search-reusables__filter-bar" role="toolbar">
+  <button id="filter-easyapply" class="search-reusables__filter-pill-button"
+          aria-pressed="false"><span>Easy Apply</span></button>
+  <button id="filter-date" class="search-reusables__filter-pill-button"
+          aria-pressed="false"><span>Date posted</span></button>
+</div>
+<div id="filterclicks" hidden></div>
 <div class="scaffold-layout__list"><ul>
 ${JOBS.map((id) => `<li data-occludable-job-id="${id}" class="jobs-search-results__list-item">
   <a class="job-card-container__link" href="/jobs/view/${id}/">Machine Learning Engineer ${id}</a></li>`).join('\n')}
@@ -72,7 +83,10 @@ function openJob(id){
   pane.innerHTML = '<div class="skeleton">Loading&hellip;</div>';
   setTimeout(function(){
     pane.innerHTML = '<h1 class="job-details-jobs-unified-top-card__job-title"><a href="/jobs/view/'+id+'/">ML Engineer '+id+'</a></h1>'+
-      '<div class="jobs-apply-button"><button aria-label="Easy Apply to ML Engineer '+id+'"><span>Easy Apply</span></button></div>'+
+      '<div class="job-details-jobs-unified-top-card__container">'+
+      '<div class="jobs-apply-button"><button aria-label="Easy Apply to ML Engineer '+id+'">'+
+      '<svg class="li-icon"></svg><span>Easy Apply</span></button></div>'+
+      '<button id="save-'+id+'" aria-label="Save ML Engineer '+id+'"><span>Save</span></button></div>'+
       '<div id="modal-root"></div>';
     // Pressing Easy Apply is what opens the dialog. Recording every open
     // is how this can tell "the user did it" from "the extension did".
@@ -82,6 +96,16 @@ function openJob(id){
     });
   }, 250);
 }
+// Record any press of a filter pill, and make it behave like the real
+// one: toggling it re-runs the search.
+var filterClicks = [];
+document.querySelectorAll('.search-reusables__filter-pill-button').forEach(function(b){
+  b.addEventListener('click', function(){
+    filterClicks.push(b.id);
+    b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+    document.getElementById('filterclicks').textContent = JSON.stringify(filterClicks);
+  });
+});
 document.querySelectorAll('a.job-card-container__link').forEach(function(a){
   a.addEventListener('click', function(ev){
     ev.preventDefault();
@@ -161,6 +185,37 @@ const read = (page, id) => page.evaluate((i) => {
   });
   t('the job the user selected is still the one selected',
     active === '4004', 'selection moved to ' + active + ' -- something clicked a card');
+  t('the Easy Apply search FILTER was never pressed',
+    (await read(page, 'filterclicks')).length === 0,
+    'pressed ' + JSON.stringify(await read(page, 'filterclicks'))
+      + ' -- clicking the filter re-runs the search, which is the reported '
+      + '"randomly searching / reloading different roles"');
+  t('...and the filter is still off',
+    (await page.evaluate(() => document.getElementById('filter-easyapply').getAttribute('aria-pressed'))) === 'false');
+
+  // Which element does the extension consider the CTA? The filter pill and
+  // the real button carry the SAME text, so this is the distinction that
+  // matters -- and pressing the wrong one re-runs the search.
+  const chosen = await sw.evaluate(async (u) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((x) => x.url === u);
+    if (!tab) return { noTab: true };
+    const r = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const d = window.__JG_LINKEDIN_DIAGNOSE__ ? window.__JG_LINKEDIN_DIAGNOSE__() : null;
+        const el = document.querySelector('.jobs-apply-button button');
+        return {
+          launchIsInPane: !!(d && d.list && d.list.easyApplyLaunch) && !!el,
+          filterPressed: document.getElementById('filter-easyapply').getAttribute('aria-pressed'),
+        };
+      },
+    });
+    return (r && r[0] && r[0].result) || {};
+  }, LIST_URL);
+  t('the CTA it resolves is the in-pane button, not the filter pill',
+    chosen.launchIsInPane === true && chosen.filterPressed === 'false',
+    JSON.stringify(chosen));
 
   console.log('\nAFTER THE USER PRESSES EASY APPLY\n');
   await page.click('.jobs-apply-button button');

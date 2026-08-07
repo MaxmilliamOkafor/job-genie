@@ -588,10 +588,51 @@
     }
   }
 
+  // THE "EASY APPLY" SEARCH FILTER IS NOT AN APPLY BUTTON.
+  //
+  // On the jobs search page LinkedIn shows a filter pill whose text is
+  // exactly "Easy Apply". It matched the CTA test perfectly, so the flow
+  // clicked it -- and clicking it re-runs the search with the filter
+  // toggled. That is the "randomly searching or reloading different
+  // roles" that was reported: not an application at all, just the filter
+  // being switched on and off.
+  const FILTER_SCOPE = [
+    '[class*="search-reusables"]', '[class*="filter-pill"]', '[class*="filters-bar"]',
+    '[class*="search-results-header"]', '.jobs-search-box', 'form[role="search"]',
+    '[role="radiogroup"]', '[role="toolbar"]', 'header', 'nav',
+  ].join(',');
+
+  function _isSearchFilter(el) {
+    try {
+      if (!el) return false;
+      if (el.closest(FILTER_SCOPE)) return true;
+      // A filter is a TOGGLE and says so; an apply button never does.
+      if (el.hasAttribute('aria-pressed')) return true;
+      const r = (el.getAttribute('role') || '').toLowerCase();
+      return r === 'radio' || r === 'checkbox' || r === 'switch';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Where a real CTA lives: on the job itself, not in the page chrome.
+  const CTA_SCOPE = [
+    '.jobs-apply-button', '.jobs-search__job-details', '.jobs-details',
+    '.job-view-layout', '.jobs-details__main-content',
+    '[class*="jobs-unified-top-card"]', '[class*="job-details-jobs-unified-top-card"]',
+  ].join(',');
+
+  function _inJobPane(el) {
+    try { return !!(el && el.closest(CTA_SCOPE)); } catch (e) { return false; }
+  }
+
   function _looksLikeEasyApplyCta(c) {
     if (!c.ok) return false;
     if (c.el.closest('[role="dialog"], dialog, .artdeco-modal')) return false;
     if (_isExternalApply(c.el)) return false;
+    // Both required: never a filter, and it must belong to a job.
+    if (_isSearchFilter(c.el)) return false;
+    if (!_inJobPane(c.el)) return false;
     // A real CTA is a short button; a job card carries the whole listing.
     if (/^easy apply\b/i.test(c.aria)) return true;
     if (/\beasy apply\b/i.test(c.aria) && c.aria.length < 120) return true;
@@ -615,6 +656,7 @@
     const hook = cands.find((c) => c.why === 'cta-hook' && c.ok
       && !c.el.closest('[role="dialog"], dialog, .artdeco-modal')
       && !_isExternalApply(c.el)
+      && !_isSearchFilter(c.el)
       && /\beasy apply\b/i.test(c.txt + ' ' + c.aria));
     if (hook) return hook.el;
     const match = cands.find(_looksLikeEasyApplyCta);
