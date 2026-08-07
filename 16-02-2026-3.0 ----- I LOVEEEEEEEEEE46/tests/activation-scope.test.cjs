@@ -25,7 +25,7 @@ const manifest = JSON.parse(read('manifest.json'));
 // ---- 1. the rule exists, on LinkedIn -------------------------------
 console.log('LINKEDIN: NOTHING WITHOUT A CLICK');
 t('the automatic path returns unless a dialog is already open',
-  /const open = findEasyApplyModal\(\);\s*\n\s*if \(!open\) return;/.test(linkedin),
+  /const open = findEasyApplyModal\(\);[\s\S]{0,400}?if \(!open\)[\s\S]{0,400}?return;/.test(linkedin),
   'the auto path can still act with no dialog open');
 // The guard must come before anything in the AUTOMATIC path that could
 // press the button. Checked inside _run's body rather than by position in
@@ -36,10 +36,15 @@ const runBody = (() => {
   return i === -1 ? '' : linkedin.slice(i, linkedin.indexOf('\n  }', i));
 })();
 t('the automatic path has a body to check', runBody.length > 100, String(runBody.length));
+// Structural, not literal: the guard gained a trace call inside it, and a
+// test that breaks when a log line is added is a test that gets deleted.
+const guardAt = runBody.search(/if \(!open\)/);
 t('the guard precedes the flow that can press Easy Apply',
-  runBody.indexOf('if (!open) return;') !== -1
-  && runBody.indexOf('if (!open) return;') < runBody.indexOf('runAutoFlow('),
+  guardAt !== -1 && guardAt < runBody.indexOf('runAutoFlow('),
   'the automatic path can reach runAutoFlow without a dialog open');
+t('and the guard actually returns',
+  /if \(!open\)[\s\S]{0,400}?return;/.test(runBody),
+  'the guard does not stop the path');
 t('the automatic path never calls openEasyApply itself',
   runBody.indexOf('openEasyApply') === -1,
   'the automatic path presses Easy Apply -- the reported bug');

@@ -67,7 +67,83 @@
   const SUBMIT_TOGGLE = 'linkedin_autosubmit_enabled';
   const MAX_STEPS = 15;              // Easy Apply is never this long
   const STEP_TIMEOUT_MS = 8000;
-  const log = (...a) => { try { console.log(TAG, ...a); } catch (e) {} };
+  // ---- tracing ---------------------------------------------------------
+  // This module runs in the PAGE, not the popup, so the popup's tracer
+  // cannot see any of it -- and the page console is gone the moment the
+  // tab navigates. Every decision is therefore recorded into a ring
+  // buffer in chrome.storage.local, which the popup's trace export reads
+  // back and prints alongside its own. Without it, "the autofill did
+  // nothing" carries no information about WHICH of a dozen early returns
+  // was taken.
+  const TRACE_KEY = 'jg_linkedin_trace';
+  const TRACE_MAX = 400;
+  const _traceBuf = [];
+  let _traceFlush = null;
+  const _t0 = Date.now();
+
+  function trace(event, data) {
+    try {
+      _traceBuf.push({
+        ms: Date.now() - _t0,
+        at: new Date().toISOString(),
+        url: (location.href || '').slice(0, 140),
+        frame: window.top === window ? 'top' : 'iframe',
+        event,
+        data: data === undefined ? undefined : _redact(data),
+      });
+      if (_traceBuf.length > TRACE_MAX) _traceBuf.splice(0, _traceBuf.length - TRACE_MAX);
+      clearTimeout(_traceFlush);
+      _traceFlush = setTimeout(_flushTrace, 400);
+    } catch (e) {}
+  }
+
+  // The profile flows through here. Names and answers are the user's own,
+  // but the trace is written to be pasted into a bug report, so anything
+  // credential-shaped never reaches the buffer.
+  const _SECRET = /(pass(word)?|token|api_?key|secret|auth|bearer|credential)/i;
+  function _redact(v, depth) {
+    const d = depth || 0;
+    if (v === null || v === undefined) return v;
+    const ty = typeof v;
+    if (ty === 'string') return v.length > 160 ? v.slice(0, 160) + '…' : v;
+    if (ty === 'number' || ty === 'boolean') return v;
+    if (ty === 'function') return '[fn]';
+    if (d > 2) return '[…]';
+    if (Array.isArray(v)) return v.slice(0, 12).map((x) => _redact(x, d + 1));
+    if (v && v.nodeType) return '[dom ' + (v.tagName || v.nodeName) + ']';
+    if (ty === 'object') {
+      const out = {};
+      let n = 0;
+      for (const k of Object.keys(v)) {
+        if (n++ > 24) { out['…'] = 'more'; break; }
+        out[k] = _SECRET.test(k) ? '[redacted]' : _redact(v[k], d + 1);
+      }
+      return out;
+    }
+    return String(v);
+  }
+
+  function _flushTrace() {
+    try {
+      chrome.storage.local.get([TRACE_KEY], (r) => {
+        try {
+          const prev = (r && r[TRACE_KEY]) || [];
+          const merged = prev.concat(_traceBuf).slice(-TRACE_MAX);
+          _traceBuf.length = 0;
+          chrome.storage.local.set({ [TRACE_KEY]: merged }, () => {});
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  // Everything already logged to the console is traced too, so the two
+  // never disagree about what happened.
+  const log = (...a) => {
+    try { console.log(TAG, ...a); } catch (e) {}
+    try { trace('log', a.length === 1 ? a[0] : a); } catch (e) {}
+  };
+
+  window.__JG_LINKEDIN_TRACE__ = () => _traceBuf.slice();
 
   function core() { return window.AutofillCore; }
 
@@ -265,7 +341,11 @@
   // Easy Apply dialog first." -- which is actively wrong on the contact
   // step, where LinkedIn prefills name, phone and email from the profile.
   async function runFill(reason) {
-    const none = (why) => ({ found: false, filled: 0, alreadySet: 0, answerable: 0, why });
+    const none = (why) => {
+      trace('fill.skipped', { reason, why });
+      return { found: false, filled: 0, alreadySet: 0, answerable: 0, why };
+    };
+    trace('fill.start', { reason });
     const C = core();
     if (!C) return none('core-missing');
     if (_busy) return none('busy');
@@ -286,8 +366,10 @@
       }
       // Before the fields: the resume step blocks Continue on a click,
       // not on a value, so filling everything else still leaves it stuck.
-      selectResumeIfNone(modal);
+      trace('resume.step', { outcome: selectResumeIfNone(modal) });
       const r = await C.fillContainer(modal, profile, {});
+      trace('fill.done', { reason, filled: r.filled, alreadySet: r.alreadySet, answerable: r.answerable,
+        step: sig.slice(0, 120) });
       _lastSignature = sig;
       if (r.filled > 0) log('filled ' + r.filled + ' field(s) on this step (' + reason + ')');
       return { found: true, filled: r.filled, alreadySet: r.alreadySet, answerable: r.answerable, why: 'ok' };
@@ -676,7 +758,11 @@
 
   async function runAutoFlow(reason) {
     const C = core();
-    const done = (status, detail, steps) => ({ status, detail: detail || '', steps: steps || 0 });
+    const done = (status, detail, steps) => {
+      trace('flow.end', { reason, status, detail: detail || '', steps: steps || 0 });
+      return { status, detail: detail || '', steps: steps || 0 };
+    };
+    trace('flow.start', { reason, jobId: currentJobId() });
     if (!C) return done('error', 'autofill core not loaded');
     if (_running) return done('busy', 'a run is already in progress');
     if (!(await C.isToggleOn(TOGGLE))) return done('off', 'LinkedIn autofill toggle is off');
@@ -714,6 +800,7 @@
 
         const missing = unansweredRequired(modal);
         if (missing.length) {
+          trace('step.blocked', { step: steps + 1, missing: missing.slice(0, 6) });
           return done('needs-you',
             'Stopped on a required question the profile has no answer for: '
             + missing.slice(0, 3).join('; '), steps);
@@ -729,6 +816,8 @@
         }
 
         const sig = stepSignature(modal);
+        trace('step.click', { kind: btn.kind, step: steps + 1,
+          label: (btn.el.getAttribute('aria-label') || btn.el.textContent || '').trim().slice(0, 60) });
         btn.el.click();
         log('clicked ' + btn.kind + ' (step ' + (steps + 1) + ')');
 
@@ -809,7 +898,15 @@
       // The dialog being ALREADY OPEN is the user's decision to apply.
       // Without it there is nothing here to continue.
       const open = findEasyApplyModal();
-      if (!open) return;
+      if (!open) {
+        // The activation rule. Seeing this in the trace is what tells the
+        // difference between "the extension is broken" and "no dialog is
+        // open, which is correct".
+        trace('idle', { reason, why: 'no Easy Apply dialog open -- waiting for the user to press it',
+          easyApplyButtonOnPage: !!findEasyApplyLaunch(), jobId: currentJobId() });
+        return;
+      }
+      trace('active', { reason, jobId: currentJobId() });
 
       if (await C.isToggleOn(AUTO_TOGGLE)) {
         const r = await runAutoFlow(reason);

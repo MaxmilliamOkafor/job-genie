@@ -898,7 +898,10 @@ class ATSTailor {
     document.getElementById('traceSaveBtn')?.addEventListener('click', () => this.traceExport('download'));
     document.getElementById('traceClearBtn')?.addEventListener('click', () => {
       if (window.JGTrace) window.JGTrace.clear();
-      chrome.storage.local.remove(['popup_error_log']);
+      // The LinkedIn filler's trace lives in storage, not in the popup's
+      // buffer, so clearing one has to clear the other or the export
+      // keeps replaying a run the user already dealt with.
+      chrome.storage.local.remove(['popup_error_log', 'jg_linkedin_trace']);
       this.showToast('Trace cleared', 'success');
     });
     document.getElementById('followupSaveClientBtn')?.addEventListener('click', () => this.followupSaveClientId());
@@ -3137,10 +3140,55 @@ class ATSTailor {
   // A password manager that cannot show you the password is a locked box.
   // The trace is only useful if it can leave the popup. Copy for pasting
   // into a report, download for anything too long to paste.
+  /**
+   * The LinkedIn Easy Apply autofill's own trace.
+   *
+   * That module runs in the PAGE, so none of it reaches the popup's
+   * tracer, and the page console is gone the moment the tab navigates.
+   * It records every decision to storage instead; this reads it back so a
+   * single exported file shows the popup and the page side by side.
+   *
+   * The interesting line is usually "idle" -- it names which precondition
+   * was missing, which is the difference between a broken autofill and a
+   * correct one waiting for Easy Apply to be pressed.
+   */
+  async linkedInTraceText() {
+    try {
+      const entries = await new Promise((resolve) => {
+        try {
+          chrome.storage.local.get(['jg_linkedin_trace'], (r) => resolve((r && r.jg_linkedin_trace) || []));
+        } catch (e) { resolve([]); }
+      });
+      const head = '\n\n' + '='.repeat(72)
+        + '\nLinkedIn Easy Apply autofill (content script)  ' + entries.length + ' entries\n'
+        + '='.repeat(72) + '\n';
+      if (!entries.length) {
+        return head + '\n(nothing recorded — the filler did not run on any LinkedIn page in this\n'
+          + ' session. If you expected it to: check the LinkedIn Easy Apply toggle, and\n'
+          + ' that the page is linkedin.com/jobs/...)\n';
+      }
+      const lines = entries.map((e) => {
+        let d = '';
+        if (e.data !== undefined) {
+          try { d = '  ' + JSON.stringify(e.data); } catch (x) { d = '  [unserialisable]'; }
+        }
+        return String(e.ms).padStart(8) + 'ms  ' + (e.frame === 'top' ? '     ' : '[ifr]')
+          + '  ' + String(e.event).padEnd(14) + d;
+      });
+      // The URLs are long and mostly repeat; list the distinct ones once.
+      const urls = [];
+      for (const e of entries) if (e.url && urls.indexOf(e.url) === -1) urls.push(e.url);
+      return head + '\npages:\n' + urls.map((u) => '  ' + u).join('\n') + '\n\n'
+        + lines.join('\n') + '\n';
+    } catch (e) {
+      return '\n\n[LinkedIn trace unavailable: ' + (e && e.message) + ']\n';
+    }
+  }
+
   async traceExport(how) {
     if (!window.JGTrace) { this.showToast('Tracer not loaded', 'error'); return; }
     try {
-      const text = window.JGTrace.asText();
+      const text = window.JGTrace.asText() + await this.linkedInTraceText();
       if (how === 'copy') {
         await navigator.clipboard.writeText(text);
         this.showToast('Trace copied (' + window.JGTrace.snapshot().entries + ' entries)', 'success');
@@ -4343,6 +4391,20 @@ class ATSTailor {
       // guesswork -- so keywords, tailoring and the contact address still
       // have a job description to work from.
       const fresh = results?.[0]?.result || null;
+
+      // A results list is not a job. Refused BEFORE reconcile, so the
+      // list is never captured as a context and never handed to a later
+      // page: the trace showed LinkedIn's search page stored as a job
+      // titled "Jobs | LinkedIn" at company "LinkedIn", carrying 10,000
+      // characters describing 99 other people's roles, and then restored
+      // onto the next page as "Job found (from the posting)".
+      if (fresh && fresh.isListPage) {
+        this.currentJob = null;
+        this.updateJobDisplay();
+        this.setStatus('This is a results list — open a job posting', 'error');
+        return false;
+      }
+
       const reconciled = await this.reconcileJobContext(fresh, tab);
 
       if (reconciled && (reconciled.description || reconciled.title)) {
@@ -7967,6 +8029,52 @@ class ATSTailor {
  * ENHANCED: 70+ company career site selectors for proper job title/company extraction
  */
 function extractJobInfoFromPageInjected() {
+  // Is this a board index / search page rather than one posting?
+  //
+  // General on purpose: LinkedIn's search results, a Greenhouse board
+  // index and a Workday search all have the same shape -- many job links,
+  // no single posting. Reported as a job, the page's own text becomes the
+  // "description" and every downstream step works from a list of other
+  // people's roles.
+  const _looksLikeJobList = () => {
+    try {
+      // A page that DECLARES one posting is a posting, whatever else it
+      // also shows. This is checked first so a real posting that happens
+      // to carry a "similar jobs" rail is never rejected.
+      for (const sc of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          let d = JSON.parse(sc.textContent);
+          if (Array.isArray(d)) d = d.find((x) => x && x['@type'] === 'JobPosting');
+          if (d && d['@type'] === 'JobPosting') return false;
+        } catch (e) {}
+      }
+      // window.location, not bare location: the rest of this injected
+      // function already goes through window, and it is what makes the
+      // helper testable outside a browser.
+      const path = window.location.pathname.toLowerCase();
+      const qs = window.location.search.toLowerCase();
+      // Search and browse URLs name themselves.
+      if (/\/(search|search-results|browse|results|collections|explore)(\/|$)/.test(path)) return true;
+      if (/[?&](keywords|q|query|search)=/.test(qs) && !/\/(view|job|jobs)\/\d{4,}/.test(path)) return true;
+
+      // Otherwise: many DISTINCT job links is a list.
+      const seen = new Set();
+      for (const el of document.querySelectorAll(
+        'a[href*="/job"], a[href*="/careers/"], [data-occludable-job-id], .job-card-container')) {
+        const h = (el.getAttribute && el.getAttribute('href')) || '';
+        if (/\/jobs?\/(?:view\/)?\d{4,}|\/jobs?\/[a-z0-9][a-z0-9-]{5,}/i.test(h)) {
+          seen.add(h.split('?')[0]);
+        } else if (el.hasAttribute && el.hasAttribute('data-occludable-job-id')) {
+          seen.add('id:' + el.getAttribute('data-occludable-job-id'));
+        }
+        if (seen.size >= 5) return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  };
+
   const result = {
     title: '',
     company: '',
@@ -8756,6 +8864,18 @@ function extractJobInfoFromPageInjected() {
   } catch (error) {
     console.error('[ATS Tailor] Extraction error:', error);
   }
+
+  // A results list has no single description, so whatever was found
+  // above describes the LIST. On LinkedIn's search page that produced
+  // a "job" titled "Jobs | LinkedIn" at company "LinkedIn" whose
+  // description ran to 10,000 characters covering 99 unrelated
+  // postings. Tailoring a CV to that is worse than not tailoring.
+  //
+  // Set unconditionally rather than inside the text fallback: the flag
+  // has to hold however the description was obtained, and putting it in
+  // one branch left a board index that filled its description another
+  // way unflagged entirely.
+  result.isListPage = _looksLikeJobList();
 
   return result;
 }
