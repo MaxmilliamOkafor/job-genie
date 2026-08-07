@@ -2274,16 +2274,21 @@ class ATSTailor {
         await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: cfg.files });
       } catch (e) { /* already present is fine */ }
 
-      // With auto-advance armed, the button should APPLY from a job
-      // listing: press Easy Apply, fill every step, advance. Otherwise it
-      // just fills whatever step is already open.
-      let entryFn = cfg.fn;
-      let flowMode = false;
-      if (site === 'linkedin') {
-        const adv = await new Promise((r) => chrome.storage.local.get(
-          ['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled !== false)));
-        if (adv) { entryFn = '__JG_LINKEDIN_APPLY_NOW__'; flowMode = true; }
-      }
+      // "Fill Easy Apply now" FILLS. Nothing else.
+      //
+      // It used to swap itself for the full apply flow whenever
+      // auto-advance was on -- pressing Easy Apply, advancing every step
+      // and submitting the application. Auto-advance defaults ON, so in
+      // practice a button labelled "Fill" sent applications, and reported
+      // "Application submitted after 1 step(s)" for a press the user
+      // understood as filling a form in front of them.
+      //
+      // A control has to do what its label says, and that goes double
+      // when the hidden behaviour is irreversible and reaches a real
+      // employer. Advancing and submitting stay with their own toggles,
+      // on the dialog the user opened.
+      const entryFn = cfg.fn;
+      const flowMode = false;
 
       // executeScript returns one result PER FRAME. chrome.tabs.sendMessage
       // delivers only the first frame's reply, so a silent frame could mask

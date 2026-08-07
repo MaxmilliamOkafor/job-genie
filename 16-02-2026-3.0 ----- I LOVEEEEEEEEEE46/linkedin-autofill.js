@@ -212,15 +212,42 @@
    * A real step always has a footer control that advances or sends it.
    * Nothing else counts.
    */
-  const STEP_TEXT = /^(submit application|submit your application|send application|review your application|continue to next step)$/;
+  // Unambiguous on their own -- no other control on LinkedIn says these.
+  const STEP_TEXT = /^(submit application|submit your application|send application|review your application|continue to next step|continue applying)$/;
+  // The real dialog's footer often just says "Next". So does a cookie
+  // banner and a notifications dropdown, which is why this wording only
+  // counts when the container also holds form fields to fill.
+  const WEAK_STEP_TEXT = /^(next|review|continue)$/;
+
+  // A step lives in a dialog. The job pane does not, and that is what
+  // structurally separates the real thing from the page behind it --
+  // far more reliable than any wording, which is shared by both.
+  const DIALOG_SEL = [
+    '.jobs-easy-apply-modal', '[data-test-modal]', '[role="dialog"]', 'dialog',
+    '.artdeco-modal', '[data-sdui-screen]',
+  ].join(',');
+
+  function _isDialogish(el) {
+    try { return !!(el && (el.matches(DIALOG_SEL) || el.closest(DIALOG_SEL))); }
+    catch (e) { return false; }
+  }
 
   function _hasStepMachinery(el) {
     try {
       if (!el) return false;
+      // A labelled footer control is proof by itself.
       if (el.querySelector(FOOTER_BTN_SEL)) return true;
-      for (const b of el.querySelectorAll('button, [role="button"]')) {
+      const btns = el.querySelectorAll('button, [role="button"]');
+      for (const b of btns) {
         const t = (b.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
         if (STEP_TEXT.test(t)) return true;
+      }
+      // Weak wording needs corroboration: something to actually fill.
+      const fields = el.querySelectorAll('input:not([type=hidden]), select, textarea').length;
+      if (!fields) return false;
+      for (const b of btns) {
+        const t = (b.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (WEAK_STEP_TEXT.test(t)) return true;
       }
       return false;
     } catch (e) {
@@ -259,7 +286,7 @@
       try {
         if (!_rendered(btn)) continue;
         const c = _containerFor(btn);
-        if (c) { trace('modal.found', { via: 'footer-aria', el: _describe(c) }); return c; }
+        if (c && _isDialogish(c)) { trace('modal.found', { via: 'footer-aria', el: _describe(c) }); return c; }
       } catch (e) {}
     }
 
@@ -271,9 +298,9 @@
         // EXACT step wording. "starts with" let anything beginning
         // "continue…" or "review…" nominate an entire page region as a
         // dialog.
-        if (!STEP_TEXT.test(t)) continue;
+        if (!STEP_TEXT.test(t) && !WEAK_STEP_TEXT.test(t)) continue;
         const c = _containerFor(btn);
-        if (c && _hasStepMachinery(c)) {
+        if (c && _isDialogish(c) && _hasStepMachinery(c)) {
           trace('modal.found', { via: 'step-text', btn: t, el: _describe(c) });
           return c;
         }

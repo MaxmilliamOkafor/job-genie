@@ -39,6 +39,8 @@ const consts = [
   /const FOOTER_BTN_SEL = \[[\s\S]*?\]\.join\(','\);/.exec(src)[0],
   /const CONTAINER_SEL = \[[\s\S]*?\]\.join\(','\);/.exec(src)[0],
   /const STEP_TEXT = .*;/.exec(src)[0],
+  /const WEAK_STEP_TEXT = .*;/.exec(src)[0],
+  /const DIALOG_SEL = \[[\s\S]*?\]\.join\(','\);/.exec(src)[0],
 ].join('\n');
 const body = [
   consts,
@@ -46,7 +48,7 @@ const body = [
   // a false positive instead of leaving it invisible. Stubbed here.
   'const _traced = []; function trace(ev, d) { _traced.push([ev, d]); }',
   extract('_rendered'), extract('_containerFor'), extract('_describe'),
-  extract('_hasStepMachinery'), extract('_submissionConfirmed'),
+  extract('_isDialogish'), extract('_hasStepMachinery'), extract('_submissionConfirmed'),
   extract('findEasyApplyModal'),
 ].join('\n');
 
@@ -127,6 +129,43 @@ for (const [name, html] of [
   const m = detect(html);
   t(name, !!m && !m.error, m && m.error ? m.error : 'a genuine dialog was missed');
 }
+
+// ---- the dialog from the second screenshot ---------------------------
+// "Apply to Stott and May", Contact info step. Its footer button says
+// "Next" -- NOT "Continue to next step" -- so a detector that insists on
+// the formal wording misses the exact screen the user is looking at.
+console.log('\nTHE "APPLY TO STOTT AND MAY" DIALOG');
+const REAL_DIALOG = `<!doctype html><html><body>
+<div class="jobs-search__job-details"><h1>AI Engineer</h1>
+  <div class="jobs-apply-button"><button aria-label="Easy Apply to AI Engineer"><span>Easy Apply</span></button></div>
+</div>
+<div class="artdeco-modal" role="dialog" aria-label="Apply to Stott and May">
+  <h2>Apply to Stott and May</h2>
+  <h3>Contact info</h3>
+  <label for="em">Email address*</label>
+  <select id="em"><option>Maxokafordev@gmail.com</option></select>
+  <label for="cc">Phone country code*</label>
+  <select id="cc"><option>Ireland (+353)</option></select>
+  <label for="ph">Mobile phone number*</label><input id="ph" value="874261508">
+  <footer><button><span>Next</span></button></footer>
+</div></body></html>`;
+{
+  const m = detect(REAL_DIALOG);
+  t('the dialog is found even though its button only says "Next"',
+    !!m && !m.error, m && m.error ? m.error : 'the real dialog was missed');
+  t('...and it is the dialog, not the job pane behind it',
+    !!m && !m.error && /artdeco-modal/.test(String(m.className || '')),
+    'matched <' + (m && m.tagName) + ' class="' + (m && m.className) + '">');
+}
+
+// ---- the manual button must only FILL --------------------------------
+console.log('\n"FILL EASY APPLY NOW" ONLY FILLS');
+const popupSrc = fs.readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
+t('it never swaps itself for the full apply flow',
+  !/entryFn = '__JG_LINKEDIN_APPLY_NOW__'/.test(popupSrc),
+  'a button labelled "Fill" still presses Easy Apply, advances and submits');
+t('it calls the fill entry point',
+  /fn: '__JG_LINKEDIN_FILL_NOW__'/.test(popupSrc));
 
 // ---- the honesty rule -----------------------------------------------
 console.log('\nSUBMISSION IS CONFIRMED, NOT ASSUMED');
