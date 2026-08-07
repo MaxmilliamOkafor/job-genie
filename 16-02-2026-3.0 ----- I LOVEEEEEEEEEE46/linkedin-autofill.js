@@ -470,14 +470,47 @@
   // switches the visible job -- no dialog, and it looked like the button
   // was broken. So the match is anchored and length-bounded: the CTA says
   // "Easy Apply" and almost nothing else.
+  /**
+   * Does this apply button send the user OFF LinkedIn?
+   *
+   * LinkedIn marks an external apply with an external-link icon inside the
+   * button -- an <svg><use href="...external..."> -- and that marking is
+   * structural, so it holds whatever language the interface is in. The
+   * words "Easy Apply" do not: on a non-English LinkedIn the text check
+   * matches nothing and the CTA is never found.
+   *
+   * (Taken from the Zippia extension's LinkedIn config, which uses this
+   * same icon to find the external button because that is the one IT
+   * wants. Here it is the exact negative signal: icon present means the
+   * button is not ours.)
+   */
+  function _isExternalApply(el) {
+    try {
+      if (!el) return false;
+      const holder = el.closest('.jobs-apply-button') || el;
+      if (holder.querySelector('use[href*="external" i], use[*|href*="external" i]')) return true;
+      // Fallbacks for the same meaning expressed differently.
+      if (el.getAttribute('target') === '_blank') return true;
+      const svg = holder.querySelector('svg[data-test-icon*="external" i], [data-test-icon*="external" i]');
+      return !!svg;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function _looksLikeEasyApplyCta(c) {
     if (!c.ok) return false;
     if (c.el.closest('[role="dialog"], dialog, .artdeco-modal')) return false;
+    if (_isExternalApply(c.el)) return false;
     // A real CTA is a short button; a job card carries the whole listing.
     if (/^easy apply\b/i.test(c.aria)) return true;
     if (/\beasy apply\b/i.test(c.aria) && c.aria.length < 120) return true;
     if (/^easy apply$/i.test(c.txt)) return true;
     if (/^easy apply\b/i.test(c.txt) && c.txt.length <= 40) return true;
+    // Non-English interface: the words never match, but a .jobs-apply-button
+    // that is NOT marked external is still the in-app apply. Restricted to
+    // the known CTA hook, so a stray "Apply" elsewhere can never qualify.
+    if (c.why === 'cta-hook' && c.txt.length <= 40) return true;
     return false;
   }
 
@@ -491,6 +524,7 @@
     // path.
     const hook = cands.find((c) => c.why === 'cta-hook' && c.ok
       && !c.el.closest('[role="dialog"], dialog, .artdeco-modal')
+      && !_isExternalApply(c.el)
       && /\beasy apply\b/i.test(c.txt + ' ' + c.aria));
     if (hook) return hook.el;
     const match = cands.find(_looksLikeEasyApplyCta);
@@ -524,8 +558,28 @@
     while (Date.now() < deadline) {
       await sleep(250);
       if (findEasyApplyModal()) return true;
+      // LinkedIn sometimes puts a starter dialog in between -- a panel
+      // with a single link-styled button that begins the application.
+      // It has none of the footer buttons the modal detector looks for,
+      // so the flow simply timed out on it. (The selector is Zippia's.)
+      if (_clickApplyStarter()) log('cleared the apply-starter dialog');
     }
     return false;
+  }
+
+  function _clickApplyStarter() {
+    try {
+      const starter = document.querySelector(
+        '[aria-labelledby*="jobs-apply-starter" i], [id*="jobs-apply-starter" i]');
+      if (!starter || !_rendered(starter)) return false;
+      const btn = starter.querySelector('button[role="link"], button, [role="button"]');
+      if (!btn || !_rendered(btn) || btn.dataset.jgStarterClicked === '1') return false;
+      btn.dataset.jgStarterClicked = '1';
+      _robustClick(btn);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // The job this page is showing, so a run is never repeated for the same
@@ -554,9 +608,15 @@
       if (pane) {
         const d = pane.getAttribute('data-job-id') || pane.getAttribute('data-occludable-job-id');
         if (d && /^\d+$/.test(String(d))) return String(d);
-        const a = pane.querySelector('a[href*="/jobs/view/"]');
-        const pm = a && /\/jobs\/view\/(\d+)/.exec(a.getAttribute('href') || '');
-        if (pm) return pm[1];
+        // The pane title's own link, which is where Zippia reads it from:
+        // div.jobs-details h1 a. Checked before the looser sweep because
+        // the title link is unambiguously THIS job, while any other
+        // /jobs/view/ link in the pane may point at a related posting.
+        for (const a of pane.querySelectorAll('h1 a, h1 ~ a, a[href*="/jobs/view/"], a[href*="/jobs/"]')) {
+          // Looser than /jobs/view/(\d+): LinkedIn also serves /jobs/<id>.
+          const pm = /\/jobs\/(?:.*\/)?(\d{6,})/.exec(a.getAttribute('href') || '');
+          if (pm) return pm[1];
+        }
       }
     } catch (e) {}
     return '';

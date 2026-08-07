@@ -25,7 +25,7 @@ const { chromium } = S.skipUnlessReady(require('path').basename(__filename));
 const https = require('https');
 const fs = require('fs');
 
-const PORT = 8453;
+const PORT = 8454;
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -91,8 +91,17 @@ function openJob(id){
     pane.innerHTML = '<h1 class="job-details-jobs-unified-top-card__job-title">Machine Learning Engineer '+id+'</h1>'+
       '<a href="/jobs/view/'+id+'/">permalink</a>'+
       (JOBS[id]
-        ? '<button class="jobs-apply-button" aria-label="Easy Apply to Machine Learning Engineer '+id+'"><span>Easy Apply</span></button>'
-        : '<button class="jobs-apply-button" aria-label="Apply to Machine Learning Engineer '+id+'"><span>Apply</span></button>')+
+        ? (id === '4006'
+            // A non-English interface: the words "Easy Apply" appear
+            // nowhere, and the button carries no external icon. This must
+            // still be recognised, or the extension is English-only.
+            ? '<div class="jobs-apply-button"><button aria-label="Candidature simplifiee"><span>Candidature simplifiee</span></button></div>'
+            : '<div class="jobs-apply-button"><button aria-label="Easy Apply to Machine Learning Engineer '+id+'"><span>Easy Apply</span></button></div>')
+        // LinkedIn's real marking for an apply that leaves the site: an
+        // external-link icon inside the button. Structural, so it holds in
+        // any language -- unlike the word "Apply".
+        : '<div class="jobs-apply-button"><button aria-label="Apply to Machine Learning Engineer '+id+'">'
+          + '<span>Apply</span><svg><use href="#external-link-small"></use></svg></button></div>')+
       '<div id="modal-root"></div>';
     var b = pane.querySelector('.jobs-apply-button');
     if (JOBS[id]) b.addEventListener('click', function(){ setTimeout(renderModal, 120); });
