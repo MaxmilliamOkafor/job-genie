@@ -137,7 +137,10 @@
   const SUCCESS_BANNER_MSG = '✅ Done! Match: 100% - Files attached!';
 
   const SUPPORTED_HOSTS = [
-    // Standard ATS platforms (EXCLUDES Lever and Ashby per user preference)
+    // Standard ATS platforms. Kept only as a fallback for when
+    // ats-platforms.js is unavailable; that module is the source of truth.
+    // Lever, Ashby and Rippling are deliberately absent from both, along
+    // with Indeed, Glassdoor, Wellfound and Otta.
     'greenhouse.io', 'job-boards.greenhouse.io', 'boards.greenhouse.io',
     'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com',
     'bullhornstaffing.com', 'bullhorn.com', 'teamtailor.com',
@@ -186,7 +189,24 @@
     const normalizedHost = hostname.replace(/^www\./, '').toLowerCase();
     const pathname = window.location.pathname.toLowerCase();
 
-    // Pure ATS platforms — always supported
+    // Pure ATS platforms — always supported.
+    //
+    // Read from ats-platforms.js rather than the local list, which had
+    // drifted badly: Lever and Ashby were absent entirely, so their
+    // postings were never recognised however good the selectors were, and
+    // Cornerstone, BrassRing, Avature, Eightfold, Rippling, Dover,
+    // Pinpoint, Zoho, Occupop, Freshteam, Gusto, Paylocity, Comeet and
+    // Polymer were never added. It also said dayforce.com where the real
+    // host is dayforcehcm.com.
+    //
+    // A platform that is detected, registered and has selectors but is
+    // missing from THIS list is still dead, which is the failure this
+    // whole file has hit repeatedly.
+    try {
+      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms : window.ATSPlatforms;
+      if (AP && AP.detect(normalizedHost, window.location.href)) return true;
+    } catch (e) { /* fall through to the static lists below */ }
+
     if (ATS_ONLY_HOSTS.some((h) => normalizedHost === h || normalizedHost.endsWith(`.${h}`))) {
       return true;
     }
@@ -210,6 +230,114 @@
   }
 
   console.log('[ATS Tailor] Supported ATS detected - AUTO-TAILOR MODE ACTIVE!');
+
+  // ============ CARRY THE POSTING TO THE APPLICATION PAGE ============
+  // Most ATS show the description at one URL and the FORM at another. By
+  // the time the user is on the form there is no description to extract
+  // keywords from, no company to address an email to, and none of the
+  // addresses printed in the JD body. Capturing here -- on the page that
+  // actually has them -- is what lets the apply page still work.
+  //
+  // Runs on every posting view, including SPA route changes, and captures
+  // the contact sources at the same time so both survive the navigation.
+  let _lastCapturedUrl = '';
+  async function captureJobContext(reason) {
+    try {
+      if (typeof JDContext === 'undefined') return;
+      const url = window.location.href;
+      // An application page has nothing worth capturing, and capturing it
+      // would be the downgrade JDContext exists to prevent.
+      if (JDContext.isApplicationPage(document, url)) return;
+      if (url === _lastCapturedUrl) return;
+
+      const info = extractJobInfo();
+      if (!info || !(info.description || '').trim()) return;
+
+      let sources = null;
+      try {
+        sources = (typeof JDContactSources !== 'undefined') ? JDContactSources.harvest(document) : null;
+      } catch (e) { /* the contact half is optional */ }
+
+      _lastCapturedUrl = url;
+      await JDContext.capture({
+        title: info.title || '',
+        company: info.company || '',
+        location: info.location || '',
+        description: info.description || '',
+        url,
+        emails: (sources && sources.emails) || [],
+        names: (sources && sources.names) || [],
+        org: (sources && sources.org) || '',
+        jobId: (sources && sources.jobId) || '',
+      }, { url });
+      console.log('[ATS Tailor] posting captured for the apply page (' + reason + '):',
+        (info.description || '').length, 'chars,',
+        ((sources && sources.emails) || []).length, 'address(es)');
+    } catch (e) {
+      console.warn('[ATS Tailor] could not capture the posting:', e && e.message);
+    }
+  }
+  // Late enough for client-rendered descriptions to exist.
+  setTimeout(() => captureJobContext('load'), 1500);
+  setTimeout(() => captureJobContext('settle'), 4000);
+
+  // A content script cannot see its own tab id, and tab lineage is the
+  // only thing that ties a careers site to the ATS it hands off to when
+  // the two are on different domains. The background worker knows.
+  let _tabIdPromise = null;
+  function myTabId() {
+    if (!_tabIdPromise) {
+      _tabIdPromise = new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ action: 'JG_MY_TAB_ID' }, (r) => {
+            if (chrome.runtime.lastError) return resolve(null);
+            resolve(r && typeof r.tabId === 'number' ? r.tabId : null);
+          });
+        } catch (e) { resolve(null); }
+      });
+    }
+    return _tabIdPromise;
+  }
+
+  /**
+   * The job as this page sees it, completed from the posting it came from.
+   *
+   * The tailoring path reads the CURRENT page, which on a two-page ATS is
+   * the application form: no description to extract keywords from and no
+   * company to address an email to. Wiring only the popup fixed the
+   * manual path and left auto-tailor still reading an empty form, so
+   * every entry point goes through this.
+   *
+   * The page always wins where it has something real; the remembered
+   * posting only fills gaps, and only ever for the SAME posting.
+   */
+  // Exposed for the real-browser check in tests/browser. This lives in
+  // the extension's ISOLATED world, so the page itself cannot see or call
+  // it -- only the extension's own executeScript can.
+  window.__jgExtractJobInfoWithContext = (...a) => extractJobInfoWithContext(...a);
+
+  async function extractJobInfoWithContext(existing) {
+    const info = existing || extractJobInfo();
+    try {
+      if (typeof JDContext === 'undefined') return info;
+      // Nothing to do when this page has the description itself.
+      if ((info.description || '').trim().length > 400) return info;
+      const url = window.location.href;
+      const remembered = await JDContext.recall(url, { tabId: await myTabId() });
+      if (!remembered) return info;
+      const merged = JDContext.merge(info, remembered, {
+        isApplicationPage: JDContext.isApplicationPage(document, url),
+      });
+      if ((merged.description || '').length > (info.description || '').length) {
+        console.log('[ATS Tailor] job description restored from the posting via',
+          remembered._via + ':', (merged.description || '').length, 'chars');
+      }
+      return merged;
+    } catch (e) {
+      console.warn('[ATS Tailor] job context unavailable:', e && e.message);
+      return info;
+    }
+  }
 
   // ============ CACHE MANAGER INTEGRATION ============
   // Debounced JD extraction to prevent duplicate processing on rapid page changes
@@ -338,7 +466,12 @@
       console.log('[ATS Tailor] Not a supported host, skipping');
       return;
     }
-    
+
+    // SPA route change: many ATS move from posting to form without a page
+    // load, so this is the only chance to capture the description before
+    // it is replaced by the application form.
+    setTimeout(() => captureJobContext('spa'), 1200);
+
     // Skip thank you pages - DO NOT start automation
     if (isThankYouPage(newUrl, true)) {
       console.log('[ATS Tailor] 🛑 SKIPPING Thank You page - no automation');
@@ -725,8 +858,9 @@
             return;
           }
           
-          // ALWAYS extract fresh job info from THIS page's JD
-          const jobInfo = extractJobInfo();
+          // Fresh from THIS page, completed from the posting when this
+          // page is the application form rather than the JD.
+          const jobInfo = await extractJobInfoWithContext();
           const jobTitle = jobInfo.title || 'Role';
           updateBanner(`🔍 Parsing: ${jobTitle.substring(0, 25)}...`, 'working');
           
@@ -2239,45 +2373,44 @@
 
     const hostname = window.location.hostname;
     
-    const platformSelectors = {
-      greenhouse: {
-        title: ['h1.app-title', 'h1.posting-headline', 'h1', '[data-test="posting-title"]'],
-        company: ['#company-name', '.company-name', '.posting-categories strong'],
-        location: ['.location', '.posting-categories .location'],
-        description: ['#content', '.posting', '.posting-description'],
-      },
-      workday: {
-        title: ['h1[data-automation-id="jobPostingHeader"]', 'h1'],
-        company: ['div[data-automation-id="jobPostingCompany"]'],
-        location: ['div[data-automation-id="locations"]'],
-        description: ['div[data-automation-id="jobPostingDescription"]'],
-      },
-      smartrecruiters: {
-        title: ['h1[data-test="job-title"]', 'h1'],
-        company: ['[data-test="job-company-name"]'],
-        location: ['[data-test="job-location"]'],
-        description: ['[data-test="job-description"]'],
-      },
-      workable: {
-        title: ['h1', '[data-ui="job-title"]'],
-        company: ['[data-ui="company-name"]'],
-        location: ['[data-ui="job-location"]'],
-        description: ['[data-ui="job-description"]'],
-      },
-    };
+    // Platform knowledge lives in ats-platforms.js so detection, contact
+    // harvesting and requisition-ID parsing cannot disagree. This used to
+    // carry selectors for four platforms and fell through to og:title
+    // guessing on the other thirty-two -- which produced a truncated
+    // description, and a truncated description is what surfaces as "could
+    // not extract keywords".
+    const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+      : (typeof window !== 'undefined' ? window.ATSPlatforms : null);
 
-    let platformKey = null;
-    if (hostname.includes('greenhouse.io')) platformKey = 'greenhouse';
-    else if (hostname.includes('workday.com') || hostname.includes('myworkdayjobs.com')) platformKey = 'workday';
-    else if (hostname.includes('smartrecruiters.com')) platformKey = 'smartrecruiters';
-    else if (hostname.includes('workable.com')) platformKey = 'workable';
+    let platformKey = AP ? AP.detect(hostname, window.location.href) : null;
 
-    const selectors = platformKey ? platformSelectors[platformKey] : null;
+    // Selectors are platform-specific first, then generic, so an ATS that
+    // is not listed still reads rather than failing.
+    const selectors = AP ? {
+      title: AP.selectorsFor(platformKey, 'title'),
+      company: AP.selectorsFor(platformKey, 'company'),
+      location: AP.selectorsFor(platformKey, 'location'),
+      description: AP.selectorsFor(platformKey, 'description'),
+    } : null;
 
-    let title = selectors ? getText(selectors.title) : '';
+    // The employer's OWN structured declaration, where there is one. Most
+    // ATS and nearly every large employer's careers site emit JobPosting
+    // JSON-LD for Google Jobs, and it carries the full description rather
+    // than whatever a selector happens to capture. It is tried first
+    // because it is the only source that is complete by construction --
+    // and it is what makes a platform nobody wrote selectors for read as
+    // well as Greenhouse does.
+    const ld = AP && typeof AP.fromJobPostingLd === 'function'
+      ? AP.fromJobPostingLd(document) : { found: false };
+    if (ld.found) {
+      console.log('[ATS Tailor] JobPosting JSON-LD found:',
+        (ld.description || '').length, 'chars of description');
+    }
+
+    let title = ld.title || (selectors ? getText(selectors.title) : '');
     if (!title) title = getMeta('og:title') || document.title?.split('|')?.[0]?.split('-')?.[0]?.trim() || '';
 
-    let company = selectors ? getText(selectors.company) : '';
+    let company = ld.company || (selectors ? getText(selectors.company) : '');
     
     // IMPROVED: Multiple fallback strategies for company extraction
     if (!company) company = getMeta('og:site_name') || '';
@@ -2326,9 +2459,16 @@
       }
     }
 
-    const rawLocation = selectors ? getText(selectors.location) : '';
+    const rawLocation = ld.location || (selectors ? getText(selectors.location) : '');
     const location = stripRemoteFromLocation(rawLocation) || rawLocation;
-    const rawDesc = selectors ? getText(selectors.description) : '';
+
+    // Whichever source gives the FULLER description wins. JSON-LD is
+    // complete by construction, but a few sites emit a one-line summary
+    // there and render the real posting in the page -- and a truncated
+    // description is what surfaces as "could not extract keywords".
+    const cssDesc = (selectors ? getText(selectors.description) : '') || '';
+    const ldDesc = ld.description || '';
+    const rawDesc = ldDesc.length >= cssDesc.length ? ldDesc : cssDesc;
     const description = rawDesc?.trim()?.length > 80 ? rawDesc.trim().substring(0, 3000) : '';
 
     return { title, company, location, description, url: window.location.href, platform: platformKey || hostname };
@@ -2483,7 +2623,7 @@
 
       // Extract job info from page (if not cached)
       if (!jobInfo) {
-        jobInfo = extractJobInfo();
+        jobInfo = await extractJobInfoWithContext();
         // Cache for future use
         if (typeof CacheManager !== 'undefined' && jobInfo.description) {
           CacheManager.setCachedJDResult(jobInfo.description, jobInfo);
@@ -3114,8 +3254,8 @@
         return;
       }
       
-      // Extract job info from page
-      const jobInfo = extractJobInfo();
+      // Extract job info from page (or from the posting it came from)
+      const jobInfo = await extractJobInfoWithContext();
       // CRITICAL: If extractJobInfo couldn't resolve company, use the Tier 1 detection result
       if (!jobInfo.company && tier1Detection.company) {
         jobInfo.company = tier1Detection.company;

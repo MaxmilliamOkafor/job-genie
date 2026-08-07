@@ -111,7 +111,25 @@
     "https://*.netflix.com/*",
     "https://*.amd.com/*",
     "https://www.metacareers.com/*",
-    "https://explore.jobs.netflix.net/*"
+    "https://explore.jobs.netflix.net/*",
+    "https://*.myworkdaysite.com/*",
+    "https://*.dayforcehcm.com/*",
+    "https://*.freshteam.com/*",
+    "https://*.gusto.com/*",
+    "https://*.paylocity.com/*",
+    "https://*.comeet.co/*",
+    "https://*.polymer.co/*",
+    "https://*.theresumator.com/*",
+    "https://*.icims.eu/*",
+    "https://*.sapsf.com/*",
+    "https://*.sapsf.eu/*",
+    "https://*.dover.io/*",
+    "https://*.cornerstoneondemand.com/*",
+    "https://*.kenexa.com/*",
+    "https://*.ukg.com/*",
+    "https://*.myadp.com/*",
+    "https://*.bullhorncdn.com/*",
+    "https://*.comeet.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -210,9 +228,6 @@
         "https://*.bamboohr.com/*",
         "https://*.recruitee.com/*",
         "https://*.jazzhr.com/*",
-        "https://*.lever.co/*",
-        "https://*.ashbyhq.com/*",
-        "https://*.rippling.com/*",
         "https://*.breezy.hr/*",
         "https://*.applytojob.com/*",
         "https://*.successfactors.com/*",
@@ -231,10 +246,28 @@
         "https://www.metacareers.com/*",
         "https://explore.jobs.netflix.net/*",
         "https://*.occupop.com/*",
-        "https://*.wellfound.com/*",
-        "https://*.otta.com/*"
+        "https://*.myworkdaysite.com/*",
+        "https://*.dayforcehcm.com/*",
+        "https://*.freshteam.com/*",
+        "https://*.gusto.com/*",
+        "https://*.paylocity.com/*",
+        "https://*.comeet.co/*",
+        "https://*.polymer.co/*",
+        "https://*.theresumator.com/*",
+        "https://*.icims.eu/*",
+        "https://*.sapsf.com/*",
+        "https://*.sapsf.eu/*",
+        "https://*.dover.io/*",
+        "https://*.cornerstoneondemand.com/*",
+        "https://*.kenexa.com/*",
+        "https://*.ukg.com/*",
+        "https://*.myadp.com/*",
+        "https://*.bullhorncdn.com/*",
+        "https://*.comeet.com/*"
       ],
       "js": [
+        "ats-platforms.js",
+        "jd-context.js",
         "debug-logger.js",
         "cache-manager.js",
         "content-quality-engine.js",
@@ -277,7 +310,8 @@
       "css": [
         "content.css"
       ],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": true
     },
     {
       "matches": [
@@ -300,12 +334,12 @@
       "all_frames": false
     },
     {
+      "comment": "LinkedIn gets the contact sources and nothing else. The heavy tailoring engine is deliberately kept off linkedin.com -- it is denylisted in background.js and autofill-controller.js because it crashes the SPA -- and LinkedIn postings are not tailored here. Easy Apply autofill is a separate, dynamically registered script (jg-linkedin-autofill).",
       "matches": [
-        "https://*.linkedin.com/*",
-        "https://*.indeed.com/*",
-        "https://*.glassdoor.com/*"
+        "https://*.linkedin.com/*"
       ],
       "js": [
+        "ats-platforms.js",
         "jd-contact-sources.js"
       ],
       "run_at": "document_idle",
@@ -333,6 +367,8 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "ats-platforms.js",
+        "jd-context.js",
         "jg-trace.js",
         "icons/*.png",
         "content.css",

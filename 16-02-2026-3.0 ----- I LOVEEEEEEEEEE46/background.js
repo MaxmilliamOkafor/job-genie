@@ -1073,7 +1073,8 @@ function syncAutofillRegistrationFromStorage() {
         chrome.storage.local.get(['autofill_enabled', 'linkedin_autofill_enabled'], resolve)
       );
       enabled = r && r.autofill_enabled === true;
-      linkedinEnabled = r && r.linkedin_autofill_enabled === true;
+      // Ships ON; an explicit false still turns it off.
+      linkedinEnabled = !!r && r.linkedin_autofill_enabled !== false;
     } catch (e) {}
     try {
       // Master toggle: vendor engine + Indeed filler.
@@ -1121,6 +1122,15 @@ syncAutofillRegistrationFromStorage();
 // guessed, constructed, or looked up in a contact database.
 // ===================================================================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // A content script cannot see its own tab id, and that id is what ties
+  // a careers page to the ATS it hands off to when the two sit on
+  // different domains -- the one case where matching on URL alone cannot
+  // work. Only the sender's own id is ever returned.
+  if (message && message.action === 'JG_MY_TAB_ID') {
+    sendResponse({ tabId: (sender && sender.tab && sender.tab.id) || null });
+    return true;
+  }
+
   if (!message || message.action !== 'JG_FIND_CAREERS_EMAIL') return;
   (async () => {
     try {

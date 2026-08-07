@@ -868,7 +868,7 @@ class ATSTailor {
     document.getElementById('linkedinAutoSubmitToggle')?.addEventListener('change', async (e) => {
       const enabled = !!e.target?.checked;
       if (enabled) {
-        const adv = await new Promise((r) => chrome.storage.local.get(['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled === true)));
+        const adv = await new Promise((r) => chrome.storage.local.get(['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled !== false)));
         if (!adv) {
           e.target.checked = false;
           this.showToast('Turn on Auto-advance first', 'error');
@@ -1444,15 +1444,17 @@ class ATSTailor {
     if (workdayToggle) workdayToggle.checked = enabled;
     // LinkedIn Easy Apply is an independent preference (also default OFF).
     const liToggle = document.getElementById('linkedinAutofillToggle');
-    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled === true;
+    // These four ship ON. An explicit false still wins, so switching one
+    // off survives a popup reopen; only "never set" means on.
+    if (liToggle) liToggle.checked = result.linkedin_autofill_enabled !== false;
     const advToggle = document.getElementById('linkedinAutoAdvanceToggle');
-    if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled === true;
+    if (advToggle) advToggle.checked = result.linkedin_autoadvance_enabled !== false;
     const subToggle = document.getElementById('linkedinAutoSubmitToggle');
-    if (subToggle) subToggle.checked = result.linkedin_autosubmit_enabled === true;
+    if (subToggle) subToggle.checked = result.linkedin_autosubmit_enabled !== false;
     this.syncLinkedInAutoUI();
     // Follow-up email: preference, saved template, and live Gmail status.
     const fuToggle = document.getElementById('followupEnabledToggle');
-    if (fuToggle) fuToggle.checked = result.followup_enabled === true;
+    if (fuToggle) fuToggle.checked = result.followup_enabled !== false;
     // Defaults ON: attaching the tailored documents is the useful case.
     const atToggle = document.getElementById('followupAttachToggle');
     if (atToggle) atToggle.checked = result.followup_attach_enabled !== false;
@@ -2174,7 +2176,7 @@ class ATSTailor {
   // rather than letting the user arm a switch that cannot fire.
   syncLinkedInAutoUI() {
     chrome.storage.local.get(['linkedin_autoadvance_enabled', 'linkedin_autosubmit_enabled'], (r) => {
-      const adv = r?.linkedin_autoadvance_enabled === true;
+      const adv = r?.linkedin_autoadvance_enabled !== false;
       const sub = document.getElementById('linkedinAutoSubmitToggle');
       const help = document.getElementById('linkedinAutoSubmitHelp');
       if (sub) {
@@ -2277,7 +2279,7 @@ class ATSTailor {
       let flowMode = false;
       if (site === 'linkedin') {
         const adv = await new Promise((r) => chrome.storage.local.get(
-          ['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled === true)));
+          ['linkedin_autoadvance_enabled'], (x) => r(x?.linkedin_autoadvance_enabled !== false)));
         if (adv) { entryFn = '__JG_LINKEDIN_APPLY_NOW__'; flowMode = true; }
       }
 
@@ -2741,7 +2743,7 @@ class ATSTailor {
         return;
       }
       const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
-      if (cfg.followup_enabled !== true) {
+      if (cfg.followup_enabled === false) {
         await outcome('disabled',
           'Follow-up email is switched off, so no note was sent. Turn on '
           + '"Application Follow-up Email" in Settings.', 'warning');
@@ -3130,6 +3132,10 @@ class ATSTailor {
     }
   }
 
+  // Generated passwords have to be readable. These accounts outlive the
+  // extension -- the employer keeps them, and the user will eventually sign
+  // in by hand, from another machine, or to check an application's status.
+  // A password manager that cannot show you the password is a locked box.
   // The trace is only useful if it can leave the popup. Copy for pasting
   // into a report, download for anything too long to paste.
   async traceExport(how) {
@@ -3195,7 +3201,7 @@ class ATSTailor {
       //    else works -- and it was silent about it.
       const st = await new Promise((r) => chrome.storage.local.get(
         ['followup_enabled', 'followup_attach_enabled', 'followup_last_outcome'], (x) => r(x || {})));
-      if (st.followup_enabled === true) ok('Follow-up email is ON');
+      if (st.followup_enabled !== false) ok('Follow-up email is ON');
       else bad('Follow-up email is OFF, so nothing will send',
         'turn on "Application Follow-up Email" in Settings');
       if (st.followup_attach_enabled === false) {
@@ -3205,11 +3211,20 @@ class ATSTailor {
       // 3. Gmail. Without a token the send fails at the last step.
       let gmailReady = false;
       let gmailMode = '';
+      let gmailLive = false;
       try {
         gmailReady = typeof FollowupEmail !== 'undefined' && !!(await FollowupEmail.isConnected());
         gmailMode = typeof FollowupEmail !== 'undefined' ? await FollowupEmail.authMode() : '';
+        // Connected is about the GRANT. A token expires hourly and is
+        // reissued silently, so a missing one is worth noting, not fixing.
+        if (gmailReady && typeof FollowupEmail.hasLiveToken === 'function') {
+          gmailLive = await FollowupEmail.hasLiveToken();
+        }
       } catch (e) { gmailReady = false; }
-      if (gmailReady) ok('Gmail connected', gmailMode ? 'via ' + gmailMode + ' client' : '');
+      if (gmailReady) {
+        ok('Gmail connected', (gmailMode ? 'via ' + gmailMode + ' client' : '')
+          + (gmailLive ? '' : ' (token expired - it will be reissued silently on the next send)'));
+      }
       else if (gmailMode === 'unconfigured') {
         // No OAuth client at all: the API send cannot work, but the compose
         // path can, and it needs no Cloud Console project.
@@ -3535,9 +3550,58 @@ class ATSTailor {
 
       console.log('[ATS Tailor] page sources:', merged.emails.length, 'email(s),',
         merged.names.length, 'name(s) across', (frames || []).length, 'frame(s)');
-      return merged.emails.length || merged.names.length || merged.org || merged.jobId ? merged : EMPTY;
+
+      // The address published in the JD body lives on the POSTING. On the
+      // apply page it is simply not in the DOM, so harvesting there finds
+      // nothing and the follow-up is skipped for a role that did publish
+      // an address. Fall back to what was harvested from the posting this
+      // application came from -- same requisition, same tab, same path.
+      const harvested = merged.emails.length || merged.names.length || merged.org || merged.jobId;
+      const carried = await this.followupRecallPageSources(tabs[0], merged);
+      if (carried) return carried;
+      return harvested ? merged : EMPTY;
     } catch (e) {
       console.warn('[ATS Tailor] page source harvest failed:', e && e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Contact sources carried forward from the posting.
+   * Stored alongside the job context, so it is subject to the same
+   * same-posting rule: an address is only ever reused for the job it was
+   * published on. Whatever the live page found still wins -- this only
+   * fills what the apply page cannot have.
+   */
+  async followupRecallPageSources(tab, live) {
+    try {
+      if (typeof JDContext === 'undefined' || !tab) return null;
+      const url = tab.url || '';
+      const hasLive = (live && live.emails && live.emails.length);
+
+      // Remember what this page DID find, so pressing Apply from here
+      // keeps it.
+      if (hasLive || (live && live.names && live.names.length)) {
+        await JDContext.capture(
+          { url, emails: live.emails, names: live.names, org: live.org, jobId: live.jobId },
+          { url, tabId: tab.id }
+        );
+      }
+      if (hasLive) return null;                 // the page answered; nothing to carry
+
+      const remembered = await JDContext.recall(url, { tabId: tab.id });
+      if (!remembered || !(remembered.emails || []).length) return null;
+
+      console.log('[ATS Tailor] contact sources carried from the posting via', remembered._via,
+        '-', remembered.emails.length, 'email(s)');
+      return {
+        emails: remembered.emails || [],
+        names: (live && live.names && live.names.length) ? live.names : (remembered.names || []),
+        org: (live && live.org) || remembered.org || '',
+        jobId: (live && live.jobId) || remembered.jobId || '',
+      };
+    } catch (e) {
+      console.warn('[ATS Tailor] could not carry contact sources:', e && e.message);
       return null;
     }
   }
@@ -4272,17 +4336,27 @@ class ATSTailor {
         func: extractJobInfoFromPageInjected,
       });
 
-      if (results?.[0]?.result) {
-        this.currentJob = results[0].result;
-        
+      // Most ATS put the posting on one page and the FORM on another, and
+      // the apply page has no description, often no company, and none of
+      // the addresses written in the JD body. Reconcile what this page
+      // yields with the posting we captured before Apply was pressed --
+      // matched by requisition id, tab lineage or path lineage, never by
+      // guesswork -- so keywords, tailoring and the contact address still
+      // have a job description to work from.
+      const fresh = results?.[0]?.result || null;
+      const reconciled = await this.reconcileJobContext(fresh, tab);
+
+      if (reconciled && (reconciled.description || reconciled.title)) {
+        this.currentJob = reconciled;
+
         // PERFORMANCE: Limit JD length for faster processing
         if (this.currentJob.description && this.currentJob.description.length > MAX_JD_LENGTH) {
           this.currentJob.description = this.currentJob.description.substring(0, MAX_JD_LENGTH);
         }
-        
+
         await chrome.storage.local.set({ ats_lastJob: this.currentJob });
         this.updateJobDisplay();
-        this.setStatus('Job found!', 'ready');
+        this.setStatus(reconciled._restoredFrom ? 'Job found (from the posting)' : 'Job found!', 'ready');
         return true;
       }
 
@@ -4296,6 +4370,32 @@ class ATSTailor {
       this.updateJobDisplay();
       this.setStatus('Detection failed', 'error');
       return false;
+    }
+  }
+
+  /**
+   * The page's reading of the job, completed from the posting it came
+   * from. Safe by construction: JDContext only ever returns a context
+   * that resolves to the SAME posting (same requisition id, same tab
+   * within the lineage window, or the same domain and path), so this can
+   * never attach one employer's description to another's application.
+   *
+   * Failing open matters here -- if the context store is unavailable the
+   * caller must still get the page's own reading, not nothing.
+   */
+  async reconcileJobContext(fresh, tab) {
+    try {
+      if (typeof JDContext === 'undefined') return fresh;
+      const url = (tab && tab.url) || (fresh && fresh.url) || '';
+      const tabId = tab && tab.id;
+      const merged = await JDContext.reconcile(fresh || {}, { url, tabId });
+      if (merged && merged._restoredFrom) {
+        console.log('[ATS Tailor] job context restored from', merged._restoredFrom, 'via', merged._via);
+      }
+      return merged;
+    } catch (e) {
+      console.warn('[ATS Tailor] job context unavailable:', e && e.message);
+      return fresh;
     }
   }
 
@@ -7474,6 +7574,46 @@ class ATSTailor {
   }
 
 
+  /**
+   * Deliver an attach request to every frame and report the best outcome.
+   * Frames that do not contain an upload field answer "skipped", which is
+   * information, not failure -- only every frame skipping is a failure.
+   */
+  async attachInAnyFrame(tabId, message) {
+    const ask = (frameId) => new Promise((resolve) => {
+      const opts = (frameId === undefined) ? undefined : { frameId };
+      try {
+        chrome.tabs.sendMessage(tabId, message, opts, (response) => {
+          // Reading lastError stops Chrome logging it as unchecked; a
+          // frame with no content script simply has nothing to say.
+          const ignored = chrome.runtime.lastError;
+          resolve(ignored ? null : response);
+        });
+      } catch (e) { resolve(null); }
+    });
+
+    let frameIds = [];
+    try {
+      // executeScript reports one result per frame, which is how the frame
+      // IDs are discovered without asking for the webNavigation permission.
+      const frames = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: () => 1,
+      });
+      frameIds = (frames || []).map((f) => f.frameId).filter((id) => id !== undefined);
+    } catch (e) { /* fall back to the top frame below */ }
+
+    if (!frameIds.length) return (await ask(undefined)) || { success: false, message: 'No response from the page' };
+
+    let lastAnswer = null;
+    for (const frameId of frameIds) {
+      const r = await ask(frameId);
+      if (r && r.success) return r;
+      if (r) lastAnswer = r;
+    }
+    return lastAnswer || { success: false, message: 'No upload field found in any frame' };
+  }
+
   async attachDocument(type) {
     // DOCX is the attached file (best ATS parseability). PDF base64 is
     // passed only as a fallback the content script uses if no DOCX exists.
@@ -7496,24 +7636,27 @@ class ATSTailor {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error('No active tab');
 
-      const res = await new Promise((resolve, reject) => {
-        chrome.tabs.sendMessage(
-          tab.id,
-          {
-            action: 'attachDocument',
-            type,
-            docx,            // preferred: DOCX base64
-            pdf: doc,        // fallback only
-            text: textDoc,
-            filename,
-          },
-          (response) => {
-            const err = chrome.runtime.lastError;
-            if (err) return reject(new Error(err.message || 'Send message failed'));
-            resolve(response);
-          }
-        );
-      });
+      const message = {
+        action: 'attachDocument',
+        type,
+        docx,            // preferred: DOCX base64
+        pdf: doc,        // fallback only
+        text: textDoc,
+        filename,
+      };
+
+      // Ask EVERY frame, not just the top one. iCIMS renders its
+      // application inside icims_formFrame, and Greenhouse,
+      // SmartRecruiters and Workable widgets are routinely embedded in a
+      // company's own careers page -- so the upload input is often in a
+      // frame. A top-frame-only send reports "no upload field found" on
+      // exactly those sites.
+      //
+      // sendMessage without a frameId reaches every frame but returns only
+      // the FIRST reply, so one frame's "not here" would mask another
+      // frame's success. Each frame is therefore asked separately and the
+      // run counts as attached if ANY of them managed it.
+      const res = await this.attachInAnyFrame(tab.id, message);
 
       if (res?.success && res?.skipped) {
         this.showToast(res.message || 'Skipped (no upload field)', 'success');
@@ -8470,30 +8613,26 @@ function extractJobInfoFromPageInjected() {
     }
     // --- Generic fallback ---
     else if (!result.title) {
-      result.title = getText('h1') || document.title.split('|')[0].split('-')[0].trim();
+      // No document.title here. It used to be taken at this point, before
+      // JSON-LD was consulted at all, so a page titled "Careers" or
+      // "Apply" permanently beat the employer's declared job title. Left
+      // empty, JSON-LD answers; if that is absent too, the same
+      // document.title fallback still runs further down.
+      result.title = getText('h1');
       result.company = result.company || document.querySelector('meta[property="og:site_name"]')?.content || '';
       result.location = result.location || getText('[class*="location"]', '[data-testid*="location"]');
       result.description = result.description || getText('main', 'article', '[class*="description"]', '#content', '[role="main"]');
       result.companySource = 'auto';
     }
 
-    // --- Fallback: Meta tags ---
-    if (!result.title) {
-      result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
-    }
-    if (!result.description || result.description.length < 100) {
-      const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content ||
-                           document.querySelector('meta[name="description"]')?.content || '';
-      if (fallbackDesc.length > result.description.length) {
-        result.description = fallbackDesc;
-      }
-      if (result.description.length < 200) {
-        const mainEl = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
-        result.description = (mainEl.innerText || mainEl.textContent || '').substring(0, 15000);
-      }
-    }
-
     // --- JSON-LD structured data ---
+    // Consulted BEFORE the text fallbacks below, not after. It used to run
+    // last, by which point the fallback had already dumped up to 15,000
+    // characters of page text into result.description -- and the JSON-LD
+    // branch only overrides a LONGER string, so it could never win. The
+    // employer's own structured description was being read and discarded
+    // on every page where the selectors missed, which is exactly the case
+    // it exists to cover.
     const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
     for (const script of jsonLdScripts) {
       try {
@@ -8523,6 +8662,57 @@ function extractJobInfoFromPageInjected() {
           break;
         }
       } catch (e) {}
+    }
+
+    // --- Fallback: the page's own headings ---
+    // AFTER JSON-LD, not before. Running first meant document.title won,
+    // so a page titled "Careers" or "Apply" beat the employer's declared
+    // job title -- and that string goes on to head the tailored CV and
+    // fill the subject line of the email to the recruiter.
+    if (!result.title) {
+      result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
+    }
+
+    // --- Fallback: meta description, then the densest content block ---
+    if (!result.description || result.description.length < 100) {
+      const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content ||
+                           document.querySelector('meta[name="description"]')?.content || '';
+      if (fallbackDesc.length > result.description.length) {
+        result.description = fallbackDesc;
+      }
+      if (result.description.length < 200) {
+        // Last resort. This used to take main/body wholesale, which sweeps
+        // in the nav, the footer, the cookie banner and -- the damaging
+        // one -- the "similar jobs" rail, so the CV was tailored partly to
+        // OTHER companies' postings. Pick the single densest block that is
+        // not page furniture instead.
+        const JUNK = 'nav,header,footer,aside,script,style,noscript,form,[role="navigation"],'
+          + '[role="banner"],[role="contentinfo"],[class*="cookie" i],[class*="consent" i],'
+          + '[class*="similar" i],[class*="related" i],[class*="recommend" i],[class*="other-job" i],'
+          + '[class*="more-job" i],[id*="similar" i],[id*="related" i]';
+        let best = '';
+        const roots = document.querySelectorAll('main, [role="main"], article, section, div');
+        for (const el of roots) {
+          try {
+            // Skip containers so large they are effectively the page.
+            if (el.querySelectorAll('section, article').length > 6) continue;
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll(JUNK).forEach((n) => n.remove());
+            const text = (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim();
+            // Prefer prose: a block that is mostly links is a job list.
+            const linkText = Array.from(clone.querySelectorAll('a'))
+              .reduce((n, a) => n + (a.textContent || '').length, 0);
+            if (text.length > 6000 && linkText > text.length * 0.4) continue;
+            if (text.length > best.length) best = text;
+          } catch (e) {}
+        }
+        if (!best) {
+          const mainEl = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+          best = (mainEl.innerText || mainEl.textContent || '');
+        }
+        result.description = best.substring(0, 15000);
+        result.descriptionSource = 'page-text';
+      }
     }
 
     // --- Additional Company Fallbacks ---

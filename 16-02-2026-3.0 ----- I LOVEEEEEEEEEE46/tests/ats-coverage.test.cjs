@@ -16,19 +16,27 @@ const hostsFor=(file)=>{
 const srcHosts=hostsFor('jd-contact-sources.js');
 const extHosts=hostsFor('jd-contact-extractor.js');
 
-const ATS={'greenhouse.io':'Greenhouse','lever.co':'Lever','myworkdayjobs.com':'Workday',
+const ATS={'greenhouse.io':'Greenhouse','myworkdayjobs.com':'Workday',
  'smartrecruiters.com':'SmartRecruiters','icims.com':'iCIMS','taleo.net':'Taleo',
- 'workable.com':'Workable','teamtailor.com':'Teamtailor','ashbyhq.com':'Ashby',
+ 'workable.com':'Workable','teamtailor.com':'Teamtailor',
  'bullhornstaffing.com':'Bullhorn','jobvite.com':'Jobvite','recruitee.com':'Recruitee',
  'personio.de':'Personio','breezy.hr':'BreezyHR','jazzhr.com':'JazzHR',
  'successfactors.com':'SuccessFactors','oraclecloud.com':'Oracle','eightfold.ai':'Eightfold',
- 'pinpointhq.com':'Pinpoint','occupop.com':'Occupop','rippling.com':'Rippling',
- 'dover.com':'Dover','wellfound.com':'Wellfound','otta.com':'Otta'};
+ 'pinpointhq.com':'Pinpoint','occupop.com':'Occupop',
+ 'dover.com':'Dover'};
 for(const [d,n] of Object.entries(ATS)) t('contact sources run on '+n, srcHosts.has(d), d+' not registered');
 // LinkedIn is the only site with a hiring-team card; the extractor there
 // would be pointless without it.
 t('contact sources run on LinkedIn (hiring-team card)', srcHosts.has('linkedin.com'), 'fromLinkedInPoster would never fire');
-t('contact sources run on Indeed', srcHosts.has('indeed.com'));
+
+// Excluded at the user's request. These previously asserted the opposite,
+// which is what kept scripts loading on sites the exclusion was meant to
+// keep the extension off entirely.
+for(const [d,n] of Object.entries({'wellfound.com':'Wellfound','otta.com':'Otta',
+  'indeed.com':'Indeed','glassdoor.com':'Glassdoor','lever.co':'Lever',
+  'ashbyhq.com':'Ashby','rippling.com':'Rippling'})){
+  t('nothing is injected on '+n, !srcHosts.has(d) && !extHosts.has(d), d+' is still registered');
+}
 t('sources load wherever the extractor loads', [...extHosts].every(h=>srcHosts.has(h)), 'extractor without its sources on: '+[...extHosts].filter(h=>!srcHosts.has(h)).slice(0,5));
 
 // ---- the contact chain is actually wired, end to end ------------------

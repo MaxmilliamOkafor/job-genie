@@ -181,7 +181,14 @@
     // --- location ----------------------------------------------------
     if (/^city$|\bcity\b|current.?city/.test(l)) return P.city || '';
     // "state" as a NOUN only -- never "please state the...", "stated location".
-    if (/\b(state|province|region|county)\b/.test(l) && !/please state|stated\b|state[sd] (the|your|why|how|what|any)/.test(l)) {
+    // "Country/Region" is a country field, not a region field, and it is
+    // one of the commonest labels on LinkedIn Easy Apply. Matching
+    // /region/ first sent it to the state rule, which returned the user's
+    // state -- empty for most profiles -- so a required field was left
+    // blank and the flow stalled on it.
+    if (/\b(state|province|region|county)\b/.test(l)
+        && !/country|nationality|citizenship/.test(l)
+        && !/please state|stated\b|state[sd] (the|your|why|how|what|any)/.test(l)) {
       return P.state || '';
     }
     if (/zip|postal|eircode|post.?code/.test(l)) return P.postal_code || P.zip || '';
@@ -240,6 +247,141 @@
     }
     if (/agree|acknowledge|consent|certif|attest|confirm/.test(l)) return 'Yes';
     return '';
+  }
+
+  // ===================================================================
+  // YES / NO QUESTIONS
+  // -------------------------------------------------------------------
+  // A Yes/No control can only accept "Yes" or "No". answerFor answers by
+  // FIELD, which is right for a text input and useless here: "Are you able
+  // to commute to this job's location?" resolves to "Dublin", no option
+  // matches, the field stays empty, and the Easy Apply flow stops on it as
+  // an unanswered required question. These rules answer the QUESTION.
+  //
+  // Two things this must never get wrong:
+  //   POLARITY. "Do you require sponsorship?" and "Are you authorised to
+  //   work here?" are opposites and both contain the word "work". A
+  //   flipped answer is a lie told to an employer in the user's name, so
+  //   sponsorship is tested first and the "without sponsorship" phrasing
+  //   is inverted explicitly.
+  //
+  //   CLAIMS. A question about whether the user HAS a skill, a licence or
+  //   a qualification is answered from the profile, never assumed. When
+  //   the profile does not say, this returns '' and the flow stops and
+  //   asks -- which is the correct outcome. Answering "Yes" to be helpful
+  //   would be inventing a credential.
+  // ===================================================================
+  function _pref(v, dflt) {
+    if (v === true) return 'Yes';
+    if (v === false) return 'No';
+    const s = String(v == null ? '' : v).trim().toLowerCase();
+    if (/^(y|yes|true|1)$/.test(s)) return 'Yes';
+    if (/^(n|no|false|0)$/.test(s)) return 'No';
+    return dflt;
+  }
+
+  /** Does the profile evidence this skill/tool/language? */
+  function _profileMentions(P, term) {
+    const t = _norm(term);
+    if (!t || t.length < 2) return false;
+    const hay = _norm([
+      Array.isArray(P.skills) ? P.skills.join(' ') : (P.skills || ''),
+      P.summary || '', P.current_title || P.title || '',
+      P.languages || '', P.certifications || '', P.cover_letter || '',
+    ].join(' '));
+    return hay.indexOf(t) !== -1;
+  }
+
+  // The subject of "do you have experience with X" / "are you proficient
+  // in X" -- what has to be checked against the profile before claiming it.
+  function _skillSubject(l) {
+    const m = l.match(/(?:experience (?:with|in|using)|proficien(?:t|cy) (?:with|in)|familiar with|worked with|knowledge of|skilled in|expertise (?:with|in))\s+(.+)$/);
+    if (!m) return '';
+    return m[1].replace(/\b(and|or|the|a|an|any|for|to|this|role|position|please|select|years?)\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  function yesNoFor(question, p) {
+    const P = p || {};
+    const l = String(question || '').toLowerCase().replace(/[^a-z0-9/ ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!l) return '';
+
+    // --- polarity pair, sponsorship first ----------------------------
+    if (/sponsor|visa|work permit|employment pass|immigration status/.test(l)) {
+      // "...work WITHOUT sponsorship", "...do NOT require sponsorship"
+      // are the same question asked the other way round.
+      // "without sponsorship", "without requiring visa sponsorship",
+      // "without the need for employer sponsorship" -- all the same
+      // inversion, so match across the words between the two.
+      if (/without[a-z ]{0,30}sponsor|not require|dont require|do not need|no sponsor/.test(l)) {
+        // Inverted phrasing, so invert the SAME default (no sponsorship
+        // needed) rather than defaulting separately -- defaulting to the
+        // opposite here made the two phrasings contradict each other.
+        return _pref(P.sponsorship_required, 'No') === 'Yes' ? 'No' : 'Yes';
+      }
+      return _pref(P.sponsorship_required, 'No');
+    }
+    if (/authoriz|authoris|legally (?:able|entitled|permitted|allowed)|right to work|eligible to work|permission to work|permitted to work/.test(l)) {
+      return _pref(P.work_authorized, 'Yes');
+    }
+
+    // --- location / working pattern ----------------------------------
+    // "commute" is the one that used to resolve to the user's city.
+    if (/commut|travel to (?:the )?(?:office|site)|report to (?:the )?office/.test(l)) return 'Yes';
+    if (/relocat|willing to move/.test(l)) return _pref(P.willing_to_relocate, 'Yes');
+    if (/remote|work from home|hybrid|on ?site|in ?office|in person/.test(l)) return 'Yes';
+
+    // --- this employer, specifically ---------------------------------
+    // "Have you worked here before" is not "are you employed" -- and a
+    // wrong Yes here is a claim about a relationship that can be checked.
+    if (/(?:current(?:ly)?|previous(?:ly)?|former(?:ly)?|ever) .{0,24}(?:employee|employed|worked|intern)\b.{0,4}(?:at|for|with|by|of)\b/.test(l)
+        || /(?:employee|worked|intern) (?:at|for|with|of) (?:this|our) (?:company|organi)/.test(l)) {
+      return _pref(P.worked_here_before, 'No');
+    }
+    if (/related to|family member|relative .{0,20}(?:work|employ)|know anyone who works/.test(l)) return 'No';
+    if (/referred by|were you referred|employee referral/.test(l)) return _pref(P.was_referred, 'No');
+    if (/currently employed|are you working/.test(l)) return _pref(P.currently_employed, 'Yes');
+
+    // --- claims: answered from the profile or not at all -------------
+    const subject = _skillSubject(l);
+    if (subject) return _profileMentions(P, subject) ? 'Yes' : '';
+    if (/do you (?:speak|write)|fluent|proficiency in|native speaker/.test(l)) {
+      const lang = (l.match(/(?:speak|fluent in|proficiency in|write)\s+([a-z ]+)/) || [])[1] || '';
+      if (lang && _profileMentions(P, lang.trim())) return 'Yes';
+      return /english/.test(l) ? 'Yes' : '';
+    }
+    if (/do you (?:have|hold) (?:a|an) .{0,30}(?:degree|diploma|certification|qualification|licen[sc]e|clearance|passport)/.test(l)
+        || /have you completed|do you possess/.test(l)) {
+      const what = (l.match(/(?:have|hold|possess|completed) (?:a|an|the)?\s*(.+)$/) || [])[1] || '';
+      if (/driver/.test(l)) return _pref(P.drivers_license, 'Yes');
+      if (/degree|diploma|bachelor|master/.test(l)) return P.degree || P.school || P.university ? 'Yes' : '';
+      return what && _profileMentions(P, what) ? 'Yes' : '';
+    }
+
+    // --- standard screening ------------------------------------------
+    if (/\b(?:over|at least|older than|minimum of)\b.{0,12}\b(?:18|16|21)\b|age of majority|legal working age/.test(l)) return 'Yes';
+    if (/convicted|felony|criminal (?:record|history|convict)|pleaded guilty/.test(l)) return _pref(P.criminal_record, 'No');
+    if (/background check|drug (?:test|screen)|reference check|credit check|right to represent/.test(l)) return 'Yes';
+    if (/agree|acknowledge|consent|certif|attest|confirm|understand and accept|terms/.test(l)) return 'Yes';
+    if (/available to start|able to start|can you start|start (?:on|by|immediately)/.test(l)) return 'Yes';
+    if (/require .{0,20}(?:accommodation|adjustment)/.test(l)) return _pref(P.needs_accommodation, 'No');
+    if (/veteran|armed forces|military service/.test(l)) return _pref(P.veteran_status, 'No');
+    if (/disabilit/.test(l)) return _pref(P.disability_status, 'No');
+    if (/willing to|are you able to|can you |comfortable (?:with|working)/.test(l)) return 'Yes';
+
+    return '';
+  }
+
+  /**
+   * Is this control a Yes/No control? Placeholder options are ignored;
+   * anything with a third real answer ("Prefer not to say") is not, and
+   * must keep going through the general mapping.
+   */
+  function isYesNoOptions(texts) {
+    const vals = (texts || []).map(_norm)
+      .filter((t) => t && !/^(select|choose|please|pick|--)/.test(t));
+    if (!vals.length || vals.length > 2) return false;
+    return vals.every((t) => t === 'yes' || t === 'no');
   }
 
   // ===================================================================
@@ -326,15 +468,50 @@
   async function fillCustomDropdown(el, value) {
     try {
       const doc = el.ownerDocument;
+      const isInput = el.tagName === 'INPUT';
       el.click();
-      await new Promise((r) => setTimeout(r, 220));
-      const opts = doc.querySelectorAll('[role="option"], li[role="option"], [class*="option" i][role]');
+      try { el.focus(); } catch (e) {}
+
+      // A typeahead (LinkedIn's artdeco combobox, and most modern ATS)
+      // is an <input role="combobox">. Typing is what makes its listbox
+      // appear and filter; without it there is nothing to pick from.
+      if (isInput) {
+        setValue(el, value);
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: value.slice(-1), bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: value.slice(-1), bubbles: true }));
+      }
+      await new Promise((r) => setTimeout(r, 260));
+
+      // The listbox is usually rendered at body level and tied to the
+      // control by aria-controls/aria-owns, so searching the control's
+      // own subtree finds nothing. Prefer the referenced listbox, then
+      // fall back to any option in the document.
+      let opts = [];
+      const owns = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
+      if (owns) {
+        const box = doc.getElementById(owns);
+        if (box) opts = Array.prototype.slice.call(box.querySelectorAll('[role="option"], li, [class*="option" i]'));
+      }
+      if (!opts.length) {
+        opts = Array.prototype.slice.call(
+          doc.querySelectorAll('[role="option"], li[role="option"], [class*="option" i][role]'));
+      }
       for (const o of opts) {
         if (optionMatches(o.textContent, value)) {
           o.click();
           await new Promise((r) => setTimeout(r, 80));
           return true;
         }
+      }
+
+      // No listbox, or nothing in it matched. For a typeahead the typed
+      // value is itself a legitimate answer, so keep it rather than
+      // reverting to an empty required field.
+      if (isInput && String(el.value || '').trim()) {
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('blur', { bubbles: true }));
+        return true;
       }
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       return false;
@@ -372,7 +549,35 @@
         // the option text ("Yes"/"No") and yields no answer.
         const label = (type === 'radio') ? questionFor(el) : labelFor(el);
         if (!label) continue;
-        const value = answerFor(label, profile, o);
+
+        // A control that only offers Yes and No has to be answered as a
+        // QUESTION, not as a field. Asked as a field, "are you able to
+        // commute to this location?" resolves to the user's city, no
+        // option matches, and the step stalls on a required question.
+        let boolOpts = null;
+        if (el.tagName === 'SELECT') {
+          boolOpts = Array.prototype.map.call(el.options, (op) => op.textContent);
+        } else if (type === 'radio' && el.name) {
+          boolOpts = Array.prototype.map.call(
+            doc.querySelectorAll('input[type="radio"][name="' + escapeSelector(el.name) + '"]'),
+            (r) => labelFor(r) || r.value
+          );
+        } else if (type === 'checkbox') {
+          boolOpts = null;                       // a checkbox is its own consent path
+        }
+
+        let value = '';
+        if (boolOpts && isYesNoOptions(boolOpts)) {
+          value = yesNoFor(label, profile);
+          // Fall back only if the general mapping produces a usable
+          // Yes/No; anything else would never match an option anyway.
+          if (!value) {
+            const generic = answerFor(label, profile, o);
+            if (/^(yes|no)$/i.test(String(generic).trim())) value = generic;
+          }
+        } else {
+          value = answerFor(label, profile, o);
+        }
         if (!value) continue;
         answerable++;
 
@@ -389,7 +594,12 @@
             el.click();
             filled++;
           }
-        } else if (el.getAttribute('role') === 'combobox' && el.tagName !== 'INPUT') {
+        } else if (el.getAttribute('role') === 'combobox') {
+          // Inputs included. An <input role="combobox"> is a typeahead --
+          // LinkedIn's Easy Apply shape -- and a plain setValue types the
+          // text without ever committing a selection, so the step stays
+          // invalid and the flow stalls on a field that looks filled.
+          if (String(el.value || '').trim()) { alreadySet++; continue; }
           if (await fillCustomDropdown(el, value)) filled++;
         } else {
           if (String(el.value || '').trim()) { alreadySet++; continue; }  // respect user input
@@ -418,11 +628,35 @@
     });
   }
 
+  // Preferences that ship ON. Everything else stays opt-in, so this list is
+  // the whole statement of what the extension does without being asked.
+  //
+  // Kept here because isToggleOn is the single place every content script
+  // reads a preference: a default expressed in one script and not another
+  // is how a toggle ends up ON in the popup and OFF in the page.
+  //
+  // Note what this means in practice: with all four on, opening a LinkedIn
+  // Easy Apply job fills it, advances it, submits it, and then emails a
+  // published contact -- end to end, with no click. Submission cannot be
+  // undone and goes to a real employer.
+  const DEFAULT_ON = new Set([
+    'linkedin_autofill_enabled',
+    'linkedin_autoadvance_enabled',
+    'linkedin_autosubmit_enabled',
+    'followup_enabled',
+  ]);
+
   function isToggleOn(key) {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get([key], (r) => resolve(!!(r && r[key] === true)));
+        chrome.storage.local.get([key], (r) => {
+          const v = r && r[key];
+          // An explicit false always wins: turning something off must
+          // survive, which "undefined means on" would otherwise undo.
+          resolve(DEFAULT_ON.has(key) ? v !== false : v === true);
+        });
       } catch (e) {
+        // A storage failure must not silently start submitting applications.
         resolve(false);
       }
     });
@@ -430,7 +664,7 @@
 
   global.AutofillCore = {
     __jg: true,
-    labelFor, questionFor, answerFor, fillContainer, loadProfile, isToggleOn,
+    labelFor, questionFor, answerFor, yesNoFor, isYesNoOptions, fillContainer, loadProfile, isToggleOn, DEFAULT_ON,
     setValue, fillSelect, fillRadioGroup, fillCustomDropdown,
     isVisible, optionMatches, escapeSelector, DEFAULTS,
   };

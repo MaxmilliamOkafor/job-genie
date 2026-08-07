@@ -224,11 +224,42 @@
   // Where the posting actually lives, per ATS, so page furniture (nav,
   // cookie banners, "other jobs at this company") is not mistaken for the
   // description.
-  const CONTENT_SELECTORS = [
-    '#content', '.job__description', '.job-post', '[class*="job-post"]',
-    '[class*="job__description"]', '[data-testid*="jobDescription"]',
-    '#job-details', '.jobDisplayContentContainer', '.description',
-    '[class*="jobDescription"]', 'main', 'article',
+  // Where the posting body lives, per ATS. Ordered most specific first so
+  // the description is preferred over the page it sits in; the generic
+  // patterns and the body fallback mean an unknown ATS still works, just
+  // with more surrounding text to filter.
+  // Description containers come from ats-platforms.js so this cannot
+  // drift from what the job detector reads. The inline list is the
+  // fallback for contexts where that module is not loaded.
+  const CONTENT_SELECTORS = (function () {
+    try {
+      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+        : (typeof global !== 'undefined' ? global.ATSPlatforms : null);
+      if (AP && typeof AP.allDescriptionSelectors === 'function') return AP.allDescriptionSelectors();
+    } catch (e) {}
+    return [
+      '.job__description', '#content', '.posting-page', '[data-qa="job-description"]',
+      '[data-automation-id="jobPostingDescription"]', '.ashby-job-posting-content',
+      '#st-jobDescription', '.iCIMS_JobContent', '#requisitionDescriptionInterface',
+      '[data-ui="job-description"]', '.block-body', '#jobDescriptionText',
+      '.jv-job-detail-description', '.jobDescription', '#job-description',
+      '.job-description', '.job-ad', '.position', '.job-details',
+      '[itemprop="description"]', '[id*="job-description" i]', '[class*="job-description" i]',
+      '[class*="jobDescription"]', '[data-testid*="description" i]', 'main', 'article',
+    ];
+  })();
+
+  // Regions that belong to the PAGE, not this posting. "Other openings"
+  // and "similar jobs" carry other roles -- and sometimes other companies'
+  // contact details -- which must never become this application's
+  // recipient.
+  const EXCLUDE_SELECTORS = [
+    'script', 'style', 'noscript', 'nav', 'footer', 'header',
+    '[class*="similar" i]', '[class*="related" i]', '[class*="other-job" i]',
+    '[class*="more-job" i]', '[class*="recommend" i]', '[id*="similar" i]',
+    '[class*="cookie" i]', '[class*="consent" i]', '[class*="banner" i]',
+    '[class*="newsletter" i]', '[class*="subscribe" i]', '[role="navigation"]',
+    '[role="banner"]', '[role="contentinfo"]',
   ];
 
   function _contentRoots(doc) {
@@ -255,8 +286,8 @@
         try {
           // Clone so removing chrome does not alter the page the user sees.
           const clone = root.cloneNode(true);
-          for (const junk of clone.querySelectorAll('script, style, noscript, nav, footer, header')) {
-            junk.remove();
+          for (const sel of EXCLUDE_SELECTORS) {
+            try { for (const junk of clone.querySelectorAll(sel)) junk.remove(); } catch (e) {}
           }
           // textContent runs block elements together with no separator, so
           // "<p>…@example.com</p><p>For questions…</p>" reads as

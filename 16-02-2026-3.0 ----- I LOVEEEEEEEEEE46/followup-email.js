@@ -497,6 +497,14 @@
   // ===================================================================
   const KEY_OAUTH = 'followup_oauth';          // { clientId, redirectUri }
   const KEY_TOKEN = 'followup_oauth_token';    // { access_token, expires_at }
+  // The LINK, as distinct from the token. An implicit-flow access token
+  // lasts about an hour; the authorisation behind it lasts until the user
+  // revokes it. Reporting connection status from the token meant a slow
+  // network, a throttled silent reissue, or simply an hour passing all read
+  // as "not connected", and the setup looked like it had to be redone.
+  // This records that the grant happened, and only an explicit Disconnect
+  // or a genuine revocation by Google clears it.
+  const KEY_LINKED = 'followup_gmail_linked';  // { at, mode }
 
   function loadOAuthConfig() {
     return new Promise((resolve) => {
@@ -806,7 +814,29 @@
     return 'unconfigured';
   }
 
-  function isConnected() {
+  /**
+   * Whether Gmail is set up, NOT whether an access token happens to be
+   * live this second. Once connected it stays connected until the user
+   * disconnects or Google revokes the grant -- which is what
+   * `hasLiveToken()` and the send path detect.
+   *
+   * Pass { verify: true } when the answer must involve an actual token.
+   */
+  async function isConnected(opts) {
+    if (await isLinked()) {
+      if (!(opts && opts.verify)) return true;
+      return getAuthToken(false).then(() => true).catch(() => false);
+    }
+    // Never linked through this path, but a token may exist from the
+    // manifest client or an earlier version. Treat that as connected and
+    // record it, so the link survives from here on.
+    return getAuthToken(false)
+      .then(async () => { await _setLinked(true, await authMode()); return true; })
+      .catch(() => false);
+  }
+
+  // A live token right now, without changing the link state.
+  function hasLiveToken() {
     return getAuthToken(false).then(() => true).catch(() => false);
   }
 
@@ -925,12 +955,31 @@
     };
   }
 
-  function connect() {
-    return getAuthToken(true).then(() => true);
+  function _setLinked(on, mode) {
+    return new Promise((resolve) => {
+      try {
+        if (on) chrome.storage.local.set({ [KEY_LINKED]: { at: Date.now(), mode: mode || '' } }, () => resolve(true));
+        else chrome.storage.local.remove([KEY_LINKED], () => resolve(true));
+      } catch (e) { resolve(true); }
+    });
+  }
+
+  function isLinked() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([KEY_LINKED], (r) => resolve(!!(r && r[KEY_LINKED] && r[KEY_LINKED].at)));
+      } catch (e) { resolve(false); }
+    });
+  }
+
+  async function connect() {
+    await getAuthToken(true);
+    await _setLinked(true, await authMode());
+    return true;
   }
 
   function disconnect() {
-    return _clearToken().then(() => getAuthTokenFromManifest(false))
+    return _setLinked(false).then(() => _clearToken()).then(() => getAuthTokenFromManifest(false))
       .then((token) => new Promise((resolve) => {
         try {
           chrome.identity.removeCachedAuthToken({ token }, () => resolve(true));
@@ -1093,6 +1142,13 @@
         // re-prompts instead of failing forever.
         await _clearToken();
         try { chrome.identity.removeCachedAuthToken({ token }, () => {}); } catch (e) {}
+        // A 401 is usually just an expired token, which a silent reissue
+        // fixes. Only when that ALSO fails has the grant actually gone --
+        // revoked in the Google account, or the client deleted. Drop the
+        // link then, and only then, so the UI stops claiming a connection
+        // that no longer exists without nagging over an hourly expiry.
+        const recovered = await getAuthToken(false).then(() => true).catch(() => false);
+        if (!recovered) await _setLinked(false);
       }
       throw new Error('Gmail send failed (' + res.status + '): ' + txt.slice(0, 300));
     }
@@ -1269,7 +1325,7 @@
     listTemplates, setActiveTemplate, createTemplate, deleteTemplate,
     BUILT_IN_TEMPLATES,
     buildTokens, render, renderBlock, findUnfilledTokens, compose, _cleanTitle,
-    isConnected, connect, disconnect, diagnose, authMode,
+    isConnected, isLinked, hasLiveToken, connect, disconnect, diagnose, authMode,
     loadOAuthConfig, saveOAuthConfig, redirectUri, redirectUriVariants, probeRedirect,
     buildComposeUrl, openCompose,
     send, sendTest, buildRaw,
