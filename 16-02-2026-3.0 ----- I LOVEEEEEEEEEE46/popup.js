@@ -2191,42 +2191,14 @@ class ATSTailor {
   bindLinkedInFlowResults() {
     try {
       chrome.runtime.onMessage.addListener((msg) => {
-        if (!msg) return;
+        if (!msg || msg.action !== 'JG_LINKEDIN_FLOW_RESULT') return;
         const out = document.getElementById('autofillRunResult');
         if (!out) return;
-
-        // A sweep of the results list reports a tally, not a single flow.
-        if (msg.action === 'JG_LINKEDIN_LIST_RESULT') {
-          out.textContent = this.describeListResult(msg.result);
-          out.style.color = (msg.result && msg.result.applied > 0)
-            ? 'var(--success)' : 'var(--warning)';
-          return;
-        }
-
-        if (msg.action !== 'JG_LINKEDIN_FLOW_RESULT') return;
         out.textContent = this.describeFlowResult(msg.result);
         out.style.color = ['submitted', 'at-submit'].includes(msg.result?.status)
           ? 'var(--success)' : 'var(--warning)';
       });
     } catch (e) {}
-  }
-
-  // A sweep of the LinkedIn results list. The tally matters more than the
-  // status: "3 applied, 2 skipped" is what the user needs to see, and a
-  // run that applied to nothing has to say WHY rather than look idle.
-  describeListResult(r) {
-    if (!r) return '';
-    if (r.status === 'off') return r.detail;
-    if (r.status === 'no-jobs') return 'No job cards on this page.';
-    if (r.status === 'error') return r.detail || 'The list run failed.';
-    const bits = [];
-    bits.push(r.applied === 1 ? '1 application submitted' : r.applied + ' applications submitted');
-    if (r.skipped) bits.push(r.skipped + ' skipped');
-    let s = bits.join(', ') + ' of ' + r.seen + ' listed.';
-    if (r.stoppedBy === 'auto-submit-off') s += ' ' + r.detail;
-    else if (r.stoppedBy === 'cap') s += ' ' + r.detail;
-    else if (r.applied === 0 && r.detail) s += ' ' + r.detail;
-    return s;
   }
 
   describeFlowResult(r) {
