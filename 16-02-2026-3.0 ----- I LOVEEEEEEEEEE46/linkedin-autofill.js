@@ -199,13 +199,67 @@
     return btn.parentElement || null;
   }
 
+  /**
+   * Does this container carry the machinery of an application STEP?
+   *
+   * Matching the words "easy apply" alone matched the job pane itself --
+   * the blue CTA on every job page says exactly that. Once the pane was
+   * treated as a dialog, the first button anywhere inside it that looked
+   * like a submit was clicked and the run reported
+   *     "Application submitted after 1 step(s)"
+   * with no dialog ever opened and nothing submitted.
+   *
+   * A real step always has a footer control that advances or sends it.
+   * Nothing else counts.
+   */
+  const STEP_TEXT = /^(submit application|submit your application|send application|review your application|continue to next step)$/;
+
+  function _hasStepMachinery(el) {
+    try {
+      if (!el) return false;
+      if (el.querySelector(FOOTER_BTN_SEL)) return true;
+      for (const b of el.querySelectorAll('button, [role="button"]')) {
+        const t = (b.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (STEP_TEXT.test(t)) return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** LinkedIn's own confirmation that the application went. */
+  function _submissionConfirmed() {
+    try {
+      const t = (document.body.textContent || '').toLowerCase();
+      return /your application was sent|application sent|application submitted|premium can help you/.test(t);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _describe(el) {
+    if (!el) return null;
+    try {
+      return {
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        cls: String(el.className || '').slice(0, 90),
+        role: el.getAttribute('role') || '',
+        aria: (el.getAttribute('aria-label') || '').slice(0, 60),
+        fields: el.querySelectorAll('input, select, textarea').length,
+        text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90),
+      };
+    } catch (e) { return { err: String(e && e.message) }; }
+  }
+
   function findEasyApplyModal() {
     // 1. Button-first. The most reliable signal on the page.
     for (const btn of document.querySelectorAll(FOOTER_BTN_SEL)) {
       try {
         if (!_rendered(btn)) continue;
         const c = _containerFor(btn);
-        if (c) return c;
+        if (c) { trace('modal.found', { via: 'footer-aria', el: _describe(c) }); return c; }
       } catch (e) {}
     }
 
@@ -214,10 +268,13 @@
       try {
         if (!_rendered(btn)) continue;
         const t = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        if (!/^(next|continue|review|submit application|submit your application|send application)/.test(t)) continue;
+        // EXACT step wording. "starts with" let anything beginning
+        // "continue…" or "review…" nominate an entire page region as a
+        // dialog.
+        if (!STEP_TEXT.test(t)) continue;
         const c = _containerFor(btn);
-        // Guard against unrelated "Next" buttons elsewhere on the page.
-        if (c && /apply|contact info|resume|work authoris|work authoriz/i.test((c.textContent || '').slice(0, 800))) {
+        if (c && _hasStepMachinery(c)) {
+          trace('modal.found', { via: 'step-text', btn: t, el: _describe(c) });
           return c;
         }
       } catch (e) {}
@@ -234,8 +291,14 @@
     for (const el of candidates) {
       try {
         if (!_rendered(el)) continue;
+        // The WORDS are not enough: "Easy Apply" is the label of the CTA
+        // on every job page, so any rendered dialog near it matched.
+        if (!_hasStepMachinery(el)) continue;
         const label = (el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '').slice(0, 600);
-        if (/easy apply|apply to |submit application|review your application|contact info/i.test(label)) return el;
+        if (/easy apply|apply to |submit application|review your application|contact info/i.test(label)) {
+          trace('modal.found', { via: 'container', el: _describe(el) });
+          return el;
+        }
       } catch (e) {}
     }
     return null;
@@ -859,12 +922,26 @@
 
         const sig = stepSignature(modal);
         trace('step.click', { kind: btn.kind, step: steps + 1,
-          label: (btn.el.getAttribute('aria-label') || btn.el.textContent || '').trim().slice(0, 60) });
+          label: (btn.el.getAttribute('aria-label') || btn.el.textContent || '').trim().slice(0, 60),
+          button: _describe(btn.el), inside: _describe(modal) });
         btn.el.click();
         log('clicked ' + btn.kind + ' (step ' + (steps + 1) + ')');
 
         if (btn.kind === 'submit') {
-          await sleep(1200);
+          await sleep(1400);
+          // Clicking a button is not evidence that an application was
+          // sent. Reporting "Application submitted after 1 step(s)" when
+          // nothing happened is worse than reporting a failure: it looks
+          // like success and hides the bug. Require the dialog to have
+          // closed, the step to have changed, or LinkedIn to say so.
+          const still = findEasyApplyModal();
+          const confirmed = !still || stepSignature(still) !== sig || _submissionConfirmed();
+          if (!confirmed) {
+            trace('submit.unconfirmed', { step: steps + 1 });
+            return done('stuck',
+              'Pressed Submit but nothing on the page changed — the application was NOT sent.',
+              steps + 1);
+          }
           return done('submitted', 'Application submitted.', steps + 1);
         }
 
