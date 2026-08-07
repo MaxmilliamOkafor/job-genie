@@ -212,6 +212,19 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
   // The filler is driven by a MutationObserver on a 700ms debounce, and
   // each step re-renders asynchronously; give the flow room to run.
   let page = await openJob();
+  await page.waitForTimeout(3000);
+
+  // Nothing may happen until the user presses Easy Apply. That is the
+  // whole activation rule, so it is checked before anything else.
+  const untouched = await page.evaluate(() => ({
+    modalOpen: !!document.querySelector('.jobs-easy-apply-modal'),
+    submitted: !document.getElementById('submitted').hidden,
+  }));
+  t('it does NOT open the application by itself',
+    !untouched.modalOpen && !untouched.submitted,
+    'opened or submitted without the user pressing Easy Apply');
+
+  await page.click('.jobs-apply-button');
   await page.waitForTimeout(6000);
 
   const state = await page.evaluate(() => ({
@@ -222,7 +235,7 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
       .map((i) => [i.id, i.value]),
   }));
 
-  t('it pressed Easy Apply and opened the dialog by itself',
+  t('once the user presses Easy Apply, the flow takes over',
     state.modalOpen || state.submitted, JSON.stringify(state));
   t('it advanced past the contact step without help',
     state.heading !== 'Contact info', 'still on: ' + state.heading + ' ' + JSON.stringify(state.values));
@@ -296,7 +309,9 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
   // ---- 5. auto-submit ON completes the application --------------------
   await setState({ linkedin_autoadvance_enabled: true, linkedin_autosubmit_enabled: true });
   page = await openJob();
-  await page.waitForTimeout(8000);
+  await page.waitForTimeout(1200);
+  await page.click('.jobs-apply-button');
+  await page.waitForTimeout(9000);
   const done = await page.evaluate(() => ({
     submitted: !document.getElementById('submitted').hidden,
     modalOpen: !!document.querySelector('.jobs-easy-apply-modal'),

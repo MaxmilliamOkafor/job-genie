@@ -13,7 +13,7 @@ node tests/browser/platforms.browser.cjs     # detection, JD, gate, email harves
 node tests/browser/attach.browser.cjs        # CV + cover letter into a real file input
 node tests/browser/easyapply.browser.cjs     # LinkedIn Easy Apply, toggle ON
 node tests/browser/twopage.browser.cjs       # posting -> Apply -> form, on every ATS
-node tests/browser/linkedin-list.browser.cjs # LinkedIn search results, whole list
+node tests/browser/linkedin-board.browser.cjs # browsing the board applies to NOTHING
 ```
 
 Both skip cleanly (exit 0) when Playwright or a Chromium build is missing,
@@ -66,13 +66,13 @@ that the apply page genuinely has none of them in its own DOM, and that
 `jd-context.js` supplies them anyway — matched by requisition id, tab
 lineage or path lineage, never by guesswork.
 
-`linkedin-list.browser.cjs` — the LinkedIn **search-results list**. Everything
-else acts on the job that is already open; on `/jobs/search-results/` none is,
-because the right pane is a skeleton until a card is clicked. This drives a
-six-job split-pane list (two of them external-apply, which must be skipped)
-under a continuous mutation storm, and asserts the bounds as hard as the
-feature: each role applied to exactly once, nothing re-applied to on a second
-visit, and nothing submitted at all with auto-submit off.
+`linkedin-board.browser.cjs` — **browsing the job board must apply to
+nothing.** Autofill only ever continues a dialog the user opened by pressing
+Easy Apply themselves; it never presses that button, never clicks a job card,
+and never navigates. This lands on a results list with every toggle ON (the
+default, and the most dangerous configuration), reads three roles, and asserts
+that nothing was opened, filled or submitted and that the user's own selection
+did not move — then presses Easy Apply and asserts the application completes.
 
 ## LinkedIn: what is deliberate
 
