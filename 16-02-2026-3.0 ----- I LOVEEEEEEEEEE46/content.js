@@ -1988,48 +1988,180 @@
   window.stripRemoteFromLocation = stripRemoteFromLocation;
 
   // ============ FIELD DETECTION ============
-  function isCVField(input) {
-    const text = (
-      (input.labels?.[0]?.textContent || '') +
-      (input.name || '') +
-      (input.id || '') +
-      (input.getAttribute('aria-label') || '') +
-      (input.getAttribute('data-qa') || '') +
+  // ============ WHICH DOCUMENT A FILE INPUT IS FOR ============
+  //
+  // This used to read the section around a field with a raw
+  // `text.includes('cv')`, which made attaching a file change the answer.
+  // Once the CV is attached the ATS renders its NAME into the same
+  // section -- SmartRecruiters adds a control reading
+  //     Remove "Maxmilliam_Okafor_CV"?
+  // -- and that string contains "cv". The cover-letter input beside it
+  // then read as a CV field, so the CV was attached into the cover-letter
+  // slot as well. The first attachment corrupted the detection that
+  // placed the second.
+  //
+  // Two rules now: the field's own labelling is authoritative and is
+  // consulted first, and any text contributed by an ALREADY-ATTACHED file
+  // is removed before anything is matched.
+
+  /** Filenames the page is currently displaying because we attached them. */
+  function _attachedFileNames() {
+    const names = [];
+    for (const f of [cvFile, coverFile]) {
+      if (f && f.name) names.push(String(f.name).toLowerCase());
+    }
+    try {
+      for (const i of document.querySelectorAll('input[type="file"]')) {
+        if (i.files && i.files[0] && i.files[0].name) names.push(String(i.files[0].name).toLowerCase());
+      }
+    } catch (e) {}
+    return names;
+  }
+
+  /** Lower-cased text with attached filenames (and their stems) removed. */
+  function _withoutAttachmentNoise(text) {
+    let t = String(text || '').toLowerCase();
+    for (const n of _attachedFileNames()) {
+      if (!n) continue;
+      const stem = n.replace(/\.[a-z0-9]+$/, '');
+      if (n) t = t.split(n).join(' ');
+      if (stem && stem !== n) t = t.split(stem).join(' ');
+    }
+    return t;
+  }
+
+  function _fieldOwnText(input) {
+    return _withoutAttachmentNoise(
+      (input.labels?.[0]?.textContent || '') + ' ' +
+      (input.name || '') + ' ' +
+      (input.id || '') + ' ' +
+      (input.getAttribute('aria-label') || '') + ' ' +
+      (input.getAttribute('data-qa') || '') + ' ' +
       (input.closest('label')?.textContent || '')
-    ).toLowerCase();
-    
+    );
+  }
+
+  // Word-boundary, so "cv" no longer matches inside unrelated words.
+  const CV_WORDS = /(^|[^a-z])(resume|cv|curriculum\s*vitae)([^a-z]|$)/;
+
+  /**
+   * 'cv' | 'cover' | '' for a file input.
+   *
+   * A container holding BOTH signals is the shared attachments section --
+   * it says nothing about THIS field, so it returns '' rather than guess.
+   * Attaching to the wrong slot is worse than not attaching: the user can
+   * see an empty field, but a CV sitting in the cover-letter slot looks
+   * done and reaches the recruiter that way.
+   */
+  function fileFieldKind(input) {
+    const own = _fieldOwnText(input);
+    const ownCover = own.indexOf('cover') !== -1;
+    const ownCv = CV_WORDS.test(own);
+    if (ownCover && !ownCv) return 'cover';
+    if (ownCv && !ownCover) return 'cv';
+
     let parent = input.parentElement;
     for (let i = 0; i < 5 && parent; i++) {
-      const parentText = (parent.textContent || '').toLowerCase().substring(0, 200);
-      if ((parentText.includes('resume') || parentText.includes('cv')) && !parentText.includes('cover')) {
-        return true;
-      }
+      // Once an ancestor holds more than one file input it is the shared
+      // attachments container, and its text belongs to the other fields
+      // as much as to this one. Reading it lets a SIBLING's label decide:
+      // an unlabelled resume input next to a labelled "Cover letter" one
+      // inherits "cover" and the CV goes into the wrong slot.
+      try {
+        if (parent.querySelectorAll('input[type="file"]').length > 1) return '';
+      } catch (e) { /* fall through and read the text */ }
+
+      const t = _withoutAttachmentNoise(parent.textContent).slice(0, 600);
+      const c = t.indexOf('cover') !== -1;
+      const v = CV_WORDS.test(t);
+      if (c && v) return '';
+      if (c) return 'cover';
+      if (v) return 'cv';
       parent = parent.parentElement;
     }
-    
-    return /(resume|cv|curriculum)/i.test(text) && !/cover/i.test(text);
+    return '';
+  }
+
+  /**
+   * Sole-candidate rule.
+   *
+   * An upload widget often gives its input no labelling at all -- the
+   * words "Resume" and "Cover letter" sit in a heading further away than
+   * the ancestor walk reaches, or are drowned by drag-and-drop helper
+   * text. Classification then returns '' for every input and NOTHING is
+   * attached, which is a silent failure.
+   *
+   * So: when a page has exactly one file input and nothing identifies it
+   * as the cover letter, it is the CV. With two, if one is identified,
+   * the other is the counterpart.
+   */
+  function soleCandidate(kind) {
+    const inputs = Array.from(document.querySelectorAll('input[type="file"]'))
+      .filter((i) => !i.disabled && i.getAttribute('data-ats-tailor-disabled') !== '1');
+    if (!inputs.length) return null;
+    const kinds = inputs.map(fileFieldKind);
+    if (kinds.indexOf(kind) !== -1) return null;        // a real match exists; use it
+    const other = kind === 'cv' ? 'cover' : 'cv';
+    if (inputs.length === 1) {
+      // A lone upload is the CV. The resume is the document every ATS
+      // asks for; a form offering only a cover-letter upload does not
+      // exist, and claiming it for both kinds would attach the CV and
+      // the cover letter to the same input.
+      return (kind === 'cv' && kinds[0] !== 'cover') ? inputs[0] : null;
+    }
+    if (inputs.length === 2) {
+      const i = kinds.indexOf(other);
+      if (i !== -1) return inputs[1 - i];
+    }
+    return null;
+  }
+
+  function isCVField(input) {
+    if (fileFieldKind(input) === 'cv') return true;
+    return soleCandidate('cv') === input;
+  }
+
+  // ============ HAS THE ATS ACCEPTED THE FILE? ============
+  //
+  // "Already attached" and "both attached" both asked input.files, and a
+  // React-based ATS -- SmartRecruiters among them -- READS the input and
+  // then CLEARS it, rendering its own chip instead. input.files.length
+  // goes back to 0, so:
+  //
+  //   the re-attach guard never fires, and the 50ms loop re-attaches for
+  //   the full 30-second safety window, flipping the upload widget in and
+  //   out of its uploaded state and leaving its
+  //       Remove "Maxmilliam_Okafor_CV"?
+  //   control on screen; and
+  //
+  //   areBothAttached() never becomes true, so the run never reports
+  //   complete and the loop is only ever stopped by the timeout.
+  //
+  // Workday had a bespoke guard for exactly this shape. Every other ATS
+  // had none. What every ATS does do on a successful upload is render the
+  // file's NAME, so that is the signal.
+  function pageShowsAttachment(fileName) {
+    if (!fileName) return false;
+    const stem = String(fileName).replace(/\.[a-z0-9]+$/i, '');
+    if (!stem || stem.length < 5) return false;      // too short to be distinctive
+    try {
+      const scope = document.querySelector('form') || document.body;
+      const text = scope.textContent || '';
+      return text.indexOf(fileName) !== -1 || text.indexOf(stem) !== -1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** True when this input already holds the file, by either signal. */
+  function inputHoldsFile(input, file) {
+    if (input.files && input.files.length > 0) return true;
+    return !!(file && pageShowsAttachment(file.name));
   }
 
   function isCoverField(input) {
-    const text = (
-      (input.labels?.[0]?.textContent || '') +
-      (input.name || '') +
-      (input.id || '') +
-      (input.getAttribute('aria-label') || '') +
-      (input.getAttribute('data-qa') || '') +
-      (input.closest('label')?.textContent || '')
-    ).toLowerCase();
-    
-    let parent = input.parentElement;
-    for (let i = 0; i < 5 && parent; i++) {
-      const parentText = (parent.textContent || '').toLowerCase().substring(0, 200);
-      if (parentText.includes('cover')) {
-        return true;
-      }
-      parent = parent.parentElement;
-    }
-    
-    return /cover/i.test(text);
+    if (fileFieldKind(input) === 'cover') return true;
+    return soleCandidate('cover') === input;
   }
 
   function hasUploadFields() {
@@ -2229,8 +2361,10 @@
     document.querySelectorAll('input[type="file"]').forEach((input) => {
       if (!isCVField(input)) return;
 
-      // If already attached, do nothing (prevents flicker)
-      if (input.files && input.files.length > 0) {
+      // Already attached -- by input.files, or by the ATS having rendered
+      // the filename after clearing the input. Without the second signal
+      // this guard never fires on a React-based ATS.
+      if (inputHoldsFile(input, cvFile)) {
         attached = true;
         return;
       }
@@ -2266,8 +2400,8 @@
       document.querySelectorAll('input[type="file"]').forEach((input) => {
         if (!isCoverField(input)) return;
 
-        // If already attached, do nothing (prevents flicker)
-        if (input.files && input.files.length > 0) {
+        // Same two signals as the CV.
+        if (inputHoldsFile(input, coverFile)) {
           attached = true;
           return;
         }
@@ -2806,9 +2940,15 @@
 
   function areBothAttached() {
     const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
-    const cvOk = !cvFile || fileInputs.some((i) => isCVField(i) && i.files && i.files.length > 0);
+    // The same two signals: the input still holding the file, or the ATS
+    // displaying its name. Relying on input.files alone meant the run
+    // never reported complete on an ATS that clears the input, so the
+    // attach loop ran to its 30-second timeout every time.
+    const cvOk = !cvFile || fileInputs.some((i) => isCVField(i) && inputHoldsFile(i, cvFile))
+      || pageShowsAttachment(cvFile.name);
     const coverOk = (!coverFile && !coverLetterText) ||
-      fileInputs.some((i) => isCoverField(i) && i.files && i.files.length > 0) ||
+      (coverFile && pageShowsAttachment(coverFile.name)) ||
+      fileInputs.some((i) => isCoverField(i) && inputHoldsFile(i, coverFile)) ||
       Array.from(document.querySelectorAll('textarea')).some((t) => /cover/i.test((t.labels?.[0]?.textContent || t.name || t.id || '')) && (t.value || '').trim().length > 0);
 
     return cvOk && coverOk;
