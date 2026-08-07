@@ -8613,30 +8613,26 @@ function extractJobInfoFromPageInjected() {
     }
     // --- Generic fallback ---
     else if (!result.title) {
-      result.title = getText('h1') || document.title.split('|')[0].split('-')[0].trim();
+      // No document.title here. It used to be taken at this point, before
+      // JSON-LD was consulted at all, so a page titled "Careers" or
+      // "Apply" permanently beat the employer's declared job title. Left
+      // empty, JSON-LD answers; if that is absent too, the same
+      // document.title fallback still runs further down.
+      result.title = getText('h1');
       result.company = result.company || document.querySelector('meta[property="og:site_name"]')?.content || '';
       result.location = result.location || getText('[class*="location"]', '[data-testid*="location"]');
       result.description = result.description || getText('main', 'article', '[class*="description"]', '#content', '[role="main"]');
       result.companySource = 'auto';
     }
 
-    // --- Fallback: Meta tags ---
-    if (!result.title) {
-      result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
-    }
-    if (!result.description || result.description.length < 100) {
-      const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content ||
-                           document.querySelector('meta[name="description"]')?.content || '';
-      if (fallbackDesc.length > result.description.length) {
-        result.description = fallbackDesc;
-      }
-      if (result.description.length < 200) {
-        const mainEl = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
-        result.description = (mainEl.innerText || mainEl.textContent || '').substring(0, 15000);
-      }
-    }
-
     // --- JSON-LD structured data ---
+    // Consulted BEFORE the text fallbacks below, not after. It used to run
+    // last, by which point the fallback had already dumped up to 15,000
+    // characters of page text into result.description -- and the JSON-LD
+    // branch only overrides a LONGER string, so it could never win. The
+    // employer's own structured description was being read and discarded
+    // on every page where the selectors missed, which is exactly the case
+    // it exists to cover.
     const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
     for (const script of jsonLdScripts) {
       try {
@@ -8666,6 +8662,57 @@ function extractJobInfoFromPageInjected() {
           break;
         }
       } catch (e) {}
+    }
+
+    // --- Fallback: the page's own headings ---
+    // AFTER JSON-LD, not before. Running first meant document.title won,
+    // so a page titled "Careers" or "Apply" beat the employer's declared
+    // job title -- and that string goes on to head the tailored CV and
+    // fill the subject line of the email to the recruiter.
+    if (!result.title) {
+      result.title = document.querySelector('meta[property="og:title"]')?.content || document.title;
+    }
+
+    // --- Fallback: meta description, then the densest content block ---
+    if (!result.description || result.description.length < 100) {
+      const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content ||
+                           document.querySelector('meta[name="description"]')?.content || '';
+      if (fallbackDesc.length > result.description.length) {
+        result.description = fallbackDesc;
+      }
+      if (result.description.length < 200) {
+        // Last resort. This used to take main/body wholesale, which sweeps
+        // in the nav, the footer, the cookie banner and -- the damaging
+        // one -- the "similar jobs" rail, so the CV was tailored partly to
+        // OTHER companies' postings. Pick the single densest block that is
+        // not page furniture instead.
+        const JUNK = 'nav,header,footer,aside,script,style,noscript,form,[role="navigation"],'
+          + '[role="banner"],[role="contentinfo"],[class*="cookie" i],[class*="consent" i],'
+          + '[class*="similar" i],[class*="related" i],[class*="recommend" i],[class*="other-job" i],'
+          + '[class*="more-job" i],[id*="similar" i],[id*="related" i]';
+        let best = '';
+        const roots = document.querySelectorAll('main, [role="main"], article, section, div');
+        for (const el of roots) {
+          try {
+            // Skip containers so large they are effectively the page.
+            if (el.querySelectorAll('section, article').length > 6) continue;
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll(JUNK).forEach((n) => n.remove());
+            const text = (clone.innerText || clone.textContent || '').replace(/\s+/g, ' ').trim();
+            // Prefer prose: a block that is mostly links is a job list.
+            const linkText = Array.from(clone.querySelectorAll('a'))
+              .reduce((n, a) => n + (a.textContent || '').length, 0);
+            if (text.length > 6000 && linkText > text.length * 0.4) continue;
+            if (text.length > best.length) best = text;
+          } catch (e) {}
+        }
+        if (!best) {
+          const mainEl = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+          best = (mainEl.innerText || mainEl.textContent || '');
+        }
+        result.description = best.substring(0, 15000);
+        result.descriptionSource = 'page-text';
+      }
     }
 
     // --- Additional Company Fallbacks ---

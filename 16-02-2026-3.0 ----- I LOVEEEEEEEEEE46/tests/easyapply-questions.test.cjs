@@ -175,6 +175,30 @@ t('someone unwilling to relocate answers No',
 t('a returning employee answers Yes',
   C.yesNoFor('Have you previously worked for this company?', Object.assign({}, PROFILE, { worked_here_before: true })) === 'Yes');
 
+// ---- 4b. plain field labels, where one rule can steal another's -------
+// Ordering in answerFor is load-bearing: a broad rule tested early
+// swallows a narrower label that appears later. "Country/Region" is the
+// one that bit -- /region/ sent it to the state rule, which returns the
+// user's state (empty on most profiles), so a required LinkedIn field
+// was left blank and the flow stalled on it.
+console.log('\nFIELD LABELS (one rule must not steal another\'s)');
+const NO_STATE = Object.assign({}, PROFILE); delete NO_STATE.state;
+for (const [label, want, prof] of [
+  ['Country/Region', 'Ireland', NO_STATE],
+  ['Country', 'Ireland', NO_STATE],
+  ['Country or Region', 'Ireland', NO_STATE],
+  ['State/Province', 'Leinster', PROFILE],
+  ['County', 'Leinster', PROFILE],
+  ['City', 'Dublin', PROFILE],
+  ['Email address', 'maxokafordev@gmail.com', PROFILE],
+  ['Mobile phone number', '+353 87 000 0000', PROFILE],
+  ['First name', 'Maxmilliam', PROFILE],
+  ['Last name', 'Okafor', PROFILE],
+]) {
+  const got = C.answerFor(label, prof, {});
+  t('"' + label + '" -> ' + want, got === want, 'got "' + got + '"');
+}
+
 // ---- 5. Yes/No option detection ---------------------------------------
 console.log('\nYES/NO CONTROL DETECTION');
 t('Yes + No is a Yes/No control', C.isYesNoOptions(['Yes', 'No']));

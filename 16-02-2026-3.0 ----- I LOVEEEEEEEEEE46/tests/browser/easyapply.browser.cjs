@@ -69,7 +69,14 @@ var STEPS = [
       '<select id="felony" name="felony" aria-required="true"><option value="">Select an option</option><option>Yes</option><option>No</option></select>' +
       '<label for="skill">Do you have experience with Power BI?</label>' +
       '<select id="skill" name="powerbi" aria-required="true"><option value="">Select an option</option><option>Yes</option><option>No</option></select>' +
-      '<label for="bg">I consent to a background check</label><input type="checkbox" id="bg" name="bg">' },
+      '<label for="bg">I consent to a background check</label><input type="checkbox" id="bg" name="bg">' +
+      // LinkedIn's real shape for a picker: an <input role="combobox">
+      // typeahead whose listbox is rendered outside the control and tied
+      // to it by aria-controls. A plain setValue types the text and never
+      // commits a selection, so the step stays invalid.
+      '<label for="cty">Country/Region</label>' +
+      '<input id="cty" name="country" role="combobox" aria-autocomplete="list" aria-controls="cty-list" aria-required="true" autocomplete="off">' +
+      '<ul id="cty-list" role="listbox"><li role="option">France</li><li role="option">Ireland</li><li role="option">Spain</li></ul>' },
   { name: 'Review', next: 'Submit application', html: '<p>Review your application</p>' },
 ];
 function render() {
@@ -80,6 +87,19 @@ function render() {
       '<form class="jobs-easy-apply-content">' + s.html + '</form>' +
       '<footer><button type="button" aria-label="' + s.next + '"><span>' + s.next + '</span></button></footer>' +
     '</div>';
+  // A real listbox commits the selection into the control when an option
+  // is clicked. Without this the fixture would accept a click that
+  // changed nothing and report a pass it had not earned.
+  var list = document.getElementById('cty-list');
+  if (list) {
+    list.addEventListener('click', function (ev) {
+      var li = ev.target.closest('li[role="option"]');
+      if (!li) return;
+      var input = document.getElementById('cty');
+      input.value = li.textContent;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
   document.querySelector('#modal-root footer button').addEventListener('click', function () {
     if (step === STEPS.length - 1) {
       document.getElementById('modal-root').innerHTML = '';
@@ -229,6 +249,7 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
   t('convicted of a felony -> No', yn.felony === 'No', JSON.stringify(yn));
   t('an evidenced skill -> Yes', yn.skill === 'Yes', JSON.stringify(yn));
   t('the consent checkbox is ticked', yn.bg === true, JSON.stringify(yn));
+  t('the typeahead combobox commits a real selection', yn.cty === 'Ireland', JSON.stringify(yn));
   await page.close();
 
   // ---- 5. auto-submit ON completes the application --------------------

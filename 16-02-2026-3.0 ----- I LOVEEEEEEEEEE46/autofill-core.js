@@ -181,7 +181,14 @@
     // --- location ----------------------------------------------------
     if (/^city$|\bcity\b|current.?city/.test(l)) return P.city || '';
     // "state" as a NOUN only -- never "please state the...", "stated location".
-    if (/\b(state|province|region|county)\b/.test(l) && !/please state|stated\b|state[sd] (the|your|why|how|what|any)/.test(l)) {
+    // "Country/Region" is a country field, not a region field, and it is
+    // one of the commonest labels on LinkedIn Easy Apply. Matching
+    // /region/ first sent it to the state rule, which returned the user's
+    // state -- empty for most profiles -- so a required field was left
+    // blank and the flow stalled on it.
+    if (/\b(state|province|region|county)\b/.test(l)
+        && !/country|nationality|citizenship/.test(l)
+        && !/please state|stated\b|state[sd] (the|your|why|how|what|any)/.test(l)) {
       return P.state || '';
     }
     if (/zip|postal|eircode|post.?code/.test(l)) return P.postal_code || P.zip || '';
@@ -461,15 +468,50 @@
   async function fillCustomDropdown(el, value) {
     try {
       const doc = el.ownerDocument;
+      const isInput = el.tagName === 'INPUT';
       el.click();
-      await new Promise((r) => setTimeout(r, 220));
-      const opts = doc.querySelectorAll('[role="option"], li[role="option"], [class*="option" i][role]');
+      try { el.focus(); } catch (e) {}
+
+      // A typeahead (LinkedIn's artdeco combobox, and most modern ATS)
+      // is an <input role="combobox">. Typing is what makes its listbox
+      // appear and filter; without it there is nothing to pick from.
+      if (isInput) {
+        setValue(el, value);
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: value.slice(-1), bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: value.slice(-1), bubbles: true }));
+      }
+      await new Promise((r) => setTimeout(r, 260));
+
+      // The listbox is usually rendered at body level and tied to the
+      // control by aria-controls/aria-owns, so searching the control's
+      // own subtree finds nothing. Prefer the referenced listbox, then
+      // fall back to any option in the document.
+      let opts = [];
+      const owns = el.getAttribute('aria-controls') || el.getAttribute('aria-owns');
+      if (owns) {
+        const box = doc.getElementById(owns);
+        if (box) opts = Array.prototype.slice.call(box.querySelectorAll('[role="option"], li, [class*="option" i]'));
+      }
+      if (!opts.length) {
+        opts = Array.prototype.slice.call(
+          doc.querySelectorAll('[role="option"], li[role="option"], [class*="option" i][role]'));
+      }
       for (const o of opts) {
         if (optionMatches(o.textContent, value)) {
           o.click();
           await new Promise((r) => setTimeout(r, 80));
           return true;
         }
+      }
+
+      // No listbox, or nothing in it matched. For a typeahead the typed
+      // value is itself a legitimate answer, so keep it rather than
+      // reverting to an empty required field.
+      if (isInput && String(el.value || '').trim()) {
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('blur', { bubbles: true }));
+        return true;
       }
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       return false;
@@ -552,7 +594,12 @@
             el.click();
             filled++;
           }
-        } else if (el.getAttribute('role') === 'combobox' && el.tagName !== 'INPUT') {
+        } else if (el.getAttribute('role') === 'combobox') {
+          // Inputs included. An <input role="combobox"> is a typeahead --
+          // LinkedIn's Easy Apply shape -- and a plain setValue types the
+          // text without ever committing a selection, so the step stays
+          // invalid and the flow stalls on a field that looks filled.
+          if (String(el.value || '').trim()) { alreadySet++; continue; }
           if (await fillCustomDropdown(el, value)) filled++;
         } else {
           if (String(el.value || '').trim()) { alreadySet++; continue; }  // respect user input
