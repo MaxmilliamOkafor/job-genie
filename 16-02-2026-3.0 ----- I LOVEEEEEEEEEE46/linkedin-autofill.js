@@ -27,7 +27,12 @@
  *   - the step not changing after a click (LinkedIn rejected the input)
  *   - the Submit button, unless auto-submit is on
  *   - MAX_STEPS, so a loop can never run away
- *   It never uploads or swaps a resume file.
+ *
+ *   It never uploads a resume file, and never changes a resume that is
+ *   already selected. It WILL pick one when the step has none selected,
+ *   because that step blocks Continue on a click rather than a value --
+ *   so a run that had answered every question correctly still stalled
+ *   there, reported as "stuck" with no field to point at.
  *
  * All field intelligence lives in autofill-core.js -- this module only
  * supplies the LinkedIn-specific scoping and step detection.
@@ -165,9 +170,46 @@
       .filter((b) => /next|continue|review|submit|apply/i.test(b.text + ' ' + b.aria))
       .slice(0, 10);
     const modal = findEasyApplyModal();
+
+    // The results list. Every selector below is a guess at LinkedIn's
+    // current markup, and a guess that has gone stale is invisible from
+    // here -- the sweep simply finds nothing and reports "no job cards".
+    // This says WHICH selector matched and which did not, so one paste
+    // identifies the stale one instead of a round of guessing.
+    const listProbe = {};
+    for (const sel of [
+      'li[data-occludable-job-id]', '[data-occludable-job-id]',
+      '.jobs-search-results__list-item', '.scaffold-layout__list-item',
+      '.job-card-container', 'a.job-card-container__link',
+      'a[href*="/jobs/view/"]',
+      '.jobs-search-results-list__list-item--active', '.job-card-container--active',
+      '.jobs-search__job-details', '.jobs-details', '.job-view-layout',
+      '.jobs-apply-button',
+    ]) {
+      try { listProbe[sel] = document.querySelectorAll(sel).length; } catch (e) { listProbe[sel] = 'err'; }
+    }
+    let cards = [];
+    try {
+      cards = resultCards().slice(0, 8).map((c) => ({
+        id: c.id,
+        text: (c.el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+      }));
+    } catch (e) { cards = [{ error: String(e && e.message) }]; }
+
     return {
       url: location.href.slice(0, 120),
       frames: window.top === window ? 'top' : 'iframe',
+      // What the list driver sees. currentJobId must be a NUMBER on a
+      // list page; '' means the selected card was not identified, and the
+      // per-job dedupe cannot work.
+      list: {
+        looksLikeListPage: (() => { try { return isResultsListPage(); } catch (e) { return 'err'; } })(),
+        cardsFound: cards.length,
+        cards,
+        currentJobId: (() => { try { return currentJobId(); } catch (e) { return 'err'; } })(),
+        easyApplyLaunch: (() => { try { return !!findEasyApplyLaunch(); } catch (e) { return 'err'; } })(),
+        selectorHits: listProbe,
+      },
       dialogs: [...document.querySelectorAll('[role="dialog"], dialog, .artdeco-modal')].slice(0, 5).map(brief),
       footerButtons: btns,
       inputsOnPage: document.querySelectorAll('input, select, textarea').length,
@@ -234,6 +276,9 @@
         log('no profile data -- skipping');
         return none('no-profile');
       }
+      // Before the fields: the resume step blocks Continue on a click,
+      // not on a value, so filling everything else still leaves it stuck.
+      selectResumeIfNone(modal);
       const r = await C.fillContainer(modal, profile, {});
       _lastSignature = sig;
       if (r.filled > 0) log('filled ' + r.filled + ' field(s) on this step (' + reason + ')');
@@ -296,6 +341,56 @@
   // A required control we could not answer. Advancing past one either fails
   // validation or, worse, submits a blank answer to an employer, so the run
   // stops and hands back to the user instead of guessing.
+  /**
+   * The resume step.
+   *
+   * Easy Apply nearly always has one, and it blocks Continue until a
+   * document is chosen. Nothing here touched it, so a run that had filled
+   * every question correctly stalled on the one step that needed a click
+   * -- reported as "stuck", with no field to point at.
+   *
+   * The boundary stays where it was: an existing SELECTION is never
+   * changed and no file is ever uploaded. This only chooses when nothing
+   * is chosen, which is the difference between blocked and not.
+   */
+  function selectResumeIfNone(modal) {
+    try {
+      const cards = modal.querySelectorAll(
+        '[class*="jobs-document-upload"] input[type="radio"],'
+        + '[class*="document-upload"] input[type="radio"],'
+        + '[class*="resume"] input[type="radio"]');
+      let group = [...cards];
+
+      // Fall back to any radio group whose surroundings talk about a
+      // resume, for markup variants that do not carry those classes.
+      if (!group.length) {
+        for (const r of modal.querySelectorAll('input[type="radio"]')) {
+          const scope = r.closest('fieldset, [role="radiogroup"], section, div');
+          const txt = ((scope && scope.textContent) || '').toLowerCase();
+          if (/resume|\bcv\b|curriculum/.test(txt) && !/cover/.test(txt)) group.push(r);
+        }
+      }
+      if (!group.length) return 'no-resume-step';
+      if (group.some((r) => r.checked)) return 'already-selected';
+
+      const pick = group.find((r) => {
+        try { return core() ? core().isVisible(r) : true; } catch (e) { return true; }
+      }) || group[0];
+      // Click the label where there is one: LinkedIn's radio is often
+      // visually hidden behind a styled card, and clicking the input
+      // directly does not always register with its handler.
+      const label = pick.id
+        ? modal.querySelector('label[for="' + CSS.escape(pick.id) + '"]')
+        : pick.closest('label');
+      (label || pick).click();
+      if (!pick.checked) { try { pick.click(); } catch (e) {} }
+      log('resume selected (none was)');
+      return pick.checked ? 'selected' : 'could-not-select';
+    } catch (e) {
+      return 'error:' + (e && e.message);
+    }
+  }
+
   function unansweredRequired(modal) {
     const out = [];
     const C = core();
@@ -445,22 +540,53 @@
    * page after the first attempt and refused to act on any other role --
    * the list looked alive while nothing was ever applied to.
    */
-  function currentJobId() {
-    const m = /[?&]currentJobId=(\d+)/.exec(location.href)
-      || /\/jobs\/view\/(\d+)/.exec(location.pathname);
-    if (m) return m[1];
-    // On the split-pane list the id lives on the selected card.
+  /** The id the DOM says is on screen, ignoring the URL entirely. */
+  function shownJobIdFromDom() {
     try {
       const active = document.querySelector(
         '.jobs-search-results-list__list-item--active, li.jobs-search-results__list-item--active,'
-        + '.job-card-container--active, [aria-current="page"]');
+        + '.job-card-container--active, .jobs-search-results-list__list-item--highlighted,'
+        + '[aria-current="page"]');
       const id = active && cardJobId(active);
       if (id) return id;
-      const paneLink = document.querySelector('.jobs-search__job-details a[href*="/jobs/view/"]');
-      const pm = paneLink && /\/jobs\/view\/(\d+)/.exec(paneLink.getAttribute('href') || '');
-      if (pm) return pm[1];
+      const pane = document.querySelector(
+        '.jobs-search__job-details, .jobs-details, .job-view-layout, .jobs-details__main-content');
+      if (pane) {
+        const d = pane.getAttribute('data-job-id') || pane.getAttribute('data-occludable-job-id');
+        if (d && /^\d+$/.test(String(d))) return String(d);
+        const a = pane.querySelector('a[href*="/jobs/view/"]');
+        const pm = a && /\/jobs\/view\/(\d+)/.exec(a.getAttribute('href') || '');
+        if (pm) return pm[1];
+      }
     } catch (e) {}
-    return '';                          // unknown -- never a shared key
+    return '';
+  }
+
+  function urlJobId() {
+    const m = /[?&]currentJobId=(\d+)/.exec(location.href)
+      || /\/jobs\/view\/(\d+)/.exec(location.pathname);
+    return m ? m[1] : '';
+  }
+
+  function currentJobId() {
+    // On a /jobs/view/ page the URL IS the job. On the split-pane list it
+    // is not: ?currentJobId= is written by LinkedIn when a card is opened,
+    // and it lags -- it still names the job the user arrived on while the
+    // pane already shows another. Reading it first meant every card the
+    // driver clicked looked like "not loaded yet" until the timeout, and
+    // the whole list was skipped except the one job already in the URL.
+    if (/\/jobs\/view\//.test(location.pathname)) return urlJobId();
+    return shownJobIdFromDom() || urlJobId();
+  }
+
+  /**
+   * Is the pane actually showing THIS job? Any of the DOM signals, or the
+   * URL. Deliberately not just currentJobId(): a stale URL parameter must
+   * never be able to veto what the DOM plainly shows.
+   */
+  function paneShowsJob(id) {
+    if (!id) return false;
+    return shownJobIdFromDom() === id || urlJobId() === id;
   }
 
   /** The requisition id a results-list card points at. */
@@ -647,7 +773,7 @@
    * that was never coming.
    */
   function paneRendered(id) {
-    if (currentJobId() !== id) return false;
+    if (!paneShowsJob(id)) return false;
     if (findEasyApplyLaunch() || findEasyApplyModal()) return true;
     const pane = document.querySelector(
       '.jobs-search__job-details, .jobs-details, .job-view-layout, .jobs-details__main-content');
@@ -664,7 +790,7 @@
       if (paneRendered(id)) return true;
       await sleep(150);
     }
-    return currentJobId() === id;
+    return paneShowsJob(id);
   }
 
   function cardLink(card) {

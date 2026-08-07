@@ -21,7 +21,7 @@ const { chromium } = S.skipUnlessReady(require('path').basename(__filename));
 const https = require('https');
 const fs = require('fs');
 
-const PORT = 8445;
+const PORT = 8452;
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -44,7 +44,22 @@ var STEPS = [
       '<label for="fn">First name</label><input id="fn" name="firstName" aria-required="true">' +
       '<label for="ln">Last name</label><input id="ln" name="lastName" aria-required="true">' +
       '<label for="em">Email address</label><input id="em" name="email" type="email" aria-required="true">' +
+      '<label for="cc">Phone country code</label>' +
+      '<select id="cc" name="country_code" aria-required="true">' +
+      '<option value="">Select</option><option>Ireland (+353)</option><option>United Kingdom (+44)</option></select>' +
       '<label for="ph">Mobile phone number</label><input id="ph" name="phone" type="tel" aria-required="true">' },
+  // The resume step. LinkedIn renders previously-uploaded resumes as radio
+  // cards with the input visually hidden behind a styled label, and blocks
+  // Continue until one is chosen. Nothing preselected here, which is the
+  // case that used to stall the whole run.
+  { name: 'Resume', next: 'Continue to next step', html:
+      '<div class="jobs-document-upload-redesign-card__container">' +
+      '<input type="radio" id="r1" name="resume" class="visually-hidden">' +
+      '<label for="r1">Maxmilliam_Okafor_CV.pdf &mdash; uploaded 3 days ago</label>' +
+      '<input type="radio" id="r2" name="resume" class="visually-hidden">' +
+      '<label for="r2">old_resume_2019.pdf &mdash; uploaded 4 years ago</label>' +
+      '</div>' +
+      '<button type="button" id="upload">Upload resume</button>' },
   { name: 'Additional questions', next: 'Continue to next step', html:
       '<label for="yrs">How many years of project management experience do you have?</label>' +
       '<input id="yrs" name="years_pm" type="text" aria-required="true">' +
@@ -77,7 +92,10 @@ var STEPS = [
       '<label for="cty">Country/Region</label>' +
       '<input id="cty" name="country" role="combobox" aria-autocomplete="list" aria-controls="cty-list" aria-required="true" autocomplete="off">' +
       '<ul id="cty-list" role="listbox"><li role="option">France</li><li role="option">Ireland</li><li role="option">Spain</li></ul>' },
-  { name: 'Review', next: 'Submit application', html: '<p>Review your application</p>' },
+  { name: 'Review', next: 'Submit application', html:
+      '<p>Review your application</p>' +
+      '<label for="follow">Follow Acme Corp to stay up to date with their news</label>' +
+      '<input type="checkbox" id="follow" name="followCompany">' },
 ];
 function render() {
   var s = STEPS[step];
@@ -102,6 +120,8 @@ function render() {
   }
   document.querySelector('#modal-root footer button').addEventListener('click', function () {
     if (step === STEPS.length - 1) {
+      var f = document.getElementById('follow');
+      window.__followedAtSubmit = !!(f && f.checked);
       document.getElementById('modal-root').innerHTML = '';
       document.getElementById('submitted').hidden = false;
       return;
@@ -111,6 +131,10 @@ function render() {
     setTimeout(render, 120);
   });
 }
+window.__uploadPressed = false;
+document.addEventListener('click', function (ev) {
+  if (ev.target && ev.target.id === 'upload') window.__uploadPressed = true;
+}, true);
 document.querySelector('.jobs-apply-button').addEventListener('click', function () {
   setTimeout(render, 150);
 });
@@ -220,6 +244,23 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
   t('last name filled', filled.ln === 'Okafor', JSON.stringify(filled));
   t('email filled', filled.em === 'maxokafordev@gmail.com', JSON.stringify(filled));
   t('phone filled', (filled.ph || '').replace(/\s/g, '') === '+353870000000', JSON.stringify(filled));
+  t('the phone country code is selected', /Ireland/.test(filled.cc || ''), JSON.stringify(filled));
+
+  // Step two: the resume step, which blocks Continue on a CLICK rather
+  // than a value. Nothing here touched it, so a run that had answered
+  // every question still stalled on it.
+  await page.click('#modal-root footer button');
+  await page.waitForTimeout(2500);
+  const resume = await page.evaluate(() => ({
+    heading: (document.querySelector('#modal-root h2') || {}).textContent || '',
+    r1: (document.getElementById('r1') || {}).checked,
+    r2: (document.getElementById('r2') || {}).checked,
+    uploadPressed: !!window.__uploadPressed,
+  }));
+  t('a resume is selected when none was', resume.r1 === true, JSON.stringify(resume));
+  t('the most recent one is chosen, not the stale one', resume.r2 !== true, JSON.stringify(resume));
+  t('no file upload is ever triggered', resume.uploadPressed === false,
+    'it pressed Upload resume -- it must never upload or swap a file');
 
   // Step two is the one that decides whether the flow gets stuck: LinkedIn
   // prefills the contact step itself, so answering the employer's own
@@ -259,9 +300,13 @@ const URL_JOB = 'https://www.linkedin.com/jobs/view/5477345004/';
   const done = await page.evaluate(() => ({
     submitted: !document.getElementById('submitted').hidden,
     modalOpen: !!document.querySelector('.jobs-easy-apply-modal'),
+    followed: window.__followedAtSubmit,
   }));
   t('with auto-submit ON the application is submitted end to end',
     done.submitted, JSON.stringify(done));
+  t('it never opted the user into following the company',
+    done.followed !== true,
+    'ticked "Follow Acme Corp" -- that is a marketing opt-in, not a consent');
   await page.close();
 
   // ---- 6. the heavy engine stays off LinkedIn -------------------------

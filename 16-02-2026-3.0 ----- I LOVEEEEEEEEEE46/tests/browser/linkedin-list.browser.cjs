@@ -25,7 +25,7 @@ const { chromium } = S.skipUnlessReady(require('path').basename(__filename));
 const https = require('https');
 const fs = require('fs');
 
-const PORT = 8451;
+const PORT = 8453;
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -76,7 +76,11 @@ function renderModal(){
 }
 function openJob(id){
   openId = id; step = 0;
-  history.replaceState({},'', '/jobs/search-results/?currentJobId='+id);
+  // Deliberately NOT updated. The real page arrives with
+  // ?currentJobId=<the job you landed on> and that parameter lags behind
+  // the pane -- reading it first made every other card look "not loaded
+  // yet" until the timeout, so the whole list was skipped except one.
+  // The active-card class below is the only honest signal.
   document.querySelectorAll('li[data-occludable-job-id]').forEach(function(li){
     li.classList.toggle('jobs-search-results-list__list-item--active', li.getAttribute('data-occludable-job-id')===id);
   });
@@ -122,7 +126,10 @@ const PROFILE = {
   email: 'maxokafordev@gmail.com', phone: '+353 87 000 0000',
   city: 'Dublin', country: 'Ireland', years: '6', work_authorized: 'Yes',
 };
-const LIST_URL = 'https://www.linkedin.com/jobs/search-results/?keywords=machine+learning+engineer';
+// A real URL from the reported session: currentJobId is present, names
+// ONE job, and never changes as the list is walked.
+const LIST_URL = 'https://www.linkedin.com/jobs/search-results/?currentJobId=4001'
+  + '&keywords=machine+learning+engineer&origin=PREFERENCES_LANDING&start=225';
 
 (async () => {
   await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
