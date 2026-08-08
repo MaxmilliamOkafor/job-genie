@@ -1013,27 +1013,53 @@
 
       y = this.renderSectionTitle(doc, 'CORE COMPETENCIES', y);
 
-      const COLS = 3;
+      // ONE COLUMN, ONE ITEM PER LINE.
+      //
+      // This was a three-column grid drawn with doc.text() at fixed x
+      // offsets, and it failed twice over.
+      //
+      //   UNREADABLE. Nothing constrained an item to its column width, so
+      //   any competency longer than a third of the page simply overprinted
+      //   the one beside it. On a phone, where the page is scaled down to
+      //   fit, that overlap is what the whole section looks like.
+      //
+      //   UNPARSEABLE. A PDF has no columns -- only glyphs at coordinates.
+      //   Extractors reconstruct lines by vertical position, so a three-up
+      //   grid comes out as each ROW run together: "Stakeholder management
+      //   Azure DevOps Agile delivery". An ATS reading that gets one long
+      //   nonsense skill instead of three real ones.
+      //
+      // One item per line is unambiguous to every parser -- the line break
+      // IS the delimiter -- and it reflows to any screen width.
       const pageWidth = PDF_CONFIG.page.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
-      const colWidth = pageWidth / COLS;
       const fontSize = PDF_CONFIG.fonts.sizes.body;
       const lineHeight = fontSize * PDF_CONFIG.lineHeight.normal;
+      const BULLET = '- ';
+      const indent = doc.getStringUnitWidth(BULLET) * fontSize;
 
-      for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
-        if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - lineHeight) {
-          doc.addPage();
-          y = PDF_CONFIG.margins.top;
-        }
-        for (let col = 0; col < COLS; col++) {
-          const idx = row * COLS + col;
-          if (idx < competencies.length) {
-            const text = this.sanitizeForPDF(`- ${competencies[idx]}`);
+      doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+      doc.setFontSize(fontSize);
+
+      for (const competency of competencies) {
+        const text = this.sanitizeForPDF(String(competency || '').trim());
+        if (!text) continue;
+        // Wrap rather than overflow. A long item now runs onto a second
+        // line, indented under the first, instead of over its neighbour.
+        const wrapped = doc.splitTextToSize(text, pageWidth - indent);
+        for (let n = 0; n < wrapped.length; n++) {
+          if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - lineHeight) {
+            doc.addPage();
+            y = PDF_CONFIG.margins.top;
             doc.setFont(PDF_CONFIG.fonts.body, 'normal');
             doc.setFontSize(fontSize);
-            doc.text(text, PDF_CONFIG.margins.left + col * colWidth, y);
           }
+          if (n === 0) {
+            doc.text(BULLET + wrapped[0], PDF_CONFIG.margins.left, y);
+          } else {
+            doc.text(wrapped[n], PDF_CONFIG.margins.left + indent, y);
+          }
+          y += lineHeight;
         }
-        y += lineHeight;
       }
 
       return y + PDF_CONFIG.spacing.beforeSection;
