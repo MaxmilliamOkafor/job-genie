@@ -1786,33 +1786,6 @@ function expandCertifications(items: string[]): string[] {
   return out;
 }
 
-function docxCertificationsGrid(items: string[]): Paragraph[] {
-  const list = expandCertifications(items);
-  if (!list.length) return [];
-  // Two-column grid via a centre tab stop so long titles wrap cleanly
-  // while short titles pair up — much more scannable than a comma list.
-  const HALF = Math.ceil(list.length / 2);
-  const rows: Paragraph[] = [];
-  for (let i = 0; i < HALF; i++) {
-    const left = list[i];
-    const right = list[i + HALF];
-    const runs: TextRun[] = [
-      new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
-      new TextRun({ text: left, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
-    ];
-    if (right) {
-      runs.push(new TextRun({ text: "\t", font: DOCX_FONT, size: 21 }));
-      runs.push(new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }));
-      runs.push(new TextRun({ text: right, font: DOCX_FONT, size: 21, color: DOCX_BODY }));
-    }
-    rows.push(new Paragraph({
-      spacing: { after: 80, line: 290 },
-      tabStops: [{ type: TabStopType.LEFT, position: 4680 }],
-      children: runs,
-    }));
-  }
-  return rows;
-}
 
 function docxBullet(text: string): Paragraph {
   return new Paragraph({
