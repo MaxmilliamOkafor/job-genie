@@ -4448,10 +4448,26 @@ class ATSTailor {
         return false;
       }
 
+      // A title the user typed by hand outranks anything scraped from the
+      // page -- otherwise the correction survives only until the next
+      // scan, which the popup runs on open. Keyed to the URL it was made
+      // on, so navigating to a different posting never inherits it.
+      const priorManualTitle =
+        (this.currentJob && this.currentJob.titleSource === 'manual'
+         && this.currentJob.title && this.currentJob.manualTitleUrl)
+          ? { url: this.currentJob.manualTitleUrl, title: this.currentJob.title }
+          : null;
+
       const reconciled = await this.reconcileJobContext(fresh, tab);
 
       if (reconciled && (reconciled.description || reconciled.title)) {
         this.currentJob = reconciled;
+
+        if (priorManualTitle && priorManualTitle.url === (reconciled.url || tab.url)) {
+          this.currentJob.title = priorManualTitle.title;
+          this.currentJob.titleSource = 'manual';
+          this.currentJob.manualTitleUrl = priorManualTitle.url;
+        }
 
         // PERFORMANCE: Limit JD length for faster processing
         if (this.currentJob.description && this.currentJob.description.length > MAX_JD_LENGTH) {
@@ -4501,6 +4517,56 @@ class ATSTailor {
       console.warn('[ATS Tailor] job context unavailable:', e && e.message);
       return fresh;
     }
+  }
+
+  // ---- MANUAL JOB TITLE CORRECTION --------------------------------
+  // Three listeners called these two methods and neither existed, so the
+  // ✏️ button beside the detected title threw TypeError on every click.
+  // It is shown on every non-ATS site -- company career pages, LinkedIn,
+  // Indeed -- which is exactly where detection is least reliable and a
+  // manual correction matters most.
+  toggleJobTitleEdit() {
+    const titleEl = document.getElementById('jobTitle');
+    const inputEl = document.getElementById('jobTitleInput');
+    if (!titleEl || !inputEl) return;
+
+    if (inputEl.classList.contains('hidden')) {
+      inputEl.value = (this.currentJob && this.currentJob.title) || '';
+      inputEl.classList.remove('hidden');
+      titleEl.classList.add('hidden');
+      inputEl.focus();
+      inputEl.select();
+    } else {
+      this.saveJobTitleEdit();
+    }
+  }
+
+  async saveJobTitleEdit() {
+    const titleEl = document.getElementById('jobTitle');
+    const inputEl = document.getElementById('jobTitleInput');
+    if (!titleEl || !inputEl) return;
+    // Enter hides the field, which fires blur, which calls this again.
+    // Closing first makes the second call a no-op.
+    if (inputEl.classList.contains('hidden')) return;
+
+    inputEl.classList.add('hidden');
+    titleEl.classList.remove('hidden');
+
+    const next = inputEl.value.trim();
+    if (!next || !this.currentJob || next === this.currentJob.title) {
+      this.updateJobDisplay();
+      return;
+    }
+
+    this.currentJob.title = next;
+    // Marks the title as the user's, so the next scan of this same page
+    // does not quietly overwrite the correction.
+    this.currentJob.titleSource = 'manual';
+    this.currentJob.manualTitleUrl = this.currentJob.url || '';
+
+    await chrome.storage.local.set({ ats_lastJob: this.currentJob });
+    this.updateJobDisplay();
+    this.setStatus('Job title updated', 'ready');
   }
 
   updateJobDisplay() {
