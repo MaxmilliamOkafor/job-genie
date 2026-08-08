@@ -76,24 +76,34 @@ fs.writeFileSync(docx, Buffer.from(built.base64, 'base64'));
 cp.execSync(`cd ${tmp} && unzip -qo cv.docx`);
 const xml = fs.readFileSync(path.join(tmp, 'word', 'document.xml'), 'utf8');
 
-// One line per paragraph, tabs preserved as \t -- the charitable reading.
-const linesKeepingTabs = xml.split(/<w:p[ >]/).slice(1).map((p) => {
+// Text runs only. <w:t[^>]*> is WRONG here: it also matches <w:tab ... />
+// and <w:tabs>, so a paragraph carrying tab stops (the role line has a
+// right stop for its dates) leaks raw XML into the extracted text and the
+// assertions below would be reading markup rather than content.
+// Requiring whitespace after <w:t excludes <w:tab> and <w:tabs> while
+// still accepting <w:t> and <w:t xml:space="preserve">.
+const TEXT_RUN = '<w:t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/w:t>';
+const paragraphs = xml.split(/<w:p[ >]/).slice(1);
+const extract2 = (keepTabs) => paragraphs.map((p) => {
   const parts = [];
-  const re = /<w:tab\/>|<w:t[^>]*>([\s\S]*?)<\/w:t>/g;
+  const re = new RegExp((keepTabs ? '<w:tab\\s*\\/>|' : '') + TEXT_RUN, 'g');
   let m;
   while ((m = re.exec(p))) parts.push(m[1] === undefined ? '\t' : m[1]);
   return parts.join('').replace(/&amp;/g, '&').trim();
 }).filter((l) => l.length);
 
-// The same, with tabs DROPPED -- what several parsers actually do, and
-// the reading that welded skills together.
-const linesDroppingTabs = xml.split(/<w:p[ >]/).slice(1).map((p) => {
-  const parts = [];
-  const re = /<w:t[^>]*>([\s\S]*?)<\/w:t>/g;
-  let m;
-  while ((m = re.exec(p))) parts.push(m[1]);
-  return parts.join('').replace(/&amp;/g, '&').trim();
-}).filter((l) => l.length);
+// The charitable reading: tabs preserved as \t.
+const linesKeepingTabs = extract2(true);
+// And the reading several parsers actually apply -- tabs dropped, which
+// is what welded skills together.
+const linesDroppingTabs = extract2(false);
+
+// The extractor itself has to be trustworthy, or every assertion below is
+// measuring the wrong thing.
+t('the extractor returns text, not markup',
+  !linesKeepingTabs.some((l) => /<w:|w:val=|w:pos=/.test(l)),
+  'raw XML leaked into the extracted text: '
+    + JSON.stringify(linesKeepingTabs.filter((l) => /<w:/.test(l)).slice(0, 1)));
 
 const compIndex = linesKeepingTabs.findIndex((l) => /^CORE COMPETENCIES$/i.test(l));
 t('the section header survives', compIndex !== -1, JSON.stringify(linesKeepingTabs.slice(0, 6)));
