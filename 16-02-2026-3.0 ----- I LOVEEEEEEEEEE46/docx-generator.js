@@ -71,13 +71,12 @@
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
     // Tab stops: opts.tabs is an array of integers (twips from left margin).
-    // Used by the 3-column CORE COMPETENCIES layout -- a single-column
-    // paragraph with tab-aligned items reads in linear order to every ATS
-    // parser while LOOKING like a 3-column grid to the human eye.
+    // The competencies grid this was built for is gone -- it is now one
+    // item per line -- so the only remaining user is the role line, which
+    // needs a RIGHT stop to set its dates flush to the margin.
     if (Array.isArray(opts.tabs) && opts.tabs.length) {
-      // Accepts a plain number (left stop, used by the competencies grid)
-      // or { pos, val } for an explicit alignment -- the role line needs a
-      // RIGHT stop so dates sit flush to the margin.
+      // Accepts a plain number (a left stop) or { pos, val } for an
+      // explicit alignment.
       const stops = opts.tabs.map((tb) => {
         const pos = (tb && typeof tb === 'object') ? tb.pos : tb;
         const val = (tb && typeof tb === 'object' && tb.val) ? tb.val : 'left';
@@ -466,9 +465,8 @@
 
         // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items
         // with no sentence punctuation gets split into per-item paragraphs.
-        // CORE COMPETENCIES / AREAS OF EXPERTISE -> 3-column tab-grid
-        //   (single-column paragraphs underneath, ATS-safe).
-        // CERTIFICATIONS / AWARDS              -> one bullet per line.
+        // CORE COMPETENCIES / AREAS OF EXPERTISE -> one item per line.
+        // CERTIFICATIONS / AWARDS                -> one bullet per line.
         if (LIST_SECTIONS.has(currentSection) || GRID_SECTIONS.has(currentSection)) {
           const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
           if (looksLikeList) {

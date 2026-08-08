@@ -257,7 +257,31 @@
         }
       }
 
+      // CORE COMPETENCIES and TECHNICAL PROFICIENCIES are rendered from two
+      // separate fields by two separate renderers, and nothing stopped the
+      // same skill appearing in both -- so a CV could list "Power BI" twice
+      // under two headings. A human reads that as padding; a keyword-scoring
+      // ATS counts the term twice for no gain.
+      //
+      // Competencies win, because they are the tailored, job-matched list.
+      // Proficiencies keep whatever is genuinely additional, and if that
+      // leaves nothing, renderSkills drops the heading rather than printing
+      // an empty section.
+      if (data.coreCompetencies.length && data.skills.length) {
+        const claimed = new Set(data.coreCompetencies.map((c) => this.skillKey(c)));
+        data.skills = data.skills.filter((s) => !claimed.has(this.skillKey(s)));
+      }
+
       return data;
+    },
+
+    // Compare skills by shape, not spelling: "Power BI", "power bi" and
+    // "PowerBI" are one skill, and a trailing comma or bullet left over
+    // from parsing must not make a duplicate look distinct.
+    skillKey(s) {
+      return String(s === null || s === undefined ? '' : s)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '');
     },
 
     // ============ EXTRACT CONTACT INFO ============
@@ -1037,7 +1061,14 @@
       const filtered = competencies.filter(c => !softSkillPattern.test(c));
       const displaced = competencies.filter(c => softSkillPattern.test(c));
       if (displaced.length > 0 && data && Array.isArray(data.skills)) {
-        data.skills = [...new Set([...data.skills, ...displaced])];
+        // A plain Set compares exact strings, so "Communication Skills"
+        // displaced into a list already holding "communication skills"
+        // would print both. Match on shape, as the dedupe above does.
+        const seen = new Set(data.skills.map((s) => this.skillKey(s)));
+        for (const d of displaced) {
+          const k = this.skillKey(d);
+          if (k && !seen.has(k)) { seen.add(k); data.skills.push(d); }
+        }
       }
       competencies = filtered;
       if (competencies.length === 0) return startY;
@@ -1464,15 +1495,15 @@
     sanitizeForPDF(text) {
       if (text === null || text === undefined) return '';
       return String(text)
-        .replace(/[‘’‚‛]/g, "'")     // curly single quotes
-        .replace(/[“”„‟]/g, '"')     // curly double quotes
-        .replace(/[‐-―]/g, '-')                // hyphens, en/em dashes
-        .replace(/[•‣◦⁃]/g, '-')     // stray bullet glyphs
-        .replace(/…/g, '...')                       // ellipsis
-        .replace(/ /g, ' ')                         // non-breaking space
-        .replace(/[​-‍﻿]/g, '')           // zero-width joiners
-        .replace(/[ --]/g, '')
-        .replace(/\t/g, ' ')                             // a tab has no meaning here
+        .replace(/[\u2018\u2019\u201A\u201B]/g, "'")        // curly single quotes
+        .replace(/[\u201C\u201D\u201E\u201F]/g, '"')        // curly double quotes
+        .replace(/[\u2010-\u2015\u2212]/g, '-')              // hyphens, en/em dashes, minus
+        .replace(/[\u2022\u2023\u25E6\u2043]/g, '-')        // stray bullet glyphs
+        .replace(/\u2026/g, '...')                            // ellipsis
+        .replace(/[\u00A0\u2007\u202F]/g, ' ')               // non-breaking spaces
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')               // zero-width joiners
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')   // control characters
+        .replace(/\t/g, ' ')                                  // a tab has no meaning here
         .replace(/[ ]{2,}/g, ' ')
         .trim();
     },
