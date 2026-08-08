@@ -953,6 +953,21 @@
     },
 
     // ============ RENDER EDUCATION ============
+    // Education entries reach here unnormalised -- structureCVData passes
+    // tailoredContent.education or the candidate's own array through as it
+    // finds it -- so the graduation date arrives under whichever name that
+    // source used.
+    educationDates(edu) {
+      if (!edu) return '';
+      const one = edu.dates || edu.year || edu.graduationDate
+               || edu.graduation_date || edu.graduationYear || edu.date;
+      if (one) return this.sanitizeForPDF(String(one).trim());
+      const start = edu.startDate || edu.start_date || edu.startYear;
+      const end = edu.endDate || edu.end_date || edu.endYear;
+      if (start && end) return this.sanitizeForPDF(`${start} - ${end}`.trim());
+      return this.sanitizeForPDF(String(start || end || '').trim());
+    },
+
     renderEducation(doc, education, startY) {
       if (!education || education.length === 0) return startY;
 
@@ -975,16 +990,39 @@
         const eduLine = [edu.degree, edu.institution].filter(Boolean).join(' – ');
         doc.text(eduLine, PDF_CONFIG.margins.left, y);
 
-        // GPA aligned right if present
-        if (edu.gpa) {
-          doc.setFont(PDF_CONFIG.fonts.body, 'normal');
-          const gpaText = `GPA: ${edu.gpa}`;
-          const gpaWidth = doc.getTextWidth(gpaText);
-          const gpaX = PDF_CONFIG.page.width - PDF_CONFIG.margins.right - gpaWidth;
-          doc.text(gpaText, gpaX, y);
+        // Graduation dates, right aligned -- the same shape as a job's
+        // dates. They used to be dropped: this renderer read only degree
+        // and institution, so whatever year the CV carried never reached
+        // the PDF and an ATS recorded a degree with no date against it.
+        // The field name varies by source, so accept the usual aliases.
+        const eduDates = this.educationDates(edu);
+
+        // GPA aligned right if present, otherwise the dates take that slot.
+        doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+        const rightText = edu.gpa ? `GPA: ${edu.gpa}` : eduDates;
+        let overflowed = false;
+        if (rightText) {
+          const rightWidth = doc.getTextWidth(rightText);
+          const rightX = PDF_CONFIG.page.width - PDF_CONFIG.margins.right - rightWidth;
+          // If the two would collide, the glyphs overlap on the page AND
+          // extract as one welded string. Drop to the next line instead.
+          if (rightX > PDF_CONFIG.margins.left + doc.getTextWidth(eduLine) + 12) {
+            doc.text(rightText, rightX, y);
+          } else {
+            y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.tight;
+            doc.text(rightText, PDF_CONFIG.margins.left, y);
+            overflowed = true;
+          }
+        }
+        // A GPA took the right-hand slot, so the dates still need a home.
+        if (edu.gpa && eduDates) {
+          y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.tight;
+          doc.text(eduDates, PDF_CONFIG.margins.left, y);
+          overflowed = true;
         }
 
-        y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.relaxed;
+        y += PDF_CONFIG.fonts.sizes.body
+           * (overflowed ? PDF_CONFIG.lineHeight.normal : PDF_CONFIG.lineHeight.relaxed);
       }
 
       return y + PDF_CONFIG.spacing.beforeSection;
@@ -1410,6 +1448,33 @@
     // ============ UTILITY METHODS ============
     sanitizeFilename(name) {
       return name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
+    },
+
+    // ============ SANITISE TEXT FOR THE PDF ============
+    // Two call sites referenced this and it was never defined, so every
+    // CV carrying a CORE COMPETENCIES section threw TypeError and
+    // generateCV returned success:false -- the whole document, not just
+    // the section.
+    //
+    // It earns its place beyond fixing the crash. jsPDF's built-in fonts
+    // are WinAnsi, so a smart quote or an em dash pasted in from a job
+    // description is written as a byte the font has no glyph for: it
+    // renders as garbage on the page and extracts as garbage into an ATS.
+    // Folding those to ASCII is what keeps the text clean.
+    sanitizeForPDF(text) {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/[‘’‚‛]/g, "'")     // curly single quotes
+        .replace(/[“”„‟]/g, '"')     // curly double quotes
+        .replace(/[‐-―]/g, '-')                // hyphens, en/em dashes
+        .replace(/[•‣◦⁃]/g, '-')     // stray bullet glyphs
+        .replace(/…/g, '...')                       // ellipsis
+        .replace(/ /g, ' ')                         // non-breaking space
+        .replace(/[​-‍﻿]/g, '')           // zero-width joiners
+        .replace(/[ --]/g, '')
+        .replace(/\t/g, ' ')                             // a tab has no meaning here
+        .replace(/[ ]{2,}/g, ' ')
+        .trim();
     },
 
     // ============ CHECK PAGE OVERFLOW ============
