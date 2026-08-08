@@ -71,13 +71,12 @@
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
     // Tab stops: opts.tabs is an array of integers (twips from left margin).
-    // Used by the 3-column CORE COMPETENCIES layout -- a single-column
-    // paragraph with tab-aligned items reads in linear order to every ATS
-    // parser while LOOKING like a 3-column grid to the human eye.
+    // The competencies grid this was built for is gone -- it is now one
+    // item per line -- so the only remaining user is the role line, which
+    // needs a RIGHT stop to set its dates flush to the margin.
     if (Array.isArray(opts.tabs) && opts.tabs.length) {
-      // Accepts a plain number (left stop, used by the competencies grid)
-      // or { pos, val } for an explicit alignment -- the role line needs a
-      // RIGHT stop so dates sit flush to the margin.
+      // Accepts a plain number (a left stop) or { pos, val } for an
+      // explicit alignment.
       const stops = opts.tabs.map((tb) => {
         const pos = (tb && typeof tb === 'object') ? tb.pos : tb;
         const val = (tb && typeof tb === 'object' && tb.val) ? tb.val : 'left';
@@ -346,44 +345,48 @@
       const LIST_SECTIONS = new Set([
         'CERTIFICATIONS', 'AWARDS',
       ]);
-      // Three-column sections: items render in a 3-up grid via tab stops.
-      // Crucially this is a SINGLE-COLUMN paragraph layout under the hood
-      // -- no tables, no Word columns -- so ATS parsers (Workday,
-      // Greenhouse, Lever, Taleo, iCIMS) read the items in linear left-
-      // to-right reading order, exactly as they would a normal list.
+      // Sections rendered as one item per line, single column.
+      //
+      // These used to be a three-up grid built from TAB characters. The
+      // structure was genuinely single-column -- no tables, no Word
+      // columns -- which is why it read as ATS-safe. The tabs were not.
+      // Parsers disagree about <w:tab/>: some emit "\t", some drop it
+      // entirely, and when it is dropped adjacent items glue together --
+      // "Project ManagementQuality AssuranceRisk Management", one
+      // unmatchable blob in the section an ATS scores most directly.
+      //
+      // That was previously patched by padding each item with a trailing
+      // space so a word boundary survived. It treated the symptom: the
+      // items were still undelimited, just no longer welded. And the tab
+      // stops were fixed positions measured for A4, so on a phone the
+      // columns did not reflow, they overflowed.
+      //
+      // A line break is a delimiter no parser can misread.
       const GRID_SECTIONS = new Set([
         'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
       ]);
-      // Tab-stop positions in twips, evenly spread across the content
-      // area between left margin (900) and right margin (900) of an
-      // A4 page (11906 twips wide -> 10106 content). Three stops at
-      // 0, ~3370, ~6740 give clean visual thirds.
-      const GRID_TABS = [0, 3370, 6740];
-      // Navy bullet character used inline within each grid cell. We
-      // build the runs by hand so a <w:tab/> can separate the cells.
+      // ONE ITEM PER PARAGRAPH.
       //
-      // The trailing space is load-bearing, not cosmetic. Parsers differ
-      // on <w:tab/>: some emit "\t", others drop it entirely. When it is
-      // dropped, adjacent cells glue together and a skills row extracts as
-      // "Project Management•  Quality Assurance•  Risk Management" -- one
-      // unmatchable blob instead of three skills, in the section the ATS
-      // scores most directly. A real space inside the run (xml:space is
-      // already "preserve") guarantees a word boundary survives whatever
-      // the parser does with the tab, and is invisible at a tab stop.
-      const gridCellRuns = (item) =>
-        run('•  ', { color: C.NAVY, sz: 22 }) + run(item + ' ', { color: C.BODY, sz: 21 });
-      // Render an array of competency strings as paragraphs of 3 columns.
-      // Final row pads to 3 cells with empty strings so the trailing tab
-      // alignment stays consistent for both human and parser.
-      const emitGrid = (items) => {
-        for (let r = 0; r < items.length; r += 3) {
-          const row = [items[r], items[r + 1] || '', items[r + 2] || ''];
-          const cells = row
-            .map((it, idx) => (idx === 0 ? gridCellRuns(it) : `<w:r><w:tab/></w:r>${it ? gridCellRuns(it) : ''}`))
-            .join('');
-          out.push(paragraph(cells, { tabs: GRID_TABS, spacingAfter: 40, line: 276, lineRule: 'auto' }));
-        }
-      };
+      // This was a three-up grid: one paragraph per row, with items
+      // separated by TAB characters. It is a single-column paragraph
+      // structure, which is why it looked safe -- but text extraction
+      // yields the tabs, and every ATS then has to guess what they mean.
+      // Some drop them, giving "Stakeholder managementAzure DevOps"; some
+      // render a space, merging three skills into one long phrase. Either
+      // way the delimiter between skills is lost, which is the one thing
+      // a skills section has to get right.
+      //
+      // The tab stops were also fixed positions measured for A4, so on a
+      // phone the columns do not reflow -- they overflow.
+      //
+      // A line break is a delimiter no parser can misread, and a short
+      // line fits any screen.
+      const emitGrid = (items) => { items.forEach(emitCompetency); };
+      // Competencies: bulleted, one per line, single column.
+      const emitCompetency = (item) => out.push(paragraph(
+        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
+        { indent: 360, hanging: 240, spacingAfter: 30, line: 276, lineRule: 'auto' }
+      ));
       // A helper to emit a single navy-bullet item paragraph.
       const emitBullet = (item) => out.push(paragraph(
         run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
@@ -462,9 +465,8 @@
 
         // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items
         // with no sentence punctuation gets split into per-item paragraphs.
-        // CORE COMPETENCIES / AREAS OF EXPERTISE -> 3-column tab-grid
-        //   (single-column paragraphs underneath, ATS-safe).
-        // CERTIFICATIONS / AWARDS              -> one bullet per line.
+        // CORE COMPETENCIES / AREAS OF EXPERTISE -> one item per line.
+        // CERTIFICATIONS / AWARDS                -> one bullet per line.
         if (LIST_SECTIONS.has(currentSection) || GRID_SECTIONS.has(currentSection)) {
           const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
           if (looksLikeList) {

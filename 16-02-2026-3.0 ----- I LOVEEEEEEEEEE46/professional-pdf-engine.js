@@ -257,7 +257,31 @@
         }
       }
 
+      // CORE COMPETENCIES and TECHNICAL PROFICIENCIES are rendered from two
+      // separate fields by two separate renderers, and nothing stopped the
+      // same skill appearing in both -- so a CV could list "Power BI" twice
+      // under two headings. A human reads that as padding; a keyword-scoring
+      // ATS counts the term twice for no gain.
+      //
+      // Competencies win, because they are the tailored, job-matched list.
+      // Proficiencies keep whatever is genuinely additional, and if that
+      // leaves nothing, renderSkills drops the heading rather than printing
+      // an empty section.
+      if (data.coreCompetencies.length && data.skills.length) {
+        const claimed = new Set(data.coreCompetencies.map((c) => this.skillKey(c)));
+        data.skills = data.skills.filter((s) => !claimed.has(this.skillKey(s)));
+      }
+
       return data;
+    },
+
+    // Compare skills by shape, not spelling: "Power BI", "power bi" and
+    // "PowerBI" are one skill, and a trailing comma or bullet left over
+    // from parsing must not make a duplicate look distinct.
+    skillKey(s) {
+      return String(s === null || s === undefined ? '' : s)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '');
     },
 
     // ============ EXTRACT CONTACT INFO ============
@@ -953,6 +977,21 @@
     },
 
     // ============ RENDER EDUCATION ============
+    // Education entries reach here unnormalised -- structureCVData passes
+    // tailoredContent.education or the candidate's own array through as it
+    // finds it -- so the graduation date arrives under whichever name that
+    // source used.
+    educationDates(edu) {
+      if (!edu) return '';
+      const one = edu.dates || edu.year || edu.graduationDate
+               || edu.graduation_date || edu.graduationYear || edu.date;
+      if (one) return this.sanitizeForPDF(String(one).trim());
+      const start = edu.startDate || edu.start_date || edu.startYear;
+      const end = edu.endDate || edu.end_date || edu.endYear;
+      if (start && end) return this.sanitizeForPDF(`${start} - ${end}`.trim());
+      return this.sanitizeForPDF(String(start || end || '').trim());
+    },
+
     renderEducation(doc, education, startY) {
       if (!education || education.length === 0) return startY;
 
@@ -975,16 +1014,39 @@
         const eduLine = [edu.degree, edu.institution].filter(Boolean).join(' – ');
         doc.text(eduLine, PDF_CONFIG.margins.left, y);
 
-        // GPA aligned right if present
-        if (edu.gpa) {
-          doc.setFont(PDF_CONFIG.fonts.body, 'normal');
-          const gpaText = `GPA: ${edu.gpa}`;
-          const gpaWidth = doc.getTextWidth(gpaText);
-          const gpaX = PDF_CONFIG.page.width - PDF_CONFIG.margins.right - gpaWidth;
-          doc.text(gpaText, gpaX, y);
+        // Graduation dates, right aligned -- the same shape as a job's
+        // dates. They used to be dropped: this renderer read only degree
+        // and institution, so whatever year the CV carried never reached
+        // the PDF and an ATS recorded a degree with no date against it.
+        // The field name varies by source, so accept the usual aliases.
+        const eduDates = this.educationDates(edu);
+
+        // GPA aligned right if present, otherwise the dates take that slot.
+        doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+        const rightText = edu.gpa ? `GPA: ${edu.gpa}` : eduDates;
+        let overflowed = false;
+        if (rightText) {
+          const rightWidth = doc.getTextWidth(rightText);
+          const rightX = PDF_CONFIG.page.width - PDF_CONFIG.margins.right - rightWidth;
+          // If the two would collide, the glyphs overlap on the page AND
+          // extract as one welded string. Drop to the next line instead.
+          if (rightX > PDF_CONFIG.margins.left + doc.getTextWidth(eduLine) + 12) {
+            doc.text(rightText, rightX, y);
+          } else {
+            y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.tight;
+            doc.text(rightText, PDF_CONFIG.margins.left, y);
+            overflowed = true;
+          }
+        }
+        // A GPA took the right-hand slot, so the dates still need a home.
+        if (edu.gpa && eduDates) {
+          y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.tight;
+          doc.text(eduDates, PDF_CONFIG.margins.left, y);
+          overflowed = true;
         }
 
-        y += PDF_CONFIG.fonts.sizes.body * PDF_CONFIG.lineHeight.relaxed;
+        y += PDF_CONFIG.fonts.sizes.body
+           * (overflowed ? PDF_CONFIG.lineHeight.normal : PDF_CONFIG.lineHeight.relaxed);
       }
 
       return y + PDF_CONFIG.spacing.beforeSection;
@@ -999,7 +1061,14 @@
       const filtered = competencies.filter(c => !softSkillPattern.test(c));
       const displaced = competencies.filter(c => softSkillPattern.test(c));
       if (displaced.length > 0 && data && Array.isArray(data.skills)) {
-        data.skills = [...new Set([...data.skills, ...displaced])];
+        // A plain Set compares exact strings, so "Communication Skills"
+        // displaced into a list already holding "communication skills"
+        // would print both. Match on shape, as the dedupe above does.
+        const seen = new Set(data.skills.map((s) => this.skillKey(s)));
+        for (const d of displaced) {
+          const k = this.skillKey(d);
+          if (k && !seen.has(k)) { seen.add(k); data.skills.push(d); }
+        }
       }
       competencies = filtered;
       if (competencies.length === 0) return startY;
@@ -1013,27 +1082,53 @@
 
       y = this.renderSectionTitle(doc, 'CORE COMPETENCIES', y);
 
-      const COLS = 3;
+      // ONE COLUMN, ONE ITEM PER LINE.
+      //
+      // This was a three-column grid drawn with doc.text() at fixed x
+      // offsets, and it failed twice over.
+      //
+      //   UNREADABLE. Nothing constrained an item to its column width, so
+      //   any competency longer than a third of the page simply overprinted
+      //   the one beside it. On a phone, where the page is scaled down to
+      //   fit, that overlap is what the whole section looks like.
+      //
+      //   UNPARSEABLE. A PDF has no columns -- only glyphs at coordinates.
+      //   Extractors reconstruct lines by vertical position, so a three-up
+      //   grid comes out as each ROW run together: "Stakeholder management
+      //   Azure DevOps Agile delivery". An ATS reading that gets one long
+      //   nonsense skill instead of three real ones.
+      //
+      // One item per line is unambiguous to every parser -- the line break
+      // IS the delimiter -- and it reflows to any screen width.
       const pageWidth = PDF_CONFIG.page.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
-      const colWidth = pageWidth / COLS;
       const fontSize = PDF_CONFIG.fonts.sizes.body;
       const lineHeight = fontSize * PDF_CONFIG.lineHeight.normal;
+      const BULLET = '- ';
+      const indent = doc.getStringUnitWidth(BULLET) * fontSize;
 
-      for (let row = 0; row < Math.ceil(competencies.length / COLS); row++) {
-        if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - lineHeight) {
-          doc.addPage();
-          y = PDF_CONFIG.margins.top;
-        }
-        for (let col = 0; col < COLS; col++) {
-          const idx = row * COLS + col;
-          if (idx < competencies.length) {
-            const text = this.sanitizeForPDF(`- ${competencies[idx]}`);
+      doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+      doc.setFontSize(fontSize);
+
+      for (const competency of competencies) {
+        const text = this.sanitizeForPDF(String(competency || '').trim());
+        if (!text) continue;
+        // Wrap rather than overflow. A long item now runs onto a second
+        // line, indented under the first, instead of over its neighbour.
+        const wrapped = doc.splitTextToSize(text, pageWidth - indent);
+        for (let n = 0; n < wrapped.length; n++) {
+          if (y > PDF_CONFIG.page.height - PDF_CONFIG.margins.bottom - lineHeight) {
+            doc.addPage();
+            y = PDF_CONFIG.margins.top;
             doc.setFont(PDF_CONFIG.fonts.body, 'normal');
             doc.setFontSize(fontSize);
-            doc.text(text, PDF_CONFIG.margins.left + col * colWidth, y);
           }
+          if (n === 0) {
+            doc.text(BULLET + wrapped[0], PDF_CONFIG.margins.left, y);
+          } else {
+            doc.text(wrapped[n], PDF_CONFIG.margins.left + indent, y);
+          }
+          y += lineHeight;
         }
-        y += lineHeight;
       }
 
       return y + PDF_CONFIG.spacing.beforeSection;
@@ -1384,6 +1479,33 @@
     // ============ UTILITY METHODS ============
     sanitizeFilename(name) {
       return name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
+    },
+
+    // ============ SANITISE TEXT FOR THE PDF ============
+    // Two call sites referenced this and it was never defined, so every
+    // CV carrying a CORE COMPETENCIES section threw TypeError and
+    // generateCV returned success:false -- the whole document, not just
+    // the section.
+    //
+    // It earns its place beyond fixing the crash. jsPDF's built-in fonts
+    // are WinAnsi, so a smart quote or an em dash pasted in from a job
+    // description is written as a byte the font has no glyph for: it
+    // renders as garbage on the page and extracts as garbage into an ATS.
+    // Folding those to ASCII is what keeps the text clean.
+    sanitizeForPDF(text) {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/[\u2018\u2019\u201A\u201B]/g, "'")        // curly single quotes
+        .replace(/[\u201C\u201D\u201E\u201F]/g, '"')        // curly double quotes
+        .replace(/[\u2010-\u2015\u2212]/g, '-')              // hyphens, en/em dashes, minus
+        .replace(/[\u2022\u2023\u25E6\u2043]/g, '-')        // stray bullet glyphs
+        .replace(/\u2026/g, '...')                            // ellipsis
+        .replace(/[\u00A0\u2007\u202F]/g, ' ')               // non-breaking spaces
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')               // zero-width joiners
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')   // control characters
+        .replace(/\t/g, ' ')                                  // a tab has no meaning here
+        .replace(/[ ]{2,}/g, ' ')
+        .trim();
     },
 
     // ============ CHECK PAGE OVERFLOW ============
