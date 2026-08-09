@@ -116,19 +116,128 @@
     ['Head of People', 'HR Manager', 'People Operations', 'HR Business Partner'],
   ];
 
+  // ---- who this role actually belongs to --------------------------------
+  // "The right person for THIS job" is three separate questions -- the
+  // right company, the right country, the right discipline -- and a title
+  // alone answers none of them. A "Technical Recruiter" is the perfect
+  // match for a software role and the wrong person for a nursing one; the
+  // same name at the same company in another country is a different
+  // office with a different pipeline.
+
+  // Discipline of a role title OR of a person's title. Matching these is
+  // what separates the recruiter who owns this requisition from a
+  // colleague who owns a different one.
+  const DISCIPLINES = [
+    ['data', /data scien|machine learning|\bml\b|\bai\b|analytics|data engineer|bi\b|business intelligence/],
+    ['engineering', /engineer|developer|software|devops|platform|sre\b|backend|frontend|full.?stack|infrastructur|cloud|security|qa\b|test automation/],
+    ['product', /product manager|product owner|\bproduct\b/],
+    ['delivery', /project manager|programme|program manager|delivery|scrum|agile|pmo\b/],
+    ['design', /design|\bux\b|\bui\b|creative/],
+    ['marketing', /market|brand|content|seo\b|communications|\bpr\b/],
+    ['sales', /sales|account exec|business development|partnerships|revenue|customer success/],
+    ['finance', /finance|account(ant|ing)|audit|tax\b|treasury|controller/],
+    ['legal', /legal|counsel|solicitor|paralegal|compliance/],
+    ['healthcare', /nurse|nursing|clinical|physician|doctor|healthcare|medical|pharmac/],
+    ['operations', /operations|logistics|supply chain|warehouse|procurement|facilities/],
+    ['support', /support|service desk|helpdesk|customer service/],
+    ['hr', /\bhr\b|human resources|people ops|people partner|talent|recruit/],
+  ];
+
+  function disciplineOf(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t) return '';
+    for (const [name, re] of DISCIPLINES) if (re.test(t)) return name;
+    return '';
+  }
+
+  // The discipline a RECRUITER covers, which is not the same question:
+  // "Technical Recruiter" is an hr title whose coverage is engineering.
+  // Read past the recruiting words to whatever they qualify.
+  function recruiterCovers(title) {
+    const t = String(title || '').toLowerCase();
+    if (!/talent|recruit|sourc|hiring/.test(t)) return '';
+    const stripped = t.replace(/talent acquisition|talent|recruit(ing|ment|er)?|sourcer|sourcing|hiring|partner|specialist|manager|lead|head of|senior|principal/g, ' ');
+    const d = disciplineOf(stripped);
+    // "Technical Recruiter" says engineering without naming it.
+    if (!d && /\btech(nical)?\b|\beng\b/.test(t)) return 'engineering';
+    return d === 'hr' ? '' : d;
+  }
+
+  const _isRecruiterTitle = (t) => /talent|recruit|sourc|hiring manager|people partner|\bhr\b|human resources/i.test(String(t || ''));
+
   // The hiring manager for the role's own function, as a later fallback: on
   // a small team the manager is the person actually reading applications.
+  const FUNCTION_TITLES = {
+    data: ['Head of Data', 'Data Science Manager', 'Analytics Manager'],
+    engineering: ['Engineering Manager', 'Head of Engineering', 'VP Engineering'],
+    product: ['Head of Product', 'Product Director'],
+    delivery: ['Head of Delivery', 'Programme Director', 'PMO Manager'],
+    design: ['Head of Design', 'Design Director'],
+    marketing: ['Head of Marketing', 'Marketing Director'],
+    sales: ['Sales Director', 'Head of Sales'],
+    finance: ['Finance Director', 'Head of Finance'],
+    legal: ['Head of Legal', 'General Counsel'],
+    healthcare: ['Clinical Manager', 'Head of Nursing', 'Medical Director'],
+    operations: ['Head of Operations', 'Operations Manager'],
+    support: ['Head of Customer Support', 'Support Manager'],
+  };
+
   function functionTitles(roleTitle) {
-    const t = String(roleTitle || '').toLowerCase();
-    if (/data scien|machine learning|\bml\b|\bai\b|analytics/.test(t)) return ['Head of Data', 'Data Science Manager', 'Analytics Manager'];
-    if (/engineer|developer|software|devops|platform/.test(t)) return ['Engineering Manager', 'Head of Engineering', 'VP Engineering'];
-    if (/product manager|product owner|\bproduct\b/.test(t)) return ['Head of Product', 'Product Director'];
-    if (/project manager|programme|program manager|delivery|scrum/.test(t)) return ['Head of Delivery', 'Programme Director', 'PMO Manager'];
-    if (/design|\bux\b|\bui\b/.test(t)) return ['Head of Design', 'Design Director'];
-    if (/market/.test(t)) return ['Head of Marketing', 'Marketing Director'];
-    if (/sales|account exec/.test(t)) return ['Sales Director', 'Head of Sales'];
-    if (/finance|account(ant|ing)/.test(t)) return ['Finance Director', 'Head of Finance'];
-    return [];
+    return FUNCTION_TITLES[disciplineOf(roleTitle)] || [];
+  }
+
+  // ---- company and country identity -------------------------------------
+  const _LEGAL = /\b(ltd|limited|llc|inc|incorporated|plc|gmbh|bv|nv|ab|oy|as|sa|srl|spa|pty|corp|corporation|co|company|group|holdings|international|global|technologies|technology|solutions|services|consulting)\b/g;
+  function _normCompany(s) {
+    return String(s || '').toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(_LEGAL, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function _companyAgrees(a, b) {
+    const x = _normCompany(a), y = _normCompany(b);
+    if (!x || !y) return null;                    // cannot tell
+    if (x === y) return true;
+    // One being a prefix/suffix of the other covers "Nortal" vs
+    // "Nortal Ireland", which is the same employer.
+    return x.indexOf(y) !== -1 || y.indexOf(x) !== -1;
+  }
+
+  // Country aliases, so "Dublin, IE" and "Dublin, Ireland" are one place
+  // and "Dublin, Ohio" is not.
+  const _COUNTRIES = [
+    ['ireland', /^(ireland|ie|irl|republic of ireland|eire)$/],
+    ['united kingdom', /^(united kingdom|uk|gb|gbr|great britain|england|scotland|wales|northern ireland)$/],
+    ['united states', /^(united states|united states of america|usa|us|u s|america)$/],
+    ['germany', /^(germany|de|deu|deutschland)$/],
+    ['france', /^(france|fr|fra)$/],
+    ['spain', /^(spain|es|esp)$/],
+    ['netherlands', /^(netherlands|nl|nld|holland)$/],
+    ['poland', /^(poland|pl|pol)$/],
+    ['india', /^(india|in|ind)$/],
+    ['canada', /^(canada|ca|can)$/],
+    ['australia', /^(australia|au|aus)$/],
+    ['estonia', /^(estonia|ee|est)$/],
+    ['portugal', /^(portugal|pt|prt)$/],
+    ['italy', /^(italy|it|ita)$/],
+    ['sweden', /^(sweden|se|swe)$/],
+    ['switzerland', /^(switzerland|ch|che)$/],
+    ['belgium', /^(belgium|be|bel)$/],
+  ];
+  function _countryOf(loc) {
+    const parts = String(loc || '').split(',').map((p) => _clean(p).toLowerCase()).filter(Boolean);
+    // Scan from the end: the country is conventionally last, but "Dublin,
+    // County Dublin, Ireland" and "Remote - Ireland" both put it there too.
+    for (let i = parts.length - 1; i >= 0; i--) {
+      for (const [name, re] of _COUNTRIES) if (re.test(parts[i])) return name;
+    }
+    return '';
+  }
+  function _cityOf(loc) {
+    const first = String(loc || '').split(/[,/]/)[0];
+    return _clean(first).toLowerCase().replace(/^(remote|hybrid|onsite)\s*[-–]?\s*/, '').trim();
   }
 
   /**
@@ -142,7 +251,30 @@
     const location = _clean(ctx && ctx.location);
     const domain = _clean(ctx && ctx.domain);
     const base = { company, location, domain };
-    const out = TITLE_TIERS.map((titles) => Object.assign({}, base, { titles }));
+    const out = [];
+
+    // Ask for the recruiter who covers THIS discipline before asking for
+    // recruiters in general. At any employer big enough to have several,
+    // the generic query returns whichever one the provider ranks highest,
+    // which is not the one who owns this requisition.
+    const disc = disciplineOf(ctx && ctx.title);
+    const DISC_RECRUITERS = {
+      engineering: ['Technical Recruiter', 'Engineering Recruiter', 'Technical Talent Partner'],
+      data: ['Technical Recruiter', 'Data Recruiter', 'Technical Talent Partner'],
+      product: ['Product Recruiter', 'Technical Recruiter'],
+      design: ['Design Recruiter', 'Technical Recruiter'],
+      sales: ['Sales Recruiter', 'Commercial Recruiter', 'GTM Recruiter'],
+      marketing: ['Marketing Recruiter', 'Commercial Recruiter'],
+      finance: ['Finance Recruiter', 'Corporate Recruiter'],
+      legal: ['Legal Recruiter', 'Corporate Recruiter'],
+      healthcare: ['Clinical Recruiter', 'Healthcare Recruiter'],
+      operations: ['Operations Recruiter', 'Corporate Recruiter'],
+      delivery: ['Technical Recruiter', 'Corporate Recruiter'],
+      support: ['Corporate Recruiter'],
+    };
+    if (DISC_RECRUITERS[disc]) out.push(Object.assign({}, base, { titles: DISC_RECRUITERS[disc] }));
+
+    for (const titles of TITLE_TIERS) out.push(Object.assign({}, base, { titles }));
 
     const fn = functionTitles(ctx && ctx.title);
     if (fn.length) out.push(Object.assign({}, base, { titles: fn }));
@@ -173,15 +305,53 @@
     }
     if (/talent|recruit/.test(title)) s += 10;
     if (/head|lead|manager|director|principal|senior/.test(title)) s += 4;
-    // A sourcer or a sales rep with "recruitment" in the title is noise.
-    if (/sales|business development|account executive|partnerships/.test(title)) s -= 25;
     if (/intern\b|assistant/.test(title)) s -= 6;
 
-    const wantLoc = String((q && q.location) || (ctx && ctx.location) || '').toLowerCase();
-    if (wantLoc && loc) {
-      const token = wantLoc.split(/[,/]/)[0].trim();
-      if (token && loc.indexOf(token) !== -1) s += 12;
+    // ---- the right DISCIPLINE, not just the right kind of job ----------
+    // Any large employer has several recruiters. Only one of them owns
+    // this requisition, and the title usually says which: a "Sales
+    // Recruiter" will not read an application for a platform engineer.
+    const roleDisc = disciplineOf(ctx && ctx.title);
+    const covers = recruiterCovers(person.title);
+    const personDisc = disciplineOf(person.title);
+
+    if (roleDisc && covers) {
+      // A recruiter who names a discipline: strong either way.
+      s += covers === roleDisc ? 16 : -18;
+    } else if (roleDisc && !_isRecruiterTitle(person.title) && personDisc) {
+      // Not a recruiter -- so this is a line manager. The head of the
+      // role's own function is the decision maker; the head of a
+      // different one is a stranger.
+      s += personDisc === roleDisc ? 14 : -12;
     }
+
+    // A sales rep with "partnerships" in the title is noise -- unless the
+    // job itself is a sales job, where that is exactly the right desk.
+    if (roleDisc !== 'sales'
+        && /sales|business development|account executive|partnerships/.test(title)) s -= 25;
+
+    // ---- the right COMPANY ---------------------------------------------
+    // Providers match on a company NAME, which drifts: a former employee,
+    // or a same-named firm in another market, comes back looking correct.
+    const wantCompany = (q && q.company) || (ctx && ctx.company);
+    const sameCompany = _companyAgrees(person.company, wantCompany);
+    if (sameCompany === true) s += 18;
+    // Demonstrably somewhere else. This has to outweigh every other
+    // signal combined: a perfectly-titled recruiter at the wrong employer
+    // cannot help with this application, and writing to them is a cold
+    // approach to a stranger about a job they do not hire for. Anyone
+    // actually at the company outranks them, however imperfect.
+    else if (sameCompany === false) s -= 60;
+
+    // ---- the right COUNTRY, then the right city ------------------------
+    const wantLoc = String((q && q.location) || (ctx && ctx.location) || '');
+    const wantCountry = _countryOf(wantLoc), haveCountry = _countryOf(person.location);
+    if (wantCountry && haveCountry) {
+      // Dublin, Ireland and Dublin, Ohio are not the same hiring market.
+      s += wantCountry === haveCountry ? 14 : -30;
+    }
+    const wantCity = _cityOf(wantLoc);
+    if (wantCity && loc && loc.indexOf(wantCity) !== -1) s += 12;
     // Providers that report their own confidence: fold it in, scaled well
     // below the title signal so a confident wrong person never wins.
     if (typeof person.confidence === 'number') s += Math.round(person.confidence / 10);
@@ -1130,6 +1300,7 @@
     listProviders, loadConfig, saveConfig, saveKey, clearKey, getCred, resolveProfile,
     createKey, testKey, refreshCred,
     buildQueries, functionTitles, scoreCandidate, isRealEmail, isPersonalEmail,
+    disciplineOf, recruiterCovers,
     findContacts, bestEmail, clearCache,
     PROVIDERS, TITLE_TIERS,
   };
