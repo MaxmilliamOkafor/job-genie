@@ -376,6 +376,9 @@
       // be split into one bullet per item even when the source has them
       // as a single comma-separated paragraph.
       let currentSection = '';
+      // Section keys already given a heading, so a repeated heading is
+      // suppressed and its content merges into the first block.
+      const seenSections = new Set();
       // One-per-line bulleted sections: each item is its own paragraph.
       const LIST_SECTIONS = new Set([
         'CERTIFICATIONS', 'AWARDS',
