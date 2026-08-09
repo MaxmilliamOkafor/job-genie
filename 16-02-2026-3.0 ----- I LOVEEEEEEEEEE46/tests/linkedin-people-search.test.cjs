@@ -183,5 +183,71 @@ const wrongField = CE.scoreCandidate(
 t('  the technical recruiter the search found scores well', found > 0, String(found));
 t('  ...above the sales recruiter it also returned', found > wrongField, found + ' vs ' + wrongField);
 
+// ---- the field-specific title must survive truncation ------------------
+console.log('\nTHE SPECIALIST TITLE LEADS, SO A TRUNCATED QUERY KEEPS IT');
+// Queries take only the first few titles. A specialist name appended at
+// the end of the list is exactly the one worth asking for, and would be
+// the first thing cut.
+for (const [role, want] of [
+  ['Cyber Security Analyst', /Security Recruiter/],
+  ['Machine Learning Engineer', /Data Recruiter|AI Recruiter/],
+  ['Microsoft Dynamics 365 Consultant', /ERP Recruiter/],
+  ['Site Reliability Engineer', /Infrastructure Recruiter/],
+]) t('  ' + role, want.test(M.targetTitles(role)[0].titles.slice(0, 3).join(' | ')),
+  JSON.stringify(M.targetTitles(role)[0].titles.slice(0, 3)));
+
+// ---- ContactOut is the one that turns a handle into an address ---------
+console.log('\nCONTACTOUT RESOLVES A HANDLE THE SEARCH FOUND');
+const CO = CE.PROVIDERS.contactout;
+const req = CO.lookupByProfile('aoife-byrne-12345', { apiKey: 'KEY' });
+t('  it rebuilds the full LinkedIn profile URL',
+  decodeURIComponent(req.url).indexOf('https://www.linkedin.com/in/aoife-byrne-12345') !== -1,
+  req.url);
+t('  ...url-encoded, not pasted raw', req.url.indexOf(' ') === -1 && /profile=https%3A/.test(req.url), req.url);
+t('  ...asking for a WORK address', /email_type=work/.test(req.url), req.url);
+t('  ...with the key in both header forms ContactOut accepts',
+  req.init.headers.token === 'KEY' && req.init.headers['x-api-key'] === 'KEY');
+const parsed = CO.parseProfile({ profile: {
+  full_name: 'Aoife Byrne', title: 'Senior Technical Recruiter', company: 'Salesforce',
+  location: 'Dublin, Ireland', contact_info: { work_email: ['aoife@salesforce.example'] } } });
+t('  the work address comes back out',
+  parsed.length === 1 && parsed[0].email === 'aoife@salesforce.example', JSON.stringify(parsed));
+t('  ...with the company, so the scorer can verify the employer',
+  parsed[0].company === 'Salesforce', JSON.stringify(parsed[0]));
+
+console.log('\n  AND ITS SEARCH DOES NOT EXCLUDE THE RIGHT DESK');
+// exclude_job_titles was unconditional, so a SALES vacancy filtered out
+// the sales recruiter who owns it -- at the source, before scoring.
+const engQ = CE.buildQueries({ company: 'Salesforce', title: 'Senior Software Engineer', location: 'Dublin' });
+const salesQ = CE.buildQueries({ company: 'Salesforce', title: 'Enterprise Account Executive', location: 'Dublin' });
+t('  a tech role still excludes sales noise',
+  engQ[0].exclude.length > 0, JSON.stringify(engQ[0].exclude));
+t('  a sales role excludes nothing', salesQ[0].exclude.length === 0, JSON.stringify(salesQ[0].exclude));
+const bodyFor = (q) => JSON.parse(CO.request(q, { apiKey: 'K' }).init.body);
+t('  ...and the request drops the filter entirely rather than sending []',
+  bodyFor(salesQ[0]).exclude_job_titles === undefined,
+  JSON.stringify(bodyFor(salesQ[0]).exclude_job_titles));
+t('  ...while the tech request still carries it',
+  Array.isArray(bodyFor(engQ[0]).exclude_job_titles));
+t('  the sales request asks for the sales desk',
+  bodyFor(salesQ[0]).job_title.some((x) => /Sales|Commercial|GTM/i.test(x)),
+  JSON.stringify(bodyFor(salesQ[0]).job_title));
+
+console.log('\n  THE PROVIDER SEARCHES USE THE FULL FIELD TAXONOMY');
+// With the module loaded, an SRE vacancy must ask for platform leadership
+// rather than settling for a generic "Engineering Manager".
+const sreQ = CE.buildQueries({ company: 'Salesforce', title: 'Site Reliability Engineer', location: 'Dublin' });
+t('  an SRE role asks for platform leadership',
+  sreQ.some((q) => q.titles.some((x) => /SRE Manager|Head of Platform|Head of Infrastructure/i.test(x))),
+  JSON.stringify(sreQ.map((q) => q.titles)));
+const secQ = CE.buildQueries({ company: 'Salesforce', title: 'Cyber Security Analyst', location: 'Dublin' });
+t('  a security role asks for a CISO',
+  secQ.some((q) => q.titles.some((x) => /CISO|Head of Security/i.test(x))),
+  JSON.stringify(secQ.map((q) => q.titles)));
+t('  the last attempt still drops the location filter',
+  sreQ[sreQ.length - 1].location === '', JSON.stringify(sreQ[sreQ.length - 1]));
+t('  and still nothing without a company',
+  CE.buildQueries({ title: 'Site Reliability Engineer', location: 'Dublin' }).length === 0);
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);

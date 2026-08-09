@@ -250,14 +250,38 @@
     if (!company) return [];
     const location = _clean(ctx && ctx.location);
     const domain = _clean(ctx && ctx.domain);
-    const base = { company, location, domain };
+    const disc = disciplineOf(ctx && ctx.title);
+    // Providers can filter at the source, which is cheaper and cleaner than
+    // penalising afterwards -- but excluding "Sales" from a SALES vacancy
+    // removes exactly the right desk. Decided once here and carried on the
+    // query, so no provider has to work it out again.
+    const exclude = disc === 'sales' ? [] : ['Sales', 'Business Development', 'Account Executive'];
+    const base = { company, location, domain, exclude };
     const out = [];
+
+    // The full per-field target list when it is loaded: an SRE vacancy asks
+    // for "Senior Site Reliability Engineer" and a security one for a CISO,
+    // rather than both settling for "Engineering Manager". Falls back to the
+    // coarse tiers below when the module is absent.
+    const LPS = global.LinkedInPeopleSearch;
+    if (LPS && typeof LPS.targetTitles === 'function') {
+      for (const g of LPS.targetTitles(ctx && ctx.title)) {
+        out.push(Object.assign({}, base, { titles: g.titles.slice(0, 6), tier: g.tier }));
+      }
+      if (location) {
+        // Same last resort as below: the recruiter for a Dublin role often
+        // sits in another office, and an over-tight filter returns nobody.
+        out.push(Object.assign({}, base, {
+          titles: LPS.allTargetTitles(ctx && ctx.title).slice(0, 8), location: '',
+        }));
+      }
+      return out;
+    }
 
     // Ask for the recruiter who covers THIS discipline before asking for
     // recruiters in general. At any employer big enough to have several,
     // the generic query returns whichever one the provider ranks highest,
     // which is not the one who owns this requisition.
-    const disc = disciplineOf(ctx && ctx.title);
     const DISC_RECRUITERS = {
       engineering: ['Technical Recruiter', 'Engineering Recruiter', 'Technical Talent Partner'],
       data: ['Technical Recruiter', 'Data Recruiter', 'Technical Talent Partner'],
@@ -438,7 +462,9 @@
             current_titles_only: true,
             // Filtered at the source rather than only penalised in scoring:
             // a sales rep whose title contains "talent" is pure noise here.
-            exclude_job_titles: ['Sales', 'Business Development', 'Account Executive'],
+            // Empty for a SALES vacancy -- excluding "Sales" there would
+            // drop the one recruiter who owns the requisition.
+            exclude_job_titles: (q.exclude && q.exclude.length) ? q.exclude : undefined,
             reveal_info: true,
             page: 1,
           }),
