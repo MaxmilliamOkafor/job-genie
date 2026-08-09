@@ -740,10 +740,12 @@
         result = this.convertToUKSpelling(result);
       }
 
-      // Step 3: Remove em dashes
+      // Step 3: Remove em dashes, and the approximation markers that read
+      // as a guessed number.
       if (removeEmDashes) {
         result = this.removeEmDashes(result);
       }
+      result = this.stripApproximations(result);
 
       // Step 4: Fix punctuation issues
       if (fixPunctuation) {
@@ -1288,6 +1290,20 @@
     },
 
     // ============ REMOVE EM DASHES ============
+    // "~40%" is the symbol form of "approximately", which is already a
+    // banned word -- so the ban was evaded by writing it as punctuation.
+    // A hedged figure reads as a guessed figure, which costs more
+    // credibility than having no figure at all.
+    stripApproximations(text) {
+      if (!text) return text;
+      return String(text)
+        // ~40%, ≈40%, c.40%, approx. 40%, circa 40%, around 40%
+        .replace(/[~≈∼]\s*(?=[\d£$€])/g, '')
+        .replace(/\b(?:approx\.?|circa|c\.)\s+(?=[\d£$€])/gi, '')
+        .replace(/\b(?:roughly|approximately|about|around|an estimated|in the region of)\s+(?=[\d£$€])/gi, '')
+        .replace(/\s{2,}/g, ' ');
+    },
+
     removeEmDashes(text) {
       if (!text) return text;
 

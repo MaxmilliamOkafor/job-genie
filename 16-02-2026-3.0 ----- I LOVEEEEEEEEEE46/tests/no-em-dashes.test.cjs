@@ -134,6 +134,26 @@ if (!jspdf || !PDFParse) {
   });
 }
 
+console.log('\nHEDGED FIGURES ARE STRIPPED');
+// From a real generated CV: "cut the manual review queue by ~40%". The
+// tilde is the symbol form of "approximately", which is already a banned
+// WORD -- so the ban was evaded by writing it as punctuation. A hedged
+// figure reads as a guessed figure, which costs more than no figure.
+for (const [input, want] of [
+  ['cut the review queue by ~40% with no loss', 'cut the review queue by 40% with no loss'],
+  ['saved approx. 12 hours weekly', 'saved 12 hours weekly'],
+  ['grew revenue by circa 2m', 'grew revenue by 2m'],
+  ['around 5 engineers reported to me', '5 engineers reported to me'],
+]) t('  ' + JSON.stringify(input.slice(0, 42)), E.stripApproximations(input) === want,
+  'got ' + JSON.stringify(E.stripApproximations(input)));
+t('  a tilde in ordinary prose is left alone',
+  E.stripApproximations('the tilde ~ in prose stays') === 'the tilde ~ in prose stays');
+t('  "roughly speaking" is not a hedged number',
+  E.stripApproximations('roughly speaking it worked') === 'roughly speaking it worked');
+t('  it runs in the shared pipeline, not only when called directly',
+  !/~\s*\d/.test(E.sanitiseCVBlock('cut the queue by ~40%')),
+  JSON.stringify(E.sanitiseCVBlock('cut the queue by ~40%')));
+
 console.log('\nAND THE PROMPT STOPS PRODUCING THEM IN THE FIRST PLACE');
 let prompt = null;
 try {

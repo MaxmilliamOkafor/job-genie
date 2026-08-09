@@ -2137,6 +2137,19 @@ Examples of REQUIRED British spellings:
 - "focussed" NOT "focused", "labelled" NOT "labeled"
 Any American English spelling is an INSTANT FAILURE.
 
+THE ONE EXEMPTION: PROPER NOUNS ARE REPRODUCED VERBATIM.
+Certification names, product names, company names, and official job titles
+are names, not prose. They are spelled the way their owner spells them,
+even when that is American English, and even when it looks wrong.
+- "AWS Certified Machine Learning - Specialty" NEVER becomes "Speciality"
+- "Program Manager" as an employer's actual job title stays "Program
+  Manager", never "Programme Manager"
+- "Center of Excellence", "Labor Relations", "Defense Systems" stay as the
+  organisation spells them
+An ATS matches certifications and titles as EXACT STRINGS. Anglicising one
+character makes the credential invisible to the scan, which is the
+opposite of the goal. This exemption outranks the rule above.
+
 ---
 PHASE 1: EXTRACTION (Do this first, output nothing yet)
 Read the job description carefully and extract:
@@ -2259,7 +2272,32 @@ The summary must never assert a job title the rest of the CV cannot support.
   the CV or cover letter.
 
 RULE 2 — SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
-The skills section must be completely replaced. Rewrite it as:
+
+READ THIS BEFORE THE KEYWORD COUNTS BELOW. Every keyword target in this
+prompt -- the minimum counts here, the "MUST ADD THESE" list at the end,
+the 95% score -- is capped by RULE 0. A keyword goes in ONLY if the
+candidate's own history evidences it. Where the two conflict, the score
+loses. Always.
+
+A quota with no evidence gate produces a fabricated professional identity,
+which is worse than a low score because it survives the ATS and then fails
+the interview. A real example this rule exists to prevent: a candidate
+whose entire history is Meta software engineering, an AI product contract,
+Accenture cloud architecture and Citigroup data analysis was given a
+summary reading "Experienced Sales Engineer with over 5 years of expertise
+in electrical systems", and skills listing transformers, industrial
+batteries, protection relays and substations. Not one of those appeared
+anywhere in the source CV. Every one came from the job description.
+- If the JD asks for a skill the candidate has never used, it does NOT go
+  in the CV. Not in Skills, not in Core Competencies, not in the summary.
+- The summary describes the person the CV EVIDENCES, in their real
+  discipline, using the JD's vocabulary only where it honestly overlaps.
+- A genuine pivot is stated as a pivot. The cover letter is where
+  transferable experience is argued (RULE 13), not the CV.
+- Missing keywords that cannot be honestly claimed are reported in
+  KEYWORDS OMITTED. That is the correct outcome, not a failure.
+
+Rewrite the skills section as:
   Technical Skills: [list ALL hard skill keywords from the JD that the candidate can legitimately claim, comma-separated, exact spelling]
   Platforms & Tools: [all platforms, cloud services, devtools]
   Methodologies: [ETL, CI/CD, distributed systems, data modelling, etc.]
@@ -2402,6 +2440,41 @@ bullet where they describe what was actually done, integrated into the
 sentence's grammar. If a keyword cannot be integrated grammatically and
 truthfully, leave it out of the bullet.
 
+RULE 15b — NO HEDGED OR APPROXIMATED NUMBERS (hard ban)
+A number that is hedged reads as a number that was guessed, which is worse
+than no number at all. Taken from a real generated CV: "cut the manual
+review queue by ~40%".
+- NEVER write "~", "circa", "c.", "approx", "approximately", "roughly",
+  "about", "around", "an estimated", "in the region of" before a figure.
+- If the source states the figure, state it exactly and plainly: "cut the
+  review queue by 40%".
+- If the source does NOT state it, do not gesture at one. Write the plain
+  fact with no number, and report the gap in metricsWorthAdding.
+
+AND NO WEASEL QUANTIFIERS IN PLACE OF A NUMBER. These are what a model
+reaches for when it has been told to sound quantified but forbidden to
+invent, and they are an obvious tell because they promise a measurement
+and deliver none. All taken from real output:
+  "surfacing significant exposure"        -> say what was surfaced
+  "absorbing several-fold traffic growth" -> say the system scaled with load
+  "measurably higher uptime"              -> either give the figure or say
+                                             "with no service disruption"
+Banned before a noun: significant, substantial, considerable, several-fold,
+measurably, markedly, dramatically, drastically, materially, notably,
+meaningfully. Plain description beats a vague intensifier every time.
+
+RULE 15c — CORE COMPETENCIES AND SKILLS DO NOT OVERLAP
+A term appears in ONE section. Real output listed "Communication Skills"
+and "Presentation Skills" in Core Competencies AND again in Technical
+Proficiencies, which reads as padding to a human and doubles nothing for
+the ATS.
+- Any phrase containing the word "skills" belongs in the Skills section,
+  never in Core Competencies. This rule already exists in RULE 8 and was
+  ignored; it is repeated here because the duplication is what a recruiter
+  notices first.
+- Before output, compare the two lists and remove from Skills anything
+  already in Core Competencies.
+
 RULE 15a — NO EM DASHES OR EN DASHES IN ANY OUTPUT (hard ban)
 An em dash is one of the strongest machine-written tells a recruiter
 reads, alongside round percentages. Never emit "—" or "–" in the CV or
@@ -2533,6 +2606,11 @@ After rewriting, run this internal checklist:
 [ ] Are there zero ", using X" / ", with X" keyword tails on bullets?
 [ ] Does every sentence start with a capital letter and read grammatically?
 [ ] Are there ZERO em dashes or en dashes in the CV and cover letter?
+[ ] Is every claim in the summary and skills evidenced by the work history? Delete any that is not.
+[ ] Are certification and job-title proper nouns spelled as their owner spells them (Specialty, not Speciality)?
+[ ] Is there a "~", "approx" or "roughly" before any figure? Remove it.
+[ ] Is there a weasel quantifier ("significant", "several-fold", "measurably") standing in for a number?
+[ ] Does any term appear in BOTH Core Competencies and Skills?
 [ ] Is the job title free of requisition numbers / posting noise?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
@@ -2613,7 +2691,8 @@ Titles (PRIORITY 3): ${jdKeywords.titles.join(", ")}
 Soft Skills (PRIORITY 4 - WEAVE INTO EXPERIENCE BULLETS, NOT SKILLS SECTION): ${jdKeywords.softSkills.join(", ")}
 Certifications: ${jdKeywords.certifications.join(", ")}
 
-MUST ADD THESE (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
+ADD THESE WHERE THE CANDIDATE'S HISTORY EVIDENCES THEM (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
+Any of these the candidate has genuinely never done is OMITTED and listed under KEYWORDS OMITTED. See RULE 0 and RULE 2. Do not invent a background to host a keyword.
 
 Return ONLY valid JSON - no markdown code blocks, no extra text.`;
 
