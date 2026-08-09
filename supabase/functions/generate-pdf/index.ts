@@ -1902,6 +1902,11 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     }));
   }
 
+  if (data.coreCompetencies?.length) {
+    children.push(...docxSectionHeader("Core Competencies"));
+    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
+  }
+
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -1917,11 +1922,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     for (const p of data.projects) children.push(...docxProject(p));
   }
 
-  if (data.education?.length) {
-    children.push(...docxSectionHeader("Education"));
-    for (const ed of data.education) children.push(...docxEducation(ed));
-  }
-
   if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
     children.push(...docxSectionHeader("Skills"));
     const groups: Array<{ label: string; items: string[] }> = [];
@@ -1930,10 +1930,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSkills(groups));
   }
 
-  if (data.coreCompetencies?.length) {
-    children.push(...docxSectionHeader("Core Competencies"));
-    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
-  }
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
