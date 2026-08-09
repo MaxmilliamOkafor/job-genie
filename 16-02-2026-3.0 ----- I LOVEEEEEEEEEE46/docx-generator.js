@@ -320,6 +320,19 @@
     'CERTIFICATIONS', 'PROJECTS', 'SELECTED PROJECTS', 'AWARDS',
   ];
 
+  // Headings that mean the same section under different names. Two blocks
+  // titled "SKILLS" and "TECHNICAL PROFICIENCIES" are one section, so only
+  // the first heading is printed.
+  function sectionKey(upper) {
+    if (/PROFICIENC|SKILLS/.test(upper)) return 'SKILLS';
+    if (/EXPERIENCE|EMPLOYMENT/.test(upper) && !/AREAS OF/.test(upper)) return 'EXPERIENCE';
+    if (/SUMMARY|PROFILE/.test(upper)) return 'SUMMARY';
+    if (/PROJECTS/.test(upper)) return 'PROJECTS';
+    if (/COMPETENCIES|AREAS OF EXPERTISE/.test(upper)) return 'COMPETENCIES';
+    return upper;
+  }
+
+
   function buildBodyXml(cvText) {
     const lines = cvText.split('\n');
     const out = [];
