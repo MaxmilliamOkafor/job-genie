@@ -227,9 +227,17 @@
   const MONTHS = ['January','February','March','April','May','June',
     'July','August','September','October','November','December'];
 
+  // The tokens that mean "still there". These must match the set
+  // prettyDateRange normalises, or a line written "01/2023 - Now" is not
+  // recognised as a date at all: it renders as ordinary body text, loses
+  // its right-aligned date styling, and never reaches the normaliser that
+  // would have turned it into "January 2023 - Present".
+  const ONGOING = 'present|current|now|ongoing|to\\s*date|till\\s*date';
+
   function isDateLine(t) {
-    return /^[A-Za-z]{3,9}\.?\s+\d{4}\s*[-–—]\s*(present|current|[A-Za-z]{3,9}\.?\s+\d{4})$/i.test(t) ||
-      /^\d{4}\s*[-–—]\s*(present|current|\d{4})$/i.test(t) ||
+    return new RegExp('^[A-Za-z]{3,9}\\.?\\s+\\d{4}\\s*[-–—]\\s*(' + ONGOING + '|[A-Za-z]{3,9}\\.?\\s+\\d{4})$', 'i').test(t) ||
+      new RegExp('^\\d{4}\\s*[-–—]\\s*(' + ONGOING + '|\\d{4})$', 'i').test(t) ||
+      new RegExp('^\\d{1,2}\\/\\d{4}\\s*[-–—]\\s*(' + ONGOING + '|\\d{1,2}\\/\\d{4})$', 'i').test(t) ||
       // MM/YYYY ranges: "01/2023 - Present", "04/2021 - 12/2022". These were
       // NOT matched, so every date in a generated CV fell through to the
       // generic body branch and rendered as ordinary text -- unstyled, and
@@ -245,6 +253,11 @@
     const ABBR = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11 };
     const one = (p) => {
       const v = String(p).trim();
+      // "Present" is the token every documented ATS date parser recognises
+      // for an ongoing role. "Current", "Now", "To date" and "Ongoing" are
+      // understood by some and not others, and a parser that misses it
+      // records the role as having no end date at all.
+      if (/^(present|current|now|to\s*date|till\s*date|ongoing|date)$/i.test(v)) return 'Present';
       const m = /^(\d{1,2})\/(\d{4})$/.exec(v);
       if (m) {
         const idx = parseInt(m[1], 10) - 1;
