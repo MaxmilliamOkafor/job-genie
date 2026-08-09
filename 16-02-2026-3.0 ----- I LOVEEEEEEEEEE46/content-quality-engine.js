@@ -1292,15 +1292,25 @@
       if (!text) return text;
 
       return text
-        // Replace em dash (—) with comma or full stop
-        .replace(/\s*—\s*/g, '. ')
-        // Replace en dash (–) used as em dash with comma
-        .replace(/\s+–\s+/g, ', ')
-        // Clean up double punctuation
-        .replace(/\.\s*\./g, '.')
+        // A dash between numbers, or before Present/Current, is a RANGE --
+        // employment dates, not punctuation. Turning "January 2023 — Present"
+        // into "January 2023. Present" destroys the dates an ATS parses to
+        // work out tenure, so those become a plain hyphen.
+        .replace(/(\d)\s*[—–]\s*(\d)/g, '$1 - $2')
+        .replace(/(\d)\s*[—–]\s*(Present|Current|Now|Date)\b/gi, '$1 - $2')
+        // "June 2019 – December 2022": a year on the left, a month name on
+        // the right, so the digit-to-digit rule above does not see it.
+        .replace(/(\d{4})\s*[—–]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/gi, '$1 - $2')
+        // Everything else is a parenthetical. A comma keeps the sentence
+        // whole; a full stop cut it into fragments like "Reduced cost. a 12%
+        // saving. in year one." -- which reads far more machine-written than
+        // the dash it replaced, and breaks the no-fragments rule outright.
+        .replace(/\s*[—–]\s*/g, ', ')
+        // Clean up doubled punctuation left behind.
         .replace(/,\s*,/g, ',')
         .replace(/\.\s*,/g, '.')
-        .replace(/,\s*\./g, '.');
+        .replace(/,\s*\./g, '.')
+        .replace(/\s{2,}/g, ' ');
     },
 
     // ============ FIX PUNCTUATION ============

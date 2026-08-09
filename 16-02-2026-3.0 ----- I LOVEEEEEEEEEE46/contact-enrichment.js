@@ -34,7 +34,13 @@
  * WHAT THE USER SHOULD KNOW, AND THE UI SAYS
  *   An enriched address is a business email obtained from a data provider,
  *   not one the recipient gave you. In the EU that needs a lawful basis
- *   under GDPR and the obligation sits with the sender. Off by default.
+ *   under GDPR and the obligation sits with the sender.
+ *
+ *   ON by default, with Closely as the default provider. It still costs
+ *   nothing and contacts nobody until a provider credential is saved, and
+ *   it is only ever consulted when the posting, its structured data and
+ *   the employer's careers page all published nothing. Every address it
+ *   returns is shown for review before any message is sent.
  *
  *   window.ContactEnrichment
  */
@@ -724,15 +730,29 @@
   // ---- config -----------------------------------------------------------
   // Credentials are per provider, so switching providers does not discard a
   // key the user pasted earlier.
+  // Defaults live HERE and nowhere else. A toggle that ships ON has no
+  // stored value until it is touched, so every reader that decides for
+  // itself what "unset" means is a chance for the interface to draw one
+  // thing while the code does another -- which has already happened twice
+  // in this extension.
+  const DEFAULT_ENABLED = true;
+  const DEFAULT_PROVIDER = 'closely';
+
+  function _withDefaults(c) {
+    const out = c || {};
+    if (!out.keys) out.keys = {};
+    if (out.enabled === undefined) out.enabled = DEFAULT_ENABLED;
+    if (!out.provider) out.provider = DEFAULT_PROVIDER;
+    return out;
+  }
+
   function loadConfig() {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get([KEY_CFG], (r) => {
-          const c = (r && r[KEY_CFG]) || {};
-          if (!c.keys) c.keys = {};
-          resolve(c);
+          resolve(_withDefaults((r && r[KEY_CFG]) || {}));
         });
-      } catch (e) { resolve({ keys: {} }); }
+      } catch (e) { resolve(_withDefaults({})); }
     });
   }
 
@@ -753,7 +773,7 @@
   /** Store a pasted key for one provider. Never touches the others. */
   async function saveKey(providerId, cred) {
     const cfg = await loadConfig();
-    const id = providerId || cfg.provider || 'contactout';
+    const id = providerId || cfg.provider || DEFAULT_PROVIDER;
     const clean = Object.assign({}, cred);
     if (clean.apiKey) clean.apiKey = _clean(clean.apiKey);
     delete clean.password;                        // never persisted, ever
@@ -854,7 +874,7 @@
    * what the provider said, so a wrong key is nameable rather than silent.
    */
   async function testKey(providerId) {
-    const id = providerId || (await loadConfig()).provider || 'contactout';
+    const id = providerId || (await loadConfig()).provider || DEFAULT_PROVIDER;
     const provider = PROVIDERS[id];
     if (!provider || !provider.test) return { ok: false, message: 'No test available for this provider.' };
     let cred = await getCred(id);
@@ -977,7 +997,7 @@
     const trace = [];
     const chain = [];
     let credentialledButUnusable = 0;
-    const first = o.provider || cfg.provider || 'contactout';
+    const first = o.provider || cfg.provider || DEFAULT_PROVIDER;
     for (const id of [first].concat(Object.keys(PROVIDERS))) {
       if (chain.indexOf(id) !== -1 || !PROVIDERS[id]) continue;
       if (!hasCred(await getCred(id), PROVIDERS[id])) {
@@ -1296,7 +1316,7 @@
       return { ok: false, results: [], reason: 'bad-profile' };
     }
 
-    const order = [o.provider || cfg.provider || 'contactout'].concat(Object.keys(PROVIDERS));
+    const order = [o.provider || cfg.provider || DEFAULT_PROVIDER].concat(Object.keys(PROVIDERS));
     const tried = [];
     for (const id of order) {
       const provider = PROVIDERS[id];
@@ -1327,6 +1347,7 @@
     createKey, testKey, refreshCred,
     buildQueries, functionTitles, scoreCandidate, isRealEmail, isPersonalEmail,
     disciplineOf, recruiterCovers,
+    DEFAULT_ENABLED, DEFAULT_PROVIDER,
     findContacts, bestEmail, clearCache,
     PROVIDERS, TITLE_TIERS,
   };
