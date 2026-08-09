@@ -406,7 +406,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       lx += fonts.bold.widthOfTextAtSize(company, size);
     }
     if (title) {
-      const sepText = company ? "  \u2014  " : "";
+      const sepText = company ? " | " : "";
       if (sepText) {
         page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
         lx += fonts.bold.widthOfTextAtSize(sepText, size);
@@ -453,7 +453,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       lx += fonts.bold.widthOfTextAtSize(name, size);
     }
     if (role) {
-      const sepText = name ? "  \u2014  " : "";
+      const sepText = name ? " | " : "";
       if (sepText) {
         page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
         lx += fonts.bold.widthOfTextAtSize(sepText, size);
@@ -504,14 +504,14 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const gpaSuffix = gpaRaw ? (isClassification ? gpaRaw : `GPA: ${gpaRaw}`) : "";
 
     const size = 10.5;
-    const headLine = gpaSuffix ? `${degree}  \u2014  ${gpaSuffix}` : degree;
+    const headLine = gpaSuffix ? `${degree} | ${gpaSuffix}` : degree;
     let lx = MARGIN;
     if (degree) {
       page.drawText(degree, { x: lx, y, size, font: fonts.bold, color: NAVY });
       lx += fonts.bold.widthOfTextAtSize(degree, size);
     }
     if (gpaSuffix) {
-      const sepText = "  \u2014  ";
+      const sepText = " | ";
       page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(sepText, size);
       page.drawText(gpaSuffix, { x: lx, y, size, font: fonts.bold, color: BODY });
@@ -771,7 +771,7 @@ function renderResume(
     for (const a of data.achievements) {
       r.drawBullet(
         a.description
-          ? `${a.title}${a.date ? ` (${a.date})` : ""} — ${a.description}`
+          ? `${a.title}${a.date ? ` (${a.date})` : ""}, ${a.description}`
           : `${a.title}${a.date ? ` (${a.date})` : ""}`,
       );
     }
@@ -1803,7 +1803,7 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
   const header: TextRun[] = [];
   if (e.company) header.push(new TextRun({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
   if (e.title) {
-    if (header.length) header.push(new TextRun({ text: "  \u2014  ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
+    if (header.length) header.push(new TextRun({ text: " | ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
     header.push(new TextRun({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   }
   if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
@@ -1821,7 +1821,7 @@ function docxProject(p: ProjectEntry): Paragraph[] {
   const header: TextRun[] = [
     new TextRun({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
   ];
-  if (p.role) header.push(new TextRun({ text: "  \u2014  " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  if (p.role) header.push(new TextRun({ text: " | " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   if (p.dates) header.push(new TextRun({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 200, after: 60 },
@@ -1845,7 +1845,7 @@ function docxEducation(e: EducationEntry): Paragraph[] {
   const out: Paragraph[] = [];
   let suffix = "";
   if (e.gpa) {
-    suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? `  \u2014  ${e.gpa}` : `  \u2014  GPA: ${e.gpa}`;
+    suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? ` | ${e.gpa}` : ` | GPA: ${e.gpa}`;
   }
   const header: TextRun[] = [
     new TextRun({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
