@@ -2766,9 +2766,15 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
     - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
-    - EDUCATION
     - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
     - CERTIFICATIONS
+    - EDUCATION (LAST). Skills and certifications sit ABOVE education:
+      a recruiter scanning top-down should reach what proves the candidate
+      can do THIS job before reaching their degrees. Education first is the
+      graduate convention and reads as early-career on a CV with years of
+      history behind it. It also keeps the skills together rather than split
+      by education: Core Competencies at the top for the scan, Technical
+      Proficiencies and Certifications lower down as the detail block.
 
 2) CREATE COVER LETTER:
    ${candidateName}
@@ -2847,6 +2853,11 @@ ${
         "bullets": ["bullet1 with metrics", "bullet2", "bullet3"]
       }
     ],
+    "skills": {
+      "primary": ${JSON.stringify([...jdKeywords.hardSkills, ...jdKeywords.tools])},
+      "secondary": ${JSON.stringify(jdKeywords.softSkills)}
+    },
+    "certifications": ${JSON.stringify(userProfile.certifications || [])},
     "education": [
       {
         "degree": "[Degree Name]",
@@ -2854,12 +2865,7 @@ ${
         "dates": "[Dates]",
         "gpa": "[GPA if applicable]"
       }
-    ],
-    "skills": {
-      "primary": ${JSON.stringify([...jdKeywords.hardSkills, ...jdKeywords.tools])},
-      "secondary": ${JSON.stringify(jdKeywords.softSkills)}
-    },
-    "certifications": ${JSON.stringify(userProfile.certifications || [])}
+    ]
   },
   "metricsWorthAdding": ["<role> — <the exact bullet> → <the number that would strengthen it>"],
   "coverLetterStructured": {
