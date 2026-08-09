@@ -320,6 +320,19 @@
     'CERTIFICATIONS', 'PROJECTS', 'SELECTED PROJECTS', 'AWARDS',
   ];
 
+  // Headings that mean the same section under different names. Two blocks
+  // titled "SKILLS" and "TECHNICAL PROFICIENCIES" are one section, so only
+  // the first heading is printed.
+  function sectionKey(upper) {
+    if (/PROFICIENC|SKILLS/.test(upper)) return 'SKILLS';
+    if (/EXPERIENCE|EMPLOYMENT/.test(upper) && !/AREAS OF/.test(upper)) return 'EXPERIENCE';
+    if (/SUMMARY|PROFILE/.test(upper)) return 'SUMMARY';
+    if (/PROJECTS/.test(upper)) return 'PROJECTS';
+    if (/COMPETENCIES|AREAS OF EXPERTISE/.test(upper)) return 'COMPETENCIES';
+    return upper;
+  }
+
+
   function buildBodyXml(cvText) {
     const lines = cvText.split('\n');
     const out = [];
@@ -363,6 +376,9 @@
       // be split into one bullet per item even when the source has them
       // as a single comma-separated paragraph.
       let currentSection = '';
+      // Section keys already given a heading, so a repeated heading is
+      // suppressed and its content merges into the first block.
+      const seenSections = new Set();
       // One-per-line bulleted sections: each item is its own paragraph.
       const LIST_SECTIONS = new Set([
         'CERTIFICATIONS', 'AWARDS',
@@ -424,6 +440,24 @@
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {
+          // ONE HEADING PER SECTION.
+          //
+          // The tailoring step can emit a skills block twice -- once as the
+          // model wrote it and once as force-injected keywords -- which
+          // printed "TECHNICAL PROFICIENCIES" twice, a few lines apart. A
+          // recruiter reads that as a broken document; an ATS just indexes
+          // the same section header twice and gains nothing. The second
+          // block's items still belong in the CV, so we keep the content
+          // and drop only the repeated heading, which merges the two
+          // blocks under the first one.
+          const key = sectionKey(upper);
+          if (seenSections.has(key)) {
+            inExperience = EXPERIENCE_HEADERS.includes(upper);
+            roleState = inExperience ? 'expectCompany' : 'none';
+            currentSection = upper;
+            continue;
+          }
+          seenSections.add(key);
           // SECTION HEADER -- navy, bold, caps, tracked, light-grey rule under
           out.push(paragraph(
             run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22, spacing: 24 }),
@@ -434,6 +468,7 @@
           currentSection = upper;
           continue;
         }
+
 
         if (/^([\-*•]|\d+\.)\s+/.test(t)) {
           const item = t.replace(/^([\-*•]|\d+\.)\s+/, '');
