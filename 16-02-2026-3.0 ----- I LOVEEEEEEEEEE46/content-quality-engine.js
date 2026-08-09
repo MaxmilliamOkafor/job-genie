@@ -1317,10 +1317,16 @@
         // "June 2019 – December 2022": a year on the left, a month name on
         // the right, so the digit-to-digit rule above does not see it.
         .replace(/(\d{4})\s*[—–]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/gi, '$1 - $2')
-        // Everything else is a parenthetical. A comma keeps the sentence
-        // whole; a full stop cut it into fragments like "Reduced cost. a 12%
-        // saving. in year one." -- which reads far more machine-written than
-        // the dash it replaced, and breaks the no-fragments rule outright.
+        // A dash between two capitalised words is part of a NAME, not
+        // punctuation in a sentence: "AWS Certified Machine Learning -
+        // Specialty", "Microsoft Certified - Azure". A comma there mangles
+        // the credential, and an ATS matches certifications as exact
+        // strings, so it stops matching at all.
+        .replace(/\s*[—–]\s*(?=[A-Z0-9])/g, ' - ')
+        // Everything else is a parenthetical inside a sentence. A comma
+        // keeps the sentence whole; a full stop cut it into fragments like
+        // "Reduced cost. a 12% saving. in year one." -- which reads far
+        // more machine-written than the dash it replaced.
         .replace(/\s*[—–]\s*/g, ', ')
         // Clean up doubled punctuation left behind.
         .replace(/,\s*,/g, ',')
