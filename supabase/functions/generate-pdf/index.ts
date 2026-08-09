@@ -721,6 +721,11 @@ function renderResume(
     r.drawSummary(data.summary);
   }
 
+  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
+    r.drawSectionHeader("Core Competencies");
+    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
+  }
+
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -741,16 +746,6 @@ function renderResume(
     );
   }
 
-  if (data.education && data.education.length > 0) {
-    r.drawSectionHeader("Education");
-    for (const edu of data.education) r.drawEducationEntry(edu);
-  }
-
-  if (data.certifications && data.certifications.length > 0) {
-    r.drawSectionHeader("Certifications");
-    r.drawCertifications(data.certifications);
-  }
-
   if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
     r.drawSectionHeader("Skills");
     const groups: Array<{ label: string; items: string[] }> = [];
@@ -761,9 +756,9 @@ function renderResume(
     r.drawSkillsBlock(groups);
   }
 
-  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
-    r.drawSectionHeader("Core Competencies");
-    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
+  if (data.certifications && data.certifications.length > 0) {
+    r.drawSectionHeader("Certifications");
+    r.drawCertifications(data.certifications);
   }
 
   if (data.achievements && data.achievements.length > 0) {
@@ -776,6 +771,12 @@ function renderResume(
       );
     }
   }
+
+  if (data.education && data.education.length > 0) {
+    r.drawSectionHeader("Education");
+    for (const edu of data.education) r.drawEducationEntry(edu);
+  }
+
 
   return r.pages;
 }
@@ -1901,6 +1902,11 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     }));
   }
 
+  if (data.coreCompetencies?.length) {
+    children.push(...docxSectionHeader("Core Competencies"));
+    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
+  }
+
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -1916,11 +1922,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     for (const p of data.projects) children.push(...docxProject(p));
   }
 
-  if (data.education?.length) {
-    children.push(...docxSectionHeader("Education"));
-    for (const ed of data.education) children.push(...docxEducation(ed));
-  }
-
   if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
     children.push(...docxSectionHeader("Skills"));
     const groups: Array<{ label: string; items: string[] }> = [];
@@ -1929,10 +1930,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSkills(groups));
   }
 
-  if (data.coreCompetencies?.length) {
-    children.push(...docxSectionHeader("Core Competencies"));
-    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
-  }
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
@@ -1943,11 +1940,18 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSectionHeader("Achievements"));
     for (const a of data.achievements) {
       const txt = a.description
-        ? `${a.title}${a.date ? ` (${a.date})` : ""} \u2014 ${a.description}`
+        ? `${a.title}${a.date ? ` (${a.date})` : ""}, ${a.description}`
         : `${a.title}${a.date ? ` (${a.date})` : ""}`;
       children.push(docxBullet(txt));
     }
   }
+
+  if (data.education?.length) {
+    children.push(...docxSectionHeader("Education"));
+    for (const ed of data.education) children.push(...docxEducation(ed));
+  }
+
+
 
   const doc = new DocxDocument({
     creator: "QuantumHire",
