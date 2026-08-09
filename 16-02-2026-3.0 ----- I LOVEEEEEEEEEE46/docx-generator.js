@@ -61,8 +61,17 @@
     if (opts.underline) p.push('<w:u w:val="single"/>');
     return `<w:rPr>${p.join('')}</w:rPr>`;
   }
+  // Last-resort dash guard, applied where text becomes a run so no caller
+  // can bypass it. ContentQualityEngine rewrites dashes properly upstream
+  // (a comma keeps the sentence whole); this is the guarantee for text that
+  // reached the generator by some other path. A plain ASCII hyphen is one
+  // byte in every encoding an ATS might assume, where an en or em dash is
+  // three in UTF-8 and becomes mojibake if the parser guesses wrong.
+  function foldDashes(text) {
+    return String(text == null ? '' : text).replace(/[\u2013\u2014\u2015\u2212]/g, '-');
+  }
   function run(text, opts = {}) {
-    return `<w:r>${rPr(opts)}<w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r>`;
+    return `<w:r>${rPr(opts)}<w:t xml:space="preserve">${xmlEscape(foldDashes(text))}</w:t></w:r>`;
   }
   function runText(text, bold) {
     return run(text, { bold: !!bold, color: C.BODY, sz: 21 });

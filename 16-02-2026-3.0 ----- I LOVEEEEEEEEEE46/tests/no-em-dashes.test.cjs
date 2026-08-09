@@ -58,6 +58,82 @@ t('  ...and neither produces a fragment',
   'a lowercase word after a full stop is a fragment: '
     + JSON.stringify(E.sanitiseCVBlock(sample)));
 
+console.log('\nNEITHER GENERATED DOCUMENT CARRIES ONE');
+// The sanitiser upstream is not the only path into a document. Both
+// generators are called directly elsewhere, so each has to guarantee this
+// for itself. Verified on real generated files, not on source text: the
+// PDF was emitting an en dash in the DATE field ("01-2023 – Present") and
+// in education ("BSc – Trinity"), and both formats passed summary and
+// bullet prose through untouched.
+const os = require('os'), cp = require('child_process');
+let jspdf = null, PDFParse = null;
+try { jspdf = require('jspdf'); PDFParse = require('pdf-parse').PDFParse; } catch (e) {}
+
+const DASHY_SUMMARY = 'Project manager \u2014 six years \u2014 delivering Dynamics 365.';
+const DASHY_BULLET = 'Cut deploy time \u2014 a 12% saving \u2014 across weekly releases.';
+const CV_TEXT = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
+  'PROFESSIONAL SUMMARY', DASHY_SUMMARY, '',
+  'WORK EXPERIENCE', 'Northbound', 'Senior Project Manager',
+  'January 2023 \u2014 Present', '- ' + DASHY_BULLET, ''].join('\n');
+
+(() => {
+  const DGm = (() => {
+    const f = path.join(DIR, 'docx-generator.js');
+    const m = new Module(f, null); m.filename = f;
+    m.paths = Module._nodeModulePaths(DIR);
+    m._compile(fs.readFileSync(f, 'utf8'), f);
+    return m.exports;
+  })();
+  const DG = DGm.DocxGenerator || DGm;
+  const built = DG.fromCvText(CV_TEXT, { name: 'cv', filename: 'cv.docx' });
+  t('  the DOCX generates', built && built.success === true, built && built.error);
+  if (!built || !built.success) return;
+  const tmp = path.join(os.tmpdir(), 'jg-dash-' + Date.now() + '.docx');
+  fs.writeFileSync(tmp, Buffer.from(built.base64, 'base64'));
+  const xml = cp.execSync('python3 -c ' + JSON.stringify(
+    'import zipfile,sys;sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("word/document.xml").decode("utf8"))'
+  ) + ' ' + JSON.stringify(tmp)).toString();
+  fs.unlinkSync(tmp);
+  const text = xml.replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '');
+  t('  the DOCX carries no en or em dash', !/[\u2013\u2014]/.test(text),
+    JSON.stringify((text.match(/.{0,30}[\u2013\u2014].{0,30}/) || [])[0] || ''));
+  t('  ...and the date range still reads correctly',
+    /January 2023 - Present/.test(text), 'date separator lost');
+})();
+
+if (!jspdf || !PDFParse) {
+  console.log('  SKIP  PDF check (jspdf / pdf-parse not installed)');
+} else {
+  global.jspdf = jspdf;
+  global.performance = global.performance || { now: () => Date.now() };
+  (() => {
+    const f = path.join(DIR, 'professional-pdf-engine.js');
+    const m = new Module(f, null); m.filename = f;
+    m.paths = Module._nodeModulePaths(DIR);
+    m._compile(fs.readFileSync(f, 'utf8'), f);
+  })();
+  const PE = global.ProfessionalPDFEngine;
+  const done = PE.generateCV(
+    { firstName: 'Max', lastName: 'Okafor', email: 'max@example.com', phone: '+353870000000', location: 'Dublin' },
+    { summary: DASHY_SUMMARY,
+      experience: [{ title: 'Senior Project Manager', company: 'Northbound',
+        startDate: '01/2023', endDate: 'Present', bullets: [DASHY_BULLET] }],
+      education: [{ degree: 'BSc Computer Science', institution: 'Trinity College Dublin', year: '2019' }] },
+    {}, null);
+  module.exports.__pdf = done.then(async (r) => {
+    const b64 = r.base64 || r.pdfBase64 || r.pdf;
+    t('  the PDF generates', !!b64, r.error || 'no bytes');
+    if (!b64) return finish();
+    const parsed = await new PDFParse({ data: new Uint8Array(Buffer.from(b64, 'base64')) }).getText();
+    t('  the PDF carries no en or em dash', !/[\u2013\u2014]/.test(parsed.text),
+      JSON.stringify((parsed.text.match(/.*[\u2013\u2014].*/) || [])[0] || ''));
+    t('  ...including in the date field',
+      !/\d[\u2013\u2014]|[\u2013\u2014]\s*Present/.test(parsed.text),
+      'the date range is the one field where a parse failure costs a whole role');
+    finish();
+  });
+}
+
 console.log('\nAND THE PROMPT STOPS PRODUCING THEM IN THE FIRST PLACE');
 let prompt = null;
 try {
@@ -77,5 +153,8 @@ if (!prompt) {
     /ZERO em dashes or en dashes/.test(prompt));
 }
 
-console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
-process.exit(FAIL ? 1 : 0);
+function finish() {
+  console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
+  process.exit(FAIL ? 1 : 0);
+}
+if (!jspdf || !PDFParse) finish();
