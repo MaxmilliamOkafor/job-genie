@@ -3240,10 +3240,11 @@ ${
       // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
       const toInjectSingles = singleWordMissing;
       if (toInjectSingles.length > 0) {
+        // Next boundary: any ALL-CAPS heading line, or end of document
         const skillsSectionPatterns = [
-          /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-          /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-          /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+          /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n[ \t]*[A-Z][A-Z0-9 &\/\-]{2,}[ \t]*\n|\s*$)/i,
+          /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n[ \t]*[A-Z][A-Z0-9 &\/\-]{2,}[ \t]*\n|\s*$)/i,
+          /(SKILLS\s*[:\n])([\s\S]*?)(\n[ \t]*[A-Z][A-Z0-9 &\/\-]{2,}[ \t]*\n|\s*$)/i,
         ];
 
         let injected = false;
