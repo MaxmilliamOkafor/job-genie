@@ -1279,6 +1279,8 @@ async function handleRawContentRequest(body: {
       "EDUCATION",
       "SKILLS",
       "TECHNICAL SKILLS",
+      "TECHNICAL PROFICIENCIES",
+      "TECHNICAL PROFICIENCY",
       "CERTIFICATIONS",
       "ACHIEVEMENTS",
       "PROJECTS",
