@@ -2742,7 +2742,7 @@ ${
     },
     "certifications": ${JSON.stringify(userProfile.certifications || [])}
   },
-  "metricsWorthAdding": ["<role> — \"<the exact bullet>\" → <the number that would strengthen it>"],
+  "metricsWorthAdding": ["<role> — <the exact bullet> → <the number that would strengthen it>"],
   "coverLetterStructured": {
     "recipientCompany": "${userProfile.portfolio || company}",
     "jobTitle": "${jobTitle}",
