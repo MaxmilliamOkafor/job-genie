@@ -1687,14 +1687,18 @@ const DOCX_FONT = "Calibri";
 const RIGHT_TAB = 9300; // ~6.45in in twips, inside 0.62in margins on A4
 
 // Every DOCX text run goes through sanitizeText so no call site can bypass it.
+// Surrounding whitespace is preserved; only the inner text is sanitised.
 // Tab prefixes (right-aligned dates) and the literal bullet glyph are preserved.
 type DocxRunOptions = ConstructorParameters<typeof TextRun>[0];
 function TR(opts: DocxRunOptions): TextRun {
   if (opts && typeof opts === "object" && typeof (opts as { text?: unknown }).text === "string") {
     const raw = (opts as { text: string }).text;
     if (!/^[\u2022\s]*$/.test(raw)) {
-      const leadingTab = raw.startsWith("\t") ? "\t" : "";
-      return new TextRun({ ...(opts as object), text: leadingTab + sanitizeText(raw) } as DocxRunOptions);
+      const m = raw.match(/^(\s*)([\s\S]*?)(\s*)$/);
+      if (m) {
+        const [, lead, middle, trail] = m;
+        return new TextRun({ ...(opts as object), text: lead + sanitizeText(middle) + trail } as DocxRunOptions);
+      }
     }
   }
   return new TextRun(opts);
