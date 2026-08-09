@@ -2137,6 +2137,19 @@ Examples of REQUIRED British spellings:
 - "focussed" NOT "focused", "labelled" NOT "labeled"
 Any American English spelling is an INSTANT FAILURE.
 
+THE ONE EXEMPTION: PROPER NOUNS ARE REPRODUCED VERBATIM.
+Certification names, product names, company names, and official job titles
+are names, not prose. They are spelled the way their owner spells them,
+even when that is American English, and even when it looks wrong.
+- "AWS Certified Machine Learning - Specialty" NEVER becomes "Speciality"
+- "Program Manager" as an employer's actual job title stays "Program
+  Manager", never "Programme Manager"
+- "Center of Excellence", "Labor Relations", "Defense Systems" stay as the
+  organisation spells them
+An ATS matches certifications and titles as EXACT STRINGS. Anglicising one
+character makes the credential invisible to the scan, which is the
+opposite of the goal. This exemption outranks the rule above.
+
 ---
 PHASE 1: EXTRACTION (Do this first, output nothing yet)
 Read the job description carefully and extract:
@@ -2259,7 +2272,32 @@ The summary must never assert a job title the rest of the CV cannot support.
   the CV or cover letter.
 
 RULE 2 — SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
-The skills section must be completely replaced. Rewrite it as:
+
+READ THIS BEFORE THE KEYWORD COUNTS BELOW. Every keyword target in this
+prompt -- the minimum counts here, the "MUST ADD THESE" list at the end,
+the 95% score -- is capped by RULE 0. A keyword goes in ONLY if the
+candidate's own history evidences it. Where the two conflict, the score
+loses. Always.
+
+A quota with no evidence gate produces a fabricated professional identity,
+which is worse than a low score because it survives the ATS and then fails
+the interview. A real example this rule exists to prevent: a candidate
+whose entire history is Meta software engineering, an AI product contract,
+Accenture cloud architecture and Citigroup data analysis was given a
+summary reading "Experienced Sales Engineer with over 5 years of expertise
+in electrical systems", and skills listing transformers, industrial
+batteries, protection relays and substations. Not one of those appeared
+anywhere in the source CV. Every one came from the job description.
+- If the JD asks for a skill the candidate has never used, it does NOT go
+  in the CV. Not in Skills, not in Core Competencies, not in the summary.
+- The summary describes the person the CV EVIDENCES, in their real
+  discipline, using the JD's vocabulary only where it honestly overlaps.
+- A genuine pivot is stated as a pivot. The cover letter is where
+  transferable experience is argued (RULE 13), not the CV.
+- Missing keywords that cannot be honestly claimed are reported in
+  KEYWORDS OMITTED. That is the correct outcome, not a failure.
+
+Rewrite the skills section as:
   Technical Skills: [list ALL hard skill keywords from the JD that the candidate can legitimately claim, comma-separated, exact spelling]
   Platforms & Tools: [all platforms, cloud services, devtools]
   Methodologies: [ETL, CI/CD, distributed systems, data modelling, etc.]
@@ -2402,6 +2440,41 @@ bullet where they describe what was actually done, integrated into the
 sentence's grammar. If a keyword cannot be integrated grammatically and
 truthfully, leave it out of the bullet.
 
+RULE 15b — NO HEDGED OR APPROXIMATED NUMBERS (hard ban)
+A number that is hedged reads as a number that was guessed, which is worse
+than no number at all. Taken from a real generated CV: "cut the manual
+review queue by ~40%".
+- NEVER write "~", "circa", "c.", "approx", "approximately", "roughly",
+  "about", "around", "an estimated", "in the region of" before a figure.
+- If the source states the figure, state it exactly and plainly: "cut the
+  review queue by 40%".
+- If the source does NOT state it, do not gesture at one. Write the plain
+  fact with no number, and report the gap in metricsWorthAdding.
+
+AND NO WEASEL QUANTIFIERS IN PLACE OF A NUMBER. These are what a model
+reaches for when it has been told to sound quantified but forbidden to
+invent, and they are an obvious tell because they promise a measurement
+and deliver none. All taken from real output:
+  "surfacing significant exposure"        -> say what was surfaced
+  "absorbing several-fold traffic growth" -> say the system scaled with load
+  "measurably higher uptime"              -> either give the figure or say
+                                             "with no service disruption"
+Banned before a noun: significant, substantial, considerable, several-fold,
+measurably, markedly, dramatically, drastically, materially, notably,
+meaningfully. Plain description beats a vague intensifier every time.
+
+RULE 15c — CORE COMPETENCIES AND SKILLS DO NOT OVERLAP
+A term appears in ONE section. Real output listed "Communication Skills"
+and "Presentation Skills" in Core Competencies AND again in Technical
+Proficiencies, which reads as padding to a human and doubles nothing for
+the ATS.
+- Any phrase containing the word "skills" belongs in the Skills section,
+  never in Core Competencies. This rule already exists in RULE 8 and was
+  ignored; it is repeated here because the duplication is what a recruiter
+  notices first.
+- Before output, compare the two lists and remove from Skills anything
+  already in Core Competencies.
+
 RULE 15a — NO EM DASHES OR EN DASHES IN ANY OUTPUT (hard ban)
 An em dash is one of the strongest machine-written tells a recruiter
 reads, alongside round percentages. Never emit "—" or "–" in the CV or
@@ -2533,6 +2606,11 @@ After rewriting, run this internal checklist:
 [ ] Are there zero ", using X" / ", with X" keyword tails on bullets?
 [ ] Does every sentence start with a capital letter and read grammatically?
 [ ] Are there ZERO em dashes or en dashes in the CV and cover letter?
+[ ] Is every claim in the summary and skills evidenced by the work history? Delete any that is not.
+[ ] Are certification and job-title proper nouns spelled as their owner spells them (Specialty, not Speciality)?
+[ ] Is there a "~", "approx" or "roughly" before any figure? Remove it.
+[ ] Is there a weasel quantifier ("significant", "several-fold", "measurably") standing in for a number?
+[ ] Does any term appear in BOTH Core Competencies and Skills?
 [ ] Is the job title free of requisition numbers / posting noise?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
@@ -2613,7 +2691,8 @@ Titles (PRIORITY 3): ${jdKeywords.titles.join(", ")}
 Soft Skills (PRIORITY 4 - WEAVE INTO EXPERIENCE BULLETS, NOT SKILLS SECTION): ${jdKeywords.softSkills.join(", ")}
 Certifications: ${jdKeywords.certifications.join(", ")}
 
-MUST ADD THESE (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
+ADD THESE WHERE THE CANDIDATE'S HISTORY EVIDENCES THEM (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
+Any of these the candidate has genuinely never done is OMITTED and listed under KEYWORDS OMITTED. See RULE 0 and RULE 2. Do not invent a background to host a keyword.
 
 Return ONLY valid JSON - no markdown code blocks, no extra text.`;
 
@@ -2687,9 +2766,15 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
     - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
-    - EDUCATION
     - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
     - CERTIFICATIONS
+    - EDUCATION (LAST). Skills and certifications sit ABOVE education:
+      a recruiter scanning top-down should reach what proves the candidate
+      can do THIS job before reaching their degrees. Education first is the
+      graduate convention and reads as early-career on a CV with years of
+      history behind it. It also keeps the skills together rather than split
+      by education: Core Competencies at the top for the scan, Technical
+      Proficiencies and Certifications lower down as the detail block.
 
 2) CREATE COVER LETTER:
    ${candidateName}
@@ -2768,6 +2853,11 @@ ${
         "bullets": ["bullet1 with metrics", "bullet2", "bullet3"]
       }
     ],
+    "skills": {
+      "primary": ${JSON.stringify([...jdKeywords.hardSkills, ...jdKeywords.tools])},
+      "secondary": ${JSON.stringify(jdKeywords.softSkills)}
+    },
+    "certifications": ${JSON.stringify(userProfile.certifications || [])},
     "education": [
       {
         "degree": "[Degree Name]",
@@ -2775,12 +2865,7 @@ ${
         "dates": "[Dates]",
         "gpa": "[GPA if applicable]"
       }
-    ],
-    "skills": {
-      "primary": ${JSON.stringify([...jdKeywords.hardSkills, ...jdKeywords.tools])},
-      "secondary": ${JSON.stringify(jdKeywords.softSkills)}
-    },
-    "certifications": ${JSON.stringify(userProfile.certifications || [])}
+    ]
   },
   "metricsWorthAdding": ["<role> — <the exact bullet> → <the number that would strengthen it>"],
   "coverLetterStructured": {

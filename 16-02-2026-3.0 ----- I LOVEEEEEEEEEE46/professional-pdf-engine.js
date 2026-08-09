@@ -99,9 +99,17 @@
         currentY = this.renderSummary(doc, cvData.summary, currentY);
         currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY, cvData);
         currentY = this.renderExperience(doc, cvData.experience, currentY);
-        currentY = this.renderEducation(doc, cvData.education, currentY);
+        // Skills and certifications above education. A recruiter scanning
+        // for six seconds reads top-down, so the sections that answer "can
+        // they do this job now" come first. Education above experience is
+        // the graduate convention and reads as early-career on a CV with
+        // years of history behind it. It also stops the skills being split
+        // in two with education wedged between them: Core Competencies at
+        // the top for the scan, Technical Proficiencies and Certifications
+        // together lower down as the detail block.
         currentY = this.renderSkills(doc, cvData.skills, currentY);
         currentY = this.renderCertifications(doc, cvData.certifications, currentY);
+        currentY = this.renderEducation(doc, cvData.education, currentY);
 
         // Generate output
         const pdfBlob = doc.output('blob');
