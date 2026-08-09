@@ -2490,11 +2490,26 @@
 
   // ============ EXTRACT JOB INFO ============
   function extractJobInfo() {
+    // Not every element carries its value as text. iCIMS and Taleo name the
+    // employer in the LOGO -- ".iCIMS_Logo img", ".brandingHeader img" --
+    // and an <img> has no textContent, so reading text alone returned
+    // nothing from the selector those platforms were given on purpose.
+    // Company then fell through to guessing at the subdomain, which turns
+    // "careers-acme.icims.com" into the employer "Careers-acme".
+    const elementText = (el) => {
+      if (!el) return '';
+      const text = (el.textContent || '').trim();
+      if (text) return text;
+      // alt for an image, content for a meta tag, value for an input.
+      const attr = (el.getAttribute && (el.getAttribute('alt')
+        || el.getAttribute('content') || el.getAttribute('value'))) || '';
+      return String(attr).replace(/\s*logo\s*/i, '').trim();
+    };
     const getText = (selectors) => {
       for (const sel of selectors) {
         try {
-          const el = document.querySelector(sel);
-          if (el?.textContent?.trim()) return el.textContent.trim();
+          const val = elementText(document.querySelector(sel));
+          if (val) return val;
         } catch {}
       }
       return '';

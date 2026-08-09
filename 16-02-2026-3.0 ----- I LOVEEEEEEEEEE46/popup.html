@@ -404,6 +404,15 @@
               <!-- Manual override, not the main path. Everything above runs
                    without it; this exists for the case where the automatic
                    search finds nobody but you already know who to write to. -->
+              <!-- Most ATS postings name nobody and publish no address, but
+                   the people are on LinkedIn and findable by title. This
+                   opens the searches that find them, scoped to this
+                   employer and this location. -->
+              <div class="fu-actions" style="margin-top:9px;">
+                <button id="findPeopleBtn" class="fu-btn fu-btn-wide">Find the right people on LinkedIn</button>
+              </div>
+              <div id="findPeopleTargets" class="fu-note"></div>
+
               <details style="margin-top:9px;">
                 <summary class="fu-label" style="cursor:pointer;">Manual override: resolve a specific person</summary>
               <div class="fu-field" style="margin-top:9px;">
@@ -1170,6 +1179,7 @@
   <script src="jd-context.js"></script>
   <script src="jg-trace.js"></script>
   <script src="contact-enrichment.js"></script>
+  <script src="linkedin-people-search.js"></script>
   <script src="linkedin-profile-memory.js"></script>
   <script src="followup-email.js"></script>
   <script src="cover-letter-generator.js"></script>

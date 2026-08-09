@@ -942,6 +942,7 @@ class ATSTailor {
     document.getElementById('enrichClearBtn')?.addEventListener('click', () => this.enrichClearKey());
     document.getElementById('enrichFindNowBtn')?.addEventListener('click', () => this.enrichFindNow());
     document.getElementById('enrichResolveProfileBtn')?.addEventListener('click', () => this.enrichResolveProfile());
+    document.getElementById('findPeopleBtn')?.addEventListener('click', () => this.findPeopleOnLinkedIn());
     document.getElementById('enrichMoreLink')?.addEventListener('click', (e) => {
       e.preventDefault();
       const more = document.getElementById('enrichMore');
@@ -3886,6 +3887,13 @@ class ATSTailor {
       if (out.indexOf(h) === -1) out.push(h);
     }
 
+    // Anyone listed on a people-search results page left open. This is
+    // what makes the lookup work on an ATS posting that names nobody:
+    // the search found the recruiter, and these are their handles.
+    for (const h of await this.linkedInSearchResultProfiles()) {
+      if (out.indexOf(h) === -1) out.push(h);
+    }
+
     // The FOCUSED profile goes first regardless: having it in front of you
     // is the most deliberate statement of who you mean.
     const active = await this.activeLinkedInProfile();
@@ -3895,6 +3903,83 @@ class ATSTailor {
       out.unshift(active);
     }
     return out;
+  }
+
+  // ---- FIND the people, rather than wait to be handed one -------------
+  // On a Workday or Greenhouse posting nothing names a person and no
+  // address is published, so the lookup had nobody to resolve. The people
+  // are on LinkedIn and findable by title: this opens the searches that
+  // find them, scoped to this employer and this location.
+  async findPeopleOnLinkedIn() {
+    const out = document.getElementById('findPeopleTargets');
+    const say = (html) => { if (out) out.innerHTML = html; };
+    if (typeof LinkedInPeopleSearch === 'undefined') {
+      say('People search module not loaded.');
+      return;
+    }
+    const company = this.enrichCompanyName();
+    if (!company) {
+      say('No employer detected for this page yet — an unscoped people search '
+        + 'returns strangers, so this needs the company first.');
+      return;
+    }
+    const ctx = {
+      company,
+      title: this.currentJob?.title || '',
+      location: this.currentJob?.location || this._defaultLocation || '',
+    };
+    const groups = LinkedInPeopleSearch.searchUrls(ctx);
+    if (!groups.length) { say('Nothing to search for.'); return; }
+
+    // Opened in the background, in order, so the tabs sit behind the popup
+    // rather than pulling focus away from the application being filled in.
+    for (const g of groups) {
+      try { await chrome.tabs.create({ url: g.url, active: false }); } catch (e) {}
+    }
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    say('Opened ' + groups.length + ' searches for <b>' + esc(company) + '</b>'
+      + (ctx.location ? ' in ' + esc(String(ctx.location).split(',')[0]) : '') + ':<br>'
+      + groups.map((g) => '&nbsp;• <b>' + esc(g.tier) + '</b> — ' + esc(g.why)).join('<br>')
+      + '<br><br>Open anyone who looks right. Their profile is picked up '
+      + 'automatically, and "Find contacts now" will resolve the address.');
+  }
+
+  // Profiles visible on any LinkedIn people-search results page the user
+  // has open. Reads the rendered page only: nothing is clicked, no
+  // connection is sent, and no request is made to LinkedIn.
+  async linkedInSearchResultProfiles() {
+    try {
+      if (!chrome?.scripting?.executeScript) return [];
+      const tabs = await chrome.tabs.query({ url: 'https://*.linkedin.com/search/results/people/*' });
+      const out = [];
+      for (const tab of (tabs || [])) {
+        if (!tab.id) continue;
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id }, files: ['linkedin-people-search.js'],
+          });
+        } catch (e) { /* already present */ }
+        try {
+          const res = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              try {
+                return window.LinkedInPeopleSearch
+                  ? window.LinkedInPeopleSearch.harvestPeopleResults(document) : [];
+              } catch (e) { return []; }
+            },
+          });
+          for (const f of (res || [])) {
+            for (const p of (f && f.result) || []) {
+              if (p && p.profile && out.indexOf(p.profile) === -1) out.push(p.profile);
+            }
+          }
+        } catch (e) { /* a tab we may not touch */ }
+      }
+      return out;
+    } catch (e) { return []; }
   }
 
   // Handles of every LinkedIn profile open in any window. Reads tab URLs
@@ -8198,11 +8283,20 @@ function extractJobInfoFromPageInjected() {
     const host = window.location.hostname.toLowerCase().replace(/^www\./, '');
 
     // --- Helper: get text from first matching selector ---
+    // An <img> has no textContent, and iCIMS and Taleo name the employer in
+    // the logo image's alt. Reading text alone returned nothing from the
+    // selector those platforms were given on purpose.
     const getText = (...selectors) => {
       for (const sel of selectors) {
         try {
           const el = document.querySelector(sel);
-          if (el?.textContent?.trim()) return el.textContent.trim();
+          if (!el) continue;
+          const text = (el.textContent || '').trim();
+          if (text) return text;
+          const attr = (el.getAttribute && (el.getAttribute('alt')
+            || el.getAttribute('content') || el.getAttribute('value'))) || '';
+          const val = String(attr).replace(/\s*logo\s*/i, '').trim();
+          if (val) return val;
         } catch (e) {}
       }
       return '';
