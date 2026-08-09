@@ -41,7 +41,12 @@ for (const [input, want] of [
 console.log('\nPARENTHETICALS STAY WHOLE SENTENCES');
 for (const [input, want] of [
   ['Reduced cost — a 12% saving — in year one.', 'Reduced cost, a 12% saving, in year one.'],
-  ['Senior PM — Acme Corp', 'Senior PM, Acme Corp'],
+  // A dash before a CAPITAL is part of a NAME ("Company - Title",
+  // "AWS Certified Machine Learning - Specialty"), so it becomes a
+  // hyphen. A comma there mangles the credential, and an ATS matches
+  // certifications as exact strings.
+  ['Senior PM — Acme Corp', 'Senior PM - Acme Corp'],
+  ['AWS Certified Machine Learning – Specialty', 'AWS Certified Machine Learning - Specialty'],
   ['Led delivery – for 11,842 users.', 'Led delivery, for 11,842 users.'],
 ]) t('  ' + JSON.stringify(input.slice(0, 40)), E.removeEmDashes(input) === want,
   'got ' + JSON.stringify(E.removeEmDashes(input)));
