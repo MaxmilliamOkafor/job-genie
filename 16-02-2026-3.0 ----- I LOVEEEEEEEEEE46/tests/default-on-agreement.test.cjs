@@ -85,5 +85,48 @@ t('...and is read with === true',
   /autofill_enabled\s*===\s*true/.test(bg),
   'it would arm itself by default');
 
+
+// ---- the contact lookup ships ON, with Closely ------------------------
+// Same failure mode as the LinkedIn toggle above, in a different config
+// shape: enrichment lives under one `enrichment_config` object rather
+// than a top-level key, so it has its own place for the interface and the
+// code to disagree about what "unset" means.
+console.log('\nCONTACT LOOKUP');
+const enrich = (() => {
+  const file = path.join(DIR, 'contact-enrichment.js');
+  const m = new Module(file, null);
+  m.filename = file;
+  m.paths = Module._nodeModulePaths(DIR);
+  global.chrome = { storage: { local: {
+    get: (k, cb) => { cb && cb({}); return Promise.resolve({}); },
+    set: (o, cb) => { cb && cb(); return Promise.resolve(); } } } };
+  m._compile(fs.readFileSync(file, 'utf8'), file);
+  return global.ContactEnrichment;
+})();
+
+t('the defaults are exported, not scattered',
+  enrich.DEFAULT_ENABLED === true && enrich.DEFAULT_PROVIDER === 'closely',
+  JSON.stringify({ enabled: enrich.DEFAULT_ENABLED, provider: enrich.DEFAULT_PROVIDER }));
+
+const ceSrc = read('contact-enrichment.js');
+t('...and applied in ONE place, so no reader can decide differently',
+  /function _withDefaults\(/.test(ceSrc) && /resolve\(_withDefaults\(/.test(ceSrc),
+  'a second reader inventing its own default is how a switch draws ON while the code reads OFF');
+t('no hardcoded provider fallback survives',
+  !/\|\|\s*'contactout'/.test(ceSrc),
+  "a stale || 'contactout' would silently override the chosen default");
+
+// The UI must render from the same config, not from its own idea of it.
+t('the popup renders the toggle from loadConfig',
+  /const cfg = await ContactEnrichment\.loadConfig\(\);[\s\S]{0,400}?enrichEnabledToggle[\s\S]{0,80}?checked = cfg\.enabled === true/.test(popupSrc),
+  'the switch would draw OFF while the lookup was ON');
+t('...and the provider select too',
+  /const current = cfg\.provider \|\| providers\[0\]\.id;/.test(popupSrc));
+
+// On by default must not mean "contacts people by default".
+t('the UI no longer claims it is off by default',
+  !/off by default/i.test(read('popup.html')),
+  'the label would contradict the behaviour');
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);

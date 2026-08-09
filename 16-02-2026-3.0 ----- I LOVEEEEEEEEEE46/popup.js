@@ -928,7 +928,8 @@ class ATSTailor {
       chrome.storage.local.set({ followup_attach_enabled: enabled });
       this.showToast(enabled ? 'Documents will be attached' : 'Documents will not be attached', 'success');
     });
-    // Contact lookup (opt-in). Off by default and only ever consulted when
+    // Contact lookup. On by default, but inert without a provider
+    // credential, and only ever consulted when
     // nothing was published; see followupEnrich().
     document.getElementById('enrichEnabledToggle')?.addEventListener('change', async (e) => {
       const enabled = !!e.target?.checked;
