@@ -318,6 +318,12 @@
     /\[\s*(?:fill[\s_-]*in|insert|add|your|tbd|todo|number|metric|percent|amount|value|placeholder|company[\s_-]*name|role[\s_-]*title|x+|\d*\s*%)[^\]]*\]/gi,
     /\b(?:TBD|TODO)\b/g,
     /<[A-Z][A-Z_]{2,}>/g,
+    // The response schema labels its own fields with bracketed prompts
+    // ("[Job Title]", "[GPA if applicable]"). A model echoes those back
+    // whenever it has no value for the field, so they arrive looking like
+    // real content. Matched by name rather than by shape, so genuine
+    // bracketed prose ("[see portfolio]") is not flagged.
+    /\[\s*(?:job|role)\s*title\s*\]|\[\s*(?:degree|school|university|institution)\s*name\s*\]|\[\s*dates?\s*\]|\[[^\]]{0,40}if\s+applicable[^\]]*\]/gi,
   ];
 
   /**

@@ -2326,9 +2326,10 @@ Rewrite the professional summary to:
    - Every sentence must survive the question "could an average applicant
      for this role write this same sentence?" If yes, it is filler --
      replace it with something from the CV that they could not write.
-   - Ban outright: "results-driven", "detail-oriented", "team player",
-     "passionate about", "proven track record", "dynamic professional",
-     "hard-working", "go-getter", "synergy", "think outside the box".
+   - The global BANNED WORDS list at the end of this prompt already covers
+     most filler. Add "team player" and "hard-working" to it: both
+     describe a temperament every applicant claims, so neither
+     distinguishes anyone.
    - No hedging. "Contributed to", "involved in", "exposure to" and
      "familiar with" all read as an admission of thin experience.
    SUBJECT TO RULES -1 AND 0: every claim here is drawn from the CV. The
@@ -2438,33 +2439,29 @@ Recovered, Automated, Consolidated, Negotiated, Rebuilt, Migrated,
 Eliminated, Accelerated, Secured. Avoid opening more than two bullets in
 the whole CV with the same verb.
 
-RULE 18 — BULLET LENGTH: TWO LINES MAXIMUM
-No bullet exceeds roughly 30 words / two printed lines. A recruiter
-scanning 200 CVs skips dense blocks entirely, so a long bullet is not read
-slowly — it is not read at all. If a bullet carries two achievements,
-split it into two bullets or drop the weaker one. This rule outranks
-keyword placement: a keyword inside an unread bullet scores nothing with
-the human and looks like padding.
-
-RULE 19 — MISSING METRICS ARE REPORTED, NEVER INVENTED, NEVER PLACEHOLDERED
+RULE 18 — MISSING METRICS ARE REPORTED, NEVER INVENTED, NEVER PLACEHOLDERED
 Rule 0 forbids inventing numbers, so a bullet whose source records no
 outcome stays unquantified. That is correct, but the candidate usually
 KNOWS the number and simply did not write it down, so the gap is worth
 surfacing.
-Do NOT write placeholder tokens — no "[FILL IN]", "[X]%", "[NUMBER]", "TBD"
-or similar — anywhere in the CV or cover letter. This tool attaches the
-generated document to real applications and can email it directly, so a
-placeholder does not get caught by a human proof-read the way it would in
-a chat window; it reaches a recruiter and reads as carelessness.
-Instead, after the CV, emit a separate section:
-"METRICS WORTH ADDING:"
-followed by one line per opportunity, in the form:
-  <role> — "<the exact bullet text>" → <the specific number to supply>
-Example:
-  Northbound, Senior PM — "Delivered the D365 rollout across four regions."
-    → how many users, over what period, or what it saved
-List at most 6, strongest opportunities first. If every bullet is already
-quantified, write "METRICS WORTH ADDING: none — every bullet is quantified."
+
+NEVER write a placeholder into any VALUE you output — no "[FILL IN]",
+"[X]%", "[NUMBER]", "[Company Name]", "[GPA if applicable]", "TBD" or
+similar. (The bracketed labels in the JSON schema below describe what to
+put there; they are never themselves an answer. If you have no value for
+an optional field, omit the field or use an empty string.) This tool
+attaches the generated document to real applications and can email it
+directly, so a placeholder gets no human proof-read the way it would in a
+chat window; it reaches a recruiter and reads as carelessness.
+
+Report the gaps instead, in the "metricsWorthAdding" array of the JSON
+response. Each entry names the role, quotes the bullet, and says exactly
+which number would strengthen it:
+  "Northbound, Senior PM — 'Delivered the D365 rollout across four
+   regions.' → how many users, over what period, or what it saved"
+At most 6 entries, strongest opportunities first. Empty array if every
+bullet is already quantified. This array is shown to the candidate; it is
+never part of the CV.
 
 RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
@@ -2511,10 +2508,9 @@ After rewriting, run this internal checklist:
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
-[ ] Is every bullet two printed lines or fewer?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
-[ ] Is there a "METRICS WORTH ADDING:" section after the CV?
+[ ] Is "metricsWorthAdding" populated (or empty because every bullet is quantified)?
 [ ] Could an average applicant for this role have written the summary? If yes, rewrite it.
 [ ] Do weighted/repeated JD terms appear more than once in the CV?
 [ ] Does the years of experience in the summary match the JD requirement?
@@ -2746,6 +2742,7 @@ ${
     },
     "certifications": ${JSON.stringify(userProfile.certifications || [])}
   },
+  "metricsWorthAdding": ["<role> — \"<the exact bullet>\" → <the number that would strengthen it>"],
   "coverLetterStructured": {
     "recipientCompany": "${userProfile.portfolio || company}",
     "jobTitle": "${jobTitle}",

@@ -55,6 +55,18 @@ for (const s of [
 ]) t('  clean ' + JSON.stringify(s.slice(0, 44)), V.findPlaceholders(s).length === 0,
   'false positive: ' + JSON.stringify(V.findPlaceholders(s)));
 
+console.log('\nAND THE SCHEMA\'S OWN LABELS, WHICH MODELS ECHO BACK');
+// The response schema labels its fields "[Job Title]", "[GPA if
+// applicable]" and so on. A model echoes those whenever it has no value,
+// so they arrive looking like real content.
+for (const s of ['[Job Title]', '[Degree Name]', '[School Name]', '[Dates]',
+  '[GPA if applicable]', '[Company Name]']) {
+  t('  flags ' + s, V.findPlaceholders(s).length > 0,
+    'this would be printed on the CV as the field value');
+}
+t('  but genuine bracketed prose is still clean',
+  V.findPlaceholders('Built C# services [see portfolio for detail]').length === 0);
+
 console.log('\nIT REPORTS EACH DISTINCT TOKEN ONCE, IN ORDER');
 const many = V.findPlaceholders('[FILL IN] then [Company Name] then [FILL IN] again and TBD');
 t('  deduplicated', many.length === 3, JSON.stringify(many));
@@ -96,9 +108,21 @@ if (!prompt) {
   t('  ...with the reason stated, so it is not edited away',
     /attaches\s+the\s+generated\s+document\s+to\s+real\s+applications/i.test(prompt),
     'the ban reads as arbitrary without it, and gets tuned away later');
-  t('  missing metrics get their own reported section instead',
-    /METRICS WORTH ADDING:/.test(prompt),
+  // The response contract is "Return ONLY valid JSON - no extra text", so
+  // a free-text section after the CV would either be dropped or appended
+  // after the JSON and break the parse -- taking the whole run with it.
+  t('  missing metrics are reported through the JSON contract',
+    /"metricsWorthAdding"/.test(prompt),
     'the useful half of the technique is lost if only the ban survives');
+  t('  ...and the schema declares the field to put them in',
+    /"metricsWorthAdding": \[/.test(prompt),
+    'the model is told to report gaps with nowhere to write them');
+  t('  ...as an array, not free text after the CV',
+    !/emit a separate section/i.test(prompt),
+    'free text after a JSON-only response breaks JSON.parse');
+  t('  the schema\'s own bracket labels are excluded from the ban',
+    /bracketed labels in the JSON schema/i.test(prompt),
+    'the model would otherwise read the ban as forbidding the schema itself');
   t('  the XYZ achievement formula is taught',
     /accomplished \[X\], as measured by \[Y\], by doing \[Z\]/i.test(prompt));
   t('  ...and made subject to the anti-fabrication rule',
@@ -106,8 +130,10 @@ if (!prompt) {
     'the formula invites invented numbers unless it is fenced');
   t('  weak bullet openers are banned',
     /Responsible for/.test(prompt) && /Helped with/.test(prompt));
-  t('  bullets are capped at two lines',
-    /two printed lines|TWO LINES MAXIMUM/i.test(prompt));
+  t('  the two-line bullet cap is NOT present',
+    !/TWO LINES MAXIMUM/.test(prompt),
+    'it was removed deliberately: it fought the keyword-density rules the '
+      + 'ATS score depends on');
   t('  the summary is written so passing feels like a mistake',
     /PASSING WOULD FEEL LIKE A MISTAKE/i.test(prompt));
   t('  ...with filler phrases banned by name',
