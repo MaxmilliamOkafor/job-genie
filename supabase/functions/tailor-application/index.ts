@@ -2402,6 +2402,18 @@ bullet where they describe what was actually done, integrated into the
 sentence's grammar. If a keyword cannot be integrated grammatically and
 truthfully, leave it out of the bullet.
 
+RULE 15a — NO EM DASHES OR EN DASHES IN ANY OUTPUT (hard ban)
+An em dash is one of the strongest machine-written tells a recruiter
+reads, alongside round percentages. Never emit "—" or "–" in the CV or
+the cover letter, in any position.
+- For a parenthetical, use a comma, or split into two proper sentences.
+- For a date or number range, use a plain hyphen: "January 2023 - Present",
+  "2019 - 2022".
+- Do not substitute a semicolon or a colon for the same effect; rewrite
+  the sentence so it does not need one.
+The em dashes appearing in THESE INSTRUCTIONS are not a style to imitate.
+Only the CV and cover letter you produce are subject to this rule.
+
 RULE 15 — CLEAN SENTENCE CASING AND GRAMMAR
 Every sentence — in the summary, bullets, and cover letter — MUST begin
 with a capital letter and be a grammatically complete sentence. Never
@@ -2520,6 +2532,7 @@ After rewriting, run this internal checklist:
 [ ] Are stated years of experience <= what the employment dates prove?
 [ ] Are there zero ", using X" / ", with X" keyword tails on bullets?
 [ ] Does every sentence start with a capital letter and read grammatically?
+[ ] Are there ZERO em dashes or en dashes in the CV and cover letter?
 [ ] Is the job title free of requisition numbers / posting noise?
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
