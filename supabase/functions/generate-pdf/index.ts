@@ -1940,11 +1940,18 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSectionHeader("Achievements"));
     for (const a of data.achievements) {
       const txt = a.description
-        ? `${a.title}${a.date ? ` (${a.date})` : ""} \u2014 ${a.description}`
+        ? `${a.title}${a.date ? ` (${a.date})` : ""}, ${a.description}`
         : `${a.title}${a.date ? ` (${a.date})` : ""}`;
       children.push(docxBullet(txt));
     }
   }
+
+  if (data.education?.length) {
+    children.push(...docxSectionHeader("Education"));
+    for (const ed of data.education) children.push(...docxEducation(ed));
+  }
+
+
 
   const doc = new DocxDocument({
     creator: "QuantumHire",
