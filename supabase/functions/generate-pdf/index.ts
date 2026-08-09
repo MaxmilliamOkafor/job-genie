@@ -721,6 +721,11 @@ function renderResume(
     r.drawSummary(data.summary);
   }
 
+  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
+    r.drawSectionHeader("Core Competencies");
+    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
+  }
+
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -741,16 +746,6 @@ function renderResume(
     );
   }
 
-  if (data.education && data.education.length > 0) {
-    r.drawSectionHeader("Education");
-    for (const edu of data.education) r.drawEducationEntry(edu);
-  }
-
-  if (data.certifications && data.certifications.length > 0) {
-    r.drawSectionHeader("Certifications");
-    r.drawCertifications(data.certifications);
-  }
-
   if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
     r.drawSectionHeader("Skills");
     const groups: Array<{ label: string; items: string[] }> = [];
@@ -761,9 +756,9 @@ function renderResume(
     r.drawSkillsBlock(groups);
   }
 
-  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
-    r.drawSectionHeader("Core Competencies");
-    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
+  if (data.certifications && data.certifications.length > 0) {
+    r.drawSectionHeader("Certifications");
+    r.drawCertifications(data.certifications);
   }
 
   if (data.achievements && data.achievements.length > 0) {
@@ -776,6 +771,12 @@ function renderResume(
       );
     }
   }
+
+  if (data.education && data.education.length > 0) {
+    r.drawSectionHeader("Education");
+    for (const edu of data.education) r.drawEducationEntry(edu);
+  }
+
 
   return r.pages;
 }
