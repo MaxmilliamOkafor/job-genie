@@ -424,6 +424,24 @@
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {
+          // ONE HEADING PER SECTION.
+          //
+          // The tailoring step can emit a skills block twice -- once as the
+          // model wrote it and once as force-injected keywords -- which
+          // printed "TECHNICAL PROFICIENCIES" twice, a few lines apart. A
+          // recruiter reads that as a broken document; an ATS just indexes
+          // the same section header twice and gains nothing. The second
+          // block's items still belong in the CV, so we keep the content
+          // and drop only the repeated heading, which merges the two
+          // blocks under the first one.
+          const key = sectionKey(upper);
+          if (seenSections.has(key)) {
+            inExperience = EXPERIENCE_HEADERS.includes(upper);
+            roleState = inExperience ? 'expectCompany' : 'none';
+            currentSection = upper;
+            continue;
+          }
+          seenSections.add(key);
           // SECTION HEADER -- navy, bold, caps, tracked, light-grey rule under
           out.push(paragraph(
             run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22, spacing: 24 }),
@@ -434,6 +452,7 @@
           currentSection = upper;
           continue;
         }
+
 
         if (/^([\-*•]|\d+\.)\s+/.test(t)) {
           const item = t.replace(/^([\-*•]|\d+\.)\s+/, '');
