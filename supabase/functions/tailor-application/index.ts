@@ -2311,7 +2311,31 @@ Rewrite the professional summary to:
 2. Reference 2-3 of the most-repeated hard skill keywords from the JD
 3. Mirror the company's value language (e.g. "gaming communities", "data-driven decisions", "petabyte-scale systems")
 4. Keep to 3-4 sentences maximum
-5. CRITICAL — YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
+5. WRITE IT SO PASSING WOULD FEEL LIKE A MISTAKE.
+   The hiring manager is reading 200 CVs looking for reasons to say no.
+   A summary that lists attributes ("motivated professional with strong
+   communication skills") gives them one, because it describes a category
+   of person rather than this person.
+   - Lead with the single most specific, verifiable thing in the whole CV
+     -- the biggest number, the largest scale, the most relevant employer,
+     the outcome closest to what this JD is asking for. Concrete beats
+     enthusiastic every time.
+   - Name what only this candidate can claim: the exact combination of
+     domain, tools and scale that would be expensive for the employer to
+     find elsewhere.
+   - Every sentence must survive the question "could an average applicant
+     for this role write this same sentence?" If yes, it is filler --
+     replace it with something from the CV that they could not write.
+   - Ban outright: "results-driven", "detail-oriented", "team player",
+     "passionate about", "proven track record", "dynamic professional",
+     "hard-working", "go-getter", "synergy", "think outside the box".
+   - No hedging. "Contributed to", "involved in", "exposure to" and
+     "familiar with" all read as an admission of thin experience.
+   SUBJECT TO RULES -1 AND 0: every claim here is drawn from the CV. The
+   goal is a sharper reading of true facts, never a louder one. An
+   inflated summary is the fastest way into the "no" pile, because the
+   interview exposes it.
+6. CRITICAL — YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
    - DERIVE the number of years from the candidate's ACTUAL employment
      dates in the CV.
    - NEVER state a number higher than that, even if the JD asks for more.
@@ -2385,6 +2409,63 @@ cross-functional teams..." (lowercase sentence start mid-paragraph).
 When a JD phrase is spliced into prose, re-case and re-word it so the
 sentence reads naturally.
 
+RULE 16 — XYZ ACHIEVEMENT FORMULA (subject to Rule 0)
+Most bullets describe duties. A duty tells a reader what the candidate was
+given; an achievement tells them what changed because the candidate was
+there. Recruiters hire for the second.
+Shape every bullet as: accomplished [X], as measured by [Y], by doing [Z].
+The three parts do NOT have to appear in that order and the phrase "as
+measured by" must NOT appear literally — it is a thinking tool, not
+wording. The bullet must read as natural English.
+- Duty:        "Managed a team of 5 engineers."
+- Achievement: "Cut deployment time 40% across weekly releases by
+                restructuring the team into cross-functional pods."
+SUBJECT TO RULE 0: X, Y and Z must all come from the source CV. If the
+source bullet records no outcome, do NOT invent one — keep the bullet
+factual and let RULE 19 handle the missing measure. A fabricated outcome
+is worse than an unquantified duty.
+
+RULE 17 — EVERY BULLET OPENS ON A STRONG VERB (hard ban)
+The first word of every bullet is a past-tense action verb describing what
+the candidate DID.
+BANNED OPENERS, no exceptions: "Responsible for", "Helped with", "Helped
+to", "Assisted with", "Worked on", "Tasked with", "Duties included",
+"Involved in", "Participated in", "Supported the". These describe
+proximity to work rather than ownership of it, and a recruiter reads them
+as someone who was present while other people delivered.
+Prefer verbs that carry a result: Cut, Reduced, Delivered, Shipped, Grew,
+Recovered, Automated, Consolidated, Negotiated, Rebuilt, Migrated,
+Eliminated, Accelerated, Secured. Avoid opening more than two bullets in
+the whole CV with the same verb.
+
+RULE 18 — BULLET LENGTH: TWO LINES MAXIMUM
+No bullet exceeds roughly 30 words / two printed lines. A recruiter
+scanning 200 CVs skips dense blocks entirely, so a long bullet is not read
+slowly — it is not read at all. If a bullet carries two achievements,
+split it into two bullets or drop the weaker one. This rule outranks
+keyword placement: a keyword inside an unread bullet scores nothing with
+the human and looks like padding.
+
+RULE 19 — MISSING METRICS ARE REPORTED, NEVER INVENTED, NEVER PLACEHOLDERED
+Rule 0 forbids inventing numbers, so a bullet whose source records no
+outcome stays unquantified. That is correct, but the candidate usually
+KNOWS the number and simply did not write it down, so the gap is worth
+surfacing.
+Do NOT write placeholder tokens — no "[FILL IN]", "[X]%", "[NUMBER]", "TBD"
+or similar — anywhere in the CV or cover letter. This tool attaches the
+generated document to real applications and can email it directly, so a
+placeholder does not get caught by a human proof-read the way it would in
+a chat window; it reaches a recruiter and reads as carelessness.
+Instead, after the CV, emit a separate section:
+"METRICS WORTH ADDING:"
+followed by one line per opportunity, in the form:
+  <role> — "<the exact bullet text>" → <the specific number to supply>
+Example:
+  Northbound, Senior PM — "Delivered the D365 rollout across four regions."
+    → how many users, over what period, or what it saved
+List at most 6, strongest opportunities first. If every bullet is already
+quantified, write "METRICS WORTH ADDING: none — every bullet is quantified."
+
 RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
 ATS systems and recruiters give the highest weight to the first 1-2 bullets of each role.
@@ -2429,6 +2510,12 @@ After rewriting, run this internal checklist:
 [ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
+[ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
+[ ] Is every bullet two printed lines or fewer?
+[ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
+[ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
+[ ] Is there a "METRICS WORTH ADDING:" section after the CV?
+[ ] Could an average applicant for this role have written the summary? If yes, rewrite it.
 [ ] Do weighted/repeated JD terms appear more than once in the CV?
 [ ] Does the years of experience in the summary match the JD requirement?
 If any box is unchecked, fix it before outputting.

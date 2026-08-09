@@ -302,8 +302,48 @@
     return { label: 'Needs Work', color: 'needs-work', emoji: '⚠️' };
   }
 
+
+  // ---- placeholder tokens must never reach a recruiter -----------------
+  // The tailoring prompt forbids inventing metrics, and forbids emitting
+  // "[FILL IN]"-style stand-ins for the ones it cannot evidence. A model
+  // can still slip one through. In a chat window that is harmless -- the
+  // human proof-reads before submitting. This tool attaches the document
+  // to real applications and can email it unattended, so an escaped token
+  // lands on a recruiter's desk and reads as carelessness.
+  // Two patterns, because case matters for one of them and not the other.
+  // The bracketed word list is case-insensitive ("[FILL IN]", "[fill in]").
+  // The angle form is deliberately ALL-CAPS only, so ordinary prose that
+  // happens to contain "<" is not flagged.
+  const PLACEHOLDER_PATTERNS = [
+    /\[\s*(?:fill[\s_-]*in|insert|add|your|tbd|todo|number|metric|percent|amount|value|placeholder|company[\s_-]*name|role[\s_-]*title|x+|\d*\s*%)[^\]]*\]/gi,
+    /\b(?:TBD|TODO)\b/g,
+    /<[A-Z][A-Z_]{2,}>/g,
+  ];
+
+  /**
+   * Every placeholder token left in a document, deduplicated and in order.
+   * Pure: takes text, returns strings. Empty array means safe to send.
+   */
+  function findPlaceholders(text) {
+    const src = String(text == null ? '' : text);
+    const out = [];
+    const seen = new Set();
+    for (const re of PLACEHOLDER_PATTERNS) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(src))) {
+        const tok = m[0].trim();
+        const k = tok.toLowerCase();
+        if (!seen.has(k)) { seen.add(k); out.push(tok); }
+        if (m.index === re.lastIndex) re.lastIndex++;
+      }
+    }
+    return out;
+  }
+
   global.ValidationEngine = {
     validateTailoring,
+    findPlaceholders,
     getScoreStatus,
     calculateKeywordDensity,
     getConfidenceLevel,

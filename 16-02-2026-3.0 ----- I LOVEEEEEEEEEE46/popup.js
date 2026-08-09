@@ -2789,6 +2789,24 @@ class ATSTailor {
         await outcome('module-missing', 'Follow-up module did not load, so no note was sent.', 'error');
         return;
       }
+      // A placeholder token the model left behind is harmless in a chat
+      // window, where it is proof-read before submission. Here the document
+      // is attached and emailed unattended, so it would reach a recruiter.
+      // Generation still succeeds -- only the automatic send is stopped, so
+      // the CV can be reviewed and fixed rather than lost.
+      if (typeof ValidationEngine !== 'undefined' && ValidationEngine.findPlaceholders) {
+        const docs = this.generatedDocuments || {};
+        const found = ValidationEngine.findPlaceholders(
+          [docs.cvText, docs.coverLetterText, docs.tailoredCV, docs.coverLetter]
+            .filter((x) => typeof x === 'string').join('\n'));
+        if (found.length) {
+          await outcome('placeholder',
+            'Not sent: the documents still contain ' + found.slice(0, 3).join(', ')
+            + '. Fill those in, then send from the composer.', 'error');
+          return;
+        }
+      }
+
       const cfg = await new Promise((r) => chrome.storage.local.get(['followup_enabled'], (x) => r(x || {})));
       if (cfg.followup_enabled === false) {
         await outcome('disabled',
