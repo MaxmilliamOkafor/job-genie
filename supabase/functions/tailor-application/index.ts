@@ -2423,8 +2423,22 @@ wording. The bullet must read as natural English.
                 restructuring the team into cross-functional pods."
 SUBJECT TO RULE 0: X, Y and Z must all come from the source CV. If the
 source bullet records no outcome, do NOT invent one — keep the bullet
-factual and let RULE 19 handle the missing measure. A fabricated outcome
+factual and let RULE 18 handle the missing measure. A fabricated outcome
 is worse than an unquantified duty.
+
+ROUND NUMBERS ARE THE TELL. Recruiters read "improved efficiency by 30%",
+"reduced costs by 40%", "increased revenue by 25%" as machine-written,
+because real measurement almost never lands on a multiple of five. A
+number suspected of being invented costs more credibility than having no
+number at all, and it casts doubt on the true numbers beside it.
+- Reproduce the source figure EXACTLY. Never round 37% to 40%, never
+  smooth 11,842 to 12,000, never turn "just under a fifth" into "20%".
+- Never write a bare percentage that is a multiple of 5 or 10 unless the
+  source states that exact figure.
+- Where the source gives a scale rather than a percentage, prefer the
+  concrete noun: "across four regions", "for 11,842 users", "a 12-person
+  team". Counts read as observed; round percentages read as estimated.
+- A bullet with no number is a normal, credible bullet. Leave it.
 
 RULE 17 — EVERY BULLET OPENS ON A STRONG VERB (hard ban)
 The first word of every bullet is a past-tense action verb describing what
@@ -2518,6 +2532,8 @@ After rewriting, run this internal checklist:
 [ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
+[ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
+[ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it — that is the tell recruiters read as machine-written.
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
@@ -2564,7 +2580,7 @@ HUMANIZED TONE RULES:
 - Use connectors: "This enabled...", "Resulting in...", "Which led to..."
 - BANNED WORDS (NEVER USE): "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "leveraging", "synergy", "proven track record", "proven ability", "proven record", "proven expertise", "orchestrated", "championed", "pioneered", "spearheaded", "helmed", "meticulous", "comprehensive", "showcasing", "demonstrating", "highly motivated", "best-in-class", "world-class", "detail-oriented", "think outside the box", "go-getter", "various", "assisted", "realm", "approximately", "the intersection of", "drive impactful outcomes", "strategic initiatives", "stakeholder environments", "robust", "seamless", "holistic"
 - APPROVED ALTERNATIVES: "led" (not championed/spearheaded), "directed" (not orchestrated), "thorough" (not comprehensive), "ability" (not proven ability), "track record" (not proven track record), "field" (not realm), "using" (not leveraging), "detailed" (not meticulous), use actual numbers with "+" (not approximately)
-- Include specific metrics (%, $, time saved, users impacted)
+- Include specific metrics (%, $, time saved, users impacted) ONLY where the source CV provides them. An absent number is left absent.
 
 ATS KEYWORD DENSITY TARGETS:
 - Hard Skills: Each must appear 2-3 times across resume
@@ -2656,7 +2672,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     ███ END DUPLICATION BAN ███
        TITLE REDUNDANCY: If the job title contains a parenthetical qualifier — e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' — do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Each role should keep 2-3 quantified results (%, time saved, scale, revenue). If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
+    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
     - EDUCATION
     - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."

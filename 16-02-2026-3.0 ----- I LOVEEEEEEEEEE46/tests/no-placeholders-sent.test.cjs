@@ -141,6 +141,22 @@ if (!prompt) {
   t('  ...and still fenced by the evidence rules',
     /SUBJECT TO RULES -1 AND 0/.test(prompt),
     'a persuasive summary must not become an inflated one');
+  // A quota of "2-3 quantified results per role" sat in the same sentence
+  // as "never invent numbers". With a source CV that has fewer, the model
+  // can satisfy only one of those -- and it satisfied the quota, inventing
+  // the round percentages that read as machine-written.
+  t('  no per-role metric quota creates fabrication pressure',
+    !/2-3 quantified results/.test(prompt),
+    'a quota plus a no-invention rule cannot both be satisfied; the quota wins');
+  t('  ...and the rounding tell is named explicitly',
+    /ROUND NUMBERS ARE THE TELL/.test(prompt));
+  t('  ...with rounding source figures banned',
+    /Never round 37% to 40%/.test(prompt));
+  t('  ...and an unquantified bullet declared acceptable',
+    /A bullet with no number is a normal, credible bullet/.test(prompt),
+    'without this the model still feels obliged to produce a number');
+  t('  the checklist asks whether any round percentage is unsourced',
+    /multiple of 5 or 10 and NOT in the source/.test(prompt));
   t('  the verification checklist covers the new rules',
     /strong action verb/i.test(prompt) && /ZERO placeholder tokens/i.test(prompt));
 }
