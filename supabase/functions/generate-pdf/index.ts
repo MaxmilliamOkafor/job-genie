@@ -1685,6 +1685,20 @@ const DOCX_RULE = "BDC7D9";
 const DOCX_FONT = "Calibri";
 const RIGHT_TAB = 9300; // ~6.45in in twips, inside 0.62in margins on A4
 
+// Every DOCX text run goes through sanitizeText so no call site can bypass it.
+// Tab prefixes (right-aligned dates) and the literal bullet glyph are preserved.
+type DocxRunOptions = ConstructorParameters<typeof TextRun>[0];
+function TR(opts: DocxRunOptions): TextRun {
+  if (opts && typeof opts === "object" && typeof (opts as { text?: unknown }).text === "string") {
+    const raw = (opts as { text: string }).text;
+    if (!/^[\u2022\s]*$/.test(raw)) {
+      const leadingTab = raw.startsWith("\t") ? "\t" : "";
+      return new TextRun({ ...(opts as object), text: leadingTab + sanitizeText(raw) } as DocxRunOptions);
+    }
+  }
+  return new TextRun(opts);
+}
+
 const UK_IE_CLASSIFICATION =
   /(first\s+class|second\s+class|upper\s+second|lower\s+second|2:1|2:2|distinction|merit|pass\s+with|honou?rs)/i;
 
