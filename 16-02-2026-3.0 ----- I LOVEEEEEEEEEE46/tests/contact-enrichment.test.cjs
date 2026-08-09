@@ -68,11 +68,32 @@ t('a same-city recruiter outranks a remote one', sTech>sRemote, sTech+' vs '+sRe
 t('an intern title is penalised',
   E.scoreCandidate({title:'Recruiting Intern'},q,ctx) < E.scoreCandidate({title:'Recruiter'},q,ctx));
 
-// ---- 4. off by default -------------------------------------------------
+// ---- 4. the shipped defaults -------------------------------------------
+// The lookup ships ON with Closely selected. A toggle that ships on has no
+// stored value until it is touched, so the defaults live in loadConfig and
+// nowhere else -- every reader deciding for itself what "unset" means is
+// how a switch ends up drawn ON while the code treats it as OFF.
 await reset({});
+const fresh = await E.loadConfig();
+t('a fresh install has the lookup enabled', fresh.enabled === true, JSON.stringify(fresh));
+t('...with Closely selected', fresh.provider === 'closely', JSON.stringify(fresh));
+t('...matching the exported defaults',
+  E.DEFAULT_ENABLED === true && E.DEFAULT_PROVIDER === 'closely',
+  JSON.stringify({ e: E.DEFAULT_ENABLED, p: E.DEFAULT_PROVIDER }));
+
+// On by default still must not mean "contacts people by default": with no
+// credential saved there is nobody to ask, and nothing may leave the machine.
 let r=await E.findContacts({company:'Nortal'});
-t('lookup is off until switched on', r.ok===false&&r.reason==='disabled', JSON.stringify(r));
+t('but with no credential it reports no-api-key, not disabled',
+  r.reason==='no-api-key', JSON.stringify(r));
+t('and nothing was requested', CALLS.length===0, String(CALLS.length));
+
+// Switching it off must still be honoured, or the toggle is decorative.
+await reset({enabled:false});
+r=await E.findContacts({company:'Nortal'});
+t('switching it off is still honoured', r.ok===false&&r.reason==='disabled', JSON.stringify(r));
 t('nothing was requested while off', CALLS.length===0, String(CALLS.length));
+CALLS.length=0;
 
 // ---- 5. no key means no call ------------------------------------------
 await reset({enabled:true,provider:'hunter'});
@@ -521,9 +542,15 @@ t('nonsense is rejected before any request', rp.reason==='bad-profile', JSON.str
 rp=await E.resolveProfile('https://www.linkedin.com/in/ACoAAB1234xyzQ');
 t('an opaque URN is rejected rather than looked up', rp.reason==='bad-profile', JSON.stringify(rp));
 
-await reset({});
+// Switched off EXPLICITLY: an empty config now means the shipped default,
+// which is on, so the switch has to be set to test that it is honoured.
+await reset({enabled:false});
 rp=await E.resolveProfile('https://www.linkedin.com/in/aoifebyrne');
 t('resolveProfile respects the master switch', rp.reason==='disabled', JSON.stringify(rp));
+await reset({});
+rp=await E.resolveProfile('https://www.linkedin.com/in/aoifebyrne');
+t('...and on a fresh install it is not disabled, only keyless',
+  rp.reason==='no-api-key', JSON.stringify(rp));
 
 // ---- 16h. a work address, not somebody's private mailbox ---------------
 // Providers hand back personal addresses freely: ContactOut will return a

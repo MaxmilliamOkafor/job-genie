@@ -24,12 +24,12 @@
       if (parts.length >= 2) {
         const start = convertToken(parts[0].trim());
         const end = hasPresent ? 'Present' : convertToken(parts[parts.length - 1].trim());
-        if (start && end) return `${start} – ${end}`;
+        if (start && end) return `${start} - ${end}`;
         if (start) return start;
       }
       const years = dateStr.match(/\d{4}/g);
-      if (hasPresent && years && years.length >= 1) return `${years[0]} – Present`;
-      if (years && years.length >= 2) return `${years[0]} – ${years[1]}`;
+      if (hasPresent && years && years.length >= 1) return `${years[0]} - Present`;
+      if (years && years.length >= 2) return `${years[0]} - ${years[1]}`;
       if (years && years.length === 1) return years[0];
       return dateStr;
     },

@@ -733,7 +733,11 @@
       if (parts.length >= 2) {
         const start = toMMYYYY(parts[0]);
         const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
-        if (start && end) return `${start} – ${end}`;
+        // Plain ASCII hyphen: one byte in every encoding an ATS might
+        // assume. An en dash is three bytes in UTF-8 and arrives as
+        // mojibake if the parser guesses wrong, leaving the range with no
+        // recognisable separator.
+        if (start && end) return `${start} - ${end}`;
         if (start) return start;
       }
 
@@ -1011,7 +1015,9 @@
         doc.setFontSize(PDF_CONFIG.fonts.sizes.body);
         doc.setTextColor(...PDF_CONFIG.colors.black);
         
-        const eduLine = [edu.degree, edu.institution].filter(Boolean).join(' – ');
+        // Pipe, not an en dash: a delimiter resume parsers split on
+        // reliably, and pure ASCII so it cannot be corrupted.
+        const eduLine = [edu.degree, edu.institution].filter(Boolean).join(' | ');
         doc.text(eduLine, PDF_CONFIG.margins.left, y);
 
         // Graduation dates, right aligned -- the same shape as a job's
@@ -1207,6 +1213,8 @@
 
     // ============ RENDER BULLET ============
     renderBullet(doc, text, y) {
+      // Fold dashes and smart quotes here rather than trusting every caller.
+      text = this.sanitizeForPDF(text);
       const leftMargin = PDF_CONFIG.margins.left;
       const bulletIndent = PDF_CONFIG.bulletIndent;
       const contentWidth = PDF_CONFIG.page.width - leftMargin - PDF_CONFIG.margins.right - bulletIndent - 10;
@@ -1223,6 +1231,7 @@
 
     // ============ RENDER PARAGRAPH ============
     renderParagraph(doc, text, y) {
+      text = this.sanitizeForPDF(text);
       const leftMargin = PDF_CONFIG.margins.left;
       const contentWidth = PDF_CONFIG.page.width - leftMargin - PDF_CONFIG.margins.right;
       
