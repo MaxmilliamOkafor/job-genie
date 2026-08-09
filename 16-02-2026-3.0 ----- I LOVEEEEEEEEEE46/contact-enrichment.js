@@ -858,7 +858,11 @@
    * answer is stored too -- re-probing on every lookup would be noise
    * against their API for no benefit.
    */
-  async function _resolveSearchEndpoint(id, provider, cred, ctx) {
+  // meter: optional { n } incremented once per probe request. The probe
+  // uses fetch directly rather than call(), so without this its requests
+  // are invisible and the diagnostic reports "0 request(s)" for a lookup
+  // that just made eight -- which reads as "it never ran".
+  async function _resolveSearchEndpoint(id, provider, cred, ctx, meter) {
     const cfg = await loadConfig();
     const known = (cfg.searchEndpoints || {})[id];
     if (known !== undefined) return known || null;
@@ -871,6 +875,7 @@
     for (const url of provider.searchProbe) {
       for (const enc of encodings) {
         try {
+          if (meter) meter.n++;
           const res = await fetch(url, {
             method: 'POST',
             headers: provider.searchHeaders(cred, enc.contentType),
@@ -966,8 +971,12 @@
     // look for one once, then use it like any other search. The result --
     // found or absent -- is remembered, so this costs at most one round of
     // probing per install and never repeats.
+    let probedAndFoundNothing = false;
     if (!out.length && !profiles.length && provider.searchProbe && ctx.company) {
-      const endpoint = await _resolveSearchEndpoint(id, provider, cred, ctx);
+      const meter = { n: 0 };
+      const endpoint = await _resolveSearchEndpoint(id, provider, cred, ctx, meter);
+      calls += meter.n;
+      probedAndFoundNothing = !(endpoint && endpoint.url);
       if (endpoint && endpoint.url) {
         for (const q of buildQueries(ctx)) {
           const enc = provider.searchEncodings(q)
@@ -1038,7 +1047,16 @@
         if (out.length) break;
       }
     }
-    return { results: out, reason: out.length ? '' : 'no-match', calls };
+    // "no-match" reads as "it looked and nobody was there". For a
+    // profile-only provider that was never given a profile, nothing was
+    // looked at -- and the fix is to open the recruiter's profile, not to
+    // change providers or top up credits. Say which it was.
+    const profileOnly = provider.searchByCompany === false
+      && (!provider.searchProbe || probedAndFoundNothing);
+    const reason = out.length ? ''
+      : (profileOnly && !profiles.length) ? 'needs-named-poster'
+      : 'no-match';
+    return { results: out, reason, calls };
   }
 
   /**
