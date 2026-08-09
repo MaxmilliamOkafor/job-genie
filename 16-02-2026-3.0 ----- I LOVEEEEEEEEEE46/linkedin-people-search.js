@@ -28,13 +28,29 @@
   // Ordered most specific first: "machine learning engineer" is ML, not
   // generic engineering, and "engineering manager" must not be read as a
   // vacancy for a manager when it appears in a PERSON's title.
+  // Unambiguous ROLE SHAPES, checked before anything else. A technology
+  // named in a manager's title is context, not their discipline: an "AI
+  // Product Manager" reports to the Head of Product, not the Head of ML,
+  // and a "Senior Product Designer" is a designer -- the bare word
+  // "product" must not claim either of them.
+  const ROLE_SHAPES = [
+    ['design',   /\bdesigner\b|product design|user experience design|interaction design/],
+    ['product',  /product manager|product owner|head of product|product lead/],
+    ['delivery', /project manager|programme manager|program manager|delivery manager|scrum master|agile coach|\bpmo\b/],
+  ];
+
   const FIELDS = [
-    ['ml',            /machine learning|\bml\b|deep learning|\bnlp\b|computer vision|\bai\b|artificial intelligence/],
+    // Physical security is not information security. Checked first so
+    // "Security Guard" cannot be routed to a CISO.
+    ['operations',    /security guard|security officer|door supervisor|concierge/],
+    ['ml',            /machine learning|\bml\b|\bmlops\b|deep learning|\bnlp\b|computer vision|\bai\b|artificial intelligence/],
     ['data-science',  /data scien|statistic|quantitative|econometric/],
     ['data-eng',      /data engineer|etl\b|data platform|data warehouse|databricks|\bspark\b/],
-    ['analytics',     /analytics|business intelligence|\bbi\b|data analyst|tableau|power bi|looker/],
+    ['analytics',     /analytics|business intelligence|\bbi\b|data analyst|business analyst|tableau|power bi|looker/],
     ['security',      /security|infosec|appsec|cyber|penetration test|pentest|soc analyst|cryptograph/],
-    ['devops',        /devops|\bsre\b|site reliability|platform engineer|infrastructure|kubernetes|terraform|cloud engineer|systems engineer/],
+    // (?<!design ) keeps a "Design Systems Engineer" -- a frontend role --
+    // out of infrastructure.
+    ['devops',        /devops|devsecops|\bsre\b|site reliability|platform engineer|infrastructure|kubernetes|terraform|cloud engineer|(?<!design )systems engineer/],
     ['cloud',         /\baws\b|\bazure\b|\bgcp\b|cloud architect|solutions architect/],
     ['qa',            /\bqa\b|quality assurance|test engineer|automation test|\bsdet\b|tester/],
     ['mobile',        /\bios\b|android|mobile (developer|engineer)|flutter|react native|swift|kotlin/],
@@ -53,8 +69,8 @@
     ['engineering',   /software engineer|developer|programmer|engineer|software/],   // generic, last of the tech nets
     ['marketing',     /market|brand|content strategist|\bseo\b|communications/],
     ['sales',         /sales|account exec|business development|partnerships|customer success/],
-    ['finance',       /finance|account(ant|ing)|audit|\btax\b|treasury|controller/],
-    ['legal',         /legal|counsel|solicitor|paralegal|compliance/],
+    ['finance',       /financ(e|ial)|account(ant|ing)|audit|\btax\b|treasury|controller/],
+    ['legal',         /legal|counsel|solicitor|paralegal|compliance|data protection|\bgdpr\b/],
     ['healthcare',    /nurse|nursing|clinical|physician|doctor|healthcare|medical|pharmac/],
     ['operations',    /operations|logistics|supply chain|warehouse|procurement|facilities/],
     ['hr',            /human resources|people operations|\bhr\b/],
@@ -63,6 +79,7 @@
   function fieldOf(roleTitle) {
     const t = String(roleTitle || '').toLowerCase();
     if (!t) return '';
+    for (const [name, re] of ROLE_SHAPES) if (re.test(t)) return name;
     for (const [name, re] of FIELDS) if (re.test(t)) return name;
     return '';
   }

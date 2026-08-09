@@ -63,6 +63,33 @@ for (const [role, want] of [
 t('  an unknown role has no field', M.fieldOf('Zookeeper') === '');
 t('  ...and empty input does not guess', M.fieldOf('') === '' && M.fieldOf(null) === '');
 
+// ---- titles that used to land in the wrong bucket ---------------------
+// A technology named in a manager's title is context, not their
+// discipline, and a bare word can claim a role it has no business with.
+// Each of these was genuinely wrong before the role-shape pass.
+console.log('\nTITLES THAT USED TO BUCKET WRONGLY');
+for (const [role, want, was] of [
+  ['Senior Product Designer', 'design', 'product -- the bare word "product" claimed a designer'],
+  ['AI Product Manager', 'product', 'ml -- a PM reports to the Head of Product, not the Head of ML'],
+  ['Data Product Manager', 'product', 'ml/data for the same reason'],
+  ['Financial Analyst', 'finance', 'nothing -- "financial" does not contain "finance"'],
+  ['Security Guard', 'operations', 'security -- and would have targeted a CISO'],
+  ['DevSecOps Engineer', 'devops', 'generic engineering -- "devsecops" does not contain "devops"'],
+  ['Business Analyst', 'analytics', 'nothing at all'],
+  ['Data Protection Officer', 'legal', 'nothing at all'],
+]) t('  ' + role + ' -> ' + want, M.fieldOf(role) === want,
+  'got ' + JSON.stringify(M.fieldOf(role)) + '; before this it was ' + was);
+
+// The role-shape pass must not swallow roles it has no claim on.
+console.log('\n  ...WITHOUT THE ROLE-SHAPE PASS OVERREACHING');
+for (const [role, want] of [
+  ['Product Security Engineer', 'security'],
+  ['Technical Program Manager', 'delivery'],
+  ['Senior Data Engineer', 'data-eng'],
+  ['Design Systems Engineer', 'engineering'],
+  ['Senior Software Engineer', 'engineering'],
+]) t('  ' + role + ' -> ' + want, M.fieldOf(role) === want, 'got ' + JSON.stringify(M.fieldOf(role)));
+
 // ---- every field has real targets --------------------------------------
 console.log('\nEVERY FIELD NAMES A RECRUITER, A MANAGER AND A PEER');
 const fields = Object.keys(M.TARGETS);
