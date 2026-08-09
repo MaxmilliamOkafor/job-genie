@@ -33,6 +33,66 @@ const calls = [...pdf.matchAll(/this\.render(Summary|CoreCompetencies|Experience
 t('  every section is rendered', calls.length === 6, JSON.stringify(calls));
 t('  ' + seq(calls), seq(calls) === seq(ORDER), 'expected ' + seq(ORDER));
 
+console.log('\nTHE DOCX ENFORCES IT ITSELF, WHATEVER ORDER THE TEXT ARRIVES IN');
+// This is the part that matters in practice. The prompt lives in an edge
+// function deployed separately, so for a long stretch the prompt was
+// corrected and the documents kept coming out in the old order because the
+// deploy had not happened. Reordering the text inside the generator removes
+// that dependency: the layout is right on extension reload alone.
+const os = require('os'), cp = require('child_process'), Module = require('module');
+global.window = global;
+const DGm = (() => {
+  const f = path.join(DIR, 'docx-generator.js');
+  const m = new Module(f, null); m.filename = f;
+  m.paths = Module._nodeModulePaths(DIR);
+  m._compile(fs.readFileSync(f, 'utf8'), f);
+  return m.exports;
+})();
+const DG = DGm.DocxGenerator || DGm;
+
+// Exactly the order a real generated CV came out in: education 5th.
+const WRONG_ORDER = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
+  'PROFESSIONAL SUMMARY', 'Experienced engineer.', '',
+  'CORE COMPETENCIES', 'Sales Engineering, Electrical Systems', '',
+  'WORK EXPERIENCE', 'Meta', 'Software Engineer', 'January 2023 - Present',
+  '- Shipped a system.', '',
+  'PROJECTS', '- A project.', '',
+  'EDUCATION', 'MSc Artificial Intelligence', 'Imperial College London', '',
+  'TECHNICAL PROFICIENCIES', 'Python, AWS, Kubernetes', '',
+  'CERTIFICATIONS', '- AWS Certified Machine Learning'].join('\n');
+
+function headingsOf(cvText) {
+  const built = DG.fromCvText(cvText, {});
+  if (!built || !built.success) return null;
+  const tmp = path.join(os.tmpdir(), 'jg-order-' + Date.now() + '.docx');
+  fs.writeFileSync(tmp, Buffer.from(built.base64, 'base64'));
+  const xml = cp.execSync('python3 -c ' + JSON.stringify(
+    'import zipfile,sys;sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("word/document.xml").decode("utf8"))'
+  ) + ' ' + JSON.stringify(tmp)).toString();
+  fs.unlinkSync(tmp);
+  return xml.split(/<w:p[ >]/).slice(1)
+    .map((p) => [...p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]).join('').trim())
+    .filter((l) => l && l === l.toUpperCase() && l.length < 40 && /[A-Z]/.test(l));
+}
+
+const got = headingsOf(WRONG_ORDER);
+t('  the document generates', !!got, 'generation failed');
+if (got) {
+  const want = ['PROFESSIONAL SUMMARY', 'CORE COMPETENCIES', 'WORK EXPERIENCE',
+    'PROJECTS', 'TECHNICAL PROFICIENCIES', 'CERTIFICATIONS', 'EDUCATION'];
+  t('  ' + got.join(' -> '), seq(got) === seq(want), 'expected ' + seq(want));
+  t('  education is last however it arrived',
+    got[got.length - 1] === 'EDUCATION', got.join(' -> '));
+  t('  no section is lost or duplicated',
+    new Set(got).size === got.length && got.length === want.length,
+    got.join(' -> '));
+}
+// A document already in the right order must come through untouched.
+const RIGHT = WRONG_ORDER.split('\n');
+const already = headingsOf([].concat(RIGHT.slice(0, 18), RIGHT.slice(22), RIGHT.slice(18, 22)).join('\n'));
+t('  text already in order is left alone', !!already && already[already.length - 1] === 'EDUCATION',
+  already ? already.join(' -> ') : 'failed');
+
 console.log('\nAND THE PROMPT ASKS FOR THE SAME ORDER');
 // The DOCX renders the tailored TEXT in whatever order it arrives, so for
 // that format the prompt is the only thing deciding this.

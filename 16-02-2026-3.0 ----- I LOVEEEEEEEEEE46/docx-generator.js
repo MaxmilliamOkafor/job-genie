@@ -320,8 +320,58 @@
     'CERTIFICATIONS', 'PROJECTS', 'SELECTED PROJECTS', 'AWARDS',
   ];
 
+  // ---- section order, enforced HERE rather than hoped for -------------
+  // The DOCX prints whatever the tailoring model emitted, in whatever order
+  // it emitted it. That made the layout depend on a prompt deployed
+  // elsewhere: the prompt was corrected and the documents kept coming out
+  // in the old order because the deploy had not happened.
+  //
+  // Reordering the TEXT before it is parsed removes that dependency. A
+  // recruiter reads top-down and stops early, so the sections that answer
+  // "can this person do THIS job" come first, and education goes last:
+  // education above experience is the graduate convention and reads as
+  // early-career on a CV with years of history behind it.
+  const SECTION_RANK = [
+    [/^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/, 1],
+    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE)$/, 2],
+    [/^(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE)$/, 3],
+    [/^(SELECTED PROJECTS|PROJECTS)$/, 4],
+    [/^(TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 5],
+    [/^CERTIFICATIONS$/, 6],
+    [/^AWARDS$/, 7],
+    [/^EDUCATION$/, 9],          // last, deliberately
+  ];
+  const rankOf = (header) => {
+    for (const [re, r] of SECTION_RANK) if (re.test(header)) return r;
+    return 8;                    // anything unrecognised sits above education
+  };
+
+  function reorderSections(cvText) {
+    const lines = String(cvText == null ? '' : cvText).split('\n');
+    const preamble = [];
+    const blocks = [];
+    let current = null;
+    for (const line of lines) {
+      const upper = line.trim().toUpperCase();
+      if (SECTION_HEADERS.includes(upper)) {
+        current = { header: upper, rank: rankOf(upper), lines: [line] };
+        blocks.push(current);
+        continue;
+      }
+      (current ? current.lines : preamble).push(line);
+    }
+    // Nothing recognisable, or already in order: leave it exactly as it is.
+    if (blocks.length < 2) return cvText;
+    const sorted = blocks
+      .map((b, i) => ({ b, i }))
+      .sort((x, y) => (x.b.rank - y.b.rank) || (x.i - y.i))   // stable
+      .map((x) => x.b);
+    if (sorted.every((b, i) => b === blocks[i])) return cvText;
+    return preamble.concat(sorted.map((b) => b.lines.join('\n'))).join('\n');
+  }
+
   function buildBodyXml(cvText) {
-    const lines = cvText.split('\n');
+    const lines = reorderSections(cvText).split('\n');
     const out = [];
     const rels = []; // hyperlink relationships collected for the contact line
 
