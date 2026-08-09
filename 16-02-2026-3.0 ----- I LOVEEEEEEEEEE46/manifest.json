@@ -340,7 +340,8 @@
       ],
       "js": [
         "ats-platforms.js",
-        "jd-contact-sources.js"
+        "jd-contact-sources.js",
+        "linkedin-people-search.js"
       ],
       "run_at": "document_idle",
       "all_frames": false
@@ -411,6 +412,7 @@
         "apply-verdict.js",
         "jd-contact-sources.js",
         "contact-enrichment.js",
+        "linkedin-people-search.js",
         "linkedin-profile-memory.js",
         "career-boost-engine.js",
         "recruiter-audit.js",
