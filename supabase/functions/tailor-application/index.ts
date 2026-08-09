@@ -2455,13 +2455,24 @@ directly, so a placeholder gets no human proof-read the way it would in a
 chat window; it reaches a recruiter and reads as carelessness.
 
 Report the gaps instead, in the "metricsWorthAdding" array of the JSON
-response. Each entry names the role, quotes the bullet, and says exactly
-which number would strengthen it:
-  "Northbound, Senior PM — 'Delivered the D365 rollout across four
-   regions.' → how many users, over what period, or what it saved"
-At most 6 entries, strongest opportunities first. Empty array if every
-bullet is already quantified. This array is shown to the candidate; it is
-never part of the CV.
+response — but ONLY where the number would change a hiring decision for
+THIS job. A generic prompt to quantify something the JD never asks about
+is noise, and noise trains the candidate to ignore the list.
+
+Include an entry ONLY if ALL of these hold:
+  1. the bullet describes something the JD explicitly asks for -- it maps
+     to a named requirement, responsibility or keyword in the posting;
+  2. the bullet currently carries NO number at all; and
+  3. you can name the SPECIFIC measure that belongs there (users, revenue,
+     time saved, volume, headcount, uptime), not merely "add a metric".
+
+At most 3 entries, most decision-changing first. Prefer an empty array
+over a weak entry: an empty list is a clean result, not a failure.
+Format each as: <role> — <the exact bullet> → <the specific number>
+Example, for a JD that asks for large-scale rollout experience:
+  Northbound, Senior PM — Delivered the D365 rollout across four regions.
+  → how many users, and over what period
+This array is shown to the candidate; it is never part of the CV.
 
 RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.

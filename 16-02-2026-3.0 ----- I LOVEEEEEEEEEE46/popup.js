@@ -4047,6 +4047,49 @@ class ATSTailor {
   // Tailoring-focus panel. Rendered ABOVE the quality notes: it tells the
   // user what to LEAD WITH for this specific role. Guidance only -- this
   // is tailoring software, so it never gates or discourages an application.
+  // The tailoring prompt is forbidden from inventing numbers, so a bullet
+  // whose source records no outcome stays unquantified. It reports those
+  // gaps in metricsWorthAdding instead -- the candidate usually KNOWS the
+  // number and simply never wrote it down. Showing them is the entire
+  // point: a suggestion nobody sees is just tokens spent.
+  renderMetricsWorthAdding(list) {
+    try {
+      // Capped low on purpose. The prompt only reports gaps on bullets the
+      // JD actually asks about; a long list of "add a number here" is noise,
+      // and noise trains you to ignore the panel entirely.
+      const items = (Array.isArray(list) ? list : [])
+        .map((s) => String(s == null ? '' : s).trim())
+        .filter((s) => s.length > 12 && /→|->/.test(s))   // must name a specific measure
+        .slice(0, 3);
+      let panel = document.getElementById('metricsWorthAddingPanel');
+      if (!items.length) { if (panel) panel.remove(); return; }
+
+      const host = document.getElementById('aiMatchAnalysis')
+        || document.getElementById('documentsCard');
+      if (!host) return;
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'metricsWorthAddingPanel';
+        panel.className = 'fu-card';
+        panel.style.cssText = 'margin-top:10px;padding:10px;border-radius:8px;'
+          + 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);';
+        host.appendChild(panel);
+      }
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      panel.innerHTML =
+        '<div style="font-weight:600;margin-bottom:4px;">Numbers worth adding ('
+        + items.length + ')</div>'
+        + '<div style="opacity:.75;font-size:11px;margin-bottom:6px;">'
+        + 'These bullets are true but unquantified. Nothing was invented — add your '
+        + 'real figures and re-run for a stronger CV.</div>'
+        + '<ul style="margin:0;padding-left:16px;line-height:1.45;">'
+        + items.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ul>';
+    } catch (e) {
+      console.warn('[ATS Tailor] renderMetricsWorthAdding failed:', e && e.message);
+    }
+  }
+
   renderApplyVerdict(v) {
     try {
       if (!v) return;
@@ -5892,6 +5935,18 @@ class ATSTailor {
 
       updateProgress(50, 'Step 2/3: Validating tailored documents...');
       console.log('[ATS Tailor] API response keys:', Object.keys(result).join(', '));
+
+      // Unquantified bullets the model could not honestly put a number on.
+      // Kept on generatedDocuments as well as rendered, because the panel
+      // is rebuilt whenever the documents card re-renders. Wrapped: a
+      // display failure must never stop the CV being written.
+      try {
+        this._metricsWorthAdding = Array.isArray(result.metricsWorthAdding)
+          ? result.metricsWorthAdding : [];
+        this.renderMetricsWorthAdding(this._metricsWorthAdding);
+      } catch (e) {
+        console.warn('[ATS Tailor] metrics panel failed:', e && e.message);
+      }
       console.log('[ATS Tailor] tailoredResume length:', (result.tailoredResume || '').length);
 
       // ███ CRITICAL: VALIDATE & FIX WORK EXPERIENCE IMMUTABILITY ███
