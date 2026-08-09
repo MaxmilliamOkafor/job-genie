@@ -8283,11 +8283,20 @@ function extractJobInfoFromPageInjected() {
     const host = window.location.hostname.toLowerCase().replace(/^www\./, '');
 
     // --- Helper: get text from first matching selector ---
+    // An <img> has no textContent, and iCIMS and Taleo name the employer in
+    // the logo image's alt. Reading text alone returned nothing from the
+    // selector those platforms were given on purpose.
     const getText = (...selectors) => {
       for (const sel of selectors) {
         try {
           const el = document.querySelector(sel);
-          if (el?.textContent?.trim()) return el.textContent.trim();
+          if (!el) continue;
+          const text = (el.textContent || '').trim();
+          if (text) return text;
+          const attr = (el.getAttribute && (el.getAttribute('alt')
+            || el.getAttribute('content') || el.getAttribute('value'))) || '';
+          const val = String(attr).replace(/\s*logo\s*/i, '').trim();
+          if (val) return val;
         } catch (e) {}
       }
       return '';
