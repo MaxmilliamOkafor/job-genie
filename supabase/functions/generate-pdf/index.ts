@@ -1333,6 +1333,9 @@ async function handleRawContentRequest(body: {
           sectionType = "WORK EXPERIENCE";
         }
         if (sectionType.includes("PROJECTS")) sectionType = "PROJECTS";
+        if (sectionType.includes("PROFICIENC") || sectionType.includes("SKILLS")) {
+          sectionType = "SKILLS";
+        }
         currentSection = { type: sectionType, content: [] };
         continue;
       }
