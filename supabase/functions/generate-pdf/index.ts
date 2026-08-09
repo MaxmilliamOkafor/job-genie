@@ -1279,6 +1279,8 @@ async function handleRawContentRequest(body: {
       "EDUCATION",
       "SKILLS",
       "TECHNICAL SKILLS",
+      "TECHNICAL PROFICIENCIES",
+      "TECHNICAL PROFICIENCY",
       "CERTIFICATIONS",
       "ACHIEVEMENTS",
       "PROJECTS",
@@ -1331,6 +1333,9 @@ async function handleRawContentRequest(body: {
           sectionType = "WORK EXPERIENCE";
         }
         if (sectionType.includes("PROJECTS")) sectionType = "PROJECTS";
+        if (sectionType.includes("PROFICIENC") || sectionType.includes("SKILLS")) {
+          sectionType = "SKILLS";
+        }
         currentSection = { type: sectionType, content: [] };
         continue;
       }
@@ -1338,6 +1343,39 @@ async function handleRawContentRequest(body: {
       if (currentSection) currentSection.content.push(trimmed);
     }
     if (currentSection) sections.push(currentSection);
+
+    // ---- Merge duplicate sections of the same type (e.g. two TECHNICAL PROFICIENCIES blocks) ----
+    {
+      const merged: { type: string; content: string[] }[] = [];
+      const byType = new Map<string, { type: string; content: string[] }>();
+      for (const s of sections) {
+        const existing = byType.get(s.type);
+        if (existing) {
+          const seen = new Set(
+            existing.content.flatMap((l) =>
+              l.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean),
+            ),
+          );
+          for (const line of s.content) {
+            const parts = line.split(",").map((p) => p.trim()).filter(Boolean);
+            const fresh = parts.filter((p) => !seen.has(p.toLowerCase()));
+            fresh.forEach((p) => seen.add(p.toLowerCase()));
+            if (fresh.length === parts.length) {
+              existing.content.push(line);
+            } else if (fresh.length > 0) {
+              existing.content.push(fresh.join(", "));
+            }
+          }
+        } else {
+          byType.set(s.type, s);
+          merged.push(s);
+        }
+      }
+      sections.length = 0;
+      sections.push(...merged);
+    }
+
+
 
     const hasSummarySection = sections.some(
       (s) => s.type === "PROFESSIONAL SUMMARY" || s.type.includes("SUMMARY"),
