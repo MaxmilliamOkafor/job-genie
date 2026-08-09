@@ -1729,23 +1729,23 @@ function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHype
   const out: Array<TextRun | ExternalHyperlink> = [];
   const push = (node: TextRun | ExternalHyperlink) => {
     if (out.length) {
-      out.push(new TextRun({ text: sep, font: DOCX_FONT, size: 19, color: DOCX_MUTED }));
+      out.push(TR({ text: sep, font: DOCX_FONT, size: 19, color: DOCX_MUTED }));
     }
     out.push(node);
   };
-  if (contact.location) push(new TextRun({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
-  if (contact.phone) push(new TextRun({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.location) push(TR({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.phone) push(TR({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
   if (contact.email) {
     push(new ExternalHyperlink({
       link: `mailto:${contact.email}`,
-      children: [new TextRun({ text: contact.email, font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+      children: [TR({ text: contact.email, font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
     }));
   }
   for (const url of [contact.linkedin, contact.github, contact.portfolio]) {
     if (!url) continue;
     push(new ExternalHyperlink({
       link: ensureUrl(url),
-      children: [new TextRun({ text: displayUrl(url), font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+      children: [TR({ text: displayUrl(url), font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
     }));
   }
   return out;
@@ -1755,7 +1755,7 @@ function docxHeader(name: string, contact: ContactInfo): Paragraph[] {
   return [
     new Paragraph({
       spacing: { after: 120 },
-      children: [new TextRun({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
+      children: [TR({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
     }),
     new Paragraph({
       spacing: { after: 60 },
@@ -1771,7 +1771,7 @@ function docxSectionHeader(label: string): Paragraph[] {
       spacing: { before: 280, after: 60 },
       keepNext: true,
       keepLines: true,
-      children: [new TextRun({
+      children: [TR({
         text: label.toUpperCase(),
         font: DOCX_FONT,
         size: 22,
@@ -1806,8 +1806,8 @@ function docxBullet(text: string): Paragraph {
     spacing: { after: 60, line: 290 },
     indent: { left: 360, hanging: 220 },
     children: [
-      new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
-      new TextRun({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+      TR({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
     ],
   });
 }
@@ -1815,12 +1815,12 @@ function docxBullet(text: string): Paragraph {
 function docxExperience(e: ExperienceEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [];
-  if (e.company) header.push(new TextRun({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
+  if (e.company) header.push(TR({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
   if (e.title) {
-    if (header.length) header.push(new TextRun({ text: " | ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
-    header.push(new TextRun({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+    if (header.length) header.push(TR({ text: " | ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
+    header.push(TR({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   }
-  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  if (e.dates) header.push(TR({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 200, after: 60 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
@@ -1833,10 +1833,10 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
 function docxProject(p: ProjectEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [
-    new TextRun({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+    TR({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
   ];
-  if (p.role) header.push(new TextRun({ text: " | " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
-  if (p.dates) header.push(new TextRun({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  if (p.role) header.push(TR({ text: " | " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  if (p.dates) header.push(TR({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 200, after: 60 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
@@ -1846,8 +1846,8 @@ function docxProject(p: ProjectEntry): Paragraph[] {
     out.push(new Paragraph({
       spacing: { after: 60 },
       children: [
-        new TextRun({ text: "Tech: ", font: DOCX_FONT, size: 20, bold: true, color: DOCX_BODY }),
-        new TextRun({ text: p.technologies.join(", "), font: DOCX_FONT, size: 20, color: DOCX_BODY }),
+        TR({ text: "Tech: ", font: DOCX_FONT, size: 20, bold: true, color: DOCX_BODY }),
+        TR({ text: p.technologies.join(", "), font: DOCX_FONT, size: 20, color: DOCX_BODY }),
       ],
     }));
   }
@@ -1862,9 +1862,9 @@ function docxEducation(e: EducationEntry): Paragraph[] {
     suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? ` | ${e.gpa}` : ` | GPA: ${e.gpa}`;
   }
   const header: TextRun[] = [
-    new TextRun({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+    TR({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
   ];
-  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  if (e.dates) header.push(TR({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 160, after: 40 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
@@ -1873,7 +1873,7 @@ function docxEducation(e: EducationEntry): Paragraph[] {
   if (e.school) {
     out.push(new Paragraph({
       spacing: { after: 80 },
-      children: [new TextRun({ text: e.school, font: DOCX_FONT, size: 20, color: DOCX_MUTED })],
+      children: [TR({ text: e.school, font: DOCX_FONT, size: 20, color: DOCX_MUTED })],
     }));
   }
   return out;
@@ -1883,8 +1883,8 @@ function docxSkills(groups: Array<{ label: string; items: string[] }>): Paragrap
   return groups.map((g) => new Paragraph({
     spacing: { after: 80, line: 290 },
     children: [
-      new TextRun({ text: `${g.label}: `, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
-      new TextRun({ text: g.items.join(", "), font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+      TR({ text: `${g.label}: `, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+      TR({ text: g.items.join(", "), font: DOCX_FONT, size: 21, color: DOCX_BODY }),
     ],
   }));
 }
@@ -1897,7 +1897,7 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSectionHeader("Professional Summary"));
     children.push(new Paragraph({
       spacing: { after: 160, line: 300 },
-      children: [new TextRun({ text: data.summary, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+      children: [TR({ text: data.summary, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
     }));
   }
 
@@ -1978,22 +1978,22 @@ async function buildCoverLetterDocxBytes(data: {
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   children.push(new Paragraph({
     spacing: { after: 200 },
-    children: [new TextRun({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
+    children: [TR({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
   }));
 
   if (data.jobTitle) {
     children.push(new Paragraph({
       spacing: { after: 200 },
       children: [
-        new TextRun({ text: "Re: ", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
-        new TextRun({ text: data.jobTitle, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+        TR({ text: "Re: ", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+        TR({ text: data.jobTitle, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
       ],
     }));
   }
 
   children.push(new Paragraph({
     spacing: { after: 200 },
-    children: [new TextRun({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
 
   for (const p of data.paragraphs) {
@@ -2002,16 +2002,16 @@ async function buildCoverLetterDocxBytes(data: {
     children.push(new Paragraph({
       spacing: { after: 200, line: 320 },
       alignment: AlignmentType.JUSTIFIED,
-      children: [new TextRun({ text: t, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+      children: [TR({ text: t, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
     }));
   }
 
   children.push(new Paragraph({
     spacing: { before: 200, after: 60 },
-    children: [new TextRun({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
   children.push(new Paragraph({
-    children: [new TextRun({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
+    children: [TR({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
   }));
 
   const doc = new DocxDocument({
