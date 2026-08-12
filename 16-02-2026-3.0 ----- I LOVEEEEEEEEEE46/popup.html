@@ -1185,6 +1185,10 @@
   <script src="followup-email.js"></script>
   <script src="cover-letter-generator.js"></script>
   <script src="recruiter-audit.js"></script>
+  <!-- popup.js gates tailoring on CareerBoostEngine.detectArchetype. It was
+       in the manifest's content_scripts but never loaded here, so in the
+       popup the symbol was undefined and the whole gate silently skipped. -->
+  <script src="career-boost-engine.js"></script>
   <script src="docx-generator.js"></script>
   <!-- Location stack: popup.js calls ATSLocationTailor for the job-adaptive
        CV header location; without these it silently no-ops to raw text. -->

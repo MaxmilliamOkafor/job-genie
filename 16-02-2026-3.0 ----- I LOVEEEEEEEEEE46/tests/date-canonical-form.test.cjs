@@ -89,5 +89,39 @@ t('  the ongoing tokens are declared once and shared',
   /const ONGOING = /.test(src) && (src.match(/ONGOING \+/g) || []).length >= 3,
   'isDateLine and prettyDateRange can drift apart again');
 
+console.log('\nAND THE PDF RENDERER AGREES, RENDERING FROM STRUCTURED DATA');
+// The PDF does NOT go through the text pipeline that normalises dates.
+// It renders from the structured record, so the "Month YYYY" decision
+// never reached it and it kept emitting MM-YYYY -- the one numeric form
+// Jobscan's match report flags as non-compliant. The same application
+// then read "January 2023 - Present" as a DOCX and "01-2023 - Present"
+// as a PDF, depending only on which file the portal accepted.
+global.window = global;
+(() => {
+  const f = path.join(DIR, 'professional-pdf-engine.js');
+  const m = new Module(f, null); m.filename = f;
+  m.paths = Module._nodeModulePaths(DIR);
+  m._compile(fs.readFileSync(f, 'utf8'), f);
+})();
+const PE = global.ProfessionalPDFEngine;
+const nd = (s) => PE.normalizeDates(s);
+for (const [input, want] of [
+  ['01/2023 – Present', 'January 2023 - Present'],
+  ['04/2021 – 07/2022', 'April 2021 - July 2022'],
+  ['2023-01 – 2023-06', 'January 2023 - June 2023'],
+  ['Jan 2020 - Dec 2021', 'January 2020 - December 2021'],
+  ['08/2017 – 03/2021', 'August 2017 - March 2021'],
+]) t('  ' + input + ' -> ' + want, nd(input) === want, nd(input));
+
+t('  no MM-YYYY survives anywhere',
+  !/\b\d{2}-\d{4}\b/.test(['01/2023 – Present', '04/2021 – 07/2022'].map(nd).join(' | ')),
+  'MM-YYYY is the form flagged as non-compliant');
+t('  a bare year stays a bare year',
+  nd('2019 - 2022') === '2019 - 2022',
+  'inventing a month would be a fabricated date');
+t('  ongoing reads "Present"', nd('01/2023 - Now') === 'January 2023 - Present', nd('01/2023 - Now'));
+t('  the separator is a plain hyphen',
+  !/[–—]/.test(nd('01/2023 – Present')), nd('01/2023 – Present'));
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);

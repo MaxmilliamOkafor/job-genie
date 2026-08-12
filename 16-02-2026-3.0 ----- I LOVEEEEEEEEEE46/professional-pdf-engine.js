@@ -716,21 +716,44 @@
     },
 
     // ============ NORMALIZE DATES (MM-YYYY format) ============
+    // Canonical form is "January 2023 - Present": full month name,
+    // four-digit year, plain ASCII hyphen.
+    //
+    // This used to emit MM-YYYY ("01-2023 - Present"). That is the one
+    // numeric form Jobscan's match report flags as non-compliant, and it
+    // is the reason the text pipeline standardised on "Month YYYY" --
+    // but the PDF renders from the STRUCTURED data, which never passes
+    // through that pipeline, so the fix never reached this format. The
+    // result was a CV whose dates read "January 2023 - Present" as a
+    // DOCX and "01-2023 - Present" as a PDF: the same application
+    // looking different depending on which file the portal accepted.
     normalizeDates(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
+      const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthName = (mm) => MONTHS[Math.max(1, Math.min(12, parseInt(mm, 10))) - 1];
 
-      // Helper: convert a date token to MM-YYYY if possible
-      const toMMYYYY = (token) => {
+      const toMonthYear = (token) => {
         if (!token) return '';
         if (/present|current|now/i.test(token)) return 'Present';
-        // YYYY-MM → MM-YYYY
+        // Already "January 2023" / "Jan 2023" -> expand to the full name.
+        const named = token.match(/\b([A-Za-z]{3,9})\.?\s+((?:19|20)\d{2})\b/);
+        if (named) {
+          const hit = MONTHS.find((m) => m.toLowerCase().startsWith(named[1].toLowerCase().slice(0, 3)));
+          if (hit) return `${hit} ${named[2]}`;
+        }
+        // YYYY-MM
         const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
-        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
-        // MM/YYYY or MM-YYYY → MM-YYYY
+        if (isoMatch) return `${monthName(isoMatch[2])} ${isoMatch[1]}`;
+        // MM/YYYY or MM-YYYY
         const mmyyyyMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
-        if (mmyyyyMatch) return `${mmyyyyMatch[1].padStart(2, '0')}-${mmyyyyMatch[2]}`;
-        // Year only
+        if (mmyyyyMatch) {
+          const n = parseInt(mmyyyyMatch[1], 10);
+          if (n >= 1 && n <= 12) return `${monthName(mmyyyyMatch[1])} ${mmyyyyMatch[2]}`;
+        }
+        // Year only stays a bare year -- inventing a month would be a
+        // fabricated date, and a bare year parses fine everywhere.
         const yearMatch = token.match(/\b((?:19|20)\d{2})\b/);
         if (yearMatch) return yearMatch[1];
         return token;
@@ -739,8 +762,8 @@
       // Try to split on range separators
       const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
       if (parts.length >= 2) {
-        const start = toMMYYYY(parts[0]);
-        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        const start = toMonthYear(parts[0]);
+        const end = hasPresent ? 'Present' : toMonthYear(parts[parts.length - 1]);
         // Plain ASCII hyphen: one byte in every encoding an ATS might
         // assume. An en dash is three bytes in UTF-8 and arrives as
         // mojibake if the parser guesses wrong, leaving the range with no
@@ -750,7 +773,7 @@
       }
 
       // Single date
-      return toMMYYYY(dateStr);
+      return toMonthYear(dateStr);
     },
 
     // ============ PARSE EDUCATION TEXT ============
