@@ -1401,6 +1401,16 @@
     ui: 'UI', ux: 'UX', qa: 'QA', kpi: 'KPI', kpis: 'KPIs', sla: 'SLA', slas: 'SLAs',
     json: 'JSON', xml: 'XML', html: 'HTML', css: 'CSS', php: 'PHP', grpc: 'gRPC',
     graphql: 'GraphQL', cicd: 'CI/CD',
+    // Newer AI tooling. These arrive lowercase from the JD keyword
+    // extractor and were printed that way -- "langgraph, crewai" beside
+    // "Python, TypeScript" is the clearest tell on the page that the
+    // list was assembled rather than written.
+    langgraph: 'LangGraph', langchain: 'LangChain', crewai: 'CrewAI',
+    llamaindex: 'LlamaIndex', huggingface: 'Hugging Face', openai: 'OpenAI',
+    pinecone: 'Pinecone', weaviate: 'Weaviate', chromadb: 'ChromaDB',
+    pgvector: 'pgvector', vllm: 'vLLM', ollama: 'Ollama', bedrock: 'Bedrock',
+    sagemaker: 'SageMaker', vertexai: 'Vertex AI', mlflow: 'MLflow',
+    kubeflow: 'Kubeflow', dbt: 'dbt', evidently: 'Evidently',
     python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript',
     java: 'Java', kotlin: 'Kotlin', scala: 'Scala', kubernetes: 'Kubernetes',
     docker: 'Docker', terraform: 'Terraform', ansible: 'Ansible',
@@ -1726,7 +1736,27 @@
   }
 
   // Non-technical entries that must not sit in a technical skills list.
+  //
+  // The second group is JD vocabulary rather than soft skills: market
+  // and segment words the keyword extractor pulls out of a posting
+  // because they are frequent, and the injector then writes into the
+  // skills list because they are "missing keywords". A real CV came out
+  // listing "langgraph, crewai, b2b, enterprise" as proficiencies. "B2B"
+  // is not a skill anyone can be proficient in, and a recruiter reading
+  // it knows immediately that a machine assembled the line -- which is
+  // the opposite of what the section is for.
+  // Deliberately NOT in this list: saas, fintech, healthtech, edtech,
+  // martech, e-commerce, mid-market, smb. Those read oddly as
+  // "proficiencies", but recruiters genuinely search them as domain
+  // terms and the posting asked for them, so stripping them would cost
+  // real keyword score to buy a small amount of tidiness. The ones below
+  // are words nobody can be proficient in at all.
   const NON_TECHNICAL_SKILL = new RegExp('^(' + [
+    'b2b', 'b2c', 'enterprise', 'startup', 'scale-up', 'scaleup',
+    'fast-paced', 'remote', 'hybrid', 'onsite', 'on-site', 'full-time',
+    'part-time', 'contract', 'permanent', 'domain',
+    'stakeholders', 'customers', 'clients', 'users', 'business', 'strategy',
+    'innovation', 'transformation', 'excellence', 'quality', 'delivery',
     'self-motivated', 'proactive', 'motivated', 'dedicated', 'teams', 'team',
     'accessibility', 'end-to-end', 'communication', 'collaboration', 'teamwork',
     'leadership', 'mentoring', 'mentorship', 'problem solving', 'adaptability',

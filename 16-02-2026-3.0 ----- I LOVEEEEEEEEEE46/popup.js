@@ -6021,10 +6021,34 @@ class ATSTailor {
       // Save original CV (before local boosting) for coverage report diffing
       this._coverageOriginalCV = result.tailoredResume || '';
 
-      // Filename format: {FirstName}_{LastName}_CV.pdf and {FirstName}_{LastName}_Cover_Letter.pdf
+      // Filename: {FirstName}_{LastName}_{Role}_CV.docx
+      //
+      // The role belongs in the name. A recruiter downloads a batch into
+      // one folder, and "Maxmilliam_Okafor_CV.docx" tells them nothing
+      // about which req it belongs to, while every other candidate's
+      // file is called something equally generic. Greenhouse profiles
+      // also get revisited for adjacent openings later, and the filename
+      // is part of what is searched.
       const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
       const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || '';
-      const fileBaseName = lastName ? `${firstName}_${lastName}` : firstName;
+      const nameBase = lastName ? `${firstName}_${lastName}` : firstName;
+      // Long titles get cut, not carried. Some postings run to
+      // "Senior Staff Machine Learning Engineer, Ranking and Discovery
+      // Platform (Remote, EMEA)"; older portals truncate long filenames
+      // and a name that wraps is worse than no role at all. Four words
+      // and 34 characters, whichever comes first, and a word is never
+      // cut mid-way.
+      const roleWords = String(this.currentJob?.title || '')
+        .replace(/\([^)]*\)/g, ' ')                       // drop "(Remote)", "(m/f/d)"
+        .replace(/[^A-Za-z0-9 ]/g, ' ')
+        .trim().split(/\s+/).filter(Boolean).slice(0, 4);
+      let roleSlug = '';
+      for (const w of roleWords) {
+        const next = roleSlug ? roleSlug + '_' + w : w;
+        if (next.length > 34) break;
+        roleSlug = next;
+      }
+      const fileBaseName = roleSlug ? `${nameBase}_${roleSlug}` : nameBase;
 
       this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
