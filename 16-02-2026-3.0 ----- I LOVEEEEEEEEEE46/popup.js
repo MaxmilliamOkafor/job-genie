@@ -6329,14 +6329,35 @@ class ATSTailor {
 
           // SINGLE KEYWORDS: Inject into Technical Proficiencies / Skills section
           if (singleWord.length > 0) {
-            const skillsMatch = cvText.match(/(TECHNICAL\s+PROFICIENCIES|TECHNICAL\s+SKILLS|SKILLS)\s*\n([^\n]*(?:\n(?![A-Z]{3,})[^\n]*)*)/i);
+            // Anchored to the start of a line and to the heading's own
+            // line. Unanchored and case-insensitive, this matched the
+            // word "skills" wherever it happened to end a line -- inside
+            // a bullet, inside the summary -- and spliced a comma list
+            // of raw JD keywords into the middle of a sentence. It also
+            // masked the real fault below: any accidental match counted
+            // as "section found", and a genuine miss then appended a
+            // second TECHNICAL PROFICIENCIES heading.
+            const skillsMatch = cvText.match(
+              /^[ \t]*(?:TECHNICAL\s+PROFICIENCIES|TECHNICAL\s+SKILLS|SKILLS)[ \t]*:?[ \t]*\n([^\n]*(?:\n(?![A-Z]{3,})[^\n]*)*)/m
+            );
             if (skillsMatch) {
               const sectionStart = skillsMatch.index;
               const fullMatch = skillsMatch[0];
               const sectionContent = fullMatch.trimEnd();
-              const separator = sectionContent.endsWith(',') ? ' ' : ', ';
-              const enriched = sectionContent + separator + singleWord.join(', ');
-              cvText = cvText.substring(0, sectionStart) + enriched + cvText.substring(sectionStart + fullMatch.length);
+              // Don't re-add a keyword the section already lists. The
+              // keyword is "missing" per the whole-document scan only
+              // because that scan is word-boundary matched and this one
+              // is not, so without the check the same term gets printed
+              // twice in the same comma list.
+              const already = new Set(
+                sectionContent.split(/[,\n]/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+              );
+              const toAdd = singleWord.filter((kw) => !already.has(kw.trim().toLowerCase()));
+              if (toAdd.length) {
+                const separator = sectionContent.endsWith(',') ? ' ' : ', ';
+                const enriched = sectionContent + separator + toAdd.join(', ');
+                cvText = cvText.substring(0, sectionStart) + enriched + cvText.substring(sectionStart + fullMatch.length);
+              }
             } else {
               const insertBefore = cvText.match(/\n(CERTIFICATIONS|EDUCATION|ACHIEVEMENTS)\b/i);
               if (insertBefore && insertBefore.index !== undefined) {
@@ -7252,6 +7273,40 @@ class ATSTailor {
    * Prevents output like: "WORK EXPERIENCE\n\nWORK EXPERIENCE".
    * ALSO FIXES: "SKILLS: PYTHON, JAVA, C++" -> splits to "SKILLS\n" + properly cased content.
    */
+  /**
+   * Join two comma-separated skill lists into one, without repeating a
+   * skill that appears in both.
+   *
+   * The old merge was a bare `first + ', ' + second`, so a keyword the
+   * injector added and the model had also written landed on the CV
+   * twice. Casing matters here: injected keywords arrive lowercase
+   * ("langgraph") while the model's own list is cased ("LangGraph"), and
+   * an all-lowercase technical term is one of the clearest tells that a
+   * CV was machine-assembled -- so on a collision the cased spelling
+   * wins. Anything that isn't a comma list (a bulleted block, prose) is
+   * joined on a new line instead, which keeps the content intact.
+   */
+  mergeSkillLists(first, second) {
+    const a = (first || '').trim();
+    const b = (second || '').trim();
+    if (!a) return b;
+    if (!b) return a;
+    const listLike = (s) => s.includes(',') && !/\n/.test(s) && !/^[•\-*]/.test(s);
+    if (!listLike(a) || !listLike(b)) return a + '\n' + b;
+
+    const seen = new Map();                      // lowercase -> chosen casing
+    for (const raw of (a + ', ' + b).split(',')) {
+      const v = raw.trim();
+      if (!v) continue;
+      const k = v.toLowerCase();
+      const held = seen.get(k);
+      if (held === undefined || (held === held.toLowerCase() && v !== v.toLowerCase())) {
+        seen.set(k, v);
+      }
+    }
+    return [...seen.values()].join(', ');
+  }
+
   dedupeSectionHeaders(text) {
     if (!text || typeof text !== 'string') return text;
 
@@ -7274,16 +7329,28 @@ class ATSTailor {
     // CRITICAL FIX v4.0: Merge duplicate SEPARATE section headers
     // When "SKILLS\ncontent1...\nCERTIFICATIONS\n...\nSKILLS\ncontent2..." exists,
     // merge content2 into the first SKILLS section and remove the second
+    //
+    // THREE copies is the case that actually shipped. The tailoring edge
+    // function appends a TECHNICAL PROFICIENCIES section when it cannot
+    // find one to append to, the post-sanitisation pass below does the
+    // same, and the model emits its own -- so the text can arrive with
+    // three. This used to merge matches[0] and matches[1] once and stop,
+    // which left the third standing and put a CV out with the heading
+    // printed twice. Merge until one remains.
     const MERGEABLE_SECTIONS = ['SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES', 'CORE SKILLS', 'KEY SKILLS', 'CERTIFICATIONS'];
     for (const sectionName of MERGEABLE_SECTIONS) {
       const sectionRegex = new RegExp(
         `^${sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n`,
         'gim'
       );
-      const matches = [...fixedText.matchAll(sectionRegex)];
-      if (matches.length > 1) {
-        // Found duplicate section - merge second occurrence into first
-        // Find the content of the second section
+      let merges = 0;
+      // Bounded so a merge that somehow fails to shrink the text cannot
+      // spin: each pass must remove one heading or we stop.
+      for (let guard = 0; guard < 10; guard++) {
+        const matches = [...fixedText.matchAll(sectionRegex)];
+        if (matches.length < 2) break;
+
+        // Merge the SECOND occurrence into the first, then look again.
         const secondStart = matches[1].index;
         const headerLen = matches[1][0].length;
         const contentStart = secondStart + headerLen;
@@ -7292,23 +7359,26 @@ class ATSTailor {
         const contentEnd = nextHeaderMatch ? contentStart + nextHeaderMatch.index : fixedText.length;
         const secondContent = fixedText.slice(contentStart, contentEnd).trim();
 
-        if (secondContent) {
-          // Find end of first section's content
-          const firstStart = matches[0].index;
-          const firstHeaderLen = matches[0][0].length;
-          const firstContentStart = firstStart + firstHeaderLen;
-          const nextHeaderAfterFirst = fixedText.slice(firstContentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
-          const firstContentEnd = nextHeaderAfterFirst ? firstContentStart + nextHeaderAfterFirst.index : contentStart - 2;
+        // Find end of first section's content
+        const firstStart = matches[0].index;
+        const firstHeaderLen = matches[0][0].length;
+        const firstContentStart = firstStart + firstHeaderLen;
+        const nextHeaderAfterFirst = fixedText.slice(firstContentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
+        const firstContentEnd = nextHeaderAfterFirst ? firstContentStart + nextHeaderAfterFirst.index : contentStart - 2;
+        const firstContent = fixedText.slice(firstContentStart, firstContentEnd).trim();
 
-          // Merge: append second content to first, remove second section entirely
-          const firstContent = fixedText.slice(firstContentStart, firstContentEnd).trim();
-          const mergedContent = firstContent + ', ' + secondContent;
-          fixedText = fixedText.slice(0, firstContentStart) + mergedContent + '\n' +
-                     fixedText.slice(firstContentEnd, secondStart) +
-                     fixedText.slice(contentEnd);
-
-          console.log(`[ATS Tailor] dedupeSectionHeaders: Merged duplicate "${sectionName}" sections`);
-        }
+        // An empty duplicate still has to go -- the heading is the
+        // problem, not the content under it.
+        const mergedContent = secondContent
+          ? this.mergeSkillLists(firstContent, secondContent)
+          : firstContent;
+        fixedText = fixedText.slice(0, firstContentStart) + mergedContent + '\n' +
+                   fixedText.slice(firstContentEnd, secondStart) +
+                   fixedText.slice(contentEnd);
+        merges++;
+      }
+      if (merges) {
+        console.log(`[ATS Tailor] dedupeSectionHeaders: Merged ${merges} duplicate "${sectionName}" section(s)`);
       }
     }
 

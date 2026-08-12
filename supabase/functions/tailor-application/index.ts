@@ -3240,16 +3240,30 @@ ${
       // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
       const toInjectSingles = singleWordMissing;
       if (toInjectSingles.length > 0) {
+        // The trailing section is optional. These used to require the
+        // skills section to be FOLLOWED by CERTIFICATIONS/EDUCATION/etc,
+        // so a CV whose skills list was the last thing on the page did
+        // not match, and Strategy 2 below then appended a SECOND
+        // TECHNICAL PROFICIENCIES heading to a document that already had
+        // one.
+        const TAIL = "(\\n\\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\\b|$)";
         const skillsSectionPatterns = [
-          /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-          /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
-          /(SKILLS\s*[:\n])([\s\S]*?)(\n\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\b)/i,
+          new RegExp("(TECHNICAL\\s+PROFICIENCIES\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
+          new RegExp("(TECHNICAL\\s+SKILLS\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
+          new RegExp("(SKILLS\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
         ];
 
+        // "Did we add anything" and "does a section already exist" are
+        // two different questions. Conflating them meant that when the
+        // section was found but already contained every missing keyword,
+        // this fell through to Strategy 2 and created a duplicate
+        // heading for a section that was sitting right there.
         let injected = false;
+        let sectionFound = false;
         for (const pattern of skillsSectionPatterns) {
           const match = resume.match(pattern);
           if (match) {
+            sectionFound = true;
             const sectionHeader = match[1];
             const sectionContent = match[2];
             const nextSection = match[3];
@@ -3270,7 +3284,7 @@ ${
         }
 
         // Strategy 2: If no skills section found, append one before Certifications/Education
-        if (!injected && toInjectSingles.length > 0) {
+        if (!sectionFound && !injected && toInjectSingles.length > 0) {
           const insertBeforePatterns = [
             /(\n\s*CERTIFICATIONS\b)/i,
             /(\n\s*EDUCATION\b)/i,

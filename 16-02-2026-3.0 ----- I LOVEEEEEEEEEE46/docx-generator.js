@@ -346,6 +346,63 @@
     return 8;                    // anything unrecognised sits above education
   };
 
+  // ---- one heading, once --------------------------------------------
+  // A generated CV passes through several keyword injectors before it
+  // reaches here: the tailoring edge function appends a TECHNICAL
+  // PROFICIENCIES section when it cannot find one to append to, the
+  // popup's post-sanitisation pass does the same, and the model emits
+  // its own. Each guards against creating a second copy, none of them
+  // against creating a THIRD, and the popup's text-level dedupe merged
+  // only the first duplicate pair -- so a document went out with
+  //
+  //   TECHNICAL PROFICIENCIES
+  //   langgraph, crewai, b2b, enterprise
+  //   TECHNICAL PROFICIENCIES
+  //   Python, TypeScript, React, ...
+  //
+  // A repeated heading is not just untidy. Parsers that key sections by
+  // heading either overwrite the first block with the second or drop one
+  // of them, so it can cost the whole skills section -- the section an
+  // ATS scores most directly. Merging here, in the renderer, means the
+  // file is correct no matter which upstream injector misbehaves.
+  const isCommaList = (body) => {
+    const real = body.filter((l) => l.trim());
+    return real.length === 1 && real[0].includes(',') && !/^[•\-*]/.test(real[0].trim());
+  };
+  function mergeCommaLists(a, b) {
+    const seen = new Map();                      // lowercase -> chosen casing
+    for (const item of (a + ', ' + b).split(',')) {
+      const v = item.trim();
+      if (!v) continue;
+      const k = v.toLowerCase();
+      // Injected keywords arrive lowercase ("langgraph"); the model's own
+      // list is properly cased ("LangGraph"). On a collision keep the
+      // cased one -- an all-lowercase term reads as machine-generated.
+      if (!seen.has(k) || (seen.get(k) === seen.get(k).toLowerCase() && v !== v.toLowerCase())) {
+        seen.set(k, v);
+      }
+    }
+    return [...seen.values()].join(', ');
+  }
+  function absorb(first, later) {
+    const trimEdges = (arr) => {
+      const c = arr.slice(1);                    // drop the heading line
+      while (c.length && !c[0].trim()) c.shift();
+      while (c.length && !c[c.length - 1].trim()) c.pop();
+      return c;
+    };
+    const a = trimEdges(first.lines);
+    const b = trimEdges(later.lines);
+    if (!b.length) return;
+    if (isCommaList(a) && isCommaList(b)) {
+      const ai = a.findIndex((l) => l.trim());
+      a[ai] = mergeCommaLists(a[ai].trim(), b.find((l) => l.trim()).trim());
+      first.lines = [first.lines[0]].concat(a, '');
+      return;
+    }
+    first.lines = [first.lines[0]].concat(a, b, '');
+  }
+
   function reorderSections(cvText) {
     const lines = String(cvText == null ? '' : cvText).split('\n');
     const preamble = [];
@@ -360,14 +417,44 @@
       }
       (current ? current.lines : preamble).push(line);
     }
-    // Nothing recognisable, or already in order: leave it exactly as it is.
     if (blocks.length < 2) return cvText;
-    const sorted = blocks
+
+    // Fold repeats into the first block that carries the same heading.
+    // Headings that mean the same section merge too (SKILLS into
+    // TECHNICAL PROFICIENCIES): two differently-named skills lists are
+    // the same duplication wearing a different label. Rank 8 is
+    // "unrecognised", which is not a shared meaning, so those merge only
+    // on an exact heading match.
+    const byKey = new Map();
+    const kept = [];
+    let mergedAny = false;
+    for (const b of blocks) {
+      const key = b.rank === 8 ? 'x:' + b.header : 'r:' + b.rank;
+      if (byKey.has(key)) { absorb(byKey.get(key), b); mergedAny = true; continue; }
+      byKey.set(key, b);
+      kept.push(b);
+    }
+
+    const sorted = kept
       .map((b, i) => ({ b, i }))
       .sort((x, y) => (x.b.rank - y.b.rank) || (x.i - y.i))   // stable
       .map((x) => x.b);
-    if (sorted.every((b, i) => b === blocks[i])) return cvText;
-    return preamble.concat(sorted.map((b) => b.lines.join('\n'))).join('\n');
+    // Nothing to merge and already in order: leave it exactly as it is.
+    if (!mergedAny && sorted.every((b, i) => b === blocks[i])) return cvText;
+
+    // Exactly one blank line between sections. Reordering moves blocks
+    // that did not end in one, which is how EDUCATION ended up welded to
+    // the last certification bullet with no gap.
+    const dropTrailingBlanks = (arr) => {
+      const l = arr.slice();
+      while (l.length && !l[l.length - 1].trim()) l.pop();
+      return l;
+    };
+    const parts = [];
+    const pre = dropTrailingBlanks(preamble);
+    if (pre.length) parts.push(pre.join('\n'));
+    for (const b of sorted) parts.push(dropTrailingBlanks(b.lines).join('\n'));
+    return parts.join('\n\n');
   }
 
   function buildBodyXml(cvText) {

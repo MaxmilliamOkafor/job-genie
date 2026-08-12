@@ -87,6 +87,60 @@ if (got) {
     new Set(got).size === got.length && got.length === want.length,
     got.join(' -> '));
 }
+console.log('\nAND A HEADING PRINTS ONCE, HOWEVER MANY INJECTORS ADDED ONE');
+// This shipped. A CV went out with:
+//
+//   TECHNICAL PROFICIENCIES
+//   langgraph, crewai, b2b, enterprise
+//   TECHNICAL PROFICIENCIES
+//   Python, TypeScript, React, ...
+//
+// Three separate passes can each append a skills section -- the
+// tailoring edge function, the popup's post-sanitisation re-injection,
+// and the model itself -- and each only guards against making a SECOND
+// one. The popup's text-level dedupe merged one pair and stopped, so the
+// third survived. A repeated heading is not only untidy: parsers that
+// key sections by heading overwrite or drop one of the blocks, which can
+// cost the entire skills section, the one an ATS scores most directly.
+const TRIPLED = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
+  'PROFESSIONAL SUMMARY', 'Experienced engineer.', '',
+  'WORK EXPERIENCE', 'Meta', 'Software Engineer', 'January 2023 - Present',
+  '- Shipped a system.', '',
+  'TECHNICAL PROFICIENCIES', 'langgraph, crewai', '',
+  'TECHNICAL PROFICIENCIES', 'b2b, enterprise, python', '',
+  'EDUCATION', 'MSc Artificial Intelligence', 'Imperial College London', '',
+  'TECHNICAL PROFICIENCIES', 'Python, TypeScript, React', '',
+  'CERTIFICATIONS', '- AWS Certified Machine Learning'].join('\n');
+const tri = headingsOf(TRIPLED);
+t('  the document generates', !!tri, 'generation failed');
+if (tri) {
+  t('  TECHNICAL PROFICIENCIES appears exactly once',
+    tri.filter((h) => h === 'TECHNICAL PROFICIENCIES').length === 1, tri.join(' -> '));
+  t('  no heading repeats at all', new Set(tri).size === tri.length, tri.join(' -> '));
+}
+// Merging must not lose the content that was under the extra headings --
+// dropping the duplicate instead of absorbing it would silently delete
+// keywords the ATS is scored on.
+const body = (cvText) => {
+  const built = DG.fromCvText(cvText, {});
+  const tmp = path.join(os.tmpdir(), 'jg-body-' + Date.now() + '.docx');
+  fs.writeFileSync(tmp, Buffer.from(built.base64, 'base64'));
+  const xml = cp.execSync('python3 -c ' + JSON.stringify(
+    'import zipfile,sys;sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("word/document.xml").decode("utf8"))'
+  ) + ' ' + JSON.stringify(tmp)).toString();
+  fs.unlinkSync(tmp);
+  return xml.replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '');
+};
+const merged = body(TRIPLED);
+for (const kw of ['langgraph', 'crewai', 'b2b', 'enterprise', 'TypeScript', 'React']) {
+  t('  keeps ' + kw, merged.includes(kw), 'the merge dropped a keyword');
+}
+// "python" and "Python" are the same skill. Printing both is the tell
+// that a machine assembled the list, so the cased spelling wins.
+t('  merges python into Python rather than listing both',
+  (merged.match(/\bPython\b/g) || []).length === 1 && !/\bpython\b/.test(merged),
+  JSON.stringify(merged.match(/[Pp]ython/g)));
+
 // A document already in the right order must come through untouched.
 const RIGHT = WRONG_ORDER.split('\n');
 const already = headingsOf([].concat(RIGHT.slice(0, 18), RIGHT.slice(22), RIGHT.slice(18, 22)).join('\n'));
