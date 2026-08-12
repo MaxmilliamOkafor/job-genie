@@ -141,6 +141,52 @@ t('  merges python into Python rather than listing both',
   (merged.match(/\bPython\b/g) || []).length === 1 && !/\bpython\b/.test(merged),
   JSON.stringify(merged.match(/[Pp]ython/g)));
 
+console.log('\nA HEADING WELDED TO ITS CONTENT IS STILL A HEADING');
+// The model sometimes emits "CORE COMPETENCIES: LLM Implementation, ..."
+// on one line. A section is recognised only when the whole line IS the
+// heading, so that arrived as body text: no heading paragraph, the
+// whole skills list in bold, nothing to rank. And an ATS splits a CV by
+// finding a line that is just the heading, so a competencies section
+// written that way is not a section at all and its keywords are never
+// scored as skills.
+const INLINE = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
+  'PROFESSIONAL SUMMARY', 'Experienced engineer.', '',
+  'CORE COMPETENCIES: LLM Implementation, AI Workflows, Real-Time Applications', '',
+  'WORK EXPERIENCE', 'Meta', 'Software Engineer', 'January 2023 - Present',
+  '- Shipped a system.', '',
+  'CERTIFICATIONS', '- Microsoft Certified: Azure AI Engineer Associate',
+  'Live demo: https://example.github.io/signaldesk/', '',
+  'EDUCATION', 'MSc Artificial Intelligence'].join('\n');
+const inl = headingsOf(INLINE);
+t('  the document generates', !!inl, 'generation failed');
+if (inl) {
+  t('  CORE COMPETENCIES becomes a heading of its own',
+    inl.includes('CORE COMPETENCIES'), inl.join(' -> '));
+  t('  ...and sits above WORK EXPERIENCE',
+    inl.indexOf('CORE COMPETENCIES') < inl.indexOf('WORK EXPERIENCE'), inl.join(' -> '));
+  t('  ...with the list no longer welded into the heading',
+    !inl.some((h) => /CORE COMPETENCIES:/.test(h)), inl.join(' -> '));
+}
+// The split keys off known section names, not off "word followed by a
+// colon", precisely so these survive intact.
+const inlBody = (() => {
+  const built = DG.fromCvText(INLINE, {});
+  const tmp = path.join(os.tmpdir(), 'jg-inline-' + Date.now() + '.docx');
+  fs.writeFileSync(tmp, Buffer.from(built.base64, 'base64'));
+  const xml = cp.execSync('python3 -c ' + JSON.stringify(
+    'import zipfile,sys;sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("word/document.xml").decode("utf8"))'
+  ) + ' ' + JSON.stringify(tmp)).toString();
+  fs.unlinkSync(tmp);
+  return xml.replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '');
+})();
+t('  a certification title keeping its colon is untouched',
+  /Microsoft Certified: Azure AI Engineer Associate/.test(inlBody),
+  'splitting on any colon would decapitate this');
+t('  a project link keeping its colon is untouched',
+  /Live demo: https/.test(inlBody), 'the demo URL must stay on its label');
+t('  the competencies themselves survive the split',
+  /LLM Implementation/.test(inlBody) && /Real-Time Applications/.test(inlBody), inlBody.slice(0, 200));
+
 // A document already in the right order must come through untouched.
 const RIGHT = WRONG_ORDER.split('\n');
 const already = headingsOf([].concat(RIGHT.slice(0, 18), RIGHT.slice(22), RIGHT.slice(18, 22)).join('\n'));

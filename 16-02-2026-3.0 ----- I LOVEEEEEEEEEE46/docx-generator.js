@@ -403,8 +403,44 @@
     first.lines = [first.lines[0]].concat(a, b, '');
   }
 
+  // A heading with its content welded on after a colon is not a heading.
+  //
+  // The tailoring model sometimes emits
+  //
+  //   CORE COMPETENCIES: LLM Implementation, AI Workflows, ...
+  //
+  // on one line. A section is only recognised here when the whole line
+  // IS the heading, so that arrived as ordinary body text: no heading
+  // paragraph, the entire skills list rendered in bold, and nothing for
+  // reorderSections to rank. Worse for the thing that matters -- an ATS
+  // splits a CV into sections by finding a line that is just the
+  // heading, so a competencies section written this way is not a
+  // section at all, and its keywords are not scored as skills.
+  //
+  // Only split on a prefix that is a known section heading. That leaves
+  // "Live demo: https://..." and "Microsoft Certified: Azure AI
+  // Engineer Associate" alone, which is why the check is membership
+  // rather than a shape.
+  function splitInlineHeadings(lines) {
+    const out = [];
+    let split = 0;
+    for (const line of lines) {
+      const m = line.match(/^\s*([A-Za-z][A-Za-z &/]{2,40}?)\s*:\s*(\S.*)$/);
+      if (m && SECTION_HEADERS.includes(m[1].trim().toUpperCase())) {
+        out.push(m[1].trim().toUpperCase());
+        out.push(m[2].trim());
+        split++;
+        continue;
+      }
+      out.push(line);
+    }
+    return { lines: out, split };
+  }
+
   function reorderSections(cvText) {
-    const lines = String(cvText == null ? '' : cvText).split('\n');
+    const raw = String(cvText == null ? '' : cvText);
+    const inline = splitInlineHeadings(raw.split('\n'));
+    const lines = inline.lines;
     const preamble = [];
     const blocks = [];
     let current = null;
@@ -417,7 +453,7 @@
       }
       (current ? current.lines : preamble).push(line);
     }
-    if (blocks.length < 2) return cvText;
+    if (blocks.length < 2) return inline.split ? lines.join('\n') : cvText;
 
     // Fold repeats into the first block that carries the same heading.
     // Headings that mean the same section merge too (SKILLS into
@@ -439,8 +475,9 @@
       .map((b, i) => ({ b, i }))
       .sort((x, y) => (x.b.rank - y.b.rank) || (x.i - y.i))   // stable
       .map((x) => x.b);
-    // Nothing to merge and already in order: leave it exactly as it is.
-    if (!mergedAny && sorted.every((b, i) => b === blocks[i])) return cvText;
+    // Nothing to merge, nothing to split, already in order: leave it
+    // exactly as it is.
+    if (!mergedAny && !inline.split && sorted.every((b, i) => b === blocks[i])) return cvText;
 
     // Exactly one blank line between sections. Reordering moves blocks
     // that did not end in one, which is how EDUCATION ended up welded to
