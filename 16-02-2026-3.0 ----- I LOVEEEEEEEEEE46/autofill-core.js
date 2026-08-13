@@ -129,7 +129,9 @@
   // ===================================================================
   const DEFAULTS = {
     authorized: 'Yes', sponsorship: 'No', relocation: 'Yes', remote: 'Yes',
-    country: 'Ireland', phoneCode: '+353', years: '5',
+    // No `years` default on purpose: it is computed from the employment
+    // history, and inventing one is a knockout answer either way.
+    country: 'Ireland', phoneCode: '+353',
     availability: 'Immediately', howHeard: 'LinkedIn',
     gender: 'Prefer not to say', ethnicity: 'Prefer not to say',
     veteran: 'I am not a protected veteran', disability: 'I do not have a disability',
@@ -142,6 +144,82 @@
     AT: 'Austria', SE: 'Sweden', NO: 'Norway', DK: 'Denmark', FI: 'Finland',
     PL: 'Poland', NZ: 'New Zealand', IN: 'India', SG: 'Singapore',
   };
+
+  // ===================================================================
+  // YEARS OF EXPERIENCE
+  // -------------------------------------------------------------------
+  // Every "years of X" question used to get the same constant back: the
+  // profile's `years` if set, otherwise a hard-coded '5'. That is the
+  // single most direct auto-reject lever on an application form, and it
+  // was wrong in three separate ways.
+  //
+  //   1. A threshold question is a YES/NO question. "Do you have 5+
+  //      years of experience?" is a dropdown with two options, and
+  //      writing "5" into it either fails validation or leaves the
+  //      answer unset -- which scores as "requirement not met".
+  //   2. The constant was answered for EVERY skill. "Years of
+  //      Kubernetes?" and "Years of people management?" both got 5,
+  //      regardless of whether the candidate had touched either. That is
+  //      a false statement on an application, and it is grounds for
+  //      withdrawing an offer later.
+  //   3. '5' was invented when the profile said nothing, so a candidate
+  //      with nine years was filtered out of senior roles, and one with
+  //      two years was filtered out for overclaiming.
+  //
+  // The employment history is right there, so use it.
+  // ===================================================================
+  function _totalYears(p) {
+    const explicit = p.years ?? p.years_experience ?? p.yearsExperience;
+    if (explicit != null && String(explicit).trim() !== '') {
+      const n = parseInt(String(explicit), 10);
+      if (!isNaN(n) && n > 0) return n;
+    }
+    const exp = p.professional_experience || p.professionalExperience || p.workExperience;
+    if (!Array.isArray(exp) || !exp.length) return null;
+
+    // Merge overlapping roles rather than summing them. A contract held
+    // alongside a full-time job is not two separate careers, and summing
+    // them is how "9 years" becomes "14 years".
+    const now = new Date();
+    const spans = [];
+    for (const job of exp) {
+      const text = [job.dates, job.startDate, job.start_date, job.endDate, job.end_date]
+        .filter(Boolean).join(' ');
+      if (!text) continue;
+      const ongoing = /present|current|now|ongoing/i.test(text);
+      const years = String(text).match(/\b(19|20)\d{2}\b/g);
+      if (!years || !years.length) continue;
+      const start = parseInt(years[0], 10);
+      const end = ongoing ? now.getFullYear() : parseInt(years[years.length - 1], 10);
+      if (isNaN(start) || isNaN(end) || end < start) continue;
+      spans.push([start, end]);
+    }
+    if (!spans.length) return null;
+    spans.sort((a, b) => a[0] - b[0]);
+    let total = 0, cursor = -Infinity;
+    for (const [s, e] of spans) {
+      const from = Math.max(s, cursor);
+      if (e > from) { total += e - from; cursor = e; }
+      else if (e > cursor) cursor = e;
+    }
+    return total > 0 ? total : null;
+  }
+
+  // "Do you have 5+ years..." / "at least 3 years" / "minimum of 7 years"
+  // -- a threshold, not a quantity. Returns the required number, or null
+  // when the question is asking "how many".
+  function _yearsThreshold(l) {
+    const m = l.match(/(\d{1,2})\s*\+?\s*(?:or more\s+)?years?/);
+    if (!m) return null;
+    const asksHowMany = /how many|number of|total years|years of experience do you have\b/.test(l)
+      && !/\bdo you have\b[^?]*\b\d/.test(l);
+    if (asksHowMany) return null;
+    // Threshold phrasing: "do you have", "at least", "minimum", "+".
+    if (/\bdo you have\b|\bat least\b|\bminimum\b|\bor more\b|\d\s*\+/.test(l)) {
+      return parseInt(m[1], 10);
+    }
+    return null;
+  }
 
   function _country(p) {
     let c = String(p.country || '').trim();
@@ -215,7 +293,30 @@
     }
 
     // --- standard screening answers ----------------------------------
-    if (/years .*(experience|exp)|experience .*years|how many years/.test(l)) return P.years || DEFAULTS.years;
+    if (/years .*(experience|exp)|experience .*years|how many years/.test(l)) {
+      const total = _totalYears(P);
+      const threshold = _yearsThreshold(l);
+      // "Years of experience with Kubernetes" asks about one tool, not a
+      // career. Answering the career total claims years of something the
+      // candidate may never have touched -- a false answer to a scored
+      // screening question, and grounds for withdrawing an offer later.
+      // _skillSubject/_profileMentions are the same pair the yes/no path
+      // already uses for "do you have experience with X".
+      const subject = _skillSubject(l);
+      if (subject && !_profileMentions(P, subject)) return '';
+      // "Do you have 5+ years?" is a Yes/No field. Writing a number into
+      // it fails validation or leaves it unset, which scores as
+      // "requirement not met".
+      if (threshold != null) {
+        if (total == null) return '';          // unknown: let the user answer
+        return total >= threshold ? 'Yes' : 'No';
+      }
+      if (total != null) return String(total);
+      // Nothing to compute from. Leave it blank rather than invent a
+      // number: a wrong answer here is a knockout, and a false one is
+      // grounds for withdrawing an offer later.
+      return P.years ? String(P.years) : '';
+    }
     if (/authoriz|authoris|legally .*(work|entitled)|eligible to work|right to work|work .*(right|permit).*(yes|no)?/.test(l)) return P.work_authorized || DEFAULTS.authorized;
     if (/sponsor|visa|immigration|work.?permit/.test(l)) return P.sponsorship || DEFAULTS.sponsorship;
     if (/relocat|willing to move/.test(l)) return DEFAULTS.relocation;

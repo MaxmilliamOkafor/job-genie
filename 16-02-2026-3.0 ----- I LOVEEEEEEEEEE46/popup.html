@@ -1181,10 +1181,22 @@
   <script src="validation-engine.js"></script>
   <script src="contact-enrichment.js"></script>
   <script src="linkedin-people-search.js"></script>
+  <!-- Step 1 of the email chain: turns a job into LinkedIn profile slugs so
+       Closely/ContactOut have something to resolve. Without it the email
+       providers are skipped as "needs-named-poster" and never called. -->
+  <script src="profile-web-search.js"></script>
+  <script src="linkedin-voyager.js"></script>
   <script src="linkedin-profile-memory.js"></script>
   <script src="followup-email.js"></script>
   <script src="cover-letter-generator.js"></script>
   <script src="recruiter-audit.js"></script>
+  <!-- popup.js gates tailoring on CareerBoostEngine.detectArchetype. It was
+       in the manifest's content_scripts but never loaded here, so in the
+       popup the symbol was undefined and the whole gate silently skipped. -->
+  <script src="career-boost-engine.js"></script>
+  <!-- Page size and spelling follow the posting's country. Loaded before
+       docx-generator.js and popup.js, both of which ask it for a region. -->
+  <script src="regional-format.js"></script>
   <script src="docx-generator.js"></script>
   <!-- Location stack: popup.js calls ATSLocationTailor for the job-adaptive
        CV header location; without these it silently no-ops to raw text. -->

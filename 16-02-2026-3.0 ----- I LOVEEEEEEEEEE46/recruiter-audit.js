@@ -171,10 +171,77 @@
     [/\bnext[- ]generation\b/gi, ''],
     [/\bgame[- ]changing\b/gi, ''],
     [/\bvalue[- ]add(ed)?\b/gi, ''],
-    [/\bproven track record\b/gi, 'record'],
+    // ---- "track record", in every form -------------------------------
+    // Banned outright, not softened. The system used to MANUFACTURE it:
+    // the prompt listed "track record" as the approved replacement for
+    // "proven track record", the prompt's own example summary opened
+    // "Strong track record in designing scalable solutions" (models copy
+    // examples), two client-side maps rewrote "proven track record" into
+    // it, and two hard-coded fallback paragraphs contained it. Removing
+    // the qualifier while keeping the phrase was never going to work.
+    //
+    // Ordered longest-first so the article and qualifier are consumed
+    // with it -- replacing only the phrase would leave "with a
+    // experience of".
+    // The preposition has to survive or be re-chosen. "track record of
+    // delivering" -> "experience delivering" reads correctly because the
+    // next word is a gerund, but the same rule turns "track record with
+    // Kubernetes" into "experience Kubernetes". So look at what follows.
+    [/\b(?:(?:a|an)\s+)?(?:(?:proven|strong|demonstrated|successful|solid|consistent|excellent|established|long)\s+)?track\s+record\s+(of|in|with|for)\s+(?=(\w+))/gi,
+      (_m, prep, next) => (/ing$/i.test(next)
+        ? 'experience '                       // experience delivering
+        : 'experience ' + (/^(?:for)$/i.test(prep) ? 'in' : prep.toLowerCase()) + ' ')],
+    [/\b(?:a|an)\s+(?:(?:proven|strong|demonstrated|successful|solid|consistent|excellent|established|long)\s+)?track\s+record\b/gi, 'experience'],
+    [/\b(?:proven|strong|demonstrated|successful|solid|consistent|excellent|established|long)\s+track\s+record\b/gi, 'experience'],
+    [/\btrack\s+record\b/gi, 'experience'],
     [/\bextensive experience\b/gi, 'experience'],
     [/\bsubject matter expert\b/gi, 'expert'],
     [/\b(strong|excellent|great|outstanding) (communication|interpersonal) skills\b/gi, ''],
+
+    // ---- the verbs that read as machine-written -----------------------
+    // The tailoring prompt already bans these, but a prompt ban has two
+    // dependencies: the model obeying it, and the edge function being
+    // deployed. Neither holds for text that arrives from the user's own
+    // profile, and neither holds before a deploy. This is the layer that
+    // actually builds the document, so it enforces the same list.
+    //
+    // These are one-for-one swaps, so grammar is unaffected: the verb is
+    // replaced, not deleted.
+    [/\bspearheaded\b/gi, 'led'],
+    [/\bspearheading\b/gi, 'leading'],
+    [/\bspearhead\b/gi, 'lead'],
+    [/\bleveraged\b/gi, 'used'],
+    [/\bleveraging\b/gi, 'using'],
+    [/\bleverages\b/gi, 'uses'],
+    [/\bleverage\b/gi, 'use'],
+    [/\bsynergised\b/gi, 'combined'],
+    [/\bsynergising\b/gi, 'combining'],
+    [/\bsynergise\b/gi, 'combine'],
+    [/\bsynergies\b/gi, 'shared gains'],
+    [/\bsynergy\b/gi, 'collaboration'],
+    [/\borchestrated\b/gi, 'directed'],
+    [/\bchampioned\b/gi, 'led'],
+    [/\bhelmed\b/gi, 'led'],
+
+    // ---- filler adjectives --------------------------------------------
+    // Deleted rather than swapped, so each pattern takes the trailing
+    // space with it and, where the word sits in a pair, the conjunction
+    // too. Removing only the adjective is what turned "Dynamic and
+    // results-driven professional" into "Dynamic and professional".
+    //
+    // "dynamic" is matched ONLY as a leading personal adjective. The
+    // word is legitimate in "dynamic pricing" and the candidate's own
+    // history mentions Dynamics 365.
+    [/^\s*dynamic\s+and\s+/gim, ''],
+    [/\bdynamic\s+(?=professional\b|engineer\b|leader\b)/gi, ''],
+    [/\band\s+dynamic\b/gi, ''],
+    // Only where it modifies something vague. "High-impact solutions"
+    // is filler; "high-impact incidents" is how incident management
+    // actually classifies severity, and deleting it loses real meaning.
+    [/\bhigh[- ]impact\s+(?=(?:solutions?|results?|outcomes?|projects?|initiatives?|work|contributions?|deliverables?)\b)/gi, ''],
+    [/\bfast[- ]paced\s+/gi, ''],
+    [/\btransformational\s+/gi, ''],
+    [/\binnovative\s+/gi, ''],
   ];
 
   // Risky phrases that warp a sentence if removed -- flag, don't fix.
@@ -236,10 +303,35 @@
       .replace(/,\s*,/g, ',')
       .replace(/,\s*(and|but|or)\s+/gi, ' $1 ')
       .replace(/\b(with|and|or|of|in|on|to|for|by)\s+([.,;:])/gi, '$2')
+      // A removed adjective leaves the conjunction that joined it to the
+      // next one: "Dynamic and results-driven professional" became
+      // "Dynamic and professional", and stripping the other adjective
+      // instead leaves a sentence opening with "and". Both read as a
+      // typo, which is worse than the buzzword was.
+      .replace(/^([ \t]*)(?:and|or|but)\s+/gim, '$1')
+      .replace(/\s+\b(and|or)\s+\1\b/gi, ' $1')
+      .replace(/\b(an?)\s+(?=[.,;:])/gi, '')
       .replace(/^\s*,\s*/gm, '')
       .replace(/[ \t]+([.,;:])/g, '$1')
       .replace(/\(\s*\)/g, '')
       .replace(/[ \t]+$/gm, '');
+
+    // Re-capitalise any line the purge left starting lower-case: cutting
+    // the opening adjective promotes the next word to first position.
+    //
+    // Prose sentences only. A skills line is a comma list whose first
+    // entry may legitimately be lower-case -- dbt and pgvector are
+    // written that way by their own projects -- and capitalising it is
+    // a different kind of wrong.
+    out = out.split('\n').map((l) => {
+      const t = l.trimStart();
+      if (!t || /^[-•*]/.test(t)) return l;
+      if (t[0] !== t[0].toLowerCase() || !/[a-z]/.test(t[0])) return l;
+      const looksLikeSentence = /[.!?]\s*$/.test(t) && /\s/.test(t) && !/^[^\s,]+,/.test(t);
+      if (!looksLikeSentence) return l;
+      const lead = l.slice(0, l.length - t.length);
+      return lead + t[0].toUpperCase() + t.slice(1);
+    }).join('\n');
 
     // Human-readable phrase labels for the warning report.
     const PHRASE_LABELS = [
@@ -327,20 +419,52 @@
     ['observability', 'observable', 'observable systems', 'monitoring and tracing'],
   ];
 
-  function _findCanonicalForJd(jdLower, group) {
+  // Which spelling does the JD actually use? Returns it with the JD's own
+  // capitalisation, so the CV can carry the posting's exact string.
+  //
+  // This used to be `jdLower.includes(term)` over a group ordered
+  // shortest-first, and both halves were wrong:
+  //
+  //   substring, not word boundary -- a JD mentioning "MLOps" contains
+  //   "ml", so "ml" was chosen and every "Machine Learning" in the CV was
+  //   rewritten to it. "PostgreSQL" contains "postgres"; "REST APIs"
+  //   contains "rest api".
+  //
+  //   first hit wins -- with the groups ordered shortest-first, the
+  //   ABBREVIATION always beat the full term.
+  //
+  // The result was a CV advertising "ML, Postgres, rest API" against a
+  // posting asking for "Machine Learning, PostgreSQL, REST APIs" -- three
+  // exact-match keywords lost to a function whose entire purpose is to
+  // mirror the JD's vocabulary. A recruiter searching the full term finds
+  // the other candidate.
+  //
+  // Longest match wins now: the most specific phrase the posting actually
+  // uses is the one worth carrying.
+  function _findCanonicalForJd(jdText, group) {
+    let best = null;
     for (const term of group) {
-      if (jdLower.includes(term)) return term;
+      const re = new RegExp('\\b' + term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+      const m = jdText.match(re);
+      if (!m) continue;
+      if (!best || m[0].length > best.length) best = m[0];   // JD's own casing
     }
-    return null;
+    // Postings often set requirement headings in capitals ("MACHINE
+    // LEARNING"), and carrying that verbatim would shout on the CV.
+    // Genuine acronyms are short and single-word, so only fold a
+    // multi-word all-caps match back to title case.
+    if (best && / /.test(best) && best === best.toUpperCase()) {
+      best = best.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+    }
+    return best;
   }
 
   function mirrorJdVocabulary(cvText, jdText) {
     if (!cvText || !jdText) return { text: cvText || '', swaps: 0 };
-    const jdLower = jdText.toLowerCase();
     let out = cvText;
     let swaps = 0;
     for (const group of SYNONYM_GROUPS) {
-      const canonical = _findCanonicalForJd(jdLower, group);
+      const canonical = _findCanonicalForJd(jdText, group);
       if (!canonical) continue;
       // If the JD uses one specific variant, swap every other variant in
       // the CV to that exact string -- only when the CV actually contains
@@ -497,6 +621,204 @@
     if (m[3]) return (parseInt(m[4],10) * 12) + parseInt(m[3],10);
     if (m[5]) return (parseInt(m[5],10) * 12) + 1;
     return null;
+  }
+
+  // ===================================================================
+  // BULLET ORDER WITHIN A ROLE
+  // -------------------------------------------------------------------
+  // Reviewers read the first three bullets of a role and stop. Bullets
+  // arrive in whatever order the source CV recorded them, which is
+  // usually the order the work happened -- not the order that answers
+  // THIS posting.
+  //
+  // A real example: the strongest bullet for a Business Analyst posting
+  // was "Investigated trading-system anomalies with SQL and Pandas,
+  // built Tableau dashboards and presented root-cause findings and
+  // recommendations to VP-level stakeholders." It was the LAST bullet of
+  // the FOURTH role. Nobody reading top-down would reach it.
+  //
+  // This changes ORDER ONLY. No word is rewritten, no fact moves between
+  // roles, chronology between roles is untouched. It is therefore the one
+  // relevance improvement with no fabrication risk at all.
+  //
+  // Scoring is deliberately blunt: how many of the posting's keywords the
+  // bullet contains, plus a small bonus for carrying a number, because a
+  // quantified bullet outperforms an unquantified one for the same
+  // keyword count. Ties keep their original order, so a role whose
+  // bullets are equally relevant is left exactly as it was.
+  //
+  // Scope is the experience section and nothing else. An EDUCATION or
+  // CERTIFICATIONS list is in date order on purpose -- ranking those by
+  // keyword would put the BSc above the MSc, which is a worse document,
+  // not a more relevant one.
+  const _BACKREF = /^\s*[-•*]?\s*(on top of that|additionally|also|separately|in addition|this |these |that work|building on|alongside this)/i;
+  const _EXP_HEAD = /^\s*(?:PROFESSIONAL\s+|WORK\s+|RELEVANT\s+)?(?:EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|CAREER\s+HISTORY)\s*:?\s*$/i;
+  const _ANY_HEAD = /^\s*[A-Z][A-Z &/'-]{3,}\s*:?\s*$/;
+
+  function orderBulletsByRelevance(cvText, jobKeywords) {
+    const kws = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim().toLowerCase())
+      .filter((k) => k.length > 2);
+    if (!kws.length || !cvText) return { text: cvText || '', moved: 0 };
+
+    const lines = String(cvText).split('\n');
+    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
+    let moved = 0;
+    let inExperience = false;
+    let i = 0;
+    while (i < lines.length) {
+      if (_EXP_HEAD.test(lines[i])) { inExperience = true; i++; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExperience = false; i++; continue; }
+      if (!inExperience || !isBullet(lines[i])) { i++; continue; }
+      let j = i;
+      while (j < lines.length && isBullet(lines[j])) j++;
+      const run = lines.slice(i, j);
+      // A single bullet, or a run short enough that order cannot matter.
+      if (run.length >= 3) {
+        const score = (b) => {
+          const low = b.toLowerCase();
+          let n = 0;
+          for (const k of kws) if (low.includes(k)) n++;
+          if (/\d/.test(b)) n += 0.5;
+          // A bullet that opens by referring back to the previous one
+          // cannot lead. Keep it where it is rather than produce
+          // "Also, I..." as the first thing a reviewer reads.
+          if (_BACKREF.test(b)) n -= 100;
+          return n;
+        };
+        const ranked = run
+          .map((b, idx) => ({ b, idx, s: score(b) }))
+          .sort((x, y) => (y.s - x.s) || (x.idx - y.idx))
+          .map((x) => x.b);
+        if (ranked.some((b, k) => b !== run[k])) {
+          for (let k = 0; k < ranked.length; k++) lines[i + k] = ranked[k];
+          moved++;
+        }
+      }
+      i = j;
+    }
+    return { text: lines.join('\n'), moved };
+  }
+
+  // ===================================================================
+  // HOW MANY BULLETS A ROLE GETS
+  // -------------------------------------------------------------------
+  // Attention is front-loaded and finite. A role from eight years ago
+  // carrying seven bullets spends the reader's patience on the least
+  // relevant part of the CV, and pushes the recent work onto page two.
+  // The convention recruiters actually apply: 4-6 bullets for the recent
+  // roles, 2-4 for the older ones.
+  //
+  // This MUST run after orderBulletsByRelevance, because it trims from
+  // the END. Once the bullets are ranked against the posting, the tail is
+  // the least relevant material, and trimming it is tailoring rather than
+  // loss -- a different posting keeps a different subset. Run in the
+  // other order it would delete whatever happened to be recorded last.
+  //
+  // Two hard guards, because deleting evidence is the one thing here that
+  // cannot be undone by the reader:
+  //
+  //   1. A bullet holding the CV's ONLY mention of a posting keyword is
+  //      never dropped. Trimming it would cost a keyword match, which is
+  //      the opposite of the point.
+  //   2. Caps are generous and only bite when a role is genuinely
+  //      overlong, so a normal CV passes through untouched.
+  const RECENT_ROLE_CAP = 6;   // the first two roles
+  const OLDER_ROLE_CAP = 4;    // everything before them
+
+  function capBulletsPerRole(cvText, jobKeywords) {
+    if (!cvText) return { text: cvText || '', trimmed: 0, roles: 0 };
+    const kws = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim().toLowerCase())
+      .filter((k) => k.length > 2);
+
+    const lines = String(cvText).split('\n');
+    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
+
+    // Count, across the whole CV, how many bullets carry each keyword.
+    // A count of one makes that bullet the sole carrier.
+    const counts = Object.create(null);
+    for (const l of lines) {
+      if (!isBullet(l)) continue;
+      const low = l.toLowerCase();
+      for (const k of kws) if (low.includes(k)) counts[k] = (counts[k] || 0) + 1;
+    }
+    const isSoleCarrier = (b) => {
+      const low = b.toLowerCase();
+      for (const k of kws) if (counts[k] === 1 && low.includes(k)) return true;
+      return false;
+    };
+
+    const out = [];
+    let inExperience = false;
+    let roleIndex = 0;
+    let trimmed = 0;
+    let rolesTrimmed = 0;
+    let i = 0;
+    while (i < lines.length) {
+      if (_EXP_HEAD.test(lines[i])) { inExperience = true; roleIndex = 0; out.push(lines[i]); i++; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExperience = false; out.push(lines[i]); i++; continue; }
+      if (!inExperience || !isBullet(lines[i])) { out.push(lines[i]); i++; continue; }
+
+      let j = i;
+      while (j < lines.length && isBullet(lines[j])) j++;
+      const run = lines.slice(i, j);
+      roleIndex++;
+      const cap = roleIndex <= 2 ? RECENT_ROLE_CAP : OLDER_ROLE_CAP;
+
+      if (run.length <= cap) {
+        out.push.apply(out, run);
+      } else {
+        const kept = run.slice(0, cap);
+        const dropped = run.slice(cap);
+        // Re-admit anything in the tail that is the only place a posting
+        // keyword appears. The role can exceed its cap for that reason;
+        // a missed keyword costs more than an extra line.
+        const rescued = dropped.filter(isSoleCarrier);
+        out.push.apply(out, kept.concat(rescued));
+        const lost = dropped.length - rescued.length;
+        if (lost > 0) { trimmed += lost; rolesTrimmed++; }
+      }
+      i = j;
+    }
+    return { text: out.join('\n'), trimmed, roles: rolesTrimmed };
+  }
+
+  // ===================================================================
+  // A WORD USED TWICE IN ONE BULLET
+  // -------------------------------------------------------------------
+  // "surfacing fraud and risk exposure for the risk team" reads as a
+  // draft nobody re-read. It is a small thing that a human notices
+  // immediately and an ATS does not notice at all.
+  //
+  // This REPORTS and does not rewrite, deliberately. Fixing it means
+  // knowing what the team was actually called, and that is a fact about
+  // the candidate's employer that this code does not have. Guessing it
+  // would put an invented team name on a CV that a reference check can
+  // contradict -- a far worse outcome than a repeated word. So the
+  // warning names the bullet and the word, and the human edits it.
+  const _STOPWORDS = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this',
+    'into', 'over', 'across', 'using', 'their', 'them', 'were', 'was', 'has',
+    'had', 'have', 'via', 'per', 'out', 'not', 'all', 'new', 'end', 'its',
+    'data', 'team', 'work', 'time', 'year', 'years', 'more', 'than', 'both']);
+
+  function detectRepeatedWords(cvText) {
+    const found = [];
+    if (!cvText) return found;
+    for (const line of String(cvText).split('\n')) {
+      if (!/^\s*[-•*]\s*\S/.test(line)) continue;
+      const words = (line.toLowerCase().match(/[a-z][a-z-]{3,}/g) || [])
+        .filter((w) => !_STOPWORDS.has(w));
+      const seen = Object.create(null);
+      for (const w of words) seen[w] = (seen[w] || 0) + 1;
+      for (const w of Object.keys(seen)) {
+        if (seen[w] >= 2) {
+          found.push({ word: w, bullet: line.trim() });
+          break;   // one flag per bullet is enough to prompt a re-read
+        }
+      }
+    }
+    return found;
   }
 
   // Splits WORK EXPERIENCE into role blocks and sorts them by start date,
@@ -1401,6 +1723,16 @@
     ui: 'UI', ux: 'UX', qa: 'QA', kpi: 'KPI', kpis: 'KPIs', sla: 'SLA', slas: 'SLAs',
     json: 'JSON', xml: 'XML', html: 'HTML', css: 'CSS', php: 'PHP', grpc: 'gRPC',
     graphql: 'GraphQL', cicd: 'CI/CD',
+    // Newer AI tooling. These arrive lowercase from the JD keyword
+    // extractor and were printed that way -- "langgraph, crewai" beside
+    // "Python, TypeScript" is the clearest tell on the page that the
+    // list was assembled rather than written.
+    langgraph: 'LangGraph', langchain: 'LangChain', crewai: 'CrewAI',
+    llamaindex: 'LlamaIndex', huggingface: 'Hugging Face', openai: 'OpenAI',
+    pinecone: 'Pinecone', weaviate: 'Weaviate', chromadb: 'ChromaDB',
+    pgvector: 'pgvector', vllm: 'vLLM', ollama: 'Ollama', bedrock: 'Bedrock',
+    sagemaker: 'SageMaker', vertexai: 'Vertex AI', mlflow: 'MLflow',
+    kubeflow: 'Kubeflow', dbt: 'dbt', evidently: 'Evidently',
     python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript',
     java: 'Java', kotlin: 'Kotlin', scala: 'Scala', kubernetes: 'Kubernetes',
     docker: 'Docker', terraform: 'Terraform', ansible: 'Ansible',
@@ -1726,7 +2058,34 @@
   }
 
   // Non-technical entries that must not sit in a technical skills list.
+  //
+  // The second group is JD vocabulary rather than soft skills: market
+  // and segment words the keyword extractor pulls out of a posting
+  // because they are frequent, and the injector then writes into the
+  // skills list because they are "missing keywords". A real CV came out
+  // listing "langgraph, crewai, b2b, enterprise" as proficiencies. "B2B"
+  // is not a skill anyone can be proficient in, and a recruiter reading
+  // it knows immediately that a machine assembled the line -- which is
+  // the opposite of what the section is for.
+  // Deliberately NOT in this list: saas, fintech, healthtech, edtech,
+  // martech, e-commerce, mid-market, smb. Those read oddly as
+  // "proficiencies", but recruiters genuinely search them as domain
+  // terms and the posting asked for them, so stripping them would cost
+  // real keyword score to buy a small amount of tidiness. The ones below
+  // are words nobody can be proficient in at all.
+  // Narrowed deliberately. An earlier draft also stripped delivery,
+  // quality, strategy, business, transformation, stakeholders, customers,
+  // clients and users. Those read oddly in a proficiencies list, but a
+  // posting can genuinely require "Delivery" or "Quality" as a named
+  // competency -- and removing a word the JD asked for costs an exact
+  // keyword match to buy a little tidiness, which is the wrong trade for
+  // a candidate competing against someone who listed it. What is left is
+  // only what nobody can be proficient in: market segments, work
+  // arrangements and contract types.
   const NON_TECHNICAL_SKILL = new RegExp('^(' + [
+    'b2b', 'b2c', 'enterprise', 'startup', 'scale-up', 'scaleup',
+    'fast-paced', 'remote', 'hybrid', 'onsite', 'on-site', 'full-time',
+    'part-time', 'contract', 'permanent', 'domain',
     'self-motivated', 'proactive', 'motivated', 'dedicated', 'teams', 'team',
     'accessibility', 'end-to-end', 'communication', 'collaboration', 'teamwork',
     'leadership', 'mentoring', 'mentorship', 'problem solving', 'adaptability',
@@ -1862,6 +2221,48 @@
       if (sorted.sorted) {
         outCV = sorted.text;
         report.fixes.push('Sorted ' + sorted.roles + ' roles into strict start-date order (no dates changed)');
+      }
+    }
+
+    // Within each role, lead with the bullets that answer THIS posting.
+    // Order only -- no rewriting, no movement between roles.
+    if (jobKeywords) {
+      const ordered = orderBulletsByRelevance(outCV, jobKeywords);
+      if (ordered.moved) {
+        outCV = ordered.text;
+        report.fixes.push('Re-ordered bullets in ' + ordered.moved
+          + ' role(s) so the most relevant lead (no wording changed)');
+      }
+    }
+
+    // Then cap the length of each role. Strictly after the ordering above:
+    // this trims from the tail, and only once the tail is the LEAST
+    // relevant material is trimming it tailoring rather than loss.
+    if (outCV) {
+      const capped = capBulletsPerRole(outCV, jobKeywords);
+      if (capped.trimmed) {
+        outCV = capped.text;
+        report.fixes.push('Trimmed ' + capped.trimmed + ' least-relevant bullet(s) from '
+          + capped.roles + ' role(s) to ' + RECENT_ROLE_CAP + ' recent / '
+          + OLDER_ROLE_CAP + ' older (kept every sole mention of a posting keyword)');
+      }
+    }
+
+    // A word used twice in one bullet. Reported, never rewritten -- the
+    // correct fix needs a fact about the employer that this code does not
+    // have, and inventing one is worse than the repetition.
+    if (outCV) {
+      const repeats = detectRepeatedWords(outCV);
+      if (repeats.length) {
+        report.warnings.push({
+          kind: 'repeated-word-in-bullet',
+          count: repeats.length,
+          samples: repeats.slice(0, 3),
+          message: 'A word appears twice in the same bullet (e.g. "'
+            + repeats[0].word + '"). Reads as an unedited draft to a human; '
+            + 'invisible to an ATS. Left as-is because rewording it needs '
+            + 'facts about the role that only you have.',
+        });
       }
     }
 

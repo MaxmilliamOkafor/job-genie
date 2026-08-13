@@ -134,7 +134,12 @@ for (let i = 0; i < COMPETENCIES.length - 1; i++) {
 
 console.log('\nTHE REST OF THE CV IS UNAFFECTED');
 t('the name is still the first line', /Maxmilliam Okafor/.test(linesKeepingTabs[0]), linesKeepingTabs[0]);
-t('work experience still parses', linesKeepingTabs.some((l) => /^WORK EXPERIENCE$/i.test(l)));
+// Either wording is fine -- the renderer normalises synonyms to the
+// conventional heading, and what this asserts is that the section still
+// arrives as a standalone heading line, not which synonym won.
+t('work experience still parses',
+  linesKeepingTabs.some((l) => /^(WORK|PROFESSIONAL) EXPERIENCE$/i.test(l)),
+  JSON.stringify(linesKeepingTabs.filter((l) => /EXPERIENCE/i.test(l))));
 t('the role bullet survives', linesKeepingTabs.some((l) => /Delivered a D365 rollout/.test(l)));
 
 // ---- and the renderers no longer build columns -----------------------

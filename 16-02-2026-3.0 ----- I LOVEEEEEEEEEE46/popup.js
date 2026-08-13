@@ -3798,9 +3798,17 @@ class ATSTailor {
         const why = {
           'no-api-key': 'No API key saved for your lookup provider - add one in Settings.',
           // Closely resolves a named poster, and this page named nobody.
-          'needs-named-poster': 'This posting names nobody to look up. Closely can only '
-            + 'resolve a named LinkedIn poster - add a Hunter, ContactOut or Apollo key '
-            + 'in Settings to cover postings like this one.',
+          // Reached only when the LinkedIn profile search ALSO came back
+          // empty, since a found profile is exactly what Closely needs.
+          // hit.profileWhy carries why that search failed, and it is the
+          // actionable half: "not signed in to LinkedIn" is a different
+          // problem from "this employer has no recruiters", and telling
+          // the user to buy a second provider fixes neither.
+          'needs-named-poster': 'No LinkedIn profile could be found for this posting, so '
+            + 'Closely had nobody to resolve.'
+            + (hit.profileWhy ? ' Reason: ' + hit.profileWhy + '.' : '')
+            + ' Check you are signed in to LinkedIn in this browser, or add a Hunter, '
+            + 'ContactOut or Apollo key in Settings to search by company instead.',
           'bad-api-key': 'Your lookup provider rejected the saved key.',
           'rate-limited': 'Your lookup provider is rate limiting - try again shortly.',
           'out-of-credits': 'Your lookup provider is out of credits.',
@@ -3808,7 +3816,15 @@ class ATSTailor {
           network: 'Could not reach your lookup provider.',
         }[hit.reason];
         if (why && info) { info.textContent = why; info.style.color = 'var(--error)'; }
-        else nothing();
+        else if (info) {
+          // An unmapped reason used to fall through to a generic "nothing
+          // found", which is the silent-failure shape this whole chain was
+          // fixed to stop reporting.
+          info.textContent = 'Lookup found no address (' + (hit.reason || 'no reason given') + ').'
+            + (hit.profileWhy ? ' ' + hit.profileWhy + '.' : '')
+            + ' Open the contact-lookup test in Settings for the full trace.';
+          info.style.color = 'var(--error)';
+        } else nothing();
         return;
       }
 
@@ -6021,10 +6037,34 @@ class ATSTailor {
       // Save original CV (before local boosting) for coverage report diffing
       this._coverageOriginalCV = result.tailoredResume || '';
 
-      // Filename format: {FirstName}_{LastName}_CV.pdf and {FirstName}_{LastName}_Cover_Letter.pdf
+      // Filename: {FirstName}_{LastName}_{Role}_CV.docx
+      //
+      // The role belongs in the name. A recruiter downloads a batch into
+      // one folder, and "Maxmilliam_Okafor_CV.docx" tells them nothing
+      // about which req it belongs to, while every other candidate's
+      // file is called something equally generic. Greenhouse profiles
+      // also get revisited for adjacent openings later, and the filename
+      // is part of what is searched.
       const firstName = (p.first_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || 'Applicant';
       const lastName = (p.last_name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') || '';
-      const fileBaseName = lastName ? `${firstName}_${lastName}` : firstName;
+      const nameBase = lastName ? `${firstName}_${lastName}` : firstName;
+      // Long titles get cut, not carried. Some postings run to
+      // "Senior Staff Machine Learning Engineer, Ranking and Discovery
+      // Platform (Remote, EMEA)"; older portals truncate long filenames
+      // and a name that wraps is worse than no role at all. Four words
+      // and 34 characters, whichever comes first, and a word is never
+      // cut mid-way.
+      const roleWords = String(this.currentJob?.title || '')
+        .replace(/\([^)]*\)/g, ' ')                       // drop "(Remote)", "(m/f/d)"
+        .replace(/[^A-Za-z0-9 ]/g, ' ')
+        .trim().split(/\s+/).filter(Boolean).slice(0, 4);
+      let roleSlug = '';
+      for (const w of roleWords) {
+        const next = roleSlug ? roleSlug + '_' + w : w;
+        if (next.length > 34) break;
+        roleSlug = next;
+      }
+      const fileBaseName = roleSlug ? `${nameBase}_${roleSlug}` : nameBase;
 
       this.profileInfo = { firstName: p.first_name, lastName: p.last_name };
 
@@ -6259,13 +6299,27 @@ class ATSTailor {
       // CRITICAL: Apply ContentQualityEngine sanitisation to final CV and cover letter
       // Ensures UK spelling, no banned words, no em dashes in ALL output
       if (typeof ContentQualityEngine !== 'undefined') {
+        // Match the posting's English. An ATS that scores keywords by
+        // literal substring match treats "optimisation" and
+        // "optimization" as two different words, so a US posting scores
+        // nothing against a British-spelt CV. Falls back to UK when the
+        // location carries no country, which is the behaviour this
+        // always had.
+        const _spelling = (typeof RegionalFormat !== 'undefined')
+          ? RegionalFormat.resolveRegion(
+              this.currentJob?.location || '',
+              this._defaultLocation || ''
+            ).spelling
+          : 'UK';
         if (this.generatedDocuments.cv) {
-          this.generatedDocuments.cv = ContentQualityEngine.sanitiseCVBlock(this.generatedDocuments.cv);
-          console.log('[ATS Tailor] Applied ContentQualityEngine to final CV');
+          this.generatedDocuments.cv = ContentQualityEngine.sanitiseCVBlock(
+            this.generatedDocuments.cv, _spelling
+          );
+          console.log('[ATS Tailor] Applied ContentQualityEngine to final CV (' + _spelling + ' spelling)');
         }
         if (this.generatedDocuments.coverLetter) {
           this.generatedDocuments.coverLetter = ContentQualityEngine.sanitiseContent(
-            this.generatedDocuments.coverLetter, { removePronouns: false }
+            this.generatedDocuments.coverLetter, { removePronouns: false, spelling: _spelling }
           );
           console.log('[ATS Tailor] Applied ContentQualityEngine to cover letter');
         }
@@ -6282,68 +6336,65 @@ class ATSTailor {
           let cvText = this.generatedDocuments.cv;
           const toReInject = postSanitiseMatch.missingKeywords;
 
-          // Separate multi-word phrases from single keywords
-          const multiWord = toReInject.filter(kw => kw.includes(' '));
-          const singleWord = toReInject.filter(kw => !kw.includes(' '));
+          // A KEYWORD THAT FITS NOWHERE TRUTHFULLY GOES IN THE SKILLS
+          // LIST, NOT INTO A MANUFACTURED ACHIEVEMENT.
+          //
+          // This used to write a whole new bullet under the most recent
+          // role whenever a multi-word phrase had no home:
+          //
+          //   "- Applied real-time applications and data integration to
+          //    troubleshoot, optimise, driving measurable improvements
+          //    across development workflows."
+          //
+          // That is a fabricated accomplishment. It claims work the
+          // candidate never described, in the exact register a recruiter
+          // reads as machine-written, and it lands under the most recent
+          // role -- the first three bullets, the part that actually gets
+          // read. It also cannot survive an interview, because there is
+          // no story behind it.
+          //
+          // The keyword coverage it bought is real but small, and the
+          // skills section captures the same terms honestly. So every
+          // unplaceable keyword now routes there, multi-word included.
+          const singleWord = toReInject.slice();
 
-          // MULTI-WORD PHRASES: Inject into experience bullet for ATS phrase matching
-          if (multiWord.length > 0) {
-            const expMatch = cvText.match(/(WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE)\s*\n/i);
-            if (expMatch && expMatch.index !== undefined) {
-              const afterExp = cvText.substring(expMatch.index);
-              const lines = afterExp.split('\n');
-              let lastBulletIdx = -1;
-              let passedBullet = false;
-              for (let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line.startsWith('-') || line.startsWith('•')) {
-                  passedBullet = true;
-                  lastBulletIdx = i;
-                }
-                if (passedBullet && !line.startsWith('-') && !line.startsWith('•') && line.length > 0 && /\d{2}\/\d{4}/.test(line)) break;
-              }
-              if (lastBulletIdx > 0) {
-                // Build natural bullet with multi-word phrases
-                const verbPhrases = [];
-                const nounPhrases = [];
-                const verbStarters = ['troubleshoot', 'implement', 'improve', 'resolve', 'manage', 'develop', 'create', 'define', 'optimize', 'optimise', 'maintain', 'investigate', 'monitor', 'set', 'collaborate'];
-                for (const p of multiWord) {
-                  const first = p.split(' ')[0].toLowerCase();
-                  if (verbStarters.some(v => first.startsWith(v))) verbPhrases.push(p);
-                  else nounPhrases.push(p);
-                }
-                let bullet;
-                if (verbPhrases.length > 0 && nounPhrases.length > 0) {
-                  bullet = `- Applied ${nounPhrases.join(' and ')} to ${verbPhrases.join(', ')}, driving measurable improvements across development workflows.`;
-                } else if (verbPhrases.length > 0) {
-                  bullet = `- Utilised technical expertise to ${verbPhrases.join(', ')}, ensuring reliable and scalable delivery processes.`;
-                } else {
-                  bullet = `- Demonstrated ${nounPhrases.join(', ')} across cross-functional projects, contributing to continuous process improvement.`;
-                }
-                lines.splice(lastBulletIdx + 1, 0, bullet);
-                cvText = cvText.substring(0, expMatch.index) + lines.join('\n');
-                console.log(`[ATS Tailor] Injected ${multiWord.length} multi-word phrases into experience bullet`);
-              }
-            }
-          }
-
-          // SINGLE KEYWORDS: Inject into Technical Proficiencies / Skills section
           if (singleWord.length > 0) {
-            const skillsMatch = cvText.match(/(TECHNICAL\s+PROFICIENCIES|TECHNICAL\s+SKILLS|SKILLS)\s*\n([^\n]*(?:\n(?![A-Z]{3,})[^\n]*)*)/i);
+            // Anchored to the start of a line and to the heading's own
+            // line. Unanchored and case-insensitive, this matched the
+            // word "skills" wherever it happened to end a line -- inside
+            // a bullet, inside the summary -- and spliced a comma list
+            // of raw JD keywords into the middle of a sentence. It also
+            // masked the real fault below: any accidental match counted
+            // as "section found", and a genuine miss then appended a
+            // second TECHNICAL PROFICIENCIES heading.
+            const skillsMatch = cvText.match(
+              /^[ \t]*(?:TECHNICAL\s+PROFICIENCIES|TECHNICAL\s+SKILLS|SKILLS)[ \t]*:?[ \t]*\n([^\n]*(?:\n(?![A-Z]{3,})[^\n]*)*)/m
+            );
             if (skillsMatch) {
               const sectionStart = skillsMatch.index;
               const fullMatch = skillsMatch[0];
               const sectionContent = fullMatch.trimEnd();
-              const separator = sectionContent.endsWith(',') ? ' ' : ', ';
-              const enriched = sectionContent + separator + singleWord.join(', ');
-              cvText = cvText.substring(0, sectionStart) + enriched + cvText.substring(sectionStart + fullMatch.length);
+              // Don't re-add a keyword the section already lists. The
+              // keyword is "missing" per the whole-document scan only
+              // because that scan is word-boundary matched and this one
+              // is not, so without the check the same term gets printed
+              // twice in the same comma list.
+              const already = new Set(
+                sectionContent.split(/[,\n]/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+              );
+              const toAdd = singleWord.filter((kw) => !already.has(kw.trim().toLowerCase()));
+              if (toAdd.length) {
+                const separator = sectionContent.endsWith(',') ? ' ' : ', ';
+                const enriched = sectionContent + separator + toAdd.join(', ');
+                cvText = cvText.substring(0, sectionStart) + enriched + cvText.substring(sectionStart + fullMatch.length);
+              }
             } else {
               const insertBefore = cvText.match(/\n(CERTIFICATIONS|EDUCATION|ACHIEVEMENTS)\b/i);
               if (insertBefore && insertBefore.index !== undefined) {
-                const newSection = `\n\nTECHNICAL PROFICIENCIES\n${singleWord.join(', ')}\n`;
+                const newSection = `\n\nTECHNICAL SKILLS\n${singleWord.join(', ')}\n`;
                 cvText = cvText.substring(0, insertBefore.index) + newSection + cvText.substring(insertBefore.index);
               } else {
-                cvText += `\n\nTECHNICAL PROFICIENCIES\n${singleWord.join(', ')}\n`;
+                cvText += `\n\nTECHNICAL SKILLS\n${singleWord.join(', ')}\n`;
               }
             }
           }
@@ -6383,6 +6434,37 @@ class ATSTailor {
           cvText = cvText.replace(phoneEmailRe, m[1] + applicationLocation + ' | ' + stripped);
           this.generatedDocuments.cv = cvText;
           console.log('[ATS Tailor] CV header location set to:', applicationLocation);
+        }
+      }
+
+      // TARGET TITLE, DIRECTLY UNDER THE NAME.
+      //
+      // The first thing a reviewer checks is the candidate's title
+      // against the req they are filling; if that is ambiguous they read
+      // the summary, and if that is generic they move on. A CV that
+      // opens with a name and a phone number makes them do the mapping
+      // themselves, on a pile where nobody has the patience.
+      //
+      // This is positioning, not a claim about the current employer --
+      // the job titles inside WORK EXPERIENCE remain exactly as they
+      // were, so nothing here contradicts the history below it. Done
+      // in the extension rather than the prompt so it does not wait on
+      // an edge-function deploy.
+      if (this.generatedDocuments.cv) {
+        const rawTitle = String(this.currentJob?.title || '')
+          .replace(/\([^)]*\)/g, ' ')                 // "(Remote)", "(m/f/d)"
+          .replace(/\s*[-–—|]\s*(remote|hybrid|onsite|contract|permanent|full[- ]time|part[- ]time)\b.*$/i, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        const lines = this.generatedDocuments.cv.split('\n');
+        const nameIdx = lines.findIndex((l) => l.trim());
+        const next = lines[nameIdx + 1] || '';
+        const alreadyThere = next.trim().toLowerCase() === rawTitle.toLowerCase();
+        // Only when there is a real title, and never twice.
+        if (rawTitle && rawTitle.length <= 60 && nameIdx >= 0 && !alreadyThere) {
+          lines.splice(nameIdx + 1, 0, rawTitle);
+          this.generatedDocuments.cv = lines.join('\n');
+          console.log('[ATS Tailor] CV target title line set to:', rawTitle);
         }
       }
 
@@ -7252,6 +7334,40 @@ class ATSTailor {
    * Prevents output like: "WORK EXPERIENCE\n\nWORK EXPERIENCE".
    * ALSO FIXES: "SKILLS: PYTHON, JAVA, C++" -> splits to "SKILLS\n" + properly cased content.
    */
+  /**
+   * Join two comma-separated skill lists into one, without repeating a
+   * skill that appears in both.
+   *
+   * The old merge was a bare `first + ', ' + second`, so a keyword the
+   * injector added and the model had also written landed on the CV
+   * twice. Casing matters here: injected keywords arrive lowercase
+   * ("langgraph") while the model's own list is cased ("LangGraph"), and
+   * an all-lowercase technical term is one of the clearest tells that a
+   * CV was machine-assembled -- so on a collision the cased spelling
+   * wins. Anything that isn't a comma list (a bulleted block, prose) is
+   * joined on a new line instead, which keeps the content intact.
+   */
+  mergeSkillLists(first, second) {
+    const a = (first || '').trim();
+    const b = (second || '').trim();
+    if (!a) return b;
+    if (!b) return a;
+    const listLike = (s) => s.includes(',') && !/\n/.test(s) && !/^[•\-*]/.test(s);
+    if (!listLike(a) || !listLike(b)) return a + '\n' + b;
+
+    const seen = new Map();                      // lowercase -> chosen casing
+    for (const raw of (a + ', ' + b).split(',')) {
+      const v = raw.trim();
+      if (!v) continue;
+      const k = v.toLowerCase();
+      const held = seen.get(k);
+      if (held === undefined || (held === held.toLowerCase() && v !== v.toLowerCase())) {
+        seen.set(k, v);
+      }
+    }
+    return [...seen.values()].join(', ');
+  }
+
   dedupeSectionHeaders(text) {
     if (!text || typeof text !== 'string') return text;
 
@@ -7274,16 +7390,28 @@ class ATSTailor {
     // CRITICAL FIX v4.0: Merge duplicate SEPARATE section headers
     // When "SKILLS\ncontent1...\nCERTIFICATIONS\n...\nSKILLS\ncontent2..." exists,
     // merge content2 into the first SKILLS section and remove the second
+    //
+    // THREE copies is the case that actually shipped. The tailoring edge
+    // function appends a TECHNICAL PROFICIENCIES section when it cannot
+    // find one to append to, the post-sanitisation pass below does the
+    // same, and the model emits its own -- so the text can arrive with
+    // three. This used to merge matches[0] and matches[1] once and stop,
+    // which left the third standing and put a CV out with the heading
+    // printed twice. Merge until one remains.
     const MERGEABLE_SECTIONS = ['SKILLS', 'TECHNICAL SKILLS', 'TECHNICAL PROFICIENCIES', 'CORE SKILLS', 'KEY SKILLS', 'CERTIFICATIONS'];
     for (const sectionName of MERGEABLE_SECTIONS) {
       const sectionRegex = new RegExp(
         `^${sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n`,
         'gim'
       );
-      const matches = [...fixedText.matchAll(sectionRegex)];
-      if (matches.length > 1) {
-        // Found duplicate section - merge second occurrence into first
-        // Find the content of the second section
+      let merges = 0;
+      // Bounded so a merge that somehow fails to shrink the text cannot
+      // spin: each pass must remove one heading or we stop.
+      for (let guard = 0; guard < 10; guard++) {
+        const matches = [...fixedText.matchAll(sectionRegex)];
+        if (matches.length < 2) break;
+
+        // Merge the SECOND occurrence into the first, then look again.
         const secondStart = matches[1].index;
         const headerLen = matches[1][0].length;
         const contentStart = secondStart + headerLen;
@@ -7292,23 +7420,26 @@ class ATSTailor {
         const contentEnd = nextHeaderMatch ? contentStart + nextHeaderMatch.index : fixedText.length;
         const secondContent = fixedText.slice(contentStart, contentEnd).trim();
 
-        if (secondContent) {
-          // Find end of first section's content
-          const firstStart = matches[0].index;
-          const firstHeaderLen = matches[0][0].length;
-          const firstContentStart = firstStart + firstHeaderLen;
-          const nextHeaderAfterFirst = fixedText.slice(firstContentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
-          const firstContentEnd = nextHeaderAfterFirst ? firstContentStart + nextHeaderAfterFirst.index : contentStart - 2;
+        // Find end of first section's content
+        const firstStart = matches[0].index;
+        const firstHeaderLen = matches[0][0].length;
+        const firstContentStart = firstStart + firstHeaderLen;
+        const nextHeaderAfterFirst = fixedText.slice(firstContentStart).match(/\n[A-Z][A-Z\s]{2,30}\n/);
+        const firstContentEnd = nextHeaderAfterFirst ? firstContentStart + nextHeaderAfterFirst.index : contentStart - 2;
+        const firstContent = fixedText.slice(firstContentStart, firstContentEnd).trim();
 
-          // Merge: append second content to first, remove second section entirely
-          const firstContent = fixedText.slice(firstContentStart, firstContentEnd).trim();
-          const mergedContent = firstContent + ', ' + secondContent;
-          fixedText = fixedText.slice(0, firstContentStart) + mergedContent + '\n' +
-                     fixedText.slice(firstContentEnd, secondStart) +
-                     fixedText.slice(contentEnd);
-
-          console.log(`[ATS Tailor] dedupeSectionHeaders: Merged duplicate "${sectionName}" sections`);
-        }
+        // An empty duplicate still has to go -- the heading is the
+        // problem, not the content under it.
+        const mergedContent = secondContent
+          ? this.mergeSkillLists(firstContent, secondContent)
+          : firstContent;
+        fixedText = fixedText.slice(0, firstContentStart) + mergedContent + '\n' +
+                   fixedText.slice(firstContentEnd, secondStart) +
+                   fixedText.slice(contentEnd);
+        merges++;
+      }
+      if (merges) {
+        console.log(`[ATS Tailor] dedupeSectionHeaders: Merged ${merges} duplicate "${sectionName}" section(s)`);
       }
     }
 

@@ -275,6 +275,8 @@
     'well-versed': 'experienced',
     'adept': 'skilled',
     // v3.2 additions — replacements for newly banned words
+    'robust understanding': 'strong understanding',
+    'robust knowledge': 'strong knowledge',
     'robust': 'reliable',
     'seamless': 'smooth',
     'holistic': 'complete',
@@ -401,7 +403,7 @@
     // "Proven X" phrases (must be removed, not rephrased)
     // User requirement: replace "proven ability" with plain "ability" (no adjectives)
     'proven ability': 'ability',
-    'proven track record': 'track record',
+    'proven track record': 'experience',
     'proven record': 'record',
     'proven proficiency': 'proficiency',
     'proven proficiency in': 'proficiency in',
@@ -485,7 +487,7 @@
     'eager to contribute': 'ready to contribute',
     'I bring a wealth of': 'I bring',
     'a wealth of experience': 'experience',
-    'track record of success': 'record',
+    'track record of success': 'record of success',
     'track record of delivering': 'history of delivering',
     'extensive experience with': 'experience with',
     'extensive knowledge of': 'knowledge of',
@@ -701,6 +703,58 @@
     // 'program' (programme only for TV/events, NOT computing)
   };
 
+  // ============ UK -> US, for postings in American English ============
+  //
+  // Built by inverting the map above rather than maintaining a second
+  // one, so the two directions can never drift apart. Three kinds of
+  // entry must NOT be inverted:
+  //
+  //   'utilize' -> 'use'      a word-quality rule, not a spelling one.
+  //                           Inverted it would turn every "use" in the
+  //                           CV into "utilize", which is the exact
+  //                           padding the engine exists to remove.
+  //   'analysis' -> 'analysis' identity pairs, present in the map only as
+  //                           a guard. Inverting them is a no-op at best.
+  //   'inquire' -> 'enquire'  kept, but see below: several UK forms are
+  //                           ordinary English words in their own right.
+  //
+  // The point of the direction is literal ATS keyword matching. A Chicago
+  // posting asking for "optimization" scores nothing against a CV that
+  // says "optimisation".
+  const NEVER_FROM_UK = new Set([
+    'use', 'used', 'using', 'usage',            // the utilize->use rule
+    'programme', 'programmes',                  // 'program' is correct in
+                                                // computing in BOTH, and
+                                                // the map excludes it
+  ]);
+
+  const UK_TO_US_SPELLING = (() => {
+    const out = {};
+    for (const us of Object.keys(US_TO_UK_SPELLING)) {
+      const uk = US_TO_UK_SPELLING[us];
+      if (!uk || uk === us) continue;           // identity guard
+      if (NEVER_FROM_UK.has(uk)) continue;      // not a spelling pair
+      // First writer wins, so 'utilise'->'use' cannot overwrite a real
+      // pair that was registered earlier.
+      if (!(uk in out)) out[uk] = us;
+    }
+    return out;
+  })();
+
+  // A word is left alone when it is Capitalised in the middle of a
+  // sentence, because that is a proper noun and not prose: "World Health
+  // Organisation" and "Defence Forces Ireland" are names, and an employer
+  // or certification name must survive verbatim. Sentence-initial and
+  // bullet-initial capitals are ordinary text and are converted.
+  function _isMidSentenceCapital(text, offset, match) {
+    if (match[0] !== match[0].toUpperCase() || match[0] === match[0].toLowerCase()) return false;
+    const before = text.slice(0, offset).replace(/[ \t]+$/, '');
+    if (!before) return false;                          // start of document
+    if (/[.!?:\n]$/.test(before)) return false;         // start of sentence
+    if (/[-•*]$/.test(before)) return false;            // start of a bullet
+    return true;
+  }
+
   // ============ FALLBACK REGEX PATTERNS for -ize/-ise ============
   // Catches any remaining US -ize words not explicitly listed above
   const IZE_PATTERN = /\b([a-z]+)iz(e[ds]?|ing|ation)\b/gi;
@@ -725,19 +779,27 @@
         removeBannedWords = true,
         removeEmDashes = true,
         fixPunctuation = true,
-        removePronouns = true
+        removePronouns = true,
+        // 'UK' | 'US'. Which English the posting is written in, from
+        // RegionalFormat.resolveRegion(). Defaults to UK, which is what
+        // this engine always did.
+        spelling = 'UK'
       } = options;
 
       let result = text;
 
-      // Step 1: Remove banned words and phrases FIRST (before UK spelling, since some banned words have US spelling)
+      // Step 1: Remove banned words and phrases FIRST (before spelling, since some banned words have US spelling)
       if (removeBannedWords) {
         result = this.removeBannedContent(result);
       }
 
-      // Step 2: Convert US to UK spelling
+      // Step 2: Match the posting's English. An ATS that scores keywords
+      // by literal substring match does not know "optimise" and
+      // "optimization" are the same word.
       if (convertToUK) {
-        result = this.convertToUKSpelling(result);
+        result = spelling === 'US'
+          ? this.convertToUSSpelling(result)
+          : this.convertToUKSpelling(result);
       }
 
       // Step 3: Remove em dashes, and the approximation markers that read
@@ -776,29 +838,43 @@
       if (!text || typeof text !== 'string') return text;
       let r = text;
 
-      // 1. Break consecutive sentences starting with "I" — AI writing signature
-      //    "I did X. I then Y. I also Z." → vary with "The", "This", "My", drop subject
-      r = r.replace(/(\. )(I )(have |had |am |was |will |would |can |could |did )?/g, (match, dot, subj, aux, offset) => {
-        const rand = Math.random();
-        if (rand < 0.25) return dot + (aux || '');       // drop subject entirely: ". Had..."
-        if (rand < 0.45) return dot + 'My ';              // ". My work..."
-        if (rand < 0.60) return dot + 'This ';            // ". This..."
-        return match;                                      // keep 40% unchanged for variety
-      });
+      // 1. REMOVED: substituting the subject pronoun.
+      //
+      // This rewrote ". I <verb>" into ". This <verb>", ". My <verb>" or
+      // ". <verb>", and no branch of it produces valid English:
+      //
+      //   "I think I could add value"  -> "This think I could add value"
+      //   "I have gone from..."        -> "My have gone from..."
+      //   "I am particularly proud"    -> "am particularly proud"
+      //
+      // The auxiliary list it relied on covers only nine verbs, so any
+      // other verb left the substitution stranded with no subject at
+      // all. It fired on 60% of first-person sentences, which in a cover
+      // letter -- a document that is first-person by nature -- is most
+      // of the text. Varying sentence openings is a real goal; swapping
+      // out the subject is not a way to achieve it.
+      //
+      // The contraction variation below does the same job grammatically.
 
       // 2. Vary paragraph/sentence openers — flag if 3+ consecutive sentences start same way
-      const sentences = r.split(/(?<=[.!?])\s+/);
-      if (sentences.length >= 3) {
-        const openers = sentences.map(s => (s.match(/^\S+/) || [''])[0].toLowerCase());
+      //
+      // Rewritten to work a line at a time. It used to split the WHOLE
+      // text on sentence boundaries and rejoin with `sentences.join(' ')`,
+      // which replaced every newline between them with a space -- so a
+      // four-paragraph cover letter came out as one unbroken block.
+      r = r.split('\n').map((lineText) => {
+        const sentences = lineText.split(/(?<=[.!?])\s+/);
+        if (sentences.length < 3) return lineText;
+        const openers = sentences.map((s) => (s.match(/^\S+/) || [''])[0].toLowerCase());
         for (let i = 2; i < openers.length; i++) {
-          if (openers[i] === openers[i - 1] && openers[i] === openers[i - 2]) {
-            const alts = ['Specifically, ', 'For example, ', 'In practice, ', 'Here, ', 'At ', 'One example: '];
+          if (openers[i] && openers[i] === openers[i - 1] && openers[i] === openers[i - 2]) {
+            const alts = ['Specifically, ', 'For example, ', 'In practice, ', 'Here, ', 'One example: '];
             const pick = alts[Math.floor(Math.random() * alts.length)];
             sentences[i] = pick + sentences[i].charAt(0).toLowerCase() + sentences[i].slice(1);
           }
         }
-        r = sentences.join(' ');
-      }
+        return sentences.join(' ');
+      }).join('\n');
 
       // 3. Contract formal phrases to casual contractions (human writers use these)
       r = r.replace(/\bI have\b/g, () => Math.random() < 0.4 ? "I've" : 'I have');
@@ -837,7 +913,10 @@
 
     // ============ CV/ATS BLOCK SANITISATION (Preserve line layout) ============
     // For multi-line CV blocks we avoid adding sentence-ending punctuation per line.
-    sanitiseCVBlock(text) {
+    // `spelling` is 'UK' (the default and the historical behaviour) or
+    // 'US' when the posting is North American. Callers get it from
+    // RegionalFormat.resolveRegion(jobLocation).spelling.
+    sanitiseCVBlock(text, spelling) {
       // FIRST: Fix inline headers (e.g., "SKILLS: PYTHON, JAVA, C++" → separate lines with proper casing)
       let result = this.normaliseInlineHeaders(text);
 
@@ -846,34 +925,31 @@
         removeBannedWords: true,
         removeEmDashes: true,
         fixPunctuation: false,
-        removePronouns: true
+        removePronouns: true,
+        spelling: spelling === 'US' ? 'US' : 'UK'
       });
 
       // ██ FINAL NEVER-LEAK GUARD ██
-      // Catches any US spellings or banned words that somehow survived the pipeline
-      result = this.neverLeakGuard(result);
+      // Catches any stray spellings or banned words that survived the pipeline
+      result = this.neverLeakGuard(result, spelling);
 
       return result;
     },
 
     // ============ NEVER-LEAK GUARD ============
     // Absolute last-resort catch for words that MUST NEVER appear in output
-    neverLeakGuard(text) {
+    // `spelling` is 'UK' (default, and what this always did) or 'US'.
+    // The spelling half of the guard flips with it; the word-quality half
+    // -- utilize/leverage/spearheaded and the rest -- is the same in every
+    // country and never flips.
+    neverLeakGuard(text, spelling) {
       if (!text || typeof text !== 'string') return text;
 
-      // These MUST be replaced no matter what — case-insensitive word-boundary match
-      const ABSOLUTE_REPLACEMENTS = [
-        // US spellings that must always be UK
-        [/\butilizing\b/gi, 'using'],
-        [/\butilized\b/gi, 'used'],
-        [/\butilize\b/gi, 'use'],
-        [/\butilizes\b/gi, 'uses'],
-        [/\butilization\b/gi, 'usage'],
-        [/\butilising\b/gi, 'using'],   // Even UK form of utilize is banned (use "using" instead)
-        [/\butilised\b/gi, 'used'],
-        [/\butilise\b/gi, 'use'],
-        [/\butilises\b/gi, 'uses'],
-        [/\butilisation\b/gi, 'usage'],
+      // Spelling, in whichever English the posting is written in. These
+      // exist because the map upstream can be bypassed; the guard is the
+      // last line and has to agree with the region, or it silently undoes
+      // the conversion it was meant to protect.
+      const FORCE_UK = [
         [/\bmodernize\b/gi, 'modernise'],
         [/\bmodernized\b/gi, 'modernised'],
         [/\bmodernizing\b/gi, 'modernising'],
@@ -888,6 +964,39 @@
         [/\boptimized\b/gi, 'optimised'],
         [/\boptimize\b/gi, 'optimise'],
         [/\boptimization\b/gi, 'optimisation'],
+      ];
+      const FORCE_US = [
+        [/\bmodernise\b/gi, 'modernize'],
+        [/\bmodernised\b/gi, 'modernized'],
+        [/\bmodernising\b/gi, 'modernizing'],
+        [/\bmodernises\b/gi, 'modernizes'],
+        [/\bmodernisation\b/gi, 'modernization'],
+        [/\banalysing\b/gi, 'analyzing'],
+        [/\banalysed\b/gi, 'analyzed'],
+        [/\banalyse\b/gi, 'analyze'],
+        [/\banalyses\b/gi, 'analyzes'],
+        [/\banalyser\b/gi, 'analyzer'],
+        [/\boptimising\b/gi, 'optimizing'],
+        [/\boptimised\b/gi, 'optimized'],
+        [/\boptimise\b/gi, 'optimize'],
+        [/\boptimisation\b/gi, 'optimization'],
+      ];
+
+      // These MUST be replaced no matter what — case-insensitive word-boundary match
+      const ABSOLUTE_REPLACEMENTS = [
+        // "utilise" is padding for "use" in both Englishes, so this pair
+        // is a word-quality rule and stays in force for every region.
+        [/\butilizing\b/gi, 'using'],
+        [/\butilized\b/gi, 'used'],
+        [/\butilize\b/gi, 'use'],
+        [/\butilizes\b/gi, 'uses'],
+        [/\butilization\b/gi, 'usage'],
+        [/\butilising\b/gi, 'using'],   // Even UK form of utilize is banned (use "using" instead)
+        [/\butilised\b/gi, 'used'],
+        [/\butilise\b/gi, 'use'],
+        [/\butilises\b/gi, 'uses'],
+        [/\butilisation\b/gi, 'usage'],
+      ].concat(spelling === 'US' ? FORCE_US : FORCE_UK).concat([
         // Banned buzzwords that must never appear
         [/\borchestrated\b/gi, 'directed'],
         [/\bchampioned\b/gi, 'led'],
@@ -899,6 +1008,11 @@
         [/\bleverage\b/gi, 'use'],
         [/\bcomprehensive\b/gi, 'thorough'],
         // v3.2 additions to never-leak guard
+        // "reliable" fits a system, not an abstract noun: "robust
+        // understanding" became "reliable understanding", which is not
+        // English anyone writes. Pick by what the word is modifying.
+        [/\brobust\b(?=\s+(?:understanding|knowledge|grasp|background|experience|command|appreciation|foundation))/gi, 'strong'],
+        [/\brobust\b(?=\s+(?:set|suite|range|portfolio))/gi, 'broad'],
         [/\brobust\b/gi, 'reliable'],
         [/\bseamless\b/gi, 'smooth'],
         [/\bholistic\b/gi, 'complete'],
@@ -918,7 +1032,7 @@
         [/\bmeticulous\b/gi, 'detailed'],
         // Phrases that must be replaced (multi-word)
         [/\bproven ability\b/gi, 'ability'],
-        [/\bproven track record\b/gi, 'track record'],
+        [/\bproven track record\b/gi, 'experience'],
         [/\bproven expertise\b/gi, 'expertise'],
         [/\bresults-driven\b/gi, 'results-focused'],
         [/\bself-motivated\b/gi, 'proactive'],
@@ -927,7 +1041,7 @@
         [/\bsynergies\b/gi, 'collaborations'],
         [/\bparadigm\b/gi, 'approach'],
         [/\brobust\b/gi, 'strong'],
-      ];
+      ]);
 
       let result = text;
       for (const [pattern, replacement] of ABSOLUTE_REPLACEMENTS) {
@@ -1251,6 +1365,33 @@
       return result;
     },
 
+    // ============ CONVERT UK -> US SPELLING ============
+    // Runs instead of convertToUKSpelling when the posting is American.
+    // Explicit map only -- no generic -ise -> -ize fallback, because that
+    // fallback would have to know that advise, supervise, expertise,
+    // enterprise, advertise, comprise, revise, devise, promise, precise
+    // and franchise are spelt -ise in American English too. A curated map
+    // cannot make that mistake; a regex eventually will.
+    convertToUSSpelling(text) {
+      if (!text || typeof text !== 'string') return text;
+      let result = text;
+
+      const sortedWords = Object.keys(UK_TO_US_SPELLING).sort((a, b) => b.length - a.length);
+      for (const ukWord of sortedWords) {
+        const usWord = UK_TO_US_SPELLING[ukWord];
+        const regex = new RegExp(`\\b${ukWord}\\b`, 'gi');
+        result = result.replace(regex, (match, offset, whole) => {
+          if (_isMidSentenceCapital(whole, offset, match)) return match;
+          if (match === match.toUpperCase()) return usWord.toUpperCase();
+          if (match[0] === match[0].toUpperCase()) {
+            return usWord.charAt(0).toUpperCase() + usWord.slice(1);
+          }
+          return usWord;
+        });
+      }
+      return result;
+    },
+
     // ============ REMOVE BANNED WORDS AND PHRASES ============
     removeBannedContent(text) {
       if (!text) return text;
@@ -1265,6 +1406,19 @@
         const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
         result = result.replace(regex, replacement);
       }
+
+      // Context-sensitive substitutions, BEFORE the word loop below.
+      //
+      // That loop walks BANNED_WORDS and looks up a single replacement
+      // per word, so "robust" always became "reliable" -- which fits a
+      // system and not an abstract noun. A real generated cover letter
+      // went out saying "I possess a reliable understanding of data
+      // profiling", which is not English anyone writes. Choosing by what
+      // the word modifies has to happen before the blanket swap.
+      result = result
+        .replace(/\brobust\b(?=\s+(?:understanding|knowledge|grasp|background|experience|command|appreciation|foundation))/gi, 'strong')
+        .replace(/\brobust\b(?=\s+(?:set|suite|range|portfolio))/gi, 'broad')
+        .replace(/\bcomprehensive\b(?=\s+(?:understanding|knowledge|grasp))/gi, 'thorough');
 
       // Replace banned words
       for (const word of BANNED_WORDS) {
@@ -1301,7 +1455,7 @@
         .replace(/[~≈∼]\s*(?=[\d£$€])/g, '')
         .replace(/\b(?:approx\.?|circa|c\.)\s+(?=[\d£$€])/gi, '')
         .replace(/\b(?:roughly|approximately|about|around|an estimated|in the region of)\s+(?=[\d£$€])/gi, '')
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[ \t]{2,}/g, ' ');
     },
 
     removeEmDashes(text) {
@@ -1317,22 +1471,32 @@
         // "June 2019 – December 2022": a year on the left, a month name on
         // the right, so the digit-to-digit rule above does not see it.
         .replace(/(\d{4})\s*[—–]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/gi, '$1 - $2')
-        // Everything else is a parenthetical. A comma keeps the sentence
-        // whole; a full stop cut it into fragments like "Reduced cost. a 12%
-        // saving. in year one." -- which reads far more machine-written than
-        // the dash it replaced, and breaks the no-fragments rule outright.
+        // A dash between two capitalised words is part of a NAME, not
+        // punctuation in a sentence: "AWS Certified Machine Learning -
+        // Specialty", "Microsoft Certified - Azure". A comma there mangles
+        // the credential, and an ATS matches certifications as exact
+        // strings, so it stops matching at all.
+        .replace(/\s*[—–]\s*(?=[A-Z0-9])/g, ' - ')
+        // Everything else is a parenthetical inside a sentence. A comma
+        // keeps the sentence whole; a full stop cut it into fragments like
+        // "Reduced cost. a 12% saving. in year one." -- which reads far
+        // more machine-written than the dash it replaced.
         .replace(/\s*[—–]\s*/g, ', ')
         // Clean up doubled punctuation left behind.
         .replace(/,\s*,/g, ',')
         .replace(/\.\s*,/g, '.')
         .replace(/,\s*\./g, '.')
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[ \t]{2,}/g, ' ');
     },
 
     // ============ FIX PUNCTUATION ============
     fixPunctuation(text) {
       if (!text) return text;
 
+      // A letter's salutation and sign-off end in a comma by
+      // convention, and a signature line is not a sentence. Neither
+      // should be 'corrected'.
+      const LETTER_LINE = /^\s*(dear\b|hi\b|hello\b|yours\b|kind regards|best regards|regards|sincerely)/i;
       return text
         // Remove excessive commas
         .replace(/,(\s*,)+/g, ',')
@@ -1342,12 +1506,32 @@
         // Fix period spacing
         .replace(/\s+\./g, '.')
         .replace(/\.(?!\s|$|\d)/g, '. ')
-        // Remove trailing punctuation from bullets
-        .replace(/[,;]\s*$/gm, '')
-        // Ensure sentences end with period
-        .replace(/([a-z])\s*$/gm, '$1.')
+        // Remove trailing punctuation from bullets -- but a letter's
+        // salutation and sign-off END in a comma by convention, and
+        // stripping it produced "Dear Hiring Manager" then "Yours
+        // sincerely" with a full stop bolted on by the rule below.
+        // `[ \t]*` not `\s*`: with /m, a greedy `\s*$` reaches past the
+        // line's own newline to the end of the NEXT (blank) line, so the
+        // replacement swallowed the blank line separating the salutation
+        // from the body.
+        .replace(/([,;])([ \t]*)$/gm, (m, punct, tail, off, whole) => {
+          const line = whole.slice(whole.lastIndexOf('\n', off - 1) + 1, off + 1);
+          return LETTER_LINE.test(line) ? m : tail;
+        })
+        // Ensure sentences end with period, leaving those lines alone.
+        .replace(/([a-z])([ \t]*)$/gm, (m, ch, tail, off, whole) => {
+          const line = whole.slice(whole.lastIndexOf('\n', off - 1) + 1, off + 1);
+          return LETTER_LINE.test(line) ? m : ch + '.' + tail;
+        })
+        // Deleting a banned phrase from the middle of a sentence can
+        // strand the verb before an infinitive -- removing "welcome the
+        // chance" from "I would welcome the chance to talk" leaves
+        // "I would to talk". Repair the few shapes that produces.
+        .replace(/\b(I|we|they|you)\s+(would|will|could|should)\s+to\s+/gi, '$1 $2 like to ')
+        .replace(/\b(I|we|they|you)'(d|ll)\s+to\s+/gi, "$1'$2 like to ")
+        .replace(/\b(I|we|they|you)\s+(am|are|is)\s+to\s+(?=[a-z])/gi, '$1 $2 happy to ')
         // Clean up multiple spaces
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[ \t]{2,}/g, ' ');
     },
 
     // ============ REMOVE PERSONAL PRONOUNS ============
@@ -1367,7 +1551,7 @@
         // Remove "our "
         .replace(/\bour\s+/g, '')
         // Clean up leftover issues
-        .replace(/\s{2,}/g, ' ')
+        .replace(/[ \t]{2,}/g, ' ')
         .trim();
     },
 
@@ -1398,7 +1582,7 @@
         // Collapse duplicated section headers (regression guard)
         .replace(dupHeaderRegex, '$1')
         // Remove double spaces
-        .replace(/\s{2,}/g, ' ')
+        .replace(/[ \t]{2,}/g, ' ')
         // Remove empty lines
         .replace(/\n\s*\n\s*\n/g, '\n\n')
         // Fix capitalisation after periods

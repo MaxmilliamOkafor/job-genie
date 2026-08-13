@@ -172,7 +172,29 @@
       console.log(`[CoverLetterGenerator] Using ${topKeywords.length} keywords for natural injection`);
 
       // Build cover letter sections WITH keyword injection
-      let opening = this.selectRandom(templateConfig.opening, { jobTitle, company });
+      // Every token this template family uses, not just the two the
+      // opening was assumed to need. Seven of the opening variants also
+      // reference {yearsExp} and {domain}, and replacePlaceholders only
+      // substitutes the keys it is handed -- so those openings shipped
+      // the literal text "I have spent {yearsExp} years doing similar
+      // work in {domain}" to recruiters. Half of all generated letters
+      // carried a raw token.
+      // ...and where a value is genuinely unknown, drop the variants
+      // that need it rather than rendering a gap.
+      let openings = templateConfig.opening;
+      if (!(yearsExp && String(yearsExp).trim())) {
+        const noYears = openings.filter((s) => !/\{yearsExp\}/.test(s));
+        if (noYears.length) openings = noYears;
+      }
+      // Prefer an opening that names the employer. Several variants use
+      // only {jobTitle} and {domain}, and when one of those was drawn the
+      // company appeared exactly once in the whole letter -- in the merge
+      // field at the close -- which reads like precisely what it is.
+      if (company) {
+        const named = openings.filter((s) => /\{company\}/.test(s));
+        if (named.length) openings = named;
+      }
+      let opening = this.selectRandom(openings, { jobTitle, company, yearsExp, domain });
       let bridge = this.buildBridgeWithKeywords(templateConfig.bridge, { yearsExp, domain }, topKeywords);
       let body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);
       let closing = this.buildClosingWithKeywords(templateConfig.closing, { company }, topKeywords);
@@ -214,15 +236,43 @@
       if (gapBridgeLine) {
         // Merge the bridge into the body as a continuation, not a new
         // paragraph -- avoids the "bolted-on" feel.
-        Body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
+        //
+        // This read `Body` (capital B) and nothing declares it. Under the
+        // 'use strict' at the top of this file that is a ReferenceError,
+        // not a silent global -- so every letter where CareerBoost found a
+        // strong adjacency threw out of generate() instead of returning.
+        // The gap bridge is the sentence that connects what the candidate
+        // has done to what the posting asks for, so the one case it was
+        // written for was the one case that crashed.
+        body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
       }
 
-      // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
+      // Spelling follows the posting's country for the same reason the CV's
+      // does: literal ATS keyword matching does not know that "optimise"
+      // and "optimization" are one word. Falls back to UK, which is what
+      // this always did. Declared out here because the final whole-letter
+      // pass further down is a separate block and needs it too.
+      const _spelling = (typeof RegionalFormat !== 'undefined')
+        ? RegionalFormat.resolveRegion(
+            jobData?.location || jobData?.jobLocation || '',
+            candidateData?.location || ''
+          ).spelling
+        : 'UK';
+
+      // CRITICAL: Apply ContentQualityEngine sanitisation for spelling and anti-AI detection
       if (typeof ContentQualityEngine !== 'undefined') {
-        opening = ContentQualityEngine.sanitiseContent(opening);
-        bridge = ContentQualityEngine.sanitiseContent(bridge);
-        body = ContentQualityEngine.sanitiseContent(body);
-        closing = ContentQualityEngine.sanitiseContent(closing);
+        // removePronouns MUST be off here. It defaults to true -- a CV
+        // bullet convention, where "I" is implied -- and these four calls
+        // omitted it, so every paragraph was stripped before the final
+        // pass on line 263 correctly turned it off. A cover letter is
+        // first-person by nature, and the result was sentences like
+        // "At Meta was Software Engineer" and "One thing am particularly
+        // proud of" going out to recruiters.
+        const letterOpts = { removePronouns: false, spelling: _spelling };
+        opening = ContentQualityEngine.sanitiseContent(opening, letterOpts);
+        bridge = ContentQualityEngine.sanitiseContent(bridge, letterOpts);
+        body = ContentQualityEngine.sanitiseContent(body, letterOpts);
+        closing = ContentQualityEngine.sanitiseContent(closing, letterOpts);
         console.log('[CoverLetterGenerator] Applied ContentQualityEngine sanitisation');
       }
 
@@ -246,7 +296,7 @@
 
       // Final sanitisation pass on complete letter
       if (typeof ContentQualityEngine !== 'undefined') {
-        coverLetter = ContentQualityEngine.sanitiseContent(coverLetter, { removePronouns: false });
+        coverLetter = ContentQualityEngine.sanitiseContent(coverLetter, { removePronouns: false, spelling: _spelling });
       }
 
       // === Recruiter Audit: post-process pass.  Strips empty buzzword
@@ -269,6 +319,22 @@
         } catch (e) {
           console.warn('[CoverLetterGenerator] Recruiter audit skipped:', e.message);
         }
+      }
+
+      // Last line of defence. Whatever template is added later, and
+      // whatever tokens it references, nothing shaped like {token} is
+      // allowed out of here -- it is addressed to a person, and a raw
+      // placeholder is the single most damaging thing a generated letter
+      // can contain. The tidy-up afterwards keeps the sentence readable
+      // rather than leaving a double space or a stranded comma.
+      if (/\{[A-Za-z][A-Za-z0-9_]*\}/.test(coverLetter)) {
+        console.warn('[CoverLetterGenerator] Unresolved template token(s) removed:',
+          [...new Set(coverLetter.match(/\{[A-Za-z][A-Za-z0-9_]*\}/g))].join(', '));
+        coverLetter = coverLetter
+          .replace(/\s*\{[A-Za-z][A-Za-z0-9_]*\}/g, '')
+          .replace(/ {2,}/g, ' ')
+          .replace(/ ([,.;:])/g, '$1')
+          .replace(/,\s*\./g, '.');
       }
 
       const timing = performance.now() - startTime;
@@ -315,7 +381,27 @@
     },
 
     // ============ BUILD BRIDGE WITH KEYWORDS (v3.0. Natural, human tone) ============
+    // Sentences that carry no years figure, for when the history cannot
+    // be totalled. Previously the generator invented "5+" so the token
+    // always had something to render, which put a number in the letter
+    // that the CV did not support.
+    YEARS_FREE_BRIDGE: [
+      'My background is in {domain}, mostly spent building things, fixing things, and working out how to do both faster. I have worked with senior stakeholders and know how to turn their priorities into delivered work.',
+      'I have worked across several {domain} roles, and the common thread has been taking on hard problems and delivering outcomes people could point to.',
+      'My work in {domain} has given me a mix of hands-on technical ability and the softer skills you need with clients, leadership, or teams under pressure.',
+      'I have spent my career in {domain}, long enough to learn what works, what does not, and how to tell the difference quickly.',
+    ],
+
     buildBridgeWithKeywords(bridgeTemplates, replacements, keywords) {
+      // No credible figure -> use a sentence that does not mention one.
+      // Leaving the token to render empty produced "I have spent roughly
+      // years working in...", and filling it with a guess contradicted
+      // the CV, which states the real total.
+      const years = replacements && replacements.yearsExp;
+      if (!years || !String(years).trim()) {
+        const clean = (bridgeTemplates || []).filter((s) => !/\{yearsExp\}/.test(s));
+        bridgeTemplates = clean.length ? clean : this.YEARS_FREE_BRIDGE;
+      }
       let bridge = this.selectRandom(bridgeTemplates, replacements);
 
       if (keywords.length >= 3) {
@@ -342,6 +428,23 @@
     // ============ BUILD CLOSING WITH KEYWORDS ============
     buildClosingWithKeywords(closingTemplates, replacements, keywords) {
       let closing = this.selectRandom(closingTemplates, replacements);
+
+      // Name the employer once more at the close. A letter that mentions
+      // the company a single time, in the opening line where the merge
+      // field sits, reads exactly like what it is -- and the guidance
+      // asks the final paragraph to say why this company specifically.
+      const co = replacements && replacements.company;
+      if (co && !new RegExp('\\b' + String(co).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(closing)) {
+        // Wording chosen to avoid the sanitiser's banned-phrase list.
+        // "welcome the chance" is deleted outright there, which turned
+        // "I would welcome the chance to talk" into "I would to talk".
+        const tails = [
+          ` I would be glad to discuss what I could bring to ${co}.`,
+          ` I am happy to talk through how I could help at ${co}.`,
+          ` I would like to discuss the role and ${co} further.`,
+        ];
+        closing = closing.replace(/\s*$/, '') + tails[Math.floor(Math.random() * tails.length)];
+      }
 
       if (keywords.length >= 5) {
         const kw = keywords[4] || keywords[0];
@@ -395,6 +498,19 @@
     },
 
     // ============ CALCULATE YEARS OF EXPERIENCE ============
+    // The CV, the cover letter and the application form must all state
+    // the same length of career. They did not.
+    //
+    // This read only `job.dates`, but the popup passes the structured
+    // shape with startDate/endDate, so in the real pipeline it found
+    // nothing and fell through to a hard-coded '5+'. The CV summary
+    // stated the true total while the letter said "5+ years" in its
+    // second sentence -- a contradiction between two documents in the
+    // same application, which is one of the first things a reviewer
+    // notices.
+    //
+    // Returns '' when it cannot be computed. Callers pick an opening
+    // that does not mention years at all rather than inventing one.
     calculateYearsExperience(candidateData) {
       // Explicit value from profile wins over date arithmetic.
       const explicit = candidateData?.yearsExperience ?? candidateData?.years_experience ?? candidateData?.yearsExp;
@@ -407,26 +523,39 @@
                         candidateData?.professionalExperience ||
                         candidateData?.workExperience || [];
 
-      if (experience.length === 0) return '5+';
+      if (!Array.isArray(experience) || experience.length === 0) return '';
 
-      let totalYears = 0;
       const currentYear = new Date().getFullYear();
-
+      const spans = [];
       for (const job of experience) {
-        const dates = job.dates || '';
-        const years = dates.match(/\d{4}/g);
+        // Every shape the profile is stored in, not just `dates`.
+        const text = [job.dates, job.startDate, job.start_date,
+          job.endDate, job.end_date].filter(Boolean).join(' ');
+        if (!text) continue;
+        const years = String(text).match(/\b(?:19|20)\d{2}\b/g);
+        if (!years || !years.length) continue;
+        const startYear = parseInt(years[0], 10);
+        // A role recorded with a single year is one year, not "everything
+        // since then" -- that turned a one-year role in 2019 into seven.
+        const endYear = /present|current|now|ongoing/i.test(text)
+          ? currentYear
+          : parseInt(years[years.length - 1], 10);
+        if (isNaN(startYear) || isNaN(endYear) || endYear < startYear) continue;
+        spans.push([startYear, endYear]);
+      }
+      if (!spans.length) return '';
 
-        if (years && years.length >= 2) {
-          const startYear = parseInt(years[0]);
-          const endYear = /present/i.test(dates) ? currentYear : parseInt(years[1]);
-          totalYears += endYear - startYear;
-        } else if (years && years.length === 1) {
-          const startYear = parseInt(years[0]);
-          totalYears += currentYear - startYear;
-        }
+      // Merge overlaps instead of summing. A contract held alongside a
+      // full-time role is not two separate careers.
+      spans.sort((a, b) => a[0] - b[0]);
+      let totalYears = 0, cursor = -Infinity;
+      for (const [s, e] of spans) {
+        const from = Math.max(s, cursor);
+        if (e > from) { totalYears += e - from; cursor = e; }
+        else if (e > cursor) cursor = e;
       }
 
-      if (totalYears <= 0) return '5+';
+      if (totalYears <= 0) return '';
       if (totalYears >= 10) return '10+';
       return `${totalYears}+`;
     },
@@ -511,6 +640,50 @@
         }
 
         paragraphs.push(para1);
+
+        // A SECOND capability, evidenced by a second role.
+        //
+        // The letter used to draw on experience[0] only, so it made one
+        // claim and stopped -- around 110 words against the one-page,
+        // 250-400 word letter the guidance describes, and a reviewer got
+        // a single piece of proof. The second role is already on the CV;
+        // this puts one line of it in front of them.
+        const prior = experience.find((j, i) => i > 0 && (j.bullets || j.achievements || []).length);
+        if (prior) {
+          const pBullets = prior.bullets || prior.achievements || [];
+          const metricFirst = pBullets.find((b) => /\d/.test(b)) || pBullets[0] || '';
+          const pc = (metricFirst || '').replace(/^[•\-*▪]\s*/, '').trim();
+          if (pc) {
+            const lc = pc.charAt(0).toLowerCase() + pc.slice(1);
+            const openers = [
+              `Before that, at ${prior.company || 'a previous employer'}, I ${lc}`,
+              `Earlier, as ${prior.title || 'an engineer'} at ${prior.company || 'a previous employer'}, I ${lc}`,
+              `That built on my time at ${prior.company || 'a previous employer'}, where I ${lc}`,
+            ];
+            let para = openers[Math.floor(Math.random() * openers.length)];
+            if (!para.endsWith('.')) para += '.';
+            // Appended to the same paragraph rather than pushed as its
+            // own. Two roles are one argument -- "here is my evidence" --
+            // and splitting every sentence out gave seven one-line
+            // paragraphs where the guidance asks for about four.
+            paragraphs[paragraphs.length - 1] += ' ' + para;
+          }
+        }
+      }
+
+      // Name a requirement from the posting and answer it directly. The
+      // guidance is explicit that a letter should tie itself to a stated
+      // requirement rather than describe a career in general.
+      if (topKeywords.length) {
+        const req = topKeywords[0];
+        const reqLines = [
+          `Your listing puts weight on ${req}, which is the part of the work I have spent most of my time on.`,
+          `You single out ${req} in the requirements; that is where most of my recent work has sat.`,
+          `On ${req} specifically, which the posting calls out, that is core to what I do day to day.`,
+        ];
+        const reqLine = reqLines[Math.floor(Math.random() * reqLines.length)];
+        if (paragraphs.length) paragraphs[paragraphs.length - 1] += ' ' + reqLine;
+        else paragraphs.push(reqLine);
       }
 
       if (topKeywords.length > 3) {
@@ -535,8 +708,13 @@
       if (topKeywords.length > 7) {
         const extraSkills = [topKeywords[7], topKeywords[8], topKeywords[9]].filter(Boolean);
         if (extraSkills.length > 0) {
+          // `ExtraSkills` (capital E) is declared nowhere, and this file
+          // is in strict mode, so reading it is a ReferenceError rather
+          // than an undefined. Any posting yielding nine or more keywords
+          // reaches this branch -- which is most real postings -- and the
+          // whole of generate() threw.
           const skillsStr = extraSkills.length > 1
-            ? ExtraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
+            ? extraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
             : extraSkills[0];
           const para3Variants = [
             `I also have hands-on experience with ${skillsStr}. I have used these in production settings and I am comfortable picking them up again wherever they fit into your stack.`,
@@ -759,7 +937,11 @@
     extractAchievement(bullet) {
       if (!bullet) return 'significant performance improvements';
       const match = bullet.match(/(\d+%?\s*(?:improvement|increase|reduction|faster|efficiency|growth))/i);
-      return match ? Match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
+      // `Match` (capital M) is undeclared; in strict mode that throws.
+      // It only threw when the regex FOUND a figure -- so the branch that
+      // worked was the one that gave up, and the branch that had a real
+      // metric to quote was the one that crashed.
+      return match ? match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
     }
   };
 

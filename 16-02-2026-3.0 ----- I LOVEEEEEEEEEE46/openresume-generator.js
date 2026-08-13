@@ -763,8 +763,8 @@
       if (!summary) {
         const topKeywords = keywordsArray.slice(0, 3);
         const baseSummary = topKeywords.length > 0
-          ? `Professional with extensive expertise in ${topKeywords.join(', ')}. Track record of delivering high-impact solutions and driving measurable business outcomes.`
-          : `Professional with track record of delivering high-impact solutions and driving measurable business outcomes.`;
+          ? `Professional with expertise in ${topKeywords.join(', ')}, focused on delivering solutions with measurable business outcomes.`
+          : `Professional focused on delivering solutions with measurable business outcomes.`;
         return sanitise(baseSummary);
       }
 
@@ -1000,7 +1000,7 @@
 
       // === SKILLS ===
       if (data.skills && data.skills.length > 0) {
-        if (addSectionHeader('TECHNICAL PROFICIENCIES') !== false) {
+        if (addSectionHeader('TECHNICAL SKILLS') !== false) {
           addText(data.skills.join(', '), false, false, font.body);
           y += 4;
         }
@@ -1057,7 +1057,7 @@
       }
 
       if (data.skills?.length > 0) {
-        lines.push('TECHNICAL PROFICIENCIES');
+        lines.push('TECHNICAL SKILLS');
         lines.push(data.skills.join(', '));
         lines.push('');
       }
@@ -1272,7 +1272,7 @@
       y += 14;
 
       // === PARAGRAPH 4: Compelling close — confident, not passive ===
-      const para4 = `I am confident that my combination of technical capability, leadership instinct, and track record of delivery would make a meaningful contribution to ${company}. I would welcome the opportunity to discuss how my background aligns with your goals, and how I can add value from day one. Thank you for your time and consideration.`;
+      const para4 = `I am confident that my combination of technical capability, leadership instinct, and delivery experience would make a meaningful contribution to ${company}. I would welcome the opportunity to discuss how my background aligns with your goals, and how I can add value from day one. Thank you for your time and consideration.`;
       addText(para4, false, font.body);
       y += 20;
 
@@ -1348,7 +1348,7 @@
 
       const p3 = `Beyond execution, I bring depth in ${kw5}, ${kw6}, and ${kw7} that enables me to operate at both strategic and operational levels. I consistently drive ${kw8} across delivery teams, creating repeatable frameworks that outlast any single project.`;
 
-      const p4 = `I am confident my combination of technical capability, leadership instinct, and delivery track record would make a meaningful contribution to ${company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.`;
+      const p4 = `I am confident my combination of technical capability, leadership instinct, and delivery experience would make a meaningful contribution to ${company}. I welcome the opportunity to discuss how I can add value from day one. Thank you for your time and consideration.`;
 
       const lines = [
         name.toUpperCase(),

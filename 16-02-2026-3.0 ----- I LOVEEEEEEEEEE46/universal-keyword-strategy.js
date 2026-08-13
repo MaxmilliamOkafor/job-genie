@@ -382,7 +382,7 @@
       
       if (toInject.length > 0) {
         // TEMPLATE: "[Title] expert in [KEYWORD1], [KEYWORD2] with proven [KEYWORD3] delivery"
-        const injection = ` Expert in ${toInject.slice(0, 3).join(', ')} with proven delivery track record.`;
+        const injection = ` Experienced with ${toInject.slice(0, 3).join(", ")}.`;
         const enhancedSummary = summarySection.replace(/(\.\s*)$/, injection + '$1');
         tailoredCV = tailoredCV.replace(summarySection, enhancedSummary);
         injectedKeywords.push(...toInject.slice(0, 3));

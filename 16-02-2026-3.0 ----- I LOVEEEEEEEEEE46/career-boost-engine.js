@@ -84,6 +84,106 @@
         medium: ['mentor', 'coaching', '1:1', 'performance review', 'hiring', 'budget', 'org design'],
       },
     },
+
+    // ---- the families this set used to be blind to --------------------
+    //
+    // Everything above is technical or technical-adjacent, so a job
+    // outside that world scored zero against every archetype, the
+    // detector returned null, and the role-fit gate concluded there was
+    // nothing to warn about. That is the wrong answer in the most
+    // important case: the further the role is from the candidate, the
+    // more certainly the warning is warranted.
+    //
+    // These exist to be DETECTED, not to be tailored towards. They carry
+    // no summaryFraming, because there is no honest way to frame an AI
+    // engineer as a Listings Specialist -- the point is to notice and
+    // say so before the application goes out.
+    'customer-success': {
+      label: 'Customer Success / Account Management',
+      detectOnly: true,
+      signals: {
+        strong: ['customer success', 'account manager', 'account executive', 'client success',
+          'customer success manager', 'csm', 'renewals', 'churn', 'upsell', 'book of business',
+          'account management', 'client relationship', 'customer retention'],
+        medium: ['quota', 'portfolio of accounts', 'qbr', 'onboarding customers', 'escalations',
+          'customer health', 'nps', 'client onboarding'],
+      },
+    },
+    'sales-bizdev': {
+      label: 'Sales / Business Development',
+      detectOnly: true,
+      signals: {
+        strong: ['sales representative', 'sales manager', 'business development', 'bdr', 'sdr',
+          'inside sales', 'field sales', 'sales executive', 'new business', 'closing deals'],
+        medium: ['pipeline', 'prospecting', 'cold calling', 'commission', 'territory', 'crm hygiene'],
+      },
+    },
+    'finance-accounting': {
+      label: 'Finance / Accounting',
+      detectOnly: true,
+      signals: {
+        strong: ['financial analyst', 'accountant', 'accounts payable', 'accounts receivable',
+          'bookkeeper', 'financial operations', 'finance operations', 'controller', 'audit',
+          'reconciliation', 'general ledger', 'month-end close', 'treasury', 'payroll'],
+        medium: ['invoicing', 'budgeting', 'forecasting', 'variance', 'gaap', 'ifrs', 'expense'],
+      },
+    },
+    'admin-operations': {
+      label: 'Administration / Operations',
+      detectOnly: true,
+      signals: {
+        strong: ['administrator', 'administrative assistant', 'office manager', 'receptionist',
+          'data entry', 'listings specialist', 'operations assistant', 'executive assistant',
+          'coordinator', 'scheduling', 'back office', 'clerk'],
+        medium: ['filing', 'diary management', 'correspondence', 'record keeping', 'inbox'],
+      },
+    },
+    'property-realestate': {
+      label: 'Property / Real Estate',
+      detectOnly: true,
+      signals: {
+        strong: ['estate agent', 'real estate', 'lettings', 'property manager', 'listings',
+          'tenancy', 'landlord', 'conveyancing', 'valuations', 'viewings', 'property listings'],
+        medium: ['rental', 'tenant', 'portfolio of properties', 'inventory of properties'],
+      },
+    },
+    'healthcare-social': {
+      label: 'Healthcare / Social Care',
+      detectOnly: true,
+      signals: {
+        strong: ['social worker', 'nurse', 'nursing', 'clinician', 'care assistant', 'support worker',
+          'safeguarding', 'clinical', 'patient care', 'occupational therapist', 'physiotherapist',
+          'mental health practitioner', 'locum'],
+        medium: ['caseload', 'care plan', 'nmc', 'hcpc', 'social care', 'residential care'],
+      },
+    },
+    'marketing-content': {
+      label: 'Marketing / Content',
+      detectOnly: true,
+      signals: {
+        strong: ['marketing manager', 'content writer', 'copywriter', 'seo specialist', 'brand manager',
+          'social media manager', 'campaign manager', 'communications manager', 'journalist', 'editor'],
+        medium: ['campaign', 'brand', 'editorial', 'newsletter', 'copy', 'audience growth'],
+      },
+    },
+    'hr-recruiting': {
+      label: 'HR / Recruiting',
+      detectOnly: true,
+      signals: {
+        strong: ['recruiter', 'talent acquisition', 'hr manager', 'hr business partner', 'people partner',
+          'human resources', 'hr advisor', 'employee relations', 'talent partner'],
+        medium: ['onboarding employees', 'hris', 'employee engagement', 'headcount planning'],
+      },
+    },
+    'support-helpdesk': {
+      label: 'Customer Support / Helpdesk',
+      detectOnly: true,
+      signals: {
+        strong: ['customer service', 'customer support', 'help desk', 'helpdesk', 'service desk',
+          'technical support', 'support agent', 'call centre', 'call center', 'contact centre'],
+        medium: ['ticket', 'sla', 'first line', 'triage queries', 'inbound calls'],
+      },
+    },
   };
 
   function _normalise(text) {
@@ -384,6 +484,12 @@
   function buildArchetypeSummary({ archetype, yearsExp, domain, baseSummary, topKeywords = [] }) {
     if (!archetype || !archetype.primary) return baseSummary;
     const a = archetype.primary;
+    // detectOnly archetypes exist so the role-fit gate can NAME a
+    // mismatched job family. They carry no framing on purpose: writing
+    // "Customer Success professional..." over an AI engineer's summary
+    // is the fabrication the gate is there to prevent. Leave the
+    // summary alone and let the warning do its job.
+    if (a.detectOnly || !a.summaryFraming) return baseSummary;
     const top3 = topKeywords.slice(0, 3).filter(Boolean);
     const kwClause = top3.length ? ` Recent focus areas: ${top3.join(', ')}.` : '';
     const lead = `${a.summaryFraming} ${yearsExp ? `${yearsExp}+ years` : 'Multi-year'} in ${domain || 'the field'}.${kwClause}`;

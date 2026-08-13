@@ -7,7 +7,15 @@
 
   // ============ PDF CONFIGURATION (ATS-PERFECT SPECIFICATION) ============
   const PDF_CONFIG = {
-    // Page dimensions (A4 in points)
+    // Page dimensions in points. A4 is the default and the fallback;
+    // _applyPageFormat swaps in US Letter when the posting is North
+    // American. Margins are unchanged between the two -- both sit well
+    // inside either printable area, and one margin set means a reviewer
+    // sees the same line breaks whichever country they are in.
+    //
+    // This is a print concern only. No ATS reads page dimensions; every
+    // one of them reads the text stream. Neither choice can cause a
+    // rejection, which is exactly why it is safe to switch.
     page: {
       width: 595.28,
       height: 841.89,
@@ -67,6 +75,32 @@
   const ProfessionalPDFEngine = {
 
     // ============ MAIN ENTRY: GENERATE CV PDF ============
+    // Choose the paper for this application and make every later
+    // width/height read agree with it. Called once, synchronously, right
+    // before the jsPDF document is constructed; the whole render pass
+    // that follows is synchronous, so nothing can observe a half-applied
+    // page. Returns the format string jsPDF wants.
+    _applyPageFormat(jobData, candidateData) {
+      const A4 = { width: 595.28, height: 841.89, format: 'a4' };
+      try {
+        const RF = (typeof window !== 'undefined' && window.RegionalFormat) || global.RegionalFormat;
+        if (!RF) { Object.assign(PDF_CONFIG.page, A4); return 'a4'; }
+        const region = RF.resolveRegion(
+          (jobData && (jobData.location || jobData.jobLocation)) || '',
+          (candidateData && candidateData.location) || ''
+        );
+        if (region.page === 'LETTER') {
+          Object.assign(PDF_CONFIG.page, { width: 612, height: 792, format: 'letter' });
+          return 'letter';
+        }
+      } catch (e) {
+        // A location we cannot read is not a reason to fail a CV.
+        console.warn('[ProfessionalPDFEngine] page format fell back to A4:', e && e.message);
+      }
+      Object.assign(PDF_CONFIG.page, A4);
+      return 'a4';
+    },
+
     async generateCV(candidateData, tailoredContent, options = {}, jobData = null) {
       const startTime = performance.now();
       console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV (SPEED OPTIMIZED)...');
@@ -84,7 +118,7 @@
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
-          format: 'a4',
+          format: this._applyPageFormat(jobData, candidateData),
           compress: true,
           putOnlyUsedFonts: true, // SPEED: Only embed used fonts
           floatPrecision: 2 // SPEED: Reduce float precision for smaller file
@@ -155,7 +189,7 @@
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
-          format: 'a4',
+          format: this._applyPageFormat(jobData, candidateData),
           compress: true,
           putOnlyUsedFonts: true, // SPEED: Only embed used fonts
           floatPrecision: 2 // SPEED: Reduce float precision
@@ -320,6 +354,21 @@
         extractedJobLocation = this.cleanLocation(extractedJobLocation);
       }
 
+      // The role being applied for, printed under the name. The DOCX
+      // gets this from the CV text, which the PDF never sees -- it
+      // renders from the structured record -- so without carrying it
+      // here the same application would show a target title in one
+      // format and not the other.
+      let targetTitle = '';
+      if (jobData) {
+        targetTitle = String(jobData.title || jobData.jobTitle || '')
+          .replace(/\([^)]*\)/g, ' ')
+          .replace(/\s*[-\u2013\u2014|]\s*(remote|hybrid|onsite|contract|permanent|full[- ]time|part[- ]time)\b.*$/i, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        if (targetTitle.length > 60) targetTitle = '';
+      }
+
       return {
         name,
         email: data.email || '',
@@ -328,7 +377,8 @@
         linkedin: this.formatLinkedIn(data.linkedin || ''),
         github: this.formatGitHub(data.github || ''),
         portfolio,
-        extractedJobLocation
+        extractedJobLocation,
+        targetTitle
       };
     },
 
@@ -716,21 +766,44 @@
     },
 
     // ============ NORMALIZE DATES (MM-YYYY format) ============
+    // Canonical form is "January 2023 - Present": full month name,
+    // four-digit year, plain ASCII hyphen.
+    //
+    // This used to emit MM-YYYY ("01-2023 - Present"). That is the one
+    // numeric form Jobscan's match report flags as non-compliant, and it
+    // is the reason the text pipeline standardised on "Month YYYY" --
+    // but the PDF renders from the STRUCTURED data, which never passes
+    // through that pipeline, so the fix never reached this format. The
+    // result was a CV whose dates read "January 2023 - Present" as a
+    // DOCX and "01-2023 - Present" as a PDF: the same application
+    // looking different depending on which file the portal accepted.
     normalizeDates(dateStr) {
       if (!dateStr) return '';
       const hasPresent = /present|current|now/i.test(dateStr);
+      const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthName = (mm) => MONTHS[Math.max(1, Math.min(12, parseInt(mm, 10))) - 1];
 
-      // Helper: convert a date token to MM-YYYY if possible
-      const toMMYYYY = (token) => {
+      const toMonthYear = (token) => {
         if (!token) return '';
         if (/present|current|now/i.test(token)) return 'Present';
-        // YYYY-MM → MM-YYYY
+        // Already "January 2023" / "Jan 2023" -> expand to the full name.
+        const named = token.match(/\b([A-Za-z]{3,9})\.?\s+((?:19|20)\d{2})\b/);
+        if (named) {
+          const hit = MONTHS.find((m) => m.toLowerCase().startsWith(named[1].toLowerCase().slice(0, 3)));
+          if (hit) return `${hit} ${named[2]}`;
+        }
+        // YYYY-MM
         const isoMatch = token.match(/\b((?:19|20)\d{2})[-/](\d{1,2})\b/);
-        if (isoMatch) return `${isoMatch[2].padStart(2, '0')}-${isoMatch[1]}`;
-        // MM/YYYY or MM-YYYY → MM-YYYY
+        if (isoMatch) return `${monthName(isoMatch[2])} ${isoMatch[1]}`;
+        // MM/YYYY or MM-YYYY
         const mmyyyyMatch = token.match(/\b(\d{1,2})[-/]((?:19|20)\d{2})\b/);
-        if (mmyyyyMatch) return `${mmyyyyMatch[1].padStart(2, '0')}-${mmyyyyMatch[2]}`;
-        // Year only
+        if (mmyyyyMatch) {
+          const n = parseInt(mmyyyyMatch[1], 10);
+          if (n >= 1 && n <= 12) return `${monthName(mmyyyyMatch[1])} ${mmyyyyMatch[2]}`;
+        }
+        // Year only stays a bare year -- inventing a month would be a
+        // fabricated date, and a bare year parses fine everywhere.
         const yearMatch = token.match(/\b((?:19|20)\d{2})\b/);
         if (yearMatch) return yearMatch[1];
         return token;
@@ -739,8 +812,8 @@
       // Try to split on range separators
       const parts = dateStr.split(/\s+[-–—]\s+|\s*[–—]\s*/);
       if (parts.length >= 2) {
-        const start = toMMYYYY(parts[0]);
-        const end = hasPresent ? 'Present' : toMMYYYY(parts[parts.length - 1]);
+        const start = toMonthYear(parts[0]);
+        const end = hasPresent ? 'Present' : toMonthYear(parts[parts.length - 1]);
         // Plain ASCII hyphen: one byte in every encoding an ATS might
         // assume. An en dash is three bytes in UTF-8 and arrives as
         // mojibake if the parser guesses wrong, leaving the range with no
@@ -750,7 +823,7 @@
       }
 
       // Single date
-      return toMMYYYY(dateStr);
+      return toMonthYear(dateStr);
     },
 
     // ============ PARSE EDUCATION TEXT ============
@@ -871,14 +944,42 @@
       doc.text(contact.name.toUpperCase(), nameX, y);
       y += PDF_CONFIG.fonts.sizes.name * 0.8 + PDF_CONFIG.spacing.afterName;
 
+      // Target title, on its own line under the name. It is the first
+      // thing a reviewer checks against the req they are filling.
+      if (contact.targetTitle) {
+        doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+        doc.setFontSize(PDF_CONFIG.fonts.sizes.contact + 1);
+        doc.setTextColor(...PDF_CONFIG.colors.black);
+        const tw = doc.getTextWidth(contact.targetTitle);
+        doc.text(contact.targetTitle, (pageWidth - tw) / 2, y);
+        y += PDF_CONFIG.fonts.sizes.contact + 3;
+      }
+
       // Contact line (centered, regular, 10pt)
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location] (ALWAYS both locations)
-      const candidateLocation = 'Dublin, IE';
-      const cleanLoc = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
+      // Location | Phone | Email | [job location, when it differs]
+      //
+      // The first segment used to be the literal 'Dublin, IE'. The
+      // job-adaptive value the popup computes already arrives here as
+      // contact.location -- it was simply discarded, so the PDF header
+      // and the DOCX header disagreed about where the candidate is on
+      // every application outside Dublin. Nobody chose that; the value
+      // was plumbed through and then thrown away.
+      const candidateLocation = contact.location || 'Dublin, IE';
+      // The trailing job location exists to show both places at once.
+      // Its de-duplication was a second hard-coded literal
+      // (/^Dublin,? IE$/), so the repeat was only ever suppressed for
+      // one city. Compare against whatever the first segment actually
+      // is instead.
+      const sameLoc = (a, b) => String(a || '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+        === String(b || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      let cleanLoc = contact.extractedJobLocation
+        ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').trim()
+        : '';
+      if (sameLoc(cleanLoc, candidateLocation)) cleanLoc = '';
       const contactParts = [candidateLocation, contact.phone, contact.email, cleanLoc].filter(Boolean);
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
@@ -1160,7 +1261,7 @@
         y = PDF_CONFIG.margins.top;
       }
 
-      y = this.renderSectionTitle(doc, 'TECHNICAL PROFICIENCIES', y);
+      y = this.renderSectionTitle(doc, 'TECHNICAL SKILLS', y);
 
       // Format skills as comma-separated list (max 25)
       const skillsText = skills.slice(0, 25).join(', ');
@@ -1272,8 +1373,21 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const cleanLocCL = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
-      const contactParts2 = [contact.phone, contact.email, cleanLocCL].filter(Boolean);
+      // Same header as the CV, for the same reasons. This carried the
+      // /^Dublin,? IE$/ literal too, so a Dublin job had its location
+      // silently dropped while every other city kept it -- and the
+      // candidate's own location was missing entirely, though the DOCX
+      // cover letter has always printed it. A recruiter reads both
+      // documents; they should not disagree about where the applicant
+      // is.
+      const candidateLocationCL = contact.location || 'Dublin, IE';
+      const sameLocCL = (a, b) => String(a || '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+        === String(b || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      let cleanLocCL = contact.extractedJobLocation
+        ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').trim()
+        : '';
+      if (sameLocCL(cleanLocCL, candidateLocationCL)) cleanLocCL = '';
+      const contactParts2 = [candidateLocationCL, contact.phone, contact.email, cleanLocCL].filter(Boolean);
       doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 2;
 

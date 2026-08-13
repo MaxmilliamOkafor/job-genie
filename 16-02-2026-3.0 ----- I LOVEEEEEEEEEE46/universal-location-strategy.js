@@ -142,6 +142,61 @@ const ISO2_COUNTRY_FALLBACK = new Set([
   'IN','AE','SG','JP','CN','KR','AU','CA','NZ','IL','TR','BR','MX','ZA','TZ','NG','KE','HK'
 ]);
 
+// Every two-letter code that is BOTH a US state and an ISO 3166-1
+// country. These are the only codes where "City, XX" is genuinely
+// ambiguous, and getting one wrong is expensive in a specific
+// direction: reading Israel as Illinois put a United States address on
+// a CV applying to a Tel Aviv role, which is what a work-authorisation
+// screen rejects on.
+//
+// This is spelled out rather than derived because the country dataset
+// bundled with the extension carries 46 countries, so a membership test
+// against it answers "not a country" for most of the world. (The guard
+// that was here called db.fromISO2(), which the dataset does not
+// implement at all, so it was answering undefined every time.)
+const STATE_COUNTRY_COLLISIONS = new Set([
+  'AL',  // Alabama        / Albania
+  'AR',  // Arkansas       / Argentina
+  'CA',  // California     / Canada
+  'CO',  // Colorado       / Colombia
+  'DE',  // Delaware       / Germany
+  'GA',  // Georgia (state)/ Georgia (country)
+  'ID',  // Idaho          / Indonesia
+  'IL',  // Illinois       / Israel
+  'IN',  // Indiana        / India
+  'KY',  // Kentucky       / Cayman Islands
+  'LA',  // Louisiana      / Laos
+  'MD',  // Maryland       / Moldova
+  'ME',  // Maine          / Montenegro
+  'MN',  // Minnesota      / Mongolia
+  'MO',  // Missouri       / Macao
+  'MS',  // Mississippi    / Montserrat
+  'MT',  // Montana        / Malta
+  'NC',  // North Carolina / New Caledonia
+  'NE',  // Nebraska       / Niger
+  'PA',  // Pennsylvania   / Panama
+  'SC',  // South Carolina / Seychelles
+  'SD',  // South Dakota   / Sudan
+  'TN',  // Tennessee      / Tunisia
+  'VA',  // Virginia       / Holy See
+]);
+
+function isAlsoACountryCode(code) {
+  const upper = String(code || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(upper)) return false;
+  if (ISO2_COUNTRY_FALLBACK.has(upper) || STATE_COUNTRY_COLLISIONS.has(upper)) return true;
+  // Exact iso2 match only. db.findCountry() is a FUZZY matcher -- it
+  // answers Taiwan for "TX", Portugal for "MT" and New Zealand for "ZZ"
+  // -- so using it as a membership test marks every US state a country
+  // and strips the ", US" off real American addresses.
+  try {
+    const list = (_getDB() || {})._COUNTRIES;
+    return Array.isArray(list) && list.some((c) => String(c && c.iso2).toUpperCase() === upper);
+  } catch (e) {
+    return false;
+  }
+}
+
 const MAJOR_US_CITIES = [
   'new york', 'los angeles', 'chicago', 'houston', 'phoenix', 'philadelphia',
   'san antonio', 'san diego', 'dallas', 'san jose', 'austin', 'jacksonville',
@@ -578,9 +633,12 @@ function _toISO2(token) {
   // Already a 2-letter code? Validate it
   if (/^[A-Z]{2}$/i.test(t)) {
     const upper = t.toUpperCase();
-    const db = _getDB();
-    // Verify it's a real country code
-    if (db?.fromISO2?.(upper)) return upper;
+    // Real country code wins. This used to ask db.fromISO2(), a method
+    // the bundled dataset does not implement, so the check answered
+    // undefined every time and fell through to the US-state test below
+    // -- which returns null for IL, DE, CA, IN and the rest, throwing
+    // away the country on exactly the codes that needed resolving.
+    if (isAlsoACountryCode(upper)) return upper;
     // Also check US states — they're 2-letter but NOT country codes
     if (US_STATES[upper]) return null; // It's a US state, not a country
     // Trust it if it looks right (DB might not be loaded yet)
@@ -713,18 +771,22 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
     }
 
     const upperLastPart = lastPart.toUpperCase();
-    const db = _getDB();
-    const isCountryCode = /^[A-Z]{2}$/i.test(lastPart) && (
-      !!db?.fromISO2?.(upperLastPart) || ISO2_COUNTRY_FALLBACK.has(upperLastPart)
-    );
+    const isCountryCode = isAlsoACountryCode(upperLastPart);
 
     // Handle "City, STATE" (US) — e.g. "Rock Hill, SC"
     if (/^[A-Z]{2}$/i.test(lastPart) && US_STATES[upperLastPart] && upperLastPart !== 'US' && !isCountryCode) {
       return `${city}, ${upperLastPart}, US`;
     }
 
-    // Handle ambiguous 2-letter suffix: prefer explicit country code when recognised.
+    // Ambiguous 2-letter suffix: the city decides, because the code
+    // cannot. "Chicago, IL" is Illinois and "Tel Aviv-Yafo, IL" is
+    // Israel, and only the city tells them apart.
     if (isCountryCode) {
+      if (US_STATES[upperLastPart]) {
+        const hit = _findCity(city);
+        const cc = hit && hit.countryCode ? String(hit.countryCode).toUpperCase() : '';
+        if (cc === 'US') return `${city}, ${upperLastPart}, US`;
+      }
       return `${city}, ${upperLastPart}`;
     }
 
@@ -1041,10 +1103,38 @@ function deduplicateAndFormat(location, fallbackLocation = 'Dublin, IE') {
   const firstPart = uniqueParts[0];
   const lastPart = uniqueParts[uniqueParts.length - 1];
 
-  // US state code at end
+  // US state code at end.
+  //
+  // Twenty-odd two-letter codes are BOTH a US state and a country: IL is
+  // Israel and Illinois, DE is Germany and Delaware, CA is Canada and
+  // California, IN is India and Indiana. This branch used to read every
+  // one of them as the state and append ", US", so a job posted in
+  // "Tel Aviv-Yafo, IL" put "Tel Aviv-Yafo, IL, US" on the CV header --
+  // a United States address, next to an Irish phone number, on an
+  // application to an Israeli role. That is not cosmetic: it is the
+  // line a work-authorisation screen reads, and it is a straight
+  // auto-reject.
+  //
+  // The code alone cannot settle it, so the CITY does. Munich is in
+  // Germany and Chicago is in Illinois, and the dataset knows both.
+  // Where the city is unknown, prefer the country reading: rendering
+  // "Springfield, IL" without a country is merely less specific, while
+  // claiming a US address the candidate does not have is false.
   if (/^[A-Z]{2}$/i.test(lastPart) && US_STATES[lastPart.toUpperCase()]) {
+    const upperLast = lastPart.toUpperCase();
+    if (isAlsoACountryCode(upperLast)) {
+      const cityHit = _findCity(firstPart);
+      const cityCountry = cityHit && cityHit.countryCode ? String(cityHit.countryCode).toUpperCase() : '';
+      // The city names the country, and it is not the US -> the code is
+      // that country ("Munich, DE" -> Germany, "Tel Aviv-Yafo, IL" -> Israel).
+      if (cityCountry && cityCountry !== 'US') return `${firstPart}, ${cityCountry}`;
+      // The city is in the US -> the code really is the state.
+      if (cityCountry === 'US') return `${firstPart}, ${upperLast}, US`;
+      // City unknown: take the country reading rather than invent ", US".
+      return `${firstPart}, ${upperLast}`;
+    }
     if (uniqueParts.length === 2) {
-      return `${firstPart}, ${lastPart.toUpperCase()}, US`;
+      return `${firstPart}, ${upperLast}, US`;
     }
     // If already has more parts, just keep but normalise US to ISO2
     return forceCityCountryFormat(uniqueParts.join(', '), fallbackLocation);

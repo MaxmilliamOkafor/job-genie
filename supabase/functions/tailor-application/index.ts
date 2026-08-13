@@ -1790,8 +1790,8 @@ const BANNED_WORDS_MAP: Record<string, string> = {
 // Phrase-level replacements for more natural language
 const BANNED_PHRASES_MAP: Record<string, string> = {
   "proven ability": "ability",
-  "proven track record": "track record",
-  "proven record": "track record",
+  "proven track record": "experience",
+  "proven record": "experience",
   "proven expertise": "expertise",
   "the intersection of": "across",
   "drive impactful outcomes": "deliver results",
@@ -1870,40 +1870,6 @@ function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
   }
 }
 
-// ==========================================
-// MULTI-WORD PHRASE INJECTION BULLET BUILDER
-// Constructs a natural-sounding experience bullet containing all missing multi-word JD phrases
-// ==========================================
-function buildMultiWordInjectionBullet(phrases: string[]): string {
-  if (phrases.length === 0) return '';
-  
-  // Group phrases by type for natural sentence construction
-  const verbPhrases: string[] = []; // e.g. "troubleshoot issues", "implement tools"
-  const nounPhrases: string[] = []; // e.g. "programming skills", "collaboration skills"
-  
-  for (const p of phrases) {
-    const firstWord = p.split(' ')[0].toLowerCase();
-    const verbStarters = ['troubleshoot', 'implement', 'improve', 'resolve', 'manage', 'develop', 'create', 'define', 'optimize', 'optimise', 'maintain', 'investigate', 'monitor', 'set', 'collaborate'];
-    if (verbStarters.some(v => firstWord.startsWith(v))) {
-      verbPhrases.push(p);
-    } else {
-      nounPhrases.push(p);
-    }
-  }
-  
-  let bullet = '- ';
-  
-  if (verbPhrases.length > 0 && nounPhrases.length > 0) {
-    // Combine: "Applied [noun phrases] to [verb phrase 1], [verb phrase 2], ..."
-    bullet += `Applied ${nounPhrases.join(' and ')} to ${verbPhrases.join(', ')}, driving measurable improvements across development workflows.`;
-  } else if (verbPhrases.length > 0) {
-    bullet += `Utilised technical expertise to ${verbPhrases.join(', ')}, ensuring reliable and scalable delivery processes.`;
-  } else {
-    bullet += `Demonstrated ${nounPhrases.join(', ')} across cross-functional projects, contributing to continuous process improvement.`;
-  }
-  
-  return bullet;
-}
 
 // ==========================================
 // KEYWORD PRIORITY WEIGHTING (inspired by JobOwl)
@@ -2153,10 +2119,10 @@ opposite of the goal. This exemption outranks the rule above.
 ---
 PHASE 1: EXTRACTION (Do this first, output nothing yet)
 Read the job description carefully and extract:
-A. HARD SKILLS — Extract EVERY specific technical term: programming languages, tools, frameworks, platforms, services, methodologies, and concepts. The EXACT job title as written.
-B. SOFT SKILLS — Extract every behavioural phrase (e.g. "growth mindset", "seeks feedback", "continuously improve", "collaborate", "explain technical concepts")
-C. WEIGHTED TERMS — Note which terms appear MORE THAN ONCE in the JD, as these carry the most ATS weight. You MUST include all of them.
-D. COMPANY CONTEXT — Identify key company-specific language (e.g. "gaming communities", "petabytes", "user privacy", "lovable products")
+A. HARD SKILLS - Extract EVERY specific technical term: programming languages, tools, frameworks, platforms, services, methodologies, and concepts. The EXACT job title as written.
+B. SOFT SKILLS - Extract every behavioural phrase (e.g. "growth mindset", "seeks feedback", "continuously improve", "collaborate", "explain technical concepts")
+C. WEIGHTED TERMS - Note which terms appear MORE THAN ONCE in the JD, as these carry the most ATS weight. You MUST include all of them.
+D. COMPANY CONTEXT - Identify key company-specific language (e.g. "gaming communities", "petabytes", "user privacy", "lovable products")
 
 ---
 PHASE 2: GAP ANALYSIS (Internal reasoning, output nothing yet)
@@ -2164,7 +2130,7 @@ Compare extracted terms from Phase 1 against the candidate's CV:
 - List every hard skill keyword MISSING from the CV
 - List every soft skill keyword MISSING from the CV
 - Identify which candidate experiences can legitimately support each missing keyword
-- Note which JD keywords have NO basis in the candidate's background (these must NOT be added — truthfulness is non-negotiable)
+- Note which JD keywords have NO basis in the candidate's background (these must NOT be added - truthfulness is non-negotiable)
 
 Pre-extracted gap analysis:
 - Current match: ${matchResult.matched.length}/${jdKeywords.allKeywords.length} keywords (${Math.round(currentMatchPercent)}%)
@@ -2173,30 +2139,30 @@ Pre-extracted gap analysis:
 - ALREADY MATCHED: ${matchResult.matched.join(", ")}
 
 ---
-PHASE 3: REWRITE — EXECUTE ALL 7 RULES
+PHASE 3: REWRITE - EXECUTE ALL 7 RULES
 
-RULE -1 — IMMUTABLE FACTS (HIGHEST PRIORITY, OVERRIDES ALL OTHER RULES)
+RULE -1 - IMMUTABLE FACTS (HIGHEST PRIORITY, OVERRIDES ALL OTHER RULES)
 The following fields from the candidate's original CV are facts. You may
 reword surrounding prose, reorder bullets, and mirror JD vocabulary, but
 you MUST NOT alter, invent, or omit any of these values:
 - Name and contact details (email, phone, links)
-- EMPLOYER NAMES — never replace with a different company
-- JOB TITLES at each employer — never upgrade or change
-- EMPLOYMENT DATES — never shift; never write a range that overlaps
+- EMPLOYER NAMES - never replace with a different company
+- JOB TITLES at each employer - never upgrade or change
+- EMPLOYMENT DATES - never shift; never write a range that overlaps
   another listed role. Dates must EXACTLY match the original CV.
 - DEGREE NAMES, institutions, and classifications (Distinction, First
-  Class Honours, etc.) — never invent a degree or alter a class.
-- CERTIFICATIONS — list ONLY those present in the original CV. Never
+  Class Honours, etc.) - never invent a degree or alter a class.
+- CERTIFICATIONS - list ONLY those present in the original CV. Never
   fabricate (no "AWS Certified..." unless the original CV lists it).
-- AWARDS — list ONLY awards present in the original CV. NEVER invent an
+- AWARDS - list ONLY awards present in the original CV. NEVER invent an
   award. If the JD mentions a "data analytics excellence" focus and the
   candidate has no such award, do not write one.
-- METRICS in bullets — keep the SOURCE numbers from the original CV.
+- METRICS in bullets - keep the SOURCE numbers from the original CV.
   You may reword the sentence around the metric; you may NOT change the
   number itself.
 
 NOTE: The candidate's STATED LOCATION on the CV header is a separate
-case — it is intentionally job-adaptive (handled outside the prompt by
+case - it is intentionally job-adaptive (handled outside the prompt by
 the extension). Do NOT change the location yourself; the extension sets it.
 
 If a JD demands an award/cert/employer/date/title the candidate does not
@@ -2207,13 +2173,13 @@ Pre-flight check before returning JSON: every employer, title, date,
 degree, certification, award, and metric in your output MUST exist in
 the original CV. If it doesn't, remove it before responding.
 
-RULE 0 — ANTI-FABRICATION (HARDEST RULE, OVERRIDES ALL OTHERS)
+RULE 0 - ANTI-FABRICATION (HARDEST RULE, OVERRIDES ALL OTHERS)
 This rule is non-negotiable. It is more important than match score, more
 important than keyword density, more important than Rule 10's verbatim-
 phrase requirement. Violations look like obvious lies to a recruiter and
 get the application instantly rejected, often blacklisting the candidate.
 
-NEVER do any of the following — even when injecting "missing keywords":
+NEVER do any of the following - even when injecting "missing keywords":
 
 1. Do NOT name the hiring company (or its products / brand / hardware /
    software / acronyms) in a bullet about a DIFFERENT employer's role.
@@ -2251,13 +2217,13 @@ NEVER do any of the following — even when injecting "missing keywords":
 
 TEST before writing each bullet: "Could the candidate defend this
 sentence in an interview when asked 'tell me about that?'" If the answer
-is no, the bullet is fabricated — rewrite it using only what is in the
+is no, the bullet is fabricated - rewrite it using only what is in the
 original CV, even if that means missing a keyword.
 
 If a Rule 3 / Rule 9 / Rule 10 instruction conflicts with Rule 0,
 Rule 0 wins. Lose the keyword, save the candidate's credibility.
 
-RULE 1 — JOB TITLE IN SUMMARY (evidence-capped)
+RULE 1 - JOB TITLE IN SUMMARY (evidence-capped)
 The summary must never assert a job title the rest of the CV cannot support.
 - If the candidate's own work history contains the SAME or a CLOSELY
   EQUIVALENT title, the summary MAY use the JD's wording for it.
@@ -2271,7 +2237,7 @@ The summary must never assert a job title the rest of the CV cannot support.
   noise (req numbers, JR-/REQ- codes, "(Remote)") must never appear in
   the CV or cover letter.
 
-RULE 2 — SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
+RULE 2 - SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
 
 READ THIS BEFORE THE KEYWORD COUNTS BELOW. Every keyword target in this
 prompt -- the minimum counts here, the "MUST ADD THESE" list at the end,
@@ -2302,9 +2268,9 @@ Rewrite the skills section as:
   Platforms & Tools: [all platforms, cloud services, devtools]
   Methodologies: [ETL, CI/CD, distributed systems, data modelling, etc.]
   Soft Skills: [all soft skill keywords from the JD, exact phrasing]
-This section alone can close 15-20 points of the gap. Minimum 15-25 keywords.
+This section alone can close 15-20 points of the gap. THERE IS NO UPPER LIMIT: list EVERY JD skill, tool and technology the candidate's history evidences, however many that is. There is no lower limit either. A floor is what causes padding -- it is satisfied by adding terms nobody can be proficient in ("b2b", "enterprise", "fast-paced"), which a recruiter reads instantly as machine-assembled and which the candidate cannot defend if asked. Maximum coverage means maximum EVIDENCED coverage: leave out only what the history does not support at all.
 
-RULE 3 — EXPERIENCE BULLETS: INJECT WEIGHTED TERMS (subject to Rule 0)
+RULE 3 - EXPERIENCE BULLETS: INJECT WEIGHTED TERMS (subject to Rule 0)
 For each role in work history:
 - Scan which Phase 1 keywords are THEMATICALLY relevant to that role
   based on the ORIGINAL CV bullet content (not the JD's wishlist).
@@ -2323,24 +2289,24 @@ For each role in work history:
 - Prioritise injecting the terms that appeared most often in the JD,
   subject to all of the above.
 
-RULE 4 — MATCH SCALE LANGUAGE TO JD
+RULE 4 - MATCH SCALE LANGUAGE TO JD
 If the JD uses "petabytes" and the CV says "10TB", rewrite to contextualise relative to enterprise/petabyte-scale systems.
 If the JD says "millions of users", reference the candidate's production scale in that language.
 
-RULE 5 — SOFT SKILLS: WEAVE INTO BULLETS (worth ~5 points)
+RULE 5 - SOFT SKILLS: WEAVE INTO BULLETS (worth ~5 points)
 Do not just list soft skills. Weave them into experience bullets:
 - "growth mindset" → "...continuously improved pipeline performance through iterative feedback loops..."
 - "seeks feedback" → "...actively sought peer code reviews to..."
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
 
-RULE 6 — SEARCHABILITY FIXES (worth ~10 points)
-- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" — the candidate location adapts to the job's city (smartLocation) so geo-filters do not reject the application.
-- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" — use the job-derived location, NOT a hardcoded address.
+RULE 6 - SEARCHABILITY FIXES (worth ~10 points)
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - the candidate location adapts to the job's city (smartLocation) so geo-filters do not reject the application.
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - use the job-derived location, NOT a hardcoded address.
 - Job title from JD appears in summary (Rule 1)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
 
-RULE 7 — SUMMARY REWRITE (worth ~8 points)
+RULE 7 - SUMMARY REWRITE (worth ~8 points)
 Rewrite the professional summary to:
 1. Open with what the candidate demonstrably IS, per RULE 1. Use the JD's
    title wording only if an equivalent title exists in their work history;
@@ -2374,7 +2340,7 @@ Rewrite the professional summary to:
    goal is a sharper reading of true facts, never a louder one. An
    inflated summary is the fastest way into the "no" pile, because the
    interview exposes it.
-6. CRITICAL — YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
+6. CRITICAL - YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
    - DERIVE the number of years from the candidate's ACTUAL employment
      dates in the CV.
    - NEVER state a number higher than that, even if the JD asks for more.
@@ -2382,33 +2348,84 @@ Rewrite the professional summary to:
      real number or omit years entirely. NEVER inflate to match the JD.
    - If neither the JD nor the CV supports a clear number, omit years.
 
-RULE 8 — CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
+RULE 8 - CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
 Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the JD's most critical requirements.
 These go between Professional Summary and Work Experience for maximum ATS + recruiter impact.
 Format: short 2-4 word phrases (e.g. "Cloud Architecture", "CI/CD Pipelines", "Stakeholder Management").
 Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that appear more than once.
-EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL PROFICIENCIES / Skills section instead, as recruiters find them off-putting at the top of a CV.
+EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL SKILLS section instead, as recruiters find them off-putting at the top of a CV.
 
 RULE 9 - VOCABULARY REFORMULATION (worth ~5 points)
-REFORMULATION IS NOT OPTIONAL, AND IT DOES NOT CONFLICT WITH RULE 0. Rule 0 forbids changing FACTS. It does not forbid changing WORDING.
-Split every bullet into two parts:
-  IMMUTABLE - numbers, percentages, technologies, tools, employers, job titles, dates. These are copied exactly. Never rounded, never approximated, never swapped for a similar tool.
-  FREE - the verb, the sentence order, which fact leads, and the vocabulary used to describe the work. These MUST be rewritten to match this posting's language.
 Do NOT just insert keywords - REFORMULATE existing experience using the JD's exact vocabulary:
 - If JD says "RAG pipelines" and CV says "LLM workflows with retrieval" → rewrite to "RAG pipeline design and LLM orchestration workflows"
 - If JD says "MLOps" and CV says "observability, evals, error handling" → rewrite to "MLOps and observability: evals, error handling, cost monitoring"
 - If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
-WORKED EXAMPLES - one source bullet, two postings. Every number and tool is identical in both; the lead fact and the vocabulary differ.
-Source bullet: "Built Python and SQL reporting pipelines that cut month-end close from 9 days to 3 for 12 finance analysts."
-- Posting emphasising data engineering: "Engineered Python and SQL data pipelines serving 12 finance analysts, reducing month-end close from 9 days to 3."
-- Posting emphasising process improvement and stakeholder delivery: "Reduced month-end close from 9 days to 3 for 12 finance analysts by automating reporting workflows in Python and SQL."
-Second source bullet: "Migrated 40 legacy reports to Power BI, removing 15 hours of manual work each week."
-- Posting emphasising BI tooling: "Delivered a Power BI migration of 40 legacy reports, eliminating 15 hours of manual reporting each week."
-- Posting emphasising efficiency and automation: "Eliminated 15 hours of weekly manual effort by migrating 40 legacy reports onto Power BI."
-Returning a source bullet unchanged is a FAILURE of Rule 9, not compliance with Rule 0.
 NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
-RULE 10 — EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
+REFORMULATION IS NOT OPTIONAL, AND IT DOES NOT CONFLICT WITH RULE 0.
+This is the rule most often ignored, and the reason is a misread conflict.
+Rule 0 and the preservation rules below say never invent, preserve every
+metric, change nothing you cannot justify. Faced with those, the safe-looking
+move is to return each bullet exactly as it arrived. That is the WRONG
+reading, and it produces the failure this rule exists to prevent: the same CV
+sent to an Applied AI Engineer posting and a Senior Technical Business Analyst
+posting came back with all twenty experience bullets byte-identical. Only the
+summary and the skills list had changed. The posting's keywords were DECLARED
+at the top and never PROVEN underneath, which is what a reviewer is checking
+for.
+
+The two rules do not conflict because they govern different things:
+
+  IMMUTABLE - never change, never add, never drop:
+    employers, job titles, dates, technologies actually used, every number,
+    every percentage, every outcome, and the fact of what was done.
+
+  FREE - must change to match the posting:
+    which fact leads the sentence, and the vocabulary used to describe it.
+
+Reordering a sentence you did not write the facts of is not fabrication.
+Leading with the outcome instead of the technology is not fabrication.
+Calling the same work "data modelling" for a data role and "backend
+architecture" for a backend role is not fabrication, PROVIDED both are
+honest descriptions of what was actually done.
+
+WORKED EXAMPLE - one real bullet, two postings:
+
+  source:   "Re-architected the Business Suite data-ingestion layer in Python
+             and SQL on an Apache Kafka stream, partitioning and caching hot
+             paths to halve p95 query latency and cut compute spend."
+
+  backend:  unchanged - it already speaks that dialect.
+
+  data/BA:  "Re-modelled the Business Suite data-ingestion layer in Python and
+             SQL over an Apache Kafka stream, partitioning and caching hot
+             paths to halve p95 query latency and cut compute spend."
+
+One verb and one preposition. Every number, technology and outcome identical.
+That is the whole move.
+
+  source:   "Designed, fine-tuned and shipped a Llama-based content-moderation
+             system in Python and PyTorch... and cut the manual review queue by
+             40% with no loss of precision across millions of daily users."
+
+  outcome-led: "Cut the manual review queue by 40% with no loss of precision
+             across millions of daily users by designing and shipping a
+             Llama-based content-moderation service in Python and PyTorch..."
+
+Same sentence, reordered so the result reads first.
+
+WHAT WOULD BE FABRICATION, for the avoidance of doubt: adding "gathered
+requirements from stakeholders", "facilitated workshops", "owned the
+roadmap" or any other activity the source does not record. If the posting
+asks for something the candidate's history does not evidence, it goes in
+TECHNICAL SKILLS if they genuinely have the skill, and nowhere at all if
+they do not. It NEVER gets invented into a bullet.
+
+APPLY THIS TO EVERY ROLE, not only the most recent. An older role is often
+the most relevant one: a Data Analyst position from years ago can evidence a
+Business Analyst posting far better than a current engineering role does.
+
+RULE 10 - EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
 ATS scanners like Jobscan check for EXACT multi-word phrases from the JD, not just individual words.
 You MUST use these phrases VERBATIM (not paraphrased) in experience bullets or the summary:
 - If JD says "troubleshoot issues" → use "troubleshoot issues" exactly, not "troubleshot problems" or "resolved issues"
@@ -2441,10 +2458,10 @@ employer. Example: applying to AMD, a Meta bullet must never say "AMD"
 or "AMD's commercial products" or "AMD-based solutions". The candidate
 worked at Meta, not AMD.
 
-RULE 14 — NO KEYWORD TAILS ON BULLETS (hard ban)
+RULE 14 - NO KEYWORD TAILS ON BULLETS (hard ban)
 NEVER append a trailing keyword clause to a bullet purely to place a
 keyword. Banned patterns include ", using stakeholder management.",
-", with time-management.", ", showing collaboration skills." — any
+", with time-management.", ", showing collaboration skills." - any
 ", using X" / ", with X" / ", showing X" / ", demonstrating X" tail
 grafted onto an otherwise complete sentence.
 Keywords belong in the summary and the skills sections, OR inside a
@@ -2452,7 +2469,7 @@ bullet where they describe what was actually done, integrated into the
 sentence's grammar. If a keyword cannot be integrated grammatically and
 truthfully, leave it out of the bullet.
 
-RULE 15b — NO HEDGED OR APPROXIMATED NUMBERS (hard ban)
+RULE 15b - NO HEDGED OR APPROXIMATED NUMBERS (hard ban)
 A number that is hedged reads as a number that was guessed, which is worse
 than no number at all. Taken from a real generated CV: "cut the manual
 review queue by ~40%".
@@ -2475,7 +2492,7 @@ Banned before a noun: significant, substantial, considerable, several-fold,
 measurably, markedly, dramatically, drastically, materially, notably,
 meaningfully. Plain description beats a vague intensifier every time.
 
-RULE 15c — CORE COMPETENCIES AND SKILLS DO NOT OVERLAP
+RULE 15c - CORE COMPETENCIES AND SKILLS DO NOT OVERLAP
 A term appears in ONE section. Real output listed "Communication Skills"
 and "Presentation Skills" in Core Competencies AND again in Technical
 Proficiencies, which reads as padding to a human and doubles nothing for
@@ -2487,7 +2504,7 @@ the ATS.
 - Before output, compare the two lists and remove from Skills anything
   already in Core Competencies.
 
-RULE 15a — NO EM DASHES OR EN DASHES IN ANY OUTPUT (hard ban)
+RULE 15a - NO EM DASHES OR EN DASHES IN ANY OUTPUT (hard ban)
 An em dash is one of the strongest machine-written tells a recruiter
 reads, alongside round percentages. Never emit "—" or "–" in the CV or
 the cover letter, in any position.
@@ -2499,27 +2516,27 @@ the cover letter, in any position.
 The em dashes appearing in THESE INSTRUCTIONS are not a style to imitate.
 Only the CV and cover letter you produce are subject to this rule.
 
-RULE 15 — CLEAN SENTENCE CASING AND GRAMMAR
-Every sentence — in the summary, bullets, and cover letter — MUST begin
+RULE 15 - CLEAN SENTENCE CASING AND GRAMMAR
+Every sentence - in the summary, bullets, and cover letter - MUST begin
 with a capital letter and be a grammatically complete sentence. Never
 emit fragments like "...and data analytics. ability to lead
 cross-functional teams..." (lowercase sentence start mid-paragraph).
 When a JD phrase is spliced into prose, re-case and re-word it so the
 sentence reads naturally.
 
-RULE 16 — XYZ ACHIEVEMENT FORMULA (subject to Rule 0)
+RULE 16 - XYZ ACHIEVEMENT FORMULA (subject to Rule 0)
 Most bullets describe duties. A duty tells a reader what the candidate was
 given; an achievement tells them what changed because the candidate was
 there. Recruiters hire for the second.
 Shape every bullet as: accomplished [X], as measured by [Y], by doing [Z].
 The three parts do NOT have to appear in that order and the phrase "as
-measured by" must NOT appear literally — it is a thinking tool, not
+measured by" must NOT appear literally - it is a thinking tool, not
 wording. The bullet must read as natural English.
 - Duty:        "Managed a team of 5 engineers."
 - Achievement: "Cut deployment time 40% across weekly releases by
                 restructuring the team into cross-functional pods."
 SUBJECT TO RULE 0: X, Y and Z must all come from the source CV. If the
-source bullet records no outcome, do NOT invent one — keep the bullet
+source bullet records no outcome, do NOT invent one - keep the bullet
 factual and let RULE 18 handle the missing measure. A fabricated outcome
 is worse than an unquantified duty.
 
@@ -2537,7 +2554,7 @@ number at all, and it casts doubt on the true numbers beside it.
   team". Counts read as observed; round percentages read as estimated.
 - A bullet with no number is a normal, credible bullet. Leave it.
 
-RULE 17 — EVERY BULLET OPENS ON A STRONG VERB (hard ban)
+RULE 17 - EVERY BULLET OPENS ON A STRONG VERB (hard ban)
 The first word of every bullet is a past-tense action verb describing what
 the candidate DID.
 BANNED OPENERS, no exceptions: "Responsible for", "Helped with", "Helped
@@ -2550,13 +2567,13 @@ Recovered, Automated, Consolidated, Negotiated, Rebuilt, Migrated,
 Eliminated, Accelerated, Secured. Avoid opening more than two bullets in
 the whole CV with the same verb.
 
-RULE 18 — MISSING METRICS ARE REPORTED, NEVER INVENTED, NEVER PLACEHOLDERED
+RULE 18 - MISSING METRICS ARE REPORTED, NEVER INVENTED, NEVER PLACEHOLDERED
 Rule 0 forbids inventing numbers, so a bullet whose source records no
 outcome stays unquantified. That is correct, but the candidate usually
 KNOWS the number and simply did not write it down, so the gap is worth
 surfacing.
 
-NEVER write a placeholder into any VALUE you output — no "[FILL IN]",
+NEVER write a placeholder into any VALUE you output - no "[FILL IN]",
 "[X]%", "[NUMBER]", "[Company Name]", "[GPA if applicable]", "TBD" or
 similar. (The bracketed labels in the JSON schema below describe what to
 put there; they are never themselves an answer. If you have no value for
@@ -2566,7 +2583,7 @@ directly, so a placeholder gets no human proof-read the way it would in a
 chat window; it reaches a recruiter and reads as carelessness.
 
 Report the gaps instead, in the "metricsWorthAdding" array of the JSON
-response — but ONLY where the number would change a hiring decision for
+response - but ONLY where the number would change a hiring decision for
 THIS job. A generic prompt to quantify something the JD never asks about
 is noise, and noise trains the candidate to ignore the list.
 
@@ -2579,43 +2596,76 @@ Include an entry ONLY if ALL of these hold:
 
 At most 3 entries, most decision-changing first. Prefer an empty array
 over a weak entry: an empty list is a clean result, not a failure.
-Format each as: <role> — <the exact bullet> → <the specific number>
+Format each as: <role> - <the exact bullet> → <the specific number>
 Example, for a JD that asks for large-scale rollout experience:
-  Northbound, Senior PM — Delivered the D365 rollout across four regions.
+  Northbound, Senior PM - Delivered the D365 rollout across four regions.
   → how many users, and over what period
 This array is shown to the candidate; it is never part of the CV.
 
-RULE 11 — BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
+RULE 11 - BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
 Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
 ATS systems and recruiters give the highest weight to the first 1-2 bullets of each role.
 Strategy:
 - For each role, score every bullet by how many JD keywords it contains
 - Place the highest-scoring bullet first
-- The first bullet of the FIRST role is the single most valuable line in the entire CV — pack it with the top JD keywords
+- The first bullet of the FIRST role is the single most valuable line in the entire CV - pack it with the top JD keywords
 - If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
 
-RULE 11b - HOW MANY BULLETS EACH ROLE GETS (hard limits)
-Attention is finite and front-loaded. A role from eight years ago carrying seven bullets spends the reader's patience on the least relevant part of the CV and pushes the recent work onto page two.
+RULE 11b: HOW MANY BULLETS EACH ROLE GETS (hard limits)
+Attention is finite and front-loaded. A role from eight years ago carrying
+seven bullets spends the reader's patience on the least relevant part of the
+CV and pushes the recent work onto page two.
 - The two most recent roles: 4 to 6 bullets each.
 - Every earlier role: 2 to 4 bullets each.
-Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least relevant bullet last, so cutting the tail removes the least relevant material. Cut before reordering and you delete whatever the source happened to list last.
-ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the whole CV where a posting keyword appears, KEEP it even though the role then runs over. A missed keyword costs more than an extra line.
-Never pad a short role UP to the minimum by inventing bullets. If the source gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
+Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least
+relevant bullet last, so cutting the tail removes the least relevant material.
+Cut before reordering and you delete whatever the source happened to list last.
+ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the
+whole CV where a posting keyword appears, KEEP it even though the role then
+runs over. A missed keyword costs more than an extra line.
+Never pad a short role UP to the minimum by inventing bullets. If the source
+gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
 
-RULE 19 - SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
-"Built dashboards" and "built dashboards used by 40 people across three desks" describe the same work at very different levels of seniority. Where the SOURCE CV states scope, carry it into the rewritten bullet instead of dropping it: team size, user or customer counts, data volume, transaction volume, number of systems, geographies, budget, or how many stakeholders the work served.
-SUBJECT TO RULE 0, WITHOUT EXCEPTION. If the source does not state the scope, you do not state the scope. Do not write "large-scale", "enterprise-wide", "high-volume", "cross-functional" or "multi-million" as a substitute for a number you were not given - those are the words a reader discounts on sight, and RULE 15b already bans hedged figures. A bullet with no scope is complete and acceptable. An invented scope is a fabrication and fails the whole output.
+RULE 19: SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
+"Built dashboards" and "built dashboards used by 40 people across three desks"
+describe the same work at very different levels of seniority. Where the SOURCE
+CV states scope, carry it into the rewritten bullet instead of dropping it:
+team size, user or customer counts, data volume, transaction volume, number of
+systems, geographies, budget, or how many stakeholders the work served.
+SUBJECT TO RULE 0, WITHOUT EXCEPTION. If the source does not state the scope,
+you do not state the scope. Do not write "large-scale", "enterprise-wide",
+"high-volume", "cross-functional" or "multi-million" as a substitute for a
+number you were not given -- those are the words a reader discounts on sight,
+and RULE 15b already bans hedged figures. A bullet with no scope is complete
+and acceptable. An invented scope is a fabrication and fails the whole output.
 
-RULE 20 - NO CONTENT WORD TWICE IN THE SAME BULLET
-"surfacing fraud and risk exposure for the risk team" reads as a draft nobody re-read. Before emitting each bullet, check whether any noun or verb of four or more letters appears twice in it. If one does, rewrite so it appears once. Resolve it by DELETING the redundant occurrence or by using the word the source CV itself uses elsewhere. Do NOT resolve it by inventing a name, a team, or a department that the source does not contain - that is a Rule 0 violation and a reference check can contradict it. If you cannot remove the repetition without inventing something, leave the bullet as it is: a repeated word is a small flaw, an invented employer detail is a disqualifying one.
+RULE 20: NO CONTENT WORD TWICE IN THE SAME BULLET
+"surfacing fraud and risk exposure for the risk team" reads as a draft nobody
+re-read. Before emitting each bullet, check whether any noun or verb of four or
+more letters appears twice in it. If one does, rewrite so it appears once.
+Resolve it by DELETING the redundant occurrence or by using the word the source
+CV itself uses elsewhere. Do NOT resolve it by inventing a name, a team, or a
+department that the source does not contain -- that is a Rule 0 violation and a
+reference check can contradict it. If you cannot remove the repetition without
+inventing something, leave the bullet as it is: a repeated word is a small flaw,
+an invented employer detail is a disqualifying one.
 
-RULE 21 - SPELLING FOLLOWS THE POSTING'S COUNTRY
-A great deal of ATS keyword scoring is literal substring matching. A posting asking for "optimization" scores nothing against a CV that says "optimisation". Same word, missed keyword.
-- Posting in the United States, Canada, Mexico or Latin America: American spelling throughout (optimize, analyze, behavior, center, modeling).
-- Posting anywhere else - UK, Ireland, the EU, Africa, India, Australia, New Zealand, Singapore: British spelling throughout (optimise, analyse, behaviour, centre, modelling).
-Two things this rule does NOT touch. Proper nouns keep their owner's spelling in every country: "World Health Organisation" and "Defence Forces Ireland" are names, not words. And these are spelt -ise in American English too, so never "correct" them: advise, supervise, expertise, enterprise, advertise, comprise, revise, devise, promise, precise, franchise.
+RULE 21: SPELLING FOLLOWS THE POSTING'S COUNTRY
+A great deal of ATS keyword scoring is literal substring matching. A posting
+asking for "optimization" scores nothing against a CV that says "optimisation".
+Same word, missed keyword.
+- Posting in the United States, Canada, Mexico or Latin America: American
+  spelling throughout (optimize, analyze, behavior, center, modeling, program).
+- Posting anywhere else -- UK, Ireland, the EU, Africa, India, Australia, New
+  Zealand, Singapore: British spelling throughout (optimise, analyse, behaviour,
+  centre, modelling, programme for a scheme but program for software).
+Two things this rule does NOT touch. Proper nouns keep their owner's spelling
+in every country: "World Health Organisation" and "Defence Forces Ireland" are
+names, not words, and RULE 15 already requires this. And these are spelt -ise in
+American English too, so never "correct" them: advise, supervise, expertise,
+enterprise, advertise, comprise, revise, devise, promise, precise, franchise.
 
-RULE 12 — STRATEGIC KEYWORD DISTRIBUTION (worth ~10 points)
+RULE 12 - STRATEGIC KEYWORD DISTRIBUTION (worth ~10 points)
 Keywords MUST be strategically placed in the highest-weight ATS positions, not randomly scattered:
 - Professional Summary: MUST contain the top 5 most-repeated JD keywords
 - First bullet of EACH work experience role: MUST contain at least 2 JD keywords
@@ -2623,7 +2673,7 @@ Keywords MUST be strategically placed in the highest-weight ATS positions, not r
 - Skills section: catches ALL remaining keywords not covered above
 This ensures maximum ATS scoring even if the scanner only reads the top of each section.
 
-RULE 13 — GAP MITIGATION IN COVER LETTER (worth ~5 points)
+RULE 13 - GAP MITIGATION IN COVER LETTER (worth ~5 points)
 For each JD requirement the candidate does NOT directly have:
 1. Identify if it's a hard blocker or nice-to-have
 2. Find adjacent/transferable experience from the candidate's background
@@ -2632,7 +2682,7 @@ Example: JD requires "Unity" but candidate has no Unity → "While my primary ex
 NEVER claim to have skills the candidate lacks. Instead, demonstrate transferability and learning agility.
 
 ---
-PHASE 4: VERIFICATION (Critical — do this before outputting)
+PHASE 4: VERIFICATION (Critical - do this before outputting)
 After rewriting, run this internal checklist:
 [ ] Does the summary open with something the CV evidences (no unsupported title claim, no bare title opener)?
 [ ] Are stated years of experience <= what the employment dates prove?
@@ -2657,12 +2707,13 @@ After rewriting, run this internal checklist:
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
-[ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it — that is the tell recruiters read as machine-written.
-[ ] Does any role exceed its bullet cap (6 for the two most recent, 4 for the rest)? If so, cut from the BOTTOM after reordering - unless the bullet is the CV's only mention of a posting keyword, in which case keep it.
+[ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it - that is the tell recruiters read as machine-written.
+[ ] REFORMULATION CHECK - go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting. Fix any bullet that is still in the source's dialect rather than the posting's.
+[ ] Does each posting keyword you placed in TECHNICAL SKILLS or CORE COMPETENCIES also appear, where the history honestly supports it, in an experience bullet? A keyword declared at the top and never evidenced underneath is what a reviewer is scanning for.
+[ ] Does any role exceed its bullet cap (6 for the two most recent, 4 for the rest)? If so, cut from the BOTTOM after reordering, unless the bullet is the CV's only mention of a posting keyword, in which case keep it.
 [ ] Did you drop a scope figure (team size, volume, user count, number of systems) that the SOURCE bullet stated? Put it back. Did you add one the source did not state? Remove it.
 [ ] Does any bullet use the same four-letter-or-longer noun or verb twice ("risk ... risk team")? Rewrite it, but never by inventing a team or department name.
-[ ] Is the spelling consistent with the POSTING's country throughout - American for US/Canada/Latin America, British everywhere else - with proper nouns left in their owner's spelling?
-[ ] REFORMULATION CHECK - go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting.
+[ ] Is the spelling consistent with the POSTING's country throughout (American for US/Canada/Latin America, British everywhere else), with proper nouns left in their owner's spelling?
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
@@ -2700,15 +2751,15 @@ ABSOLUTE RULES:
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
-6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
+6. The TECHNICAL SKILLS section must list ALL JD keywords not already covered in experience bullets
 7. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
 
 HUMANIZED TONE RULES:
 - Active voice only
 - Vary sentence structure - avoid repetitive patterns
 - Use connectors: "This enabled...", "Resulting in...", "Which led to..."
-- BANNED WORDS (NEVER USE): "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "leveraging", "synergy", "proven track record", "proven ability", "proven record", "proven expertise", "orchestrated", "championed", "pioneered", "spearheaded", "helmed", "meticulous", "comprehensive", "showcasing", "demonstrating", "highly motivated", "best-in-class", "world-class", "detail-oriented", "think outside the box", "go-getter", "various", "assisted", "realm", "approximately", "the intersection of", "drive impactful outcomes", "strategic initiatives", "stakeholder environments", "robust", "seamless", "holistic"
-- APPROVED ALTERNATIVES: "led" (not championed/spearheaded), "directed" (not orchestrated), "thorough" (not comprehensive), "ability" (not proven ability), "track record" (not proven track record), "field" (not realm), "using" (not leveraging), "detailed" (not meticulous), use actual numbers with "+" (not approximately)
+- BANNED WORDS (NEVER USE): "track record", "proven track record", "strong track record", "results-driven", "dynamic", "cutting-edge", "passionate", "leverage", "leveraging", "synergy", "proven track record", "proven ability", "proven record", "proven expertise", "orchestrated", "championed", "pioneered", "spearheaded", "helmed", "meticulous", "comprehensive", "showcasing", "demonstrating", "highly motivated", "best-in-class", "world-class", "detail-oriented", "think outside the box", "go-getter", "various", "assisted", "realm", "approximately", "the intersection of", "drive impactful outcomes", "strategic initiatives", "stakeholder environments", "robust", "seamless", "holistic"
+- APPROVED ALTERNATIVES: "led" (not championed/spearheaded), "directed" (not orchestrated), "thorough" (not comprehensive), "ability" (not proven ability), "experience" (never "track record", in any form), "field" (not realm), "using" (not leveraging), "detailed" (not meticulous), use actual numbers with "+" (not approximately)
 - Include specific metrics (%, $, time saved, users impacted) ONLY where the source CV provides them. An absent number is left absent.
 
 ATS KEYWORD DENSITY TARGETS:
@@ -2768,7 +2819,7 @@ ${userProfile.certifications?.join(", ") || "None listed"}
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
-SELECTED PROJECTS (Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text):
+SELECTED PROJECTS (Do NOT output a SELECTED PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text):
 ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
 
@@ -2795,16 +2846,19 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
       WRONG FIRST WORD: "${candidateName.split(" ")[0]}" (this is the name - BANNED)
       
       EXAMPLE OF CORRECT SUMMARY:
-      "Experienced Principal Cloud Architect with 8+ years of expertise in cloud computing, data analytics, and machine learning. Strong track record in designing scalable solutions that reduced infrastructure costs by 40% and improved system uptime to 99.9%."
+      "Experienced Principal Cloud Architect with 8+ years of expertise in cloud computing, data analytics, and machine learning. Designs scalable solutions that reduced infrastructure costs by 40% and improved system uptime to 99.9%."
       
       EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
       "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
     ███ END DUPLICATION BAN ███
-       TITLE REDUNDANCY: If the job title contains a parenthetical qualifier — e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' — do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
+       TITLE REDUNDANCY: If the job title contains a parenthetical qualifier - e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' - do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
+    - COVER LETTER FIGURES ARE QUOTED, NOT PARAPHRASED: any number that appears in the cover letter MUST be copied from the CV with the SAME noun attached. A real pair went out with the CV saying "cut the manual review QUEUE by 40%" and the letter saying "reducing manual review TIME by 40%" -- a queue and a time are different claims, and a reviewer holding both documents sees an applicant whose own numbers do not agree. If the exact phrasing does not fit the sentence, drop the figure from the letter rather than restate it loosely; the CV already carries it.
+    - THE COVER LETTER MUST SAY WHY THIS EMPLOYER: name something specific to THIS company from the posting -- the team, the product, the stated problem, the market -- and connect it to the candidate's own work. "the projects at [Company]" and "your innovative culture" are filler and count for nothing: they read identically for every employer, which is exactly what a reviewer is scanning for. If the posting genuinely says nothing specific, write about the WORK described in it rather than inventing a reason to admire the company.
+    - TARGET TITLE LINE: The line immediately after the candidate's name is the job title being applied for, on its own, e.g. "Senior Backend Engineer". No pipes, no skills, no company. This is the first thing a reviewer checks against the req they are filling, and a CV that opens with a name and a phone number makes them do that mapping themselves. It is positioning, not a claim of current employment, so the titles inside WORK EXPERIENCE stay exactly as the candidate held them and nothing here may contradict them. If the posting's title does not truthfully describe the candidate's work, use their real target title instead. The extension also sets this line, so never emit it twice.
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. CRITICAL: Years of experience in summary MUST match the JD requirement — if JD says "3+ years" use "3+ years", not more. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
-    - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
-    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
+    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. YEARS OF EXPERIENCE - THE DATES ON THE PAGE ARE THE ANSWER: any years figure in the summary MUST be consistent with the employment dates in this same CV. Add up the candidate's actual history and state that, or state no figure at all. NEVER set the figure to the JD's requirement: a CV whose summary says "over 4 years" above a work history running from 2017 to Present contradicts itself in the two places a reader looks first, and many ATS compute total tenure from the dates and compare it to the stated number. Exceeding a stated minimum is not a problem to solve - "5+ years" required and 9 years held is a strong application, whereas understating it filters the candidate out of the senior roles they actually qualify for and reads as junior. If the true total is genuinely below the JD's minimum, say the true total; do not inflate it either. Use VOCABULARY REFORMULATION (Rule 9) - reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully - at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL SKILLS section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting - never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
+    - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
+    - TECHNICAL SKILLS: A single comma-separated list. Include EVERY JD hard skill, tool and technology the candidate's history evidences -- as many as qualify, with no cap. Classify each JD keyword before writing it: PROVEN (used professionally -> list it), TRANSFERABLE (related experience, different tool -> describe the transferable skill honestly, never rename it as the tool they asked for), UNSUPPORTED (never used, could not explain it in an interview -> leave it out entirely). Never add a keyword merely because it is absent. Where a term has an acronym and a full form the JD uses both, give both ONCE ("Continuous Integration and Continuous Delivery (CI/CD)"); never list variants of the same product ("Azure, Microsoft Azure, Azure Cloud"). Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture".
     - CERTIFICATIONS
     - EDUCATION (LAST). Skills and certifications sit ABOVE education:
       a recruiter scanning top-down should reach what proves the candidate
@@ -2837,14 +2891,14 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - NEVER use banned words: "leveraging", "utilising", "utilizing", "synergy", "passionate"
    - Use natural connectors: "with expertise in", "applying", "through", "incorporating"
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
-   - COMPANY-FIRST BALANCE: Address the company directly — use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
+   - COMPANY-FIRST BALANCE: Address the company directly - use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
 
-   GAP MITIGATION (CRITICAL — from Rule 13):
+   GAP MITIGATION (CRITICAL - from Rule 13):
    - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
    - For each gap, demonstrate transferable experience or adjacent skills
    - Example: If JD requires "Unity" but candidate lacks it → "My deep experience with CI/CD pipelines for mobile application builds, combined with my understanding of game development workflows, positions me to quickly contribute to Unity-based build processes."
    - Frame gaps as "transferable strength + learning velocity", never as weaknesses
-   - Maximum 1-2 gap mitigations — do not over-apologise
+   - Maximum 1-2 gap mitigations - do not over-apologise
 
 ${
   includeReferral
@@ -2905,7 +2959,7 @@ ${
       }
     ]
   },
-  "metricsWorthAdding": ["<role> — <the exact bullet> → <the number that would strengthen it>"],
+  "metricsWorthAdding": ["<role> - <the exact bullet> → <the number that would strengthen it>"],
   "coverLetterStructured": {
     "recipientCompany": "${userProfile.portfolio || company}",
     "jobTitle": "${jobTitle}",
@@ -3118,7 +3172,7 @@ ${
     }
     console.log("Content quality engine applied - banned words replaced");
 
-    // Deterministic SELECTED PROJECTS injection — rebuild from structured profile data
+    // Deterministic SELECTED PROJECTS injection - rebuild from structured profile data
     // so project names, tech stack, and URLs are preserved verbatim (anti-fabrication).
     if (result.tailoredResume && Array.isArray(userProfile.relevantProjects) && userProfile.relevantProjects.length > 0) {
       const buildProjectsSection = (projects: any[]): string => {
@@ -3153,7 +3207,7 @@ ${
       const projectsBlock = buildProjectsSection(userProfile.relevantProjects);
       if (projectsBlock) {
         let resume = result.tailoredResume;
-        // Strip ALL existing projects sections — case-insensitive and global, looping until no match remains.
+        // Strip ALL existing projects sections - case-insensitive and global, looping until no match remains.
         const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|KEY PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
         while (sectionRegex.test(resume)) {
           resume = resume.replace(sectionRegex, "");
@@ -3231,64 +3285,58 @@ ${
 
       let resume = result.tailoredResume;
 
-      // Separate multi-word phrases (need bullet injection) from single keywords (skills section)
-      const multiWordMissing = actualMissing.filter(kw => kw.includes(' '));
-      const singleWordMissing = actualMissing.filter(kw => !kw.includes(' '));
-
-      // STRATEGY A: Inject multi-word phrases into the LAST experience bullet of the FIRST role
-      // This ensures ATS scanners find exact phrases in context, not just skills lists
-      if (multiWordMissing.length > 0) {
-        const workExpMatch = resume.match(/(WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE)\s*\n/i);
-        if (workExpMatch && workExpMatch.index !== undefined) {
-          // Find the first bullet point block after the work experience header
-          const afterHeader = resume.substring(workExpMatch.index);
-          const bulletLines = afterHeader.split('\n');
-          
-          // Find the last bullet of the first role (before the next company/role header)
-          let lastBulletIdx = -1;
-          let passedFirstBullet = false;
-          for (let i = 1; i < bulletLines.length; i++) {
-            const line = bulletLines[i].trim();
-            if (line.startsWith('-') || line.startsWith('•')) {
-              passedFirstBullet = true;
-              lastBulletIdx = i;
-            }
-            // Stop at next role header (line that doesn't start with - and has a date pattern)
-            if (passedFirstBullet && !line.startsWith('-') && !line.startsWith('•') && line.length > 0 && /\d{2}\/\d{4}/.test(line)) {
-              break;
-            }
-          }
-
-          if (lastBulletIdx > 0) {
-            // Append a new bullet with all multi-word phrases woven naturally
-            const phrasesText = multiWordMissing.join(', ');
-            const injectionBullet = `- Leveraged programming skills to implement tools and scripts that troubleshoot issues, resolve issues, and improve efficiency across development workflows, demonstrating strong collaboration skills in cross-functional team settings.`;
-            
-            // Build a smarter bullet that uses ALL the actual missing multi-word phrases
-            const smartBullet = buildMultiWordInjectionBullet(multiWordMissing);
-            bulletLines.splice(lastBulletIdx + 1, 0, smartBullet);
-            
-            const newAfterHeader = bulletLines.join('\n');
-            resume = resume.substring(0, workExpMatch.index) + newAfterHeader;
-            console.log(`[FORCE-INJECT] Injected ${multiWordMissing.length} multi-word phrases into experience bullet`);
-          }
-        }
-      }
+      // A KEYWORD THAT FITS NOWHERE TRUTHFULLY GOES IN THE SKILLS LIST,
+      // NOT INTO A MANUFACTURED ACHIEVEMENT.
+      //
+      // STRATEGY A used to append a whole new bullet to the most recent
+      // role whenever a multi-word phrase had no home, reading:
+      //
+      //   "- Leveraged programming skills to implement tools and scripts
+      //    that troubleshoot issues, resolve issues, and improve
+      //    efficiency across development workflows, demonstrating strong
+      //    collaboration skills in cross-functional team settings."
+      //
+      // That is a fabricated accomplishment. It claims work the
+      // candidate never described, in the exact register a reviewer
+      // reads as machine-written, and it lands under the most recent
+      // role -- among the first three bullets, the part that actually
+      // gets read. It cannot survive an interview either, because there
+      // is no story behind it.
+      //
+      // Both the extension and this function did the same thing, so a
+      // single CV could collect two of them. Every unplaceable keyword
+      // now routes to the skills list, which captures the same terms
+      // honestly, and RULE 2's evidence gate governs what may be woven
+      // into a real bullet.
+      const singleWordMissing = actualMissing.slice();
 
       // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
       const toInjectSingles = singleWordMissing;
       if (toInjectSingles.length > 0) {
-        // Next boundary: any ALL-CAPS heading line, or end of document
+        // The trailing section is optional. These used to require the
+        // skills section to be FOLLOWED by CERTIFICATIONS/EDUCATION/etc,
+        // so a CV whose skills list was the last thing on the page did
+        // not match, and Strategy 2 below then appended a SECOND
+        // TECHNICAL PROFICIENCIES heading to a document that already had
+        // one.
+        const TAIL = "(\\n\\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\\b|$)";
         const skillsSectionPatterns = [
-          /(TECHNICAL\s+PROFICIENCIES\s*[:\n])([\s\S]*?)(\n[ \t]*[A-Z][A-Z0-9 &\/\-]{2,}[ \t]*\n|\s*$)/i,
-          /(TECHNICAL\s+SKILLS\s*[:\n])([\s\S]*?)(\n[ \t]*[A-Z][A-Z0-9 &\/\-]{2,}[ \t]*\n|\s*$)/i,
-          /(SKILLS\s*[:\n])([\s\S]*?)(\n[ \t]*[A-Z][A-Z0-9 &\/\-]{2,}[ \t]*\n|\s*$)/i,
+          new RegExp("(TECHNICAL\\s+PROFICIENCIES\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
+          new RegExp("(TECHNICAL\\s+SKILLS\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
+          new RegExp("(SKILLS\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
         ];
 
+        // "Did we add anything" and "does a section already exist" are
+        // two different questions. Conflating them meant that when the
+        // section was found but already contained every missing keyword,
+        // this fell through to Strategy 2 and created a duplicate
+        // heading for a section that was sitting right there.
         let injected = false;
+        let sectionFound = false;
         for (const pattern of skillsSectionPatterns) {
           const match = resume.match(pattern);
           if (match) {
+            sectionFound = true;
             const sectionHeader = match[1];
             const sectionContent = match[2];
             const nextSection = match[3];
@@ -3309,7 +3357,7 @@ ${
         }
 
         // Strategy 2: If no skills section found, append one before Certifications/Education
-        if (!injected && toInjectSingles.length > 0) {
+        if (!sectionFound && !injected && toInjectSingles.length > 0) {
           const insertBeforePatterns = [
             /(\n\s*CERTIFICATIONS\b)/i,
             /(\n\s*EDUCATION\b)/i,
@@ -3319,7 +3367,7 @@ ${
           for (const pattern of insertBeforePatterns) {
             const match = resume.match(pattern);
             if (match && match.index !== undefined) {
-              const newSection = `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+              const newSection = `\n\nTECHNICAL SKILLS\n${toInjectSingles.join(", ")}\n`;
               resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
               console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${toInjectSingles.length} keywords`);
               injected = true;
@@ -3328,7 +3376,7 @@ ${
           }
 
           if (!injected) {
-            resume += `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+            resume += `\n\nTECHNICAL SKILLS\n${toInjectSingles.join(", ")}\n`;
             console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end`);
           }
         }
@@ -3367,7 +3415,7 @@ ${
         ? Math.round((finalMatched.length / jdKeywords.allKeywords.length) * 100)
         : actualScore;
 
-      console.log(`[FORCE-INJECT] Final match score: ${finalScore}% (${finalMatched.length}/${jdKeywords.allKeywords.length}) — was ${actualScore}%`);
+      console.log(`[FORCE-INJECT] Final match score: ${finalScore}% (${finalMatched.length}/${jdKeywords.allKeywords.length}) - was ${actualScore}%`);
       if (finalMissing.length > 0) {
         console.log(`[FORCE-INJECT] Remaining unmatched (${finalMissing.length}): ${finalMissing.join(", ")}`);
       }

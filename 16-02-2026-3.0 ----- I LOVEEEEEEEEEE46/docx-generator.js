@@ -320,26 +320,255 @@
     'CERTIFICATIONS', 'PROJECTS', 'SELECTED PROJECTS', 'AWARDS',
   ];
 
-  // Headings that mean the same section under different names. Two blocks
-  // titled "SKILLS" and "TECHNICAL PROFICIENCIES" are one section, so only
-  // the first heading is printed.
-  function sectionKey(upper) {
-    if (/PROFICIENC|SKILLS/.test(upper)) return 'SKILLS';
-    if (/EXPERIENCE|EMPLOYMENT/.test(upper) && !/AREAS OF/.test(upper)) return 'EXPERIENCE';
-    if (/SUMMARY|PROFILE/.test(upper)) return 'SUMMARY';
-    if (/PROJECTS/.test(upper)) return 'PROJECTS';
-    if (/COMPETENCIES|AREAS OF EXPERTISE/.test(upper)) return 'COMPETENCIES';
-    return upper;
+  // ---- section order, enforced HERE rather than hoped for -------------
+  // The DOCX prints whatever the tailoring model emitted, in whatever order
+  // it emitted it. That made the layout depend on a prompt deployed
+  // elsewhere: the prompt was corrected and the documents kept coming out
+  // in the old order because the deploy had not happened.
+  //
+  // Reordering the TEXT before it is parsed removes that dependency. A
+  // recruiter reads top-down and stops early, so the sections that answer
+  // "can this person do THIS job" come first, and education goes last:
+  // education above experience is the graduate convention and reads as
+  // early-career on a CV with years of history behind it.
+  const SECTION_RANK = [
+    [/^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/, 1],
+    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE)$/, 2],
+    [/^(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE)$/, 3],
+    [/^(SELECTED PROJECTS|PROJECTS)$/, 4],
+    [/^(TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 5],
+    [/^CERTIFICATIONS$/, 6],
+    [/^AWARDS$/, 7],
+    [/^EDUCATION$/, 9],          // last, deliberately
+  ];
+  const rankOf = (header) => {
+    for (const [re, r] of SECTION_RANK) if (re.test(header)) return r;
+    return 8;                    // anything unrecognised sits above education
+  };
+
+  // The heading actually printed, whatever synonym the text arrived
+  // with. The safest headings for a parser are the conventional ones,
+  // and the tailoring prompt lives in an edge function deployed
+  // separately -- so relying on the prompt alone means documents keep
+  // coming out with the old heading until that deploy happens.
+  // Normalising here makes the rendered file correct on extension
+  // reload alone. Only synonyms are rewritten; a heading the renderer
+  // does not recognise is left exactly as the writer set it.
+  const CANONICAL_HEADER = {
+    1: 'PROFESSIONAL SUMMARY',
+    2: 'CORE COMPETENCIES',
+    3: 'PROFESSIONAL EXPERIENCE',
+    5: 'TECHNICAL SKILLS',
+    6: 'CERTIFICATIONS',
+    9: 'EDUCATION',
+  };
+  const canonicalHeader = (header, rank) => CANONICAL_HEADER[rank] || header;
+
+  // ---- one heading, once --------------------------------------------
+  // A generated CV passes through several keyword injectors before it
+  // reaches here: the tailoring edge function appends a TECHNICAL
+  // PROFICIENCIES section when it cannot find one to append to, the
+  // popup's post-sanitisation pass does the same, and the model emits
+  // its own. Each guards against creating a second copy, none of them
+  // against creating a THIRD, and the popup's text-level dedupe merged
+  // only the first duplicate pair -- so a document went out with
+  //
+  //   TECHNICAL PROFICIENCIES
+  //   langgraph, crewai, b2b, enterprise
+  //   TECHNICAL PROFICIENCIES
+  //   Python, TypeScript, React, ...
+  //
+  // A repeated heading is not just untidy. Parsers that key sections by
+  // heading either overwrite the first block with the second or drop one
+  // of them, so it can cost the whole skills section -- the section an
+  // ATS scores most directly. Merging here, in the renderer, means the
+  // file is correct no matter which upstream injector misbehaves.
+  const isCommaList = (body) => {
+    const real = body.filter((l) => l.trim());
+    return real.length === 1 && real[0].includes(',') && !/^[•\-*]/.test(real[0].trim());
+  };
+  function mergeCommaLists(a, b) {
+    const seen = new Map();                      // lowercase -> chosen casing
+    for (const item of (a + ', ' + b).split(',')) {
+      const v = item.trim();
+      if (!v) continue;
+      const k = v.toLowerCase();
+      // Injected keywords arrive lowercase ("langgraph"); the model's own
+      // list is properly cased ("LangGraph"). On a collision keep the
+      // cased one -- an all-lowercase term reads as machine-generated.
+      if (!seen.has(k) || (seen.get(k) === seen.get(k).toLowerCase() && v !== v.toLowerCase())) {
+        seen.set(k, v);
+      }
+    }
+    return [...seen.values()].join(', ');
+  }
+  function absorb(first, later) {
+    const trimEdges = (arr) => {
+      const c = arr.slice(1);                    // drop the heading line
+      while (c.length && !c[0].trim()) c.shift();
+      while (c.length && !c[c.length - 1].trim()) c.pop();
+      return c;
+    };
+    const a = trimEdges(first.lines);
+    const b = trimEdges(later.lines);
+    if (!b.length) return;
+    if (isCommaList(a) && isCommaList(b)) {
+      const ai = a.findIndex((l) => l.trim());
+      a[ai] = mergeCommaLists(a[ai].trim(), b.find((l) => l.trim()).trim());
+      first.lines = [first.lines[0]].concat(a, '');
+      return;
+    }
+    first.lines = [first.lines[0]].concat(a, b, '');
   }
 
+  // A heading with its content welded on after a colon is not a heading.
+  //
+  // The tailoring model sometimes emits
+  //
+  //   CORE COMPETENCIES: LLM Implementation, AI Workflows, ...
+  //
+  // on one line. A section is only recognised here when the whole line
+  // IS the heading, so that arrived as ordinary body text: no heading
+  // paragraph, the entire skills list rendered in bold, and nothing for
+  // reorderSections to rank. Worse for the thing that matters -- an ATS
+  // splits a CV into sections by finding a line that is just the
+  // heading, so a competencies section written this way is not a
+  // section at all, and its keywords are not scored as skills.
+  //
+  // Only split on a prefix that is a known section heading. That leaves
+  // "Live demo: https://..." and "Microsoft Certified: Azure AI
+  // Engineer Associate" alone, which is why the check is membership
+  // rather than a shape.
+  function splitInlineHeadings(lines) {
+    const out = [];
+    let split = 0;
+    for (const line of lines) {
+      const m = line.match(/^\s*([A-Za-z][A-Za-z &/]{2,40}?)\s*:\s*(\S.*)$/);
+      if (m && SECTION_HEADERS.includes(m[1].trim().toUpperCase())) {
+        out.push(m[1].trim().toUpperCase());
+        out.push(m[2].trim());
+        split++;
+        continue;
+      }
+      out.push(line);
+    }
+    return { lines: out, split };
+  }
+
+  function reorderSections(cvText) {
+    const raw = String(cvText == null ? '' : cvText);
+    const inline = splitInlineHeadings(raw.split('\n'));
+    const lines = inline.lines;
+    const preamble = [];
+    const blocks = [];
+    let current = null;
+    let renamed = 0;
+    for (const line of lines) {
+      const upper = line.trim().toUpperCase();
+      if (SECTION_HEADERS.includes(upper)) {
+        const rank = rankOf(upper);
+        const label = canonicalHeader(upper, rank);
+        if (label !== line.trim()) renamed++;
+        current = { header: label, rank, lines: [label] };
+        blocks.push(current);
+        continue;
+      }
+      (current ? current.lines : preamble).push(line);
+    }
+    if (blocks.length < 2) {
+      if (!inline.split && !renamed) return cvText;
+      return preamble.concat(blocks.map((b) => b.lines.join('\n'))).join('\n');
+    }
+
+    // Fold repeats into the first block that carries the same heading.
+    // Headings that mean the same section merge too (SKILLS into
+    // TECHNICAL PROFICIENCIES): two differently-named skills lists are
+    // the same duplication wearing a different label. Rank 8 is
+    // "unrecognised", which is not a shared meaning, so those merge only
+    // on an exact heading match.
+    const byKey = new Map();
+    const kept = [];
+    let mergedAny = false;
+    for (const b of blocks) {
+      const key = b.rank === 8 ? 'x:' + b.header : 'r:' + b.rank;
+      if (byKey.has(key)) { absorb(byKey.get(key), b); mergedAny = true; continue; }
+      byKey.set(key, b);
+      kept.push(b);
+    }
+
+    const sorted = kept
+      .map((b, i) => ({ b, i }))
+      .sort((x, y) => (x.b.rank - y.b.rank) || (x.i - y.i))   // stable
+      .map((x) => x.b);
+    // Nothing to merge, nothing to split, already in order: leave it
+    // exactly as it is.
+    let dedupedSkills = false;
+    // ---- the two skills sections must not repeat each other ----------
+    //
+    // A real generated CV listed nine Core Competencies, six of which
+    // appeared again verbatim in Technical Skills sixty lines later:
+    // Data Profiling, Data Modelling, Databricks, SQL, Power BI, Data
+    // Warehousing. Two thirds of the scan zone was padding, and a
+    // recruiter reading the same six terms twice draws the obvious
+    // conclusion. The prompt already forbids this (RULE 15c); the model
+    // did it anyway, so the renderer enforces it and no deploy is
+    // needed.
+    //
+    // Trimmed from TECHNICAL SKILLS rather than CORE COMPETENCIES.
+    // Both map to "skills" in every parser here, so the term is still
+    // indexed either way and no keyword is lost -- but Core Competencies
+    // is the six-second scan zone and gutting it to three lines would
+    // trade one problem for another. A floor keeps the technical list
+    // substantial: if trimming would leave it thin, the duplication is
+    // the lesser evil and nothing is touched.
+    (() => {
+      const cc = sorted.find((b) => b.rank === 2);
+      const ts = sorted.find((b) => b.rank === 5);
+      if (!cc || !ts) return;
+      const itemsOf = (block) => block.lines.slice(1).join('\n')
+        .split(/[,\n]/).map((s) => s.replace(/^\s*[•\-*]\s*/, '').trim()).filter(Boolean);
+      const owned = new Set(itemsOf(cc).map((s) => s.toLowerCase()));
+      if (!owned.size) return;
+      const kept = itemsOf(ts).filter((s) => !owned.has(s.toLowerCase()));
+      if (kept.length === itemsOf(ts).length) return;      // nothing repeated
+      if (kept.length < 8) return;                          // would leave it thin
+      ts.lines = [ts.lines[0], kept.join(', '), ''];
+      dedupedSkills = true;
+    })();
+
+    if (!mergedAny && !inline.split && !renamed && !dedupedSkills && sorted.every((b, i) => b === blocks[i])) return cvText;
+
+    // Exactly one blank line between sections. Reordering moves blocks
+    // that did not end in one, which is how EDUCATION ended up welded to
+    // the last certification bullet with no gap.
+    const dropTrailingBlanks = (arr) => {
+      const l = arr.slice();
+      while (l.length && !l[l.length - 1].trim()) l.pop();
+      return l;
+    };
+
+    const parts = [];
+    const pre = dropTrailingBlanks(preamble);
+    if (pre.length) parts.push(pre.join('\n'));
+    for (const b of sorted) parts.push(dropTrailingBlanks(b.lines).join('\n'));
+    return parts.join('\n\n');
+  }
 
   function buildBodyXml(cvText) {
-    const lines = cvText.split('\n');
+    const lines = reorderSections(cvText).split('\n');
     const out = [];
     const rels = []; // hyperlink relationships collected for the contact line
 
     // Experience sections where the company/title/date treatment applies.
-    const EXPERIENCE_HEADERS = ['WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT'];
+    //
+    // PROFESSIONAL EXPERIENCE was missing, though SECTION_HEADERS has
+    // always listed it and the tailoring model emits it freely. A CV
+    // that used that wording lost the whole role/date treatment --
+    // dates no longer right-aligned to their role line, the company and
+    // title no longer emphasised -- silently, because nothing here
+    // fails when the list does not match. Kept in step with
+    // SECTION_RANK rank 3.
+    const EXPERIENCE_HEADERS = SECTION_HEADERS.filter((h) => rankOf(h) === 3);
 
     let firstNonEmpty = -1;
     for (let i = 0; i < lines.length; i++) {
@@ -376,9 +605,6 @@
       // be split into one bullet per item even when the source has them
       // as a single comma-separated paragraph.
       let currentSection = '';
-      // Section keys already given a heading, so a repeated heading is
-      // suppressed and its content merges into the first block.
-      const seenSections = new Set();
       // One-per-line bulleted sections: each item is its own paragraph.
       const LIST_SECTIONS = new Set([
         'CERTIFICATIONS', 'AWARDS',
@@ -440,24 +666,6 @@
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {
-          // ONE HEADING PER SECTION.
-          //
-          // The tailoring step can emit a skills block twice -- once as the
-          // model wrote it and once as force-injected keywords -- which
-          // printed "TECHNICAL PROFICIENCIES" twice, a few lines apart. A
-          // recruiter reads that as a broken document; an ATS just indexes
-          // the same section header twice and gains nothing. The second
-          // block's items still belong in the CV, so we keep the content
-          // and drop only the repeated heading, which merges the two
-          // blocks under the first one.
-          const key = sectionKey(upper);
-          if (seenSections.has(key)) {
-            inExperience = EXPERIENCE_HEADERS.includes(upper);
-            roleState = inExperience ? 'expectCompany' : 'none';
-            currentSection = upper;
-            continue;
-          }
-          seenSections.add(key);
           // SECTION HEADER -- navy, bold, caps, tracked, light-grey rule under
           out.push(paragraph(
             run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22, spacing: 24 }),
@@ -468,7 +676,6 @@
           currentSection = upper;
           continue;
         }
-
 
         if (/^([\-*•]|\d+\.)\s+/.test(t)) {
           const item = t.replace(/^([\-*•]|\d+\.)\s+/, '');
@@ -567,16 +774,42 @@
   }
 
   // ---- Word document XML ----------------------------------------------
-  function documentXml(bodyXml) {
+  //
+  // Page size follows the posting's country: US Letter for North America
+  // and the Letter-using parts of Latin America, A4 everywhere else. This
+  // is invisible to every ATS -- parsers read the text stream and never
+  // look at <w:pgSz> -- so it is not a rejection risk in either
+  // direction. It matters exactly once, when a human prints the file: A4
+  // on a Letter tray loses the bottom 18mm of the page.
+  //
+  // Margins stay identical in both. They are already inside the printable
+  // area of both paper sizes, and a single margin set means the line
+  // breaks a reviewer sees do not depend on which country they are in.
+  const A4_TWIPS = { w: 11906, h: 16838 };
+
+  function documentXml(bodyXml, pageTwips) {
+    const pg = (pageTwips && pageTwips.w && pageTwips.h) ? pageTwips : A4_TWIPS;
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
       `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
       `<w:body>${bodyXml}` +
       `<w:sectPr>` +
-      `<w:pgSz w:w="11906" w:h="16838"/>` +
+      `<w:pgSz w:w="${pg.w}" w:h="${pg.h}"/>` +
       `<w:pgMar w:top="864" w:right="900" w:bottom="864" w:left="900" w:header="720" w:footer="720" w:gutter="0"/>` +
       `</w:sectPr>` +
       `</w:body></w:document>`;
+  }
+
+  // Resolve the page from whatever the caller passed: an explicit
+  // {w,h}, a region object from RegionalFormat, or a location string.
+  function pageTwipsFrom(opts) {
+    if (opts && opts.pageTwips && opts.pageTwips.w) return opts.pageTwips;
+    if (opts && opts.region && opts.region.pageTwips) return opts.region.pageTwips;
+    const RF = global.RegionalFormat;
+    if (RF && opts && opts.jobLocation) {
+      return RF.resolveRegion(opts.jobLocation, opts.candidateLocation).pageTwips;
+    }
+    return A4_TWIPS;
   }
 
   function wordRelsXml(rels) {
@@ -793,7 +1026,7 @@
         { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
         { name: '_rels/.rels', content: ROOT_RELS_XML },
         { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
-        { name: 'word/document.xml', content: documentXml(bodyXml) },
+        { name: 'word/document.xml', content: documentXml(bodyXml, pageTwipsFrom(opts)) },
       ];
       const zipBytes = buildZip(files);
       const base64 = bytesToBase64(zipBytes);
@@ -816,7 +1049,7 @@
         { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
         { name: '_rels/.rels', content: ROOT_RELS_XML },
         { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
-        { name: 'word/document.xml', content: documentXml(bodyXml) },
+        { name: 'word/document.xml', content: documentXml(bodyXml, pageTwipsFrom(opts)) },
       ];
       const zipBytes = buildZip(files);
       const base64 = bytesToBase64(zipBytes);
@@ -829,7 +1062,42 @@
     }
   }
 
-  global.DocxGenerator = { fromCvText, fromCoverLetterText };
+  // ---- one filename rule, used by every path that builds a document ---
+  //
+  // The popup and the content script each generate documents, and each
+  // built its own filename. The popup learned to include the target role
+  // ("Maxmilliam_Okafor_Senior_Technical_Business_Analyst_CV.docx"); the
+  // content script's auto-flow kept its own `First_Last_CV.docx`. So the
+  // panel showed one name and the file attached to the form had another,
+  // which is both confusing and hides a real failure: with the role in
+  // the name, a CV left over from a DIFFERENT application is obvious at a
+  // glance. Without it, every file is called the same thing and a stale
+  // attachment is invisible.
+  //
+  // Capped at four words and 34 characters, never cutting a word in half:
+  // some postings run past eighty characters and older portals truncate.
+  function buildFileBase(firstName, lastName, jobTitle) {
+    const clean = (s) => String(s == null ? '' : s).trim()
+      .replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const first = clean(firstName) || 'Applicant';
+    const last = clean(lastName);
+    const nameBase = last ? first + '_' + last : first;
+
+    const words = String(jobTitle == null ? '' : jobTitle)
+      .replace(/\([^)]*\)/g, ' ')                       // "(Remote)", "(m/f/d)"
+      .replace(/\s*[-–—|]\s*(remote|hybrid|onsite|contract|permanent|full[- ]time|part[- ]time)\b.*$/i, '')
+      .replace(/[^A-Za-z0-9 ]/g, ' ')
+      .trim().split(/\s+/).filter(Boolean).slice(0, 4);
+    let slug = '';
+    for (const w of words) {
+      const next = slug ? slug + '_' + w : w;
+      if (next.length > 34) break;
+      slug = next;
+    }
+    return slug ? nameBase + '_' + slug : nameBase;
+  }
+
+  global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }

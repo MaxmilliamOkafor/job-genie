@@ -348,7 +348,7 @@
       
       // Technical Proficiencies
       if (resume.technicalProficiencies) {
-        sections.push('TECHNICAL PROFICIENCIES');
+        sections.push('TECHNICAL SKILLS');
         sections.push(resume.technicalProficiencies);
       }
       

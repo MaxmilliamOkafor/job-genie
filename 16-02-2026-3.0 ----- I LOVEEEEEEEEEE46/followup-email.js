@@ -558,13 +558,57 @@
     return [base + '/', base];
   }
 
-  function buildAuthUrl(clientId, uri, prompt) {
-    return 'https://accounts.google.com/o/oauth2/v2/auth' +
+  // `prompt` is passed through only when set. Omitting it entirely is the
+  // point: this used to hard-code prompt=consent on every interactive
+  // run, which re-shows the full consent screen even when the grant is
+  // already on file. In the implicit flow consent buys nothing -- there
+  // is no refresh token to force out of Google -- so all it did was make
+  // a working connection look like it had dropped.
+  //
+  // `login_hint` is what actually makes the silent path work. With more
+  // than one Google account signed in, prompt=none cannot pick one and
+  // Google answers account_selection_required, so the hourly silent
+  // reissue failed every time and the user was pushed back to the
+  // account chooser. Naming the account resolves it without any UI.
+  function buildAuthUrl(clientId, uri, prompt, loginHint) {
+    let url = 'https://accounts.google.com/o/oauth2/v2/auth' +
       '?client_id=' + encodeURIComponent(clientId) +
       '&response_type=token' +
       '&redirect_uri=' + encodeURIComponent(uri) +
-      '&scope=' + encodeURIComponent(GMAIL_SCOPE) +
-      '&prompt=' + encodeURIComponent(prompt || 'consent');
+      '&scope=' + encodeURIComponent(GMAIL_SCOPE);
+    if (prompt) url += '&prompt=' + encodeURIComponent(prompt);
+    if (loginHint) url += '&login_hint=' + encodeURIComponent(loginHint);
+    return url;
+  }
+
+  // The Gmail address to reissue against. Set explicitly by the user if
+  // they linked a mailbox other than the one on their profile; otherwise
+  // the profile address, which is the account they are signing in with
+  // in every case we have seen. An empty hint is not fatal -- it just
+  // means the silent path may need the chooser once.
+  const KEY_ACCOUNT = 'followup_gmail_account';
+  function loadAccountHint() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([KEY_ACCOUNT, 'ats_profile'], (r) => {
+          const explicit = r && r[KEY_ACCOUNT];
+          if (explicit) { resolve(String(explicit)); return; }
+          const p = (r && r.ats_profile) || {};
+          resolve(String(p.email || p.email_address || p.emailAddress || '').trim());
+        });
+      } catch (e) {
+        resolve('');
+      }
+    });
+  }
+  function saveAccountHint(email) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ [KEY_ACCOUNT]: String(email || '').trim() }, () => resolve(true));
+      } catch (e) {
+        resolve(false);
+      }
+    });
   }
 
   // Google renders every setup failure as an HTML error PAGE inside the auth
@@ -696,7 +740,7 @@
     } catch (e) {
       return '';   // config problem -- let the interactive path report it
     }
-    const url = buildAuthUrl(clientId, uri, 'none');
+    const url = buildAuthUrl(clientId, uri, 'none', await loadAccountHint());
     const responseUrl = await new Promise((resolve) => {
       try {
         chrome.identity.launchWebAuthFlow({ url, interactive: false }, (r) => {
@@ -734,7 +778,13 @@
     // with the precise, actionable cause instead of letting the user hit an
     // opaque error page.
     const uri = await resolveRedirectUri(clientId);
-    const url = buildAuthUrl(clientId, uri, 'consent');
+    // Already linked? Ask for nothing: Google returns the token against
+    // the hinted account without a consent screen. Only a first link
+    // needs the chooser, and select_account is enough for that -- it
+    // never re-asks for a permission the user has already given.
+    const hint = await loadAccountHint();
+    const linked = await isLinked().catch(() => false);
+    const url = buildAuthUrl(clientId, uri, (linked && hint) ? '' : 'select_account', hint);
 
     const redirect = await new Promise((resolve, reject) => {
       try {
@@ -1327,6 +1377,7 @@
     buildTokens, render, renderBlock, findUnfilledTokens, compose, _cleanTitle,
     isConnected, isLinked, hasLiveToken, connect, disconnect, diagnose, authMode,
     loadOAuthConfig, saveOAuthConfig, redirectUri, redirectUriVariants, probeRedirect,
+    loadAccountHint, saveAccountHint, buildAuthUrl,
     buildComposeUrl, openCompose,
     send, sendTest, buildRaw,
     alreadySent, markSent, checkSendPolicy, SEND_POLICY,
