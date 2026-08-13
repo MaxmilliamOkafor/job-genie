@@ -2390,10 +2390,22 @@ Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that a
 EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL PROFICIENCIES / Skills section instead, as recruiters find them off-putting at the top of a CV.
 
 RULE 9 — VOCABULARY REFORMULATION (worth ~5 points)
+REFORMULATION IS NOT OPTIONAL, AND IT DOES NOT CONFLICT WITH RULE 0. Rule 0 forbids changing FACTS. It does not forbid changing WORDING.
+Split every bullet into two parts:
+  IMMUTABLE - numbers, percentages, technologies, tools, employers, job titles, dates. These are copied exactly. Never rounded, never approximated, never swapped for a similar tool.
+  FREE - the verb, the sentence order, which fact leads, and the vocabulary used to describe the work. These MUST be rewritten to match this posting's language.
 Do NOT just insert keywords — REFORMULATE existing experience using the JD's exact vocabulary:
 - If JD says "RAG pipelines" and CV says "LLM workflows with retrieval" → rewrite to "RAG pipeline design and LLM orchestration workflows"
 - If JD says "MLOps" and CV says "observability, evals, error handling" → rewrite to "MLOps and observability: evals, error handling, cost monitoring"
 - If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
+WORKED EXAMPLES — one source bullet, two postings. Every number and tool is identical in both; the lead fact and the vocabulary differ.
+Source bullet: "Built Python and SQL reporting pipelines that cut month-end close from 9 days to 3 for 12 finance analysts."
+- Posting emphasising data engineering: "Engineered Python and SQL data pipelines serving 12 finance analysts, reducing month-end close from 9 days to 3."
+- Posting emphasising process improvement and stakeholder delivery: "Reduced month-end close from 9 days to 3 for 12 finance analysts by automating reporting workflows in Python and SQL."
+Second source bullet: "Migrated 40 legacy reports to Power BI, removing 15 hours of manual work each week."
+- Posting emphasising BI tooling: "Delivered a Power BI migration of 40 legacy reports, eliminating 15 hours of manual reporting each week."
+- Posting emphasising efficiency and automation: "Eliminated 15 hours of weekly manual effort by migrating 40 legacy reports onto Power BI."
+Returning a source bullet unchanged is a FAILURE of Rule 9, not compliance with Rule 0.
 NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
 RULE 10 — EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
@@ -2582,6 +2594,27 @@ Strategy:
 - The first bullet of the FIRST role is the single most valuable line in the entire CV — pack it with the top JD keywords
 - If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
 
+RULE 11b — HOW MANY BULLETS EACH ROLE GETS (hard limits)
+Attention is finite and front-loaded. A role from eight years ago carrying seven bullets spends the reader's patience on the least relevant part of the CV and pushes the recent work onto page two.
+- The two most recent roles: 4 to 6 bullets each.
+- Every earlier role: 2 to 4 bullets each.
+Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least relevant bullet last, so cutting the tail removes the least relevant material. Cut before reordering and you delete whatever the source happened to list last.
+ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the whole CV where a posting keyword appears, KEEP it even though the role then runs over. A missed keyword costs more than an extra line.
+Never pad a short role UP to the minimum by inventing bullets. If the source gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
+
+RULE 19 — SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
+"Built dashboards" and "built dashboards used by 40 people across three desks" describe the same work at very different levels of seniority. Where the SOURCE CV states scope, carry it into the rewritten bullet instead of dropping it: team size, user or customer counts, data volume, transaction volume, number of systems, geographies, budget, or how many stakeholders the work served.
+SUBJECT TO RULE 0, WITHOUT EXCEPTION. If the source does not state the scope, you do not state the scope. Do not write "large-scale", "enterprise-wide", "high-volume", "cross-functional" or "multi-million" as a substitute for a number you were not given - those are the words a reader discounts on sight, and RULE 15b already bans hedged figures. A bullet with no scope is complete and acceptable. An invented scope is a fabrication and fails the whole output.
+
+RULE 20 — NO CONTENT WORD TWICE IN THE SAME BULLET
+"surfacing fraud and risk exposure for the risk team" reads as a draft nobody re-read. Before emitting each bullet, check whether any noun or verb of four or more letters appears twice in it. If one does, rewrite so it appears once. Resolve it by DELETING the redundant occurrence or by using the word the source CV itself uses elsewhere. Do NOT resolve it by inventing a name, a team, or a department that the source does not contain - that is a Rule 0 violation and a reference check can contradict it. If you cannot remove the repetition without inventing something, leave the bullet as it is: a repeated word is a small flaw, an invented employer detail is a disqualifying one.
+
+RULE 21 — SPELLING FOLLOWS THE POSTING'S COUNTRY
+A great deal of ATS keyword scoring is literal substring matching. A posting asking for "optimization" scores nothing against a CV that says "optimisation". Same word, missed keyword.
+- Posting in the United States, Canada, Mexico or Latin America: American spelling throughout (optimize, analyze, behavior, center, modeling).
+- Posting anywhere else - UK, Ireland, the EU, Africa, India, Australia, New Zealand, Singapore: British spelling throughout (optimise, analyse, behaviour, centre, modelling).
+Two things this rule does NOT touch. Proper nouns keep their owner's spelling in every country: "World Health Organisation" and "Defence Forces Ireland" are names, not words. And these are spelt -ise in American English too, so never "correct" them: advise, supervise, expertise, enterprise, advertise, comprise, revise, devise, promise, precise, franchise.
+
 RULE 12 — STRATEGIC KEYWORD DISTRIBUTION (worth ~10 points)
 Keywords MUST be strategically placed in the highest-weight ATS positions, not randomly scattered:
 - Professional Summary: MUST contain the top 5 most-repeated JD keywords
@@ -2625,6 +2658,11 @@ After rewriting, run this internal checklist:
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
 [ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it — that is the tell recruiters read as machine-written.
+[ ] Does any role exceed its bullet cap (6 for the two most recent, 4 for the rest)? If so, cut from the BOTTOM after reordering - unless the bullet is the CV's only mention of a posting keyword, in which case keep it.
+[ ] Did you drop a scope figure (team size, volume, user count, number of systems) that the SOURCE bullet stated? Put it back. Did you add one the source did not state? Remove it.
+[ ] Does any bullet use the same four-letter-or-longer noun or verb twice ("risk ... risk team")? Rewrite it, but never by inventing a team or department name.
+[ ] Is the spelling consistent with the POSTING's country throughout - American for US/Canada/Latin America, British everywhere else - with proper nouns left in their owner's spelling?
+[ ] REFORMULATION CHECK - go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting.
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
