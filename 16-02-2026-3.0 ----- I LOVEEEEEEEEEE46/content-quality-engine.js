@@ -275,6 +275,8 @@
     'well-versed': 'experienced',
     'adept': 'skilled',
     // v3.2 additions — replacements for newly banned words
+    'robust understanding': 'strong understanding',
+    'robust knowledge': 'strong knowledge',
     'robust': 'reliable',
     'seamless': 'smooth',
     'holistic': 'complete',
@@ -913,6 +915,11 @@
         [/\bleverage\b/gi, 'use'],
         [/\bcomprehensive\b/gi, 'thorough'],
         // v3.2 additions to never-leak guard
+        // "reliable" fits a system, not an abstract noun: "robust
+        // understanding" became "reliable understanding", which is not
+        // English anyone writes. Pick by what the word is modifying.
+        [/\brobust\b(?=\s+(?:understanding|knowledge|grasp|background|experience|command|appreciation|foundation))/gi, 'strong'],
+        [/\brobust\b(?=\s+(?:set|suite|range|portfolio))/gi, 'broad'],
         [/\brobust\b/gi, 'reliable'],
         [/\bseamless\b/gi, 'smooth'],
         [/\bholistic\b/gi, 'complete'],
@@ -1279,6 +1286,19 @@
         const replacement = PHRASE_REPLACEMENTS[phrase.toLowerCase()] || '';
         result = result.replace(regex, replacement);
       }
+
+      // Context-sensitive substitutions, BEFORE the word loop below.
+      //
+      // That loop walks BANNED_WORDS and looks up a single replacement
+      // per word, so "robust" always became "reliable" -- which fits a
+      // system and not an abstract noun. A real generated cover letter
+      // went out saying "I possess a reliable understanding of data
+      // profiling", which is not English anyone writes. Choosing by what
+      // the word modifies has to happen before the blanket swap.
+      result = result
+        .replace(/\brobust\b(?=\s+(?:understanding|knowledge|grasp|background|experience|command|appreciation|foundation))/gi, 'strong')
+        .replace(/\brobust\b(?=\s+(?:set|suite|range|portfolio))/gi, 'broad')
+        .replace(/\bcomprehensive\b(?=\s+(?:understanding|knowledge|grasp))/gi, 'thorough');
 
       // Replace banned words
       for (const word of BANNED_WORDS) {

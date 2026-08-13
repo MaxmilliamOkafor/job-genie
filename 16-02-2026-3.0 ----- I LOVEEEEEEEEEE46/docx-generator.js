@@ -502,7 +502,41 @@
       .map((x) => x.b);
     // Nothing to merge, nothing to split, already in order: leave it
     // exactly as it is.
-    if (!mergedAny && !inline.split && !renamed && sorted.every((b, i) => b === blocks[i])) return cvText;
+    let dedupedSkills = false;
+    // ---- the two skills sections must not repeat each other ----------
+    //
+    // A real generated CV listed nine Core Competencies, six of which
+    // appeared again verbatim in Technical Skills sixty lines later:
+    // Data Profiling, Data Modelling, Databricks, SQL, Power BI, Data
+    // Warehousing. Two thirds of the scan zone was padding, and a
+    // recruiter reading the same six terms twice draws the obvious
+    // conclusion. The prompt already forbids this (RULE 15c); the model
+    // did it anyway, so the renderer enforces it and no deploy is
+    // needed.
+    //
+    // Trimmed from TECHNICAL SKILLS rather than CORE COMPETENCIES.
+    // Both map to "skills" in every parser here, so the term is still
+    // indexed either way and no keyword is lost -- but Core Competencies
+    // is the six-second scan zone and gutting it to three lines would
+    // trade one problem for another. A floor keeps the technical list
+    // substantial: if trimming would leave it thin, the duplication is
+    // the lesser evil and nothing is touched.
+    (() => {
+      const cc = sorted.find((b) => b.rank === 2);
+      const ts = sorted.find((b) => b.rank === 5);
+      if (!cc || !ts) return;
+      const itemsOf = (block) => block.lines.slice(1).join('\n')
+        .split(/[,\n]/).map((s) => s.replace(/^\s*[•\-*]\s*/, '').trim()).filter(Boolean);
+      const owned = new Set(itemsOf(cc).map((s) => s.toLowerCase()));
+      if (!owned.size) return;
+      const kept = itemsOf(ts).filter((s) => !owned.has(s.toLowerCase()));
+      if (kept.length === itemsOf(ts).length) return;      // nothing repeated
+      if (kept.length < 8) return;                          // would leave it thin
+      ts.lines = [ts.lines[0], kept.join(', '), ''];
+      dedupedSkills = true;
+    })();
+
+    if (!mergedAny && !inline.split && !renamed && !dedupedSkills && sorted.every((b, i) => b === blocks[i])) return cvText;
 
     // Exactly one blank line between sections. Reordering moves blocks
     // that did not end in one, which is how EDUCATION ended up welded to
@@ -512,6 +546,7 @@
       while (l.length && !l[l.length - 1].trim()) l.pop();
       return l;
     };
+
     const parts = [];
     const pre = dropTrailingBlanks(preamble);
     if (pre.length) parts.push(pre.join('\n'));

@@ -323,5 +323,47 @@ t('  ...and still works if the generator is missing',
   /typeof DocxGenerator !== 'undefined' && DocxGenerator\.buildFileBase/.test(contentSrc),
   'attaching nothing is worse than attaching a plainly named file');
 
+console.log('\nTHE TWO SKILLS SECTIONS DO NOT REPEAT EACH OTHER');
+// A real generated CV listed nine Core Competencies, six of which
+// appeared again verbatim in Technical Skills sixty lines later. Two
+// thirds of the six-second scan zone was padding, and a recruiter
+// reading the same six terms twice draws the obvious conclusion. RULE
+// 15c already forbids it; the model did it anyway, so the renderer
+// enforces it without waiting on a deploy.
+const DUPED = ['Maxmilliam Okafor', 'Senior Technical Business Analyst', 'Dublin | max@x.com', '',
+  'PROFESSIONAL SUMMARY', 'Experienced analyst.', '',
+  'CORE COMPETENCIES', 'Business Analysis, Data Profiling, Data Modelling, Databricks, '
+    + 'SQL, Power BI, Data Warehousing, Stakeholder Management, Analytics Solutions', '',
+  'PROFESSIONAL EXPERIENCE', 'Meta', 'Software Engineer', 'January 2023 - Present',
+  '- Did a thing.', '',
+  'TECHNICAL SKILLS', 'Python, SQL, Databricks, dbt, Power BI, Data Engineering, '
+    + 'Data Warehousing, Data Modelling, Data Profiling, Apache Kafka, Apache Airflow, '
+    + 'AWS, Azure, Kubernetes, Docker, CI/CD, ETL, Machine Learning, Deep Learning', '',
+  'EDUCATION', 'MSc AI'].join('\n');
+const dupBody = body(DUPED);
+for (const term of ['SQL', 'Databricks', 'Power BI', 'Data Modelling', 'Data Profiling', 'Data Warehousing']) {
+  const n = (dupBody.match(new RegExp('\\b' + term.replace(' ', '\\s') + '\\b', 'g')) || []).length;
+  t('  ' + term + ' appears once, not twice', n === 1, 'appears ' + n + ' times');
+}
+// Trimming the technical list must not lose a keyword from the page,
+// and must not gut the scan zone either.
+for (const term of ['Business Analysis', 'Stakeholder Management', 'Analytics Solutions']) {
+  t('  competency kept: ' + term, dupBody.includes(term), 'the scan zone was gutted instead');
+}
+for (const term of ['Python', 'dbt', 'Apache Kafka', 'Kubernetes', 'Machine Learning']) {
+  t('  technical skill kept: ' + term, dupBody.includes(term), 'a keyword was lost');
+}
+// A short technical list must be left alone: trading duplication for a
+// three-item skills section is not an improvement.
+const SHORT = DUPED.replace(
+  'Python, SQL, Databricks, dbt, Power BI, Data Engineering, Data Warehousing, '
+    + 'Data Modelling, Data Profiling, Apache Kafka, Apache Airflow, AWS, Azure, '
+    + 'Kubernetes, Docker, CI/CD, ETL, Machine Learning, Deep Learning',
+  'SQL, Databricks, Power BI, Python');
+const shortBody = body(SHORT);
+t('  a thin technical list is left untouched',
+  /SQL/.test(shortBody) && /Databricks/.test(shortBody) && /Power BI/.test(shortBody),
+  'trimming below the floor would leave almost nothing under the heading');
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);
