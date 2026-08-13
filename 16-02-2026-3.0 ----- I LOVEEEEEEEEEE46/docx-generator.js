@@ -1001,7 +1001,42 @@
     }
   }
 
-  global.DocxGenerator = { fromCvText, fromCoverLetterText };
+  // ---- one filename rule, used by every path that builds a document ---
+  //
+  // The popup and the content script each generate documents, and each
+  // built its own filename. The popup learned to include the target role
+  // ("Maxmilliam_Okafor_Senior_Technical_Business_Analyst_CV.docx"); the
+  // content script's auto-flow kept its own `First_Last_CV.docx`. So the
+  // panel showed one name and the file attached to the form had another,
+  // which is both confusing and hides a real failure: with the role in
+  // the name, a CV left over from a DIFFERENT application is obvious at a
+  // glance. Without it, every file is called the same thing and a stale
+  // attachment is invisible.
+  //
+  // Capped at four words and 34 characters, never cutting a word in half:
+  // some postings run past eighty characters and older portals truncate.
+  function buildFileBase(firstName, lastName, jobTitle) {
+    const clean = (s) => String(s == null ? '' : s).trim()
+      .replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const first = clean(firstName) || 'Applicant';
+    const last = clean(lastName);
+    const nameBase = last ? first + '_' + last : first;
+
+    const words = String(jobTitle == null ? '' : jobTitle)
+      .replace(/\([^)]*\)/g, ' ')                       // "(Remote)", "(m/f/d)"
+      .replace(/\s*[-–—|]\s*(remote|hybrid|onsite|contract|permanent|full[- ]time|part[- ]time)\b.*$/i, '')
+      .replace(/[^A-Za-z0-9 ]/g, ' ')
+      .trim().split(/\s+/).filter(Boolean).slice(0, 4);
+    let slug = '';
+    for (const w of words) {
+      const next = slug ? slug + '_' + w : w;
+      if (next.length > 34) break;
+      slug = next;
+    }
+    return slug ? nameBase + '_' + slug : nameBase;
+  }
+
+  global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }

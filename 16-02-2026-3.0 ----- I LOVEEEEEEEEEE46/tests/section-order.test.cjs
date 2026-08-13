@@ -283,5 +283,45 @@ t('  ...and for every experience synonym',
     .every((h) => withTabs(SYNONYMS.replace('EMPLOYMENT', h)) > 0),
   'one of the experience headings is not in EXPERIENCE_HEADERS');
 
+console.log('\nEVERY PATH THAT BUILDS A DOCUMENT NAMES IT THE SAME WAY');
+// The popup and the content script each generated documents and each
+// built its own filename. The popup learned to include the target role;
+// the content script's auto-flow kept First_Last_CV.docx. So the panel
+// listed "..._Senior_Technical_Business_Analyst_CV.docx" while the file
+// actually attached to the Greenhouse form was "Maxmilliam_Okafor_CV.docx".
+//
+// The confusion is the small half. The role in the name is what makes a
+// CV left over from a DIFFERENT application visible at a glance --
+// without it every file is called the same thing and a stale attachment
+// cannot be spotted at all.
+const base = DG.buildFileBase;
+t('  the shared helper exists', typeof base === 'function',
+  'two paths building names independently is how they drifted apart');
+t('  role included', base('Maxmilliam', 'Okafor', 'Senior Technical Business Analyst')
+  === 'Maxmilliam_Okafor_Senior_Technical_Business_Analyst', base('Maxmilliam', 'Okafor', 'Senior Technical Business Analyst'));
+t('  parenthetical noise stripped',
+  base('Max', 'Okafor', 'AI Engineer (Remote)') === 'Max_Okafor_AI_Engineer', base('Max', 'Okafor', 'AI Engineer (Remote)'));
+t('  work-mode suffix stripped',
+  base('Max', 'Okafor', 'Data Analyst - Hybrid') === 'Max_Okafor_Data_Analyst', base('Max', 'Okafor', 'Data Analyst - Hybrid'));
+t('  long titles are cut, never mid-word',
+  !/_$/.test(base('Max', 'Okafor', 'Senior Staff Machine Learning Engineer Ranking Platform'))
+    && base('Max', 'Okafor', 'Senior Staff Machine Learning Engineer Ranking Platform').length <= 45,
+  base('Max', 'Okafor', 'Senior Staff Machine Learning Engineer Ranking Platform'));
+t('  no title falls back to the name alone',
+  base('Max', 'Okafor', '') === 'Max_Okafor', base('Max', 'Okafor', ''));
+t('  a missing name still yields something usable',
+  base('', '', 'Engineer') === 'Applicant_Engineer', base('', '', 'Engineer'));
+
+// Both call sites must use it, or they drift again.
+const contentSrc = read('content.js');
+t('  the content script uses the shared helper',
+  /DocxGenerator\.buildFileBase\(p\.first_name, p\.last_name, jobTitleForName\)/.test(contentSrc),
+  'the auto-flow built its own First_Last_CV.docx');
+t('  ...from the detected job title',
+  /jobTitleForName = \(jobInfo &&/.test(contentSrc), 'no title means no role in the name');
+t('  ...and still works if the generator is missing',
+  /typeof DocxGenerator !== 'undefined' && DocxGenerator\.buildFileBase/.test(contentSrc),
+  'attaching nothing is worse than attaching a plainly named file');
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);

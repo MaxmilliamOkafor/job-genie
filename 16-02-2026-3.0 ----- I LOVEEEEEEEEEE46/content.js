@@ -2855,7 +2855,17 @@
       updateBanner('⏳ Step 3/3: Attaching CV & Cover Letter...', 'working');
 
       // Store PDFs in chrome.storage for the attach loop
-      const fallbackName = `${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant';
+      // Same filename rule as the popup. These were built independently,
+      // so the panel showed "..._Senior_Technical_Business_Analyst_CV.docx"
+      // while the file attached to the form was "Maxmilliam_Okafor_CV.docx".
+      // Beyond the confusion, the role in the name is what makes a CV left
+      // over from a DIFFERENT application visible at a glance -- without
+      // it every file is called the same thing and a stale attachment
+      // cannot be spotted.
+      const jobTitleForName = (jobInfo && (jobInfo.title || jobInfo.jobTitle)) || '';
+      const fallbackName = (typeof DocxGenerator !== 'undefined' && DocxGenerator.buildFileBase)
+        ? DocxGenerator.buildFileBase(p.first_name, p.last_name, jobTitleForName)
+        : (`${(p.first_name || '').trim()}_${(p.last_name || '').trim()}`.replace(/\s+/g, '_') || 'Applicant');
 
       // Build DOCX from the tailored TEXT right here so the attach loop
       // attaches DOCX (not the backend PDF). DocxGenerator is loaded as a
