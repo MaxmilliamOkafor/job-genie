@@ -2362,6 +2362,69 @@ Do NOT just insert keywords — REFORMULATE existing experience using the JD's e
 - If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
 NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
+REFORMULATION IS NOT OPTIONAL, AND IT DOES NOT CONFLICT WITH RULE 0.
+This is the rule most often ignored, and the reason is a misread conflict.
+Rule 0 and the preservation rules below say never invent, preserve every
+metric, change nothing you cannot justify. Faced with those, the safe-looking
+move is to return each bullet exactly as it arrived. That is the WRONG
+reading, and it produces the failure this rule exists to prevent: the same CV
+sent to an Applied AI Engineer posting and a Senior Technical Business Analyst
+posting came back with all twenty experience bullets byte-identical. Only the
+summary and the skills list had changed. The posting's keywords were DECLARED
+at the top and never PROVEN underneath, which is what a reviewer is checking
+for.
+
+The two rules do not conflict because they govern different things:
+
+  IMMUTABLE — never change, never add, never drop:
+    employers, job titles, dates, technologies actually used, every number,
+    every percentage, every outcome, and the fact of what was done.
+
+  FREE — must change to match the posting:
+    which fact leads the sentence, and the vocabulary used to describe it.
+
+Reordering a sentence you did not write the facts of is not fabrication.
+Leading with the outcome instead of the technology is not fabrication.
+Calling the same work "data modelling" for a data role and "backend
+architecture" for a backend role is not fabrication, PROVIDED both are
+honest descriptions of what was actually done.
+
+WORKED EXAMPLE — one real bullet, two postings:
+
+  source:   "Re-architected the Business Suite data-ingestion layer in Python
+             and SQL on an Apache Kafka stream, partitioning and caching hot
+             paths to halve p95 query latency and cut compute spend."
+
+  backend:  unchanged - it already speaks that dialect.
+
+  data/BA:  "Re-modelled the Business Suite data-ingestion layer in Python and
+             SQL over an Apache Kafka stream, partitioning and caching hot
+             paths to halve p95 query latency and cut compute spend."
+
+One verb and one preposition. Every number, technology and outcome identical.
+That is the whole move.
+
+  source:   "Designed, fine-tuned and shipped a Llama-based content-moderation
+             system in Python and PyTorch... and cut the manual review queue by
+             40% with no loss of precision across millions of daily users."
+
+  outcome-led: "Cut the manual review queue by 40% with no loss of precision
+             across millions of daily users by designing and shipping a
+             Llama-based content-moderation service in Python and PyTorch..."
+
+Same sentence, reordered so the result reads first.
+
+WHAT WOULD BE FABRICATION, for the avoidance of doubt: adding "gathered
+requirements from stakeholders", "facilitated workshops", "owned the
+roadmap" or any other activity the source does not record. If the posting
+asks for something the candidate's history does not evidence, it goes in
+TECHNICAL SKILLS if they genuinely have the skill, and nowhere at all if
+they do not. It NEVER gets invented into a bullet.
+
+APPLY THIS TO EVERY ROLE, not only the most recent. An older role is often
+the most relevant one: a Data Analyst position from years ago can evidence a
+Business Analyst posting far better than a current engineering role does.
+
 RULE 10 — EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
 ATS scanners like Jobscan check for EXACT multi-word phrases from the JD, not just individual words.
 You MUST use these phrases VERBATIM (not paraphrased) in experience bullets or the summary:
@@ -2591,6 +2654,8 @@ After rewriting, run this internal checklist:
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
 [ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it — that is the tell recruiters read as machine-written.
+[ ] REFORMULATION CHECK — go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting. Fix any bullet that is still in the source's dialect rather than the posting's.
+[ ] Does each posting keyword you placed in TECHNICAL SKILLS or CORE COMPETENCIES also appear, where the history honestly supports it, in an experience bullet? A keyword declared at the top and never evidenced underneath is what a reviewer is scanning for.
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?

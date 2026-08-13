@@ -157,6 +157,46 @@ if (!prompt) {
     'without this the model still feels obliged to produce a number');
   t('  the checklist asks whether any round percentage is unsourced',
     /multiple of 5 or 10 and NOT in the source/.test(prompt));
+  console.log('\n  AND THE BULLETS MUST ACTUALLY BE REFORMULATED');
+  // Measured, not assumed: the same CV sent to an Applied AI Engineer
+  // posting and a Senior Technical Business Analyst posting came back
+  // with all twenty experience bullets byte-identical. Only the summary
+  // and the skills list had changed, so the posting's keywords were
+  // DECLARED at the top and never PROVEN underneath.
+  //
+  // The cause was a misread conflict: Rule 0 and the preservation rules
+  // say never invent and preserve every metric, so the safe-looking move
+  // is to return each bullet unchanged. The rule now says explicitly
+  // that the two do not conflict, because they govern different things.
+  t('  reformulation is stated as non-optional',
+    /REFORMULATION IS NOT OPTIONAL/.test(prompt),
+    'Rule 9 existed and was ignored; saying it again would not have helped');
+  t('  ...with the misread conflict named and resolved',
+    /does not conflict with Rule 0|DOES NOT CONFLICT WITH RULE 0/i.test(prompt)
+      && /IMMUTABLE/.test(prompt) && /FREE/.test(prompt),
+    'without separating what may change from what may not, the model freezes');
+  t('  the immutable list is explicit',
+    /employers, job titles, dates, technologies actually used, every number/.test(prompt),
+    'numbers and employers must never move');
+  t('  ...and what is free to change is too',
+    /which fact leads the sentence, and the vocabulary/.test(prompt));
+  t('  a worked example shows the size of the move',
+    /Re-architected the Business Suite data-ingestion layer/.test(prompt)
+      && /Re-modelled the Business Suite data-ingestion layer/.test(prompt),
+    'one verb changed, every number identical -- abstract instructions get ignored');
+  t('  fabrication is named concretely, not just forbidden',
+    /gathered\s+requirements from stakeholders/.test(prompt),
+    'the model needs the boundary shown, not asserted');
+  t('  older roles are reformulated too',
+    /APPLY THIS TO EVERY ROLE/.test(prompt),
+    'a Data Analyst role from years ago can evidence a BA posting better '
+      + 'than a current engineering role');
+  t('  the checklist forces a count, not a claim',
+    /REFORMULATION CHECK/.test(prompt) && /How many did you actually change/.test(prompt),
+    'asking "did you reformulate?" gets a yes regardless');
+  t('  ...and checks keywords are evidenced, not just listed',
+    /declared at the top and never evidenced underneath/i.test(prompt));
+
   t('  the verification checklist covers the new rules',
     /strong action verb/i.test(prompt) && /ZERO placeholder tokens/i.test(prompt));
 }
