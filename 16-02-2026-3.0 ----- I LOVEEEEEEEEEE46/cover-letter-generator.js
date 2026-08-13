@@ -181,11 +181,19 @@
       // carried a raw token.
       // ...and where a value is genuinely unknown, drop the variants
       // that need it rather than rendering a gap.
-      const openings = (yearsExp && String(yearsExp).trim())
-        ? templateConfig.opening
-        : (templateConfig.opening.filter((s) => !/\{yearsExp\}/.test(s)).length
-            ? templateConfig.opening.filter((s) => !/\{yearsExp\}/.test(s))
-            : templateConfig.opening);
+      let openings = templateConfig.opening;
+      if (!(yearsExp && String(yearsExp).trim())) {
+        const noYears = openings.filter((s) => !/\{yearsExp\}/.test(s));
+        if (noYears.length) openings = noYears;
+      }
+      // Prefer an opening that names the employer. Several variants use
+      // only {jobTitle} and {domain}, and when one of those was drawn the
+      // company appeared exactly once in the whole letter -- in the merge
+      // field at the close -- which reads like precisely what it is.
+      if (company) {
+        const named = openings.filter((s) => /\{company\}/.test(s));
+        if (named.length) openings = named;
+      }
       let opening = this.selectRandom(openings, { jobTitle, company, yearsExp, domain });
       let bridge = this.buildBridgeWithKeywords(templateConfig.bridge, { yearsExp, domain }, topKeywords);
       let body = this.buildBodyWithKeywords(candidateData, jobData, topKeywords, includeMetrics);

@@ -1181,6 +1181,11 @@
   <script src="validation-engine.js"></script>
   <script src="contact-enrichment.js"></script>
   <script src="linkedin-people-search.js"></script>
+  <!-- Step 1 of the email chain: turns a job into LinkedIn profile slugs so
+       Closely/ContactOut have something to resolve. Without it the email
+       providers are skipped as "needs-named-poster" and never called. -->
+  <script src="profile-web-search.js"></script>
+  <script src="linkedin-voyager.js"></script>
   <script src="linkedin-profile-memory.js"></script>
   <script src="followup-email.js"></script>
   <script src="cover-letter-generator.js"></script>

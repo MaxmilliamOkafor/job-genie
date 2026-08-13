@@ -997,6 +997,59 @@
     const trace = [];
     const chain = [];
     let credentialledButUnusable = 0;
+
+    // STEP 1: FIND A PROFILE, SO STEP 2 HAS SOMETHING TO RESOLVE.
+    //
+    // Closely can only turn a LinkedIn profile into an email; it has no
+    // people search, and its own extension does that half through
+    // LinkedIn's Voyager API. Without this, a posting that named nobody
+    // meant Closely was skipped as "needs-named-poster", its API was
+    // never called, and the saved token was never spent -- a lookup that
+    // silently did nothing, which is precisely what was reported.
+    //
+    // Off by default and capped hard; see linkedin-voyager.js for why.
+    // Web search first, always. It asks a search engine for the profiles
+    // that are already indexed, so LinkedIn is never contacted, sees no
+    // traffic, and has nothing to restrict. The Voyager route below does
+    // the same job by calling LinkedIn's private API, which works and is
+    // against their User Agreement -- it stays off unless deliberately
+    // enabled, and is only reached if the safe route found nobody.
+    const needProfiles = () => !(ctx.linkedinProfiles || []).length;
+    const searchQuery = {
+      title: ctx.searchTitle || ctx.jobTitle || ctx.title || '',
+      titles: ctx.searchTitles || [],
+      company: ctx.company || '',
+      location: ctx.location || '',
+    };
+    const adoptProfiles = (found) => {
+      (found.trace || []).forEach((t) => trace.push(t));
+      if (found.ok && found.profiles.length) {
+        // Hand the slugs on in the shape the providers already expect.
+        ctx = Object.assign({}, ctx, {
+          linkedinProfiles: found.profiles.map((p) => p.profile),
+          linkedinCandidates: found.profiles,
+        });
+      }
+    };
+
+    if (needProfiles() && typeof ProfileWebSearch !== 'undefined'
+        && (searchQuery.company || searchQuery.title || searchQuery.titles.length)) {
+      try {
+        adoptProfiles(await ProfileWebSearch.findProfiles(searchQuery));
+      } catch (e) {
+        trace.push('Profile search: failed (' + (e && e.message) + ')');
+      }
+    }
+
+    if (needProfiles() && typeof LinkedInVoyager !== 'undefined'
+        && (searchQuery.company || searchQuery.title)) {
+      try {
+        adoptProfiles(await LinkedInVoyager.findProfiles(searchQuery,
+          { force: o.forceLinkedInSearch }));
+      } catch (e) {
+        trace.push('LinkedIn search: failed (' + (e && e.message) + ')');
+      }
+    }
     const first = o.provider || cfg.provider || DEFAULT_PROVIDER;
     for (const id of [first].concat(Object.keys(PROVIDERS))) {
       if (chain.indexOf(id) !== -1 || !PROVIDERS[id]) continue;
