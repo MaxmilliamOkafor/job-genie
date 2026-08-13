@@ -700,6 +700,127 @@
     return { text: lines.join('\n'), moved };
   }
 
+  // ===================================================================
+  // HOW MANY BULLETS A ROLE GETS
+  // -------------------------------------------------------------------
+  // Attention is front-loaded and finite. A role from eight years ago
+  // carrying seven bullets spends the reader's patience on the least
+  // relevant part of the CV, and pushes the recent work onto page two.
+  // The convention recruiters actually apply: 4-6 bullets for the recent
+  // roles, 2-4 for the older ones.
+  //
+  // This MUST run after orderBulletsByRelevance, because it trims from
+  // the END. Once the bullets are ranked against the posting, the tail is
+  // the least relevant material, and trimming it is tailoring rather than
+  // loss -- a different posting keeps a different subset. Run in the
+  // other order it would delete whatever happened to be recorded last.
+  //
+  // Two hard guards, because deleting evidence is the one thing here that
+  // cannot be undone by the reader:
+  //
+  //   1. A bullet holding the CV's ONLY mention of a posting keyword is
+  //      never dropped. Trimming it would cost a keyword match, which is
+  //      the opposite of the point.
+  //   2. Caps are generous and only bite when a role is genuinely
+  //      overlong, so a normal CV passes through untouched.
+  const RECENT_ROLE_CAP = 6;   // the first two roles
+  const OLDER_ROLE_CAP = 4;    // everything before them
+
+  function capBulletsPerRole(cvText, jobKeywords) {
+    if (!cvText) return { text: cvText || '', trimmed: 0, roles: 0 };
+    const kws = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim().toLowerCase())
+      .filter((k) => k.length > 2);
+
+    const lines = String(cvText).split('\n');
+    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
+
+    // Count, across the whole CV, how many bullets carry each keyword.
+    // A count of one makes that bullet the sole carrier.
+    const counts = Object.create(null);
+    for (const l of lines) {
+      if (!isBullet(l)) continue;
+      const low = l.toLowerCase();
+      for (const k of kws) if (low.includes(k)) counts[k] = (counts[k] || 0) + 1;
+    }
+    const isSoleCarrier = (b) => {
+      const low = b.toLowerCase();
+      for (const k of kws) if (counts[k] === 1 && low.includes(k)) return true;
+      return false;
+    };
+
+    const out = [];
+    let inExperience = false;
+    let roleIndex = 0;
+    let trimmed = 0;
+    let rolesTrimmed = 0;
+    let i = 0;
+    while (i < lines.length) {
+      if (_EXP_HEAD.test(lines[i])) { inExperience = true; roleIndex = 0; out.push(lines[i]); i++; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExperience = false; out.push(lines[i]); i++; continue; }
+      if (!inExperience || !isBullet(lines[i])) { out.push(lines[i]); i++; continue; }
+
+      let j = i;
+      while (j < lines.length && isBullet(lines[j])) j++;
+      const run = lines.slice(i, j);
+      roleIndex++;
+      const cap = roleIndex <= 2 ? RECENT_ROLE_CAP : OLDER_ROLE_CAP;
+
+      if (run.length <= cap) {
+        out.push.apply(out, run);
+      } else {
+        const kept = run.slice(0, cap);
+        const dropped = run.slice(cap);
+        // Re-admit anything in the tail that is the only place a posting
+        // keyword appears. The role can exceed its cap for that reason;
+        // a missed keyword costs more than an extra line.
+        const rescued = dropped.filter(isSoleCarrier);
+        out.push.apply(out, kept.concat(rescued));
+        const lost = dropped.length - rescued.length;
+        if (lost > 0) { trimmed += lost; rolesTrimmed++; }
+      }
+      i = j;
+    }
+    return { text: out.join('\n'), trimmed, roles: rolesTrimmed };
+  }
+
+  // ===================================================================
+  // A WORD USED TWICE IN ONE BULLET
+  // -------------------------------------------------------------------
+  // "surfacing fraud and risk exposure for the risk team" reads as a
+  // draft nobody re-read. It is a small thing that a human notices
+  // immediately and an ATS does not notice at all.
+  //
+  // This REPORTS and does not rewrite, deliberately. Fixing it means
+  // knowing what the team was actually called, and that is a fact about
+  // the candidate's employer that this code does not have. Guessing it
+  // would put an invented team name on a CV that a reference check can
+  // contradict -- a far worse outcome than a repeated word. So the
+  // warning names the bullet and the word, and the human edits it.
+  const _STOPWORDS = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this',
+    'into', 'over', 'across', 'using', 'their', 'them', 'were', 'was', 'has',
+    'had', 'have', 'via', 'per', 'out', 'not', 'all', 'new', 'end', 'its',
+    'data', 'team', 'work', 'time', 'year', 'years', 'more', 'than', 'both']);
+
+  function detectRepeatedWords(cvText) {
+    const found = [];
+    if (!cvText) return found;
+    for (const line of String(cvText).split('\n')) {
+      if (!/^\s*[-•*]\s*\S/.test(line)) continue;
+      const words = (line.toLowerCase().match(/[a-z][a-z-]{3,}/g) || [])
+        .filter((w) => !_STOPWORDS.has(w));
+      const seen = Object.create(null);
+      for (const w of words) seen[w] = (seen[w] || 0) + 1;
+      for (const w of Object.keys(seen)) {
+        if (seen[w] >= 2) {
+          found.push({ word: w, bullet: line.trim() });
+          break;   // one flag per bullet is enough to prompt a re-read
+        }
+      }
+    }
+    return found;
+  }
+
   // Splits WORK EXPERIENCE into role blocks and sorts them by start date,
   // newest first. Dates themselves are never touched.
   function sortExperienceByStartDate(cvText) {
@@ -2111,6 +2232,37 @@
         outCV = ordered.text;
         report.fixes.push('Re-ordered bullets in ' + ordered.moved
           + ' role(s) so the most relevant lead (no wording changed)');
+      }
+    }
+
+    // Then cap the length of each role. Strictly after the ordering above:
+    // this trims from the tail, and only once the tail is the LEAST
+    // relevant material is trimming it tailoring rather than loss.
+    if (outCV) {
+      const capped = capBulletsPerRole(outCV, jobKeywords);
+      if (capped.trimmed) {
+        outCV = capped.text;
+        report.fixes.push('Trimmed ' + capped.trimmed + ' least-relevant bullet(s) from '
+          + capped.roles + ' role(s) to ' + RECENT_ROLE_CAP + ' recent / '
+          + OLDER_ROLE_CAP + ' older (kept every sole mention of a posting keyword)');
+      }
+    }
+
+    // A word used twice in one bullet. Reported, never rewritten -- the
+    // correct fix needs a fact about the employer that this code does not
+    // have, and inventing one is worse than the repetition.
+    if (outCV) {
+      const repeats = detectRepeatedWords(outCV);
+      if (repeats.length) {
+        report.warnings.push({
+          kind: 'repeated-word-in-bullet',
+          count: repeats.length,
+          samples: repeats.slice(0, 3),
+          message: 'A word appears twice in the same bullet (e.g. "'
+            + repeats[0].word + '"). Reads as an unedited draft to a human; '
+            + 'invisible to an ATS. Left as-is because rewording it needs '
+            + 'facts about the role that only you have.',
+        });
       }
     }
 
