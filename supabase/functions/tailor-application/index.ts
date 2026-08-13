@@ -2390,10 +2390,22 @@ Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that a
 EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL PROFICIENCIES / Skills section instead, as recruiters find them off-putting at the top of a CV.
 
 RULE 9 — VOCABULARY REFORMULATION (worth ~5 points)
+REFORMULATION IS NOT OPTIONAL, AND IT DOES NOT CONFLICT WITH RULE 0. Rule 0 forbids changing FACTS. It does not forbid changing WORDING.
+Split every bullet into two parts:
+  IMMUTABLE - numbers, percentages, technologies, tools, employers, job titles, dates. These are copied exactly. Never rounded, never approximated, never swapped for a similar tool.
+  FREE - the verb, the sentence order, which fact leads, and the vocabulary used to describe the work. These MUST be rewritten to match this posting's language.
 Do NOT just insert keywords — REFORMULATE existing experience using the JD's exact vocabulary:
 - If JD says "RAG pipelines" and CV says "LLM workflows with retrieval" → rewrite to "RAG pipeline design and LLM orchestration workflows"
 - If JD says "MLOps" and CV says "observability, evals, error handling" → rewrite to "MLOps and observability: evals, error handling, cost monitoring"
 - If JD says "stakeholder management" and CV says "collaborated with team" → rewrite to "stakeholder management across engineering, operations, and business"
+WORKED EXAMPLES — one source bullet, two postings. Every number and tool is identical in both; the lead fact and the vocabulary differ.
+Source bullet: "Built Python and SQL reporting pipelines that cut month-end close from 9 days to 3 for 12 finance analysts."
+- Posting emphasising data engineering: "Engineered Python and SQL data pipelines serving 12 finance analysts, reducing month-end close from 9 days to 3."
+- Posting emphasising process improvement and stakeholder delivery: "Reduced month-end close from 9 days to 3 for 12 finance analysts by automating reporting workflows in Python and SQL."
+Second source bullet: "Migrated 40 legacy reports to Power BI, removing 15 hours of manual work each week."
+- Posting emphasising BI tooling: "Delivered a Power BI migration of 40 legacy reports, eliminating 15 hours of manual reporting each week."
+- Posting emphasising efficiency and automation: "Eliminated 15 hours of weekly manual effort by migrating 40 legacy reports onto Power BI."
+Returning a source bullet unchanged is a FAILURE of Rule 9, not compliance with Rule 0.
 NEVER add skills the candidate does not have. Only reformulate real experience with the JD's exact vocabulary.
 
 RULE 10 — EXACT JD PHRASE PRESERVATION (worth ~15 points, CRITICAL for Jobscan)
