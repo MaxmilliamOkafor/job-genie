@@ -175,6 +175,51 @@
     [/\bextensive experience\b/gi, 'experience'],
     [/\bsubject matter expert\b/gi, 'expert'],
     [/\b(strong|excellent|great|outstanding) (communication|interpersonal) skills\b/gi, ''],
+
+    // ---- the verbs that read as machine-written -----------------------
+    // The tailoring prompt already bans these, but a prompt ban has two
+    // dependencies: the model obeying it, and the edge function being
+    // deployed. Neither holds for text that arrives from the user's own
+    // profile, and neither holds before a deploy. This is the layer that
+    // actually builds the document, so it enforces the same list.
+    //
+    // These are one-for-one swaps, so grammar is unaffected: the verb is
+    // replaced, not deleted.
+    [/\bspearheaded\b/gi, 'led'],
+    [/\bspearheading\b/gi, 'leading'],
+    [/\bspearhead\b/gi, 'lead'],
+    [/\bleveraged\b/gi, 'used'],
+    [/\bleveraging\b/gi, 'using'],
+    [/\bleverages\b/gi, 'uses'],
+    [/\bleverage\b/gi, 'use'],
+    [/\bsynergised\b/gi, 'combined'],
+    [/\bsynergising\b/gi, 'combining'],
+    [/\bsynergise\b/gi, 'combine'],
+    [/\bsynergies\b/gi, 'shared gains'],
+    [/\bsynergy\b/gi, 'collaboration'],
+    [/\borchestrated\b/gi, 'directed'],
+    [/\bchampioned\b/gi, 'led'],
+    [/\bhelmed\b/gi, 'led'],
+
+    // ---- filler adjectives --------------------------------------------
+    // Deleted rather than swapped, so each pattern takes the trailing
+    // space with it and, where the word sits in a pair, the conjunction
+    // too. Removing only the adjective is what turned "Dynamic and
+    // results-driven professional" into "Dynamic and professional".
+    //
+    // "dynamic" is matched ONLY as a leading personal adjective. The
+    // word is legitimate in "dynamic pricing" and the candidate's own
+    // history mentions Dynamics 365.
+    [/^\s*dynamic\s+and\s+/gim, ''],
+    [/\bdynamic\s+(?=professional\b|engineer\b|leader\b)/gi, ''],
+    [/\band\s+dynamic\b/gi, ''],
+    // Only where it modifies something vague. "High-impact solutions"
+    // is filler; "high-impact incidents" is how incident management
+    // actually classifies severity, and deleting it loses real meaning.
+    [/\bhigh[- ]impact\s+(?=(?:solutions?|results?|outcomes?|projects?|initiatives?|work|contributions?|deliverables?)\b)/gi, ''],
+    [/\bfast[- ]paced\s+/gi, ''],
+    [/\btransformational\s+/gi, ''],
+    [/\binnovative\s+/gi, ''],
   ];
 
   // Risky phrases that warp a sentence if removed -- flag, don't fix.
@@ -236,10 +281,35 @@
       .replace(/,\s*,/g, ',')
       .replace(/,\s*(and|but|or)\s+/gi, ' $1 ')
       .replace(/\b(with|and|or|of|in|on|to|for|by)\s+([.,;:])/gi, '$2')
+      // A removed adjective leaves the conjunction that joined it to the
+      // next one: "Dynamic and results-driven professional" became
+      // "Dynamic and professional", and stripping the other adjective
+      // instead leaves a sentence opening with "and". Both read as a
+      // typo, which is worse than the buzzword was.
+      .replace(/^([ \t]*)(?:and|or|but)\s+/gim, '$1')
+      .replace(/\s+\b(and|or)\s+\1\b/gi, ' $1')
+      .replace(/\b(an?)\s+(?=[.,;:])/gi, '')
       .replace(/^\s*,\s*/gm, '')
       .replace(/[ \t]+([.,;:])/g, '$1')
       .replace(/\(\s*\)/g, '')
       .replace(/[ \t]+$/gm, '');
+
+    // Re-capitalise any line the purge left starting lower-case: cutting
+    // the opening adjective promotes the next word to first position.
+    //
+    // Prose sentences only. A skills line is a comma list whose first
+    // entry may legitimately be lower-case -- dbt and pgvector are
+    // written that way by their own projects -- and capitalising it is
+    // a different kind of wrong.
+    out = out.split('\n').map((l) => {
+      const t = l.trimStart();
+      if (!t || /^[-•*]/.test(t)) return l;
+      if (t[0] !== t[0].toLowerCase() || !/[a-z]/.test(t[0])) return l;
+      const looksLikeSentence = /[.!?]\s*$/.test(t) && /\s/.test(t) && !/^[^\s,]+,/.test(t);
+      if (!looksLikeSentence) return l;
+      const lead = l.slice(0, l.length - t.length);
+      return lead + t[0].toUpperCase() + t.slice(1);
+    }).join('\n');
 
     // Human-readable phrase labels for the warning report.
     const PHRASE_LABELS = [

@@ -77,5 +77,64 @@ const low = skillsLine('dbt, pgvector, Python');
 t('  dbt stays dbt', /\bdbt\b/.test(low) && !/\bDbt\b/.test(low), low);
 t('  pgvector stays pgvector', /\bpgvector\b/.test(low) && !/\bPgvector\b/.test(low), low);
 
+console.log('\nTHE VERBS THAT READ AS MACHINE-WRITTEN ARE REPLACED, NOT LEFT');
+// The tailoring prompt bans these, but a prompt ban depends on the model
+// obeying it AND the edge function being deployed. Neither holds for text
+// that came from the user's own profile, and neither holds before a
+// deploy. This is the layer that builds the document.
+const bullets = (lines, jd) => {
+  const cv = ['Maxmilliam Okafor', '', 'PROFESSIONAL EXPERIENCE', 'Meta, Engineer',
+    'January 2023 - Present'].concat(lines.map((b) => '- ' + b))
+    .concat(['', 'EDUCATION', 'MSc AI']).join('\n');
+  const out = RA.runRecruiterAudit({ cvText: cv, jdText: jd || 'Python', jdTitle: 'Engineer' });
+  return out.cvText.split('\n').filter((l) => /^-/.test(l.trim())).map((l) => l.trim());
+};
+const verbs = bullets([
+  'Spearheaded the migration of legacy services.',
+  'Leveraged Python to synergise cross-functional workflows.',
+  'Orchestrated the release process and championed testing.',
+]);
+t('  spearheaded -> led', /^- Led /.test(verbs[0]), verbs[0]);
+t('  leveraged -> used', /^- Used /.test(verbs[1]), verbs[1]);
+t('  synergise -> combine', /combine/i.test(verbs[1]) && !/synergi/i.test(verbs[1]), verbs[1]);
+t('  orchestrated -> directed, championed -> led',
+  /directed/i.test(verbs[2]) && !/championed/i.test(verbs[2]), verbs[2]);
+t('  the sentences stay grammatical',
+  verbs.every((b) => /^- [A-Z]/.test(b) && !/\s{2,}/.test(b)), JSON.stringify(verbs));
+
+console.log('\nA STRIPPED ADJECTIVE MUST NOT LEAVE BROKEN ENGLISH');
+// "Dynamic and results-driven professional" used to become "Dynamic and
+// professional" -- removing one adjective from a pair strands the
+// conjunction. A recruiter reads that as a typo, which is worse than the
+// buzzword was.
+const summaryOf = (text) => {
+  const cv = ['Maxmilliam Okafor', '', 'PROFESSIONAL SUMMARY', text, '',
+    'EDUCATION', 'MSc AI'].join('\n');
+  return RA.runRecruiterAudit({ cvText: cv, jdText: 'Python', jdTitle: 'Engineer' })
+    .cvText.split('\n')[3];
+};
+const purged = summaryOf('Dynamic and results-driven professional with a proven track record '
+  + 'of leveraging innovative technology to deliver high-impact solutions in fast-paced environments.');
+t('  no dangling conjunction', !/\b(and|or)\s+(and|or)\b/i.test(purged)
+  && !/^\s*(and|or|but)\b/i.test(purged), purged);
+t('  starts with a capital', /^[A-Z]/.test(purged.trim()), purged);
+t('  no double spaces left behind', !/\s{2,}/.test(purged), JSON.stringify(purged));
+for (const w of ['results-driven', 'dynamic', 'leveraging', 'fast-paced', 'high-impact'])
+  t('  ' + w + ' is gone', !new RegExp(w, 'i').test(purged), purged);
+
+console.log('\nAND LEGITIMATE TECHNICAL LANGUAGE IS NOT TOUCHED');
+// The words above are filler when they describe the candidate and real
+// terms when they describe the work. Deleting them blindly costs meaning.
+const keep = [
+  'Delivered Microsoft Dynamics 365 F&O across four regions.',
+  'Built a dynamic pricing engine in Python.',
+  'Designed dynamic programming solutions for route optimisation.',
+  'Reduced high-impact incidents by tracking p95 latency.',
+  'Used PyTorch and Hugging Face Transformers for model training.',
+];
+const kept = bullets(keep);
+keep.forEach((orig, i) => t('  keeps ' + JSON.stringify(orig.slice(0, 42)),
+  kept[i] === '- ' + orig, kept[i]));
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);
