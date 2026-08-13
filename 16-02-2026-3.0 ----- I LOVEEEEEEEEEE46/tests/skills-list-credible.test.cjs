@@ -42,7 +42,12 @@ const line = skillsLine('langgraph, crewai, b2b, enterprise, saas, fintech, Pyth
   + 'Kubernetes, stakeholders, fast-paced, e-commerce, remote, delivery');
 
 console.log('WORDS NOBODY CAN BE PROFICIENT IN ARE REMOVED');
-for (const junk of ['b2b', 'enterprise', 'stakeholders', 'fast-paced', 'remote', 'delivery']) {
+// "stakeholders" and "delivery" used to be on this list and were taken
+// off deliberately. They read oddly in a proficiencies list, but a
+// posting can name them as required competencies, and dropping a word
+// the JD asked for costs an exact keyword match -- the precise way a
+// candidate loses to someone who listed it. See jd-exact-keyword.
+for (const junk of ['b2b', 'enterprise', 'fast-paced', 'remote', 'full-time']) {
   t('  drops ' + junk, !new RegExp('(^|,\\s*)' + junk.replace('-', '\\-') + '\\s*(,|$)', 'i').test(line),
     'a recruiter reading this knows a machine built the list: ' + line);
 }

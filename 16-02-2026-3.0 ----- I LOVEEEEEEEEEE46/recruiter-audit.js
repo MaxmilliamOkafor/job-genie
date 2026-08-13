@@ -327,20 +327,52 @@
     ['observability', 'observable', 'observable systems', 'monitoring and tracing'],
   ];
 
-  function _findCanonicalForJd(jdLower, group) {
+  // Which spelling does the JD actually use? Returns it with the JD's own
+  // capitalisation, so the CV can carry the posting's exact string.
+  //
+  // This used to be `jdLower.includes(term)` over a group ordered
+  // shortest-first, and both halves were wrong:
+  //
+  //   substring, not word boundary -- a JD mentioning "MLOps" contains
+  //   "ml", so "ml" was chosen and every "Machine Learning" in the CV was
+  //   rewritten to it. "PostgreSQL" contains "postgres"; "REST APIs"
+  //   contains "rest api".
+  //
+  //   first hit wins -- with the groups ordered shortest-first, the
+  //   ABBREVIATION always beat the full term.
+  //
+  // The result was a CV advertising "ML, Postgres, rest API" against a
+  // posting asking for "Machine Learning, PostgreSQL, REST APIs" -- three
+  // exact-match keywords lost to a function whose entire purpose is to
+  // mirror the JD's vocabulary. A recruiter searching the full term finds
+  // the other candidate.
+  //
+  // Longest match wins now: the most specific phrase the posting actually
+  // uses is the one worth carrying.
+  function _findCanonicalForJd(jdText, group) {
+    let best = null;
     for (const term of group) {
-      if (jdLower.includes(term)) return term;
+      const re = new RegExp('\\b' + term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+      const m = jdText.match(re);
+      if (!m) continue;
+      if (!best || m[0].length > best.length) best = m[0];   // JD's own casing
     }
-    return null;
+    // Postings often set requirement headings in capitals ("MACHINE
+    // LEARNING"), and carrying that verbatim would shout on the CV.
+    // Genuine acronyms are short and single-word, so only fold a
+    // multi-word all-caps match back to title case.
+    if (best && / /.test(best) && best === best.toUpperCase()) {
+      best = best.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+    }
+    return best;
   }
 
   function mirrorJdVocabulary(cvText, jdText) {
     if (!cvText || !jdText) return { text: cvText || '', swaps: 0 };
-    const jdLower = jdText.toLowerCase();
     let out = cvText;
     let swaps = 0;
     for (const group of SYNONYM_GROUPS) {
-      const canonical = _findCanonicalForJd(jdLower, group);
+      const canonical = _findCanonicalForJd(jdText, group);
       if (!canonical) continue;
       // If the JD uses one specific variant, swap every other variant in
       // the CV to that exact string -- only when the CV actually contains
@@ -1751,12 +1783,19 @@
   // terms and the posting asked for them, so stripping them would cost
   // real keyword score to buy a small amount of tidiness. The ones below
   // are words nobody can be proficient in at all.
+  // Narrowed deliberately. An earlier draft also stripped delivery,
+  // quality, strategy, business, transformation, stakeholders, customers,
+  // clients and users. Those read oddly in a proficiencies list, but a
+  // posting can genuinely require "Delivery" or "Quality" as a named
+  // competency -- and removing a word the JD asked for costs an exact
+  // keyword match to buy a little tidiness, which is the wrong trade for
+  // a candidate competing against someone who listed it. What is left is
+  // only what nobody can be proficient in: market segments, work
+  // arrangements and contract types.
   const NON_TECHNICAL_SKILL = new RegExp('^(' + [
     'b2b', 'b2c', 'enterprise', 'startup', 'scale-up', 'scaleup',
     'fast-paced', 'remote', 'hybrid', 'onsite', 'on-site', 'full-time',
     'part-time', 'contract', 'permanent', 'domain',
-    'stakeholders', 'customers', 'clients', 'users', 'business', 'strategy',
-    'innovation', 'transformation', 'excellence', 'quality', 'delivery',
     'self-motivated', 'proactive', 'motivated', 'dedicated', 'teams', 'team',
     'accessibility', 'end-to-end', 'communication', 'collaboration', 'teamwork',
     'leadership', 'mentoring', 'mentorship', 'problem solving', 'adaptability',
