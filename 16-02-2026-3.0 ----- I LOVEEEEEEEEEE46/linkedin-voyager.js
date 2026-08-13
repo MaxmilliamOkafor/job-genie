@@ -175,6 +175,60 @@
     return m ? decodeURIComponent(m[1]) : '';
   }
 
+  // ---- WHERE THE REQUEST IS MADE FROM -----------------------------------
+  //
+  // This matters more than anything else in this file.
+  //
+  // The popup runs on a chrome-extension:// origin. A fetch from there to
+  // linkedin.com is a cross-site credentialed request: the Origin header
+  // is the extension, the Referer is absent, and cookies are subject to
+  // SameSite. LinkedIn answers that pattern with 403 or 999, which is the
+  // "search ran and found nobody" the user kept seeing. Nothing about the
+  // query was wrong; the request was being made from the wrong place.
+  //
+  // Run the same fetch INSIDE an open linkedin.com tab and it is
+  // first-party: the session cookies attach normally, Origin and Referer
+  // are linkedin.com, and it is indistinguishable from the page asking
+  // for its own search results -- which is also how Closely's own
+  // extension does it.
+  //
+  // executeScript rather than messaging a content script, because a
+  // content script only exists in tabs loaded AFTER the extension was
+  // installed or reloaded. Injecting on demand works on a tab that has
+  // been open for hours, which is the normal case.
+  async function _fetchInLinkedInTab(url, hdrs) {
+    try {
+      if (!chrome.tabs || !chrome.tabs.query || !chrome.scripting) return null;
+      const tabs = await new Promise((resolve) => {
+        try { chrome.tabs.query({ url: 'https://*.linkedin.com/*' }, (t) => resolve(t || [])); }
+        catch (e) { resolve([]); }
+      });
+      const tab = (tabs || []).find((t) => t && t.id != null && t.id >= 0);
+      if (!tab) return null;
+      const out = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        // Serialised and run in the page's context: no closure over
+        // anything here, everything arrives through args.
+        func: async (u, h) => {
+          try {
+            const r = await fetch(u, { method: 'GET', headers: h, credentials: 'include' });
+            return { status: r.status, body: await r.text() };
+          } catch (e) {
+            return { status: 0, error: String((e && e.message) || e) };
+          }
+        },
+        args: [url, hdrs],
+      });
+      const r = out && out[0] && out[0].result;
+      return r || null;
+    } catch (e) {
+      // A tab we cannot script (a chrome:// page, a blocked host) is not
+      // an error worth failing the lookup for -- fall back to the direct
+      // request and let the status code speak.
+      return null;
+    }
+  }
+
   function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
   /**
@@ -221,12 +275,34 @@
 
     const url = searchUrl(buildVariables(q));
     let res;
-    try {
-      _sessionCalls++;
-      _lastCallAt = Date.now();
-      res = await fetch(url, { method: 'GET', headers: headers(csrf), credentials: 'include' });
-    } catch (e) {
-      return { ok: false, profiles: [], reason: say('network error: ' + (e && e.message)), trace };
+    _sessionCalls++;
+    _lastCallAt = Date.now();
+
+    // First choice: run it inside an open LinkedIn tab, where the request
+    // is first-party. See _fetchInLinkedInTab.
+    const viaTab = await _fetchInLinkedInTab(url, headers(csrf));
+    if (viaTab) {
+      if (!viaTab.status) {
+        return { ok: false, profiles: [], reason: say('network error in the LinkedIn tab: '
+          + (viaTab.error || 'unknown')), trace };
+      }
+      say('ran inside your open LinkedIn tab (first-party request)');
+      res = {
+        status: viaTab.status,
+        ok: viaTab.status >= 200 && viaTab.status < 300,
+        json: async () => JSON.parse(viaTab.body),
+      };
+    } else {
+      // No LinkedIn tab open. The direct request usually fails -- it is
+      // cross-site from the extension origin -- so say that up front
+      // rather than reporting the 403 as if the search found nobody.
+      say('no LinkedIn tab open, trying direct (LinkedIn often rejects this; '
+        + 'open linkedin.com in a tab for a first-party request)');
+      try {
+        res = await fetch(url, { method: 'GET', headers: headers(csrf), credentials: 'include' });
+      } catch (e) {
+        return { ok: false, profiles: [], reason: say('network error: ' + (e && e.message)), trace };
+      }
     }
 
     // 999 is LinkedIn's rate-limit/blocked response; 429 is the standard
@@ -238,8 +314,9 @@
       return { ok: false, profiles: [], reason: say(_disabledReason), trace };
     }
     if (res.status === 401 || res.status === 403) {
-      return { ok: false, profiles: [], reason: say('LinkedIn rejected the session ('
-        + res.status + ') -- sign in again'), trace };
+      return { ok: false, profiles: [], reason: say('LinkedIn rejected the request ('
+        + res.status + '). Open linkedin.com in a tab and make sure you are signed in, '
+        + 'then try again -- the request is only accepted from a real LinkedIn tab'), trace };
     }
     if (!res.ok) {
       return { ok: false, profiles: [], reason: say('LinkedIn returned ' + res.status), trace };
