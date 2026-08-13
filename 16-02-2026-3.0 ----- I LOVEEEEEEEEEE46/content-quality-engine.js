@@ -401,7 +401,7 @@
     // "Proven X" phrases (must be removed, not rephrased)
     // User requirement: replace "proven ability" with plain "ability" (no adjectives)
     'proven ability': 'ability',
-    'proven track record': 'track record',
+    'proven track record': 'experience',
     'proven record': 'record',
     'proven proficiency': 'proficiency',
     'proven proficiency in': 'proficiency in',
@@ -485,7 +485,7 @@
     'eager to contribute': 'ready to contribute',
     'I bring a wealth of': 'I bring',
     'a wealth of experience': 'experience',
-    'track record of success': 'record',
+    'track record of success': 'record of success',
     'track record of delivering': 'history of delivering',
     'extensive experience with': 'experience with',
     'extensive knowledge of': 'knowledge of',
@@ -918,7 +918,7 @@
         [/\bmeticulous\b/gi, 'detailed'],
         // Phrases that must be replaced (multi-word)
         [/\bproven ability\b/gi, 'ability'],
-        [/\bproven track record\b/gi, 'track record'],
+        [/\bproven track record\b/gi, 'experience'],
         [/\bproven expertise\b/gi, 'expertise'],
         [/\bresults-driven\b/gi, 'results-focused'],
         [/\bself-motivated\b/gi, 'proactive'],

@@ -136,5 +136,63 @@ const kept = bullets(keep);
 keep.forEach((orig, i) => t('  keeps ' + JSON.stringify(orig.slice(0, 42)),
   kept[i] === '- ' + orig, kept[i]));
 
+console.log('\n"TRACK RECORD" NEVER APPEARS, IN ANY FORM');
+// Asked for explicitly, and it kept coming back because the system was
+// MANUFACTURING it, not merely failing to remove it:
+//
+//   the prompt listed "track record" as the APPROVED replacement for
+//   "proven track record"; the prompt's own example summary opened
+//   "Strong track record in designing scalable solutions", and models
+//   copy examples; two client-side maps rewrote "proven track record"
+//   into it; and three hard-coded fallback paragraphs contained it.
+//
+// Stripping the qualifier and keeping the phrase was never going to
+// work. It is banned outright now, at every layer.
+const TRACK = [
+  'Track record in implementing AI-driven solutions that optimise workflows.',
+  'Experienced engineer with a proven track record of delivering cloud platforms.',
+  'Strong track record in designing scalable solutions that cut costs.',
+  'A track record of success across four regions.',
+  'My track record speaks for itself.',
+  'Demonstrated track record with Kubernetes and Azure.',
+  'Consistent track record for shipping on time.',
+  'Professional with track record of delivering high-impact solutions.',
+  'I have a long track record in backend engineering.',
+];
+for (const sentence of TRACK) {
+  const got = summaryOf(sentence);
+  t('  gone from ' + JSON.stringify(sentence.slice(0, 40)),
+    !/track\s*record/i.test(got), got);
+  // Removing it must not wreck the sentence around it.
+  t('    ...and the sentence still reads',
+    /^[A-Z]/.test(got.trim()) && !/\s{2,}/.test(got)
+      && !/\b(with|of|in|for|and|a|an)\s*[.,]/i.test(got)
+      && !/[a-z][A-Z]/.test(got.replace(/\b[A-Z][a-z]*[A-Z]\w*/g, '')),
+    JSON.stringify(got));
+}
+// The preposition has to be re-chosen, not dropped: "record of
+// delivering" -> "experience delivering" is right, but the same rule
+// applied to "record with Kubernetes" gives "experience Kubernetes".
+t('  a gerund keeps no preposition',
+  /experience delivering/i.test(summaryOf('A proven track record of delivering cloud platforms.')),
+  summaryOf('A proven track record of delivering cloud platforms.'));
+t('  a noun keeps one',
+  /experience with Kubernetes/i.test(summaryOf('Demonstrated track record with Kubernetes and Azure.')),
+  summaryOf('Demonstrated track record with Kubernetes and Azure.'));
+
+console.log('\nAND NOTHING IN THE CODEBASE PRODUCES IT');
+// Detection lists and replacement PATTERNS may name it; no string the
+// generators emit may contain it.
+const EMITTERS = ['openresume-generator.js', 'universal-keyword-strategy.js', 'resume-builder.js'];
+for (const file of EMITTERS) {
+  let src = '';
+  try { src = fs.readFileSync(path.join(DIR, file), 'utf8'); } catch (e) { continue; }
+  const code = src.split('\n')
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join('\n');
+  t('  ' + file + ' emits none', !/track\s+record/i.test(code),
+    'a hard-coded fallback paragraph still contains it');
+}
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);

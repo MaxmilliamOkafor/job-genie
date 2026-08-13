@@ -171,7 +171,29 @@
     [/\bnext[- ]generation\b/gi, ''],
     [/\bgame[- ]changing\b/gi, ''],
     [/\bvalue[- ]add(ed)?\b/gi, ''],
-    [/\bproven track record\b/gi, 'record'],
+    // ---- "track record", in every form -------------------------------
+    // Banned outright, not softened. The system used to MANUFACTURE it:
+    // the prompt listed "track record" as the approved replacement for
+    // "proven track record", the prompt's own example summary opened
+    // "Strong track record in designing scalable solutions" (models copy
+    // examples), two client-side maps rewrote "proven track record" into
+    // it, and two hard-coded fallback paragraphs contained it. Removing
+    // the qualifier while keeping the phrase was never going to work.
+    //
+    // Ordered longest-first so the article and qualifier are consumed
+    // with it -- replacing only the phrase would leave "with a
+    // experience of".
+    // The preposition has to survive or be re-chosen. "track record of
+    // delivering" -> "experience delivering" reads correctly because the
+    // next word is a gerund, but the same rule turns "track record with
+    // Kubernetes" into "experience Kubernetes". So look at what follows.
+    [/\b(?:(?:a|an)\s+)?(?:(?:proven|strong|demonstrated|successful|solid|consistent|excellent|established|long)\s+)?track\s+record\s+(of|in|with|for)\s+(?=(\w+))/gi,
+      (_m, prep, next) => (/ing$/i.test(next)
+        ? 'experience '                       // experience delivering
+        : 'experience ' + (/^(?:for)$/i.test(prep) ? 'in' : prep.toLowerCase()) + ' ')],
+    [/\b(?:a|an)\s+(?:(?:proven|strong|demonstrated|successful|solid|consistent|excellent|established|long)\s+)?track\s+record\b/gi, 'experience'],
+    [/\b(?:proven|strong|demonstrated|successful|solid|consistent|excellent|established|long)\s+track\s+record\b/gi, 'experience'],
+    [/\btrack\s+record\b/gi, 'experience'],
     [/\bextensive experience\b/gi, 'experience'],
     [/\bsubject matter expert\b/gi, 'expert'],
     [/\b(strong|excellent|great|outstanding) (communication|interpersonal) skills\b/gi, ''],
