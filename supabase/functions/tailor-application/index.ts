@@ -2582,6 +2582,27 @@ Strategy:
 - The first bullet of the FIRST role is the single most valuable line in the entire CV — pack it with the top JD keywords
 - If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
 
+RULE 11b — HOW MANY BULLETS EACH ROLE GETS (hard limits)
+Attention is finite and front-loaded. A role from eight years ago carrying seven bullets spends the reader's patience on the least relevant part of the CV and pushes the recent work onto page two.
+- The two most recent roles: 4 to 6 bullets each.
+- Every earlier role: 2 to 4 bullets each.
+Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least relevant bullet last, so cutting the tail removes the least relevant material. Cut before reordering and you delete whatever the source happened to list last.
+ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the whole CV where a posting keyword appears, KEEP it even though the role then runs over. A missed keyword costs more than an extra line.
+Never pad a short role UP to the minimum by inventing bullets. If the source gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
+
+RULE 19 — SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
+"Built dashboards" and "built dashboards used by 40 people across three desks" describe the same work at very different levels of seniority. Where the SOURCE CV states scope, carry it into the rewritten bullet instead of dropping it: team size, user or customer counts, data volume, transaction volume, number of systems, geographies, budget, or how many stakeholders the work served.
+SUBJECT TO RULE 0, WITHOUT EXCEPTION. If the source does not state the scope, you do not state the scope. Do not write "large-scale", "enterprise-wide", "high-volume", "cross-functional" or "multi-million" as a substitute for a number you were not given - those are the words a reader discounts on sight, and RULE 15b already bans hedged figures. A bullet with no scope is complete and acceptable. An invented scope is a fabrication and fails the whole output.
+
+RULE 20 — NO CONTENT WORD TWICE IN THE SAME BULLET
+"surfacing fraud and risk exposure for the risk team" reads as a draft nobody re-read. Before emitting each bullet, check whether any noun or verb of four or more letters appears twice in it. If one does, rewrite so it appears once. Resolve it by DELETING the redundant occurrence or by using the word the source CV itself uses elsewhere. Do NOT resolve it by inventing a name, a team, or a department that the source does not contain - that is a Rule 0 violation and a reference check can contradict it. If you cannot remove the repetition without inventing something, leave the bullet as it is: a repeated word is a small flaw, an invented employer detail is a disqualifying one.
+
+RULE 21 — SPELLING FOLLOWS THE POSTING'S COUNTRY
+A great deal of ATS keyword scoring is literal substring matching. A posting asking for "optimization" scores nothing against a CV that says "optimisation". Same word, missed keyword.
+- Posting in the United States, Canada, Mexico or Latin America: American spelling throughout (optimize, analyze, behavior, center, modeling).
+- Posting anywhere else - UK, Ireland, the EU, Africa, India, Australia, New Zealand, Singapore: British spelling throughout (optimise, analyse, behaviour, centre, modelling).
+Two things this rule does NOT touch. Proper nouns keep their owner's spelling in every country: "World Health Organisation" and "Defence Forces Ireland" are names, not words. And these are spelt -ise in American English too, so never "correct" them: advise, supervise, expertise, enterprise, advertise, comprise, revise, devise, promise, precise, franchise.
+
 RULE 12 — STRATEGIC KEYWORD DISTRIBUTION (worth ~10 points)
 Keywords MUST be strategically placed in the highest-weight ATS positions, not randomly scattered:
 - Professional Summary: MUST contain the top 5 most-repeated JD keywords
