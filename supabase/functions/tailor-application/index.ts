@@ -2625,6 +2625,11 @@ After rewriting, run this internal checklist:
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
 [ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it — that is the tell recruiters read as machine-written.
+[ ] Does any role exceed its bullet cap (6 for the two most recent, 4 for the rest)? If so, cut from the BOTTOM after reordering - unless the bullet is the CV's only mention of a posting keyword, in which case keep it.
+[ ] Did you drop a scope figure (team size, volume, user count, number of systems) that the SOURCE bullet stated? Put it back. Did you add one the source did not state? Remove it.
+[ ] Does any bullet use the same four-letter-or-longer noun or verb twice ("risk ... risk team")? Rewrite it, but never by inventing a team or department name.
+[ ] Is the spelling consistent with the POSTING's country throughout - American for US/Canada/Latin America, British everywhere else - with proper nouns left in their owner's spelling?
+[ ] REFORMULATION CHECK - go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting.
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
