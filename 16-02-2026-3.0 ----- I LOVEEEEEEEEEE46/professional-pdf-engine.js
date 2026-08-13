@@ -926,9 +926,26 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      // REORDERED: Dublin, IE | Phone | Email | [Extracted Job Location] (ALWAYS both locations)
-      const candidateLocation = 'Dublin, IE';
-      const cleanLoc = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
+      // Location | Phone | Email | [job location, when it differs]
+      //
+      // The first segment used to be the literal 'Dublin, IE'. The
+      // job-adaptive value the popup computes already arrives here as
+      // contact.location -- it was simply discarded, so the PDF header
+      // and the DOCX header disagreed about where the candidate is on
+      // every application outside Dublin. Nobody chose that; the value
+      // was plumbed through and then thrown away.
+      const candidateLocation = contact.location || 'Dublin, IE';
+      // The trailing job location exists to show both places at once.
+      // Its de-duplication was a second hard-coded literal
+      // (/^Dublin,? IE$/), so the repeat was only ever suppressed for
+      // one city. Compare against whatever the first segment actually
+      // is instead.
+      const sameLoc = (a, b) => String(a || '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+        === String(b || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      let cleanLoc = contact.extractedJobLocation
+        ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').trim()
+        : '';
+      if (sameLoc(cleanLoc, candidateLocation)) cleanLoc = '';
       const contactParts = [candidateLocation, contact.phone, contact.email, cleanLoc].filter(Boolean);
       const contactLine = contactParts.join('  |  ');
       const contactWidth = doc.getTextWidth(contactLine);
@@ -1322,8 +1339,21 @@
       doc.setFontSize(PDF_CONFIG.fonts.sizes.contact);
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
 
-      const cleanLocCL = contact.extractedJobLocation ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').replace(/^Dublin,?\s*IE$/i, '').trim() : '';
-      const contactParts2 = [contact.phone, contact.email, cleanLocCL].filter(Boolean);
+      // Same header as the CV, for the same reasons. This carried the
+      // /^Dublin,? IE$/ literal too, so a Dublin job had its location
+      // silently dropped while every other city kept it -- and the
+      // candidate's own location was missing entirely, though the DOCX
+      // cover letter has always printed it. A recruiter reads both
+      // documents; they should not disagree about where the applicant
+      // is.
+      const candidateLocationCL = contact.location || 'Dublin, IE';
+      const sameLocCL = (a, b) => String(a || '').replace(/[^a-z0-9]/gi, '').toLowerCase()
+        === String(b || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+      let cleanLocCL = contact.extractedJobLocation
+        ? String(contact.extractedJobLocation).replace(/\bopen\s+to\s+relocation\b/gi, '').trim()
+        : '';
+      if (sameLocCL(cleanLocCL, candidateLocationCL)) cleanLocCL = '';
+      const contactParts2 = [candidateLocationCL, contact.phone, contact.email, cleanLocCL].filter(Boolean);
       doc.text(contactParts2.join('  |  '), PDF_CONFIG.margins.left, y);
       y += PDF_CONFIG.fonts.sizes.contact * PDF_CONFIG.lineHeight.normal + 2;
 
