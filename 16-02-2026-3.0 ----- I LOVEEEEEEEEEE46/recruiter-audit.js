@@ -623,6 +623,83 @@
     return null;
   }
 
+  // ===================================================================
+  // BULLET ORDER WITHIN A ROLE
+  // -------------------------------------------------------------------
+  // Reviewers read the first three bullets of a role and stop. Bullets
+  // arrive in whatever order the source CV recorded them, which is
+  // usually the order the work happened -- not the order that answers
+  // THIS posting.
+  //
+  // A real example: the strongest bullet for a Business Analyst posting
+  // was "Investigated trading-system anomalies with SQL and Pandas,
+  // built Tableau dashboards and presented root-cause findings and
+  // recommendations to VP-level stakeholders." It was the LAST bullet of
+  // the FOURTH role. Nobody reading top-down would reach it.
+  //
+  // This changes ORDER ONLY. No word is rewritten, no fact moves between
+  // roles, chronology between roles is untouched. It is therefore the one
+  // relevance improvement with no fabrication risk at all.
+  //
+  // Scoring is deliberately blunt: how many of the posting's keywords the
+  // bullet contains, plus a small bonus for carrying a number, because a
+  // quantified bullet outperforms an unquantified one for the same
+  // keyword count. Ties keep their original order, so a role whose
+  // bullets are equally relevant is left exactly as it was.
+  //
+  // Scope is the experience section and nothing else. An EDUCATION or
+  // CERTIFICATIONS list is in date order on purpose -- ranking those by
+  // keyword would put the BSc above the MSc, which is a worse document,
+  // not a more relevant one.
+  const _BACKREF = /^\s*[-•*]?\s*(on top of that|additionally|also|separately|in addition|this |these |that work|building on|alongside this)/i;
+  const _EXP_HEAD = /^\s*(?:PROFESSIONAL\s+|WORK\s+|RELEVANT\s+)?(?:EXPERIENCE|EMPLOYMENT(?:\s+HISTORY)?|CAREER\s+HISTORY)\s*:?\s*$/i;
+  const _ANY_HEAD = /^\s*[A-Z][A-Z &/'-]{3,}\s*:?\s*$/;
+
+  function orderBulletsByRelevance(cvText, jobKeywords) {
+    const kws = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim().toLowerCase())
+      .filter((k) => k.length > 2);
+    if (!kws.length || !cvText) return { text: cvText || '', moved: 0 };
+
+    const lines = String(cvText).split('\n');
+    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
+    let moved = 0;
+    let inExperience = false;
+    let i = 0;
+    while (i < lines.length) {
+      if (_EXP_HEAD.test(lines[i])) { inExperience = true; i++; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExperience = false; i++; continue; }
+      if (!inExperience || !isBullet(lines[i])) { i++; continue; }
+      let j = i;
+      while (j < lines.length && isBullet(lines[j])) j++;
+      const run = lines.slice(i, j);
+      // A single bullet, or a run short enough that order cannot matter.
+      if (run.length >= 3) {
+        const score = (b) => {
+          const low = b.toLowerCase();
+          let n = 0;
+          for (const k of kws) if (low.includes(k)) n++;
+          if (/\d/.test(b)) n += 0.5;
+          // A bullet that opens by referring back to the previous one
+          // cannot lead. Keep it where it is rather than produce
+          // "Also, I..." as the first thing a reviewer reads.
+          if (_BACKREF.test(b)) n -= 100;
+          return n;
+        };
+        const ranked = run
+          .map((b, idx) => ({ b, idx, s: score(b) }))
+          .sort((x, y) => (y.s - x.s) || (x.idx - y.idx))
+          .map((x) => x.b);
+        if (ranked.some((b, k) => b !== run[k])) {
+          for (let k = 0; k < ranked.length; k++) lines[i + k] = ranked[k];
+          moved++;
+        }
+      }
+      i = j;
+    }
+    return { text: lines.join('\n'), moved };
+  }
+
   // Splits WORK EXPERIENCE into role blocks and sorts them by start date,
   // newest first. Dates themselves are never touched.
   function sortExperienceByStartDate(cvText) {
@@ -2023,6 +2100,17 @@
       if (sorted.sorted) {
         outCV = sorted.text;
         report.fixes.push('Sorted ' + sorted.roles + ' roles into strict start-date order (no dates changed)');
+      }
+    }
+
+    // Within each role, lead with the bullets that answer THIS posting.
+    // Order only -- no rewriting, no movement between roles.
+    if (jobKeywords) {
+      const ordered = orderBulletsByRelevance(outCV, jobKeywords);
+      if (ordered.moved) {
+        outCV = ordered.text;
+        report.fixes.push('Re-ordered bullets in ' + ordered.moved
+          + ' role(s) so the most relevant lead (no wording changed)');
       }
     }
 
