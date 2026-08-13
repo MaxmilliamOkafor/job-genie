@@ -1102,8 +1102,14 @@
       company: ctx.company || '',
       location: ctx.location || '',
     };
+    // Why step 1 came back empty, kept for the caller. Without it a
+    // failed profile search is reported as "this page names nobody",
+    // which sends the user off to buy a second provider when the real
+    // cause is that they are not signed in to LinkedIn in this browser.
+    const profileWhy = [];
     const adoptProfiles = (found) => {
       (found.trace || []).forEach((t) => trace.push(t));
+      if (!found.ok && found.reason) profileWhy.push(found.reason);
       if (found.ok && found.profiles.length) {
         // Hand the slugs on in the shape the providers already expect.
         ctx = Object.assign({}, ctx, {
@@ -1160,8 +1166,10 @@
       // someone who has a working Closely account but is looking at a
       // Workday posting, where there is no named poster to resolve.
       return credentialledButUnusable
-        ? { ok: false, results: [], reason: 'needs-named-poster', trace }
-        : { ok: false, results: [], reason: 'no-api-key', trace };
+        ? { ok: false, results: [], reason: 'needs-named-poster',
+            profileWhy: profileWhy.join('; '), trace }
+        : { ok: false, results: [], reason: 'no-api-key',
+            profileWhy: profileWhy.join('; '), trace };
     }
 
     const collected = [];
@@ -1195,7 +1203,8 @@
       // "Nobody matched" is a successful lookup with an empty answer; only
       // a provider that actually failed is not ok. Collapsing the two would
       // make a rejected key look like an employer with no recruiters.
-      return { ok: lastReason === 'no-match', results: [], reason: lastReason, triedProviders: chain, trace };
+      return { ok: lastReason === 'no-match', results: [], reason: lastReason,
+        profileWhy: profileWhy.join('; '), triedProviders: chain, trace };
     }
     log('found ' + results.length + ' contact(s) at ' + (ctx.company || 'the posting')
       + ' via ' + (results[0].provider || chain[0]));
@@ -1433,7 +1442,12 @@
    */
   async function bestEmail(ctx) {
     const r = await findContacts(ctx);
-    if (!r.ok || !r.results.length) return { email: '', name: '', reason: r.reason || 'none' };
+    if (!r.ok || !r.results.length) {
+      return { email: '', name: '', reason: r.reason || 'none',
+        // What stopped step 1, when step 1 is what stopped. The caller
+        // shows this instead of guessing at generic advice.
+        profileWhy: r.profileWhy || '', trace: r.trace || [] };
+    }
     const top = r.results[0];
     return {
       email: top.email,

@@ -180,6 +180,25 @@ global.fetch = async (url, init) => {
   t('  the key names are reported', /unknown_wrapper/.test(tr3), tr3);
   t('  but no value is', !/Jane Doe|hunter2/.test(tr3) && !tr3.includes(EMAIL), tr3);
 
+  console.log('\nAND A FAILED PROFILE SEARCH SAYS WHAT FAILED');
+  // If step 1 finds nobody, Closely has nothing to resolve and the whole
+  // lookup reports "needs-named-poster". That reason used to send the user
+  // off to buy a second provider, when the actual cause can be that they
+  // are not signed in to LinkedIn in this browser. The specific reason has
+  // to survive as far as the caller.
+  CE.clearCache();
+  global.chrome.cookies.get = (d, cb) => cb(null);        // no LinkedIn session
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
+  const r4 = await CE.bestEmail({ company: 'Coforge', jobTitle: 'Analyst',
+    location: 'Dublin, Ireland' });
+  t('  no address, as expected', !r4.email, JSON.stringify(r4));
+  t('  the reason names the profile-search failure, not just "no poster"',
+    !!r4.profileWhy, 'profileWhy was empty: ' + JSON.stringify(r4));
+  t('  ...and it mentions the LinkedIn session',
+    /sign|session|log/i.test(r4.profileWhy || ''), r4.profileWhy);
+  t('  the full trace is handed to the caller too',
+    Array.isArray(r4.trace) && r4.trace.length > 0, JSON.stringify(r4.trace));
+
   console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
   process.exit(FAIL ? 1 : 0);
 })().catch((e) => { console.error('SUITE THREW:', e); process.exit(1); });

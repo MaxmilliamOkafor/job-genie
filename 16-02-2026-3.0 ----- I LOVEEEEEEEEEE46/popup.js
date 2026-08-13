@@ -3798,9 +3798,17 @@ class ATSTailor {
         const why = {
           'no-api-key': 'No API key saved for your lookup provider - add one in Settings.',
           // Closely resolves a named poster, and this page named nobody.
-          'needs-named-poster': 'This posting names nobody to look up. Closely can only '
-            + 'resolve a named LinkedIn poster - add a Hunter, ContactOut or Apollo key '
-            + 'in Settings to cover postings like this one.',
+          // Reached only when the LinkedIn profile search ALSO came back
+          // empty, since a found profile is exactly what Closely needs.
+          // hit.profileWhy carries why that search failed, and it is the
+          // actionable half: "not signed in to LinkedIn" is a different
+          // problem from "this employer has no recruiters", and telling
+          // the user to buy a second provider fixes neither.
+          'needs-named-poster': 'No LinkedIn profile could be found for this posting, so '
+            + 'Closely had nobody to resolve.'
+            + (hit.profileWhy ? ' Reason: ' + hit.profileWhy + '.' : '')
+            + ' Check you are signed in to LinkedIn in this browser, or add a Hunter, '
+            + 'ContactOut or Apollo key in Settings to search by company instead.',
           'bad-api-key': 'Your lookup provider rejected the saved key.',
           'rate-limited': 'Your lookup provider is rate limiting - try again shortly.',
           'out-of-credits': 'Your lookup provider is out of credits.',
@@ -3808,7 +3816,15 @@ class ATSTailor {
           network: 'Could not reach your lookup provider.',
         }[hit.reason];
         if (why && info) { info.textContent = why; info.style.color = 'var(--error)'; }
-        else nothing();
+        else if (info) {
+          // An unmapped reason used to fall through to a generic "nothing
+          // found", which is the silent-failure shape this whole chain was
+          // fixed to stop reporting.
+          info.textContent = 'Lookup found no address (' + (hit.reason || 'no reason given') + ').'
+            + (hit.profileWhy ? ' ' + hit.profileWhy + '.' : '')
+            + ' Open the contact-lookup test in Settings for the full trace.';
+          info.style.color = 'var(--error)';
+        } else nothing();
         return;
       }
 
