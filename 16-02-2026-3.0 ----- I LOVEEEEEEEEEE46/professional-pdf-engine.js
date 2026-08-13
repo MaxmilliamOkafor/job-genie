@@ -320,6 +320,21 @@
         extractedJobLocation = this.cleanLocation(extractedJobLocation);
       }
 
+      // The role being applied for, printed under the name. The DOCX
+      // gets this from the CV text, which the PDF never sees -- it
+      // renders from the structured record -- so without carrying it
+      // here the same application would show a target title in one
+      // format and not the other.
+      let targetTitle = '';
+      if (jobData) {
+        targetTitle = String(jobData.title || jobData.jobTitle || '')
+          .replace(/\([^)]*\)/g, ' ')
+          .replace(/\s*[-\u2013\u2014|]\s*(remote|hybrid|onsite|contract|permanent|full[- ]time|part[- ]time)\b.*$/i, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        if (targetTitle.length > 60) targetTitle = '';
+      }
+
       return {
         name,
         email: data.email || '',
@@ -328,7 +343,8 @@
         linkedin: this.formatLinkedIn(data.linkedin || ''),
         github: this.formatGitHub(data.github || ''),
         portfolio,
-        extractedJobLocation
+        extractedJobLocation,
+        targetTitle
       };
     },
 
@@ -893,6 +909,17 @@
       const nameX = (pageWidth - nameWidth) / 2;
       doc.text(contact.name.toUpperCase(), nameX, y);
       y += PDF_CONFIG.fonts.sizes.name * 0.8 + PDF_CONFIG.spacing.afterName;
+
+      // Target title, on its own line under the name. It is the first
+      // thing a reviewer checks against the req they are filling.
+      if (contact.targetTitle) {
+        doc.setFont(PDF_CONFIG.fonts.body, 'normal');
+        doc.setFontSize(PDF_CONFIG.fonts.sizes.contact + 1);
+        doc.setTextColor(...PDF_CONFIG.colors.black);
+        const tw = doc.getTextWidth(contact.targetTitle);
+        doc.text(contact.targetTitle, (pageWidth - tw) / 2, y);
+        y += PDF_CONFIG.fonts.sizes.contact + 3;
+      }
 
       // Contact line (centered, regular, 10pt)
       doc.setFont(PDF_CONFIG.fonts.body, 'normal');

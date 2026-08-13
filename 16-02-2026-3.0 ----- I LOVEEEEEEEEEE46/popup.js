@@ -6407,6 +6407,37 @@ class ATSTailor {
         }
       }
 
+      // TARGET TITLE, DIRECTLY UNDER THE NAME.
+      //
+      // The first thing a reviewer checks is the candidate's title
+      // against the req they are filling; if that is ambiguous they read
+      // the summary, and if that is generic they move on. A CV that
+      // opens with a name and a phone number makes them do the mapping
+      // themselves, on a pile where nobody has the patience.
+      //
+      // This is positioning, not a claim about the current employer --
+      // the job titles inside WORK EXPERIENCE remain exactly as they
+      // were, so nothing here contradicts the history below it. Done
+      // in the extension rather than the prompt so it does not wait on
+      // an edge-function deploy.
+      if (this.generatedDocuments.cv) {
+        const rawTitle = String(this.currentJob?.title || '')
+          .replace(/\([^)]*\)/g, ' ')                 // "(Remote)", "(m/f/d)"
+          .replace(/\s*[-–—|]\s*(remote|hybrid|onsite|contract|permanent|full[- ]time|part[- ]time)\b.*$/i, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        const lines = this.generatedDocuments.cv.split('\n');
+        const nameIdx = lines.findIndex((l) => l.trim());
+        const next = lines[nameIdx + 1] || '';
+        const alreadyThere = next.trim().toLowerCase() === rawTitle.toLowerCase();
+        // Only when there is a real title, and never twice.
+        if (rawTitle && rawTitle.length <= 60 && nameIdx >= 0 && !alreadyThere) {
+          lines.splice(nameIdx + 1, 0, rawTitle);
+          this.generatedDocuments.cv = lines.join('\n');
+          console.log('[ATS Tailor] CV target title line set to:', rawTitle);
+        }
+      }
+
       // CRITICAL: Normalise all experience dates to "Month YYYY" format in
       // generated CV text. Jobscan's match report explicitly recommends
       // MM/YY, MM/YYYY, or "Month YYYY"; the previous MM-YYYY (e.g.
