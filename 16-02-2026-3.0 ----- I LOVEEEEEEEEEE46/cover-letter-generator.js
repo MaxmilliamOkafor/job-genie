@@ -233,10 +233,18 @@
 
       // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
       if (typeof ContentQualityEngine !== 'undefined') {
-        opening = ContentQualityEngine.sanitiseContent(opening);
-        bridge = ContentQualityEngine.sanitiseContent(bridge);
-        body = ContentQualityEngine.sanitiseContent(body);
-        closing = ContentQualityEngine.sanitiseContent(closing);
+        // removePronouns MUST be off here. It defaults to true -- a CV
+        // bullet convention, where "I" is implied -- and these four calls
+        // omitted it, so every paragraph was stripped before the final
+        // pass on line 263 correctly turned it off. A cover letter is
+        // first-person by nature, and the result was sentences like
+        // "At Meta was Software Engineer" and "One thing am particularly
+        // proud of" going out to recruiters.
+        const letterOpts = { removePronouns: false };
+        opening = ContentQualityEngine.sanitiseContent(opening, letterOpts);
+        bridge = ContentQualityEngine.sanitiseContent(bridge, letterOpts);
+        body = ContentQualityEngine.sanitiseContent(body, letterOpts);
+        closing = ContentQualityEngine.sanitiseContent(closing, letterOpts);
         console.log('[CoverLetterGenerator] Applied ContentQualityEngine sanitisation');
       }
 
@@ -392,6 +400,23 @@
     // ============ BUILD CLOSING WITH KEYWORDS ============
     buildClosingWithKeywords(closingTemplates, replacements, keywords) {
       let closing = this.selectRandom(closingTemplates, replacements);
+
+      // Name the employer once more at the close. A letter that mentions
+      // the company a single time, in the opening line where the merge
+      // field sits, reads exactly like what it is -- and the guidance
+      // asks the final paragraph to say why this company specifically.
+      const co = replacements && replacements.company;
+      if (co && !new RegExp('\\b' + String(co).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(closing)) {
+        // Wording chosen to avoid the sanitiser's banned-phrase list.
+        // "welcome the chance" is deleted outright there, which turned
+        // "I would welcome the chance to talk" into "I would to talk".
+        const tails = [
+          ` I would be glad to discuss what I could bring to ${co}.`,
+          ` I am happy to talk through how I could help at ${co}.`,
+          ` I would like to discuss the role and ${co} further.`,
+        ];
+        closing = closing.replace(/\s*$/, '') + tails[Math.floor(Math.random() * tails.length)];
+      }
 
       if (keywords.length >= 5) {
         const kw = keywords[4] || keywords[0];
@@ -587,6 +612,50 @@
         }
 
         paragraphs.push(para1);
+
+        // A SECOND capability, evidenced by a second role.
+        //
+        // The letter used to draw on experience[0] only, so it made one
+        // claim and stopped -- around 110 words against the one-page,
+        // 250-400 word letter the guidance describes, and a reviewer got
+        // a single piece of proof. The second role is already on the CV;
+        // this puts one line of it in front of them.
+        const prior = experience.find((j, i) => i > 0 && (j.bullets || j.achievements || []).length);
+        if (prior) {
+          const pBullets = prior.bullets || prior.achievements || [];
+          const metricFirst = pBullets.find((b) => /\d/.test(b)) || pBullets[0] || '';
+          const pc = (metricFirst || '').replace(/^[•\-*▪]\s*/, '').trim();
+          if (pc) {
+            const lc = pc.charAt(0).toLowerCase() + pc.slice(1);
+            const openers = [
+              `Before that, at ${prior.company || 'a previous employer'}, I ${lc}`,
+              `Earlier, as ${prior.title || 'an engineer'} at ${prior.company || 'a previous employer'}, I ${lc}`,
+              `That built on my time at ${prior.company || 'a previous employer'}, where I ${lc}`,
+            ];
+            let para = openers[Math.floor(Math.random() * openers.length)];
+            if (!para.endsWith('.')) para += '.';
+            // Appended to the same paragraph rather than pushed as its
+            // own. Two roles are one argument -- "here is my evidence" --
+            // and splitting every sentence out gave seven one-line
+            // paragraphs where the guidance asks for about four.
+            paragraphs[paragraphs.length - 1] += ' ' + para;
+          }
+        }
+      }
+
+      // Name a requirement from the posting and answer it directly. The
+      // guidance is explicit that a letter should tie itself to a stated
+      // requirement rather than describe a career in general.
+      if (topKeywords.length) {
+        const req = topKeywords[0];
+        const reqLines = [
+          `Your listing puts weight on ${req}, which is the part of the work I have spent most of my time on.`,
+          `You single out ${req} in the requirements; that is where most of my recent work has sat.`,
+          `On ${req} specifically, which the posting calls out, that is core to what I do day to day.`,
+        ];
+        const reqLine = reqLines[Math.floor(Math.random() * reqLines.length)];
+        if (paragraphs.length) paragraphs[paragraphs.length - 1] += ' ' + reqLine;
+        else paragraphs.push(reqLine);
       }
 
       if (topKeywords.length > 3) {

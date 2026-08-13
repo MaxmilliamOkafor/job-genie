@@ -776,29 +776,43 @@
       if (!text || typeof text !== 'string') return text;
       let r = text;
 
-      // 1. Break consecutive sentences starting with "I" — AI writing signature
-      //    "I did X. I then Y. I also Z." → vary with "The", "This", "My", drop subject
-      r = r.replace(/(\. )(I )(have |had |am |was |will |would |can |could |did )?/g, (match, dot, subj, aux, offset) => {
-        const rand = Math.random();
-        if (rand < 0.25) return dot + (aux || '');       // drop subject entirely: ". Had..."
-        if (rand < 0.45) return dot + 'My ';              // ". My work..."
-        if (rand < 0.60) return dot + 'This ';            // ". This..."
-        return match;                                      // keep 40% unchanged for variety
-      });
+      // 1. REMOVED: substituting the subject pronoun.
+      //
+      // This rewrote ". I <verb>" into ". This <verb>", ". My <verb>" or
+      // ". <verb>", and no branch of it produces valid English:
+      //
+      //   "I think I could add value"  -> "This think I could add value"
+      //   "I have gone from..."        -> "My have gone from..."
+      //   "I am particularly proud"    -> "am particularly proud"
+      //
+      // The auxiliary list it relied on covers only nine verbs, so any
+      // other verb left the substitution stranded with no subject at
+      // all. It fired on 60% of first-person sentences, which in a cover
+      // letter -- a document that is first-person by nature -- is most
+      // of the text. Varying sentence openings is a real goal; swapping
+      // out the subject is not a way to achieve it.
+      //
+      // The contraction variation below does the same job grammatically.
 
       // 2. Vary paragraph/sentence openers — flag if 3+ consecutive sentences start same way
-      const sentences = r.split(/(?<=[.!?])\s+/);
-      if (sentences.length >= 3) {
-        const openers = sentences.map(s => (s.match(/^\S+/) || [''])[0].toLowerCase());
+      //
+      // Rewritten to work a line at a time. It used to split the WHOLE
+      // text on sentence boundaries and rejoin with `sentences.join(' ')`,
+      // which replaced every newline between them with a space -- so a
+      // four-paragraph cover letter came out as one unbroken block.
+      r = r.split('\n').map((lineText) => {
+        const sentences = lineText.split(/(?<=[.!?])\s+/);
+        if (sentences.length < 3) return lineText;
+        const openers = sentences.map((s) => (s.match(/^\S+/) || [''])[0].toLowerCase());
         for (let i = 2; i < openers.length; i++) {
-          if (openers[i] === openers[i - 1] && openers[i] === openers[i - 2]) {
-            const alts = ['Specifically, ', 'For example, ', 'In practice, ', 'Here, ', 'At ', 'One example: '];
+          if (openers[i] && openers[i] === openers[i - 1] && openers[i] === openers[i - 2]) {
+            const alts = ['Specifically, ', 'For example, ', 'In practice, ', 'Here, ', 'One example: '];
             const pick = alts[Math.floor(Math.random() * alts.length)];
             sentences[i] = pick + sentences[i].charAt(0).toLowerCase() + sentences[i].slice(1);
           }
         }
-        r = sentences.join(' ');
-      }
+        return sentences.join(' ');
+      }).join('\n');
 
       // 3. Contract formal phrases to casual contractions (human writers use these)
       r = r.replace(/\bI have\b/g, () => Math.random() < 0.4 ? "I've" : 'I have');
@@ -1301,7 +1315,7 @@
         .replace(/[~≈∼]\s*(?=[\d£$€])/g, '')
         .replace(/\b(?:approx\.?|circa|c\.)\s+(?=[\d£$€])/gi, '')
         .replace(/\b(?:roughly|approximately|about|around|an estimated|in the region of)\s+(?=[\d£$€])/gi, '')
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[ \t]{2,}/g, ' ');
     },
 
     removeEmDashes(text) {
@@ -1332,13 +1346,17 @@
         .replace(/,\s*,/g, ',')
         .replace(/\.\s*,/g, '.')
         .replace(/,\s*\./g, '.')
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[ \t]{2,}/g, ' ');
     },
 
     // ============ FIX PUNCTUATION ============
     fixPunctuation(text) {
       if (!text) return text;
 
+      // A letter's salutation and sign-off end in a comma by
+      // convention, and a signature line is not a sentence. Neither
+      // should be 'corrected'.
+      const LETTER_LINE = /^\s*(dear\b|hi\b|hello\b|yours\b|kind regards|best regards|regards|sincerely)/i;
       return text
         // Remove excessive commas
         .replace(/,(\s*,)+/g, ',')
@@ -1348,12 +1366,32 @@
         // Fix period spacing
         .replace(/\s+\./g, '.')
         .replace(/\.(?!\s|$|\d)/g, '. ')
-        // Remove trailing punctuation from bullets
-        .replace(/[,;]\s*$/gm, '')
-        // Ensure sentences end with period
-        .replace(/([a-z])\s*$/gm, '$1.')
+        // Remove trailing punctuation from bullets -- but a letter's
+        // salutation and sign-off END in a comma by convention, and
+        // stripping it produced "Dear Hiring Manager" then "Yours
+        // sincerely" with a full stop bolted on by the rule below.
+        // `[ \t]*` not `\s*`: with /m, a greedy `\s*$` reaches past the
+        // line's own newline to the end of the NEXT (blank) line, so the
+        // replacement swallowed the blank line separating the salutation
+        // from the body.
+        .replace(/([,;])([ \t]*)$/gm, (m, punct, tail, off, whole) => {
+          const line = whole.slice(whole.lastIndexOf('\n', off - 1) + 1, off + 1);
+          return LETTER_LINE.test(line) ? m : tail;
+        })
+        // Ensure sentences end with period, leaving those lines alone.
+        .replace(/([a-z])([ \t]*)$/gm, (m, ch, tail, off, whole) => {
+          const line = whole.slice(whole.lastIndexOf('\n', off - 1) + 1, off + 1);
+          return LETTER_LINE.test(line) ? m : ch + '.' + tail;
+        })
+        // Deleting a banned phrase from the middle of a sentence can
+        // strand the verb before an infinitive -- removing "welcome the
+        // chance" from "I would welcome the chance to talk" leaves
+        // "I would to talk". Repair the few shapes that produces.
+        .replace(/\b(I|we|they|you)\s+(would|will|could|should)\s+to\s+/gi, '$1 $2 like to ')
+        .replace(/\b(I|we|they|you)'(d|ll)\s+to\s+/gi, "$1'$2 like to ")
+        .replace(/\b(I|we|they|you)\s+(am|are|is)\s+to\s+(?=[a-z])/gi, '$1 $2 happy to ')
         // Clean up multiple spaces
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[ \t]{2,}/g, ' ');
     },
 
     // ============ REMOVE PERSONAL PRONOUNS ============
@@ -1373,7 +1411,7 @@
         // Remove "our "
         .replace(/\bour\s+/g, '')
         // Clean up leftover issues
-        .replace(/\s{2,}/g, ' ')
+        .replace(/[ \t]{2,}/g, ' ')
         .trim();
     },
 
@@ -1404,7 +1442,7 @@
         // Collapse duplicated section headers (regression guard)
         .replace(dupHeaderRegex, '$1')
         // Remove double spaces
-        .replace(/\s{2,}/g, ' ')
+        .replace(/[ \t]{2,}/g, ' ')
         // Remove empty lines
         .replace(/\n\s*\n\s*\n/g, '\n\n')
         // Fix capitalisation after periods
