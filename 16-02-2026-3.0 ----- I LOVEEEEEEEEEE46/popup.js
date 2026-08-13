@@ -6283,13 +6283,27 @@ class ATSTailor {
       // CRITICAL: Apply ContentQualityEngine sanitisation to final CV and cover letter
       // Ensures UK spelling, no banned words, no em dashes in ALL output
       if (typeof ContentQualityEngine !== 'undefined') {
+        // Match the posting's English. An ATS that scores keywords by
+        // literal substring match treats "optimisation" and
+        // "optimization" as two different words, so a US posting scores
+        // nothing against a British-spelt CV. Falls back to UK when the
+        // location carries no country, which is the behaviour this
+        // always had.
+        const _spelling = (typeof RegionalFormat !== 'undefined')
+          ? RegionalFormat.resolveRegion(
+              this.currentJob?.location || '',
+              this._defaultLocation || ''
+            ).spelling
+          : 'UK';
         if (this.generatedDocuments.cv) {
-          this.generatedDocuments.cv = ContentQualityEngine.sanitiseCVBlock(this.generatedDocuments.cv);
-          console.log('[ATS Tailor] Applied ContentQualityEngine to final CV');
+          this.generatedDocuments.cv = ContentQualityEngine.sanitiseCVBlock(
+            this.generatedDocuments.cv, _spelling
+          );
+          console.log('[ATS Tailor] Applied ContentQualityEngine to final CV (' + _spelling + ' spelling)');
         }
         if (this.generatedDocuments.coverLetter) {
           this.generatedDocuments.coverLetter = ContentQualityEngine.sanitiseContent(
-            this.generatedDocuments.coverLetter, { removePronouns: false }
+            this.generatedDocuments.coverLetter, { removePronouns: false, spelling: _spelling }
           );
           console.log('[ATS Tailor] Applied ContentQualityEngine to cover letter');
         }

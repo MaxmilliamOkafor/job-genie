@@ -1194,6 +1194,9 @@
        in the manifest's content_scripts but never loaded here, so in the
        popup the symbol was undefined and the whole gate silently skipped. -->
   <script src="career-boost-engine.js"></script>
+  <!-- Page size and spelling follow the posting's country. Loaded before
+       docx-generator.js and popup.js, both of which ask it for a region. -->
+  <script src="regional-format.js"></script>
   <script src="docx-generator.js"></script>
   <!-- Location stack: popup.js calls ATSLocationTailor for the job-adaptive
        CV header location; without these it silently no-ops to raw text. -->

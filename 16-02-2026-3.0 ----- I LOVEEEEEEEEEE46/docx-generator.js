@@ -774,16 +774,42 @@
   }
 
   // ---- Word document XML ----------------------------------------------
-  function documentXml(bodyXml) {
+  //
+  // Page size follows the posting's country: US Letter for North America
+  // and the Letter-using parts of Latin America, A4 everywhere else. This
+  // is invisible to every ATS -- parsers read the text stream and never
+  // look at <w:pgSz> -- so it is not a rejection risk in either
+  // direction. It matters exactly once, when a human prints the file: A4
+  // on a Letter tray loses the bottom 18mm of the page.
+  //
+  // Margins stay identical in both. They are already inside the printable
+  // area of both paper sizes, and a single margin set means the line
+  // breaks a reviewer sees do not depend on which country they are in.
+  const A4_TWIPS = { w: 11906, h: 16838 };
+
+  function documentXml(bodyXml, pageTwips) {
+    const pg = (pageTwips && pageTwips.w && pageTwips.h) ? pageTwips : A4_TWIPS;
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
       `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
       `<w:body>${bodyXml}` +
       `<w:sectPr>` +
-      `<w:pgSz w:w="11906" w:h="16838"/>` +
+      `<w:pgSz w:w="${pg.w}" w:h="${pg.h}"/>` +
       `<w:pgMar w:top="864" w:right="900" w:bottom="864" w:left="900" w:header="720" w:footer="720" w:gutter="0"/>` +
       `</w:sectPr>` +
       `</w:body></w:document>`;
+  }
+
+  // Resolve the page from whatever the caller passed: an explicit
+  // {w,h}, a region object from RegionalFormat, or a location string.
+  function pageTwipsFrom(opts) {
+    if (opts && opts.pageTwips && opts.pageTwips.w) return opts.pageTwips;
+    if (opts && opts.region && opts.region.pageTwips) return opts.region.pageTwips;
+    const RF = global.RegionalFormat;
+    if (RF && opts && opts.jobLocation) {
+      return RF.resolveRegion(opts.jobLocation, opts.candidateLocation).pageTwips;
+    }
+    return A4_TWIPS;
   }
 
   function wordRelsXml(rels) {
@@ -1000,7 +1026,7 @@
         { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
         { name: '_rels/.rels', content: ROOT_RELS_XML },
         { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
-        { name: 'word/document.xml', content: documentXml(bodyXml) },
+        { name: 'word/document.xml', content: documentXml(bodyXml, pageTwipsFrom(opts)) },
       ];
       const zipBytes = buildZip(files);
       const base64 = bytesToBase64(zipBytes);
@@ -1023,7 +1049,7 @@
         { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
         { name: '_rels/.rels', content: ROOT_RELS_XML },
         { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
-        { name: 'word/document.xml', content: documentXml(bodyXml) },
+        { name: 'word/document.xml', content: documentXml(bodyXml, pageTwipsFrom(opts)) },
       ];
       const zipBytes = buildZip(files);
       const base64 = bytesToBase64(zipBytes);

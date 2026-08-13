@@ -703,6 +703,58 @@
     // 'program' (programme only for TV/events, NOT computing)
   };
 
+  // ============ UK -> US, for postings in American English ============
+  //
+  // Built by inverting the map above rather than maintaining a second
+  // one, so the two directions can never drift apart. Three kinds of
+  // entry must NOT be inverted:
+  //
+  //   'utilize' -> 'use'      a word-quality rule, not a spelling one.
+  //                           Inverted it would turn every "use" in the
+  //                           CV into "utilize", which is the exact
+  //                           padding the engine exists to remove.
+  //   'analysis' -> 'analysis' identity pairs, present in the map only as
+  //                           a guard. Inverting them is a no-op at best.
+  //   'inquire' -> 'enquire'  kept, but see below: several UK forms are
+  //                           ordinary English words in their own right.
+  //
+  // The point of the direction is literal ATS keyword matching. A Chicago
+  // posting asking for "optimization" scores nothing against a CV that
+  // says "optimisation".
+  const NEVER_FROM_UK = new Set([
+    'use', 'used', 'using', 'usage',            // the utilize->use rule
+    'programme', 'programmes',                  // 'program' is correct in
+                                                // computing in BOTH, and
+                                                // the map excludes it
+  ]);
+
+  const UK_TO_US_SPELLING = (() => {
+    const out = {};
+    for (const us of Object.keys(US_TO_UK_SPELLING)) {
+      const uk = US_TO_UK_SPELLING[us];
+      if (!uk || uk === us) continue;           // identity guard
+      if (NEVER_FROM_UK.has(uk)) continue;      // not a spelling pair
+      // First writer wins, so 'utilise'->'use' cannot overwrite a real
+      // pair that was registered earlier.
+      if (!(uk in out)) out[uk] = us;
+    }
+    return out;
+  })();
+
+  // A word is left alone when it is Capitalised in the middle of a
+  // sentence, because that is a proper noun and not prose: "World Health
+  // Organisation" and "Defence Forces Ireland" are names, and an employer
+  // or certification name must survive verbatim. Sentence-initial and
+  // bullet-initial capitals are ordinary text and are converted.
+  function _isMidSentenceCapital(text, offset, match) {
+    if (match[0] !== match[0].toUpperCase() || match[0] === match[0].toLowerCase()) return false;
+    const before = text.slice(0, offset).replace(/[ \t]+$/, '');
+    if (!before) return false;                          // start of document
+    if (/[.!?:\n]$/.test(before)) return false;         // start of sentence
+    if (/[-•*]$/.test(before)) return false;            // start of a bullet
+    return true;
+  }
+
   // ============ FALLBACK REGEX PATTERNS for -ize/-ise ============
   // Catches any remaining US -ize words not explicitly listed above
   const IZE_PATTERN = /\b([a-z]+)iz(e[ds]?|ing|ation)\b/gi;
@@ -727,19 +779,27 @@
         removeBannedWords = true,
         removeEmDashes = true,
         fixPunctuation = true,
-        removePronouns = true
+        removePronouns = true,
+        // 'UK' | 'US'. Which English the posting is written in, from
+        // RegionalFormat.resolveRegion(). Defaults to UK, which is what
+        // this engine always did.
+        spelling = 'UK'
       } = options;
 
       let result = text;
 
-      // Step 1: Remove banned words and phrases FIRST (before UK spelling, since some banned words have US spelling)
+      // Step 1: Remove banned words and phrases FIRST (before spelling, since some banned words have US spelling)
       if (removeBannedWords) {
         result = this.removeBannedContent(result);
       }
 
-      // Step 2: Convert US to UK spelling
+      // Step 2: Match the posting's English. An ATS that scores keywords
+      // by literal substring match does not know "optimise" and
+      // "optimization" are the same word.
       if (convertToUK) {
-        result = this.convertToUKSpelling(result);
+        result = spelling === 'US'
+          ? this.convertToUSSpelling(result)
+          : this.convertToUKSpelling(result);
       }
 
       // Step 3: Remove em dashes, and the approximation markers that read
@@ -853,7 +913,10 @@
 
     // ============ CV/ATS BLOCK SANITISATION (Preserve line layout) ============
     // For multi-line CV blocks we avoid adding sentence-ending punctuation per line.
-    sanitiseCVBlock(text) {
+    // `spelling` is 'UK' (the default and the historical behaviour) or
+    // 'US' when the posting is North American. Callers get it from
+    // RegionalFormat.resolveRegion(jobLocation).spelling.
+    sanitiseCVBlock(text, spelling) {
       // FIRST: Fix inline headers (e.g., "SKILLS: PYTHON, JAVA, C++" → separate lines with proper casing)
       let result = this.normaliseInlineHeaders(text);
 
@@ -862,34 +925,31 @@
         removeBannedWords: true,
         removeEmDashes: true,
         fixPunctuation: false,
-        removePronouns: true
+        removePronouns: true,
+        spelling: spelling === 'US' ? 'US' : 'UK'
       });
 
       // ██ FINAL NEVER-LEAK GUARD ██
-      // Catches any US spellings or banned words that somehow survived the pipeline
-      result = this.neverLeakGuard(result);
+      // Catches any stray spellings or banned words that survived the pipeline
+      result = this.neverLeakGuard(result, spelling);
 
       return result;
     },
 
     // ============ NEVER-LEAK GUARD ============
     // Absolute last-resort catch for words that MUST NEVER appear in output
-    neverLeakGuard(text) {
+    // `spelling` is 'UK' (default, and what this always did) or 'US'.
+    // The spelling half of the guard flips with it; the word-quality half
+    // -- utilize/leverage/spearheaded and the rest -- is the same in every
+    // country and never flips.
+    neverLeakGuard(text, spelling) {
       if (!text || typeof text !== 'string') return text;
 
-      // These MUST be replaced no matter what — case-insensitive word-boundary match
-      const ABSOLUTE_REPLACEMENTS = [
-        // US spellings that must always be UK
-        [/\butilizing\b/gi, 'using'],
-        [/\butilized\b/gi, 'used'],
-        [/\butilize\b/gi, 'use'],
-        [/\butilizes\b/gi, 'uses'],
-        [/\butilization\b/gi, 'usage'],
-        [/\butilising\b/gi, 'using'],   // Even UK form of utilize is banned (use "using" instead)
-        [/\butilised\b/gi, 'used'],
-        [/\butilise\b/gi, 'use'],
-        [/\butilises\b/gi, 'uses'],
-        [/\butilisation\b/gi, 'usage'],
+      // Spelling, in whichever English the posting is written in. These
+      // exist because the map upstream can be bypassed; the guard is the
+      // last line and has to agree with the region, or it silently undoes
+      // the conversion it was meant to protect.
+      const FORCE_UK = [
         [/\bmodernize\b/gi, 'modernise'],
         [/\bmodernized\b/gi, 'modernised'],
         [/\bmodernizing\b/gi, 'modernising'],
@@ -904,6 +964,39 @@
         [/\boptimized\b/gi, 'optimised'],
         [/\boptimize\b/gi, 'optimise'],
         [/\boptimization\b/gi, 'optimisation'],
+      ];
+      const FORCE_US = [
+        [/\bmodernise\b/gi, 'modernize'],
+        [/\bmodernised\b/gi, 'modernized'],
+        [/\bmodernising\b/gi, 'modernizing'],
+        [/\bmodernises\b/gi, 'modernizes'],
+        [/\bmodernisation\b/gi, 'modernization'],
+        [/\banalysing\b/gi, 'analyzing'],
+        [/\banalysed\b/gi, 'analyzed'],
+        [/\banalyse\b/gi, 'analyze'],
+        [/\banalyses\b/gi, 'analyzes'],
+        [/\banalyser\b/gi, 'analyzer'],
+        [/\boptimising\b/gi, 'optimizing'],
+        [/\boptimised\b/gi, 'optimized'],
+        [/\boptimise\b/gi, 'optimize'],
+        [/\boptimisation\b/gi, 'optimization'],
+      ];
+
+      // These MUST be replaced no matter what — case-insensitive word-boundary match
+      const ABSOLUTE_REPLACEMENTS = [
+        // "utilise" is padding for "use" in both Englishes, so this pair
+        // is a word-quality rule and stays in force for every region.
+        [/\butilizing\b/gi, 'using'],
+        [/\butilized\b/gi, 'used'],
+        [/\butilize\b/gi, 'use'],
+        [/\butilizes\b/gi, 'uses'],
+        [/\butilization\b/gi, 'usage'],
+        [/\butilising\b/gi, 'using'],   // Even UK form of utilize is banned (use "using" instead)
+        [/\butilised\b/gi, 'used'],
+        [/\butilise\b/gi, 'use'],
+        [/\butilises\b/gi, 'uses'],
+        [/\butilisation\b/gi, 'usage'],
+      ].concat(spelling === 'US' ? FORCE_US : FORCE_UK).concat([
         // Banned buzzwords that must never appear
         [/\borchestrated\b/gi, 'directed'],
         [/\bchampioned\b/gi, 'led'],
@@ -948,7 +1041,7 @@
         [/\bsynergies\b/gi, 'collaborations'],
         [/\bparadigm\b/gi, 'approach'],
         [/\brobust\b/gi, 'strong'],
-      ];
+      ]);
 
       let result = text;
       for (const [pattern, replacement] of ABSOLUTE_REPLACEMENTS) {
@@ -1269,6 +1362,33 @@
         return stem + 'is' + ukSuffix.slice(1);
       });
 
+      return result;
+    },
+
+    // ============ CONVERT UK -> US SPELLING ============
+    // Runs instead of convertToUKSpelling when the posting is American.
+    // Explicit map only -- no generic -ise -> -ize fallback, because that
+    // fallback would have to know that advise, supervise, expertise,
+    // enterprise, advertise, comprise, revise, devise, promise, precise
+    // and franchise are spelt -ise in American English too. A curated map
+    // cannot make that mistake; a regex eventually will.
+    convertToUSSpelling(text) {
+      if (!text || typeof text !== 'string') return text;
+      let result = text;
+
+      const sortedWords = Object.keys(UK_TO_US_SPELLING).sort((a, b) => b.length - a.length);
+      for (const ukWord of sortedWords) {
+        const usWord = UK_TO_US_SPELLING[ukWord];
+        const regex = new RegExp(`\\b${ukWord}\\b`, 'gi');
+        result = result.replace(regex, (match, offset, whole) => {
+          if (_isMidSentenceCapital(whole, offset, match)) return match;
+          if (match === match.toUpperCase()) return usWord.toUpperCase();
+          if (match[0] === match[0].toUpperCase()) {
+            return usWord.charAt(0).toUpperCase() + usWord.slice(1);
+          }
+          return usWord;
+        });
+      }
       return result;
     },
 

@@ -7,7 +7,15 @@
 
   // ============ PDF CONFIGURATION (ATS-PERFECT SPECIFICATION) ============
   const PDF_CONFIG = {
-    // Page dimensions (A4 in points)
+    // Page dimensions in points. A4 is the default and the fallback;
+    // _applyPageFormat swaps in US Letter when the posting is North
+    // American. Margins are unchanged between the two -- both sit well
+    // inside either printable area, and one margin set means a reviewer
+    // sees the same line breaks whichever country they are in.
+    //
+    // This is a print concern only. No ATS reads page dimensions; every
+    // one of them reads the text stream. Neither choice can cause a
+    // rejection, which is exactly why it is safe to switch.
     page: {
       width: 595.28,
       height: 841.89,
@@ -67,6 +75,32 @@
   const ProfessionalPDFEngine = {
 
     // ============ MAIN ENTRY: GENERATE CV PDF ============
+    // Choose the paper for this application and make every later
+    // width/height read agree with it. Called once, synchronously, right
+    // before the jsPDF document is constructed; the whole render pass
+    // that follows is synchronous, so nothing can observe a half-applied
+    // page. Returns the format string jsPDF wants.
+    _applyPageFormat(jobData, candidateData) {
+      const A4 = { width: 595.28, height: 841.89, format: 'a4' };
+      try {
+        const RF = (typeof window !== 'undefined' && window.RegionalFormat) || global.RegionalFormat;
+        if (!RF) { Object.assign(PDF_CONFIG.page, A4); return 'a4'; }
+        const region = RF.resolveRegion(
+          (jobData && (jobData.location || jobData.jobLocation)) || '',
+          (candidateData && candidateData.location) || ''
+        );
+        if (region.page === 'LETTER') {
+          Object.assign(PDF_CONFIG.page, { width: 612, height: 792, format: 'letter' });
+          return 'letter';
+        }
+      } catch (e) {
+        // A location we cannot read is not a reason to fail a CV.
+        console.warn('[ProfessionalPDFEngine] page format fell back to A4:', e && e.message);
+      }
+      Object.assign(PDF_CONFIG.page, A4);
+      return 'a4';
+    },
+
     async generateCV(candidateData, tailoredContent, options = {}, jobData = null) {
       const startTime = performance.now();
       console.log('[ProfessionalPDFEngine] Generating ATS-perfect CV (SPEED OPTIMIZED)...');
@@ -84,7 +118,7 @@
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
-          format: 'a4',
+          format: this._applyPageFormat(jobData, candidateData),
           compress: true,
           putOnlyUsedFonts: true, // SPEED: Only embed used fonts
           floatPrecision: 2 // SPEED: Reduce float precision for smaller file
@@ -155,7 +189,7 @@
         const doc = new jspdf.jsPDF({
           orientation: 'portrait',
           unit: 'pt',
-          format: 'a4',
+          format: this._applyPageFormat(jobData, candidateData),
           compress: true,
           putOnlyUsedFonts: true, // SPEED: Only embed used fonts
           floatPrecision: 2 // SPEED: Reduce float precision

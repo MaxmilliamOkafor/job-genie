@@ -236,10 +236,30 @@
       if (gapBridgeLine) {
         // Merge the bridge into the body as a continuation, not a new
         // paragraph -- avoids the "bolted-on" feel.
-        Body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
+        //
+        // This read `Body` (capital B) and nothing declares it. Under the
+        // 'use strict' at the top of this file that is a ReferenceError,
+        // not a silent global -- so every letter where CareerBoost found a
+        // strong adjacency threw out of generate() instead of returning.
+        // The gap bridge is the sentence that connects what the candidate
+        // has done to what the posting asks for, so the one case it was
+        // written for was the one case that crashed.
+        body = `${body.replace(/\s+$/, '')} ${gapBridgeLine}`;
       }
 
-      // CRITICAL: Apply ContentQualityEngine sanitisation for UK spelling and anti-AI detection
+      // Spelling follows the posting's country for the same reason the CV's
+      // does: literal ATS keyword matching does not know that "optimise"
+      // and "optimization" are one word. Falls back to UK, which is what
+      // this always did. Declared out here because the final whole-letter
+      // pass further down is a separate block and needs it too.
+      const _spelling = (typeof RegionalFormat !== 'undefined')
+        ? RegionalFormat.resolveRegion(
+            jobData?.location || jobData?.jobLocation || '',
+            candidateData?.location || ''
+          ).spelling
+        : 'UK';
+
+      // CRITICAL: Apply ContentQualityEngine sanitisation for spelling and anti-AI detection
       if (typeof ContentQualityEngine !== 'undefined') {
         // removePronouns MUST be off here. It defaults to true -- a CV
         // bullet convention, where "I" is implied -- and these four calls
@@ -248,7 +268,7 @@
         // first-person by nature, and the result was sentences like
         // "At Meta was Software Engineer" and "One thing am particularly
         // proud of" going out to recruiters.
-        const letterOpts = { removePronouns: false };
+        const letterOpts = { removePronouns: false, spelling: _spelling };
         opening = ContentQualityEngine.sanitiseContent(opening, letterOpts);
         bridge = ContentQualityEngine.sanitiseContent(bridge, letterOpts);
         body = ContentQualityEngine.sanitiseContent(body, letterOpts);
@@ -276,7 +296,7 @@
 
       // Final sanitisation pass on complete letter
       if (typeof ContentQualityEngine !== 'undefined') {
-        coverLetter = ContentQualityEngine.sanitiseContent(coverLetter, { removePronouns: false });
+        coverLetter = ContentQualityEngine.sanitiseContent(coverLetter, { removePronouns: false, spelling: _spelling });
       }
 
       // === Recruiter Audit: post-process pass.  Strips empty buzzword
@@ -688,8 +708,13 @@
       if (topKeywords.length > 7) {
         const extraSkills = [topKeywords[7], topKeywords[8], topKeywords[9]].filter(Boolean);
         if (extraSkills.length > 0) {
+          // `ExtraSkills` (capital E) is declared nowhere, and this file
+          // is in strict mode, so reading it is a ReferenceError rather
+          // than an undefined. Any posting yielding nine or more keywords
+          // reaches this branch -- which is most real postings -- and the
+          // whole of generate() threw.
           const skillsStr = extraSkills.length > 1
-            ? ExtraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
+            ? extraSkills.slice(0, -1).join(', ') + ' and ' + extraSkills[extraSkills.length - 1]
             : extraSkills[0];
           const para3Variants = [
             `I also have hands-on experience with ${skillsStr}. I have used these in production settings and I am comfortable picking them up again wherever they fit into your stack.`,
@@ -912,7 +937,11 @@
     extractAchievement(bullet) {
       if (!bullet) return 'significant performance improvements';
       const match = bullet.match(/(\d+%?\s*(?:improvement|increase|reduction|faster|efficiency|growth))/i);
-      return match ? Match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
+      // `Match` (capital M) is undeclared; in strict mode that throws.
+      // It only threw when the regex FOUND a figure -- so the branch that
+      // worked was the one that gave up, and the branch that had a real
+      // metric to quote was the one that crashed.
+      return match ? match[1] : bullet.slice(0, 50) + (bullet.length > 50 ? '...' : '');
     }
   };
 
