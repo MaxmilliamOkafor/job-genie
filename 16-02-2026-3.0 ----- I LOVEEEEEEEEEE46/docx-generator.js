@@ -346,6 +346,24 @@
     return 8;                    // anything unrecognised sits above education
   };
 
+  // The heading actually printed, whatever synonym the text arrived
+  // with. The safest headings for a parser are the conventional ones,
+  // and the tailoring prompt lives in an edge function deployed
+  // separately -- so relying on the prompt alone means documents keep
+  // coming out with the old heading until that deploy happens.
+  // Normalising here makes the rendered file correct on extension
+  // reload alone. Only synonyms are rewritten; a heading the renderer
+  // does not recognise is left exactly as the writer set it.
+  const CANONICAL_HEADER = {
+    1: 'PROFESSIONAL SUMMARY',
+    2: 'CORE COMPETENCIES',
+    3: 'PROFESSIONAL EXPERIENCE',
+    5: 'TECHNICAL SKILLS',
+    6: 'CERTIFICATIONS',
+    9: 'EDUCATION',
+  };
+  const canonicalHeader = (header, rank) => CANONICAL_HEADER[rank] || header;
+
   // ---- one heading, once --------------------------------------------
   // A generated CV passes through several keyword injectors before it
   // reaches here: the tailoring edge function appends a TECHNICAL
@@ -444,16 +462,23 @@
     const preamble = [];
     const blocks = [];
     let current = null;
+    let renamed = 0;
     for (const line of lines) {
       const upper = line.trim().toUpperCase();
       if (SECTION_HEADERS.includes(upper)) {
-        current = { header: upper, rank: rankOf(upper), lines: [line] };
+        const rank = rankOf(upper);
+        const label = canonicalHeader(upper, rank);
+        if (label !== line.trim()) renamed++;
+        current = { header: label, rank, lines: [label] };
         blocks.push(current);
         continue;
       }
       (current ? current.lines : preamble).push(line);
     }
-    if (blocks.length < 2) return inline.split ? lines.join('\n') : cvText;
+    if (blocks.length < 2) {
+      if (!inline.split && !renamed) return cvText;
+      return preamble.concat(blocks.map((b) => b.lines.join('\n'))).join('\n');
+    }
 
     // Fold repeats into the first block that carries the same heading.
     // Headings that mean the same section merge too (SKILLS into
@@ -477,7 +502,7 @@
       .map((x) => x.b);
     // Nothing to merge, nothing to split, already in order: leave it
     // exactly as it is.
-    if (!mergedAny && !inline.split && sorted.every((b, i) => b === blocks[i])) return cvText;
+    if (!mergedAny && !inline.split && !renamed && sorted.every((b, i) => b === blocks[i])) return cvText;
 
     // Exactly one blank line between sections. Reordering moves blocks
     // that did not end in one, which is how EDUCATION ended up welded to
@@ -500,7 +525,15 @@
     const rels = []; // hyperlink relationships collected for the contact line
 
     // Experience sections where the company/title/date treatment applies.
-    const EXPERIENCE_HEADERS = ['WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT'];
+    //
+    // PROFESSIONAL EXPERIENCE was missing, though SECTION_HEADERS has
+    // always listed it and the tailoring model emits it freely. A CV
+    // that used that wording lost the whole role/date treatment --
+    // dates no longer right-aligned to their role line, the company and
+    // title no longer emphasised -- silently, because nothing here
+    // fails when the list does not match. Kept in step with
+    // SECTION_RANK rank 3.
+    const EXPERIENCE_HEADERS = SECTION_HEADERS.filter((h) => rankOf(h) === 3);
 
     let firstNonEmpty = -1;
     for (let i = 0; i < lines.length; i++) {

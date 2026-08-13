@@ -1870,40 +1870,6 @@ function getCoverLetterToneInstructions(tone: CoverLetterTone): string {
   }
 }
 
-// ==========================================
-// MULTI-WORD PHRASE INJECTION BULLET BUILDER
-// Constructs a natural-sounding experience bullet containing all missing multi-word JD phrases
-// ==========================================
-function buildMultiWordInjectionBullet(phrases: string[]): string {
-  if (phrases.length === 0) return '';
-  
-  // Group phrases by type for natural sentence construction
-  const verbPhrases: string[] = []; // e.g. "troubleshoot issues", "implement tools"
-  const nounPhrases: string[] = []; // e.g. "programming skills", "collaboration skills"
-  
-  for (const p of phrases) {
-    const firstWord = p.split(' ')[0].toLowerCase();
-    const verbStarters = ['troubleshoot', 'implement', 'improve', 'resolve', 'manage', 'develop', 'create', 'define', 'optimize', 'optimise', 'maintain', 'investigate', 'monitor', 'set', 'collaborate'];
-    if (verbStarters.some(v => firstWord.startsWith(v))) {
-      verbPhrases.push(p);
-    } else {
-      nounPhrases.push(p);
-    }
-  }
-  
-  let bullet = '- ';
-  
-  if (verbPhrases.length > 0 && nounPhrases.length > 0) {
-    // Combine: "Applied [noun phrases] to [verb phrase 1], [verb phrase 2], ..."
-    bullet += `Applied ${nounPhrases.join(' and ')} to ${verbPhrases.join(', ')}, driving measurable improvements across development workflows.`;
-  } else if (verbPhrases.length > 0) {
-    bullet += `Utilised technical expertise to ${verbPhrases.join(', ')}, ensuring reliable and scalable delivery processes.`;
-  } else {
-    bullet += `Demonstrated ${nounPhrases.join(', ')} across cross-functional projects, contributing to continuous process improvement.`;
-  }
-  
-  return bullet;
-}
 
 // ==========================================
 // KEYWORD PRIORITY WEIGHTING (inspired by JobOwl)
@@ -2387,7 +2353,7 @@ Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the J
 These go between Professional Summary and Work Experience for maximum ATS + recruiter impact.
 Format: short 2-4 word phrases (e.g. "Cloud Architecture", "CI/CD Pipelines", "Stakeholder Management").
 Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that appear more than once.
-EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL PROFICIENCIES / Skills section instead, as recruiters find them off-putting at the top of a CV.
+EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL SKILLS section instead, as recruiters find them off-putting at the top of a CV.
 
 RULE 9 — VOCABULARY REFORMULATION (worth ~5 points)
 Do NOT just insert keywords — REFORMULATE existing experience using the JD's exact vocabulary:
@@ -2662,7 +2628,7 @@ ABSOLUTE RULES:
 3. NO typos, grammatical errors, or formatting issues
 4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
-6. The TECHNICAL PROFICIENCIES / SKILLS section must list ALL JD keywords not already covered in experience bullets
+6. The TECHNICAL SKILLS section must list ALL JD keywords not already covered in experience bullets
 7. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
 
 HUMANIZED TONE RULES:
@@ -2764,9 +2730,9 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     ███ END DUPLICATION BAN ███
        TITLE REDUNDANCY: If the job title contains a parenthetical qualifier — e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' — do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
     - CORE COMPETENCIES: 6-9 keyword phrases from the JD in a grid format (placed between Summary and Work Experience)
-    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. YEARS OF EXPERIENCE — THE DATES ON THE PAGE ARE THE ANSWER: any years figure in the summary MUST be consistent with the employment dates in this same CV. Add up the candidate's actual history and state that, or state no figure at all. NEVER set the figure to the JD's requirement: a CV whose summary says "over 4 years" above a work history running from 2017 to Present contradicts itself in the two places a reader looks first, and many ATS compute total tenure from the dates and compare it to the stated number. Exceeding a stated minimum is not a problem to solve — "5+ years" required and 9 years held is a strong application, whereas understating it filters the candidate out of the senior roles they actually qualify for and reads as junior. If the true total is genuinely below the JD's minimum, say the true total; do not inflate it either. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL PROFICIENCIES section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
+    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. YEARS OF EXPERIENCE — THE DATES ON THE PAGE ARE THE ANSWER: any years figure in the summary MUST be consistent with the employment dates in this same CV. Add up the candidate's actual history and state that, or state no figure at all. NEVER set the figure to the JD's requirement: a CV whose summary says "over 4 years" above a work history running from 2017 to Present contradicts itself in the two places a reader looks first, and many ATS compute total tenure from the dates and compare it to the stated number. Exceeding a stated minimum is not a problem to solve — "5+ years" required and 9 years held is a strong application, whereas understating it filters the candidate out of the senior roles they actually qualify for and reads as junior. If the true total is genuinely below the JD's minimum, say the true total; do not inflate it either. Use VOCABULARY REFORMULATION (Rule 9) — reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully — at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL SKILLS section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting — never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section — it is added programmatically after generation. Never render the projects data anywhere in the resume text.
-    - TECHNICAL PROFICIENCIES: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
+    - TECHNICAL SKILLS: List ALL JD hard skills, tools, and technologies as a single comma-separated list. Include EVERY keyword from the JD. This section must contain at minimum 15-25 keywords. Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture, etc."
     - CERTIFICATIONS
     - EDUCATION (LAST). Skills and certifications sit ABOVE education:
       a recruiter scanning top-down should reach what proves the candidate
@@ -3193,49 +3159,30 @@ ${
 
       let resume = result.tailoredResume;
 
-      // Separate multi-word phrases (need bullet injection) from single keywords (skills section)
-      const multiWordMissing = actualMissing.filter(kw => kw.includes(' '));
-      const singleWordMissing = actualMissing.filter(kw => !kw.includes(' '));
-
-      // STRATEGY A: Inject multi-word phrases into the LAST experience bullet of the FIRST role
-      // This ensures ATS scanners find exact phrases in context, not just skills lists
-      if (multiWordMissing.length > 0) {
-        const workExpMatch = resume.match(/(WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE)\s*\n/i);
-        if (workExpMatch && workExpMatch.index !== undefined) {
-          // Find the first bullet point block after the work experience header
-          const afterHeader = resume.substring(workExpMatch.index);
-          const bulletLines = afterHeader.split('\n');
-          
-          // Find the last bullet of the first role (before the next company/role header)
-          let lastBulletIdx = -1;
-          let passedFirstBullet = false;
-          for (let i = 1; i < bulletLines.length; i++) {
-            const line = bulletLines[i].trim();
-            if (line.startsWith('-') || line.startsWith('•')) {
-              passedFirstBullet = true;
-              lastBulletIdx = i;
-            }
-            // Stop at next role header (line that doesn't start with - and has a date pattern)
-            if (passedFirstBullet && !line.startsWith('-') && !line.startsWith('•') && line.length > 0 && /\d{2}\/\d{4}/.test(line)) {
-              break;
-            }
-          }
-
-          if (lastBulletIdx > 0) {
-            // Append a new bullet with all multi-word phrases woven naturally
-            const phrasesText = multiWordMissing.join(', ');
-            const injectionBullet = `- Leveraged programming skills to implement tools and scripts that troubleshoot issues, resolve issues, and improve efficiency across development workflows, demonstrating strong collaboration skills in cross-functional team settings.`;
-            
-            // Build a smarter bullet that uses ALL the actual missing multi-word phrases
-            const smartBullet = buildMultiWordInjectionBullet(multiWordMissing);
-            bulletLines.splice(lastBulletIdx + 1, 0, smartBullet);
-            
-            const newAfterHeader = bulletLines.join('\n');
-            resume = resume.substring(0, workExpMatch.index) + newAfterHeader;
-            console.log(`[FORCE-INJECT] Injected ${multiWordMissing.length} multi-word phrases into experience bullet`);
-          }
-        }
-      }
+      // A KEYWORD THAT FITS NOWHERE TRUTHFULLY GOES IN THE SKILLS LIST,
+      // NOT INTO A MANUFACTURED ACHIEVEMENT.
+      //
+      // STRATEGY A used to append a whole new bullet to the most recent
+      // role whenever a multi-word phrase had no home, reading:
+      //
+      //   "- Leveraged programming skills to implement tools and scripts
+      //    that troubleshoot issues, resolve issues, and improve
+      //    efficiency across development workflows, demonstrating strong
+      //    collaboration skills in cross-functional team settings."
+      //
+      // That is a fabricated accomplishment. It claims work the
+      // candidate never described, in the exact register a reviewer
+      // reads as machine-written, and it lands under the most recent
+      // role -- among the first three bullets, the part that actually
+      // gets read. It cannot survive an interview either, because there
+      // is no story behind it.
+      //
+      // Both the extension and this function did the same thing, so a
+      // single CV could collect two of them. Every unplaceable keyword
+      // now routes to the skills list, which captures the same terms
+      // honestly, and RULE 2's evidence gate governs what may be woven
+      // into a real bullet.
+      const singleWordMissing = actualMissing.slice();
 
       // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
       const toInjectSingles = singleWordMissing;
@@ -3294,7 +3241,7 @@ ${
           for (const pattern of insertBeforePatterns) {
             const match = resume.match(pattern);
             if (match && match.index !== undefined) {
-              const newSection = `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+              const newSection = `\n\nTECHNICAL SKILLS\n${toInjectSingles.join(", ")}\n`;
               resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
               console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${toInjectSingles.length} keywords`);
               injected = true;
@@ -3303,7 +3250,7 @@ ${
           }
 
           if (!injected) {
-            resume += `\n\nTECHNICAL PROFICIENCIES\n${toInjectSingles.join(", ")}\n`;
+            resume += `\n\nTECHNICAL SKILLS\n${toInjectSingles.join(", ")}\n`;
             console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end`);
           }
         }

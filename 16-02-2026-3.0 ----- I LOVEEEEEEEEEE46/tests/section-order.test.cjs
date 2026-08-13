@@ -78,8 +78,8 @@ function headingsOf(cvText) {
 const got = headingsOf(WRONG_ORDER);
 t('  the document generates', !!got, 'generation failed');
 if (got) {
-  const want = ['PROFESSIONAL SUMMARY', 'CORE COMPETENCIES', 'WORK EXPERIENCE',
-    'PROJECTS', 'TECHNICAL PROFICIENCIES', 'CERTIFICATIONS', 'EDUCATION'];
+  const want = ['PROFESSIONAL SUMMARY', 'CORE COMPETENCIES', 'PROFESSIONAL EXPERIENCE',
+    'PROJECTS', 'TECHNICAL SKILLS', 'CERTIFICATIONS', 'EDUCATION'];
   t('  ' + got.join(' -> '), seq(got) === seq(want), 'expected ' + seq(want));
   t('  education is last however it arrived',
     got[got.length - 1] === 'EDUCATION', got.join(' -> '));
@@ -114,8 +114,8 @@ const TRIPLED = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
 const tri = headingsOf(TRIPLED);
 t('  the document generates', !!tri, 'generation failed');
 if (tri) {
-  t('  TECHNICAL PROFICIENCIES appears exactly once',
-    tri.filter((h) => h === 'TECHNICAL PROFICIENCIES').length === 1, tri.join(' -> '));
+  t('  TECHNICAL SKILLS appears exactly once',
+    tri.filter((h) => h === 'TECHNICAL SKILLS').length === 1, tri.join(' -> '));
   t('  no heading repeats at all', new Set(tri).size === tri.length, tri.join(' -> '));
 }
 // Merging must not lose the content that was under the extra headings --
@@ -162,8 +162,8 @@ t('  the document generates', !!inl, 'generation failed');
 if (inl) {
   t('  CORE COMPETENCIES becomes a heading of its own',
     inl.includes('CORE COMPETENCIES'), inl.join(' -> '));
-  t('  ...and sits above WORK EXPERIENCE',
-    inl.indexOf('CORE COMPETENCIES') < inl.indexOf('WORK EXPERIENCE'), inl.join(' -> '));
+  t('  ...and sits above PROFESSIONAL EXPERIENCE',
+    inl.indexOf('CORE COMPETENCIES') < inl.indexOf('PROFESSIONAL EXPERIENCE'), inl.join(' -> '));
   t('  ...with the list no longer welded into the heading',
     !inl.some((h) => /CORE COMPETENCIES:/.test(h)), inl.join(' -> '));
 }
@@ -205,7 +205,7 @@ if (!prompt) {
   const spec = [
     ['CORE COMPETENCIES', at('CORE COMPETENCIES')],
     ['WORK EXPERIENCE', at('WORK EXPERIENCE')],
-    ['TECHNICAL PROFICIENCIES', at('TECHNICAL PROFICIENCIES')],
+    ['TECHNICAL SKILLS', at('TECHNICAL SKILLS')],
     ['CERTIFICATIONS', at('CERTIFICATIONS')],
     ['EDUCATION', at('EDUCATION (LAST)')],
   ];
@@ -239,6 +239,49 @@ if (!prompt) {
   try { JSON.parse(ex); } catch (e) { ok = false; err = e.message; }
   t('  the example parses', ok, err);
 }
+
+console.log('\nTHE PRINTED HEADINGS ARE THE CONVENTIONAL ONES');
+// The safest headings for a parser are the conventional ones, and the
+// tailoring prompt lives in an edge function deployed separately -- so
+// relying on the prompt alone means files keep coming out with the old
+// heading until that deploy lands. Normalising in the renderer makes the
+// document right on extension reload alone.
+const SYNONYMS = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
+  'SUMMARY', 'Experienced engineer.', '',
+  'EMPLOYMENT', 'Meta', 'Software Engineer', 'January 2023 - Present',
+  '- Shipped a system.', '',
+  'TECHNICAL PROFICIENCIES', 'Python, AWS', '',
+  'EDUCATION', 'MSc Artificial Intelligence'].join('\n');
+const canon = headingsOf(SYNONYMS);
+t('  SUMMARY -> PROFESSIONAL SUMMARY', canon && canon.includes('PROFESSIONAL SUMMARY'), String(canon));
+t('  EMPLOYMENT -> PROFESSIONAL EXPERIENCE', canon && canon.includes('PROFESSIONAL EXPERIENCE'), String(canon));
+t('  TECHNICAL PROFICIENCIES -> TECHNICAL SKILLS', canon && canon.includes('TECHNICAL SKILLS'), String(canon));
+t('  ...even though nothing needed reordering or merging',
+  canon && canon.length === 4, String(canon));
+
+// Renaming the experience heading must not switch off the treatment
+// that depends on recognising it. EXPERIENCE_HEADERS listed WORK
+// EXPERIENCE, EXPERIENCE and EMPLOYMENT but not PROFESSIONAL
+// EXPERIENCE, so a CV using that wording silently lost its role/date
+// layout -- dates no longer set against their role line. It is derived
+// from SECTION_RANK now so the two cannot drift.
+const withTabs = (cvText) => {
+  const built = DG.fromCvText(cvText, {});
+  const tmp = path.join(os.tmpdir(), 'jg-tab-' + Date.now() + '.docx');
+  fs.writeFileSync(tmp, Buffer.from(built.base64, 'base64'));
+  const xml = cp.execSync('python3 -c ' + JSON.stringify(
+    'import zipfile,sys;sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("word/document.xml").decode("utf8"))'
+  ) + ' ' + JSON.stringify(tmp)).toString();
+  fs.unlinkSync(tmp);
+  return (xml.match(/<w:tab\/>/g) || []).length;
+};
+t('  the role/date treatment still runs after the rename',
+  withTabs(SYNONYMS) > 0,
+  'no tab stop in the document: the experience section was not recognised');
+t('  ...and for every experience synonym',
+  ['WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT', 'PROFESSIONAL EXPERIENCE']
+    .every((h) => withTabs(SYNONYMS.replace('EMPLOYMENT', h)) > 0),
+  'one of the experience headings is not in EXPERIENCE_HEADERS');
 
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);

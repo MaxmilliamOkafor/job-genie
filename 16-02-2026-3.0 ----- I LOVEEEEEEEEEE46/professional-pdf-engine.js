@@ -1183,7 +1183,7 @@
         y = PDF_CONFIG.margins.top;
       }
 
-      y = this.renderSectionTitle(doc, 'TECHNICAL PROFICIENCIES', y);
+      y = this.renderSectionTitle(doc, 'TECHNICAL SKILLS', y);
 
       // Format skills as comma-separated list (max 25)
       const skillsText = skills.slice(0, 25).join(', ');

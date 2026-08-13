@@ -6306,52 +6306,28 @@ class ATSTailor {
           let cvText = this.generatedDocuments.cv;
           const toReInject = postSanitiseMatch.missingKeywords;
 
-          // Separate multi-word phrases from single keywords
-          const multiWord = toReInject.filter(kw => kw.includes(' '));
-          const singleWord = toReInject.filter(kw => !kw.includes(' '));
+          // A KEYWORD THAT FITS NOWHERE TRUTHFULLY GOES IN THE SKILLS
+          // LIST, NOT INTO A MANUFACTURED ACHIEVEMENT.
+          //
+          // This used to write a whole new bullet under the most recent
+          // role whenever a multi-word phrase had no home:
+          //
+          //   "- Applied real-time applications and data integration to
+          //    troubleshoot, optimise, driving measurable improvements
+          //    across development workflows."
+          //
+          // That is a fabricated accomplishment. It claims work the
+          // candidate never described, in the exact register a recruiter
+          // reads as machine-written, and it lands under the most recent
+          // role -- the first three bullets, the part that actually gets
+          // read. It also cannot survive an interview, because there is
+          // no story behind it.
+          //
+          // The keyword coverage it bought is real but small, and the
+          // skills section captures the same terms honestly. So every
+          // unplaceable keyword now routes there, multi-word included.
+          const singleWord = toReInject.slice();
 
-          // MULTI-WORD PHRASES: Inject into experience bullet for ATS phrase matching
-          if (multiWord.length > 0) {
-            const expMatch = cvText.match(/(WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE)\s*\n/i);
-            if (expMatch && expMatch.index !== undefined) {
-              const afterExp = cvText.substring(expMatch.index);
-              const lines = afterExp.split('\n');
-              let lastBulletIdx = -1;
-              let passedBullet = false;
-              for (let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line.startsWith('-') || line.startsWith('•')) {
-                  passedBullet = true;
-                  lastBulletIdx = i;
-                }
-                if (passedBullet && !line.startsWith('-') && !line.startsWith('•') && line.length > 0 && /\d{2}\/\d{4}/.test(line)) break;
-              }
-              if (lastBulletIdx > 0) {
-                // Build natural bullet with multi-word phrases
-                const verbPhrases = [];
-                const nounPhrases = [];
-                const verbStarters = ['troubleshoot', 'implement', 'improve', 'resolve', 'manage', 'develop', 'create', 'define', 'optimize', 'optimise', 'maintain', 'investigate', 'monitor', 'set', 'collaborate'];
-                for (const p of multiWord) {
-                  const first = p.split(' ')[0].toLowerCase();
-                  if (verbStarters.some(v => first.startsWith(v))) verbPhrases.push(p);
-                  else nounPhrases.push(p);
-                }
-                let bullet;
-                if (verbPhrases.length > 0 && nounPhrases.length > 0) {
-                  bullet = `- Applied ${nounPhrases.join(' and ')} to ${verbPhrases.join(', ')}, driving measurable improvements across development workflows.`;
-                } else if (verbPhrases.length > 0) {
-                  bullet = `- Utilised technical expertise to ${verbPhrases.join(', ')}, ensuring reliable and scalable delivery processes.`;
-                } else {
-                  bullet = `- Demonstrated ${nounPhrases.join(', ')} across cross-functional projects, contributing to continuous process improvement.`;
-                }
-                lines.splice(lastBulletIdx + 1, 0, bullet);
-                cvText = cvText.substring(0, expMatch.index) + lines.join('\n');
-                console.log(`[ATS Tailor] Injected ${multiWord.length} multi-word phrases into experience bullet`);
-              }
-            }
-          }
-
-          // SINGLE KEYWORDS: Inject into Technical Proficiencies / Skills section
           if (singleWord.length > 0) {
             // Anchored to the start of a line and to the heading's own
             // line. Unanchored and case-insensitive, this matched the
@@ -6385,10 +6361,10 @@ class ATSTailor {
             } else {
               const insertBefore = cvText.match(/\n(CERTIFICATIONS|EDUCATION|ACHIEVEMENTS)\b/i);
               if (insertBefore && insertBefore.index !== undefined) {
-                const newSection = `\n\nTECHNICAL PROFICIENCIES\n${singleWord.join(', ')}\n`;
+                const newSection = `\n\nTECHNICAL SKILLS\n${singleWord.join(', ')}\n`;
                 cvText = cvText.substring(0, insertBefore.index) + newSection + cvText.substring(insertBefore.index);
               } else {
-                cvText += `\n\nTECHNICAL PROFICIENCIES\n${singleWord.join(', ')}\n`;
+                cvText += `\n\nTECHNICAL SKILLS\n${singleWord.join(', ')}\n`;
               }
             }
           }

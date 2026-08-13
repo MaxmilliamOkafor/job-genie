@@ -1000,7 +1000,7 @@
 
       // === SKILLS ===
       if (data.skills && data.skills.length > 0) {
-        if (addSectionHeader('TECHNICAL PROFICIENCIES') !== false) {
+        if (addSectionHeader('TECHNICAL SKILLS') !== false) {
           addText(data.skills.join(', '), false, false, font.body);
           y += 4;
         }
@@ -1057,7 +1057,7 @@
       }
 
       if (data.skills?.length > 0) {
-        lines.push('TECHNICAL PROFICIENCIES');
+        lines.push('TECHNICAL SKILLS');
         lines.push(data.skills.join(', '));
         lines.push('');
       }
