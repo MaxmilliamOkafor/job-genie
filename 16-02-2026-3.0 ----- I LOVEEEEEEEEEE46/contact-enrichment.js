@@ -92,6 +92,70 @@
     'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com',
     'gmx.com', 'gmx.net', 'yandex.com', 'mail.com', 'zoho.com',
   ]);
+  // ---- reading a provider's answer without knowing its exact shape ----
+  //
+  // Every provider here documents its request and not its response, and
+  // the responses differ between accounts and change without notice. A
+  // parser written against one observed shape returns [] for all the
+  // others, and because parse errors are swallowed upstream, a lookup
+  // that fetched a perfectly good email is indistinguishable from one
+  // that found nobody. That is exactly the "it runs and does nothing"
+  // this module exists to stop, so the readers below accept every shape
+  // these APIs plausibly return rather than one.
+
+  // An address list, however it is expressed: a bare string, an array of
+  // strings, an array of objects keyed email/address/value/work_email, or
+  // a single such object. The object case matters most -- _clean() on an
+  // object yields "[object Object]", which is not an address but is a
+  // non-empty string, so it survives further than a null would.
+  function _emailStrings(v) {
+    const out = [];
+    const take = (x) => {
+      if (!x) return;
+      if (typeof x === 'string') { out.push(x); return; }
+      if (Array.isArray(x)) { x.forEach(take); return; }
+      if (typeof x === 'object') {
+        take(x.email || x.address || x.value || x.email_address
+          || x.work_email || x.personal_email);
+      }
+    };
+    take(v);
+    return out.map(_clean).filter(Boolean);
+  }
+
+  // The array of people in a response, wherever the provider put it.
+  function _entryList(json) {
+    if (!json) return [];
+    if (Array.isArray(json)) return json;
+    const d = json.data;
+    const cands = [
+      d && d.entries, d && d.contacts, d && d.people, d && d.results, d && d.profiles,
+      Array.isArray(d) ? d : null,
+      json.entries, json.contacts, json.people, json.results, json.profiles,
+    ];
+    for (const c of cands) if (Array.isArray(c) && c.length) return c;
+    // A single person returned unwrapped.
+    const one = (d && typeof d === 'object' && !Array.isArray(d)) ? d : json;
+    if (one && typeof one === 'object'
+        && (one.emails || one.email || one.full_name || one.first_name)) return [one];
+    return [];
+  }
+
+  // What a response actually looked like, for the trace. Keys and types
+  // only -- never values, because these responses carry personal data and
+  // the trace is shown in the UI and pasted into bug reports.
+  function _shapeOf(json, depth) {
+    const d = depth == null ? 2 : depth;
+    if (json === null || json === undefined) return String(json);
+    if (Array.isArray(json)) {
+      return json.length ? '[' + (d > 0 ? _shapeOf(json[0], d - 1) : '...') + ' x' + json.length + ']' : '[]';
+    }
+    if (typeof json !== 'object') return typeof json;
+    const keys = Object.keys(json).slice(0, 12);
+    if (!d) return '{' + keys.join(',') + '}';
+    return '{' + keys.map((k) => k + ':' + _shapeOf(json[k], d - 1)).join(', ') + '}';
+  }
+
   function isPersonalEmail(v) {
     const at = String(v || '').lastIndexOf('@');
     if (at === -1) return false;
@@ -524,11 +588,13 @@
       parseProfile: (json) => {
         const p = (json && (json.profile || json.data || json)) || {};
         const ci = p.contact_info || p.contactInfo || p;
-        const pick = (v) => (Array.isArray(v) ? v : (v ? [v] : []));
-        const emails = []
-          .concat(pick(ci.work_email), pick(ci.work_emails))
-          .concat(pick(ci.email), pick(ci.emails))
-          .filter(Boolean);
+        // _emailStrings rather than a bare pick(): ContactOut returns
+        // work_email as a plain string on some plans and as
+        // {email,type} objects on others, and _clean() on an object
+        // yields "[object Object]" -- a non-empty string that survives
+        // as far as the send step.
+        const emails = _emailStrings(ci.work_email).concat(_emailStrings(ci.work_emails))
+          .concat(_emailStrings(ci.email)).concat(_emailStrings(ci.emails));
         const company = typeof p.company === 'string'
           ? p.company : _clean(p.company && p.company.name);
         return emails.map((em) => ({
@@ -668,17 +734,32 @@
           body: 'lid[]=' + encodeURIComponent(slug) + '&contact[]=email&contact[]=phone',
         },
       }),
+      // Shape-tolerant on purpose. This previously read only
+      // data.entries[].emails[] with string emails, and returned nothing
+      // for every other shape Closely might answer with -- including
+      // emails as {email,type} objects, a singular `email` field, entries
+      // at the top level, and `data` as a bare array, which threw. The
+      // throw was swallowed upstream, so all four failures looked
+      // identical to "this person has no address on file".
       parseProfile: (json) => {
-        const entries = (json && json.data && json.data.entries) || [];
         const out = [];
-        for (const e of entries) {
-          for (const em of (e.emails || [])) {
+        for (const e of _entryList(json)) {
+          if (!e || typeof e !== 'object') continue;
+          const emails = _emailStrings(e.emails).concat(_emailStrings(e.email))
+            .concat(_emailStrings(e.work_email)).concat(_emailStrings(e.contact_info));
+          const seen = new Set();
+          for (const em of emails) {
+            const k = em.toLowerCase();
+            if (seen.has(k)) continue;
+            seen.add(k);
             out.push({
-              name: _clean(e.full_name || [e.first_name, e.last_name].filter(Boolean).join(' ')),
-              title: _clean(e.title || e.headline),
-              company: _clean(e.company),
-              location: _clean(e.location),
-              email: _clean(em),
+              name: _clean(e.full_name || e.name
+                || [e.first_name || e.firstName, e.last_name || e.lastName].filter(Boolean).join(' ')),
+              title: _clean(e.title || e.job_title || e.headline),
+              company: _clean(typeof e.company === 'string' ? e.company
+                : (e.company && e.company.name) || e.company_name),
+              location: _clean(e.location || e.country),
+              email: em,
             });
           }
         }
@@ -1090,6 +1171,10 @@
       trace.push(PROVIDERS[id].label + ': ' + (r.results.length
         ? r.results.length + ' contact(s) found'
         : (r.reason || 'nothing found')) + ' after ' + (r.calls || 0) + ' request(s)');
+      // When nothing came back, say what the provider actually answered
+      // with. "no-match after 2 request(s)" is indistinguishable from a
+      // parser that did not recognise a perfectly good response.
+      if (!r.results.length) (r.notes || []).forEach((n) => trace.push('  ' + n));
       if (r.results.length) { collected.push.apply(collected, r.results); break; }
       if (r.reason && r.reason !== 'no-match') lastReason = r.reason;
     }
@@ -1186,6 +1271,9 @@
     const provider = PROVIDERS[id];
     let cred = await getCred(id);
     let calls = 0;
+    // Shape diagnostics for responses that parsed to nobody. Surfaced in
+    // the trace by the caller.
+    const notes = [];
 
     // Runs one request and normalises every failure mode into a reason.
     const call = async (req, parse, q, opts2) => {
@@ -1208,7 +1296,17 @@
 
       const json = await res.json().catch(() => null);
       let rows = [];
-      try { rows = parse(json) || []; } catch (e) { rows = []; }
+      let parseError = '';
+      try { rows = parse(json) || []; }
+      catch (e) { rows = []; parseError = (e && e.message) || 'parse failed'; }
+      // A 200 that yields nobody is the failure mode that reads as "the
+      // lookup did nothing". Record what actually came back -- keys and
+      // types only, never values -- so the next run says which shape the
+      // provider answered with instead of leaving it to guesswork.
+      if (!rows.length) {
+        notes.push(provider.label + ': ' + (parseError ? 'parse error (' + parseError + '), ' : '')
+          + 'HTTP ' + res.status + ' returned ' + _shapeOf(json));
+      }
       // The search step keeps rows that carry a LinkedIn handle but no
       // address, because those are exactly the ones worth resolving. Every
       // other caller wants addresses only.
@@ -1228,7 +1326,7 @@
     if (provider.lookupByProfile && profiles.length) {
       for (const slug of profiles.slice(0, 3)) {
         const r = await call(provider.lookupByProfile(slug, cred), provider.parseProfile, {});
-        if (r.fatal) return { results: [], reason: r.fatal, calls };
+        if (r.fatal) return { results: [], reason: r.fatal, calls, notes };
         // A named poster outranks anyone a company search turns up.
         for (const p of r.rows) {
           out.push(Object.assign({}, p, { score: p.score + 40, source: 'job-poster', provider: id }));
@@ -1258,7 +1356,7 @@
               body: enc.body,
             },
           }, provider.parseSearch, q, { keepEmpty: true });
-          if (r.fatal) return { results: [], reason: r.fatal, calls };
+          if (r.fatal) return { results: [], reason: r.fatal, calls, notes };
           if (!r.rows.length) continue;
 
           const ranked = r.rows
@@ -1285,7 +1383,7 @@
         // The search identifies WHO. It does not always carry a usable
         // address, and the one it does carry is not necessarily verified.
         const r = await call(provider.request(q, cred), provider.parse, q, { keepEmpty: true });
-        if (r.fatal) return { results: [], reason: r.fatal, calls };
+        if (r.fatal) return { results: [], reason: r.fatal, calls, notes };
         if (!r.rows.length) continue;
 
         // Rank first, then resolve. Resolving costs a credit per profile,
@@ -1325,7 +1423,7 @@
     const reason = out.length ? ''
       : (profileOnly && !profiles.length) ? 'needs-named-poster'
       : 'no-match';
-    return { results: out, reason, calls };
+    return { results: out, reason, calls, notes };
   }
 
   /**
