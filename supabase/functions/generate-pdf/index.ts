@@ -406,7 +406,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       lx += fonts.bold.widthOfTextAtSize(company, size);
     }
     if (title) {
-      const sepText = company ? "  \u2014  " : "";
+      const sepText = company ? " | " : "";
       if (sepText) {
         page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
         lx += fonts.bold.widthOfTextAtSize(sepText, size);
@@ -453,7 +453,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
       lx += fonts.bold.widthOfTextAtSize(name, size);
     }
     if (role) {
-      const sepText = name ? "  \u2014  " : "";
+      const sepText = name ? " | " : "";
       if (sepText) {
         page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
         lx += fonts.bold.widthOfTextAtSize(sepText, size);
@@ -504,14 +504,14 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const gpaSuffix = gpaRaw ? (isClassification ? gpaRaw : `GPA: ${gpaRaw}`) : "";
 
     const size = 10.5;
-    const headLine = gpaSuffix ? `${degree}  \u2014  ${gpaSuffix}` : degree;
+    const headLine = gpaSuffix ? `${degree} | ${gpaSuffix}` : degree;
     let lx = MARGIN;
     if (degree) {
       page.drawText(degree, { x: lx, y, size, font: fonts.bold, color: NAVY });
       lx += fonts.bold.widthOfTextAtSize(degree, size);
     }
     if (gpaSuffix) {
-      const sepText = "  \u2014  ";
+      const sepText = " | ";
       page.drawText(sepText, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(sepText, size);
       page.drawText(gpaSuffix, { x: lx, y, size, font: fonts.bold, color: BODY });
@@ -721,6 +721,11 @@ function renderResume(
     r.drawSummary(data.summary);
   }
 
+  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
+    r.drawSectionHeader("Core Competencies");
+    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
+  }
+
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -741,16 +746,6 @@ function renderResume(
     );
   }
 
-  if (data.education && data.education.length > 0) {
-    r.drawSectionHeader("Education");
-    for (const edu of data.education) r.drawEducationEntry(edu);
-  }
-
-  if (data.certifications && data.certifications.length > 0) {
-    r.drawSectionHeader("Certifications");
-    r.drawCertifications(data.certifications);
-  }
-
   if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
     r.drawSectionHeader("Skills");
     const groups: Array<{ label: string; items: string[] }> = [];
@@ -761,9 +756,9 @@ function renderResume(
     r.drawSkillsBlock(groups);
   }
 
-  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
-    r.drawSectionHeader("Core Competencies");
-    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
+  if (data.certifications && data.certifications.length > 0) {
+    r.drawSectionHeader("Certifications");
+    r.drawCertifications(data.certifications);
   }
 
   if (data.achievements && data.achievements.length > 0) {
@@ -771,11 +766,17 @@ function renderResume(
     for (const a of data.achievements) {
       r.drawBullet(
         a.description
-          ? `${a.title}${a.date ? ` (${a.date})` : ""} — ${a.description}`
+          ? `${a.title}${a.date ? ` (${a.date})` : ""}, ${a.description}`
           : `${a.title}${a.date ? ` (${a.date})` : ""}`,
       );
     }
   }
+
+  if (data.education && data.education.length > 0) {
+    r.drawSectionHeader("Education");
+    for (const edu of data.education) r.drawEducationEntry(edu);
+  }
+
 
   return r.pages;
 }
@@ -1278,6 +1279,8 @@ async function handleRawContentRequest(body: {
       "EDUCATION",
       "SKILLS",
       "TECHNICAL SKILLS",
+      "TECHNICAL PROFICIENCIES",
+      "TECHNICAL PROFICIENCY",
       "CERTIFICATIONS",
       "ACHIEVEMENTS",
       "PROJECTS",
@@ -1330,6 +1333,9 @@ async function handleRawContentRequest(body: {
           sectionType = "WORK EXPERIENCE";
         }
         if (sectionType.includes("PROJECTS")) sectionType = "PROJECTS";
+        if (sectionType.includes("PROFICIENC") || sectionType.includes("SKILLS")) {
+          sectionType = "SKILLS";
+        }
         currentSection = { type: sectionType, content: [] };
         continue;
       }
@@ -1337,6 +1343,39 @@ async function handleRawContentRequest(body: {
       if (currentSection) currentSection.content.push(trimmed);
     }
     if (currentSection) sections.push(currentSection);
+
+    // ---- Merge duplicate sections of the same type (e.g. two TECHNICAL PROFICIENCIES blocks) ----
+    {
+      const merged: { type: string; content: string[] }[] = [];
+      const byType = new Map<string, { type: string; content: string[] }>();
+      for (const s of sections) {
+        const existing = byType.get(s.type);
+        if (existing) {
+          const seen = new Set(
+            existing.content.flatMap((l) =>
+              l.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean),
+            ),
+          );
+          for (const line of s.content) {
+            const parts = line.split(",").map((p) => p.trim()).filter(Boolean);
+            const fresh = parts.filter((p) => !seen.has(p.toLowerCase()));
+            fresh.forEach((p) => seen.add(p.toLowerCase()));
+            if (fresh.length === parts.length) {
+              existing.content.push(line);
+            } else if (fresh.length > 0) {
+              existing.content.push(fresh.join(", "));
+            }
+          }
+        } else {
+          byType.set(s.type, s);
+          merged.push(s);
+        }
+      }
+      sections.length = 0;
+      sections.push(...merged);
+    }
+
+
 
     const hasSummarySection = sections.some(
       (s) => s.type === "PROFESSIONAL SUMMARY" || s.type.includes("SUMMARY"),
@@ -1685,6 +1724,24 @@ const DOCX_RULE = "BDC7D9";
 const DOCX_FONT = "Calibri";
 const RIGHT_TAB = 9300; // ~6.45in in twips, inside 0.62in margins on A4
 
+// Every DOCX text run goes through sanitizeText so no call site can bypass it.
+// Surrounding whitespace is preserved; only the inner text is sanitised.
+// Tab prefixes (right-aligned dates) and the literal bullet glyph are preserved.
+type DocxRunOptions = ConstructorParameters<typeof TextRun>[0];
+function TR(opts: DocxRunOptions): TextRun {
+  if (opts && typeof opts === "object" && typeof (opts as { text?: unknown }).text === "string") {
+    const raw = (opts as { text: string }).text;
+    if (!/^[\u2022\s]*$/.test(raw)) {
+      const m = raw.match(/^(\s*)([\s\S]*?)(\s*)$/);
+      if (m) {
+        const [, lead, middle, trail] = m;
+        return new TextRun({ ...(opts as object), text: lead + sanitizeText(middle) + trail } as DocxRunOptions);
+      }
+    }
+  }
+  return new TextRun(opts);
+}
+
 const UK_IE_CLASSIFICATION =
   /(first\s+class|second\s+class|upper\s+second|lower\s+second|2:1|2:2|distinction|merit|pass\s+with|honou?rs)/i;
 
@@ -1715,23 +1772,23 @@ function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHype
   const out: Array<TextRun | ExternalHyperlink> = [];
   const push = (node: TextRun | ExternalHyperlink) => {
     if (out.length) {
-      out.push(new TextRun({ text: sep, font: DOCX_FONT, size: 19, color: DOCX_MUTED }));
+      out.push(TR({ text: sep, font: DOCX_FONT, size: 19, color: DOCX_MUTED }));
     }
     out.push(node);
   };
-  if (contact.location) push(new TextRun({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
-  if (contact.phone) push(new TextRun({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.location) push(TR({ text: contact.location, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
+  if (contact.phone) push(TR({ text: contact.phone, font: DOCX_FONT, size: 19, color: DOCX_BODY }));
   if (contact.email) {
     push(new ExternalHyperlink({
       link: `mailto:${contact.email}`,
-      children: [new TextRun({ text: contact.email, font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+      children: [TR({ text: contact.email, font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
     }));
   }
   for (const url of [contact.linkedin, contact.github, contact.portfolio]) {
     if (!url) continue;
     push(new ExternalHyperlink({
       link: ensureUrl(url),
-      children: [new TextRun({ text: displayUrl(url), font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
+      children: [TR({ text: displayUrl(url), font: DOCX_FONT, size: 19, color: DOCX_LINK, underline: {} })],
     }));
   }
   return out;
@@ -1741,7 +1798,7 @@ function docxHeader(name: string, contact: ContactInfo): Paragraph[] {
   return [
     new Paragraph({
       spacing: { after: 120 },
-      children: [new TextRun({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
+      children: [TR({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
     }),
     new Paragraph({
       spacing: { after: 60 },
@@ -1757,7 +1814,7 @@ function docxSectionHeader(label: string): Paragraph[] {
       spacing: { before: 280, after: 60 },
       keepNext: true,
       keepLines: true,
-      children: [new TextRun({
+      children: [TR({
         text: label.toUpperCase(),
         font: DOCX_FONT,
         size: 22,
@@ -1792,8 +1849,8 @@ function docxBullet(text: string): Paragraph {
     spacing: { after: 60, line: 290 },
     indent: { left: 360, hanging: 220 },
     children: [
-      new TextRun({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
-      new TextRun({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+      TR({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
     ],
   });
 }
@@ -1801,12 +1858,12 @@ function docxBullet(text: string): Paragraph {
 function docxExperience(e: ExperienceEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [];
-  if (e.company) header.push(new TextRun({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
+  if (e.company) header.push(TR({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
   if (e.title) {
-    if (header.length) header.push(new TextRun({ text: "  \u2014  ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
-    header.push(new TextRun({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+    if (header.length) header.push(TR({ text: " | ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
+    header.push(TR({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   }
-  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  if (e.dates) header.push(TR({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 200, after: 60 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
@@ -1819,10 +1876,10 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
 function docxProject(p: ProjectEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [
-    new TextRun({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+    TR({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
   ];
-  if (p.role) header.push(new TextRun({ text: "  \u2014  " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
-  if (p.dates) header.push(new TextRun({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  if (p.role) header.push(TR({ text: " | " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
+  if (p.dates) header.push(TR({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 200, after: 60 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
@@ -1832,8 +1889,8 @@ function docxProject(p: ProjectEntry): Paragraph[] {
     out.push(new Paragraph({
       spacing: { after: 60 },
       children: [
-        new TextRun({ text: "Tech: ", font: DOCX_FONT, size: 20, bold: true, color: DOCX_BODY }),
-        new TextRun({ text: p.technologies.join(", "), font: DOCX_FONT, size: 20, color: DOCX_BODY }),
+        TR({ text: "Tech: ", font: DOCX_FONT, size: 20, bold: true, color: DOCX_BODY }),
+        TR({ text: p.technologies.join(", "), font: DOCX_FONT, size: 20, color: DOCX_BODY }),
       ],
     }));
   }
@@ -1845,12 +1902,12 @@ function docxEducation(e: EducationEntry): Paragraph[] {
   const out: Paragraph[] = [];
   let suffix = "";
   if (e.gpa) {
-    suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? `  \u2014  ${e.gpa}` : `  \u2014  GPA: ${e.gpa}`;
+    suffix = UK_IE_CLASSIFICATION.test(e.gpa) ? ` | ${e.gpa}` : ` | GPA: ${e.gpa}`;
   }
   const header: TextRun[] = [
-    new TextRun({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+    TR({ text: (e.degree || "") + suffix, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
   ];
-  if (e.dates) header.push(new TextRun({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
+  if (e.dates) header.push(TR({ text: "\t" + e.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
   out.push(new Paragraph({
     spacing: { before: 160, after: 40 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
@@ -1859,7 +1916,7 @@ function docxEducation(e: EducationEntry): Paragraph[] {
   if (e.school) {
     out.push(new Paragraph({
       spacing: { after: 80 },
-      children: [new TextRun({ text: e.school, font: DOCX_FONT, size: 20, color: DOCX_MUTED })],
+      children: [TR({ text: e.school, font: DOCX_FONT, size: 20, color: DOCX_MUTED })],
     }));
   }
   return out;
@@ -1869,8 +1926,8 @@ function docxSkills(groups: Array<{ label: string; items: string[] }>): Paragrap
   return groups.map((g) => new Paragraph({
     spacing: { after: 80, line: 290 },
     children: [
-      new TextRun({ text: `${g.label}: `, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
-      new TextRun({ text: g.items.join(", "), font: DOCX_FONT, size: 21, color: DOCX_BODY }),
+      TR({ text: `${g.label}: `, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
+      TR({ text: g.items.join(", "), font: DOCX_FONT, size: 21, color: DOCX_BODY }),
     ],
   }));
 }
@@ -1883,8 +1940,13 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSectionHeader("Professional Summary"));
     children.push(new Paragraph({
       spacing: { after: 160, line: 300 },
-      children: [new TextRun({ text: data.summary, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+      children: [TR({ text: data.summary, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
     }));
+  }
+
+  if (data.coreCompetencies?.length) {
+    children.push(...docxSectionHeader("Core Competencies"));
+    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
   }
 
   const filteredExp = (data.experience || []).filter((e) => {
@@ -1902,11 +1964,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     for (const p of data.projects) children.push(...docxProject(p));
   }
 
-  if (data.education?.length) {
-    children.push(...docxSectionHeader("Education"));
-    for (const ed of data.education) children.push(...docxEducation(ed));
-  }
-
   if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
     children.push(...docxSectionHeader("Skills"));
     const groups: Array<{ label: string; items: string[] }> = [];
@@ -1915,10 +1972,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSkills(groups));
   }
 
-  if (data.coreCompetencies?.length) {
-    children.push(...docxSectionHeader("Core Competencies"));
-    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
-  }
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
@@ -1929,11 +1982,18 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     children.push(...docxSectionHeader("Achievements"));
     for (const a of data.achievements) {
       const txt = a.description
-        ? `${a.title}${a.date ? ` (${a.date})` : ""} \u2014 ${a.description}`
+        ? `${a.title}${a.date ? ` (${a.date})` : ""}, ${a.description}`
         : `${a.title}${a.date ? ` (${a.date})` : ""}`;
       children.push(docxBullet(txt));
     }
   }
+
+  if (data.education?.length) {
+    children.push(...docxSectionHeader("Education"));
+    for (const ed of data.education) children.push(...docxEducation(ed));
+  }
+
+
 
   const doc = new DocxDocument({
     creator: "QuantumHire",
@@ -1964,22 +2024,22 @@ async function buildCoverLetterDocxBytes(data: {
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   children.push(new Paragraph({
     spacing: { after: 200 },
-    children: [new TextRun({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
+    children: [TR({ text: today, font: DOCX_FONT, size: 21, color: DOCX_MUTED })],
   }));
 
   if (data.jobTitle) {
     children.push(new Paragraph({
       spacing: { after: 200 },
       children: [
-        new TextRun({ text: "Re: ", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
-        new TextRun({ text: data.jobTitle, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+        TR({ text: "Re: ", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+        TR({ text: data.jobTitle, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
       ],
     }));
   }
 
   children.push(new Paragraph({
     spacing: { after: 200 },
-    children: [new TextRun({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: "Dear Hiring Manager,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
 
   for (const p of data.paragraphs) {
@@ -1988,16 +2048,16 @@ async function buildCoverLetterDocxBytes(data: {
     children.push(new Paragraph({
       spacing: { after: 200, line: 320 },
       alignment: AlignmentType.JUSTIFIED,
-      children: [new TextRun({ text: t, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+      children: [TR({ text: t, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
     }));
   }
 
   children.push(new Paragraph({
     spacing: { before: 200, after: 60 },
-    children: [new TextRun({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
+    children: [TR({ text: "Sincerely,", font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   }));
   children.push(new Paragraph({
-    children: [new TextRun({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
+    children: [TR({ text: data.personalInfo.name, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY })],
   }));
 
   const doc = new DocxDocument({
