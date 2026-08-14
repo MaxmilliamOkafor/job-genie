@@ -2237,6 +2237,78 @@ The summary must never assert a job title the rest of the CV cannot support.
   noise (req numbers, JR-/REQ- codes, "(Remote)") must never appear in
   the CV or cover letter.
 
+RULE 1b - THE PIVOT BRIDGE (how to be interesting without being false)
+
+Rule 1 says do not claim a title the history cannot support. It does NOT
+say write a CV that ignores the target role. A candidate moving into a
+field they can genuinely do deserves a CV that makes a recruiter in that
+field want to talk to them. That is the job here, and it is done with
+real material, not invented material.
+
+There is a hard line, and it is not about how ambitious the framing is:
+
+  ALWAYS ALLOWED - reframing work the candidate really did:
+    - describing real work in the target role's vocabulary, where the
+      description stays true ("mentored junior engineers" for a role
+      asking about developing a team; "presented root-cause findings to
+      VP-level stakeholders" for one asking about stakeholder engagement)
+    - leading with the parts of the history closest to this role, even
+      when they sit in an older position
+    - naming a domain the candidate has genuinely worked in, at the level
+      they worked in it ("healthcare platforms", "regulated financial
+      data", "HIPAA-compliant systems")
+    - using the JD's exact words for skills the candidate has
+
+  NEVER ALLOWED - things a check would catch:
+    - a licence, registration, board certification or degree they do not
+      hold (PharmD, RN, MD, CPA, PE, bar admission, a named degree)
+    - a job title they have never held, asserted as what they are
+    - years in a field they have not worked in
+    - a responsibility they have never carried
+
+The difference is that the first list survives an interview and a
+reference call. The second ends the application, and can end worse than
+that when a licence is involved.
+
+THE PIVOT OPENER. When the target title is not in the history, do not
+open with it and do not open with a bare claim about the target field.
+Open with what the candidate IS, then the bridge to what the role NEEDS,
+using only evidenced material:
+
+  "<real current discipline> with <the most relevant evidenced domain or
+   capability for this posting>, <a concrete evidenced achievement that
+   maps onto the posting's core need>."
+
+  Worked example. Software engineer applying to a healthcare operations
+  role, whose history includes a healthcare platform:
+
+    WRONG - "Experienced Manager of Clinical Services with a strong
+    background in clinical pharmacy leadership."
+    Nothing in the history supports the title OR the background. This is
+    the failure this rule exists to prevent.
+
+    RIGHT - "Software engineer with healthcare platform experience,
+    including HIPAA-compliant data governance and clinical model
+    validation against held-out test sets, and four years leading
+    delivery and mentoring engineers."
+    Every clause is in the CV. A recruiter reads a real overlap rather
+    than a claim they will discard on sight.
+
+WHERE THE PIVOT CASE IS ACTUALLY MADE. The summary shows the overlap in
+one sentence. The COVER LETTER is where the pivot is argued: state the
+move plainly, name the transferable evidence, and say what is being
+brought that the field does not usually get. A candidate who explains a
+pivot honestly is far more interesting than one who pretends there is
+nothing to explain.
+
+WHEN THE ROLE IS GATED ON A CREDENTIAL. If the posting requires a
+licence, registration or named degree the candidate does not hold, no
+amount of framing makes them eligible, and a summary implying otherwise
+wastes the application. Tailor honestly around what they do have, list
+the unmet requirement under KEYWORDS OMITTED, and let the human decide
+whether to apply. Do not quietly manufacture the credential to raise a
+score.
+
 RULE 2 - SKILLS SECTION: COMPLETE REWRITE (worth ~20 points)
 
 READ THIS BEFORE THE KEYWORD COUNTS BELOW. Every keyword target in this
@@ -2714,6 +2786,8 @@ After rewriting, run this internal checklist:
 [ ] Did you drop a scope figure (team size, volume, user count, number of systems) that the SOURCE bullet stated? Put it back. Did you add one the source did not state? Remove it.
 [ ] Does any bullet use the same four-letter-or-longer noun or verb twice ("risk ... risk team")? Rewrite it, but never by inventing a team or department name.
 [ ] Is the spelling consistent with the POSTING's country throughout (American for US/Canada/Latin America, British everywhere else), with proper nouns left in their owner's spelling?
+[ ] PIVOT CHECK - if the target title is not in the employment history: does the summary open with what the candidate actually IS rather than the target title, and is every clause of the bridge traceable to something in the CV? A pivot is argued with real overlap, never with a borrowed title.
+[ ] Does the CV claim any licence, registration, board certification or named degree the candidate does not hold? Remove it and list the requirement under KEYWORDS OMITTED - this is the one class of claim that is checked before an interview.
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
