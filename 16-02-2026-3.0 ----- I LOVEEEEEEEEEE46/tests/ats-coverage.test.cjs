@@ -196,8 +196,21 @@ t('enrichment runs only after the careers-page fallback',
   popupJs.indexOf('followupFindCareersAddress()')<popupJs.indexOf('async followupEnrich()')
   &&/followupFindCareersAddress\(\)\s*\{[\s\S]{0,2200}this\.followupEnrich\(\)/.test(popupJs),
   'enrichment must not pre-empt a published address');
-t('a looked-up address never overwrites one already found',
-  /followupEnrich\(\)[\s\S]{0,3000}if\s*\(toEl\s*&&\s*!toEl\.value\)/.test(popupJs), 'would clobber a published address');
+// Slice followupEnrich's own body and check the guards are in IT. The
+// previous form looked for a toEl guard within 3000 characters of any
+// "followupEnrich()" occurrence, which passed because the CAREERS
+// function happened to have one just before its call to it -- so the
+// assertion held while saying nothing about the function it named.
+{
+  const _s = popupJs.indexOf('async followupEnrich()');
+  const _e = popupJs.indexOf('\n  enrichCompanyName()', _s);
+  const body = _s > -1 ? popupJs.slice(_s, _e > _s ? _e : popupJs.length) : '';
+  t('the followupEnrich body is actually under test', body.length > 200,
+    'slice boundaries wrong: ' + body.length + ' chars');
+  t('a looked-up address never overwrites one already found',
+    /if \(toEl && !toEl\.value\)/.test(body) && /if \(detected && !detected\.email\)/.test(body),
+    'would clobber a published address');
+}
 t('a looked-up address is labelled as not published',
   /Looked up \(not published\)/.test(popupJs), 'user could not tell the difference');
 
