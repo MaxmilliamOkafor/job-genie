@@ -3515,14 +3515,53 @@ class ATSTailor {
           + (activeProfile ? '   (' + activeProfile + ' is the profile open in this tab)' : '')
         : '(none - no profile open and this page names nobody)'));
 
+      // STEP 0: is the saved credential real, and does the account have
+      // anything to spend? Reading the balance BEFORE and AFTER is the only
+      // direct evidence that the token was used at all -- which is the
+      // thing that could never be answered from the outside, because a
+      // lookup that quietly did nothing reported the same "found nobody"
+      // as one that ran.
+      say('');
+      say('Provider: ' + (cfg.provider || 'closely'));
+      const keyTest = await ContactEnrichment.testKey(cfg.provider);
+      say('  credential: ' + (keyTest.ok ? 'accepted by the provider' : 'REJECTED - ' + keyTest.message));
+      const before = await ContactEnrichment.creditBalance(cfg.provider);
+      say('  credits before: ' + (before.balance == null
+        ? '(not reported' + (before.detail ? ': ' + before.detail : '') + ')'
+        : before.balance));
+      if (keyTest.ok && before.balance === 0) {
+        say('  NOTE: the balance is zero, so a lookup cannot return an address');
+        say('        however well everything else works.');
+      }
+
       say('');
       say('Running lookup (this spends provider credits)…');
       // noCache so the result reflects the providers right now, not a
       // week-old answer. This is the button for "is it actually working".
+      const startedAt = Date.now();
       const r = await ContactEnrichment.findContacts(ctx, { noCache: true });
+      const tookMs = Date.now() - startedAt;
 
       say('');
       for (const line of (r.trace || [])) say('  ' + line);
+
+      // STEP N: did the account actually move?
+      const after = await ContactEnrichment.creditBalance(cfg.provider);
+      say('');
+      say('Took ' + (tookMs / 1000).toFixed(1) + 's.');
+      if (before.balance != null && after.balance != null) {
+        const spent = before.balance - after.balance;
+        say('Credits after: ' + after.balance
+          + (spent > 0 ? '  -> ' + spent + ' spent, so your token WAS used'
+            : spent === 0 ? '  -> nothing spent'
+              : '  -> balance went up, which the provider decides'));
+        if (spent === 0 && !(r.results || []).length) {
+          say('Nothing was spent and nothing was found, so the chain stopped before');
+          say('reaching the provider. The trace above says at which step.');
+        }
+      } else {
+        say('Credits after: (not reported, so spend cannot be measured)');
+      }
 
       say('');
       if (r.results && r.results.length) {
