@@ -196,37 +196,123 @@
   // content script only exists in tabs loaded AFTER the extension was
   // installed or reloaded. Injecting on demand works on a tab that has
   // been open for hours, which is the normal case.
-  async function _fetchInLinkedInTab(url, hdrs) {
-    try {
-      if (!chrome.tabs || !chrome.tabs.query || !chrome.scripting) return null;
-      const tabs = await new Promise((resolve) => {
-        try { chrome.tabs.query({ url: 'https://*.linkedin.com/*' }, (t) => resolve(t || [])); }
-        catch (e) { resolve([]); }
-      });
-      const tab = (tabs || []).find((t) => t && t.id != null && t.id >= 0);
-      if (!tab) return null;
-      const out = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        // Serialised and run in the page's context: no closure over
-        // anything here, everything arrives through args.
-        func: async (u, h) => {
-          try {
-            const r = await fetch(u, { method: 'GET', headers: h, credentials: 'include' });
-            return { status: r.status, body: await r.text() };
-          } catch (e) {
-            return { status: 0, error: String((e && e.message) || e) };
-          }
-        },
-        args: [url, hdrs],
-      });
-      const r = out && out[0] && out[0].result;
-      return r || null;
-    } catch (e) {
-      // A tab we cannot script (a chrome:// page, a blocked host) is not
-      // an error worth failing the lookup for -- fall back to the direct
-      // request and let the status code speak.
-      return null;
+  const _tabs = () => (typeof chrome !== 'undefined' && chrome.tabs) || null;
+  const _scripting = () => (typeof chrome !== 'undefined' && chrome.scripting) || null;
+
+  function _findLinkedInTabs() {
+    return new Promise((resolve) => {
+      try { _tabs().query({ url: 'https://*.linkedin.com/*' }, (t) => resolve(t || [])); }
+      catch (e) { resolve([]); }
+    });
+  }
+  function _openTab(url) {
+    return new Promise((resolve) => {
+      try { _tabs().create({ url, active: false }, (t) => resolve(t || null)); }
+      catch (e) { resolve(null); }
+    });
+  }
+  function _closeTab(id) {
+    return new Promise((resolve) => {
+      try { _tabs().remove(id, () => resolve(true)); } catch (e) { resolve(false); }
+    });
+  }
+  async function _exec(tabId, func, args) {
+    const out = await _scripting().executeScript({ target: { tabId }, func, args });
+    return out && out[0] ? out[0].result : null;
+  }
+  // Poll for the document being ready rather than listening on
+  // tabs.onUpdated: a tab that finished loading before the listener was
+  // attached never fires it, and this has to work for a tab we just made.
+  async function _waitReady(tabId, timeoutMs) {
+    const until = Date.now() + (timeoutMs || 15000);
+    while (Date.now() < until) {
+      try {
+        const st = await _exec(tabId, () => document.readyState, []);
+        if (st === 'complete' || st === 'interactive') return true;
+      } catch (e) { /* not scriptable yet */ }
+      await _sleep(400);
     }
+    return false;
+  }
+
+  /**
+   * A LinkedIn tab to work in.
+   *
+   * Reuses one the user already has open. If there is none, opens one in
+   * the background -- inactive, so focus is not stolen -- and marks it
+   * `mine` so it can be closed afterwards and navigated freely. A tab the
+   * user opened is never navigated: they may be mid-message.
+   */
+  async function _getOwnTab() {
+    const made = await _openTab('https://www.linkedin.com/feed/');
+    if (!made || made.id == null) return null;
+    await _waitReady(made.id, 15000);
+    return { id: made.id, mine: true };
+  }
+
+  async function _getSearchTab() {
+    if (!_tabs() || !_scripting()) return null;
+    const existing = (await _findLinkedInTabs()).find((t) => t && t.id != null && t.id >= 0);
+    if (existing) return { id: existing.id, mine: false };
+    return _getOwnTab();
+  }
+
+  // The Voyager request, issued from inside the tab so it is first-party.
+  async function _apiInTab(tabId, url, hdrs) {
+    try {
+      return await _exec(tabId, async (u, h) => {
+        try {
+          const r = await fetch(u, { method: 'GET', headers: h, credentials: 'include' });
+          return { status: r.status, body: await r.text() };
+        } catch (e) { return { status: 0, error: String((e && e.message) || e) }; }
+      }, [url, hdrs]);
+    } catch (e) { return null; }
+  }
+
+  /**
+   * The durable fallback: LinkedIn's own people-search PAGE, read from the
+   * DOM.
+   *
+   * The Voyager call carries a queryId hash that LinkedIn rotates without
+   * notice. When it rotates, the endpoint 400s and every lookup dies until
+   * somebody updates a constant in this file -- a single point of failure
+   * with no warning and no workaround for the user. The search page needs
+   * no queryId: it is the URL a person types, and the profile links are in
+   * the markup.
+   *
+   * Only ever used in a tab this code opened. Navigating a tab the user
+   * opened would throw away whatever they were doing.
+   */
+  async function _scrapeSearchPage(tabId, q) {
+    const keywords = [q.title, q.company, q.location].filter(Boolean).join(' ');
+    if (!keywords) return [];
+    const url = 'https://www.linkedin.com/search/results/people/?keywords='
+      + encodeURIComponent(keywords);
+    await new Promise((resolve) => {
+      try { _tabs().update(tabId, { url }, () => resolve()); } catch (e) { resolve(); }
+    });
+    await _waitReady(tabId, 20000);
+    await _sleep(1500);            // results render after the shell
+    try {
+      return (await _exec(tabId, () => {
+        const seen = {};
+        const out = [];
+        for (const a of document.querySelectorAll('a[href*="/in/"]')) {
+          const m = (a.getAttribute('href') || '').match(/linkedin\.com\/in\/([^/?#]+)|^\/in\/([^/?#]+)/);
+          const slug = m && (m[1] || m[2]);
+          if (!slug || seen[slug]) continue;
+          seen[slug] = 1;
+          // The card's text is the most reliable name/headline source
+          // available without depending on class names, which change.
+          const card = a.closest('li, div[data-view-name], .entity-result') || a;
+          const lines = (card.innerText || '')
+            .split('\n').map((x) => x.trim()).filter(Boolean);
+          out.push({ slug, name: lines[0] || '', title: lines[1] || '', location: lines[2] || '' });
+          if (out.length >= 10) break;
+        }
+        return out;
+      }, [])) || [];
+    } catch (e) { return []; }
   }
 
   function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -274,60 +360,103 @@
     if (_lastCallAt && since < gap) await _sleep(gap - since);
 
     const url = searchUrl(buildVariables(q));
-    let res;
+    let res = null;
+    let people = null;
     _sessionCalls++;
     _lastCallAt = Date.now();
 
-    // First choice: run it inside an open LinkedIn tab, where the request
-    // is first-party. See _fetchInLinkedInTab.
-    const viaTab = await _fetchInLinkedInTab(url, headers(csrf));
-    if (viaTab) {
-      if (!viaTab.status) {
-        return { ok: false, profiles: [], reason: say('network error in the LinkedIn tab: '
-          + (viaTab.error || 'unknown')), trace };
+    // Work inside a LinkedIn tab: reuse one the user has open, or open one
+    // in the background. Everything below is first-party from there.
+    let tab = await _getSearchTab();
+    try {
+      if (tab) {
+        say(tab.mine ? 'opened a background LinkedIn tab' : 'using your open LinkedIn tab');
+        let viaTab = await _apiInTab(tab.id, url, headers(csrf));
+
+        // A tab we cannot script -- a discarded tab, one still loading, a
+        // page the browser will not inject into. Rather than give up on
+        // the good route, open our own tab, which is scriptable by
+        // definition and also unlocks the search-page fallback below.
+        if (!viaTab && !tab.mine) {
+          say('your LinkedIn tab could not be scripted, opening one instead');
+          const own = await _getOwnTab();
+          if (own) {
+            tab = own;
+            viaTab = await _apiInTab(tab.id, url, headers(csrf));
+          }
+        }
+
+        if (viaTab && viaTab.status) {
+          res = {
+            status: viaTab.status,
+            ok: viaTab.status >= 200 && viaTab.status < 300,
+            json: async () => JSON.parse(viaTab.body),
+          };
+        } else if (viaTab && viaTab.error) {
+          say('request failed inside the tab: ' + viaTab.error);
+        }
+      } else {
+        // No tabs API at all (or it refused). The direct request is
+        // cross-site from the extension origin and LinkedIn usually
+        // rejects it, so say that rather than reporting the 403 as
+        // "matched nobody".
+        say('could not use a LinkedIn tab, trying direct (LinkedIn usually rejects this)');
+        try {
+          res = await fetch(url, { method: 'GET', headers: headers(csrf), credentials: 'include' });
+        } catch (e) {
+          return { ok: false, profiles: [], reason: say('network error: ' + (e && e.message)), trace };
+        }
       }
-      say('ran inside your open LinkedIn tab (first-party request)');
-      res = {
-        status: viaTab.status,
-        ok: viaTab.status >= 200 && viaTab.status < 300,
-        json: async () => JSON.parse(viaTab.body),
-      };
-    } else {
-      // No LinkedIn tab open. The direct request usually fails -- it is
-      // cross-site from the extension origin -- so say that up front
-      // rather than reporting the 403 as if the search found nobody.
-      say('no LinkedIn tab open, trying direct (LinkedIn often rejects this; '
-        + 'open linkedin.com in a tab for a first-party request)');
-      try {
-        res = await fetch(url, { method: 'GET', headers: headers(csrf), credentials: 'include' });
-      } catch (e) {
-        return { ok: false, profiles: [], reason: say('network error: ' + (e && e.message)), trace };
+
+      // Rate limiting is a stop, whichever route produced it.
+      if (res && (res.status === 999 || res.status === 429)) {
+        _disabledReason = 'LinkedIn rate-limited the request (' + res.status
+          + '); search disabled for this session';
+        return { ok: false, profiles: [], reason: say(_disabledReason), trace };
       }
+
+      if (res && res.ok) {
+        let json = null;
+        try { json = await res.json(); } catch (e) { json = null; }
+        if (json) people = parsePeople(json).slice(0, LIMITS.resultsUsed);
+        else say('response was not JSON');
+      } else if (res) {
+        say('the private API answered ' + res.status
+          + (res.status === 400 || res.status === 404
+            ? ' (its queryId rotates; falling back to the search page)' : ''));
+      }
+
+      // The queryId in this file is a constant and LinkedIn rotates it.
+      // When that happens the API 400s and, without this, every lookup
+      // dies until somebody edits a hash in here. The search PAGE needs no
+      // queryId. Only in a tab we opened -- navigating the user's own tab
+      // would discard whatever they were doing.
+      if ((!people || !people.length) && tab && tab.mine) {
+        say('reading the LinkedIn search page instead');
+        const scraped = await _scrapeSearchPage(tab.id, q);
+        if (scraped.length) {
+          people = scraped.slice(0, LIMITS.resultsUsed).map((p) => ({
+            name: p.name, title: p.title, location: p.location,
+            profile: p.slug, source: 'linkedin-search-page',
+          }));
+        }
+      }
+    } finally {
+      // Never leave a tab behind that this code created.
+      if (tab && tab.mine) await _closeTab(tab.id);
     }
 
-    // 999 is LinkedIn's rate-limit/blocked response; 429 is the standard
-    // one. Either means stop for the session rather than retry into a
-    // restriction.
-    if (res.status === 999 || res.status === 429) {
-      _disabledReason = 'LinkedIn rate-limited the request (' + res.status
-        + '); search disabled for this session';
-      return { ok: false, profiles: [], reason: say(_disabledReason), trace };
-    }
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, profiles: [], reason: say('LinkedIn rejected the request ('
-        + res.status + '). Open linkedin.com in a tab and make sure you are signed in, '
-        + 'then try again -- the request is only accepted from a real LinkedIn tab'), trace };
-    }
-    if (!res.ok) {
-      return { ok: false, profiles: [], reason: say('LinkedIn returned ' + res.status), trace };
+    if (!people) {
+      const st = res ? res.status : 0;
+      if (st === 401 || st === 403) {
+        return { ok: false, profiles: [], reason: say('LinkedIn rejected the request ('
+          + st + '). Make sure you are signed in to LinkedIn in this browser, then retry'), trace };
+      }
+      return { ok: false, profiles: [], reason: say(st
+        ? 'LinkedIn returned ' + st + ' and the search page gave nothing'
+        : 'could not reach LinkedIn'), trace };
     }
 
-    let json;
-    try { json = await res.json(); } catch (e) {
-      return { ok: false, profiles: [], reason: say('response was not JSON'), trace };
-    }
-
-    const people = parsePeople(json).slice(0, LIMITS.resultsUsed);
     say(people.length
       ? 'found ' + people.length + ' profile(s): ' + people.map((p) => p.profile).join(', ')
       : 'search ran but matched nobody');
