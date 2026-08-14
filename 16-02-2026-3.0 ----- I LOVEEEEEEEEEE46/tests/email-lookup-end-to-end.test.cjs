@@ -247,6 +247,76 @@ global.fetch = async (url, init) => {
       rr.results.length === 0, JSON.stringify(rr.results.map((x) => x.email)));
   }
 
+  console.log('\nA CACHED MISS MUST NOT MASQUERADE AS A COMPLETED LOOKUP');
+  // readCache returns hit.results for a miss, which is []. In JavaScript
+  // [] is truthy, so findContacts returned { ok: true, results: [] } with
+  // NO reason -- and the caller reported "no address (none)". A lookup
+  // that never ran, described as a lookup that found nobody.
+  //
+  // Worse than the wording: for the life of the entry NOTHING downstream
+  // is reached. Not the LinkedIn search, not the provider, not the shape
+  // readers. Every fix in this file is bypassed by a two-hour-old miss.
+  {
+    CE.clearCache();
+    // An earlier block removed the LinkedIn cookie to test that path.
+    // Restore it, or the chain stops before a cache entry is ever written.
+    global.chrome.cookies.get = (d, cb) => cb({ value: '"ajax:1234567890123456789"' });
+    let closelyCalls = 0;
+    global.fetch = async (url) => {
+      if (String(url).includes('linkedin.com/voyager')) return { ok: true, status: 200, json: async () => VOYAGER };
+      closelyCalls++;
+      return { ok: true, status: 200, json: async () => ({ data: { entries: [] } }) };
+    };
+    const ctx = { company: 'CachedCo', jobTitle: 'Analyst', location: 'Dublin, Ireland' };
+    const first = await CE.findContacts(ctx, {});     // populates the miss
+    t('  the first lookup genuinely runs', closelyCalls > 0 || (first.trace || []).length > 0,
+      JSON.stringify(first));
+
+    const before = closelyCalls;
+    const second = await CE.findContacts(ctx, {});    // served from cache
+    t('  the second is served from cache', second.source === 'cache', JSON.stringify(second));
+    t('  and carries a reason instead of nothing', second.reason === 'no-match',
+      'reason was ' + JSON.stringify(second.reason) + ' -- the caller shows "(none)"');
+    t('  the trace says it was a cached miss',
+      (second.trace || []).some((x) => /cached miss/i.test(x)), JSON.stringify(second.trace));
+    t('  and no provider credit was spent on it', closelyCalls === before,
+      'a cached miss must not re-call the provider');
+
+    const hit = await CE.bestEmail(ctx);
+    t('  bestEmail no longer reports the bare "none"', hit.reason === 'no-match',
+      'reason was ' + JSON.stringify(hit.reason));
+  }
+
+  console.log('\nAND A MISS CACHED BY AN OLDER BUILD IS DISCARDED');
+  // The entries written while the lookup was broken would otherwise keep
+  // answering for two hours after the fix ships, so the fix would look
+  // like it changed nothing -- which is exactly how this was reported.
+  {
+    CE.clearCache();
+    global.chrome.cookies.get = (d, cb) => cb({ value: '"ajax:1234567890123456789"' });
+    const ctx = { company: 'StaleCo', jobTitle: 'Analyst' };
+    // Hand-write an entry in the OLD shape: no version stamp.
+    await new Promise((resolve) => {
+      chrome.storage.local.get(['enrichment_cache'], (r) => {
+        const all = (r && r.enrichment_cache) || {};
+        all['staleco|analyst|'] = { at: Date.now(), results: [] };   // no v
+        chrome.storage.local.set({ enrichment_cache: all }, resolve);
+      });
+    });
+    let reached = false;
+    global.fetch = async (url) => {
+      if (String(url).includes('linkedin.com/voyager')) return { ok: true, status: 200, json: async () => VOYAGER };
+      reached = true;
+      return { ok: true, status: 200,
+        json: async () => ({ data: { entries: [{ full_name: 'Jane Doe', emails: [EMAIL] }] } }) };
+    };
+    const r5 = await CE.findContacts(ctx, {});
+    t('  the stale entry does not short-circuit the lookup', reached,
+      'an unversioned miss still answered, so the fix would look like a no-op');
+    t('  and the address is found', (r5.results[0] || {}).email === EMAIL,
+      JSON.stringify(r5.results) + ' reason=' + r5.reason);
+  }
+
   console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
   process.exit(FAIL ? 1 : 0);
 })().catch((e) => { console.error('SUITE THREW:', e); process.exit(1); });

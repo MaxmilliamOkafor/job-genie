@@ -52,6 +52,12 @@
   const KEY_CACHE = 'enrichment_cache';
   const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // a week; people change jobs
   const MISS_TTL_MS = 2 * 60 * 60 * 1000;         // a miss is usually a fixable setup problem
+  // Bumped whenever a change alters what a lookup would return. A cached
+  // MISS written by an older build is worthless and actively harmful: it
+  // answers instantly, so the very fix that would have found the address
+  // never runs. Entries stamped with any other version are ignored, which
+  // clears them without the user having to know a cache exists.
+  const CACHE_V = 2;
   const log = (...a) => { try { console.log(TAG, ...a); } catch (e) {} };
 
   function _clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
@@ -1077,13 +1083,20 @@
       + '|' + ((ctx && ctx.linkedinProfiles) || []).join(',').toLowerCase();
   }
 
-  function readCache(ctx) {
+  // Both take an explicit key. They used to derive it from ctx, and
+  // findContacts REASSIGNS ctx when the profile search finds handles --
+  // so the write landed under a different key than the read had looked
+  // up. The entry could never be hit again, and every repeat lookup
+  // re-spent a provider credit for an answer already paid for.
+  function readCache(key) {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get([KEY_CACHE], (r) => {
           const all = (r && r[KEY_CACHE]) || {};
-          const hit = all[_cacheKey(ctx)];
+          const hit = all[key];
           if (!hit || !hit.at) { resolve(null); return; }
+          // Written by a build whose lookup behaved differently. Ignore it.
+          if (hit.v !== CACHE_V) { resolve(null); return; }
           // A found recruiter is good for a week. A MISS is not: it is
           // usually a key that was missing, wrong or out of credits at the
           // time, and caching that for a week meant fixing the key changed
@@ -1095,12 +1108,12 @@
     });
   }
 
-  function writeCache(ctx, results) {
+  function writeCache(key, results) {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get([KEY_CACHE], (r) => {
           const all = (r && r[KEY_CACHE]) || {};
-          all[_cacheKey(ctx)] = { at: Date.now(), results };
+          all[key] = { at: Date.now(), v: CACHE_V, results };
           const keys = Object.keys(all);
           if (keys.length > 200) delete all[keys[0]];
           chrome.storage.local.set({ [KEY_CACHE]: all }, () => resolve(true));
@@ -1131,9 +1144,25 @@
       return { ok: false, results: [], reason: 'no-company' };
     }
 
+    // Fixed at entry, before the profile search can rewrite ctx.
+    const cacheKey = _cacheKey(ctx);
+
     if (!o.noCache) {
-      const cached = await readCache(ctx);
-      if (cached) return { ok: true, results: cached, source: 'cache' };
+      const cached = await readCache(cacheKey);
+      // An empty array is a cached MISS, and [] is truthy. Returned as a
+      // plain success it carried no `reason`, so the caller reported
+      // "no address (none)" -- a lookup that never ran, described as a
+      // lookup that found nobody. Every later fix was bypassed for the
+      // life of the entry, because nothing downstream was ever reached.
+      if (cached && cached.length) {
+        return { ok: true, results: cached, source: 'cache' };
+      }
+      if (cached) {
+        return { ok: true, results: [], reason: 'no-match', source: 'cache',
+          trace: ['Cached miss from an earlier lookup for this company '
+            + '(kept for up to two hours to avoid spending credits twice). '
+            + 'Use the contact-lookup test in Settings to retry now.'] };
+      }
     }
 
     // Providers cover different situations, so one alone leaves gaps.
@@ -1273,7 +1302,7 @@
     }
     const results = Array.from(byEmail.values()).sort((a, b) => b.score - a.score).slice(0, 5);
 
-    await writeCache(ctx, results);
+    await writeCache(cacheKey, results);
     if (!results.length) {
       // "Nobody matched" is a successful lookup with an empty answer; only
       // a provider that actually failed is not ok. Collapsing the two would
