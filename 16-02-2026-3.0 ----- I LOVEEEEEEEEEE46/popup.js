@@ -3007,10 +3007,31 @@ class ATSTailor {
             (detected.jobId ? ' (Job ID ' + detected.jobId + ')' : '') +
             ' - checking the company\'s published careers address…';
           info.style.color = 'var(--warning)';
-          // Automatic fallback: look for a candidate-facing mailbox the
-          // employer published on its own site. No manual step.
-          this.followupFindCareersAddress();
         }
+      }
+
+      // THE FALLBACK CHAIN RUNS, AND FINISHES, BEFORE THIS RESOLVES.
+      //
+      // Two separate faults met here, and together they meant a posting
+      // that published no address could never be written to.
+      //
+      // It was called INSIDE `if (info)`. Finding the recipient was
+      // therefore conditional on a panel element existing in the DOM. On
+      // any run where the composer had not been rendered, the careers-page
+      // lookup and the provider lookup were both skipped outright.
+      //
+      // And it was not awaited. followupDetectContact returned
+      // immediately, so `await this.contactDetection` in autoSendFollowup
+      // resolved while the lookup was still in flight. followupContext
+      // then read an empty To field and reported 'no-recipient'. The email
+      // was never sent, and the lookup it was waiting for completed a
+      // moment later with nobody listening.
+      //
+      // Both routes are bounded internally, so awaiting cannot hang the
+      // application: the careers probe answers or errors, and the provider
+      // lookup carries its own ten-second budget.
+      if (!detected.hasPublishedEmail) {
+        await this.followupFindCareersAddress();
       }
       console.log('[ATS Tailor] JD contact:', detected.email || '(none)', '| jobId:', detected.jobId || '(none)');
       // Show prior contact with this employer up front, so the decision is
@@ -3719,43 +3740,53 @@ class ATSTailor {
   // Automatic fallback when the posting has no contact email: ask the
   // background worker (the only context with cross-origin fetch) for a
   // candidate-facing mailbox the employer published on its own website.
-  followupFindCareersAddress() {
+  // Returns a promise that settles only once the recipient has been
+  // resolved or every route has been exhausted. It used to return
+  // immediately while a callback ran on: the caller could not wait for it,
+  // so the automatic send read an empty To field and gave up.
+  async followupFindCareersAddress() {
     const info = document.getElementById('followupDetected');
-    try {
-      chrome.runtime.sendMessage({
-        action: 'JG_FIND_CAREERS_EMAIL',
-        companyName: this.currentJob?.company || '',
-        jdUrl: this.currentJob?.url || '',
-      }, (resp) => {
-        if (chrome.runtime.lastError || !resp || !resp.ok) {
-          // Nothing published anywhere. Last resort, and only if the user
-          // switched it on and supplied their own provider key.
-          this.followupEnrich();
-          return;
-        }
-        const detected = this.jdContact || this.generatedDocuments?.jdContact;
-        if (resp.email) {
-          if (detected) {
-            detected.email = resp.email;
-            detected.emailSource = 'company-careers-page';
-          }
-          const toEl = document.getElementById('followupTo');
-          if (toEl && !toEl.value) { toEl.value = resp.email; toEl.dataset.autofilled = '1'; }
-          if (info) {
-            info.textContent = '✓ Company\'s published recruiting address: ' + resp.email +
-              (detected && detected.jobId ? ' · Job ID ' + detected.jobId : '') +
-              ' (found on ' + (resp.source || 'their site') + ')';
-            info.style.color = 'var(--success)';
-          }
-          console.log('[ATS Tailor] careers address:', resp.email, 'from', resp.source);
-        } else {
-          this.followupEnrich();
-        }
-      });
-    } catch (e) {
-      console.warn('[ATS Tailor] careers lookup failed:', e && e.message);
-      this.followupEnrich();
+    // The careers probe goes through the service worker and can hang if
+    // that worker was asleep. Cap it: a slow probe must not hold up the
+    // application, and the provider lookup below is the better answer
+    // anyway.
+    const resp = await new Promise((resolve) => {
+      let settled = false;
+      const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+      setTimeout(() => done(null), 6000);
+      try {
+        chrome.runtime.sendMessage({
+          action: 'JG_FIND_CAREERS_EMAIL',
+          companyName: this.currentJob?.company || '',
+          jdUrl: this.currentJob?.url || '',
+        }, (r) => { void chrome.runtime.lastError; done(r || null); });
+      } catch (e) {
+        console.warn('[ATS Tailor] careers lookup failed:', e && e.message);
+        done(null);
+      }
+    });
+
+    if (resp && resp.ok && resp.email) {
+      const detected = this.jdContact || this.generatedDocuments?.jdContact;
+      if (detected) {
+        detected.email = resp.email;
+        detected.emailSource = 'company-careers-page';
+      }
+      const toEl = document.getElementById('followupTo');
+      if (toEl && !toEl.value) { toEl.value = resp.email; toEl.dataset.autofilled = '1'; }
+      if (info) {
+        info.textContent = '✓ Company\'s published recruiting address: ' + resp.email +
+          (detected && detected.jobId ? ' · Job ID ' + detected.jobId : '') +
+          ' (found on ' + (resp.source || 'their site') + ')';
+        info.style.color = 'var(--success)';
+      }
+      console.log('[ATS Tailor] careers address:', resp.email, 'from', resp.source);
+      return resp.email;
     }
+
+    // Nothing published anywhere. Last resort, and only if the user
+    // switched it on and supplied their own provider key.
+    return this.followupEnrich();
   }
 
   // Last resort, reached only when the posting, its structured data and the
@@ -3775,10 +3806,10 @@ class ATSTailor {
       }
     };
 
-    if (typeof ContactEnrichment === 'undefined') { nothing(); return; }
+    if (typeof ContactEnrichment === 'undefined') { nothing(); return ''; }
     try {
       const cfg = await ContactEnrichment.loadConfig();
-      if (cfg.enabled !== true) { nothing(); return; }
+      if (cfg.enabled !== true) { nothing(); return ''; }
 
       if (info) {
         info.textContent = 'Nothing published for this role - checking your contact lookup provider…';
@@ -3848,10 +3879,12 @@ class ATSTailor {
         info.style.color = 'var(--warning)';
       }
       console.log('[ATS Tailor] enriched contact:', hit.email, 'via', hit.provider);
+      return hit.email;
     } catch (e) {
       console.warn('[ATS Tailor] enrichment failed:', e && e.message);
       nothing();
     }
+    return '';
   }
 
   // resolveCompanyName takes (job, detected). Called bare it resolved to
