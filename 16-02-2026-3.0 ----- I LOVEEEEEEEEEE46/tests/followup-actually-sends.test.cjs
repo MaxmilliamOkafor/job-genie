@@ -118,5 +118,42 @@ console.log('\nAND THE ANTI-SPAM POLICY IS STILL APPLIED',);
 t('  followupSend still runs the policy', /followupSend\(\{ test: false \}\)/.test(autoBody),
   'the company-level policy is what stops a second note to the same employer');
 
+console.log('\nTHE NOTE GOES OUT AFTER THE DOCUMENTS EXIST, NEVER BEFORE');
+// The requirement in the user's words: send once the CV and cover letter
+// are fully tailored and the .docx files are in hand. Ordering is the
+// whole of it -- a note sent a moment early carries nothing, and an
+// empty-handed follow-up is worse than none.
+{
+  const attachIdx = SRC.indexOf('await this.attachBothDocuments()');
+  const storeIdx = SRC.indexOf('ats_lastGeneratedDocuments: this.generatedDocuments');
+  const sendIdx = SRC.indexOf('await this.autoSendFollowup()');
+  t('  documents are generated and attached first',
+    attachIdx > -1 && attachIdx < sendIdx, 'attach=' + attachIdx + ' send=' + sendIdx);
+  t('  and stored before the note is composed',
+    storeIdx > -1 && storeIdx < sendIdx, 'store=' + storeIdx + ' send=' + sendIdx);
+  t('  autoSendFollowup is the last step of the run',
+    sendIdx > -1, 'the send is not wired into the tailoring path at all');
+  t('  and it cannot fail the tailoring run',
+    /try \{\s*await this\.autoSendFollowup\(\);\s*\} catch/.test(SRC),
+    'a failed note must not look like a failed tailor');
+}
+
+console.log('\nAND IT REFUSES TO SEND WITH NOTHING ATTACHED');
+t('  no documents means no note', /no-documents/.test(autoBody)
+  && /this\.followupAttachments\(\)/.test(autoBody),
+  'an empty-handed follow-up is worse than none');
+
+console.log('\nAND WHAT IT ATTACHES IS THE DOCX');
+{
+  const aStart = SRC.indexOf('followupAttachments() {');
+  const aBody = SRC.slice(aStart, aStart + 1400);
+  t('  the slice under test is not empty', aBody.length > 200, String(aBody.length));
+  t('  DOCX is preferred over PDF', /if \(docx\) return/.test(aBody)
+    && aBody.indexOf('if (docx) return') < aBody.indexOf('if (pdf) return'),
+    'attach_format is pinned to docx, so the pdf fields are usually empty');
+  t('  both the CV and the cover letter are attached',
+    /g\.cvDocx/.test(aBody) && /g\.coverDocx/.test(aBody), aBody.slice(-400));
+}
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);
