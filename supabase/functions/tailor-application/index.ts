@@ -2737,13 +2737,61 @@ names, not words, and RULE 15 already requires this. And these are spelt -ise in
 American English too, so never "correct" them: advise, supervise, expertise,
 enterprise, advertise, comprise, revise, devise, promise, precise, franchise.
 
-RULE 12 - STRATEGIC KEYWORD DISTRIBUTION (worth ~10 points)
-Keywords MUST be strategically placed in the highest-weight ATS positions, not randomly scattered:
-- Professional Summary: MUST contain the top 5 most-repeated JD keywords
-- First bullet of EACH work experience role: MUST contain at least 2 JD keywords
-- Core Competencies grid: MUST contain 6-9 of the highest-priority JD phrases
-- Skills section: catches ALL remaining keywords not covered above
-This ensures maximum ATS scoring even if the scanner only reads the top of each section.
+RULE 12 - WHERE EACH KEYWORD GOES (worth ~10 points)
+
+Placement matters as much as coverage. A scanner and a human both read
+the top of each section hardest, and a keyword sitting only in a skills
+list is DECLARED but not PROVEN -- which is what a reviewer is checking
+for. Subject to RULE 0 throughout: a keyword goes where the work
+actually happened, never where it would score best.
+
+FIRST, RANK THE KEYWORDS. Three tiers, in this order:
+  TIER 1  stated as required, or repeated three or more times in the JD
+  TIER 2  repeated twice, or listed under responsibilities
+  TIER 3  mentioned once, or listed as preferred/nice-to-have
+Tier 1 is what the CV must prove. Tier 3 is what the skills line catches.
+
+THEN PLACE THEM.
+
+  Professional Summary  the top 5 Tier 1 terms, worked into prose.
+  Core Competencies     6-9 Tier 1 and Tier 2 phrases, JD wording.
+  Experience bullets    where the proving happens. See the scaling below.
+  Skills section        everything evidenced and not yet placed, which is
+                        most of Tier 3.
+
+SCALING ACROSS THE EXPERIENCE SECTION. "Two in the first bullet" is a
+floor that wastes the rest of the section when a posting carries thirty
+terms, and pads it when a posting carries six. Spread them instead:
+
+  - Count the Tier 1 and Tier 2 terms the history can honestly carry.
+    Call it N. Count the experience bullets. Call it B.
+  - Aim for roughly N/B terms per bullet, weighted to the front: the most
+    recent role and the first bullet of each role take the largest share.
+  - NEVER more than two JD terms in one sentence, whatever N/B says. A
+    third makes the sentence read as assembled rather than written, and
+    RULE 14 already bans the ", using X and Y" tail that results.
+  - Every bullet should carry at least one JD term where the underlying
+    work honestly supports it. A bullet with none is not a failure -- it
+    is a bullet describing work this posting does not ask about, and it
+    may be the one RULE 11b trims.
+
+WHICH ROLE GETS WHICH TERM. The role where that work actually happened,
+always. Where two roles both support a term, put it in the more recent
+one and let the older role carry a different term: spreading coverage
+beats repeating it. A term the candidate used most recently is also the
+most credible in the most recent role.
+
+HOW OFTEN. Once is enough for most terms. Two or three appearances for a
+Tier 1 term -- typically summary plus one bullet, or competencies plus
+one bullet -- is the useful maximum. Beyond that a human reads padding
+and the scanner gains nothing, because presence is what is scored.
+
+THE TEST FOR A TERM IN THE TOP HALF: does a bullet underneath prove it?
+If a Tier 1 term appears in the summary or competencies and nowhere in
+the experience, either move it down into the role that evidences it, or
+accept that the history does not support it and let it go to KEYWORDS
+OMITTED. A declared skill with nothing underneath is the specific thing
+that makes a CV read as tailored-by-machine.
 
 RULE 13 - GAP MITIGATION IN COVER LETTER (worth ~5 points)
 For each JD requirement the candidate does NOT directly have:
@@ -2771,7 +2819,9 @@ After rewriting, run this internal checklist:
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
 [ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
 [ ] Are the top 5 keywords in the Professional Summary?
-[ ] Is the first bullet of each role keyword-rich (2+ JD keywords)?
+[ ] Are the JD terms SPREAD across the experience bullets rather than crammed into the first one, with no sentence carrying more than two, and the most recent role carrying the largest share?
+[ ] Does every Tier 1 term in the summary or Core Competencies have a bullet underneath that proves it? If not, move it down or omit it - a declared skill with nothing beneath it is what reads as machine-assembled.
+[ ] Is any single term repeated more than three times across the CV? Presence is what is scored; the rest is padding a human notices.
 [ ] Are bullets reordered so the most relevant appear first?
 [ ] Does the cover letter address skill gaps with transferable experience?
 [ ] Is "${smartLocation}" present in the header as the candidate's location?
