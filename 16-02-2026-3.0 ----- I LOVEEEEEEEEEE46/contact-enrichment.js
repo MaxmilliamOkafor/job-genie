@@ -1033,6 +1033,47 @@
    * Prove a credential works before a live application depends on it. Says
    * what the provider said, so a wrong key is nameable rather than silent.
    */
+  /**
+   * The provider's own credit balance, as a number.
+   *
+   * testKey already calls this endpoint but returns prose. The number
+   * matters on its own: reading it either side of a lookup is the only
+   * direct evidence that the saved token was SPENT, as opposed to a
+   * lookup that quietly did nothing and reported the same "nobody found".
+   * That was the original complaint about this feature, and prose could
+   * not answer it.
+   *
+   * Returns { ok, balance, detail }. balance is null when the provider
+   * publishes no balance -- not an error, just unknowable.
+   */
+  async function creditBalance(providerId) {
+    const id = providerId || (await loadConfig()).provider || DEFAULT_PROVIDER;
+    const provider = PROVIDERS[id];
+    if (!provider || !provider.test) return { ok: false, balance: null, detail: 'no balance endpoint' };
+    let cred = await getCred(id);
+    if (!hasCred(cred, provider)) return { ok: false, balance: null, detail: 'no credential saved' };
+    try {
+      let req = provider.test(cred);
+      let res = await fetch(req.url, req.init);
+      if (res.status === 401 && provider.refreshKey) {
+        const fresh = await refreshCred(id, cred);
+        if (fresh) { cred = fresh; req = provider.test(cred); res = await fetch(req.url, req.init); }
+      }
+      if (!res.ok) return { ok: false, balance: null, detail: 'HTTP ' + res.status };
+      const json = await res.json().catch(() => null);
+      const d = (json && json.data) || json || {};
+      const nums = ['paid_balance', 'free_balance', 'balance', 'credits', 'remaining']
+        .map((k) => Number(d[k])).filter((x) => !isNaN(x));
+      return {
+        ok: true,
+        balance: nums.length ? nums.reduce((a, b) => a + b, 0) : null,
+        detail: nums.length ? '' : 'provider reports no numeric balance',
+      };
+    } catch (e) {
+      return { ok: false, balance: null, detail: (e && e.message) || 'request failed' };
+    }
+  }
+
   async function testKey(providerId) {
     const id = providerId || (await loadConfig()).provider || DEFAULT_PROVIDER;
     const provider = PROVIDERS[id];
@@ -1627,7 +1668,7 @@
 
   global.ContactEnrichment = {
     listProviders, loadConfig, saveConfig, saveKey, clearKey, getCred, resolveProfile,
-    createKey, testKey, refreshCred,
+    createKey, testKey, refreshCred, creditBalance,
     buildQueries, functionTitles, scoreCandidate, isRealEmail, isPersonalEmail,
     disciplineOf, recruiterCovers,
     DEFAULT_ENABLED, DEFAULT_PROVIDER,

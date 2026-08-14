@@ -317,6 +317,47 @@ global.fetch = async (url, init) => {
       JSON.stringify(r5.results) + ' reason=' + r5.reason);
   }
 
+  console.log('\nTHE BALANCE CAN BE READ, SO "WAS MY TOKEN USED" IS ANSWERABLE');
+  // The original complaint about this feature was that the saved Closely
+  // token never seemed to be spent -- and from the outside a lookup that
+  // quietly did nothing reported the same "found nobody" as one that ran.
+  // A number either side of the lookup is the only direct evidence.
+  {
+    global.chrome.cookies.get = (d, cb) => cb({ value: '"ajax:1234567890123456789"' });
+    await CE.saveKey('closely', { token: 'test-token' });
+    global.fetch = async (url) => {
+      if (String(url).includes('/credits')) {
+        return { ok: true, status: 200,
+          json: async () => ({ data: { paid_balance: 40, free_balance: 2 } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+    const bal = await CE.creditBalance('closely');
+    t('  the balance is read as a number', bal.ok && bal.balance === 42, JSON.stringify(bal));
+  }
+  {
+    // A provider that reports no numeric balance is not an error: it is
+    // simply unknowable, and must not be shown as a failure.
+    global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ data: { plan: 'pro' } }) });
+    const bal = await CE.creditBalance('closely');
+    t('  no numeric balance is reported as unknown, not as failure',
+      bal.ok && bal.balance === null && /no numeric balance/i.test(bal.detail || ''),
+      JSON.stringify(bal));
+  }
+  {
+    global.fetch = async () => ({ ok: false, status: 401, json: async () => ({}) });
+    const bal = await CE.creditBalance('closely');
+    t('  a rejected token is reported as not ok', !bal.ok && /401/.test(bal.detail || ''),
+      JSON.stringify(bal));
+  }
+  {
+    await CE.clearKey('closely');
+    const bal = await CE.creditBalance('closely');
+    t('  no credential saved says so plainly',
+      !bal.ok && /no credential/i.test(bal.detail || ''), JSON.stringify(bal));
+    await CE.saveKey('closely', { token: 'test-token' });
+  }
+
   console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
   process.exit(FAIL ? 1 : 0);
 })().catch((e) => { console.error('SUITE THREW:', e); process.exit(1); });
