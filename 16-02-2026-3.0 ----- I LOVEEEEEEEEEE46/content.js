@@ -361,6 +361,26 @@
   let coverLetterText = '';
   let hasTriggeredTailor = false;
   let tailoringInProgress = false;
+
+  // ---- when previously tailored documents stop being usable -------------
+  //
+  // ats_tailored_urls records postings already tailored, and a hit SKIPS
+  // GENERATION. That makes it the highest-leverage cache in the extension
+  // and the most dangerous one to leave unversioned: after an update,
+  // re-running a posting returned the OLD build's documents byte for
+  // byte, so every fix appeared to have changed nothing.
+  //
+  // The stamp combines the extension version with a constant bumped
+  // whenever the generated document should differ. The manifest version
+  // covers a released update; the constant covers changes made without a
+  // version bump, which is most of them during development.
+  const TAILOR_CACHE_V = 2;
+  const TAILOR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  function TAILOR_CACHE_STAMP() {
+    let ver = '0';
+    try { ver = (chrome.runtime.getManifest() || {}).version || '0'; } catch (e) {}
+    return ver + '/' + TAILOR_CACHE_V;
+  }
   let defaultLocation = 'Dublin, IE'; // User configurable default location for Remote jobs
   const startTime = Date.now();
   const currentJobUrl = window.location.href;
@@ -2697,14 +2717,33 @@
       });
     });
 
-    if (cached[currentJobUrl]) {
-      console.log('[ATS Tailor] Already tailored for this URL, loading cached files');
+    // A HIT HERE SKIPS GENERATION ENTIRELY, so it has to be invalidated
+    // whenever generation itself changes. Without that, re-running a
+    // posting after an update returns the documents produced by the OLD
+    // build -- byte for byte -- and every fix looks like it did nothing.
+    // That is exactly how a CV kept coming back with the same summary and
+    // the same bullets after each round of changes.
+    //
+    // Entries are stamped with the build. A bare timestamp is the legacy
+    // shape and counts as a different build, so it re-tailors once and
+    // then stamps properly. A day old also re-tailors: the profile, the
+    // prompt or the posting may have moved since.
+    const stamp = TAILOR_CACHE_STAMP();
+    const hit = cached[currentJobUrl];
+    const fresh = hit && typeof hit === 'object' && hit.v === stamp
+      && (Date.now() - (hit.at || 0)) < TAILOR_CACHE_TTL_MS;
+    if (fresh) {
+      console.log('[ATS Tailor] Already tailored for this URL on this build, loading cached files');
       // Cache hit -- release the in-progress flag so future explicit
       // re-tailors are still possible, but keep hasTriggeredTailor=true
       // so the auto-trigger paths don't re-fire on this URL.
       tailoringInProgress = false;
       loadFilesAndStart();
       return;
+    }
+    if (hit) {
+      console.log('[ATS Tailor] Cached documents were produced by an older build '
+        + 'or are stale; re-tailoring this posting.');
     }
     
     createStatusBanner();
@@ -2931,8 +2970,8 @@
         }, resolve);
       });
 
-      // Mark this URL as tailored
-      cached[currentJobUrl] = Date.now();
+      // Mark this URL as tailored BY THIS BUILD.
+      cached[currentJobUrl] = { at: Date.now(), v: TAILOR_CACHE_STAMP() };
       await new Promise(resolve => {
         chrome.storage.local.set({ ats_tailored_urls: cached }, resolve);
       });
