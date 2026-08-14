@@ -39,14 +39,29 @@ const PEOPLE = { included: [
 // Rebuild the module against a fresh fake Chrome for each scenario.
 function boot(opts) {
   const log = [];
+  const store = opts.store || {};
+  const live = opts.liveTabs || {};      // tabId -> url, tabs that exist
+  if (opts.hasTab) live[7] = 'https://www.linkedin.com/feed/';
   global.window = global;
   global.chrome = {
-    storage: { local: { get: (k, cb) => cb({}), set: (o, cb) => cb && cb() } },
+    storage: { local: {
+      get: (k, cb) => { const o = {}; (Array.isArray(k) ? k : [k]).forEach((x) => { if (x in store) o[x] = store[x]; }); cb(o); },
+      set: (o, cb) => { Object.assign(store, o); cb && cb(); },
+    } },
     cookies: { get: (d, cb) => cb(opts.noCookie ? null : { value: '"ajax:1234567890123456789"' }) },
     tabs: opts.noTabsApi ? undefined : {
       query: (q, cb) => { log.push('tabs.query'); cb(opts.hasTab ? [{ id: 7, url: 'https://www.linkedin.com/feed/' }] : []); },
-      create: (o, cb) => { log.push('tabs.create:' + o.url + (o.active === false ? ' (background)' : ' (FOREGROUND)')); cb({ id: 42 }); },
-      remove: (id, cb) => { log.push('tabs.remove:' + id); cb && cb(); },
+      create: (o, cb) => {
+        log.push('tabs.create:' + o.url + (o.active === false ? ' (background)' : ' (FOREGROUND)'));
+        // Distinct ids, so two simultaneous opens are visible as two tabs
+        // rather than one overwriting the other.
+        const id = 42 + (opts.peak ? opts.peak.n++ : 0);
+        live[id] = o.url;
+        if (opts.peak) opts.peak.max = Math.max(opts.peak.max, Object.keys(live).length);
+        cb({ id });
+      },
+      remove: (id, cb) => { log.push('tabs.remove:' + id); delete live[id]; cb && cb(); },
+      get: (id, cb) => { log.push('tabs.get:' + id); cb(live[id] ? { id, url: live[id] } : undefined); },
       update: (id, o, cb) => { log.push('tabs.update:' + id + ' -> ' + o.url); cb && cb(); },
     },
     scripting: opts.noTabsApi ? undefined : {
@@ -191,6 +206,68 @@ const search = (V) => V.findProfiles({ title: 'Technical Recruiter', company: 'C
       !r.ok && /sign|session|cookie|log/i.test(r.reason || ''), r.reason);
   }
 
+
+  console.log('\nAND IT NEVER ACCUMULATES TABS');
+  // A helper tab per application is a hundred tabs over a batch run, and a
+  // browser that falls over is worse than a lookup that fails.
+  {
+    // Ten applications in a row, sharing one storage area as the real
+    // extension does.
+    const store = {}; const liveTabs = {};
+    let opened = 0, removed = 0;
+    for (let i = 0; i < 10; i++) {
+      const { V, log } = boot({ hasTab: false, store, liveTabs });
+      await search(V);
+      opened += log.filter((l) => /^tabs\.create/.test(l)).length;
+      removed += log.filter((l) => /^tabs\.remove/.test(l)).length;
+    }
+    t('  ten lookups open ten tabs and close ten', opened === 10 && removed === 10,
+      'opened=' + opened + ' removed=' + removed);
+    t('  and none is left behind at the end',
+      Object.keys(liveTabs).length === 0, JSON.stringify(liveTabs));
+  }
+
+  console.log('\nAND AN INTERRUPTED LOOKUP COSTS ONE STRAY TAB, NOT ONE PER RUN');
+  // The popup's JS context dies the moment it closes, so the `finally`
+  // that removes the tab never runs. The id is remembered in storage so
+  // the next run adopts that tab instead of opening another.
+  {
+    const store = { voyager_helper_tab: 42 };     // as if a run was cut short
+    const liveTabs = { 42: 'https://www.linkedin.com/feed/' };
+    const { V, log } = boot({ hasTab: false, store, liveTabs });
+    const r = await search(V);
+    t('  it checks whether the remembered tab still exists',
+      log.some((l) => /^tabs\.get:42$/.test(l)), JSON.stringify(log));
+    t('  and reuses it instead of opening another',
+      !log.some((l) => /^tabs\.create/.test(l)), JSON.stringify(log));
+    t('  the search still works', r.ok && r.profiles.length === 1, JSON.stringify(r));
+    t('  and the stray tab is cleaned up', Object.keys(liveTabs).length === 0,
+      JSON.stringify(liveTabs));
+  }
+  {
+    // A remembered id for a tab the user has since closed must not be
+    // reused: chrome.tabs.get returns nothing and scripting it would throw.
+    const store = { voyager_helper_tab: 99 };
+    const { V, log } = boot({ hasTab: false, store, liveTabs: {} });
+    const r = await search(V);
+    t('  a remembered tab that is gone is not reused',
+      log.some((l) => /^tabs\.create/.test(l)), JSON.stringify(log));
+    t('  and the lookup still succeeds', r.ok, JSON.stringify(r));
+  }
+
+  console.log('\nAND CONCURRENT LOOKUPS SHARE ONE TAB');
+  // Two applications tailoring at once would otherwise open two.
+  {
+    const store = {}; const liveTabs = {}; const peak = { n: 0, max: 0 };
+    const { V } = boot({ hasTab: false, store, liveTabs, peak });
+    await Promise.all([search(V), search(V), search(V)]);
+    // The property that matters is not how many were created over time but
+    // how many existed AT ONCE. One is the answer; a browser dies of the
+    // other kind.
+    t('  never more than one helper tab exists at a time', peak.max <= 1,
+      'peak was ' + peak.max + ' simultaneous tabs');
+    t('  and none is left open', Object.keys(liveTabs).length === 0, JSON.stringify(liveTabs));
+  }
   console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
   process.exit(FAIL ? 1 : 0);
 })().catch((e) => { console.error('SUITE THREW:', e); process.exit(1); });

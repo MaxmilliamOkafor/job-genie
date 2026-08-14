@@ -251,9 +251,61 @@
    * `mine` so it can be closed afterwards and navigated freely. A tab the
    * user opened is never navigated: they may be mid-message.
    */
+  // ---- one tab, ever ----------------------------------------------------
+  //
+  // A helper tab per application would be a hundred tabs over a batch run,
+  // and a browser that falls over is a worse outcome than a lookup that
+  // fails. Three things keep the count at one.
+  //
+  // REMEMBERED. The id of the tab this module opened is written to
+  // chrome.storage, which outlives the popup. The popup's JavaScript
+  // context is destroyed the moment the popup closes -- mid-lookup, the
+  // `finally` that closes the tab never runs and the tab is orphaned.
+  // Recording the id means the NEXT run finds that tab and reuses it
+  // rather than opening a second one, so an interrupted lookup costs one
+  // stray tab once, not one per application.
+  //
+  // SERIALISED. Two lookups at once would open two tabs. _inFlight makes
+  // concurrent callers share the first one's work.
+  //
+  // VERIFIED. A remembered id is checked against the live tab list before
+  // use: the user may have closed it, and reusing a dead id throws.
+  const KEY_TAB = 'voyager_helper_tab';
+  let _inFlight = null;
+
+  function _rememberTab(id) {
+    return new Promise((resolve) => {
+      try { chrome.storage.local.set({ [KEY_TAB]: id == null ? null : id }, () => resolve()); }
+      catch (e) { resolve(); }
+    });
+  }
+  function _recallTabId() {
+    return new Promise((resolve) => {
+      try { chrome.storage.local.get([KEY_TAB], (r) => resolve((r && r[KEY_TAB]) || null)); }
+      catch (e) { resolve(null); }
+    });
+  }
+  function _tabExists(id) {
+    return new Promise((resolve) => {
+      try {
+        chrome.tabs.get(id, (t) => {
+          void chrome.runtime.lastError;
+          resolve(!!(t && t.id === id && /linkedin\.com/.test(t.url || '')));
+        });
+      } catch (e) { resolve(false); }
+    });
+  }
+
   async function _getOwnTab() {
+    // Left over from a lookup the popup interrupted: adopt it rather than
+    // add to it.
+    const prior = await _recallTabId();
+    if (prior != null && await _tabExists(prior)) {
+      return { id: prior, mine: true, reused: true };
+    }
     const made = await _openTab('https://www.linkedin.com/feed/');
     if (!made || made.id == null) return null;
+    await _rememberTab(made.id);
     await _waitReady(made.id, LIMITS.tabReadyMs);
     return { id: made.id, mine: true };
   }
@@ -333,7 +385,21 @@
    * is a lookup that silently did nothing, so "it didn't work" is not an
    * acceptable answer to give back.
    */
+  /**
+   * Serialised entry point. Two applications tailoring at once would
+   * otherwise each open a helper tab; concurrent callers now queue behind
+   * the first, so there is never more than one lookup, and never more
+   * than one tab, in flight.
+   */
   async function findProfiles(q, opts) {
+    const run = () => _findProfiles(q, opts);
+    _inFlight = (_inFlight ? _inFlight.catch(() => {}).then(run) : run());
+    const mine = _inFlight;
+    try { return await mine; }
+    finally { if (_inFlight === mine) _inFlight = null; }
+  }
+
+  async function _findProfiles(q, opts) {
     const trace = [];
     const o = opts || {};
     const say = (m) => { trace.push('LinkedIn search: ' + m); return m; };
@@ -452,8 +518,13 @@
         }
       }
     } finally {
-      // Never leave a tab behind that this code created.
-      if (tab && tab.mine) await _closeTab(tab.id);
+      // Never leave a tab behind that this code created, and forget the id
+      // in the same breath so a later run does not try to adopt a tab that
+      // is already gone.
+      if (tab && tab.mine) {
+        await _closeTab(tab.id);
+        await _rememberTab(null);
+      }
     }
 
     if (!people) {
@@ -485,7 +556,7 @@
       disabledReason: _disabledReason,
     };
   }
-  function _resetForTests() { _sessionCalls = 0; _lastCallAt = 0; _disabledReason = ''; }
+  function _resetForTests() { _sessionCalls = 0; _lastCallAt = 0; _disabledReason = ''; _inFlight = null; }
 
   global.LinkedInVoyager = {
     isEnabled, setEnabled, getCsrfToken, csrfFromJsessionid,
