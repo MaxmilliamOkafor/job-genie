@@ -168,7 +168,8 @@ global.fetch = async (url, init) => {
     r2.results.length === 0, JSON.stringify(r2.results));
 
   console.log('\nAND THE SHAPE REPORT NEVER LEAKS PERSONAL DATA');
-  // The trace is shown in the UI and pasted into bug reports.
+  // The trace is shown in the UI and pasted into bug reports, and these
+  // responses carry personal data. Key names and types only.
   CE.clearCache();
   global.fetch = async (url) => {
     if (String(url).includes('linkedin.com/voyager')) return { ok: true, status: 200, json: async () => VOYAGER };
@@ -177,8 +178,10 @@ global.fetch = async (url, init) => {
   };
   const r3 = await CE.findContacts({ company: 'Coforge', jobTitle: 'Analyst' }, { noCache: true });
   const tr3 = (r3.trace || []).join(' | ');
+  t('  an unknown wrapper still yields the address', (r3.results[0] || {}).email === EMAIL,
+    JSON.stringify(r3.results));
   t('  the key names are reported', /unknown_wrapper/.test(tr3), tr3);
-  t('  but no value is', !/Jane Doe|hunter2/.test(tr3) && !tr3.includes(EMAIL), tr3);
+  t('  but no value is', !/Jane Doe|hunter2/.test(tr3), tr3);
 
   console.log('\nAND A FAILED PROFILE SEARCH SAYS WHAT FAILED');
   // If step 1 finds nobody, Closely has nothing to resolve and the whole
@@ -198,6 +201,51 @@ global.fetch = async (url, init) => {
     /sign|session|log/i.test(r4.profileWhy || ''), r4.profileWhy);
   t('  the full trace is handed to the caller too',
     Array.isArray(r4.trace) && r4.trace.length > 0, JSON.stringify(r4.trace));
+
+  console.log('\nAN UNRECOGNISED SHAPE IS READ ANYWAY, NOT REPORTED BACK');
+  // Waiting for a human to paste an unknown response to a developer is
+  // the same silent failure with a longer feedback loop. A shape nobody
+  // wrote a reader for has to work on the first try.
+  const weird = {
+    'an unknown wrapper': { payload: { records: [{ person: { fullName: 'Jane Doe' },
+      contact: { primaryMail: EMAIL } }] } },
+    'buried eight deep': { a: { b: { c: { d: { e: { who: 'Jane Doe', mail: EMAIL } } } } } },
+    'an array of arrays': [[{ full_name: 'Jane Doe', x: { y: EMAIL } }]],
+    'a key nobody has seen': { result: { hit: { name: 'Jane Doe', businessEmailAddress: EMAIL } } },
+  };
+  for (const [label, json] of Object.entries(weird)) {
+    CE.clearCache();
+    global.fetch = async () => ({ ok: true, status: 200, json: async () => json });
+    const rr = await CE.findContacts({ company: 'Coforge',
+      linkedinProfiles: ['jane-recruiter-123'] }, { noCache: true });
+    t('  ' + label, (rr.results[0] || {}).email === EMAIL,
+      JSON.stringify(rr.results) + ' trace=' + JSON.stringify(rr.trace));
+  }
+  {
+    CE.clearCache();
+    global.fetch = async () => ({ ok: true, status: 200,
+      json: async () => weird['an unknown wrapper'] });
+    const rr = await CE.findContacts({ company: 'Coforge',
+      linkedinProfiles: ['jane-recruiter-123'] }, { noCache: true });
+    t('  and it says it had to do that, rather than hiding it',
+      (rr.trace || []).some((x) => /not recognised/i.test(x)), JSON.stringify(rr.trace));
+  }
+
+  console.log('\nBUT A BROAD SCAN MUST NOT PICK UP RUBBISH');
+  const rubbish = {
+    'the provider\'s own support address': { error: 'contact support@closelyhq.com' },
+    'an unattended mailbox': { data: { entries: [{ emails: ['noreply@coforge.com'] }] } },
+    'a do-not-reply, however spelt': { data: { entries: [{ emails: ['Do-Not-Reply@coforge.com'] }] } },
+    'a postmaster': { data: { entries: [{ emails: ['postmaster@coforge.com'] }] } },
+  };
+  for (const [label, json] of Object.entries(rubbish)) {
+    CE.clearCache();
+    global.fetch = async () => ({ ok: true, status: 200, json: async () => json });
+    const rr = await CE.findContacts({ company: 'Coforge',
+      linkedinProfiles: ['jane-recruiter-123'] }, { noCache: true });
+    t('  ' + label + ' is not offered as a contact',
+      rr.results.length === 0, JSON.stringify(rr.results.map((x) => x.email)));
+  }
 
   console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
   process.exit(FAIL ? 1 : 0);

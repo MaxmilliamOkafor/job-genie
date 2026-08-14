@@ -53,6 +53,14 @@
     minGapMs: 4000,        // never two calls closer together than this
     jitterMs: 3000,        // plus a random extra, so the cadence is not a metronome
     resultsUsed: 5,        // slugs handed on to the email provider
+    // Applying for a role takes about a minute. A lookup that spends
+    // twenty seconds waiting for a tab to load has made the application
+    // slower than doing it by hand, which is a different kind of broken.
+    // Everything below is bounded so the whole profile search cannot
+    // exceed roughly ten seconds, and gives up cleanly if it would.
+    budgetMs: 10000,       // whole profile search, both routes
+    tabReadyMs: 5000,      // waiting for a background tab to be usable
+    pageReadyMs: 6000,     // waiting for the search page to render
   };
 
   let _sessionCalls = 0;
@@ -224,13 +232,13 @@
   // tabs.onUpdated: a tab that finished loading before the listener was
   // attached never fires it, and this has to work for a tab we just made.
   async function _waitReady(tabId, timeoutMs) {
-    const until = Date.now() + (timeoutMs || 15000);
+    const until = Date.now() + (timeoutMs || LIMITS.tabReadyMs);
     while (Date.now() < until) {
       try {
         const st = await _exec(tabId, () => document.readyState, []);
         if (st === 'complete' || st === 'interactive') return true;
       } catch (e) { /* not scriptable yet */ }
-      await _sleep(400);
+      await _sleep(250);
     }
     return false;
   }
@@ -246,7 +254,7 @@
   async function _getOwnTab() {
     const made = await _openTab('https://www.linkedin.com/feed/');
     if (!made || made.id == null) return null;
-    await _waitReady(made.id, 15000);
+    await _waitReady(made.id, LIMITS.tabReadyMs);
     return { id: made.id, mine: true };
   }
 
@@ -291,8 +299,8 @@
     await new Promise((resolve) => {
       try { _tabs().update(tabId, { url }, () => resolve()); } catch (e) { resolve(); }
     });
-    await _waitReady(tabId, 20000);
-    await _sleep(1500);            // results render after the shell
+    await _waitReady(tabId, LIMITS.pageReadyMs);
+    await _sleep(900);             // results render after the shell
     try {
       return (await _exec(tabId, () => {
         const seen = {};
@@ -360,6 +368,7 @@
     if (_lastCallAt && since < gap) await _sleep(gap - since);
 
     const url = searchUrl(buildVariables(q));
+    const _startedAt = Date.now();
     let res = null;
     let people = null;
     _sessionCalls++;
@@ -431,7 +440,8 @@
       // dies until somebody edits a hash in here. The search PAGE needs no
       // queryId. Only in a tab we opened -- navigating the user's own tab
       // would discard whatever they were doing.
-      if ((!people || !people.length) && tab && tab.mine) {
+      if ((!people || !people.length) && tab && tab.mine
+          && (Date.now() - _startedAt) < LIMITS.budgetMs) {
         say('reading the LinkedIn search page instead');
         const scraped = await _scrapeSearchPage(tab.id, q);
         if (scraped.length) {

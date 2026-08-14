@@ -141,6 +141,71 @@
     return [];
   }
 
+  // ---- last resort: find the address wherever it is ---------------------
+  //
+  // The readers above cover every shape these APIs are known to answer
+  // with. This covers the ones they are not.
+  //
+  // Waiting for a human to paste the unrecognised response back to a
+  // developer is not a fix -- it is the same silent failure with a longer
+  // feedback loop. So when a provider returns 200 and no reader
+  // recognises it, walk the whole response and take any string that IS an
+  // email address, attributing it to the nearest enclosing object that
+  // carries a name. A new shape then works on the first try, with nobody
+  // in the loop.
+  //
+  // The risk of a scan this broad is picking up an address that is not
+  // the person's, so:
+  //   - the provider's own domains are excluded, or an error body
+  //     mentioning support@ becomes a "contact"
+  //   - unattended mailboxes are excluded for the same reason
+  //   - isRealEmail still applies downstream, and it is the send step's
+  //     last guard
+  const _PROVIDER_DOMAINS = /(closelyhq|contactout|hunter|apollo|linkedin)\.(io|com|co)$/i;
+  const _EMAIL_EXACT = /^[^\s@,;<>()[\]]+@[^\s@,;<>()[\]]+\.[a-z]{2,}$/i;
+
+  function _deepFindContacts(json) {
+    const out = [];
+    const seen = new Set();
+
+    const nameish = (o, prev) => ({
+      name: _clean(o.full_name || o.name || o.fullName
+        || [o.first_name || o.firstName, o.last_name || o.lastName].filter(Boolean).join(' ')) || prev.name,
+      title: _clean(o.title || o.job_title || o.jobTitle || o.headline || o.position) || prev.title,
+      company: _clean(typeof o.company === 'string' ? o.company
+        : (o.company && o.company.name) || o.company_name || o.organization) || prev.company,
+      location: _clean(o.location || o.city || o.country) || prev.location,
+    });
+
+    const walk = (node, ctx, depth) => {
+      if (!node || depth > 8 || out.length > 25) return;
+      if (Array.isArray(node)) { for (const n of node) walk(n, ctx, depth + 1); return; }
+      if (typeof node !== 'object') return;
+
+      const here = nameish(node, ctx);
+      for (const k of Object.keys(node)) {
+        const v = node[k];
+        if (typeof v === 'string') {
+          const val = v.trim();
+          if (!_EMAIL_EXACT.test(val)) continue;
+          const dom = val.split('@')[1] || '';
+          if (_PROVIDER_DOMAINS.test(dom)) continue;
+          if (UNATTENDED_RE.test(val)) continue;
+          const key = val.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ name: here.name, title: here.title, company: here.company,
+            location: here.location, email: val });
+        } else {
+          walk(v, here, depth + 1);
+        }
+      }
+    };
+
+    walk(json, { name: '', title: '', company: '', location: '' }, 0);
+    return out;
+  }
+
   // What a response actually looked like, for the trace. Keys and types
   // only -- never values, because these responses carry personal data and
   // the trace is shown in the UI and pasted into bug reports.
@@ -165,10 +230,18 @@
   // A provider that has no address for someone still returns a row. These
   // are placeholders, not addresses, and must never reach a recruiter.
   const PLACEHOLDER_RE = /^(email_not_unlocked|not_unlocked|locked|hidden|unavailable|domain_only|SEARCH)@|^(SEARCH|LOCKED)$/i;
+  // An unattended mailbox is a valid address and never a person. Sending a
+  // follow-up to noreply@ is worse than sending nothing: it is guaranteed
+  // not to be read, and it still spends a provider credit to find. This
+  // sits in isRealEmail rather than in one reader so that it holds for
+  // every provider and every response shape.
+  const UNATTENDED_RE = /^(no-?reply|do-?not-?reply|donotreply|postmaster|mailer-daemon|abuse|bounce|unsubscribe)\b/i;
+
   function isRealEmail(v) {
     const e = _clean(v);
     if (!e || e.indexOf('@') === -1) return false;
     if (PLACEHOLDER_RE.test(e)) return false;
+    if (UNATTENDED_RE.test(e)) return false;
     return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e);
   }
 
@@ -1179,10 +1252,12 @@
       trace.push(PROVIDERS[id].label + ': ' + (r.results.length
         ? r.results.length + ' contact(s) found'
         : (r.reason || 'nothing found')) + ' after ' + (r.calls || 0) + ' request(s)');
-      // When nothing came back, say what the provider actually answered
-      // with. "no-match after 2 request(s)" is indistinguishable from a
-      // parser that did not recognise a perfectly good response.
-      if (!r.results.length) (r.notes || []).forEach((n) => trace.push('  ' + n));
+      // Notes are only recorded when something notable happened: a
+      // response that parsed to nobody, or one whose shape had to be read
+      // by the fallback scan. Surface them either way -- a lookup that
+      // succeeded through the fallback is working, but the shape has
+      // moved and that is worth knowing before it moves further.
+      (r.notes || []).forEach((n) => trace.push('  ' + n));
       if (r.results.length) { collected.push.apply(collected, r.results); break; }
       if (r.reason && r.reason !== 'no-match') lastReason = r.reason;
     }
@@ -1308,6 +1383,20 @@
       let parseError = '';
       try { rows = parse(json) || []; }
       catch (e) { rows = []; parseError = (e && e.message) || 'parse failed'; }
+
+      // The provider answered, and no reader recognised the shape. Rather
+      // than report nothing and wait for someone to diagnose it, find the
+      // addresses in whatever came back. Applies to every provider,
+      // because every one of them can change its response.
+      if (!rows.length && json) {
+        const deep = _deepFindContacts(json);
+        if (deep.length) {
+          rows = deep;
+          notes.push(provider.label + ': response shape was not recognised, so the '
+            + 'addresses were read directly out of it (' + deep.length + ' found). '
+            + 'Shape: ' + _shapeOf(json));
+        }
+      }
       // A 200 that yields nobody is the failure mode that reads as "the
       // lookup did nothing". Record what actually came back -- keys and
       // types only, never values -- so the next run says which shape the
