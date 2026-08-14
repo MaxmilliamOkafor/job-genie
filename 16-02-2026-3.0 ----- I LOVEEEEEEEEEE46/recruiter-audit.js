@@ -802,6 +802,120 @@
     'had', 'have', 'via', 'per', 'out', 'not', 'all', 'new', 'end', 'its',
     'data', 'team', 'work', 'time', 'year', 'years', 'more', 'than', 'both']);
 
+  // ===================================================================
+  // A PIVOT IS ARGUED WITH REAL OVERLAP, NOT A BORROWED TITLE
+  // -------------------------------------------------------------------
+  // Applying to a role you have not held is normal and worth doing well.
+  // What sinks it is opening the summary with the posting's title as
+  // though it were yours:
+  //
+  //   "Experienced Manager of Clinical Services with a strong background
+  //    in clinical pharmacy leadership and operational excellence."
+  //
+  // written over a history of software engineering. A recruiter in that
+  // field discards it on the first line, because the claim is contradicted
+  // three inches further down the same page. The candidate loses the
+  // chance to be read at all -- including the parts that genuinely were
+  // relevant.
+  //
+  // This rewrites rather than reports. Two moves, both checkable against
+  // the document itself:
+  //
+  //   1. A title asserted in the opening that appears nowhere in the
+  //      employment history is replaced by the candidate's actual most
+  //      recent title.
+  //   2. A trailing "with a background in X" clause whose distinctive
+  //      words appear nowhere else in the CV is dropped, because nothing
+  //      in the document supports it.
+  //
+  // What it deliberately does NOT do is invent a replacement. Building
+  // the bridge sentence -- the evidenced overlap that makes a pivot
+  // interesting -- needs judgement about which of the candidate's real
+  // work is closest to this posting, and that belongs to the model, under
+  // RULE 1b. This is the floor: whatever else happens, the CV does not
+  // open by claiming to be something the rest of it contradicts.
+  const _SUMMARY_HEAD = /^\s*(PROFESSIONAL\s+SUMMARY|SUMMARY|PROFILE)\s*:?\s*$/i;
+  const _STOP = new Set(['with', 'and', 'a', 'an', 'the', 'in', 'of', 'for', 'strong',
+    'background', 'experience', 'experienced', 'proven', 'across', 'to', 'on', 'by',
+    'senior', 'lead', 'manager', 'management', 'services', 'team', 'teams']);
+
+  function rewritePivotSummary(cvText, jdTitle) {
+    const text = String(cvText || '');
+    const title = String(jdTitle == null ? '' : jdTitle).replace(/\s+/g, ' ').trim();
+    if (!text || !title) return { text, changed: false };
+
+    const lines = text.split('\n');
+
+    // The experience section, and the real titles inside it.
+    let inExp = false;
+    const roleLines = [];
+    for (const l of lines) {
+      if (_EXP_HEAD.test(l)) { inExp = true; continue; }
+      if (_ANY_HEAD.test(l)) { inExp = false; continue; }
+      if (!inExp) continue;
+      if (/^\s*[-•*]/.test(l) || !l.trim()) continue;
+      roleLines.push(l);
+    }
+    if (!roleLines.length) return { text, changed: false };
+    const historyBlob = roleLines.join(' | ').toLowerCase();
+
+    // Does the history contain this title at all? If it does, claiming it
+    // is honest and nothing here applies.
+    if (historyBlob.indexOf(title.toLowerCase()) !== -1) return { text, changed: false };
+
+    // The candidate's real, most recent title. The role line is the one
+    // carrying the DATE RANGE -- a company sits on its own line, and
+    // taking the first non-bullet line instead yields "Experienced Meta",
+    // which is worse than the claim it replaced. Roles are already in
+    // newest-first order by the time this runs.
+    const DATE_RE = /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|\d{1,2}\/\d{4}|\d{4})\s*[-–—]/i;
+    let realTitle = '';
+    for (const l of roleLines) {
+      if (!DATE_RE.test(l)) continue;
+      const t = l.split('\t')[0].split(DATE_RE)[0]
+        .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
+      if (t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7) { realTitle = t; break; }
+    }
+    if (!realTitle) return { text, changed: false };
+
+    // The summary block.
+    const start = lines.findIndex((l) => _SUMMARY_HEAD.test(l));
+    if (start === -1) return { text, changed: false };
+    let end = start + 1;
+    while (end < lines.length && !_ANY_HEAD.test(lines[end])) end++;
+
+    // Everything outside the summary, for checking whether a claim is
+    // supported anywhere in the document.
+    const rest = lines.slice(0, start).concat(lines.slice(end)).join(' ').toLowerCase();
+
+    let changed = false;
+    for (let i = start + 1; i < end; i++) {
+      let line = lines[i];
+      if (!line.trim()) continue;
+
+      // 1. The borrowed title.
+      const re = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      if (re.test(line)) { line = line.replace(re, realTitle); changed = true; }
+
+      // 2. An unsupported "background in X" clause.
+      line = line.replace(/,?\s*with\s+(?:a\s+)?(?:strong\s+|solid\s+|deep\s+)?background\s+in\s+([^.]+)/i,
+        (m, claim) => {
+          const words = String(claim).toLowerCase().match(/[a-z][a-z-]{3,}/g) || [];
+          const distinctive = words.filter((w) => !_STOP.has(w));
+          if (!distinctive.length) return m;
+          const supported = distinctive.filter((w) => rest.indexOf(w) !== -1).length;
+          // Keep it if the CV backs most of it up; drop it otherwise.
+          if (supported >= Math.ceil(distinctive.length * 0.5)) return m;
+          changed = true;
+          return '';
+        });
+
+      lines[i] = line.replace(/\s{2,}/g, ' ').replace(/\s+\./g, '.').replace(/\.\s*\./g, '.').trim();
+    }
+
+    return { text: lines.join('\n'), changed };
+  }
+
   function detectRepeatedWords(cvText) {
     const found = [];
     if (!cvText) return found;
@@ -2245,6 +2359,17 @@
         report.fixes.push('Trimmed ' + capped.trimmed + ' least-relevant bullet(s) from '
           + capped.roles + ' role(s) to ' + RECENT_ROLE_CAP + ' recent / '
           + OLDER_ROLE_CAP + ' older (kept every sole mention of a posting keyword)');
+      }
+    }
+
+    // A pivot must not open by borrowing the posting's title. Runs before
+    // the audits below so everything downstream sees the corrected text.
+    if (outCV && jdTitle) {
+      const pivot = rewritePivotSummary(outCV, jdTitle);
+      if (pivot.changed) {
+        outCV = pivot.text;
+        report.fixes.push('Summary no longer claims a title the employment history '
+          + 'does not contain (a pivot is argued with real overlap, not a borrowed title)');
       }
     }
 
