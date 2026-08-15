@@ -2596,6 +2596,58 @@ cross-functional teams..." (lowercase sentence start mid-paragraph).
 When a JD phrase is spliced into prose, re-case and re-word it so the
 sentence reads naturally.
 
+RULE 15d - WHICH KIND OF NUMBER COUNTS AS EVIDENCE
+
+Scanners ask for "measurable results" and the lazy way to satisfy that is
+a percentage. Percentages are also the single most common tell of a
+generated CV, because they are the easiest thing to invent and the
+hardest thing for a reader to check. "Reduced manual effort by 40%"
+raises the question 40% of what, measured how, against what baseline --
+and a reader who cannot answer that discounts the whole bullet, and
+often the whole CV with it.
+
+Concrete magnitudes do not have that problem. They are checkable, they
+carry scale on their face, and nobody reads them as machine-written.
+
+PREFER, IN THIS ORDER:
+  1. A count of real things:      50+ legacy applications, 12 analysts,
+                                  40 reports, three trading desks
+  2. A before and after:          a full day to under two hours,
+                                  two weeks to three days,
+                                  nine days to three
+  3. A scale or volume:           millions of daily users, the daily
+                                  transaction feed, petabyte-scale
+  4. A duration or frequency:     nightly, month-end, within the first
+                                  quarter of going live
+  5. A percentage                 LAST RESORT, and only when the source
+                                  states it.
+
+RULES ON PERCENTAGES:
+- NEVER introduce a percentage that is not in the source CV. This is
+  already RULE 0, and it is stated again because this is where it is
+  most often broken.
+- NEVER convert a count or a duration INTO a percentage. "Cut processing
+  from a full day to under two hours" must not become "cut processing
+  time by 90%". The first is evidence; the second is arithmetic on
+  evidence, and reads worse.
+- When the source gives BOTH a percentage and the underlying figures,
+  lead with the figures.
+- A bare round percentage -- 20%, 30%, 40%, 50% -- that is not in the
+  source is the specific pattern a reviewer reads as machine-written.
+  RULE 15b already bans it. Never emit one.
+
+MEASURABLE RESULTS ARE NOT ONLY NUMBERS. A bullet is measurable when a
+reader can tell what changed and by how much. Scope counts: how many
+systems, how many people, how many sites, over what period, to what
+standard, replacing what. "Migrated 50+ client applications to
+Kubernetes with zero service disruption" is fully measurable and
+contains no percentage at all.
+
+AND WHEN THE SOURCE HAS NO NUMBER, do not manufacture one. RULE 18 keeps
+that rule: report the missing measure, never invent it. A bullet stating
+what was built, for whom, and what it replaced is stronger than the same
+bullet with a fabricated figure bolted on.
+
 RULE 16 - XYZ ACHIEVEMENT FORMULA (subject to Rule 0)
 Most bullets describe duties. A duty tells a reader what the candidate was
 given; an achievement tells them what changed because the candidate was
@@ -2838,6 +2890,8 @@ After rewriting, run this internal checklist:
 [ ] Is the spelling consistent with the POSTING's country throughout (American for US/Canada/Latin America, British everywhere else), with proper nouns left in their owner's spelling?
 [ ] PIVOT CHECK - if the target title is not in the employment history: does the summary open with what the candidate actually IS rather than the target title, and is every clause of the bridge traceable to something in the CV? A pivot is argued with real overlap, never with a borrowed title.
 [ ] Does the CV claim any licence, registration, board certification or named degree the candidate does not hold? Remove it and list the requirement under KEYWORDS OMITTED - this is the one class of claim that is checked before an interview.
+[ ] Is any percentage present that the SOURCE does not state? Remove it. Did you turn a count or a duration into a percentage? Put the original figures back - they are the evidence, the percentage is arithmetic on it.
+[ ] Where the source offers both a count/duration and a percentage for the same fact, does the bullet lead with the count or duration?
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
