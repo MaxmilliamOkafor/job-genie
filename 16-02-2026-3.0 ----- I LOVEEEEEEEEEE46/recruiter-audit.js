@@ -1126,15 +1126,27 @@
     out = out.replace(/^\s*\{?\s*"tailoredResume"\s*:\s*"/, '');
     out = out.replace(/^\s*\{?\s*"tailoredCoverLetter"\s*:\s*"/, '');
 
-    // (c) Em-dash and en-dash to neutral punctuation.  ` -- ` -> `, `,
-    // bare `--` (no surrounding space) -> `, `, en-dash `-` -> hyphen-minus
-    // when used as a punctuation separator (we leave date-range hyphens alone
-    // by NOT touching the `-` already in the string).
+    // (c) Em and en dashes to neutral punctuation.
+    //
+    // In PROSE a comma is right: it keeps the sentence whole without the
+    // glyph. BETWEEN TWO DATES it is wrong twice over. A CV reads
+    // "January 2023 - Present", and "January 2023, Present" is not just
+    // odd to read: it stops the line matching ROLE_DATE_RE, which is how
+    // every later pass finds where one role ends and the next begins. So
+    // bullet ordering, the per-role cap and the pivot summary rewrite all
+    // ran against a document whose roles they could no longer see, and
+    // did nothing at all -- silently, on a CV that still looked fine.
+    // This ran BEFORE all three of them, so nothing downstream could
+    // recover. Models write date ranges with an en dash by default, so
+    // this was the normal case rather than an edge one.
+    const D = '(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\.?\\s+\\d{4}'
+      + '|\\d{1,2}/\\d{4}|\\b\\d{4}\\b|\\b(?:Present|Current|Ongoing|Now|To Date)\\b)';
+    out = out.replace(new RegExp('(' + D + ')\\s*[–—]\\s*(' + D + ')', 'gi'), '$1 - $2');
+
+    // Everything still carrying one is prose.
     out = out
-      .replace(/\s*—\s*/g, ', ')
-      .replace(/—/g, ', ')
-      .replace(/\s*–\s*/g, ', ')
-      .replace(/–/g, ', ');
+      .replace(/\s*[–—]\s*/g, ', ')
+      .replace(/[–—]/g, ', ');
 
     return out;
   }
