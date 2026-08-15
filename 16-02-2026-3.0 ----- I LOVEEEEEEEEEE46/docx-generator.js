@@ -666,9 +666,32 @@
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {
-          // SECTION HEADER -- navy, bold, caps, tracked, light-grey rule under
+          // SECTION HEADER -- navy, bold, caps, light-grey rule under.
+          //
+          // NO LETTER SPACING. This carried spacing: 24, a little over a
+          // point of tracking, which looks smart on the page and destroys
+          // the document for every ATS that reads it.
+          //
+          // Letter spacing is applied by the renderer between glyphs, so
+          // the PDF text layer stops being one word. Run through the
+          // OpenResume parser, this CV's headings came out as
+          //
+          //     P R O F ES S I O NA L EXP ER I ENCE
+          //     T ECH NI CA L S K I LLS
+          //     ED U CAT I O N
+          //
+          // Every ATS locates a section by keyword-matching its heading,
+          // and none of those match. So no section was found: all 90
+          // lines were grouped under PROFILE, and Work Experience,
+          // Education and Skills each came back EMPTY. Workday's
+          // autofillWithResume did the same thing on the same file.
+          //
+          // That is the whole document lost, not a keyword. It outranks
+          // every scoring question, because a parser that finds no
+          // employment history has nothing to score. The name kept its
+          // spacing: 4, which is a fifth of this and parsed correctly.
           out.push(paragraph(
-            run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22, spacing: 24 }),
+            run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22 }),
             { spacingBefore: 240, spacingAfter: 60, bottomBorder: { color: C.RULE, sz: 4 } }
           ));
           inExperience = EXPERIENCE_HEADERS.includes(upper);

@@ -741,7 +741,10 @@
       font-weight: bold;
       text-align: left;
       margin-bottom: 8px;
-      letter-spacing: 0.5px;
+      /* No letter-spacing: it splits the word in the PDF text layer,
+         and an ATS keyword-matches section headings. Tracked headings
+         parsed as "P R O F ES S I O NA L EXP ER I ENCE", so no section
+         was found and Work Experience came back empty. */
     }
     
     /* Contact */
@@ -766,7 +769,10 @@
       font-size: ${ATS_CONFIG.fontSize.sectionTitle};
       font-weight: bold;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      /* No letter-spacing: it splits the word in the PDF text layer,
+         and an ATS keyword-matches section headings. Tracked headings
+         parsed as "P R O F ES S I O NA L EXP ER I ENCE", so no section
+         was found and Work Experience came back empty. */
       margin-top: ${ATS_CONFIG.sectionSpacing};
       margin-bottom: ${ATS_CONFIG.sectionSpacing};
     }

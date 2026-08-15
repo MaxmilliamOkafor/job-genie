@@ -6428,7 +6428,38 @@ class ATSTailor {
           // The keyword coverage it bought is real but small, and the
           // skills section captures the same terms honestly. So every
           // unplaceable keyword now routes there, multi-word included.
-          const singleWord = toReInject.slice();
+          // A SOFT SKILL IS NOT A TECHNICAL SKILL.
+          //
+          // Everything unplaceable routed here, soft skills included, so
+          // the generated CV ended its TECHNICAL SKILLS list with
+          //
+          //   ... Jenkins, GitHub Actions, thorough, Creativity
+          //
+          // read back off the real PDF by the OpenResume parser. A
+          // recruiter reading "thorough" in a list of languages and cloud
+          // platforms knows the document was assembled by a machine, and
+          // it costs more than the keyword is worth. Soft skills belong in
+          // the summary and in the bullets, where they are evidenced by
+          // the work described around them.
+          //
+          // They are dropped rather than moved: writing one into a bullet
+          // means writing a claim the candidate did not make, which is
+          // the fabricated-achievement problem this block already exists
+          // to avoid.
+          const _isSoft = (kw) => {
+            try {
+              const X = window.JDSkillExtractor;
+              if (!X) return false;
+              const n = X._norm(kw).replace(/ skills$/, '');
+              return X.SOFT_SKILLS.some((s) => X._norm(s) === n);
+            } catch (e) { return false; }
+          };
+          const softDropped = toReInject.filter(_isSoft);
+          const singleWord = toReInject.filter((kw) => !_isSoft(kw));
+          if (softDropped.length) {
+            console.log('[ATS Tailor] Soft skills kept out of the technical list:',
+              softDropped.join(', '));
+          }
 
           if (singleWord.length > 0) {
             // Anchored to the start of a line and to the heading's own
