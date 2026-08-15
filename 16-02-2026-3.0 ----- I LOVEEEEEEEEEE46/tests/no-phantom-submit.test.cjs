@@ -228,7 +228,9 @@ t('a submit click is verified before reporting success',
   /const confirmed = !still \|\| stepSignature\(still\) !== sig \|\| _submissionConfirmed\(\);/.test(src),
   'success is still assumed from having clicked');
 t('an unconfirmed submit reports that it was NOT sent',
-  /the application was NOT sent/.test(src),
+  // Tolerates the article starting a sentence, but NOT stays shouted:
+  // that word is the whole point of the message.
+  /[Tt]he application was NOT sent/.test(src),
   'a failed submit would still read as success');
 t('...and reports it as stuck rather than submitted',
   /trace\('submit\.unconfirmed'[\s\S]{0,200}?done\('stuck'/.test(src));

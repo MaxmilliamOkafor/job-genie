@@ -3247,7 +3247,7 @@ class ATSTailor {
         + '\nLinkedIn Easy Apply autofill (content script)  ' + entries.length + ' entries\n'
         + '='.repeat(72) + '\n';
       if (!entries.length) {
-        return head + '\n(nothing recorded — the filler did not run on any LinkedIn page in this\n'
+        return head + '\n(nothing recorded: the filler did not run on any LinkedIn page in this\n'
           + ' session. If you expected it to: check the LinkedIn Easy Apply toggle, and\n'
           + ' that the page is linkedin.com/jobs/...)\n';
       }
@@ -4026,7 +4026,7 @@ class ATSTailor {
     }
     const company = this.enrichCompanyName();
     if (!company) {
-      say('No employer detected for this page yet — an unscoped people search '
+      say('No employer detected for this page yet. An unscoped people search '
         + 'returns strangers, so this needs the company first.');
       return;
     }
@@ -4048,7 +4048,7 @@ class ATSTailor {
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     say('Opened ' + groups.length + ' searches for <b>' + esc(company) + '</b>'
       + (ctx.location ? ' in ' + esc(String(ctx.location).split(',')[0]) : '') + ':<br>'
-      + groups.map((g) => '&nbsp;• <b>' + esc(g.tier) + '</b> — ' + esc(g.why)).join('<br>')
+      + groups.map((g) => '&nbsp;• <b>' + esc(g.tier) + '</b>: ' + esc(g.why)).join('<br>')
       + '<br><br>Open anyone who looks right. Their profile is picked up '
       + 'automatically, and "Find contacts now" will resolve the address.');
   }
@@ -4169,7 +4169,7 @@ class ATSTailor {
         '<div style="font-weight:600;margin-bottom:4px;">Numbers worth adding ('
         + items.length + ')</div>'
         + '<div style="opacity:.75;font-size:11px;margin-bottom:6px;">'
-        + 'These bullets are true but unquantified. Nothing was invented — add your '
+        + 'These bullets are true but unquantified. Nothing was invented. Add your '
         + 'real figures and re-run for a stronger CV.</div>'
         + '<ul style="margin:0;padding-left:16px;line-height:1.45;">'
         + items.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ul>';
@@ -4679,7 +4679,7 @@ class ATSTailor {
       if (fresh && fresh.isListPage) {
         this.currentJob = null;
         this.updateJobDisplay();
-        this.setStatus('This is a results list — open a job posting', 'error');
+        this.setStatus('This is a results list. Open a job posting.', 'error');
         return false;
       }
 
@@ -8524,6 +8524,23 @@ function extractJobInfoFromPageInjected() {
       // helper testable outside a browser.
       const path = window.location.pathname.toLowerCase();
       const qs = window.location.search.toLowerCase();
+
+      // A URL THAT NAMES ONE POSTING IS SHOWING THAT POSTING.
+      //
+      // LinkedIn renders the selected job in a detail pane BESIDE the
+      // results, at the same URL as the list: /jobs/search-results/ and
+      // /jobs/collections/... both carry ?currentJobId=<id>. The path
+      // test below reads those as lists, so the popup refused every job
+      // opened the way LinkedIn is actually used, with the posting's
+      // description on screen and an Easy Apply dialog open over it. The
+      // only LinkedIn page that ever got through was /jobs/view/<id>,
+      // which you reach only by opening a card in a new tab.
+      //
+      // Checked before the path patterns, for the same reason the
+      // JobPosting check above is: a page that declares which posting it
+      // is showing has answered the question.
+      if (/[?&](currentjobid|jobid|job_id|gh_jid|lever-jid)=\d{3,}/.test(qs)) return false;
+
       // Search and browse URLs name themselves.
       if (/\/(search|search-results|browse|results|collections|explore)(\/|$)/.test(path)) return true;
       if (/[?&](keywords|q|query|search)=/.test(qs) && !/\/(view|job|jobs)\/\d{4,}/.test(path)) return true;
@@ -8783,12 +8800,13 @@ function extractJobInfoFromPageInjected() {
       },
 
       // ===== Social & Media =====
-      'linkedin.com': {
-        company: 'LinkedIn',
-        title: ['h1.topcard__title', 'h1.job-title', 'h1'],
-        location: ['.topcard__flavor--bullet', '.job-location'],
-        description: ['.description__text', '.job-description', 'main']
-      },
+      // linkedin.com is deliberately NOT here. This map answers "which
+      // employer owns this domain", which is right for google.com/careers
+      // and wrong for a job board: every entry sets result.company to the
+      // literal below, so LinkedIn postings were all attributed to an
+      // employer called LinkedIn rather than to the company hiring. The
+      // board is handled with the other boards further down, where the
+      // company is read off the posting.
       'tiktok.com': {
         company: 'TikTok',
         title: ['h1.job-title', 'h1'],
@@ -9134,8 +9152,39 @@ function extractJobInfoFromPageInjected() {
     }
 
     // ============ ATS PLATFORM SELECTORS ============
+    // --- LinkedIn ---
+    // A board, so the company is read off the posting and never assumed
+    // from the domain. Every selector is scoped to the detail pane: on
+    // /jobs/search-results/ the results list is on the same page, and a
+    // fallback to `main` would take the list as the description, which is
+    // the original fault this whole path exists to prevent. No `main`
+    // fallback here for that reason. If the pane is not found, the fields
+    // stay empty and the caller treats it as no job, which is correct.
+    if (!result.title && host.includes('linkedin')) {
+      result.title = getText(
+        '.job-details-jobs-unified-top-card__job-title h1',
+        '.job-details-jobs-unified-top-card__job-title',
+        '.jobs-unified-top-card__job-title',
+        '.topcard__title', 'h1.top-card-layout__title');
+      result.company = getText(
+        '.job-details-jobs-unified-top-card__company-name a',
+        '.job-details-jobs-unified-top-card__company-name',
+        '.jobs-unified-top-card__company-name',
+        '.topcard__org-name-link', '.topcard__flavor');
+      result.location = getText(
+        '.job-details-jobs-unified-top-card__primary-description-container .tvm__text',
+        '.jobs-unified-top-card__bullet',
+        '.topcard__flavor--bullet');
+      result.description = getText(
+        '#job-details',
+        '.jobs-description__content',
+        '.jobs-description-content__text',
+        '.jobs-box__html-content',
+        '.description__text');
+      result.companySource = 'selector';
+    }
     // --- Greenhouse ---
-    if (!result.title && host.includes('greenhouse')) {
+    else if (!result.title && host.includes('greenhouse')) {
       result.title = getText('h1.app-title', '.job-title h1', 'h1[class*="job"]', '.posting-headline h1', 'h1');
       result.company = result.company || getText('.company-name', '[class*="company"]') || document.querySelector('meta[property="og:site_name"]')?.content || '';
       result.location = result.location || getText('.location', '[class*="location"]', '.posting-categories .location');

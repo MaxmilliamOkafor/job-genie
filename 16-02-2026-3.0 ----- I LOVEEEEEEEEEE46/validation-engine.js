@@ -276,20 +276,20 @@
       sections,
       warnings: [
         ...(stuffedKeywords.length > 0 ? [`Keyword stuffing detected: ${stuffedKeywords.map(s => `"${s.keyword}" (${s.count}x)`).join(', ')}`] : []),
-        ...(density > 5.0 ? ['Keyword density too high — may trigger ATS spam filters'] : []),
-        ...(density < 1.0 && keywordCount > 0 ? ['Keyword density too low — keywords may not be prominent enough'] : []),
-        ...(keywordCount < 5 ? ['Too few keywords matched — tailoring may be insufficient'] : []),
-        ...(missing.length > matched.length ? ['More keywords missing than matched — consider adding more relevant terms'] : []),
-        ...(!contact.email ? ['Missing email — ATS cannot contact you'] : []),
-        ...(!contact.phone ? ['Missing phone — recruiters may skip your CV'] : []),
-        ...(!contact.linkedin && !contact.location ? ['Missing LinkedIn/location — add at least one'] : []),
+        ...(density > 5.0 ? ['Keyword density too high, may trigger ATS spam filters'] : []),
+        ...(density < 1.0 && keywordCount > 0 ? ['Keyword density too low, keywords may not be prominent enough'] : []),
+        ...(keywordCount < 5 ? ['Too few keywords matched, tailoring may be insufficient'] : []),
+        ...(missing.length > matched.length ? ['More keywords missing than matched, consider adding more relevant terms'] : []),
+        ...(!contact.email ? ['Missing email. ATS cannot contact you'] : []),
+        ...(!contact.phone ? ['Missing phone. Recruiters may skip your CV'] : []),
+        ...(!contact.linkedin && !contact.location ? ['Missing LinkedIn/location. Add at least one'] : []),
         ...(!sections.experience ? ['Missing "Experience" section — critical ATS parsing failure risk'] : []),
         ...(!sections.education ? ['Missing "Education" section — many ATS require it'] : []),
         ...(!sections.skills ? ['Missing "Skills" section — ATS relies on it for keyword extraction'] : []),
-        ...(quantified.count < 3 ? [`Only ${quantified.count} quantified achievements — add metrics (%, £, counts) for higher ATS + recruiter scoring`] : []),
+        ...(quantified.count < 3 ? [`Only ${quantified.count} quantified achievements. Add metrics (%, £, counts) for higher ATS + recruiter scoring`] : []),
         ...(actionVerbs.totalBullets >= 5 && actionVerbs.coverage < 50 ? [`Only ${actionVerbs.coverage}% bullets start with strong action verbs`] : []),
         ...(!roleTitle.matched && jobMeta.title ? [`Role-title signal weak (${roleTitle.coverage}% of title keywords in CV)`] : []),
-        ...(priority.high < 70 ? [`High-priority keyword coverage only ${priority.high}% — target ≥ 80%`] : [])
+        ...(priority.high < 70 ? [`High-priority keyword coverage only ${priority.high}%. Target ≥ 80%`] : [])
       ]
     };
   }

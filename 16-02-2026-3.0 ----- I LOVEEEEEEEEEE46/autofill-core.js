@@ -387,9 +387,19 @@
     // Anything with a factual answer of its own is not motivation, even
     // when it is phrased as an open question.
     if (/how many|how much|years? of|rate your|level of|proficien|certif|licen[sc]e|salary|compensation|notice period|start date|available/.test(l)) return false;
+    // Nor is anything the extension answers AUTHORITATIVELY further down.
+    // This rule runs early, so without these it wins over the rules that
+    // own these fields: "Why do you require sponsorship?" came back as
+    // the cover letter instead of the sponsorship answer, and so did
+    // "Why are you authorized to work in the US?". Those two are the
+    // polarity-critical fields this file warns about, and a cover letter
+    // is not an answer to either. Relocation and travel are preferences
+    // held in the profile. "Why are you leaving?" stays out because the
+    // honest answer is the user's, not a marketing paragraph.
+    if (/sponsor|visa|authoriz|authoris|eligib|work permit|relocat|commut|travel|criminal|convict|background check|drug|clearance|leaving/.test(l)) return false;
     // "interest in" is anchored to the job itself. Left open it would
     // swallow "what is your interest in Kubernetes", which is a claim.
-    return /why (do|would|are|should) you|why this|why our|why us\b|why work|what (interests|attracts|excites|motivates|appeals)|what makes you|good fit|right fit|best fit|suitable for this|interest in (this|our|the) (role|position|job|company|team|opportunity|vacancy)|tell us (why|about your interest)/.test(l);
+    return /why (do|would|are|should) (you|we)\b|why this|why our|why us\b|why work|what (interests|attracts|excites|motivates|appeals)|what makes you|good fit|right fit|best fit|suitable for this|interest in (this|our|the) (role|position|job|company|team|opportunity|vacancy)|tell us (why|about your interest)/.test(l);
   }
 
   // ===================================================================

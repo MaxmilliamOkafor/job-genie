@@ -181,7 +181,7 @@
   function summarise(report) {
     if (!report || !report.hasForm) return '';
     if (report.complete) {
-      return `✅ All ${report.total} required fields complete — ready to submit.`;
+      return `✅ All ${report.total} required fields complete. Ready to submit.`;
     }
     const names = report.missing.slice(0, 5).map((m) => m.label).join(', ');
     const more = report.missing.length > 5 ? ` +${report.missing.length - 5} more` : '';
