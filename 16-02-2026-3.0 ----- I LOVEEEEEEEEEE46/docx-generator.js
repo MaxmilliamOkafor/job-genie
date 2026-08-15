@@ -79,6 +79,25 @@
   function paragraph(content, opts = {}) {
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
+    // A HEADING SEPARATED FROM WHAT IT INTRODUCES IS A PARSING FAULT.
+    //
+    // Nothing here set keepNext, so a company name could sit at the foot
+    // of one page with its date line and bullets starting the next. A
+    // parser reading a role expects company, then title, then dates,
+    // adjacent; split across a page boundary they stop being one record.
+    //
+    // It also produced visible damage in a real parse. Both of these are
+    // page boundaries, and both merged two unrelated lines into one:
+    //
+    //   "LedgerLens, Explainable Credit-Risk Scoring APIPython, XGBoost"
+    //   "review. -Architected an autoscaling microservices backend"
+    //
+    // keepNext holds a heading, a company, a role line and a project
+    // title with the line beneath it, so the break falls between records
+    // rather than through the middle of one. keepLines stops a single
+    // paragraph being split across pages.
+    if (opts.keepNext) ppr.push('<w:keepNext/>');
+    if (opts.keepLines) ppr.push('<w:keepLines/>');
     // Tab stops: opts.tabs is an array of integers (twips from left margin).
     // The competencies grid this was built for is gone -- it is now one
     // item per line -- so the only remaining user is the role line, which
@@ -692,7 +711,8 @@
           // spacing: 4, which is a fifth of this and parsed correctly.
           out.push(paragraph(
             run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22 }),
-            { spacingBefore: 240, spacingAfter: 60, bottomBorder: { color: C.RULE, sz: 4 } }
+            { spacingBefore: 240, spacingAfter: 60, keepNext: true, keepLines: true,
+              bottomBorder: { color: C.RULE, sz: 4 } }
           ));
           inExperience = EXPERIENCE_HEADERS.includes(upper);
           roleState = inExperience ? 'expectCompany' : 'none';
@@ -715,7 +735,8 @@
             continue;
           }
           if (roleState === 'expectCompany') {
-            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: 21 }), { spacingBefore: 80, spacingAfter: 20 }));
+            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: 21 }),
+              { spacingBefore: 80, spacingAfter: 20, keepNext: true, keepLines: true }));
             roleState = 'expectTitle';
             continue;
           }
