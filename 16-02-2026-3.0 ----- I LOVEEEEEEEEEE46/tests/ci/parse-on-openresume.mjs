@@ -27,11 +27,24 @@ try {
   await page.screenshot({ path: 'parse-screenshot.png', fullPage: true });
 
   // Read a labelled value out of the results table.
+  //
+  // The results are a TABLE, and innerText separates table cells with a
+  // TAB, not a newline. The first version of this only accepted a
+  // newline, so Name, Phone and Location all came back empty while Email
+  // passed -- because Email was matched from the raw text instead. Three
+  // empty fields and one populated, split exactly along that line, was
+  // the scraper and not the parse.
   const field = (label) => {
-    const re = new RegExp('^\\s*' + label + '\\s*\\n+\\s*(.+)$', 'mi');
+    const re = new RegExp('^[ \\t]*' + label + '[ \\t]*[\\t\\n]+[ \\t]*(.+)$', 'mi');
     const m = text.match(re);
     return m ? m[1].trim() : '';
   };
+
+  // Printed in full so the result can be read from the log rather than
+  // taken on trust, and so a failure can be diagnosed without the
+  // artifact.
+  console.log('\n=== THE PARSER PAGE, VERBATIM ===');
+  console.log(text.split('\n').slice(0, 60).map((l) => '  | ' + l).join('\n'));
 
   console.log('\n=== WHAT THE LIVE PARSER EXTRACTED ===');
   for (const l of ['Name', 'Email', 'Phone', 'Location']) {
