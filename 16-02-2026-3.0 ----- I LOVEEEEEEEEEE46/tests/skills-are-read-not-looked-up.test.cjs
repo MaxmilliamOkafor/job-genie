@@ -97,18 +97,57 @@ console.log('\nAND A SHORT NAME NEVER SUPPRESSES THE LONGER ONE');
     r.some((x) => N(x) === 'cad/cam software'), r.join(' | '));
 }
 
-console.log('\nAND IT IS WIRED INTO THE PIPELINE, NOT SITTING BESIDE IT');
-// The extractor existed and changed nothing until this union.
+console.log('\nAND IT LANDS IN THE FIELDS THAT ARE ACTUALLY READ');
+// The first attempt put the results in a new `hardSkills` field on the
+// return value. NOTHING READS THAT FIELD. tailor-universal consumes
+// keywordList, mediumPriority and softSkillsForExperience;
+// allocateSectionsOptimally reads highROI, mediumROI and lowROI. So the
+// extractor ran, the numbers looked right, and the CV was unchanged.
+// These assert the consumed fields, not the reported ones.
 {
   const r = S.extractAndClassifyKeywords(JD);
-  const mh = missing(HARD, r.hardSkills);
-  t('  the strategy returns all 17', mh.length === 0,
-    'missing through the real entry point: ' + mh.join(', '));
-  t('  and the soft skills too', missing(SOFT, r.softSkills).length === 0,
-    'missing: ' + missing(SOFT, r.softSkills).join(', '));
+  const inAll = new Set((r.all || []).map(N));
+  const inHigh = new Set((r.highROI || []).map(N));
+  const mAll = HARD.filter((w) => !inAll.has(N(w)));
+  const mHigh = HARD.filter((w) => !inHigh.has(N(w)));
+  t('  every hard skill is in all[]', mAll.length === 0, 'missing: ' + mAll.join(', '));
+  t('  and in highROI[], which feeds the skills section',
+    mHigh.length === 0, 'missing: ' + mHigh.join(', '));
+  t('  the soft skills are in lowROI[], the route into bullets',
+    SOFT.filter((w) => !new Set((r.lowROI || []).map(N)).has(N(w))).length <= 1,
+    JSON.stringify(r.lowROI));
+
+  // The end of the chain: what the skills section is actually given.
+  const alloc = S.allocateSectionsOptimally(r);
+  const inSkills = new Set((alloc.skills || []).map(N));
+  t('  and the skills section is given real ones',
+    ['iso 9001', 'solidworks', 'lean manufacturing'].every((k) => inSkills.has(N(k))),
+    JSON.stringify(alloc.skills));
   t('  the closed lists alone would have found almost none',
-    [...S.HARD_SKILLS].filter((s) => JD.toLowerCase().includes(s)).length < 6,
+    [...S.HARD_SKILLS].filter((s2) => JD.toLowerCase().includes(s2)).length < 6,
     'the premise no longer holds; the list may have grown');
+}
+
+console.log('\nAND A KEYWORD MATCHES A WHOLE WORD, NOT A SUBSTRING');
+// The lists were matched with jdLower.includes(skill) and contain 'r',
+// 'go' and 'ats'. A single letter is inside almost every posting, so "r"
+// was classified HIGH ROI on this manufacturing JD and printed FIRST in
+// the skills section of the generated CV.
+{
+  const r = S.extractAndClassifyKeywords(JD);
+  const skills = S.allocateSectionsOptimally(r).skills.map(N);
+  t('  "r" is not a skill on a manufacturing posting', !skills.includes('r'),
+    JSON.stringify(S.allocateSectionsOptimally(r).skills));
+  t('  nor "go"', !skills.includes('go'), JSON.stringify(skills));
+  // Boundaries are non-word characters, not \b, because \b breaks on
+  // exactly the terms that need matching most.
+  const sw = S.extractAndClassifyKeywords(
+    'Backend engineer using Python, Go, R, C++, Node.js, CI/CD and .NET on AWS.');
+  const high = new Set(sw.highROI.map(N));
+  for (const k of ['python', 'go', 'r', 'c++', 'node.js', 'ci/cd', 'aws']) {
+    t('  "' + k + '" still matches when it is genuinely there', high.has(N(k)),
+      JSON.stringify(sw.highROI));
+  }
 }
 
 console.log('\nAND SOFTWARE POSTINGS DID NOT REGRESS');
