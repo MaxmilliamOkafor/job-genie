@@ -247,15 +247,62 @@
 
     const timing = performance.now() - startTime;
     console.log(`[UniversalStrategy] Phase 1 complete in ${timing.toFixed(0)}ms (target: ${TIMING_TARGETS.EXTRACT_CLASSIFY}ms)`);
-    console.log(`[UniversalStrategy] Hard skills: ${extractedHardSkills.length}, Soft skills: ${extractedSoftSkills.length}`);
+    // ============ OPEN EXTRACTION, UNIONED IN ============
+    //
+    // Everything above intersects the JD with a closed list, and those
+    // lists are software vocabulary: 332 hard skills opening python,
+    // java, javascript. Measured against one real mechanical and
+    // industrial engineering posting, 14 of its 17 hard skills were
+    // absent from them -- SolidWorks, AutoCAD, ISO 9001, lean
+    // manufacturing, CAD/CAM software, time studies, process flow,
+    // quality control, quality standards, technical reports, process
+    // design, and the three engineering disciplines themselves.
+    //
+    // `unclassified` cannot recover them either: it splits on
+    // whitespace, so it is single words only and every one of those is
+    // multi-word. An extension that cannot SEE a skill cannot place it,
+    // which is upstream of every complaint about skills missing from the
+    // tailored CV.
+    //
+    // JDSkillExtractor reads the posting instead of matching it against a
+    // list. Unioned rather than substituted: the closed lists are good
+    // for software roles and there is no reason to lose them.
+    let openHard = [], openSoft = [];
+    try {
+      const X = (typeof window !== 'undefined' && window.JDSkillExtractor)
+        || (typeof globalThis !== 'undefined' && globalThis.JDSkillExtractor);
+      if (X) {
+        const found = X.extractSkills(jobDescription);
+        openHard = found.hardSkills || [];
+        openSoft = found.softSkills || [];
+      }
+    } catch (e) {
+      console.warn('[UniversalStrategy] open skill extraction failed:', e && e.message);
+    }
+    const _dedupe = (a, b) => {
+      const seen = new Set(), out = [];
+      for (const s of a.concat(b)) {
+        const k = String(s || '').toLowerCase().replace(/[^a-z0-9/+#]+/g, ' ').trim();
+        if (!k || seen.has(k)) continue;
+        seen.add(k);
+        out.push(s);
+      }
+      return out;
+    };
+    const hardSkills = _dedupe(extractedHardSkills, openHard);
+    const softSkills = _dedupe(extractedSoftSkills, openSoft);
+
+    console.log(`[UniversalStrategy] Hard skills: ${hardSkills.length} `
+      + `(${extractedHardSkills.length} listed, ${openHard.length} read from the posting), `
+      + `Soft skills: ${softSkills.length}`);
 
     return {
       highROI: foundKeywords.high,
       mediumROI: foundKeywords.medium,
       lowROI: foundKeywords.low,
       // NEW: Explicit hard/soft skills categorisation (Jobscan ATS scoring)
-      hardSkills: extractedHardSkills,   // HIGH SCORE IMPACT
-      softSkills: extractedSoftSkills,   // MEDIUM SCORE IMPACT
+      hardSkills,                         // HIGH SCORE IMPACT
+      softSkills,                        // MEDIUM SCORE IMPACT
       unclassified: foundKeywords.unclassified,
       all: allKeywords,
       timing,

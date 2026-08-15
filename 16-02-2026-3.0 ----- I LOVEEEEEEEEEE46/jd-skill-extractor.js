@@ -134,6 +134,10 @@
     'new', 'existing', 'multiple', 'various', 'well', 'high', 'highly',
     'plus', 'essential', 'desirable', 'preferred', 'required', 'requirements',
     'e', 'g', 'i', 'etc', 'such', 'via', 'per',
+    // Counting words open a quantity, not a skill: "across two assembly
+    // lines" was arriving as the skill "two assembly".
+    'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+    'ten', 'several', 'many', 'few', 'numerous', 'multiple',
   ]);
 
   // Where a noun phrase STARTS.
@@ -364,7 +368,13 @@
       if (soft.has(key)) continue;
       const words = key.split(' ');
       let extendsShorter = false;
-      for (let n = 1; n < words.length; n++) {
+      // From n = 2: a SINGLE word must never suppress the phrase it
+      // begins. "ISO" was killing "ISO 9001" and "CAD/CAM" was killing
+      // "CAD/CAM software", because the acronym rule finds the bare word
+      // and the head-noun walk finds the phrase. The rule is meant to
+      // drop "quality assurance audits" in favour of "quality
+      // assurance", which is a two-word prefix and still does.
+      for (let n = 2; n < words.length; n++) {
         if (keys.has(words.slice(0, n).join(' '))) { extendsShorter = true; break; }
       }
       if (extendsShorter) continue;
