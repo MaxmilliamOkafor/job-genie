@@ -110,6 +110,43 @@ console.log('\nAND THE MOTIVATION TEST ITSELF DRAWS THE LINE IN THE RIGHT PLACE'
     !C._isMotivationQuestion(norm('How many years have you worked in this field?')), 'matched');
 }
 
+console.log('\nAND IT NEVER OUTRANKS A FIELD THE EXTENSION ANSWERS PROPERLY');
+// The rule has to run EARLY to beat the field-name rules that claim the
+// words "company" and "role". Running early means it also runs before
+// the rules that own sponsorship, work authorisation and relocation --
+// and it won. "Why do you require sponsorship?" came back as the cover
+// letter. Sponsorship and work authorisation are the two polarity
+// -critical fields this file warns about, and a marketing paragraph is
+// not an answer to either.
+{
+  const P2 = Object.assign({}, PROFILE, {
+    willing_to_relocate: true, current_company: 'Meta', current_title: 'Engineer',
+  });
+  const cases = [
+    ['Why do you require sponsorship?', 'No'],
+    ['Why are you authorized to work in the US?', 'Yes'],
+    ['Why do you want to relocate?', 'Yes'],
+    ['What is your current company?', 'Meta'],
+    ['What is your current title?', 'Engineer'],
+  ];
+  for (const [q, want] of cases) {
+    const a = C.answerFor(q, P2);
+    t('  ' + q + ' -> ' + want, a === want,
+      'got ' + JSON.stringify(a) + (a === P2.cover_letter ? '  (the cover letter won)' : ''));
+  }
+  t('  "why are you leaving?" stays the user\'s own answer',
+    C.answerFor('Why are you leaving your current company?', P2) === '',
+    'a cover letter is not an honest answer to this one');
+}
+
+console.log('\nAND IT CATCHES THE COMMON PHRASING THAT SAYS "WE"');
+{
+  t('  why should we hire you',
+    C.answerFor('Why should we hire you?', PROFILE) === PROFILE.cover_letter, 'missed');
+  t('  why should we consider you',
+    C.answerFor('Why should we consider you for this role?', PROFILE) === PROFILE.cover_letter, 'missed');
+}
+
 console.log('\nAND IT FALLS BACK, THEN GIVES UP HONESTLY');
 {
   const noCover = Object.assign({}, PROFILE, { cover_letter: '' });
