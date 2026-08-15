@@ -191,11 +191,30 @@
           : (/^https?:\/\//i.test(seg) ? seg : 'https://' + seg)
               .replace(/^(https?:\/\/)www\./i, '$1')
               .replace(/\/+$/, '');
+        // Same reason as the phone: a label identifies the field without
+        // the parser having to recognise the value. Email already parses
+        // everywhere on its @ shape, so this costs nothing and helps the
+        // parsers that key on the label.
+        if (isEmail) pieces.push(run('Email: ', { color: C.MUTED, sz: opts.sz || 19 }));
         pieces.push(`<w:hyperlink r:id="${id}">${run(display, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
+      } else if (looksLikePhone(seg)) {
+        // A PLAIN-TEXT "Phone:" LABEL IN FRONT OF THE NUMBER.
+        //
+        // The contact line was a bare pipe-separated list:
+        //
+        //   Surrey, CA | +353 874 261 508 | maxokafordev@gmail.com
+        //
+        // and the OpenResume parser returned Phone: EMPTY. Its rule is a
+        // regex for a US 3-3-4 number, which an Irish +353 number cannot
+        // satisfy however it is grouped. A label is what lets a parser
+        // identify the field without recognising the number format, and
+        // it is the one item on the standard ATS checklist this line did
+        // not meet. Every parser that reads labels now gets the field for
+        // free; the regex-only ones are no worse off than before.
+        pieces.push(run('Phone: ', { color: C.MUTED, sz: opts.sz || 19 }));
+        pieces.push(run(normalizePhoneToken(seg), { color: C.BODY, sz: opts.sz || 19 }));
       } else {
-        // Phone segments get normalised (strip stray colon, group digits).
-        const display = looksLikePhone(seg) ? normalizePhoneToken(seg) : seg;
-        pieces.push(run(display, { color: C.BODY, sz: opts.sz || 19 }));
+        pieces.push(run(seg, { color: C.BODY, sz: opts.sz || 19 }));
       }
     });
     return paragraph(pieces.join(''), { align: opts.align || 'left', spacingAfter: opts.spacingAfter != null ? opts.spacingAfter : 40 });
