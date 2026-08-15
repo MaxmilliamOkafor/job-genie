@@ -244,6 +244,32 @@
       return 'None - I do not require sponsorship.';
     }
 
+    // --- open-ended motivation questions ------------------------------
+    // Employers add their own questions to Easy Apply, and some form of
+    // "why do you want this job" is the commonest of them. Nothing here
+    // answered it: it names no field of the profile, so it fell through
+    // to the '' at the end. These questions are nearly always REQUIRED,
+    // so runAutoFlow stopped with 'needs-you' on a question that asserts
+    // no credential and has no factual answer to get wrong -- while the
+    // cover letter the user wrote for exactly this purpose sat unread in
+    // the same profile.
+    //
+    // This has to run UP HERE, with the other traps, for the same reason
+    // the referral-name rule does. "What attracts you to our company?"
+    // contains the word company, and "What interests you about this
+    // role?" contains the word role, so the field-name rules below claim
+    // both and answer them with the user's CURRENT employer and job
+    // title -- which are empty for most profiles, so the question came
+    // back blank and the flow stopped anyway, having matched a rule.
+    //
+    // Motivation ONLY, and the boundary is the point. "Describe your
+    // experience with Kubernetes" is a CLAIM about what the user has
+    // done. It stays unanswered unless the profile evidences it, because
+    // pasting a cover letter that never mentions Kubernetes does not
+    // answer the question, it just fills the box. Stopping there is the
+    // correct outcome and this must not take it away.
+    if (_isMotivationQuestion(l)) return o.coverLetter || P.cover_letter || P.summary || '';
+
     // --- identity ----------------------------------------------------
     if (/first.?name|given.?name|forename/.test(l)) return P.first_name || P.firstName || '';
     if (/last.?name|family.?name|surname/.test(l)) return P.last_name || P.lastName || '';
@@ -348,6 +374,22 @@
     }
     if (/agree|acknowledge|consent|certif|attest|confirm/.test(l)) return 'Yes';
     return '';
+  }
+
+  /**
+   * Is this asking why the user wants the role, rather than what they
+   * have done? Only the first kind can be answered from prose the user
+   * has already written.
+   */
+  function _isMotivationQuestion(l) {
+    // Naming a specific skill or tool makes it a claim, not a motivation.
+    if (_skillSubject(l)) return false;
+    // Anything with a factual answer of its own is not motivation, even
+    // when it is phrased as an open question.
+    if (/how many|how much|years? of|rate your|level of|proficien|certif|licen[sc]e|salary|compensation|notice period|start date|available/.test(l)) return false;
+    // "interest in" is anchored to the job itself. Left open it would
+    // swallow "what is your interest in Kubernetes", which is a claim.
+    return /why (do|would|are|should) you|why this|why our|why us\b|why work|what (interests|attracts|excites|motivates|appeals)|what makes you|good fit|right fit|best fit|suitable for this|interest in (this|our|the) (role|position|job|company|team|opportunity|vacancy)|tell us (why|about your interest)/.test(l);
   }
 
   // ===================================================================
@@ -501,18 +543,45 @@
     }
   }
 
+  /**
+   * A field that says maxlength="300" REJECTS a 2000-character answer.
+   *
+   * maxlength constrains TYPING. Assigning through the native setter
+   * below bypasses it entirely, so the long value lands in the box, the
+   * site's own validator then refuses it, and the step will not advance
+   * -- with the field visibly full. That reads as the form being broken
+   * rather than the answer being too long, and nothing in the extension
+   * read maxlength anywhere, so the longest answers we have (the cover
+   * letter, the summary) were the ones most likely to be silently
+   * rejected.
+   */
+  function _clampToMaxLength(el, value) {
+    const s = String(value == null ? '' : value);
+    const max = Number(el && el.maxLength);
+    // Absent attribute reads as -1; a select has none at all.
+    if (!isFinite(max) || max <= 0 || s.length <= max) return s;
+    const cut = s.slice(0, max);
+    // Prefer a sentence end, then a word boundary. A truncation through
+    // the middle of a word is read by a person and looks like a fault.
+    const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    if (stop > max * 0.6) return cut.slice(0, stop + 1).trim();
+    const space = cut.lastIndexOf(' ');
+    return (space > max * 0.6 ? cut.slice(0, space) : cut).trim();
+  }
+
   // Frameworks track value via the native setter; assigning .value
   // directly leaves their internal state stale and the value reverts.
   function setValue(el, value) {
+    const clamped = _clampToMaxLength(el, value);
     try {
       const proto = el.tagName === 'TEXTAREA'
         ? global.HTMLTextAreaElement.prototype
         : global.HTMLInputElement.prototype;
       const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (desc && desc.set) desc.set.call(el, value);
-      else el.value = value;
+      if (desc && desc.set) desc.set.call(el, clamped);
+      else el.value = clamped;
     } catch (e) {
-      el.value = value;
+      el.value = clamped;
     }
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -773,6 +842,9 @@
     labelFor, questionFor, answerFor, yesNoFor, isYesNoOptions, fillContainer, loadProfile, isToggleOn, DEFAULT_ON,
     setValue, fillSelect, fillRadioGroup, fillCustomDropdown,
     isVisible, optionMatches, escapeSelector, DEFAULTS,
+    // Exported so the boundary between "motivation" and "claim", and the
+    // length clamp, can be asserted directly rather than through a DOM.
+    _isMotivationQuestion, _clampToMaxLength,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.AutofillCore;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
