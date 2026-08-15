@@ -192,6 +192,36 @@ console.log('\nTHE PROFILE FIELDS EXTRACT');
   t('  with no letters glued to it',
     phoneItems.some((s) => !/[a-zA-Z]/.test(s) && scorePhoneItem(s) === 4),
     phoneItems.map((s) => JSON.stringify(s) + ' scores ' + scorePhoneItem(s)).join(', '));
+
+  // AND IT MUST SURVIVE THE PDF EXPORT.
+  //
+  // From group-text-items-into-lines.ts: adjacent items merge when
+  //
+  //     distance = currentItem.x - leftItemXEnd
+  //     if (distance <= typicalCharWidth) -> merge
+  //
+  // and the merge inserts a space when the left item ends in a colon.
+  // The DOCX keeps the phone in a run of its own, but the extension
+  // ships DOCX and the user exports it to PDF, where only PHYSICAL GAP
+  // keeps items apart. A "Phone:" label beside the number would merge
+  // into "Phone: +353: 0874261508", which has letters, and the phone
+  // score drops from 4 to 0.
+  //
+  // That is why the label was taken back off, and why the separator
+  // around each contact field is two spaces either side of the pipe:
+  // wider than a typical character, so the fields stay separate items
+  // through the export.
+  const contact = profile.find((l) => l.items.some((i) => RE.phone.test(i.str)));
+  const idx = contact ? contact.items.findIndex((i) => RE.phone.test(i.str)) : -1;
+  t('  nothing lettered sits directly beside it',
+    idx > 0 && !/[a-zA-Z]/.test(contact.items[idx - 1].str),
+    'the item before the phone is '
+      + JSON.stringify(idx > 0 ? contact.items[idx - 1].str : '(none)')
+      + '; on PDF export it would merge into the number');
+  t('  and the separator is wider than one character',
+    idx > 0 && /^\s{2,}\S\s{2,}$/.test(contact.items[idx - 1].str),
+    'separator ' + JSON.stringify(idx > 0 ? contact.items[idx - 1].str : '(none)')
+      + ' may not exceed typicalCharWidth, so the fields merge on export');
 }
 
 console.log('\nTHE EMPLOYMENT HISTORY EXTRACTS  (company, title, dates)');
