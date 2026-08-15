@@ -934,6 +934,76 @@
   // exactly as written, since those are the evidence worth keeping.
   const _PCT = /\d{1,3}(?:[.,]\d+)?\s*(?:%|per\s?cent|percent)/i;
 
+  /**
+   * A STANDARD BOLTED ONTO THE END OF A BULLET THAT IS NOT ABOUT IT.
+   *
+   * Read off the real generated CV by a parser:
+   *
+   *   "Implemented full-stack observability with the ELK Stack,
+   *    Prometheus and Grafana, enabling early-warning alerting and
+   *    cutting mean time to resolution substantially, with iso 9001."
+   *
+   *   "Built and maintained CI/CD pipelines with Azure DevOps and GitHub
+   *    Actions, enabling automated deployments across staging,
+   *    using as9100."
+   *
+   * ISO 9001 is a quality management standard and AS9100 is its
+   * aerospace equivalent. Neither has anything to do with observability
+   * or a deployment pipeline. They were appended to reach a keyword, and
+   * the seam shows: a trailing clause with no verb, hanging off a
+   * sentence that had already finished, in lower case.
+   *
+   * A recruiter in that industry reads this as someone who has never
+   * worked to the standard, which is worse than not matching the keyword
+   * at all. So the clause goes.
+   *
+   * Two rules, both narrow on purpose:
+   *
+   *   A standard is REMOVED only when it forms a trailing clause of the
+   *   shape ", with X." or ", using X." at the very end of a bullet.
+   *   That shape is the bolt-on. A standard named inside the sentence
+   *   ("audited the line against ISO 9001 before release") is real work
+   *   and is left exactly as it is.
+   *
+   *   A standard that stays is RECASED. "iso 9001" and "as9100" are
+   *   proper names and are written ISO 9001 and AS9100. Lower case is
+   *   itself a tell that the term was pasted rather than written.
+   */
+  // Two halves, because four of these prefixes are also ordinary English
+  // words. "AS", "EN", "UL" and "API" may only be followed IMMEDIATELY by
+  // the number (as9100, EN1090). Allowing a space would have matched
+  // "...as 2023 revenue..." and rewritten it to "AS 2023", inventing a
+  // standard out of a sentence. The unambiguous prefixes may be spaced,
+  // which is how they are normally written, and two digits are enough
+  // because NFPA 70 exists.
+  const _STANDARD = '(?:\\b(?:ISO|IEC|DIN|ANSI|ASTM|ASME|IPC|NFPA|OSHA|SAE|MIL|BS)'
+    + '(?:[\\s-]?[A-Z])?[\\s-]?\\d{2,5}(?:[:-]\\d{2,4})?)'
+    + '|(?:\\b(?:AS|EN|UL|API)-?\\d{2,5}(?:[:-]\\d{2,4})?)';
+
+  function stripBoltedStandards(text) {
+    if (!text || typeof text !== 'string') return { text: text || '', removed: 0, recased: 0 };
+    let removed = 0, recased = 0;
+    const lines = text.split('\n').map((line) => {
+      let out = line;
+      // Only a BULLET can carry a bolt-on: a heading or a skills list
+      // legitimately ends in a bare term.
+      if (/^\s*[-*•]/.test(out)) {
+        const bolt = new RegExp('\\s*,\\s*(?:with|using|including|per|to|under|and)\\s+('
+          + _STANDARD + ')\\s*\\.?\\s*$', 'i');
+        const m = out.match(bolt);
+        if (m) { out = out.replace(bolt, '.'); removed++; }
+      }
+      // Whatever survived is a real mention, so write it properly.
+      out = out.replace(new RegExp(_STANDARD, 'gi'), (s) => {
+        const fixed = s.toUpperCase();
+        if (fixed !== s) recased++;
+        return fixed;
+      });
+      return out;
+    });
+    return { text: lines.join('\n'), removed, recased };
+  }
+
   function stripPercentages(cvText) {
     if (!cvText || !_PCT.test(cvText)) return { text: cvText || '', removed: 0 };
     const N = '\\d{1,3}(?:[.,]\\d+)?\\s*(?:%|per\\s?cent|percent)';
@@ -2452,6 +2522,20 @@
       if (pctCL.removed) outCL = pctCL.text;
     }
 
+    // A standard bolted onto the end of an unrelated bullet.
+    if (outCV) {
+      const bolt = stripBoltedStandards(outCV);
+      outCV = bolt.text;
+      if (bolt.removed) {
+        report.fixes.push('Removed ' + bolt.removed + ' standard(s) bolted onto the end of '
+          + 'a bullet that was not about them');
+      }
+      if (bolt.recased) {
+        report.fixes.push('Corrected the casing of ' + bolt.recased + ' standard(s)');
+      }
+    }
+    if (outCL) outCL = stripBoltedStandards(outCL).text;
+
     // A word used twice in one bullet. Reported, never rewritten -- the
     // correct fix needs a fact about the employer that this code does not
     // have, and inventing one is worse than the repetition.
@@ -2844,6 +2928,9 @@
 
   const RecruiterAudit = {
     runRecruiterAudit,
+    // Exported so the boundary between a bolted-on standard and a real
+    // mention can be asserted directly.
+    stripBoltedStandards,
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,
