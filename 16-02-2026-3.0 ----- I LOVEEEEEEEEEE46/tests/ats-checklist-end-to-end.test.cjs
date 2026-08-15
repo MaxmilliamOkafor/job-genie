@@ -108,10 +108,22 @@ console.log('\n4. CONTACT DETAILS ARE IN THE BODY, WITH PLAIN-TEXT LABELS');
   t('  no header part', !/<w:hdr[\s>]/.test(zip), 'contact in a header is invisible to most parsers');
   t('  no footer part', !/<w:ftr[\s>]/.test(zip), 'same');
   t('  the contact line is in the body', text.includes('maxokafordev@gmail.com'), 'absent');
-  // The checklist item that the real CV failed: OpenResume returned an
-  // empty Phone because a bare +353 number matches no US-shaped regex.
-  t('  the phone carries a "Phone:" label', /Phone:\s*\+?\d/.test(text),
-    JSON.stringify(lines.find((l) => /\+353|Phone/.test(l)) || '(no phone line)'));
+  // THE PHONE, AGAINST THE PARSER'S OWN PUBLISHED RULE.
+  //
+  // Not a proxy for the real thing: this is the documented regex, run
+  // over the text extracted from the document just built. A CV of the
+  // user's that parses correctly today produces "0874261508", and that
+  // is the exact string asserted here.
+  const PHONE_RE = /\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/;
+  const phoneHit = (text.match(PHONE_RE) || [''])[0];
+  t('  a phone is extractable at all', !!phoneHit,
+    'the contact line as built: ' + JSON.stringify(lines.find((l) => /\+/.test(l)) || ''));
+  t('  and it is the national number, not a fragment of the country code',
+    phoneHit === '0874261508',
+    'got ' + JSON.stringify(phoneHit) + '. "353 0874261" means a space or hyphen '
+      + 'follows the country code and the match ran straight through it.');
+  t('  the country code survives for a human and for international dialling',
+    /\+353/.test(text), JSON.stringify(lines.find((l) => /\d{7}/.test(l)) || ''));
   t('  the email carries an "Email:" label', /Email:\s*\S+@/.test(text),
     JSON.stringify(lines.find((l) => /@/.test(l)) || '(no email line)'));
 }

@@ -133,21 +133,69 @@
   // contact segment to "+CC NNN NNN NNNN" -- colon removed, trunk 0
   // after the country code dropped, light readability grouping.
   function normalizePhoneToken(seg) {
-    const cleaned = String(seg || '').replace(/[^\d+]/g, '');
+    const raw = String(seg || '');
+    const cleaned = raw.replace(/[^\d+]/g, '');
     if (!/\d{7,}/.test(cleaned)) return seg; // not a phone
-    const m = cleaned.match(/^\+(\d{1,3})0?(\d+)$/);
+
+    // THIS FUNCTION USED TO BREAK THE NUMBER IT WAS TIDYING.
+    //
+    // It stripped the trunk zero (the `0?` in its old pattern) and then
+    // grouped the rest in threes "for readability", turning
+    //
+    //     +353: 0874261508        which parses
+    // into
+    //     +353 874 261 508        which does not
+    //
+    // Measured against the parser's own documented rule,
+    // /\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/, on a CV of the user's that
+    // parses correctly today:
+    //
+    //     "+353 874 261 508"   MISS      (what this produced)
+    //     "+353 0874261508"    "353 0874261"   country code swallowed
+    //     "+353: 0874261508"   "0874261508"    correct
+    //
+    // Two things are load-bearing and both were being destroyed.
+    //
+    // THE TRUNK ZERO. It makes the national number ten digits, which is
+    // what a 3-3-4 rule needs. Nine digits cannot match it however they
+    // are spaced, so no Irish or UK number written without the zero is
+    // readable to a parser built around North American numbers.
+    //
+    // THE SEPARATOR AFTER THE COUNTRY CODE MUST NOT BE A SPACE OR A
+    // HYPHEN. Both appear in that rule's own character class, so the
+    // match runs straight through the country code and returns
+    // "353 0874261" -- a wrong number, which is worse than none. A colon
+    // stops it, so the match starts cleanly at the national number. The
+    // previous comment here called that colon malformed and removed it.
+    // It is the reason the format works.
+    //
+    // No digit is invented. The country code is read from the original
+    // separator rather than guessed by length (greedy matching turned
+    // "+1 (415) 555-0134" into country code 141), and the national part
+    // is passed through exactly as written, minus its spacing.
+    // Countries whose national numbers carry a trunk 0 that is dropped
+    // when dialling internationally, with the digit count WITHOUT it.
+    // The zero is restored only when the length matches exactly, so a
+    // number of any other shape is passed through untouched rather than
+    // guessed at. This is the standard national prefix, not an invention:
+    // +353 87 426 1508 is dialled 087 426 1508 inside Ireland. Countries
+    // with no trunk prefix (the NANP, Spain, Italy's numbers which keep
+    // their own zero) are deliberately absent.
+    const TRUNK_ZERO = { 353: 9, 44: 10, 33: 9, 61: 9, 91: 10 };
+
+    const m = raw.match(/^\s*\+(\d{1,3})\D+(.+)$/);
     if (m) {
-      const cc = m[1], local = m[2];
-      let grouped = local;
-      if (local.length >= 9) grouped = `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
-      else if (local.length >= 7) grouped = `${local.slice(0, 3)} ${local.slice(3)}`;
-      return `+${cc} ${grouped}`;
+      const cc = m[1];
+      let national = m[2].replace(/\D/g, '');
+      if (national.length >= 7) {
+        if (national.charAt(0) !== '0' && TRUNK_ZERO[cc] === national.length) {
+          national = '0' + national;
+        }
+        return `+${cc}: ${national}`;
+      }
     }
-    if (/^\d{7,}$/.test(cleaned)) {
-      return cleaned.length >= 10
-        ? `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`
-        : cleaned;
-    }
+    // Already national and contiguous: leave it exactly as it is.
+    if (/^\d{7,}$/.test(cleaned)) return cleaned;
     return seg;
   }
 
@@ -211,7 +259,9 @@
         // it is the one item on the standard ATS checklist this line did
         // not meet. Every parser that reads labels now gets the field for
         // free; the regex-only ones are no worse off than before.
-        pieces.push(run('Phone: ', { color: C.MUTED, sz: opts.sz || 19 }));
+        // No "Phone:" prefix. The number already carries "+353:", and
+        // "Phone: +353: 0874261508" reads badly to the human who sees it
+        // first. The colon in the number is the part that does the work.
         pieces.push(run(normalizePhoneToken(seg), { color: C.BODY, sz: opts.sz || 19 }));
       } else {
         pieces.push(run(seg, { color: C.BODY, sz: opts.sz || 19 }));
