@@ -126,12 +126,10 @@
     return `<w:p>${pprXml}${content}</w:p>`;
   }
 
-  // ---- phone normaliser (parser-safe, no stray colon) ------------------
-  // The source CV text header sometimes arrives as "+353: 0874261508"
-  // (a stray colon between country code and number) which breaks ATS
-  // phone parsers and reads as malformed. Normalise any phone-shaped
-  // contact segment to "+CC NNN NNN NNNN" -- colon removed, trunk 0
-  // after the country code dropped, light readability grouping.
+  // ---- phone normaliser: ONE implementation, shared with the PDF ------
+  // Exported as DocxGenerator.normalizePhone. The PDF formatters used to
+  // carry their own copy with the same faults, so fixing the DOCX left
+  // the PDF broken.
   function normalizePhoneToken(seg) {
     const raw = String(seg || '');
     const cleaned = raw.replace(/[^\d+]/g, '');
@@ -1210,7 +1208,12 @@
     return slug ? nameBase + '_' + slug : nameBase;
   }
 
-  global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase };
+  // normalizePhone is exported because the PDF formatters had their OWN
+  // copy of this logic, with the same faults, and the DOCX got fixed
+  // while the PDF stayed broken. One implementation, used by every path
+  // that writes a contact line.
+  global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase,
+    normalizePhone: normalizePhoneToken };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }

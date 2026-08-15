@@ -213,17 +213,20 @@
     // ============ FORMAT PHONE ============
     formatPhone(phone) {
       if (!phone) return '';
-      
-      let cleaned = phone.replace(/[^\d+]/g, '');
-      
-      if (cleaned.startsWith('+')) {
-        const match = cleaned.match(/^\+(\d{1,3})(\d+)$/);
-        if (match) {
-          return `+${match[1]} ${match[2]}`;
-        }
-      }
-      
-      return phone;
+      // ONE IMPLEMENTATION, IN docx-generator.
+      //
+      // This used to be its own copy, and it carried both faults the
+      // DOCX one did: a SPACE after the country code, which makes a
+      // 3-3-4 parser rule swallow the code and return "353 0874261" (a
+      // wrong number), and a greedy country-code match that read
+      // "+1 (415) 555-0134" as country code 141. The DOCX was fixed and
+      // the PDF was not, which is exactly what duplicating it costs.
+      //
+      // If the shared module is not loaded the number is returned
+      // untouched: passing it through is always safe, mangling it is not.
+      const canonical = (typeof window !== 'undefined' && window.DocxGenerator
+        && window.DocxGenerator.normalizePhone);
+      return canonical ? canonical(phone) : phone;
     },
 
     // ============ CLEAN LOCATION ============

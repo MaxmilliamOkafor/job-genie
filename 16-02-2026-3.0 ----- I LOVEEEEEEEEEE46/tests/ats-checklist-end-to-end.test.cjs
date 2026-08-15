@@ -59,7 +59,12 @@ const built = global.DocxGenerator.fromCvText(CV, { name: 'Maxmilliam Okafor' })
 t('the document builds at all', !!(built && built.success && built.base64), JSON.stringify(built).slice(0, 200));
 const zip = Buffer.from(built.base64, 'base64').toString('latin1');
 // document.xml is the body part; the parts are stored, so it is present verbatim.
-const docXml = (zip.match(/<w:document[\s\S]*?<\/w:document>/) || [''])[0];
+// The archive is read as latin1 to keep byte offsets intact, so the
+// XML has to be decoded back to UTF-8 before it is text. Without
+// this the bullet U+2022 arrives as two mojibake characters and a
+// bullet count of zero, which reads as bullets being lost.
+const docXml = Buffer.from(
+  (zip.match(/<w:document[\s\S]*?<\/w:document>/) || [''])[0], 'latin1').toString('utf8');
 t('document.xml is readable from the archive', docXml.length > 500, 'len=' + docXml.length);
 
 // The text layer: what a parser sees after the markup is removed. Each
@@ -162,12 +167,71 @@ console.log('\n8. THE TEXT LAYER READS CLEANLY  (the plain-text test)');
   // first version of this flagged "January 2023 - Present" and would
   // have had the date separator removed to satisfy it, which is the
   // fault this suite exists to catch.
-  const stranded = /\S\s+[*•]\s+[A-Z]|[a-z.]\s+-\s+[A-Z][a-z]{3,}/;
-  t('  no bullet is stranded mid-line', !stranded.test(text),
-    JSON.stringify((text.match(new RegExp('.{0,30}(?:' + stranded.source + ').{0,20}')) || [''])[0]));
+  // Per LINE, not over the joined text. Run across the join, this
+  // matched "Present\n-  Re-architected", which is a bullet correctly
+  // starting the next line -- and the "fix" would have been to stop
+  // emitting bullets.
+  const strandedLine = lines.find((l) => /\S\s+[*•]\s+\S/.test(l));
+  t('  no bullet is stranded mid-line', !strandedLine, JSON.stringify(strandedLine || ''));
   t('  every bullet starts its own line',
     lines.filter((l) => /[-*•]/.test(l)).every((l) => /^\s*[-*•]/.test(l) || !/^\s*\S+\s+[-*•]/.test(l)),
     JSON.stringify(lines.find((l) => /^\s*\S+\s+[-*•]\s/.test(l)) || ''));
+}
+
+console.log('\n9. THE COVER LETTER, NOT JUST THE CV');
+// It shares run(), paragraph() and contactParagraph(), so it inherits
+// every fix here -- but "inherits" is an assumption until asserted, and
+// the cover letter is uploaded to the same portals.
+{
+  const CL = [
+    'Maxmilliam Okafor',
+    'Dublin, IE | +353: 0874261508 | maxokafordev@gmail.com',
+    '',
+    'Dear Hiring Manager,',
+    '',
+    'I am writing about the Manufacturing Engineer role. My background is in '
+      + 'process optimisation and quality assurance.',
+    '',
+    'Kind regards,',
+    'Maxmilliam Okafor',
+  ].join('\n');
+  const b = global.DocxGenerator.fromCoverLetterText(CL, { name: 'Maxmilliam Okafor' });
+  t('  it builds', !!(b && b.success && b.base64), JSON.stringify(b).slice(0, 160));
+  const z = Buffer.from(b.base64, 'base64').toString('latin1');
+  const x = Buffer.from((z.match(/<w:document[\s\S]*?<\/w:document>/) || [''])[0], 'latin1').toString('utf8');
+  const clText = (x.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+    .map((s) => s.replace(/<[^>]+>/g, '')).join(' ');
+  t('  no letter spacing wide enough to split a word',
+    !/<w:spacing w:val="(?:[1-9]\d|9)"\/>/.test(x),
+    (x.match(/<w:spacing w:val="\d+"\/>/g) || []).join(' '));
+  t('  the phone is the same parseable form as the CV',
+    (clText.match(/\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/) || [''])[0] === '0874261508',
+    JSON.stringify((clText.match(/\+\d+:?[\d ]+/) || [''])[0]));
+  t('  no en or em dash', !/[–—]/.test(clText),
+    JSON.stringify((clText.match(/.{0,20}[–—].{0,20}/) || [''])[0]));
+  t('  no table, text box or image', !/<w:tbl>|<w:txbxContent|<w:drawing/.test(x), 'present');
+  t('  a standard font only',
+    [...new Set((x.match(/w:ascii="([^"]+)"/g) || []).map((s) => s.slice(9, -1)))]
+      .every((f) => ['Arial', 'Calibri', 'Garamond', 'Georgia'].includes(f)), 'non-standard font');
+}
+
+const read = (f) => fs.readFileSync(path.join(DIR, f), 'utf8');
+console.log('\n10. THE PDF PATH USES THE SAME PHONE RULE, NOT ITS OWN COPY');
+// Both PDF formatters carried their own formatPhone with the same two
+// faults. The DOCX was fixed and the PDF was not, which is what a second
+// copy costs. This asserts there is only one implementation left.
+{
+  for (const f of ['cv-formatter-perfect.js', 'cv-formatter-perfect-enhanced.js']) {
+    const src = read(f);
+    const fn = src.slice(src.indexOf('formatPhone(phone)'), src.indexOf('formatPhone(phone)') + 1400);
+    t('  ' + f + ' delegates to the shared one',
+      /window\.DocxGenerator[\s\S]{0,80}normalizePhone/.test(fn), 'still has its own copy');
+    t('  ' + f + ' no longer groups digits itself',
+      !/match\[1\]\}\s*\$\{match\[2\]/.test(fn) && !/\.slice\(0, 3\)\} \$\{/.test(fn),
+      'the old grouping is still there');
+  }
+  t('  and the shared one is exported',
+    /normalizePhone:\s*normalizePhoneToken/.test(read('docx-generator.js')), 'not exported');
 }
 
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
