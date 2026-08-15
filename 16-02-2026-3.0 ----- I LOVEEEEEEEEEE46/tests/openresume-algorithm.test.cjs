@@ -82,22 +82,40 @@ const lines = (docXml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((p) => {
 }).filter((l) => l.text);
 
 // ---- step 3: group lines into sections -------------------------------
-const SECTION_KEYWORDS = ['profile', 'summary', 'objective', 'experience', 'education',
-  'project', 'skill', 'certification', 'award', 'competenc'];
-const isSectionTitle = (l) => {
-  const onlyItem = l.items.length === 1;
-  const bold = l.items.every((i) => i.bold);
-  const caps = l.text === l.text.toUpperCase() && /[A-Z]/.test(l.text);
-  if (onlyItem && bold && caps) return true;
-  return caps && SECTION_KEYWORDS.some((k) => l.text.toLowerCase().includes(k));
+// Transcribed from the parser's source (group-lines-into-sections.ts),
+// not from its prose description. Three of these conditions are absent
+// from the write-up and all three can reject a heading on their own:
+//
+//   isFirstTwoLines           a heading in the first two lines is never
+//                             a heading, so the name and contact block
+//                             must come first
+//   hasMoreThanOneItemInLine  a heading split into two text items is not
+//                             a heading. Letter spacing splits it into
+//                             one item PER LETTER
+//   textHasAtMost2Words       the fallback only ever fires on a heading
+//                             of two words or fewer
+const SECTION_KEYWORDS = ['experience', 'education', 'project', 'skill', 'job',
+  'course', 'extracurricular', 'objective', 'summary', 'award', 'honor'];
+const isSectionTitle = (l, idx) => {
+  if (idx < 2) return false;                       // isFirstTwoLines
+  if (l.items.length !== 1) return false;          // hasMoreThanOneItemInLine
+  const item = l.items[0];
+  const caps = /[a-zA-Z]/.test(item.str) && item.str === item.str.toUpperCase();
+  if (item.bold && caps) return true;              // the main heuristic
+  // The fallback, all conditions required.
+  const words = item.str.trim().split(/\s+/).filter((w) => w !== '&');
+  if (words.length > 2) return false;
+  if (!/^[a-zA-Z\s&]+$/.test(item.str)) return false;
+  if (!/^[A-Z]/.test(item.str.trim())) return false;
+  return SECTION_KEYWORDS.some((k) => item.str.toLowerCase().includes(k));
 };
 const sections = {};
 let current = 'PROFILE';
 sections[current] = [];
-for (const l of lines) {
-  if (isSectionTitle(l)) { current = l.text; sections[current] = []; continue; }
+lines.forEach((l, idx) => {
+  if (isSectionTitle(l, idx)) { current = l.text; sections[current] = []; return; }
   sections[current].push(l);
-}
+});
 
 console.log('SECTIONS ARE FOUND  (this is what came back empty)');
 {
@@ -121,15 +139,28 @@ const RE = {
   degree: /Associate|Bachelor|Master|PhD|Doctorate|Diploma|MSc|BSc/i,
   title: /Engineer|Analyst|Manager|Architect|Developer|Intern|Technician|Consultant|Designer|Scientist|Director|Lead/i,
 };
+// Transcribed from extract-profile.ts. The write-up omits
+// hasParenthesis (-4) and has4OrMoreWords (-2) on the name, and
+// hasLetter (-4) on the phone -- that last one is why the phone has to
+// sit in a text item of its own, with no label glued to it.
 const scoreName = (l) => {
   let s = 0;
-  if (RE.name.test(l.text)) s += 3;
+  if (RE.name.test(l.text)) s += 3; else return -99;   // required match
   if (l.items.some((i) => i.bold)) s += 2;
-  if (l.text === l.text.toUpperCase()) s += 2;
+  if (/[a-zA-Z]/.test(l.text) && l.text === l.text.toUpperCase()) s += 2;
   if (l.text.includes('@')) s -= 4;
   if (/\d/.test(l.text)) s -= 4;
+  if (/[()]/.test(l.text)) s -= 4;
   if (l.text.includes(',')) s -= 4;
   if (l.text.includes('/')) s -= 4;
+  if (l.text.trim().split(/\s+/).length >= 4) s -= 2;
+  return s;
+};
+// Phone is scored per TEXT ITEM, and any letter in the item is -4.
+const scorePhoneItem = (str) => {
+  let s = 0;
+  if (RE.phone.test(str)) s += 4; else return -99;
+  if (/[a-zA-Z]/.test(str)) s -= 4;
   return s;
 };
 const profile = sections.PROFILE || [];
@@ -147,6 +178,20 @@ console.log('\nTHE PROFILE FIELDS EXTRACT');
     'got ' + JSON.stringify(phone) + ' from ' + JSON.stringify(phoneLine ? phoneLine.text : '(none)'));
   const loc = profile.find((l) => RE.location.test(l.text));
   t('  location', !!loc, 'no line matches City, ST');
+
+  // hasLetter is -4 on the phone, and it is scored PER TEXT ITEM. So the
+  // number must sit in an item of its own with nothing lettered glued to
+  // it. A "Phone:" label in the same run would halve the score to zero
+  // and hand the field to any other item that happens to match. This is
+  // the assertion that would have caught that, and it is why the label
+  // was taken back off.
+  const phoneItems = profile.flatMap((l) => l.items.map((i) => i.str))
+    .filter((s) => RE.phone.test(s));
+  t('  the phone is in a text item of its own', phoneItems.length > 0,
+    'no item matches the phone rule');
+  t('  with no letters glued to it',
+    phoneItems.some((s) => !/[a-zA-Z]/.test(s) && scorePhoneItem(s) === 4),
+    phoneItems.map((s) => JSON.stringify(s) + ' scores ' + scorePhoneItem(s)).join(', '));
 }
 
 console.log('\nTHE EMPLOYMENT HISTORY EXTRACTS  (company, title, dates)');
