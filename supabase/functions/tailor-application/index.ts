@@ -2619,22 +2619,31 @@ PREFER, IN THIS ORDER:
                                   transaction feed, petabyte-scale
   4. A duration or frequency:     nightly, month-end, within the first
                                   quarter of going live
-  5. A percentage                 LAST RESORT, and only when the source
-                                  states it.
 
-RULES ON PERCENTAGES:
-- NEVER introduce a percentage that is not in the source CV. This is
-  already RULE 0, and it is stated again because this is where it is
-  most often broken.
+PERCENTAGES ARE NOT USED AT ALL. Not as a last resort, not even when the
+source CV states one. This is a deliberate decision by the candidate
+whose CV this is, and it is absolute:
+
+- Never write a percentage. No "by 40%", no "a 25% reduction", no "90%
+  faster", no "30 per cent". Not in the CV, not in the cover letter, not
+  in the summary.
+- When the SOURCE bullet contains a percentage, express the underlying
+  fact instead and drop the figure. "Cut the manual review queue by 40%
+  with no loss of precision across millions of daily users" becomes "cut
+  the manual review queue with no loss of precision across millions of
+  daily users" -- which is the stronger sentence anyway, because the
+  reader can check every part of it.
 - NEVER convert a count or a duration INTO a percentage. "Cut processing
   from a full day to under two hours" must not become "cut processing
   time by 90%". The first is evidence; the second is arithmetic on
   evidence, and reads worse.
-- When the source gives BOTH a percentage and the underlying figures,
-  lead with the figures.
-- A bare round percentage -- 20%, 30%, 40%, 50% -- that is not in the
-  source is the specific pattern a reviewer reads as machine-written.
-  RULE 15b already bans it. Never emit one.
+- Every OTHER figure is kept exactly as the source states it: counts,
+  durations, volumes, versions, ranges, "50+", "two hours", "millions",
+  "9 days to 3". Those are the evidence. Only the percentage goes.
+
+The renderer strips any percentage that reaches it, so one emitted here
+is deleted before the document is written. Emitting one wastes the
+sentence it was built around: write the sentence without it.
 
 MEASURABLE RESULTS ARE NOT ONLY NUMBERS. A bullet is measurable when a
 reader can tell what changed and by how much. Scope counts: how many
@@ -2890,8 +2899,8 @@ After rewriting, run this internal checklist:
 [ ] Is the spelling consistent with the POSTING's country throughout (American for US/Canada/Latin America, British everywhere else), with proper nouns left in their owner's spelling?
 [ ] PIVOT CHECK - if the target title is not in the employment history: does the summary open with what the candidate actually IS rather than the target title, and is every clause of the bridge traceable to something in the CV? A pivot is argued with real overlap, never with a borrowed title.
 [ ] Does the CV claim any licence, registration, board certification or named degree the candidate does not hold? Remove it and list the requirement under KEYWORDS OMITTED - this is the one class of claim that is checked before an interview.
-[ ] Is any percentage present that the SOURCE does not state? Remove it. Did you turn a count or a duration into a percentage? Put the original figures back - they are the evidence, the percentage is arithmetic on it.
-[ ] Where the source offers both a count/duration and a percentage for the same fact, does the bullet lead with the count or duration?
+[ ] Is there a percentage anywhere in the CV or cover letter? Remove it, including one the source states, and express the underlying fact instead. Every other figure - counts, durations, volumes, versions - stays exactly as the source has it.
+[ ] Did you turn a count or a duration into a percentage? Put the original figures back: they are the evidence, the percentage is arithmetic on it.
 [ ] Does every bullet open on a strong action verb (no "Responsible for", "Helped with", "Worked on")?
 [ ] Does each bullet state an OUTCOME rather than a duty, wherever the source supports one?
 [ ] Are there ZERO placeholder tokens ("[FILL IN]", "[X]%", "TBD") anywhere in the CV or cover letter?
