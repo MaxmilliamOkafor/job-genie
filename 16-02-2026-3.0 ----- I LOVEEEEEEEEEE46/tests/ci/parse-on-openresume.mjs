@@ -19,10 +19,32 @@ const check = (name, ok, detail) => {
 try {
   await page.goto('https://www.open-resume.com/resume-parser', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.setInputFiles('input[type="file"]', PDF);
-  // The parse is client-side and fast, but the table renders on a tick.
-  await page.waitForTimeout(6000);
+
+  // WAIT FOR OUR RESUME, NOT A FIXED DELAY.
+  //
+  // The page ships a demo resume and renders ITS values until the upload
+  // is parsed. On a six-second delay one run read the demo and reported
+  // on it: Name "Leo Leopard", Email "lleopard@laverne.edu", Phone
+  // "(909) 555-5555" -- a complete, plausible-looking result belonging to
+  // someone else, with the file visibly attached as "cv.pdf - 47.9 KB".
+  //
+  // A test that can silently grade a different document is worse than no
+  // test, so this waits for the demo to be REPLACED and refuses to
+  // assert if it never is.
+  const DEMO = /Leo Leopard|laverne\.edu|LionLike MindState|Volunteer Swim Coach/i;
+  let replaced = false;
+  try {
+    await page.waitForFunction(
+      () => !/Leo Leopard|laverne\.edu/i.test(document.body.innerText),
+      { timeout: 45000 });
+    replaced = true;
+  } catch (e) { /* reported below */ }
+  await page.waitForTimeout(1500);
 
   const text = await page.evaluate(() => document.body.innerText);
+  check('the page is showing OUR resume, not its demo', replaced && !DEMO.test(text),
+    'the demo was still rendered after 45s, so every assertion below would '
+    + 'have graded someone else\'s resume');
   fs.writeFileSync('parse-output.txt', text);
   await page.screenshot({ path: 'parse-screenshot.png', fullPage: true });
 

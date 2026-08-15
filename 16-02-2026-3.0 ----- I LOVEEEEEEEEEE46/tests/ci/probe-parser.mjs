@@ -25,6 +25,15 @@ try {
   console.log('  http ' + (res && res.status()));
   console.log('  title ' + JSON.stringify(await page.title()));
 
+  // A landing page that renders a SAMPLE report is the trap open-resume
+  // set: pastthebots.com shows "Jordan Rivera / PARSE HEALTH 58 / JD
+  // MATCH 41" as marketing, and reading that back as a score for our CV
+  // would be inventing a result. Flagged so the log cannot mislead.
+  const pre = (await page.evaluate(() => document.body.innerText)) || '';
+  const sample = /Jordan Rivera|sample report|illustrative/i.test(pre);
+  if (sample) console.log('  NOTE: this page renders its own SAMPLE report. '
+    + 'Any score visible before an upload belongs to the sample, not to us.');
+
   const inputs = await page.locator('input[type="file"]').count();
   console.log('  file inputs on the page: ' + inputs);
   // A site that needs an account will say so long before it takes a file.
@@ -40,7 +49,30 @@ try {
     console.log('  --- page after upload, first 60 lines ---');
     console.log(after.split('\n').slice(0, 60).map((l) => '  | ' + l).join('\n'));
   } else {
-    console.log('  no file input: the upload is behind a control this pass does not drive');
+    // The input is commonly rendered only after a call-to-action is
+    // clicked, so try the obvious ones before giving up.
+    for (const label of [/check my r|check r|upload|get started free|scan|analyse|analyze/i]) {
+      try {
+        const btn = page.getByRole('link', { name: label }).or(page.getByRole('button', { name: label })).first();
+        if (await btn.count()) {
+          await btn.click({ timeout: 5000 });
+          await page.waitForTimeout(4000);
+          const n = await page.locator('input[type="file"]').count();
+          console.log('  after clicking a call-to-action, file inputs: ' + n + ' at ' + page.url());
+          if (n > 0) {
+            await page.locator('input[type="file"]').first().setInputFiles(PDF);
+            await page.waitForTimeout(15000);
+            const after = await page.evaluate(() => document.body.innerText);
+            fs.writeFileSync('probe-' + TAG + '.txt', after);
+            console.log('  --- after upload, first 70 lines ---');
+            console.log(after.split('\n').slice(0, 70).map((l) => '  | ' + l).join('\n'));
+            await page.screenshot({ path: 'probe-' + TAG + '.png', fullPage: true });
+            break;
+          }
+        }
+      } catch (e) { console.log('  cta attempt: ' + String(e.message).split('\n')[0]); }
+    }
+    console.log('  (no direct file input on the landing page)');
     fs.writeFileSync('probe-' + TAG + '.txt', body);
     console.log(body.split('\n').slice(0, 40).map((l) => '  | ' + l).join('\n'));
   }
