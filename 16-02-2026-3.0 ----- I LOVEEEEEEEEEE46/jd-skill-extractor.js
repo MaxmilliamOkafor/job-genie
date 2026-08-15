@@ -134,6 +134,12 @@
     'new', 'existing', 'multiple', 'various', 'well', 'high', 'highly',
     'plus', 'essential', 'desirable', 'preferred', 'required', 'requirements',
     'e', 'g', 'i', 'etc', 'such', 'via', 'per',
+    // A candidate from ANY path must not open with one of these. The
+    // backward walk stops at them, but the cue path does not walk: it
+    // splits "Familiarity with WMS software, ideally SAP EWM" on the
+    // comma and took "ideally SAP EWM" whole.
+    'ideally', 'preferably', 'complete', 'accurate', 'accurately',
+    'safely', 'ensuring', 'administer', 'escalate', 'liaise',
     // Counting words open a quantity, not a skill: "across two assembly
     // lines" was arriving as the skill "two assembly".
     'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
@@ -170,6 +176,13 @@
     'adherence', 'compliance', 'approach', 'degree', 'discipline',
     'defined', 'given', 'applicable', 'appropriate', 'suitable',
     'key', 'core', 'critical', 'daily', 'overall', 'general',
+    // Found by running this over nursing, finance and warehouse
+    // postings, none of which it was built against. "ideally SAP EWM"
+    // and "complete clinical documentation" are an adverb and a verb
+    // that the walk should never have crossed.
+    'ideally', 'preferably', 'complete', 'completes', 'completing',
+    'accurate', 'accurately', 'administer', 'administers', 'escalate',
+    'liaise', 'local', 'direct', 'safely', 'ensuring',
   ]);
 
   // Heads that read as a skill standing alone. Every other head needs a
