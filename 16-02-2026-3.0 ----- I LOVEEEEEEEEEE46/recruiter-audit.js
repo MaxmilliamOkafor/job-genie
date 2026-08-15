@@ -916,6 +916,58 @@
     return { text: lines.join('\n'), changed };
   }
 
+  // ===================================================================
+  // PERCENTAGES COME OUT
+  // -------------------------------------------------------------------
+  // A percentage is the easiest figure to invent and the hardest for a
+  // reader to check: "by 40%" invites 40% of what, measured how, against
+  // what baseline. A reader who cannot answer discounts the bullet, and
+  // often the document with it. The underlying facts are almost always
+  // stronger anyway -- "cut the manual review queue with no loss of
+  // precision across millions of daily users" says more than the 40% did.
+  //
+  // Removed even when the source CV supplied it, because that is what
+  // was asked for and it is the candidate's own material to decide about.
+  // Nothing else in the sentence is touched: no fact is added, no number
+  // is converted into another number, and every non-percentage figure --
+  // counts, durations, volumes, "50+", "two hours", "millions" -- is left
+  // exactly as written, since those are the evidence worth keeping.
+  const _PCT = /\d{1,3}(?:[.,]\d+)?\s*(?:%|per\s?cent|percent)/i;
+
+  function stripPercentages(cvText) {
+    if (!cvText || !_PCT.test(cvText)) return { text: cvText || '', removed: 0 };
+    const N = '\\d{1,3}(?:[.,]\\d+)?\\s*(?:%|per\\s?cent|percent)';
+    let removed = 0;
+    const out = String(cvText).split('\n').map((line) => {
+      if (!/^\s*[-•*]\s*\S/.test(line) && !/^[A-Z]/.test(line)) return line;
+      if (!_PCT.test(line)) return line;
+      const before = line;
+      let l = line;
+
+      // "cut X by 40%" -> "cut X". The commonest shape by far.
+      l = l.replace(new RegExp(',?\\s*by\\s+(?:about\\s+|around\\s+|roughly\\s+|nearly\\s+|over\\s+|up\\s+to\\s+)?' + N, 'gi'), '');
+      // "a 40% reduction" -> "a reduction"; "the 40% uplift" -> "the uplift"
+      l = l.replace(new RegExp('\\b(a|an|the)\\s+' + N + '\\s+', 'gi'), '$1 ');
+      // "40% faster" -> "faster"
+      l = l.replace(new RegExp('\\b' + N + '\\s+(?=[a-z])', 'gi'), '');
+      // "(40%)" and any remaining bare token
+      l = l.replace(new RegExp('\\s*\\(\\s*' + N + '\\s*\\)', 'gi'), '');
+      l = l.replace(new RegExp('\\s*' + N, 'gi'), '');
+
+      // Tidy what the removal left behind.
+      l = l.replace(/\s{2,}/g, ' ')
+        .replace(/\s+([,.;:])/g, '$1')
+        .replace(/,\s*,/g, ',')
+        .replace(/\bby\s*([,.;:])/gi, '$1')
+        .replace(/\s+(and|with|to)\s*\./gi, '.')
+        .replace(/,\s*\./g, '.')
+        .replace(/\s+$/, '');
+      if (l !== before) removed++;
+      return l;
+    }).join('\n');
+    return { text: out, removed };
+  }
+
   function detectRepeatedWords(cvText) {
     const found = [];
     if (!cvText) return found;
@@ -2371,6 +2423,21 @@
         report.fixes.push('Summary no longer claims a title the employment history '
           + 'does not contain (a pivot is argued with real overlap, not a borrowed title)');
       }
+    }
+
+    // Percentages out. Runs before the wording audits so they see the
+    // final sentence rather than one with a figure about to be removed.
+    if (outCV) {
+      const pct = stripPercentages(outCV);
+      if (pct.removed) {
+        outCV = pct.text;
+        report.fixes.push('Removed percentage claims from ' + pct.removed
+          + ' line(s); counts, durations and volumes were left untouched');
+      }
+    }
+    if (outCL) {
+      const pctCL = stripPercentages(outCL);
+      if (pctCL.removed) outCL = pctCL.text;
     }
 
     // A word used twice in one bullet. Reported, never rewritten -- the
