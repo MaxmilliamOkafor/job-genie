@@ -3247,7 +3247,7 @@ class ATSTailor {
         + '\nLinkedIn Easy Apply autofill (content script)  ' + entries.length + ' entries\n'
         + '='.repeat(72) + '\n';
       if (!entries.length) {
-        return head + '\n(nothing recorded — the filler did not run on any LinkedIn page in this\n'
+        return head + '\n(nothing recorded: the filler did not run on any LinkedIn page in this\n'
           + ' session. If you expected it to: check the LinkedIn Easy Apply toggle, and\n'
           + ' that the page is linkedin.com/jobs/...)\n';
       }
@@ -4026,7 +4026,7 @@ class ATSTailor {
     }
     const company = this.enrichCompanyName();
     if (!company) {
-      say('No employer detected for this page yet — an unscoped people search '
+      say('No employer detected for this page yet. An unscoped people search '
         + 'returns strangers, so this needs the company first.');
       return;
     }
@@ -4048,7 +4048,7 @@ class ATSTailor {
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     say('Opened ' + groups.length + ' searches for <b>' + esc(company) + '</b>'
       + (ctx.location ? ' in ' + esc(String(ctx.location).split(',')[0]) : '') + ':<br>'
-      + groups.map((g) => '&nbsp;• <b>' + esc(g.tier) + '</b> — ' + esc(g.why)).join('<br>')
+      + groups.map((g) => '&nbsp;• <b>' + esc(g.tier) + '</b>: ' + esc(g.why)).join('<br>')
       + '<br><br>Open anyone who looks right. Their profile is picked up '
       + 'automatically, and "Find contacts now" will resolve the address.');
   }
@@ -4169,7 +4169,7 @@ class ATSTailor {
         '<div style="font-weight:600;margin-bottom:4px;">Numbers worth adding ('
         + items.length + ')</div>'
         + '<div style="opacity:.75;font-size:11px;margin-bottom:6px;">'
-        + 'These bullets are true but unquantified. Nothing was invented — add your '
+        + 'These bullets are true but unquantified. Nothing was invented. Add your '
         + 'real figures and re-run for a stronger CV.</div>'
         + '<ul style="margin:0;padding-left:16px;line-height:1.45;">'
         + items.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ul>';

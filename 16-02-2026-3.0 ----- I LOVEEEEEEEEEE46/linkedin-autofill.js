@@ -1015,7 +1015,7 @@
           if (!confirmed) {
             trace('submit.unconfirmed', { step: steps + 1 });
             return done('stuck',
-              'Pressed Submit but nothing on the page changed — the application was NOT sent.',
+              'Pressed Submit but nothing on the page changed. The application was NOT sent.',
               steps + 1);
           }
           return done('submitted', 'Application submitted.', steps + 1);
@@ -1199,7 +1199,7 @@
     _obs = null;
     clearTimeout(_debounce);
     _firstRequestAt = 0;
-    log('left the jobs section — watcher stopped');
+    log('left the jobs section, watcher stopped');
   }
 
   function syncLifecycle(reason) {

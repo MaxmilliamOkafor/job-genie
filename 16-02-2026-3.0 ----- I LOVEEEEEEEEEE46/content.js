@@ -3122,7 +3122,7 @@
     attachLoop4ms = setInterval(() => {
       if (!filesLoaded) return;
       if (Date.now() - attachStartTime > ATTACH_SAFETY_TIMEOUT_MS) {
-        console.warn('[ATS Tailor] Attach loop safety timeout (30s) — stopping');
+        console.warn('[ATS Tailor] Attach loop safety timeout (30s), stopping');
         stopAttachLoops();
         return;
       }
@@ -3188,7 +3188,7 @@
               console.log('[ATS Tailor] Completeness check: settled complete on re-scan');
               return;
             }
-            const msg = 'Review before submitting — ' +
+            const msg = 'Review before submitting. ' +
               window.ApplicationValidator.summarise(second).replace(/^⚠️\s*/, '');
             console.warn('[ATS Tailor] Completeness check:', msg);
             createStatusBanner();

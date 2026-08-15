@@ -2822,7 +2822,7 @@
             claimed: y.claimed,
             evidenced: y.evidenced,
             note: `The summary claimed ${y.claimed} years of experience but your history evidences about ` +
-              `${y.evidenced}. Corrected to ${y.evidenced} — a recruiter checks this by subtracting your earliest date.`,
+              `${y.evidenced}. Corrected to ${y.evidenced}. A recruiter checks this by subtracting your earliest date.`,
           });
         }
         const drift = summaryPersonaDrift(outCV, originalCV);

@@ -69,15 +69,15 @@
     const l = String(label || '').trim().slice(0, 100);
     switch (qualType) {
       case 'education':
-        return `"${l}" — lead with equivalent hands-on experience and any certifications up front, so a screener sees the capability before the credential.`;
+        return `"${l}". Lead with equivalent hands-on experience and any certifications up front, so a screener sees the capability before the credential.`;
       case 'certification':
-        return `"${l}" — if you hold anything adjacent, surface it in the header/certifications; if in progress, say so plainly.`;
+        return `"${l}". If you hold anything adjacent, surface it in the header/certifications; if in progress, say so plainly.`;
       case 'technical_skill':
-        return `"${l}" — if you have genuine adjacent experience, name it explicitly in the summary and the closest bullet; don't leave the screener to infer it.`;
+        return `"${l}". If you have genuine adjacent experience, name it explicitly in the summary and the closest bullet; don't leave the screener to infer it.`;
       case 'domain_knowledge':
-        return `"${l}" — connect your nearest domain experience to this one in the summary line.`;
+        return `"${l}". Connect your nearest domain experience to this one in the summary line.`;
       default:
-        return `"${l}" — work this into the bullet where you genuinely did it, using the JD's exact wording.`;
+        return `"${l}". Work this into the bullet where you genuinely did it, using the JD's exact wording.`;
     }
   }
 
@@ -102,7 +102,7 @@
     if (requiredYears !== null && candidateYears !== null && candidateYears + 1 < requiredYears) {
       priorities.push(
         `JD asks for ${requiredYears}+ years; your CV evidences about ${candidateYears}. ` +
-        `Lead with scope and impact — your largest system, biggest number, most senior decision — ` +
+        `Lead with scope and impact: your largest system, biggest number, most senior decision, ` +
         `so the screener reads seniority from results rather than tenure.`
       );
     }
@@ -128,14 +128,14 @@
     else focus = 'light';
 
     const LABELS = {
-      light: '🟢 Strong alignment — light tailoring',
-      targeted: '🟡 Good angle available — targeted tailoring',
-      heavy: '🔵 Needs a strong angle — heavy tailoring',
+      light: '🟢 Strong alignment, light tailoring',
+      targeted: '🟡 Good angle available, targeted tailoring',
+      heavy: '🔵 Needs a strong angle, heavy tailoring',
     };
     const ADVICE = {
       light: 'Your CV already speaks to this role. Make sure the metrics are real and the project links load.',
       targeted: 'Lead with the priority below and this becomes a genuinely competitive application.',
-      heavy: 'Build the case around the priorities below — lead with your strongest transferable evidence, and keep every claim true.',
+      heavy: 'Build the case around the priorities below. Lead with your strongest transferable evidence, and keep every claim true.',
     };
 
     const parts = [];
