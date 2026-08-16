@@ -934,6 +934,138 @@
   // exactly as written, since those are the evidence worth keeping.
   const _PCT = /\d{1,3}(?:[.,]\d+)?\s*(?:%|per\s?cent|percent)/i;
 
+  /**
+   * A STANDARD BOLTED ONTO THE END OF A BULLET THAT IS NOT ABOUT IT.
+   *
+   * Read off the real generated CV by a parser:
+   *
+   *   "Implemented full-stack observability with the ELK Stack,
+   *    Prometheus and Grafana, enabling early-warning alerting and
+   *    cutting mean time to resolution substantially, with iso 9001."
+   *
+   *   "Built and maintained CI/CD pipelines with Azure DevOps and GitHub
+   *    Actions, enabling automated deployments across staging,
+   *    using as9100."
+   *
+   * ISO 9001 is a quality management standard and AS9100 is its
+   * aerospace equivalent. Neither has anything to do with observability
+   * or a deployment pipeline. They were appended to reach a keyword, and
+   * the seam shows: a trailing clause with no verb, hanging off a
+   * sentence that had already finished, in lower case.
+   *
+   * A recruiter in that industry reads this as someone who has never
+   * worked to the standard, which is worse than not matching the keyword
+   * at all. So the clause goes.
+   *
+   * Two rules, both narrow on purpose:
+   *
+   *   A standard is REMOVED only when it forms a trailing clause of the
+   *   shape ", with X." or ", using X." at the very end of a bullet.
+   *   That shape is the bolt-on. A standard named inside the sentence
+   *   ("audited the line against ISO 9001 before release") is real work
+   *   and is left exactly as it is.
+   *
+   *   A standard that stays is RECASED. "iso 9001" and "as9100" are
+   *   proper names and are written ISO 9001 and AS9100. Lower case is
+   *   itself a tell that the term was pasted rather than written.
+   */
+  // Two halves, because four of these prefixes are also ordinary English
+  // words. "AS", "EN", "UL" and "API" may only be followed IMMEDIATELY by
+  // the number (as9100, EN1090). Allowing a space would have matched
+  // "...as 2023 revenue..." and rewritten it to "AS 2023", inventing a
+  // standard out of a sentence. The unambiguous prefixes may be spaced,
+  // which is how they are normally written, and two digits are enough
+  // because NFPA 70 exists.
+  const _STANDARD = '(?:\\b(?:ISO|IEC|DIN|ANSI|ASTM|ASME|IPC|NFPA|OSHA|SAE|MIL|BS)'
+    + '(?:[\\s-]?[A-Z])?[\\s-]?\\d{2,5}(?:[:-]\\d{2,4})?)'
+    + '|(?:\\b(?:AS|EN|UL|API)-?\\d{2,5}(?:[:-]\\d{2,4})?)';
+
+  /**
+   * EMPLOYMENT TYPE BELONGS IN THE DESCRIPTION, NOT IN THE JOB TITLE.
+   *
+   * Measured on a generated document: the Job Title a parser extracts is
+   *
+   *     "AI Product Manager (Contract, part-time)"
+   *
+   * That is a real field. Workday, Taleo and iCIMS store it, recruiters
+   * search and filter on it, and several normalise it against a title
+   * taxonomy. "AI Product Manager (Contract, part-time)" matches neither
+   * a search for "AI Product Manager" nor any taxonomy entry, so the role
+   * is harder to find than if the qualifier were not there.
+   *
+   * The information itself matters and is NOT dropped. It moves to the
+   * one place that costs nothing: the description. Ranked by how much
+   * damage a stray qualifier does,
+   *
+   *     Job Title   searched and matched directly    keep clean
+   *     Company     matched against employer names   keep clean
+   *     Dates       parsed for tenure arithmetic     keep clean
+   *     Bullets     free text, matched by keyword    safe
+   *
+   * so it becomes the role's first bullet, where a recruiter reads it in
+   * the same glance and no structured field carries it.
+   *
+   * Only genuine employment-type qualifiers move. A parenthetical that is
+   * part of the title itself, "(EMEA)" or "(Data Platform)", is left
+   * alone: it is the name of the job, not a note about the contract.
+   */
+  const _EMP_TYPE = new RegExp(
+    '\\s*\\(\\s*((?:contract|contractor|part[\\s-]?time|full[\\s-]?time|freelance'
+    + '|temporary|temp|fixed[\\s-]?term|interim|internship|intern|placement'
+    + '|seasonal|maternity cover|parental cover|secondment|consultant|consultancy'
+    + '|permanent|perm|remote|hybrid|on[\\s-]?site)'
+    + '(?:\\s*,\\s*[a-z\\s-]+)*)\\s*\\)\\s*$', 'i');
+
+  function moveEmploymentType(cvText) {
+    if (!cvText || typeof cvText !== 'string') return { text: cvText || '', moved: 0 };
+    const lines = cvText.split('\n');
+    const out = [];
+    let inExp = false, moved = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const bare = line.trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; out.push(line); continue; }
+      if (inExp && _ANY_HEAD.test(bare) && !_EXP_HEAD.test(bare)) { inExp = false; out.push(line); continue; }
+
+      const m = (inExp && bare && !/^\s*[-*•]/.test(line)) ? line.match(_EMP_TYPE) : null;
+      if (!m) { out.push(line); continue; }
+
+      out.push(line.replace(_EMP_TYPE, ''));
+      // The date line, when there is one, must stay immediately under the
+      // title: that adjacency is how a parser binds a date to a role.
+      const next = lines[i + 1];
+      if (next && ROLE_DATE_RE.test(next.trim())) { out.push(next); i++; }
+      const label = m[1].replace(/\s+/g, ' ').trim();
+      out.push('- ' + label.charAt(0).toUpperCase() + label.slice(1) + '.');
+      moved++;
+    }
+    return { text: out.join('\n'), moved };
+  }
+
+  function stripBoltedStandards(text) {
+    if (!text || typeof text !== 'string') return { text: text || '', removed: 0, recased: 0 };
+    let removed = 0, recased = 0;
+    const lines = text.split('\n').map((line) => {
+      let out = line;
+      // Only a BULLET can carry a bolt-on: a heading or a skills list
+      // legitimately ends in a bare term.
+      if (/^\s*[-*•]/.test(out)) {
+        const bolt = new RegExp('\\s*,\\s*(?:with|using|including|per|to|under|and)\\s+('
+          + _STANDARD + ')\\s*\\.?\\s*$', 'i');
+        const m = out.match(bolt);
+        if (m) { out = out.replace(bolt, '.'); removed++; }
+      }
+      // Whatever survived is a real mention, so write it properly.
+      out = out.replace(new RegExp(_STANDARD, 'gi'), (s) => {
+        const fixed = s.toUpperCase();
+        if (fixed !== s) recased++;
+        return fixed;
+      });
+      return out;
+    });
+    return { text: lines.join('\n'), removed, recased };
+  }
+
   function stripPercentages(cvText) {
     if (!cvText || !_PCT.test(cvText)) return { text: cvText || '', removed: 0 };
     const N = '\\d{1,3}(?:[.,]\\d+)?\\s*(?:%|per\\s?cent|percent)';
@@ -2452,6 +2584,31 @@
       if (pctCL.removed) outCL = pctCL.text;
     }
 
+    // Employment type out of the job title and into the description.
+    if (outCV) {
+      const emp = moveEmploymentType(outCV);
+      outCV = emp.text;
+      if (emp.moved) {
+        report.fixes.push('Moved the employment type out of ' + emp.moved
+          + ' job title(s) and into the role description, so the title field '
+          + 'a recruiter searches on is the title alone');
+      }
+    }
+
+    // A standard bolted onto the end of an unrelated bullet.
+    if (outCV) {
+      const bolt = stripBoltedStandards(outCV);
+      outCV = bolt.text;
+      if (bolt.removed) {
+        report.fixes.push('Removed ' + bolt.removed + ' standard(s) bolted onto the end of '
+          + 'a bullet that was not about them');
+      }
+      if (bolt.recased) {
+        report.fixes.push('Corrected the casing of ' + bolt.recased + ' standard(s)');
+      }
+    }
+    if (outCL) outCL = stripBoltedStandards(outCL).text;
+
     // A word used twice in one bullet. Reported, never rewritten -- the
     // correct fix needs a fact about the employer that this code does not
     // have, and inventing one is worse than the repetition.
@@ -2844,6 +3001,9 @@
 
   const RecruiterAudit = {
     runRecruiterAudit,
+    // Exported so the boundary between a bolted-on standard and a real
+    // mention can be asserted directly.
+    stripBoltedStandards,
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,

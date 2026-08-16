@@ -280,7 +280,11 @@
     }
     if (/\bemail\b/.test(l)) return P.email || '';
     if (/country.?code|phone.?code|dial.?code|calling.?code/.test(l)) return P.phoneCountryCode || DEFAULTS.phoneCode;
-    if (/phone|mobile|cell|telephone/.test(l)) return P.phone || '';
+    if (/phone|mobile|cell|telephone/.test(l)) {
+      // National when the form carries the country code separately, or
+      // it arrives twice and the field is rejected. See fillContainer.
+      return o.hasCountryCodeField ? _nationalPhone(P.phone, P.phoneCountryCode) : (P.phone || '');
+    }
 
     // --- location ----------------------------------------------------
     if (/^city$|\bcity\b|current.?city/.test(l)) return P.city || '';
@@ -602,6 +606,37 @@
     return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
+  /**
+   * The number without its country code, for a form that asks for the
+   * code separately.
+   *
+   * Strips the stored code when the number carries it, so "+353 874 261
+   * 508" with a code of "+353" becomes "874 261 508". Falls back to
+   * removing a leading + and one to three digits when no code is stored.
+   * The remaining digits are never altered: only the prefix is removed,
+   * and a number that does not start with a code is returned untouched.
+   */
+  function _nationalPhone(phone, countryCode) {
+    const raw = String(phone == null ? '' : phone).trim();
+    if (!raw || raw.charAt(0) !== '+') return raw;
+    const cc = String(countryCode || '').replace(/\D/g, '');
+    if (cc) {
+      const digits = raw.replace(/[^\d]/g, '');
+      if (digits.indexOf(cc) === 0) {
+        // Walk the original, dropping characters until the country
+        // code's digits are consumed, so the rest keeps its grouping.
+        let seen = 0, i = 1;
+        while (i < raw.length && seen < cc.length) {
+          if (/\d/.test(raw.charAt(i))) seen++;
+          i++;
+        }
+        return raw.slice(i).trim();
+      }
+    }
+    const m = raw.match(/^\+\d{1,3}[\s-]*(.+)$/);
+    return m ? m[1].trim() : raw;
+  }
+
   // Option matching that understands yes/no semantics -- the single most
   // common dropdown/radio answer on application forms.
   function optionMatches(optText, want) {
@@ -719,6 +754,34 @@
     let answerable = 0;
 
     const controls = scope.querySelectorAll('input, select, textarea, [role="combobox"]');
+
+    // DOES THIS FORM ASK FOR THE COUNTRY CODE SEPARATELY?
+    //
+    // Workday does, and most enterprise forms do. When it has its own
+    // control, the number field must NOT repeat it, or the form receives
+    // +353 twice over. From a real application, with Country Phone Code
+    // already set to Ireland (+353) and the number field filled from the
+    // profile:
+    //
+    //   +353 874 261 508
+    //   Error: Enter a phone number in the valid format. The number
+    //   isn't recognized. Verify the country phone code and number.
+    //
+    // A required field, rejected, on a form the user cannot submit. So
+    // the number is passed to answerFor as national when, and only when,
+    // the country code has somewhere else to go.
+    let hasCountryCodeField = false;
+    for (const el of controls) {
+      try {
+        const l = String(labelFor(el) || '').toLowerCase();
+        if (/country.?code|phone.?code|dial.?code|calling.?code/.test(l)) {
+          hasCountryCodeField = true;
+          break;
+        }
+      } catch (e) {}
+    }
+    if (hasCountryCodeField) o.hasCountryCodeField = true;
+
     for (const el of controls) {
       try {
         const type = (el.type || '').toLowerCase();
@@ -854,7 +917,7 @@
     isVisible, optionMatches, escapeSelector, DEFAULTS,
     // Exported so the boundary between "motivation" and "claim", and the
     // length clamp, can be asserted directly rather than through a DOM.
-    _isMotivationQuestion, _clampToMaxLength,
+    _isMotivationQuestion, _clampToMaxLength, _nationalPhone,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.AutofillCore;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

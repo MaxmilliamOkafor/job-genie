@@ -171,22 +171,39 @@
     const foundKeywords = { high: [], medium: [], low: [], unclassified: [] };
 
     // Extract known HIGH ROI keywords
+    // A KEYWORD MUST MATCH A WHOLE WORD, NOT A SUBSTRING.
+    //
+    // The lists were matched with jdLower.includes(skill), and they
+    // contain 'r', 'go' and 'ats'. A single letter is inside almost every
+    // posting ever written, so "r" was classified HIGH ROI on a
+    // manufacturing JD and printed first in the skills section of the
+    // generated CV. "go" matches "going", "ats" matches "operators".
+    //
+    // Boundaries are non-word characters rather than \b, because \b
+    // breaks on the terms that need it most: c++, .net, ci/cd, node.js.
+    const _jdHas = (skill) => {
+      const k = String(skill || '').toLowerCase().trim();
+      if (!k) return false;
+      const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('(^|[^a-z0-9])' + esc + '($|[^a-z0-9])', 'i').test(jdLower);
+    };
+
     ROI_CLASSIFICATION.HIGH.forEach(kw => {
-      if (jdLower.includes(kw.toLowerCase())) {
+      if (_jdHas(kw)) {
         foundKeywords.high.push(kw);
       }
     });
 
     // Extract known MEDIUM ROI keywords
     ROI_CLASSIFICATION.MEDIUM.forEach(kw => {
-      if (jdLower.includes(kw.toLowerCase())) {
+      if (_jdHas(kw)) {
         foundKeywords.medium.push(kw);
       }
     });
 
     // Extract known LOW ROI keywords
     ROI_CLASSIFICATION.LOW.forEach(kw => {
-      if (jdLower.includes(kw.toLowerCase())) {
+      if (_jdHas(kw)) {
         foundKeywords.low.push(kw);
       }
     });
@@ -224,7 +241,7 @@
     // ============ HARD SKILLS EXTRACTION (HIGH SCORE IMPACT) ============
     const extractedHardSkills = [];
     HARD_SKILLS.forEach(skill => {
-      if (jdLower.includes(skill.toLowerCase())) {
+      if (_jdHas(skill)) {
         extractedHardSkills.push(skill);
       }
     });
@@ -232,10 +249,62 @@
     // ============ SOFT SKILLS EXTRACTION (MEDIUM SCORE IMPACT) ============
     const extractedSoftSkills = [];
     SOFT_SKILLS.forEach(skill => {
-      if (jdLower.includes(skill.toLowerCase())) {
+      if (_jdHas(skill)) {
         extractedSoftSkills.push(skill);
       }
     });
+
+    // ============ OPEN EXTRACTION, INTO THE FIELDS THAT ARE READ ============
+    //
+    // Everything above intersects the JD with closed lists, and those
+    // lists are software vocabulary. On one real mechanical and
+    // industrial engineering posting, 14 of its 17 hard skills were in
+    // none of them, and `unclassified` could not recover them because it
+    // splits on whitespace and every one is multi-word.
+    //
+    // This MUST land in foundKeywords, not in a field of its own. The
+    // first attempt added `hardSkills` to the return value; nothing
+    // downstream reads that field. tailor-universal consumes
+    // keywordList, mediumPriority and softSkillsForExperience, and
+    // allocateSectionsOptimally reads highROI, mediumROI and lowROI. A
+    // skill that is not in one of those is not placed anywhere, so the
+    // extractor ran and changed nothing.
+    //
+    // Hard skills join HIGH: they are the technical terms, and highROI
+    // is what feeds the skills section and the summary. Soft skills join
+    // LOW, which is the existing route into experience bullets and is
+    // explicitly excluded from the skills list.
+    let openHard = [], openSoft = [];
+    try {
+      const X = (typeof window !== 'undefined' && window.JDSkillExtractor)
+        || (typeof globalThis !== 'undefined' && globalThis.JDSkillExtractor);
+      if (X) {
+        const found = X.extractSkills(jobDescription);
+        openHard = found.hardSkills || [];
+        openSoft = found.softSkills || [];
+      }
+    } catch (e) {
+      console.warn('[UniversalStrategy] open skill extraction failed:', e && e.message);
+    }
+    const _key = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9/+#]+/g, ' ').trim();
+    const _mergeInto = (list, additions) => {
+      const seen = new Set(list.map(_key));
+      for (const a of additions) {
+        const k = _key(a);
+        if (!k || seen.has(k)) continue;
+        seen.add(k);
+        list.push(a);
+      }
+      return list;
+    };
+    _mergeInto(foundKeywords.high, openHard);
+    _mergeInto(foundKeywords.low, openSoft);
+    // A term now carried by high or low is no longer "unclassified", and
+    // leaving it in both would double it in allKeywords.
+    {
+      const claimed = new Set(foundKeywords.high.concat(foundKeywords.low).map(_key));
+      foundKeywords.unclassified = foundKeywords.unclassified.filter((w) => !claimed.has(_key(w)));
+    }
 
     // Combine all keywords (prioritized: hard skills first, then process, then soft)
     const allKeywords = [
@@ -247,15 +316,13 @@
 
     const timing = performance.now() - startTime;
     console.log(`[UniversalStrategy] Phase 1 complete in ${timing.toFixed(0)}ms (target: ${TIMING_TARGETS.EXTRACT_CLASSIFY}ms)`);
-    console.log(`[UniversalStrategy] Hard skills: ${extractedHardSkills.length}, Soft skills: ${extractedSoftSkills.length}`);
-
     return {
       highROI: foundKeywords.high,
       mediumROI: foundKeywords.medium,
       lowROI: foundKeywords.low,
       // NEW: Explicit hard/soft skills categorisation (Jobscan ATS scoring)
-      hardSkills: extractedHardSkills,   // HIGH SCORE IMPACT
-      softSkills: extractedSoftSkills,   // MEDIUM SCORE IMPACT
+      hardSkills: _mergeInto(extractedHardSkills.slice(), openHard),   // HIGH SCORE IMPACT
+      softSkills: _mergeInto(extractedSoftSkills.slice(), openSoft),  // MEDIUM SCORE IMPACT
       unclassified: foundKeywords.unclassified,
       all: allKeywords,
       timing,

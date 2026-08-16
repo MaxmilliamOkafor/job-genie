@@ -276,6 +276,7 @@
         "mandatory-keywords.js",
         "universal-jd-parser.js",
         "reliable-extractor.js",
+        "jd-skill-extractor.js",
         "universal-keyword-strategy.js",
         "unique-cv-engine.js",
         "tailor-universal.js",

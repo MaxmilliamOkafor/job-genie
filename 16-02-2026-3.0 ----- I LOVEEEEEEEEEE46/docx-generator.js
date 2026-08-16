@@ -79,6 +79,25 @@
   function paragraph(content, opts = {}) {
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
+    // A HEADING SEPARATED FROM WHAT IT INTRODUCES IS A PARSING FAULT.
+    //
+    // Nothing here set keepNext, so a company name could sit at the foot
+    // of one page with its date line and bullets starting the next. A
+    // parser reading a role expects company, then title, then dates,
+    // adjacent; split across a page boundary they stop being one record.
+    //
+    // It also produced visible damage in a real parse. Both of these are
+    // page boundaries, and both merged two unrelated lines into one:
+    //
+    //   "LedgerLens, Explainable Credit-Risk Scoring APIPython, XGBoost"
+    //   "review. -Architected an autoscaling microservices backend"
+    //
+    // keepNext holds a heading, a company, a role line and a project
+    // title with the line beneath it, so the break falls between records
+    // rather than through the middle of one. keepLines stops a single
+    // paragraph being split across pages.
+    if (opts.keepNext) ppr.push('<w:keepNext/>');
+    if (opts.keepLines) ppr.push('<w:keepLines/>');
     // Tab stops: opts.tabs is an array of integers (twips from left margin).
     // The competencies grid this was built for is gone -- it is now one
     // item per line -- so the only remaining user is the role line, which
@@ -107,28 +126,74 @@
     return `<w:p>${pprXml}${content}</w:p>`;
   }
 
-  // ---- phone normaliser (parser-safe, no stray colon) ------------------
-  // The source CV text header sometimes arrives as "+353: 0874261508"
-  // (a stray colon between country code and number) which breaks ATS
-  // phone parsers and reads as malformed. Normalise any phone-shaped
-  // contact segment to "+CC NNN NNN NNNN" -- colon removed, trunk 0
-  // after the country code dropped, light readability grouping.
+  // ---- phone normaliser: ONE implementation, shared with the PDF ------
+  // Exported as DocxGenerator.normalizePhone. The PDF formatters used to
+  // carry their own copy with the same faults, so fixing the DOCX left
+  // the PDF broken.
   function normalizePhoneToken(seg) {
-    const cleaned = String(seg || '').replace(/[^\d+]/g, '');
+    const raw = String(seg || '');
+    const cleaned = raw.replace(/[^\d+]/g, '');
     if (!/\d{7,}/.test(cleaned)) return seg; // not a phone
-    const m = cleaned.match(/^\+(\d{1,3})0?(\d+)$/);
+
+    // THIS FUNCTION USED TO BREAK THE NUMBER IT WAS TIDYING.
+    //
+    // It stripped the trunk zero (the `0?` in its old pattern) and then
+    // grouped the rest in threes "for readability", turning
+    //
+    //     +353: 0874261508        which parses
+    // into
+    //     +353 874 261 508        which does not
+    //
+    // Measured against the parser's own documented rule,
+    // /\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/, on a CV of the user's that
+    // parses correctly today:
+    //
+    //     "+353 874 261 508"   MISS      (what this produced)
+    //     "+353 0874261508"    "353 0874261"   country code swallowed
+    //     "+353: 0874261508"   "0874261508"    correct
+    //
+    // Two things are load-bearing and both were being destroyed.
+    //
+    // THE TRUNK ZERO. It makes the national number ten digits, which is
+    // what a 3-3-4 rule needs. Nine digits cannot match it however they
+    // are spaced, so no Irish or UK number written without the zero is
+    // readable to a parser built around North American numbers.
+    //
+    // THE SEPARATOR AFTER THE COUNTRY CODE MUST NOT BE A SPACE OR A
+    // HYPHEN. Both appear in that rule's own character class, so the
+    // match runs straight through the country code and returns
+    // "353 0874261" -- a wrong number, which is worse than none. A colon
+    // stops it, so the match starts cleanly at the national number. The
+    // previous comment here called that colon malformed and removed it.
+    // It is the reason the format works.
+    //
+    // No digit is invented. The country code is read from the original
+    // separator rather than guessed by length (greedy matching turned
+    // "+1 (415) 555-0134" into country code 141), and the national part
+    // is passed through exactly as written, minus its spacing.
+    // Countries whose national numbers carry a trunk 0 that is dropped
+    // when dialling internationally, with the digit count WITHOUT it.
+    // The zero is restored only when the length matches exactly, so a
+    // number of any other shape is passed through untouched rather than
+    // guessed at. This is the standard national prefix, not an invention:
+    // +353 87 426 1508 is dialled 087 426 1508 inside Ireland. Countries
+    // with no trunk prefix (the NANP, Spain, Italy's numbers which keep
+    // their own zero) are deliberately absent.
+    const TRUNK_ZERO = { 353: 9, 44: 10, 33: 9, 61: 9, 91: 10 };
+
+    const m = raw.match(/^\s*\+(\d{1,3})\D+(.+)$/);
     if (m) {
-      const cc = m[1], local = m[2];
-      let grouped = local;
-      if (local.length >= 9) grouped = `${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
-      else if (local.length >= 7) grouped = `${local.slice(0, 3)} ${local.slice(3)}`;
-      return `+${cc} ${grouped}`;
+      const cc = m[1];
+      let national = m[2].replace(/\D/g, '');
+      if (national.length >= 7) {
+        if (national.charAt(0) !== '0' && TRUNK_ZERO[cc] === national.length) {
+          national = '0' + national;
+        }
+        return `+${cc}: ${national}`;
+      }
     }
-    if (/^\d{7,}$/.test(cleaned)) {
-      return cleaned.length >= 10
-        ? `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`
-        : cleaned;
-    }
+    // Already national and contiguous: leave it exactly as it is.
+    if (/^\d{7,}$/.test(cleaned)) return cleaned;
     return seg;
   }
 
@@ -172,11 +237,32 @@
           : (/^https?:\/\//i.test(seg) ? seg : 'https://' + seg)
               .replace(/^(https?:\/\/)www\./i, '$1')
               .replace(/\/+$/, '');
+        // Same reason as the phone: a label identifies the field without
+        // the parser having to recognise the value. Email already parses
+        // everywhere on its @ shape, so this costs nothing and helps the
+        // parsers that key on the label.
+        if (isEmail) pieces.push(run('Email: ', { color: C.MUTED, sz: opts.sz || 19 }));
         pieces.push(`<w:hyperlink r:id="${id}">${run(display, { color: C.LINK, sz: opts.sz || 19, underline: true })}</w:hyperlink>`);
+      } else if (looksLikePhone(seg)) {
+        // A PLAIN-TEXT "Phone:" LABEL IN FRONT OF THE NUMBER.
+        //
+        // The contact line was a bare pipe-separated list:
+        //
+        //   Surrey, CA | +353 874 261 508 | maxokafordev@gmail.com
+        //
+        // and the OpenResume parser returned Phone: EMPTY. Its rule is a
+        // regex for a US 3-3-4 number, which an Irish +353 number cannot
+        // satisfy however it is grouped. A label is what lets a parser
+        // identify the field without recognising the number format, and
+        // it is the one item on the standard ATS checklist this line did
+        // not meet. Every parser that reads labels now gets the field for
+        // free; the regex-only ones are no worse off than before.
+        // No "Phone:" prefix. The number already carries "+353:", and
+        // "Phone: +353: 0874261508" reads badly to the human who sees it
+        // first. The colon in the number is the part that does the work.
+        pieces.push(run(normalizePhoneToken(seg), { color: C.BODY, sz: opts.sz || 19 }));
       } else {
-        // Phone segments get normalised (strip stray colon, group digits).
-        const display = looksLikePhone(seg) ? normalizePhoneToken(seg) : seg;
-        pieces.push(run(display, { color: C.BODY, sz: opts.sz || 19 }));
+        pieces.push(run(seg, { color: C.BODY, sz: opts.sz || 19 }));
       }
     });
     return paragraph(pieces.join(''), { align: opts.align || 'left', spacingAfter: opts.spacingAfter != null ? opts.spacingAfter : 40 });
@@ -666,10 +752,34 @@
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {
-          // SECTION HEADER -- navy, bold, caps, tracked, light-grey rule under
+          // SECTION HEADER -- navy, bold, caps, light-grey rule under.
+          //
+          // NO LETTER SPACING. This carried spacing: 24, a little over a
+          // point of tracking, which looks smart on the page and destroys
+          // the document for every ATS that reads it.
+          //
+          // Letter spacing is applied by the renderer between glyphs, so
+          // the PDF text layer stops being one word. Run through the
+          // OpenResume parser, this CV's headings came out as
+          //
+          //     P R O F ES S I O NA L EXP ER I ENCE
+          //     T ECH NI CA L S K I LLS
+          //     ED U CAT I O N
+          //
+          // Every ATS locates a section by keyword-matching its heading,
+          // and none of those match. So no section was found: all 90
+          // lines were grouped under PROFILE, and Work Experience,
+          // Education and Skills each came back EMPTY. Workday's
+          // autofillWithResume did the same thing on the same file.
+          //
+          // That is the whole document lost, not a keyword. It outranks
+          // every scoring question, because a parser that finds no
+          // employment history has nothing to score. The name kept its
+          // spacing: 4, which is a fifth of this and parsed correctly.
           out.push(paragraph(
-            run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22, spacing: 24 }),
-            { spacingBefore: 240, spacingAfter: 60, bottomBorder: { color: C.RULE, sz: 4 } }
+            run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22 }),
+            { spacingBefore: 240, spacingAfter: 60, keepNext: true, keepLines: true,
+              bottomBorder: { color: C.RULE, sz: 4 } }
           ));
           inExperience = EXPERIENCE_HEADERS.includes(upper);
           roleState = inExperience ? 'expectCompany' : 'none';
@@ -692,7 +802,8 @@
             continue;
           }
           if (roleState === 'expectCompany') {
-            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: 21 }), { spacingBefore: 80, spacingAfter: 20 }));
+            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: 21 }),
+              { spacingBefore: 80, spacingAfter: 20, keepNext: true, keepLines: true }));
             roleState = 'expectTitle';
             continue;
           }
@@ -1097,7 +1208,12 @@
     return slug ? nameBase + '_' + slug : nameBase;
   }
 
-  global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase };
+  // normalizePhone is exported because the PDF formatters had their OWN
+  // copy of this logic, with the same faults, and the DOCX got fixed
+  // while the PDF stayed broken. One implementation, used by every path
+  // that writes a contact line.
+  global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase,
+    normalizePhone: normalizePhoneToken };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }
