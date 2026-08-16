@@ -1057,6 +1057,108 @@
   }
 
   // ===================================================================
+  // EDUCATION ENTRIES CARRY THEIR DATES
+  // -------------------------------------------------------------------
+  // A live Workday parse of a generated CV returned both education
+  // entries with `date: ""`. Workday's education block has required
+  // From/To year fields, and it is not alone -- the same required-year
+  // shape appears across the enterprise ATS tier. Every one of those
+  // applications was being hand-typed, on a field the profile already
+  // knows the answer to.
+  //
+  // The cause is that the generator writes the education section from
+  // the model's tailored text, and the model reliably emits degree and
+  // institution and reliably drops the year. Asking it more firmly is
+  // not a guarantee; reading the date out of the structured profile and
+  // putting it back is.
+  //
+  // Nothing is invented. A date is restored only when the profile
+  // carries one for an entry the CV already names, and an entry that
+  // already shows a year is left exactly as it is.
+  const _EDU_HEAD = new RegExp('^\\s*(?:EDUCATION|ACADEMIC\\s+BACKGROUND'
+    + '|ACADEMIC\\s+QUALIFICATIONS|EDUCATIONAL\\s+QUALIFICATIONS'
+    + '|ACADEMIC\\s+HISTORY|QUALIFICATIONS)\\s*:?\\s*$', 'i');
+  const _HAS_YEAR = /\b(?:19|20)\d{2}\b/;
+  const _EDU_STOP = new Set(['university', 'college', 'school', 'institute',
+    'academy', 'bachelor', 'master', 'science', 'arts', 'degree', 'honours',
+    'honors', 'with', 'and', 'the', 'of', 'in']);
+
+  // The graduation date arrives under whichever name its source used, so
+  // accept the usual aliases rather than one canonical field.
+  function _eduDates(edu) {
+    if (!edu || typeof edu !== 'object') return '';
+    const one = edu.dates || edu.date || edu.year || edu.graduationDate
+      || edu.graduation_date || edu.graduationYear || edu.graduation_year;
+    if (one) return String(one).trim();
+    const start = edu.startDate || edu.start_date || edu.startYear || edu.start_year;
+    const end = edu.endDate || edu.end_date || edu.endYear || edu.end_year;
+    if (start && end) return String(start).trim() + ' - ' + String(end).trim();
+    return String(start || end || '').trim();
+  }
+
+  // En/em dashes to a hyphen, the separator every documented ATS date
+  // parser splits on, and the same one the experience block already uses.
+  const _prettyEduDate = (d) => String(d).trim()
+    .replace(/\s*[–—]\s*/g, ' - ').replace(/\s*-\s*/g, ' - ')
+    .replace(/\s{2,}/g, ' ').trim();
+
+  const _eduNorm = (s) => String(s || '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  function restoreEducationDates(cvText, education) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(education) || !education.length) return { text, added: 0 };
+    const lines = text.split('\n');
+
+    const start = lines.findIndex((l) => _EDU_HEAD.test(l));
+    if (start === -1) return { text, added: 0 };
+    let end = start + 1;
+    while (end < lines.length && !_ANY_HEAD.test(lines[end])) end++;
+
+    const inserts = [];
+    const claimed = new Set();
+    for (const edu of education) {
+      const dates = _eduDates(edu);
+      if (!dates || !_HAS_YEAR.test(dates)) continue;
+
+      // Anchor on the institution, falling back to the degree. The date
+      // goes under whichever line the CV actually shows, so an entry the
+      // tailoring dropped never gets a date bolted to a different school.
+      let at = -1;
+      const keys = [edu.institution || edu.school || edu.university || edu.name,
+        edu.degree || edu.qualification || edu.course];
+      for (const key of keys) {
+        const k = _eduNorm(key);
+        if (k.length < 4) continue;
+        for (let i = start + 1; i < end; i++) {
+          if (claimed.has(i)) continue;
+          const l = _eduNorm(lines[i]);
+          if (l.length < 4) continue;
+          if (l.indexOf(k) !== -1 || k.indexOf(l) !== -1) { at = i; break; }
+        }
+        if (at !== -1) break;
+      }
+      if (at === -1) continue;
+      claimed.add(at);
+
+      // Already dated somewhere in the entry, so there is nothing to
+      // restore and re-stating the year would read as a duplicate.
+      if (_HAS_YEAR.test(lines[at])) continue;
+      if (_HAS_YEAR.test(lines[at - 1] || '')) continue;
+      const next = (lines[at + 1] || '').trim();
+      if (next && _HAS_YEAR.test(next) && next.split(/\s+/).length <= 6) continue;
+
+      inserts.push({ at, line: _prettyEduDate(dates) });
+    }
+    if (!inserts.length) return { text, added: 0 };
+
+    // Back to front, so earlier indices stay valid as lines are inserted.
+    inserts.sort((a, b) => b.at - a.at);
+    for (const ins of inserts) lines.splice(ins.at + 1, 0, ins.line);
+    return { text: lines.join('\n'), added: inserts.length };
+  }
+
+  // ===================================================================
   // PERCENTAGES COME OUT
   // -------------------------------------------------------------------
   // A percentage is the easiest figure to invent and the hardest for a
@@ -2661,6 +2763,7 @@
     originalCV = '',
     jobKeywords = null,
     relevantProjects = null,
+    education = null,
     flags = {},
   } = {}) {
     const t0 = Date.now();
@@ -2855,6 +2958,21 @@
         if (r.injected) {
           outCV = r.text;
           report.fixes.push(`projects: SELECTED PROJECTS ${r.replaced ? 'normalised' : 'injected'} (${relevantProjects.length} project(s))`);
+        }
+      } catch (e) {}
+    }
+
+    // Education dates back from the structured profile. Workday and the
+    // rest of the enterprise tier have required From/To year fields on
+    // the education block, and the tailored text reliably drops them.
+    if (outCV && Array.isArray(education) && education.length) {
+      try {
+        const r = restoreEducationDates(outCV, education);
+        if (r.added) {
+          outCV = r.text;
+          report.fixes.push('education: graduation date restored on ' + r.added
+            + ' entr' + (r.added === 1 ? 'y' : 'ies')
+            + ' (enterprise ATS education blocks require From/To years)');
         }
       } catch (e) {}
     }

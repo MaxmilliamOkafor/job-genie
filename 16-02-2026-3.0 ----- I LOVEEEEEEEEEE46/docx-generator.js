@@ -676,6 +676,22 @@
       const LIST_SECTIONS = new Set([
         'CERTIFICATIONS', 'AWARDS',
       ]);
+      // Education entries get the same institution-and-date-on-one-line
+      // shape the experience block uses. A live Workday parse returned
+      // date: "" for both entries, and Workday's education block has
+      // required From/To year fields, so those were being hand-typed on
+      // every application. The right tab stop is the layout the parse
+      // report confirmed works: title and date stay two separate text
+      // items and land in two separate fields.
+      const EDU_SECTIONS = new Set([
+        'EDUCATION', 'ACADEMIC BACKGROUND', 'ACADEMIC QUALIFICATIONS',
+        'EDUCATIONAL QUALIFICATIONS', 'ACADEMIC HISTORY', 'QUALIFICATIONS',
+      ]);
+      // A degree usually carries a single graduation year rather than a
+      // range, which isDateLine deliberately does not match -- a bare
+      // four-digit line is too easy to hit by accident elsewhere. Inside
+      // the education section there is nothing else it could be.
+      const isEduDateLine = (t) => isDateLine(t) || /^(?:19|20)\d{2}$/.test(t);
       // Sections rendered as one item per line, single column.
       //
       // These used to be a three-up grid built from TAB characters. The
@@ -817,6 +833,31 @@
           // Anything else inside a role -> body
           out.push(paragraph(run(t, { color: C.BODY, sz: 21 }), { spacingAfter: 40 }));
           continue;
+        }
+
+        // EDUCATION: the entry line and its date share a line, right
+        // aligned, exactly as a role and its dates do. A date on its own
+        // line parses as a stray text item and binds to nothing.
+        if (EDU_SECTIONS.has(currentSection)) {
+          if (isEduDateLine(t)) {
+            out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: 19 }),
+              { spacingAfter: 40 }));
+            continue;
+          }
+          const nextEdu = (lines[i + 1] || '').trim();
+          if (nextEdu && isEduDateLine(nextEdu)) {
+            // Trailing space before the tab, same guard the role line
+            // needs: a parser that drops <w:tab/> would otherwise glue
+            // "Imperial College London2021".
+            out.push(paragraph(
+              run(t + ' ', { color: C.BODY, sz: 21 })
+                + '<w:r><w:tab/></w:r>'
+                + run(prettyDateRange(nextEdu), { italic: true, color: C.MUTED, sz: 19 }),
+              { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 40 }
+            ));
+            i++;                         // the date line is consumed
+            continue;
+          }
         }
 
         // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items

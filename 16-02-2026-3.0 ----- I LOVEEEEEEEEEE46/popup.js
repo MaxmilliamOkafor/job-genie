@@ -6675,6 +6675,10 @@ class ATSTailor {
             // renders on every generated CV, fully ATS-parseable.
             relevantProjects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects
               : (Array.isArray(profile.relevantProjects) ? profile.relevantProjects : []),
+            // Graduation years, which the tailored text reliably drops and
+            // Workday's education block requires. Restored from the profile
+            // rather than asked for again in the prompt.
+            education: Array.isArray(profile.education) ? profile.education : [],
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;
