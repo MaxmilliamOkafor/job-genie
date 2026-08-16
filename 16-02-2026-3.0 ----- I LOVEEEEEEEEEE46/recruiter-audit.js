@@ -1016,6 +1016,77 @@
     + '|permanent|perm|remote|hybrid|on[\\s-]?site)'
     + '(?:\\s*,\\s*[a-z\\s-]+)*)\\s*\\)\\s*$', 'i');
 
+  /**
+   * THE COMPANY FIELD IS THE COMPANY'S NAME.
+   *
+   * "Meta (formerly Facebook Inc)" is one text item, and it lands in the
+   * Company field a parser stores. Employers match that field against a
+   * name: "Meta" matches, "Meta (formerly Facebook Inc)" does not. Same
+   * fault as the employment type in the job title, one line up.
+   *
+   * A RENAME is dropped. "formerly Facebook Inc", "previously Acme Ltd",
+   * "now part of X" is information about the employer's corporate
+   * history, not about the candidate's work, and the current name is
+   * what any database holds. Nobody screening for Meta experience
+   * searches for Facebook Inc.
+   *
+   * ANYTHING ELSE MOVES rather than disappears. "SolimHealth (AI
+   * Startup)" carries real context about the environment worked in, so
+   * it becomes the role's first description line instead of being
+   * deleted. Losing it would make the CV weaker, which is the opposite
+   * of the point.
+   */
+  const _RENAME = /^(?:formerly|previously|prev\.?|f\.?k\.?a\.?|née|nee|now|now part of|acquired by|trading as|t\/a)\b/i;
+  const _COMPANY_PAREN = /\s*\(([^)]{2,60})\)\s*$/;
+
+  function cleanCompanyLine(cvText) {
+    if (!cvText || typeof cvText !== 'string') return { text: cvText || '', cleaned: 0, kept: 0 };
+    const lines = cvText.split('\n');
+    const out = [];
+    let inExp = false, cleaned = 0, kept = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const bare = line.trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; out.push(line); continue; }
+      if (inExp && _ANY_HEAD.test(bare) && !_EXP_HEAD.test(bare)) { inExp = false; out.push(line); continue; }
+
+      // A COMPANY line: inside the experience section, not a bullet, not
+      // itself carrying the dates, and followed by the line that does.
+      // That last condition is what distinguishes it from a job title,
+      // which is handled separately and must not be touched here.
+      const next = (lines[i + 1] || '').trim();
+      const nextNext = (lines[i + 2] || '').trim();
+      // company, then TITLE, then date. The title line is also followed
+      // by a date, so without excluding that this claimed the title too
+      // and took "(Contract, part-time)" off it as though it were a
+      // company parenthetical -- undoing the employment-type rule one
+      // line down and reporting the wrong fix.
+      const isCompany = inExp && bare && !/^\s*[-*•]/.test(line)
+        && !ROLE_DATE_RE.test(bare)
+        && !ROLE_DATE_RE.test(next) && !/\t/.test(bare)
+        && (ROLE_DATE_RE.test(nextNext) || /\t/.test(next));
+      const m = isCompany ? bare.match(_COMPANY_PAREN) : null;
+      if (!m) { out.push(line); continue; }
+
+      out.push(line.replace(_COMPANY_PAREN, ''));
+      cleaned++;
+      if (!_RENAME.test(m[1].trim())) {
+        // Held back until after the title and date lines, so the
+        // adjacency a parser needs to bind a date to a role survives.
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim()
+          && !/^\s*[-*•]/.test(lines[j]) && (j - i) <= 2) {
+          out.push(lines[j]); j++;
+        }
+        const label = m[1].replace(/\s+/g, ' ').trim();
+        out.push('- ' + label.charAt(0).toUpperCase() + label.slice(1) + '.');
+        kept++;
+        i = j - 1;
+      }
+    }
+    return { text: out.join('\n'), cleaned, kept };
+  }
+
   function moveEmploymentType(cvText) {
     if (!cvText || typeof cvText !== 'string') return { text: cvText || '', moved: 0 };
     const lines = cvText.split('\n');
@@ -2584,6 +2655,17 @@
       if (pctCL.removed) outCL = pctCL.text;
     }
 
+    // The company field is the company's name.
+    if (outCV) {
+      const co = cleanCompanyLine(outCV);
+      outCV = co.text;
+      if (co.cleaned) {
+        report.fixes.push('Took the parenthetical off ' + co.cleaned + ' company name(s) so the '
+          + 'employer field matches the company a recruiter searches for'
+          + (co.kept ? ', keeping ' + co.kept + ' of them in the role description' : ''));
+      }
+    }
+
     // Employment type out of the job title and into the description.
     if (outCV) {
       const emp = moveEmploymentType(outCV);
@@ -3003,7 +3085,7 @@
     runRecruiterAudit,
     // Exported so the boundary between a bolted-on standard and a real
     // mention can be asserted directly.
-    stripBoltedStandards,
+    stripBoltedStandards, cleanCompanyLine,
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,
