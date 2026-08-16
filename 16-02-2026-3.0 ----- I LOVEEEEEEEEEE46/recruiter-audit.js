@@ -785,6 +785,130 @@
   }
 
   // ===================================================================
+  // ONE PAGE
+  // -------------------------------------------------------------------
+  // A recruiter working through a stack decides whether to read a CV
+  // before they decide what it says, and a second page is where a lot of
+  // that decision gets made. The generator already squeezes spacing and
+  // the type scale to fit, but typography has a floor: four roles at the
+  // per-role caps is twenty bullets, and twenty bullets of real length do
+  // not fit on a page at any size worth reading.
+  //
+  // So the last of the fitting is done here, where relevance to the
+  // posting is known and the generator's is not. It runs AFTER
+  // orderBulletsByRelevance and capBulletsPerRole, so the tail of each
+  // role is already its least relevant material.
+  //
+  // What it will not do:
+  //
+  //   * touch a bullet holding the CV's only mention of a posting
+  //     keyword -- the same guard the per-role cap uses, for the same
+  //     reason. A missed keyword costs more than a second page.
+  //   * take a role below two bullets. A role reduced to one line reads
+  //     as filler and invites the question of why it is there at all.
+  //   * touch anything outside the experience section. Education,
+  //     skills and projects are not padding.
+  //   * trim past the point of fitting. It stops the moment the budget
+  //     is met, so a CV that is one line over loses one line.
+  //
+  // If it cannot fit within those rules, it stops and the CV runs to two
+  // pages, which is the honest outcome for a CV with more on it than a
+  // page holds.
+  //
+  // WHO DECIDES WHETHER IT FITS.
+  //
+  // The generator, and only the generator. It measures the XML it
+  // actually emitted, after choosing a density, so it is the one place
+  // that knows. This module carried its own line-count heuristic for a
+  // first version and the two disagreed badly: on a CV the generator
+  // would have fitted at full size, the heuristic cut 22 bullets down to
+  // 8 and still reported that it did not fit. Two estimators for one
+  // question is one too many.
+  //
+  // The fallback exists only for callers that load this module without
+  // the generator, and is deliberately generous: given no way to
+  // measure, doing nothing is the right answer.
+  const _MIN_ROLE_BULLETS = 2;
+
+  function _fits(cvText) {
+    const G = (typeof window !== 'undefined' && window.DocxGenerator)
+      || (typeof global !== 'undefined' && global.DocxGenerator);
+    if (G && typeof G.measureCv === 'function') {
+      try { return !!G.measureCv(cvText).fitsOnePage; } catch (e) { return true; }
+    }
+    return true;
+  }
+
+  function fitToOnePage(cvText, jobKeywords) {
+    const text = String(cvText || '');
+    if (!text || _fits(text)) return { text, trimmed: 0, fits: true };
+
+    const kws = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim().toLowerCase())
+      .filter((k) => k.length > 2);
+    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
+
+    let lines = text.split('\n');
+    const counts = Object.create(null);
+    for (const l of lines) {
+      if (!isBullet(l)) continue;
+      const low = l.toLowerCase();
+      for (const k of kws) if (low.includes(k)) counts[k] = (counts[k] || 0) + 1;
+    }
+    const isSoleCarrier = (b) => {
+      const low = b.toLowerCase();
+      for (const k of kws) if (counts[k] === 1 && low.includes(k)) return true;
+      return false;
+    };
+
+    let trimmed = 0;
+    // Each pass removes at most one bullet, from the last bullet of the
+    // LAST role that can still spare one -- oldest work, least relevant
+    // bullet, which is the cheapest line on the page.
+    for (let guard = 0; guard < 40; guard++) {
+      if (_fits(lines.join('\n'))) break;
+
+      // Map the experience section's bullet runs.
+      const runs = [];
+      let inExp = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (_EXP_HEAD.test(lines[i])) { inExp = true; continue; }
+        if (_ANY_HEAD.test(lines[i])) { inExp = false; continue; }
+        if (!inExp || !isBullet(lines[i])) continue;
+        let j = i;
+        while (j < lines.length && isBullet(lines[j])) j++;
+        runs.push({ start: i, end: j });
+        i = j - 1;
+      }
+
+      // Take from the role with the MOST bullets, oldest first on a tie.
+      //
+      // Working strictly oldest-first instead left the newest role at six
+      // bullets and stripped the second-newest to the floor of two, which
+      // reads as though the second job barely happened. Taking from the
+      // longest run levels the page: every role keeps enough to be a real
+      // entry, and the last bullet of a six-bullet role is a cheaper loss
+      // than the third of a three-bullet one. Ties go to the older role,
+      // so attention still ends up front-loaded.
+      let cut = -1, bestLen = _MIN_ROLE_BULLETS;
+      for (let r = runs.length - 1; r >= 0; r--) {
+        const { start, end } = runs[r];
+        const len = end - start;
+        if (len <= bestLen) continue;
+        for (let k = end - 1; k >= start + _MIN_ROLE_BULLETS; k--) {
+          if (!isSoleCarrier(lines[k])) { cut = k; bestLen = len; break; }
+        }
+      }
+      if (cut === -1) break;      // nothing left that may honestly go
+      lines.splice(cut, 1);
+      trimmed++;
+    }
+
+    const out = lines.join('\n');
+    return { text: out, trimmed, fits: _fits(out) };
+  }
+
+  // ===================================================================
   // A WORD USED TWICE IN ONE BULLET
   // -------------------------------------------------------------------
   // "surfacing fraud and risk exposure for the risk team" reads as a
@@ -3329,6 +3453,31 @@
               `Tailoring should reframe your real background, not invent a different profession. Review before submitting.`,
           });
         }
+      } catch (e) {}
+    }
+
+    // ONE PAGE, LAST.
+    //
+    // Runs after every other pass, because every one of them changes the
+    // length: projects are injected, education gains a date line, a
+    // summary sentence comes out. Measuring before all that would fit the
+    // wrong document.
+    //
+    // The generator squeezes spacing and the type scale first; this only
+    // bites when four roles of real bullets will not fit at any readable
+    // size, and it never takes a role below two bullets, never touches
+    // the sole mention of a posting keyword, and stops the moment it
+    // fits.
+    if (outCV) {
+      try {
+        const fitted = fitToOnePage(outCV, jobKeywords);
+        if (fitted.trimmed) {
+          outCV = fitted.text;
+          report.fixes.push('Fitted to one page: dropped ' + fitted.trimmed
+            + ' least-relevant bullet(s), levelled across the longest roles '
+            + '(never below two per role, never the sole mention of a keyword)');
+        }
+        report.onePage = fitted.fits;
       } catch (e) {}
     }
 

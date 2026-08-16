@@ -357,6 +357,149 @@
     return one(t);
   }
 
+  // ===================================================================
+  // THE TYPE SCALE, AND WHY BODY COPY IS THE SMALLEST THING ON IT
+  // -------------------------------------------------------------------
+  // Sizes are half-points, as OOXML counts them. Everything used to sit
+  // at 21 -- company, job title, bullets and body all the same size --
+  // with only weight and colour separating them. Two costs to that.
+  //
+  // A parser that weights relative font size to decide what is a header
+  // gets a flat signal and has to fall back on guessing. And a recruiter
+  // scanning the page has nothing to land on: the employer, which is the
+  // single most-scanned item on a CV, is exactly as loud as the fourth
+  // bullet of the oldest role.
+  //
+  // The scale now descends: heading and company, then title, then body,
+  // then dates. Body copy being the smallest is the point, not a
+  // compromise -- it is the most of the page and the least of the scan.
+  const SZ_BASE = {
+    name: 44,       // 22pt
+    heading: 22,    // 11pt
+    company: 22,    // 11pt -- was 21, tied with the body
+    title: 21,      // 10.5pt
+    body: 20,       // 10pt  -- was 21
+    date: 19,       // 9.5pt
+  };
+
+  // ===================================================================
+  // ONE PAGE
+  // -------------------------------------------------------------------
+  // A recruiter working a stack of applications decides whether to read
+  // a CV before they decide what it says, and a second page is where a
+  // lot of that decision gets made. The LaTeX CV's whole argument is
+  // that everything worth saying fits on one page.
+  //
+  // Nothing here deletes content to get there. Bullet selection already
+  // happens upstream, in the audit, where relevance to the posting is
+  // known; by the time text reaches this generator, every line in it has
+  // earned its place and dropping one would be the generator overruling
+  // a decision made with more information.
+  //
+  // What is left is typography. Four profiles, loosest first, and the
+  // first one that fits on a page wins. If none of them fits, the
+  // tightest is used and the CV runs to two pages -- which is the
+  // honest outcome for a CV with more on it than a page holds, and far
+  // better than a page of unreadable 7pt or a silently truncated role.
+  const DENSITY = [
+    { name: 'comfortable', sz: 0, space: 1.00 },
+    { name: 'tight', sz: 0, space: 0.70 },
+    { name: 'compact', sz: -1, space: 0.55 },
+    { name: 'dense', sz: -2, space: 0.45 },
+  ];
+  // 9pt body is the floor. Below that a document stops reading as a
+  // professional CV and starts reading as someone hiding how much they
+  // wrote, which costs more than the second page would have.
+  const SZ_FLOOR = 18;
+
+  // Word's own metrics, close enough to choose a profile by.
+  //
+  // Calibri's average advance over mixed-case English is about 0.47 em,
+  // and single line spacing is about 1.22 em. Both are approximations,
+  // so the fit test below leaves a margin rather than filling the page
+  // to the last twip.
+  const EM_TWIPS = 10;             // 1 half-point = 10 twips
+  const CHAR_EM = 0.47;
+  const LINE_EM = 1.22;
+
+  // Measured from the XML that was actually emitted rather than from a
+  // parallel model of it. A separate estimator drifts from the renderer
+  // the first time either changes; reading back the emitted paragraphs
+  // cannot.
+  function estimateHeightTwips(bodyXml, contentWidthTwips) {
+    const paras = String(bodyXml || '').match(/<w:p>[\s\S]*?<\/w:p>/g) || [];
+    let total = 0;
+    for (const p of paras) {
+      const attr = (re) => { const m = re.exec(p); return m ? parseInt(m[1], 10) : 0; };
+      const before = attr(/w:before="(\d+)"/);
+      const after = attr(/w:after="(\d+)"/);
+      const indent = attr(/<w:ind w:left="(\d+)"/);
+      const width = Math.max(1440, contentWidthTwips - indent);
+
+      // A tab stop puts its runs side by side, so the paragraph is one
+      // line regardless of the combined length.
+      const tabbed = /<w:tab\/>/.test(p);
+
+      // The size that governs the line is the one MOST OF THE TEXT is
+      // set in, not the largest present. A bullet paragraph opens with a
+      // navy marker one step above the body, and taking the maximum
+      // measured every bullet as though the whole sentence were set at
+      // heading size -- narrower lines, taller rows, and a CV pushed to a
+      // tighter profile than it needed.
+      let chars = 0, govSz = 0, govChars = -1;
+      const runRe = /<w:r>([\s\S]*?)<\/w:r>/g;
+      let m;
+      while ((m = runRe.exec(p)) !== null) {
+        const r = m[1];
+        const szm = /<w:sz w:val="(\d+)"\/>/.exec(r);
+        const sz = szm ? parseInt(szm[1], 10) : SZ_BASE.body;
+        const tm = /<w:t[^>]*>([\s\S]*?)<\/w:t>/.exec(r);
+        const n = tm ? tm[1].length : 0;
+        chars += n;
+        if (n > govChars) { govChars = n; govSz = sz; }
+      }
+      const maxSz = govSz || SZ_BASE.body;
+
+      const charW = maxSz * EM_TWIPS * CHAR_EM;
+      const perLine = Math.max(10, Math.floor(width / charW));
+      const wrapped = tabbed ? 1 : Math.max(1, Math.ceil(chars / perLine));
+
+      let lineH = maxSz * EM_TWIPS * LINE_EM;
+      const lm = /w:line="(\d+)" w:lineRule="auto"/.exec(p);
+      if (lm) lineH = lineH * (parseInt(lm[1], 10) / 240);
+
+      // An empty paragraph still occupies a line, and the rule under a
+      // heading is drawn in the same band, so nothing is free.
+      total += wrapped * lineH + before + after;
+    }
+    return Math.round(total);
+  }
+
+  // A density is a pure transform on the emitted XML, so it needs no
+  // cooperation from the ~20 places that build a paragraph and cannot
+  // fall out of step with them.
+  //
+  // Both regexes are deliberately narrow. <w:sz w:val=".."/> is the run
+  // property; the w:sz on <w:bottom> is a BORDER WIDTH and must not be
+  // scaled. w:before/w:after are paragraph spacing; the <w:spacing
+  // w:val=".."/> inside a run is LETTER spacing, which is what made
+  // every section heading unparseable in the first place and must never
+  // be touched here.
+  function applyDensity(bodyXml, d) {
+    let out = String(bodyXml || '');
+    if (d.sz) {
+      out = out.replace(/<w:sz w:val="(\d+)"\/><w:szCs w:val="(\d+)"\/>/g, (m0, a) => {
+        const v = Math.max(SZ_FLOOR, parseInt(a, 10) + d.sz);
+        return `<w:sz w:val="${v}"/><w:szCs w:val="${v}"/>`;
+      });
+    }
+    if (d.space !== 1) {
+      out = out.replace(/w:(before|after)="(\d+)"/g,
+        (m0, which, v) => `w:${which}="${Math.round(parseInt(v, 10) * d.space)}"`);
+    }
+    return out;
+  }
+
   // ---- CV text -> DOCX paragraphs --------------------------------------
   // The audited CV text uses the standard structure we already enforce:
   //   <name line>
@@ -622,6 +765,7 @@
   }
 
   function buildBodyXml(cvText) {
+    const SZ = SZ_BASE;
     const lines = reorderSections(cvText).split('\n');
     const out = [];
     const rels = []; // hyperlink relationships collected for the contact line
@@ -645,7 +789,7 @@
     if (firstNonEmpty >= 0) {
       // NAME -- navy, bold, 22pt, left-aligned (matches the PDF header)
       out.push(paragraph(
-        run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: 44, spacing: 4 }),
+        run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: SZ.name, spacing: 4 }),
         { align: 'left', spacingAfter: 40 }
       ));
 
@@ -657,7 +801,7 @@
         if (!t) continue;
         const upper = t.toUpperCase().replace(/:$/, '');
         if (SECTION_HEADERS.includes(upper)) break;
-        out.push(contactParagraph(t, rels, { align: 'left', sz: 19, spacingAfter: 40 }));
+        out.push(contactParagraph(t, rels, { align: 'left', sz: SZ.date, spacingAfter: 40 }));
         headerLineCount++;
       }
 
@@ -731,12 +875,12 @@
       const emitGrid = (items) => { items.forEach(emitCompetency); };
       // Competencies: bulleted, one per line, single column.
       const emitCompetency = (item) => out.push(paragraph(
-        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
+        run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
         { indent: 360, hanging: 240, spacingAfter: 30, line: 276, lineRule: 'auto' }
       ));
       // A helper to emit a single navy-bullet item paragraph.
       const emitBullet = (item) => out.push(paragraph(
-        run('•  ', { color: C.NAVY, sz: 22 }) + run(item, { color: C.BODY, sz: 21 }),
+        run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
         { indent: 360, hanging: 240, spacingAfter: 50, line: 288, lineRule: 'auto' }
       ));
       for (; i < lines.length; i++) {
@@ -774,7 +918,7 @@
           // employment history has nothing to score. The name kept its
           // spacing: 4, which is a fifth of this and parsed correctly.
           out.push(paragraph(
-            run(upper, { bold: true, caps: true, color: C.NAVY, sz: 22 }),
+            run(upper, { bold: true, caps: true, color: C.NAVY, sz: SZ.heading }),
             { spacingBefore: 240, spacingAfter: 60, keepNext: true, keepLines: true,
               bottomBorder: { color: C.RULE, sz: 4 } }
           ));
@@ -795,11 +939,11 @@
         // -> date (muted italic). Date lines detected anywhere.
         if (inExperience) {
           if (isDateLine(t)) {
-            out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: 19 }), { spacingAfter: 40 }));
+            out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: SZ.date }), { spacingAfter: 40 }));
             continue;
           }
           if (roleState === 'expectCompany') {
-            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: 21 }),
+            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: SZ.company }),
               { spacingBefore: 80, spacingAfter: 20, keepNext: true, keepLines: true }));
             roleState = 'expectTitle';
             continue;
@@ -817,21 +961,21 @@
             const next = (lines[i + 1] || '').trim();
             if (isDateLine(next)) {
               out.push(paragraph(
-                run(t + ' ', { bold: true, color: C.BODY, sz: 21 })
+                run(t + ' ', { bold: true, color: C.BODY, sz: SZ.title })
                   + '<w:r><w:tab/></w:r>'
-                  + run(prettyDateRange(next), { italic: true, color: C.MUTED, sz: 19 }),
+                  + run(prettyDateRange(next), { italic: true, color: C.MUTED, sz: SZ.date }),
                 { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 30 }
               ));
               i++;                       // the date line is consumed
               roleState = 'inRole';
               continue;
             }
-            out.push(paragraph(run(t, { bold: true, color: C.BODY, sz: 21 }), { spacingAfter: 20 }));
+            out.push(paragraph(run(t, { bold: true, color: C.BODY, sz: SZ.title }), { spacingAfter: 20 }));
             roleState = 'inRole';
             continue;
           }
           // Anything else inside a role -> body
-          out.push(paragraph(run(t, { color: C.BODY, sz: 21 }), { spacingAfter: 40 }));
+          out.push(paragraph(run(t, { color: C.BODY, sz: SZ.body }), { spacingAfter: 40 }));
           continue;
         }
 
@@ -840,7 +984,7 @@
         // line parses as a stray text item and binds to nothing.
         if (EDU_SECTIONS.has(currentSection)) {
           if (isEduDateLine(t)) {
-            out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: 19 }),
+            out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: SZ.date }),
               { spacingAfter: 40 }));
             continue;
           }
@@ -850,9 +994,9 @@
             // needs: a parser that drops <w:tab/> would otherwise glue
             // "Imperial College London2021".
             out.push(paragraph(
-              run(t + ' ', { color: C.BODY, sz: 21 })
+              run(t + ' ', { color: C.BODY, sz: SZ.body })
                 + '<w:r><w:tab/></w:r>'
-                + run(prettyDateRange(nextEdu), { italic: true, color: C.MUTED, sz: 19 }),
+                + run(prettyDateRange(nextEdu), { italic: true, color: C.MUTED, sz: SZ.date }),
               { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 40 }
             ));
             i++;                         // the date line is consumed
@@ -884,7 +1028,7 @@
         // visible as text, so it stays 100% ATS-parseable. Labels render as
         // plain body text.
         if (/https?:\/\//.test(t)) {
-          out.push(paragraph(linkifyRuns(t, rels, { color: C.BODY, sz: 21 }),
+          out.push(paragraph(linkifyRuns(t, rels, { color: C.BODY, sz: SZ.body }),
             { spacingAfter: 40, line: 276, lineRule: 'auto' }));
           continue;
         }
@@ -893,13 +1037,13 @@
         const labelMatch = t.match(/^([A-Z][A-Za-z &/]{1,28}):\s*(.+)$/);
         if (labelMatch) {
           out.push(paragraph(
-            run(labelMatch[1] + ': ', { bold: true, color: C.BODY, sz: 21 }) +
-            run(labelMatch[2], { color: C.BODY, sz: 21 }),
+            run(labelMatch[1] + ': ', { bold: true, color: C.BODY, sz: SZ.body }) +
+            run(labelMatch[2], { color: C.BODY, sz: SZ.body }),
             { spacingAfter: 40 }
           ));
           continue;
         }
-        out.push(paragraph(run(t, { color: C.BODY, sz: 21 }), { spacingAfter: 40, line: 276, lineRule: 'auto' }));
+        out.push(paragraph(run(t, { color: C.BODY, sz: SZ.body }), { spacingAfter: 40, line: 276, lineRule: 'auto' }));
       }
     }
 
@@ -1149,23 +1293,83 @@
     return { bodyXml: out.join(''), rels };
   }
 
+  // Does this CV text fit on a page, and at what density? Everything
+  // fromCvText does up to the point of knowing, without building the ZIP.
+  //
+  // Exported because the audit needs the answer while it is still deciding
+  // what the CV says. It used to carry its own line-count heuristic for
+  // this and the two disagreed badly -- the audit cut a CV from 22 bullets
+  // to 8 that the generator would have fitted at full size. Two estimators
+  // for one question is one too many.
+  function measureCv(cvText, opts = {}) {
+    if (!cvText || typeof cvText !== 'string') {
+      return { fitsOnePage: true, density: DENSITY[0].name, heightTwips: 0, pageHeightTwips: 0 };
+    }
+    const { bodyXml: baseXml } = buildBodyXml(cvText);
+    const pg = pageTwipsFrom(opts);
+    const usableH = Math.round((pg.h - 864 - 864) * 0.96);
+    const usableW = pg.w - 900 - 900;
+    let density = DENSITY[DENSITY.length - 1].name;
+    let heightTwips = 0;
+    for (let i = 0; i < DENSITY.length; i++) {
+      heightTwips = estimateHeightTwips(applyDensity(baseXml, DENSITY[i]), usableW);
+      density = DENSITY[i].name;
+      if (heightTwips <= usableH) break;
+    }
+    return {
+      fitsOnePage: heightTwips <= usableH,
+      density, heightTwips, pageHeightTwips: usableH,
+    };
+  }
+
   function fromCvText(cvText, opts = {}) {
     try {
       if (!cvText || typeof cvText !== 'string') {
         return { success: false, error: 'empty CV text' };
       }
-      const { bodyXml, rels } = buildBodyXml(cvText);
+      const { bodyXml: baseXml, rels } = buildBodyXml(cvText);
+
+      // FIT TO ONE PAGE, LOOSEST PROFILE FIRST.
+      //
+      // Content is not touched: the audit already chose which bullets
+      // survive, knowing the posting, and this generator has no basis to
+      // overrule that. Only spacing and the type scale move.
+      //
+      // The 4% margin covers the difference between these metrics and
+      // Word's own. Filling the page to the last twip and then finding
+      // Word disagrees by one line is the failure this exists to avoid,
+      // and it costs a couple of points of density to rule out.
+      const pg = pageTwipsFrom(opts);
+      const usableH = Math.round((pg.h - 864 - 864) * 0.96);
+      const usableW = pg.w - 900 - 900;
+
+      let bodyXml = baseXml;
+      let density = DENSITY[DENSITY.length - 1].name;
+      let heightTwips = 0;
+      for (let i = 0; i < DENSITY.length; i++) {
+        const candidate = applyDensity(baseXml, DENSITY[i]);
+        const h = estimateHeightTwips(candidate, usableW);
+        bodyXml = candidate;
+        density = DENSITY[i].name;
+        heightTwips = h;
+        if (h <= usableH) break;
+      }
+
       const files = [
         { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
         { name: '_rels/.rels', content: ROOT_RELS_XML },
         { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
-        { name: 'word/document.xml', content: documentXml(bodyXml, pageTwipsFrom(opts)) },
+        { name: 'word/document.xml', content: documentXml(bodyXml, pg) },
       ];
       const zipBytes = buildZip(files);
       const base64 = bytesToBase64(zipBytes);
       const baseName = (opts.name || 'Resume').replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '');
       const filename = opts.filename || `${baseName}_CV.docx`;
-      return { success: true, base64, filename, size: zipBytes.length };
+      return {
+        success: true, base64, filename, size: zipBytes.length,
+        density, heightTwips, pageHeightTwips: usableH,
+        fitsOnePage: heightTwips <= usableH,
+      };
     } catch (e) {
       console.warn(TAG, 'generation failed:', e);
       return { success: false, error: e.message };
@@ -1177,12 +1381,30 @@
       if (!coverText || typeof coverText !== 'string') {
         return { success: false, error: 'empty cover letter text' };
       }
-      const { bodyXml, rels } = buildCoverLetterBodyXml(coverText);
+      const { bodyXml: baseXml, rels } = buildCoverLetterBodyXml(coverText);
+
+      // A cover letter that runs to two pages does not get its second
+      // page read, and unlike the CV there is nothing here worth losing
+      // to prevent that -- every paragraph is argument. So only the
+      // spacing moves, and only as far as it needs to.
+      //
+      // The type scale is deliberately left alone: shrinking the text of
+      // a letter to buy a page is visible in a way that tightening the
+      // gaps is not.
+      const pg = pageTwipsFrom(opts);
+      const usableH = Math.round((pg.h - 864 - 864) * 0.96);
+      const usableW = pg.w - 900 - 900;
+      let bodyXml = baseXml;
+      for (const d of DENSITY) {
+        bodyXml = applyDensity(baseXml, { sz: 0, space: d.space });
+        if (estimateHeightTwips(bodyXml, usableW) <= usableH) break;
+      }
+
       const files = [
         { name: '[Content_Types].xml', content: CONTENT_TYPES_XML },
         { name: '_rels/.rels', content: ROOT_RELS_XML },
         { name: 'word/_rels/document.xml.rels', content: wordRelsXml(rels) },
-        { name: 'word/document.xml', content: documentXml(bodyXml, pageTwipsFrom(opts)) },
+        { name: 'word/document.xml', content: documentXml(bodyXml, pg) },
       ];
       const zipBytes = buildZip(files);
       const base64 = bytesToBase64(zipBytes);
@@ -1235,7 +1457,7 @@
   // while the PDF stayed broken. One implementation, used by every path
   // that writes a contact line.
   global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase,
-    normalizePhone: normalizePhoneToken };
+    measureCv, normalizePhone: normalizePhoneToken };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }
