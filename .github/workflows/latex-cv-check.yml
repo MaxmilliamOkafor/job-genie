@@ -1,0 +1,82 @@
+# Compiles the one-page LaTeX CV and checks the two things that actually
+# matter about it: that it is ONE PAGE, and that its text extracts in
+# reading order with the contact details intact.
+#
+# The template's whole argument is that it fits everything important on a
+# single page. Adding real content to it can silently push it to two, and
+# that is not visible from the source. So it gets compiled and counted
+# rather than eyeballed.
+name: latex-cv-check
+
+on:
+  push:
+    paths:
+      - 'latex-cv/**'
+      - '.github/workflows/latex-cv-check.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install TeX Live and pdftotext
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended poppler-utils
+
+      - name: Compile
+        working-directory: latex-cv
+        run: |
+          pdflatex -interaction=nonstopmode -halt-on-error main.tex
+          pdflatex -interaction=nonstopmode -halt-on-error main.tex
+
+      - name: Page count must be 1
+        working-directory: latex-cv
+        run: |
+          PAGES=$(pdfinfo main.pdf | awk '/^Pages:/ {print $2}')
+          echo "pages=$PAGES"
+          test "$PAGES" = "1" || {
+            echo "::error::CV is $PAGES pages. Trim a bullet from the oldest role."
+            exit 1
+          }
+
+      # Reading order is what an ATS sees. -raw returns the text stream in
+      # document order, which is the same thing a parser consumes.
+      - name: Extracted text
+        working-directory: latex-cv
+        run: |
+          pdftotext -raw main.pdf - | tee extracted.txt
+          echo '--- checks ---'
+          grep -q '+353 87 426 1508' extracted.txt \
+            || { echo '::error::phone did not extract'; exit 1; }
+          grep -q 'maxokafordev@gmail.com' extracted.txt \
+            || { echo '::error::email did not extract'; exit 1; }
+          # Sections must come out in order, not interleaved.
+          python3 - <<'PY'
+          import re, sys
+          t = open('extracted.txt', encoding='utf-8').read()
+          want = ['Core Competencies', 'Professional Experience',
+                  'Selected Projects', 'Technical Expertise', 'Education']
+          pos = []
+          for w in want:
+              i = t.find(w)
+              if i < 0:
+                  print('::error::section missing from extracted text: ' + w)
+                  sys.exit(1)
+              pos.append((w, i))
+          if pos != sorted(pos, key=lambda p: p[1]):
+              print('::error::sections extract out of order: ' + repr(pos))
+              sys.exit(1)
+          print('sections in order:', [w for w, _ in pos])
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: latex-cv
+          path: |
+            latex-cv/main.pdf
+            latex-cv/extracted.txt

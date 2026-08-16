@@ -1,0 +1,261 @@
+%-------------------------------------------------------------------------
+% Maxmilliam Okafor - one page CV
+%
+% Same template as before, with the real record in it. Four things were
+% changed for parsing reasons, all of them measured against the ATS
+% findings on the generated documents:
+%
+%   1. PHONE. Was "+353: 0874261508". The colon after the country code is
+%      not a format libphonenumber accepts, and Workday, Greenhouse and
+%      iCIMS all validate phone fields with it, so the field arrives
+%      empty or rejected. Now "+353 87 426 1508".
+%
+%   2. FONT AWESOME ICONS ARE GONE. \faEnvelope, \faPhone and \faLinkedin
+%      draw glyphs from a symbol font with no sensible Unicode mapping.
+%      They extract as replacement characters welded to the value next to
+%      them, which is how a contact line turns into an unparseable blob.
+%      Plain text labels cost one line and cannot be misread.
+%
+%   3. CORE COMPETENCIES IS NO LONGER A 3-COLUMN multicols BLOCK. Columns
+%      are the single most reliable way to break a resume parser: one
+%      reading by vertical position interleaves the three columns into
+%      nonsense. A single delimited line says the same thing and cannot
+%      be read out of order. This is the same change the extension made
+%      to its own competencies grid.
+%
+%   4. ONE EXPERIENCE SECTION, NOT TWO. "Software Engineering Experience"
+%      as a second heading is invisible to parsers that bind to the first
+%      experience block only, so anything under it is dropped.
+%
+% \pdfgentounicode=1 with \input{glyphtounicode} is kept and is the part
+% of this template that actually makes it extract cleanly. Leave it in.
+%
+% FILL IN BEFORE SENDING: graduation years, marked 20XX below, and the
+% per-role locations if you want them. Both are left blank rather than
+% guessed.
+%-------------------------------------------------------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks,pdfnewwindow=true]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage{times}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.6in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1.19in}
+\addtolength{\topmargin}{-.7in}
+\addtolength{\textheight}{1.4in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting with optimal spacing
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large\bfseries
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Emits a ToUnicode map so text extraction returns real characters
+% instead of glyph indices. This is the line that makes the PDF parse.
+\pdfgentounicode=1
+
+% Custom commands with better spacing
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+% Company and dates on line one, title on line two. The date binds to the
+% company line, which is the shape parsers are documented against.
+\newcommand{\resumeSubheading}[3]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{1.0\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \textbf{\small #2} \\
+      \textit{\small#3} & \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+% Same, with a location in the right-hand slot of the second line. Use
+% this one once you have decided what to put there.
+\newcommand{\resumeSubheadingLoc}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{1.0\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \textbf{\small #2} \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{1.001\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & \textbf{\small #2}\\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\renewcommand\labelitemi{$\vcenter{\hbox{\tiny$\bullet$}}$}
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.0in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+%----------HEADING----------
+% No icon font. Every value is plain text with a pipe delimiter, which is
+% what parsers split contact lines on.
+\begin{center}
+    {\Huge \scshape Maxmilliam Okafor}
+    \vspace{2pt}
+
+    \small
+    Dublin, Ireland ~|~ +353 87 426 1508 ~|~
+    \href{mailto:maxokafordev@gmail.com}{maxokafordev@gmail.com} \\
+    \vspace{2pt}
+    \href{https://linkedin.com/in/maxokafor}{linkedin.com/in/maxokafor} ~|~
+    \href{https://github.com/MaxmilliamOkafor}{github.com/MaxmilliamOkafor} ~|~
+    \href{https://maxmilliamlabs-ai.web.app}{maxmilliamlabs-ai.web.app}
+
+    \vspace{-7pt}
+\end{center}
+
+%-----------CORE COMPETENCIES-----------
+% One delimited line, not a three-column block. See note 3 at the top.
+\section{Core Competencies}
+\vspace{-3pt}
+\begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+    Machine Learning, MLOps, Data Engineering, Distributed Systems, Cloud Architecture,
+    Model Deployment, Data Pipeline Architecture, CI/CD, Stakeholder Management,
+    Technical Leadership, Risk \& Fraud Modelling, Regulatory Reporting
+    }}
+\end{itemize}
+\vspace{-10pt}
+
+%-----------EXPERIENCE-----------
+% One heading. See note 4 at the top.
+\section{Professional Experience}
+  \resumeSubHeadingListStart
+
+    \resumeSubheading
+      {Meta}{January 2023 -- Present}
+      {Software Engineer}
+      \resumeItemListStart
+        \resumeItem{Designed, fine-tuned and shipped a Llama-based content-moderation system in Python and PyTorch, served behind a REST API that auto-triages flagged posts and cut the manual review queue across millions of daily users with no loss of precision}
+        \resumeItem{Built Meta AI Studio's MLOps CI/CD platform on Docker, Kubernetes and GitHub Actions with automated testing, canary rollout and rollback, shrinking model release cycles from two weeks to under three days}
+        \resumeItem{Re-architected the Meta Business Suite data-ingestion layer in Python and SQL on an Apache Kafka stream, partitioning and caching hot paths to roughly halve p95 query latency and cut AWS compute spend}
+        \resumeItem{Set the team's code-review, testing and Git standards and mentored junior engineers through pairing and design reviews, lifting release quality and helping them ship features independently}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {SolimHealth}{August 2022 -- December 2022}
+      {AI Product Manager (Contract, part-time)}
+      \resumeItemListStart
+        \resumeItem{Designed and trained the GenAI model behind an early dementia-screening tool in Python with PyTorch and Hugging Face Transformers, tracking experiments in MLflow and validating against held-out clinical test sets}
+        \resumeItem{Built a HIPAA-compliant data-governance layer over PostgreSQL and Amazon S3, keeping the platform continuously audit-ready and reducing audit-preparation time}
+        \resumeItem{Introduced infrastructure-as-code with Terraform and GitHub Actions plus model monitoring and drift detection, enabling zero-downtime releases, scheduled retraining and far fewer production incidents}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {Accenture}{April 2021 -- July 2022}
+      {Solutions Architect}
+      \resumeItemListStart
+        \resumeItem{Led the migration of 50+ legacy client applications to Kubernetes on Azure, containerising services with Docker and Helm with zero service disruption}
+        \resumeItem{Designed a real-time analytics pipeline in Python with Apache Kafka and Spark, replacing next-day batch reporting}
+        \resumeItem{Implemented full-stack observability with the ELK Stack, Prometheus and Grafana, enabling early-warning alerting and cutting mean time to resolution substantially}
+        \resumeItem{Advised senior client leadership on cloud roadmap and cost optimisation, right-sizing workloads and aligning engineering delivery with business priorities}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {Citigroup}{August 2017 -- March 2021}
+      {Data Analyst}
+      \resumeItemListStart
+        \resumeItem{Developed fraud and risk-scoring models in Python with scikit-learn and XGBoost over the daily transaction feed, surfacing fraud and risk exposure for the risk team within the first quarter of going live}
+        \resumeItem{Re-engineered ETL workflows in SQL and Apache Airflow with parallelised, monitored jobs, cutting end-to-end processing from a full day to under two hours and enabling same-day risk reporting}
+        \resumeItem{Automated monthly regulatory reporting with Python and Pandas, eliminating manual compilation and reducing submission errors}
+        \resumeItem{Investigated trading-system anomalies with SQL and Pandas, built Tableau dashboards and presented root-cause findings to VP-level stakeholders}
+      \resumeItemListEnd
+
+  \resumeSubHeadingListEnd
+\vspace{-12pt}
+
+%-----------PROJECTS-----------
+\section{Selected Projects}
+  \resumeSubHeadingListStart
+    \resumeProjectHeading
+      {\textbf{SignalDesk}, Real-Time Market-Sentiment Engine $|$ \emph{Python, LLMs (RAG), Kafka, FastAPI, React, AWS}}{}
+      \resumeItemListStart
+        \resumeItem{Streams live financial news and filings through an LLM that extracts entities and sentiment with inline source citations and a hallucination-eval harness, surfacing ticker-level signals on a live dashboard. \href{https://maxmilliamokafor.github.io/signaldesk/}{maxmilliamokafor.github.io/signaldesk} $|$ \href{https://github.com/MaxmilliamOkafor/signaldesk}{github.com/MaxmilliamOkafor/signaldesk}}
+      \resumeItemListEnd
+
+    \resumeProjectHeading
+      {\textbf{DriftGuard}, Self-Healing MLOps Platform $|$ \emph{Python, MLflow, Evidently, Docker, Kubernetes, GitHub Actions}}{}
+      \resumeItemListStart
+        \resumeItem{Open-source framework that watches a deployed model for data and concept drift and automatically retrains, validates and canary-deploys a new version with no human intervention. \href{https://maxmilliamokafor.github.io/driftguard/}{maxmilliamokafor.github.io/driftguard} $|$ \href{https://github.com/MaxmilliamOkafor/driftguard}{github.com/MaxmilliamOkafor/driftguard}}
+      \resumeItemListEnd
+
+    \resumeProjectHeading
+      {\textbf{LedgerLens}, Explainable Credit-Risk Scoring API $|$ \emph{Python, XGBoost, SHAP, FastAPI, Fairlearn, Docker}}{}
+      \resumeItemListStart
+        \resumeItem{Credit-risk model served as an API returning a per-decision SHAP explanation, a bias/fairness audit and a published model card, with an interactive demo that updates the score and its reasons live. \href{https://maxmilliamokafor.github.io/ledgerlens/}{maxmilliamokafor.github.io/ledgerlens} $|$ \href{https://github.com/MaxmilliamOkafor/ledgerlens}{github.com/MaxmilliamOkafor/ledgerlens}}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+\vspace{-12pt}
+
+%-----------TECHNICAL SKILLS-----------
+\section{Technical Expertise}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \textbf{Programming}{: Python, SQL, Go, Java, Scala, JavaScript, React.js, Node.js} \\
+     \textbf{Data \& ML}{: PyTorch, TensorFlow, scikit-learn, XGBoost, Hugging Face Transformers, Pandas, NumPy, MLflow, Spark, dbt, Databricks, Snowflake} \\
+     \textbf{Data Engineering}{: Apache Kafka, Apache Airflow, ETL/ELT, Data Warehousing, Data Modelling, Data Profiling, PostgreSQL} \\
+     \textbf{Cloud \& DevOps}{: AWS, Azure, GCP, Docker, Kubernetes, Terraform, CI/CD, GitHub Actions, Azure DevOps, Prometheus, Grafana, ELK Stack} \\
+     \textbf{Analytics \& BI}{: Power BI, Tableau, Statistical Modelling, Fraud \& Risk Modelling, A/B Testing} \\
+     \textbf{Certifications}{: AWS ML Specialty; AWS Solutions Architect Professional; Google Cloud Professional ML Engineer; Azure AI Engineer Associate; Azure Solutions Architect Expert; TensorFlow Developer; CKA}
+     % Add languages and work authorisation here if you want them on the
+     % page. Left out rather than carried over from the old file, which
+     % had claims I could not check against anything.
+    }}
+ \end{itemize}
+ \vspace{-15pt}
+
+%-----------EDUCATION-----------
+% FILL IN: replace 20XX with the real years. They are placeholders, not
+% guesses -- nothing in your profile records graduation dates, and
+% Workday's education block has required From/To year fields, so leaving
+% them out means typing them by hand on every enterprise application.
+\section{Education}
+\begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{Master of Science (MSc) in Artificial Intelligence and Machine Learning} & \textbf{20XX -- 20XX} \\
+      Imperial College London, London, UK & \textit{Distinction} \\
+      \textbf{Bachelor of Science (BSc) in Computer Science} & \textbf{20XX -- 20XX} \\
+      University of Derby, Derbyshire, UK & \textit{First Class Honours}
+    \end{tabular*}
+    }}
+\end{itemize}
+\vspace{-12pt}
+
+\end{document}
