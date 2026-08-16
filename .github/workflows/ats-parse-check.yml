@@ -55,11 +55,38 @@ jobs:
           echo "--- the PDF text layer, which is what a parser reads ---"
           pdftotext -layout cv.pdf - 2>/dev/null | head -40 || true
 
+      # ADVISORY, NEVER BLOCKING.
+      #
+      # This drives a third-party website. It can be slow, change its
+      # markup, or serve its own demo resume, and none of that is a
+      # reason to stop a pull request merging. It reports; the offline
+      # suites are what gate.
       - name: Parse it on the live OpenResume
+        id: liveparse
+        continue-on-error: true
         working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
         env:
           NODE_PATH: ${{ github.workspace }}/node_modules
-        run: node tests/ci/parse-on-openresume.mjs cv.pdf
+        run: node tests/ci/parse-on-openresume.mjs cv.pdf | tee live-parse.log
+
+      - name: Say what the live parser found
+        if: always()
+        working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
+        run: |
+          {
+            echo "## Live ATS parse check"
+            echo ""
+            if [ "${{ steps.liveparse.outcome }}" = "success" ]; then
+              echo "All live assertions passed."
+            else
+              echo "Some live assertions did not pass. This does NOT block the merge:"
+              echo "it drives a third-party site and is advisory. The offline suites gate."
+            fi
+            echo ""
+            echo '```'
+            sed -n '/=== THE ASSERTIONS ===/,$p' live-parse.log 2>/dev/null | head -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Probe the other parsers, reporting only
         if: always()
