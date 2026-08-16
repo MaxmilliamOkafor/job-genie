@@ -63,6 +63,7 @@
 \fancyfoot{}
 \renewcommand{\headrulewidth}{0pt}
 \renewcommand{\footrulewidth}{0pt}
+\setlength{\footskip}{5pt}
 
 % Adjust margins
 \addtolength{\oddsidemargin}{-0.6in}
@@ -114,7 +115,7 @@
 
 \newcommand{\resumeProjectHeading}[2]{
     \item
-    \begin{tabular*}{1.001\textwidth}{l@{\extracolsep{\fill}}r}
+    \begin{tabular*}{1.0\textwidth}{l@{\extracolsep{\fill}}r}
       \small#1 & \textbf{\small #2}\\
     \end{tabular*}\vspace{-7pt}
 }
@@ -154,8 +155,7 @@
 \begin{itemize}[leftmargin=0.15in, label={}]
     \small{\item{
     Machine Learning, MLOps, Data Engineering, Distributed Systems, Cloud Architecture,
-    Model Deployment, Data Pipeline Architecture, CI/CD, Stakeholder Management,
-    Technical Leadership, Risk \& Fraud Modelling, Regulatory Reporting
+    CI/CD, Stakeholder Management, Technical Leadership, Risk \& Fraud Modelling
     }}
 \end{itemize}
 \vspace{-10pt}
@@ -169,39 +169,38 @@
       {Meta}{January 2023 -- Present}
       {Software Engineer}
       \resumeItemListStart
-        \resumeItem{Designed, fine-tuned and shipped a Llama-based content-moderation system in Python and PyTorch, served behind a REST API that auto-triages flagged posts and cut the manual review queue across millions of daily users with no loss of precision}
-        \resumeItem{Built Meta AI Studio's MLOps CI/CD platform on Docker, Kubernetes and GitHub Actions with automated testing, canary rollout and rollback, shrinking model release cycles from two weeks to under three days}
-        \resumeItem{Re-architected the Meta Business Suite data-ingestion layer in Python and SQL on an Apache Kafka stream, partitioning and caching hot paths to roughly halve p95 query latency and cut AWS compute spend}
-        \resumeItem{Set the team's code-review, testing and Git standards and mentored junior engineers through pairing and design reviews, lifting release quality and helping them ship features independently}
+        \resumeItem{Shipped a fine-tuned Llama content-moderation system in Python and PyTorch behind a REST API, auto-triaging flagged posts and cutting the manual review queue across millions of daily users with no loss of precision}
+        \resumeItem{Built Meta AI Studio's MLOps CI/CD platform on Docker, Kubernetes and GitHub Actions with canary rollout and rollback, shrinking model release cycles from two weeks to under three days}
+        \resumeItem{Re-architected the Meta Business Suite data-ingestion layer in Python and SQL on Apache Kafka, partitioning and caching hot paths to roughly halve p95 query latency and cut AWS spend}
+        \resumeItem{Set the team's code-review, testing and Git standards and mentored junior engineers through pairing and design reviews, lifting release quality}
       \resumeItemListEnd
 
     \resumeSubheading
       {SolimHealth}{August 2022 -- December 2022}
       {AI Product Manager (Contract, part-time)}
       \resumeItemListStart
-        \resumeItem{Designed and trained the GenAI model behind an early dementia-screening tool in Python with PyTorch and Hugging Face Transformers, tracking experiments in MLflow and validating against held-out clinical test sets}
-        \resumeItem{Built a HIPAA-compliant data-governance layer over PostgreSQL and Amazon S3, keeping the platform continuously audit-ready and reducing audit-preparation time}
-        \resumeItem{Introduced infrastructure-as-code with Terraform and GitHub Actions plus model monitoring and drift detection, enabling zero-downtime releases, scheduled retraining and far fewer production incidents}
+        \resumeItem{Designed and trained the GenAI model behind an early dementia-screening tool in PyTorch and Hugging Face Transformers, tracked in MLflow and validated against held-out clinical test sets}
+        \resumeItem{Built a HIPAA-compliant data-governance layer over PostgreSQL and Amazon S3, keeping the platform continuously audit-ready}
+        \resumeItem{Introduced Terraform infrastructure-as-code plus drift detection and model monitoring, enabling zero-downtime releases and scheduled retraining}
       \resumeItemListEnd
 
     \resumeSubheading
       {Accenture}{April 2021 -- July 2022}
       {Solutions Architect}
       \resumeItemListStart
-        \resumeItem{Led the migration of 50+ legacy client applications to Kubernetes on Azure, containerising services with Docker and Helm with zero service disruption}
+        \resumeItem{Migrated 50+ legacy client applications to Kubernetes on Azure, containerising services with Docker and Helm with zero service disruption}
         \resumeItem{Designed a real-time analytics pipeline in Python with Apache Kafka and Spark, replacing next-day batch reporting}
-        \resumeItem{Implemented full-stack observability with the ELK Stack, Prometheus and Grafana, enabling early-warning alerting and cutting mean time to resolution substantially}
-        \resumeItem{Advised senior client leadership on cloud roadmap and cost optimisation, right-sizing workloads and aligning engineering delivery with business priorities}
+        \resumeItem{Implemented full-stack observability with the ELK Stack, Prometheus and Grafana, cutting mean time to resolution substantially}
+        \resumeItem{Advised client leadership on cloud roadmap and cost optimisation, right-sizing workloads against business priorities}
       \resumeItemListEnd
 
     \resumeSubheading
       {Citigroup}{August 2017 -- March 2021}
       {Data Analyst}
       \resumeItemListStart
-        \resumeItem{Developed fraud and risk-scoring models in Python with scikit-learn and XGBoost over the daily transaction feed, surfacing fraud and risk exposure for the risk team within the first quarter of going live}
-        \resumeItem{Re-engineered ETL workflows in SQL and Apache Airflow with parallelised, monitored jobs, cutting end-to-end processing from a full day to under two hours and enabling same-day risk reporting}
-        \resumeItem{Automated monthly regulatory reporting with Python and Pandas, eliminating manual compilation and reducing submission errors}
-        \resumeItem{Investigated trading-system anomalies with SQL and Pandas, built Tableau dashboards and presented root-cause findings to VP-level stakeholders}
+        \resumeItem{Developed fraud and risk-scoring models in scikit-learn and XGBoost over the daily transaction feed, surfacing exposure for the risk team within the first quarter}
+        \resumeItem{Re-engineered ETL workflows in SQL and Apache Airflow, cutting end-to-end processing from a full day to under two hours and enabling same-day risk reporting}
+        \resumeItem{Automated monthly regulatory reporting with Python and Pandas, and presented Tableau root-cause analysis of trading-system anomalies to VP-level stakeholders}
       \resumeItemListEnd
 
   \resumeSubHeadingListEnd
@@ -211,21 +210,21 @@
 \section{Selected Projects}
   \resumeSubHeadingListStart
     \resumeProjectHeading
-      {\textbf{SignalDesk}, Real-Time Market-Sentiment Engine $|$ \emph{Python, LLMs (RAG), Kafka, FastAPI, React, AWS}}{}
+      {\textbf{SignalDesk}, Real-Time Market-Sentiment Engine $|$ \emph{Python, LLMs (RAG), Kafka, FastAPI, React, AWS}}{\href{https://maxmilliamokafor.github.io/signaldesk/}{Demo} $|$ \href{https://github.com/MaxmilliamOkafor/signaldesk}{Code}}
       \resumeItemListStart
-        \resumeItem{Streams live financial news and filings through an LLM that extracts entities and sentiment with inline source citations and a hallucination-eval harness, surfacing ticker-level signals on a live dashboard. \href{https://maxmilliamokafor.github.io/signaldesk/}{maxmilliamokafor.github.io/signaldesk} $|$ \href{https://github.com/MaxmilliamOkafor/signaldesk}{github.com/MaxmilliamOkafor/signaldesk}}
+        \resumeItem{Streams live financial news and filings through an LLM extracting entities and sentiment with inline source citations and a hallucination-eval harness, surfacing ticker-level signals on a live dashboard}
       \resumeItemListEnd
 
     \resumeProjectHeading
-      {\textbf{DriftGuard}, Self-Healing MLOps Platform $|$ \emph{Python, MLflow, Evidently, Docker, Kubernetes, GitHub Actions}}{}
+      {\textbf{DriftGuard}, Self-Healing MLOps Platform $|$ \emph{Python, MLflow, Evidently, Docker, Kubernetes, GitHub Actions}}{\href{https://maxmilliamokafor.github.io/driftguard/}{Demo} $|$ \href{https://github.com/MaxmilliamOkafor/driftguard}{Code}}
       \resumeItemListStart
-        \resumeItem{Open-source framework that watches a deployed model for data and concept drift and automatically retrains, validates and canary-deploys a new version with no human intervention. \href{https://maxmilliamokafor.github.io/driftguard/}{maxmilliamokafor.github.io/driftguard} $|$ \href{https://github.com/MaxmilliamOkafor/driftguard}{github.com/MaxmilliamOkafor/driftguard}}
+        \resumeItem{Open-source framework that watches a deployed model for data and concept drift and automatically retrains, validates and canary-deploys a new version with no human intervention}
       \resumeItemListEnd
 
     \resumeProjectHeading
-      {\textbf{LedgerLens}, Explainable Credit-Risk Scoring API $|$ \emph{Python, XGBoost, SHAP, FastAPI, Fairlearn, Docker}}{}
+      {\textbf{LedgerLens}, Explainable Credit-Risk Scoring API $|$ \emph{Python, XGBoost, SHAP, FastAPI, Fairlearn, Docker}}{\href{https://maxmilliamokafor.github.io/ledgerlens/}{Demo} $|$ \href{https://github.com/MaxmilliamOkafor/ledgerlens}{Code}}
       \resumeItemListStart
-        \resumeItem{Credit-risk model served as an API returning a per-decision SHAP explanation, a bias/fairness audit and a published model card, with an interactive demo that updates the score and its reasons live. \href{https://maxmilliamokafor.github.io/ledgerlens/}{maxmilliamokafor.github.io/ledgerlens} $|$ \href{https://github.com/MaxmilliamOkafor/ledgerlens}{github.com/MaxmilliamOkafor/ledgerlens}}
+        \resumeItem{Credit-risk model served as an API returning a per-decision SHAP explanation, a bias/fairness audit and a published model card, with a live interactive demo}
       \resumeItemListEnd
   \resumeSubHeadingListEnd
 \vspace{-12pt}
@@ -236,9 +235,8 @@
     \small{\item{
      \textbf{Programming}{: Python, SQL, Go, Java, Scala, JavaScript, React.js, Node.js} \\
      \textbf{Data \& ML}{: PyTorch, TensorFlow, scikit-learn, XGBoost, Hugging Face Transformers, Pandas, NumPy, MLflow, Spark, dbt, Databricks, Snowflake} \\
-     \textbf{Data Engineering}{: Apache Kafka, Apache Airflow, ETL/ELT, Data Warehousing, Data Modelling, Data Profiling, PostgreSQL} \\
+     \textbf{Data Engineering}{: Apache Kafka, Apache Airflow, ETL/ELT, Data Warehousing, Data Modelling, Data Profiling, PostgreSQL, Power BI, Tableau} \\
      \textbf{Cloud \& DevOps}{: AWS, Azure, GCP, Docker, Kubernetes, Terraform, CI/CD, GitHub Actions, Azure DevOps, Prometheus, Grafana, ELK Stack} \\
-     \textbf{Analytics \& BI}{: Power BI, Tableau, Statistical Modelling, Fraud \& Risk Modelling, A/B Testing} \\
      \textbf{Certifications}{: AWS ML Specialty; AWS Solutions Architect Professional; Google Cloud Professional ML Engineer; Azure AI Engineer Associate; Azure Solutions Architect Expert; TensorFlow Developer; CKA}
      % Add languages and work authorisation here if you want them on the
      % page. Left out rather than carried over from the old file, which
