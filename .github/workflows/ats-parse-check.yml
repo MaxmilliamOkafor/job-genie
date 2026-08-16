@@ -16,15 +16,58 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/docx-generator.js'
-      - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/recruiter-audit.js'
-      - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/tests/ci/**'
+      - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/**/*.js'
+      - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/tests/**'
       - '.github/workflows/ats-parse-check.yml'
 
 jobs:
+  # WHAT GATES THE MERGE.
+  #
+  # Deterministic, offline, no third party involved. If this is red the
+  # code is broken; if it is green the guarantees hold. Nothing in the
+  # job below can fail the build, because nothing in it is under our
+  # control.
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run every offline suite
+        working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
+        run: |
+          pass=0; fail=0; failed=''
+          for f in tests/*.test.cjs; do
+            if out=$(node "$f" 2>&1); then
+              pass=$((pass+1))
+            else
+              fail=$((fail+1)); failed="$failed$f"$'\n'
+              echo "::group::FAILED $f"; echo "$out"; echo '::endgroup::'
+            fi
+          done
+          echo "suites: $pass passed, $fail failed"
+          echo "suites: $pass passed, $fail failed" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::$fail suite(s) failed:"; printf '%s' "$failed"; exit 1
+          fi
+
+  # ADVISORY ONLY, START TO FINISH.
+  #
+  # Every step here drives a website belonging to somebody else. It goes
+  # down, it changes its markup, a runner loses DNS -- none of which says
+  # anything about the CV, and all of which used to surface as the same
+  # red X as a genuine regression. A check that cries wolf gets ignored,
+  # and then the one time it means something it gets ignored too.
+  #
+  # So this job never fails. It reports what the live parsers returned
+  # into the run summary, and distinguishes "the site was unreachable"
+  # from "the site worked and the CV parsed wrong".
   parse:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -55,14 +98,46 @@ jobs:
           echo "--- the PDF text layer, which is what a parser reads ---"
           pdftotext -layout cv.pdf - 2>/dev/null | head -40 || true
 
+      # The script exits 0 for pass, 1 for a real regression, and 2 when
+      # the site could not be reached or never showed our upload. Only
+      # the middle one is about the CV.
       - name: Parse it on the live OpenResume
+        id: liveparse
+        continue-on-error: true
         working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
         env:
           NODE_PATH: ${{ github.workspace }}/node_modules
-        run: node tests/ci/parse-on-openresume.mjs cv.pdf
+        run: |
+          set +e
+          node tests/ci/parse-on-openresume.mjs cv.pdf | tee live-parse.log
+          code=${PIPESTATUS[0]}
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Say what the live parser found
+        if: always()
+        working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
+        run: |
+          {
+            echo "## Live ATS parse check (advisory)"
+            echo ""
+            case "${{ steps.liveparse.outputs.code }}" in
+              0) echo "PASSED. Every live assertion held." ;;
+              2) echo "SKIPPED. open-resume.com was unreachable or never rendered the"
+                 echo "upload, so nothing was graded. This says nothing about the CV." ;;
+              *) echo "REGRESSION. The parser worked and the CV came back wrong."
+                 echo "This does not block the merge, but it is worth reading." ;;
+            esac
+            echo ""
+            echo '```'
+            sed -n '/=== THE ASSERTIONS ===/,$p' live-parse.log 2>/dev/null | head -40 \
+              || sed -n '1,20p' live-parse.log 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Probe the other parsers, reporting only
         if: always()
+        continue-on-error: true
         working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
         env:
           NODE_PATH: ${{ github.workspace }}/node_modules

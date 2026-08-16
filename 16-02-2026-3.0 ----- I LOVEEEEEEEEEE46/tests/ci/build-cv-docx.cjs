@@ -22,7 +22,7 @@ const RAW = [
     + 'quality assurance and documentation.',
   '',
   'PROFESSIONAL EXPERIENCE',
-  'Meta',
+  'Meta (formerly Facebook Inc)',
   'Senior Software Engineer (Contract, part-time)',
   'January 2023 – Present',
   '- Re-architected the data-ingestion layer in Python and SQL on an Apache Kafka stream.',

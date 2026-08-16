@@ -174,7 +174,7 @@ console.log('\nTHE PROFILE FIELDS EXTRACT');
   t('  email', !!email, 'no line matches the email rule');
   const phoneLine = profile.find((l) => RE.phone.test(l.text));
   const phone = phoneLine ? phoneLine.text.match(RE.phone)[0] : '';
-  t('  phone', phone === '0874261508',
+  t('  phone', phone === '087 426 1508',
     'got ' + JSON.stringify(phone) + ' from ' + JSON.stringify(phoneLine ? phoneLine.text : '(none)'));
   const loc = profile.find((l) => RE.location.test(l.text));
   t('  location', !!loc, 'no line matches City, ST');

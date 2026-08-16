@@ -785,6 +785,130 @@
   }
 
   // ===================================================================
+  // ONE PAGE
+  // -------------------------------------------------------------------
+  // A recruiter working through a stack decides whether to read a CV
+  // before they decide what it says, and a second page is where a lot of
+  // that decision gets made. The generator already squeezes spacing and
+  // the type scale to fit, but typography has a floor: four roles at the
+  // per-role caps is twenty bullets, and twenty bullets of real length do
+  // not fit on a page at any size worth reading.
+  //
+  // So the last of the fitting is done here, where relevance to the
+  // posting is known and the generator's is not. It runs AFTER
+  // orderBulletsByRelevance and capBulletsPerRole, so the tail of each
+  // role is already its least relevant material.
+  //
+  // What it will not do:
+  //
+  //   * touch a bullet holding the CV's only mention of a posting
+  //     keyword -- the same guard the per-role cap uses, for the same
+  //     reason. A missed keyword costs more than a second page.
+  //   * take a role below two bullets. A role reduced to one line reads
+  //     as filler and invites the question of why it is there at all.
+  //   * touch anything outside the experience section. Education,
+  //     skills and projects are not padding.
+  //   * trim past the point of fitting. It stops the moment the budget
+  //     is met, so a CV that is one line over loses one line.
+  //
+  // If it cannot fit within those rules, it stops and the CV runs to two
+  // pages, which is the honest outcome for a CV with more on it than a
+  // page holds.
+  //
+  // WHO DECIDES WHETHER IT FITS.
+  //
+  // The generator, and only the generator. It measures the XML it
+  // actually emitted, after choosing a density, so it is the one place
+  // that knows. This module carried its own line-count heuristic for a
+  // first version and the two disagreed badly: on a CV the generator
+  // would have fitted at full size, the heuristic cut 22 bullets down to
+  // 8 and still reported that it did not fit. Two estimators for one
+  // question is one too many.
+  //
+  // The fallback exists only for callers that load this module without
+  // the generator, and is deliberately generous: given no way to
+  // measure, doing nothing is the right answer.
+  const _MIN_ROLE_BULLETS = 2;
+
+  function _fits(cvText) {
+    const G = (typeof window !== 'undefined' && window.DocxGenerator)
+      || (typeof global !== 'undefined' && global.DocxGenerator);
+    if (G && typeof G.measureCv === 'function') {
+      try { return !!G.measureCv(cvText).fitsOnePage; } catch (e) { return true; }
+    }
+    return true;
+  }
+
+  function fitToOnePage(cvText, jobKeywords) {
+    const text = String(cvText || '');
+    if (!text || _fits(text)) return { text, trimmed: 0, fits: true };
+
+    const kws = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim().toLowerCase())
+      .filter((k) => k.length > 2);
+    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
+
+    let lines = text.split('\n');
+    const counts = Object.create(null);
+    for (const l of lines) {
+      if (!isBullet(l)) continue;
+      const low = l.toLowerCase();
+      for (const k of kws) if (low.includes(k)) counts[k] = (counts[k] || 0) + 1;
+    }
+    const isSoleCarrier = (b) => {
+      const low = b.toLowerCase();
+      for (const k of kws) if (counts[k] === 1 && low.includes(k)) return true;
+      return false;
+    };
+
+    let trimmed = 0;
+    // Each pass removes at most one bullet, from the last bullet of the
+    // LAST role that can still spare one -- oldest work, least relevant
+    // bullet, which is the cheapest line on the page.
+    for (let guard = 0; guard < 40; guard++) {
+      if (_fits(lines.join('\n'))) break;
+
+      // Map the experience section's bullet runs.
+      const runs = [];
+      let inExp = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (_EXP_HEAD.test(lines[i])) { inExp = true; continue; }
+        if (_ANY_HEAD.test(lines[i])) { inExp = false; continue; }
+        if (!inExp || !isBullet(lines[i])) continue;
+        let j = i;
+        while (j < lines.length && isBullet(lines[j])) j++;
+        runs.push({ start: i, end: j });
+        i = j - 1;
+      }
+
+      // Take from the role with the MOST bullets, oldest first on a tie.
+      //
+      // Working strictly oldest-first instead left the newest role at six
+      // bullets and stripped the second-newest to the floor of two, which
+      // reads as though the second job barely happened. Taking from the
+      // longest run levels the page: every role keeps enough to be a real
+      // entry, and the last bullet of a six-bullet role is a cheaper loss
+      // than the third of a three-bullet one. Ties go to the older role,
+      // so attention still ends up front-loaded.
+      let cut = -1, bestLen = _MIN_ROLE_BULLETS;
+      for (let r = runs.length - 1; r >= 0; r--) {
+        const { start, end } = runs[r];
+        const len = end - start;
+        if (len <= bestLen) continue;
+        for (let k = end - 1; k >= start + _MIN_ROLE_BULLETS; k--) {
+          if (!isSoleCarrier(lines[k])) { cut = k; bestLen = len; break; }
+        }
+      }
+      if (cut === -1) break;      // nothing left that may honestly go
+      lines.splice(cut, 1);
+      trimmed++;
+    }
+
+    const out = lines.join('\n');
+    return { text: out, trimmed, fits: _fits(out) };
+  }
+
+  // ===================================================================
   // A WORD USED TWICE IN ONE BULLET
   // -------------------------------------------------------------------
   // "surfacing fraud and risk exposure for the risk team" reads as a
@@ -869,12 +993,33 @@
     // which is worse than the claim it replaced. Roles are already in
     // newest-first order by the time this runs.
     const DATE_RE = /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|\d{1,2}\/\d{4}|\d{4})\s*[-–—]/i;
+    // Two layouts, and only one used to work.
+    //
+    //   "Software Engineer\tJanuary 2023 - Present"   title and date share
+    //                                                 a line: split it
+    //   "Software Engineer"                           title and date on
+    //   "January 2023 - Present"                      SEPARATE lines
+    //
+    // The second is what the generator emits, and splitting its date line
+    // yields an empty string before the date, so no real title was found
+    // and this returned unchanged. A CV claiming "AFC Advisory Manager,
+    // 5+ years anti-financial crime" over Meta and Citigroup software
+    // bullets went through untouched, which is the entire case this
+    // function exists for.
+    const _cleanTitle = (t) => String(t || '')
+      .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
+    const _isTitle = (t) => !!t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7;
     let realTitle = '';
-    for (const l of roleLines) {
+    for (let i = 0; i < roleLines.length; i++) {
+      const l = roleLines[i];
       if (!DATE_RE.test(l)) continue;
-      const t = l.split('\t')[0].split(DATE_RE)[0]
-        .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
-      if (t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7) { realTitle = t; break; }
+      const sameLine = _cleanTitle(l.split('\t')[0].split(DATE_RE)[0]);
+      if (_isTitle(sameLine)) { realTitle = sameLine; break; }
+      // Nothing before the date on this line, so the title is the line
+      // above it. The line above THAT is the company, which is why this
+      // takes the nearest one and not the first.
+      const prev = _cleanTitle(roleLines[i - 1]);
+      if (_isTitle(prev) && !DATE_RE.test(prev)) { realTitle = prev; break; }
     }
     if (!realTitle) return { text, changed: false };
 
@@ -914,6 +1059,227 @@
     }
 
     return { text: lines.join('\n'), changed };
+  }
+
+  // ===================================================================
+  // A YEARS-IN-A-FIELD CLAIM NEEDS A FIELD THE CV ACTUALLY SHOWS
+  // -------------------------------------------------------------------
+  // The title half of the problem above is only half. Replace the
+  // borrowed title and the sentence still reads:
+  //
+  //   "Experienced Software Engineer with 5+ years in anti-financial
+  //    crime compliance and AFC governance across EU markets."
+  //
+  // over bullets that are Kafka, Kubernetes and MLflow start to finish.
+  // Every parser scores that at 100%. The first human or LLM screener
+  // reads two lines, sees the contradiction, and stops. It is the most
+  // expensive sentence in the document precisely because nothing
+  // automated flags it.
+  //
+  // What makes it checkable is the choice of evidence base. A claim
+  // about years spent in a field is answered by the record of what the
+  // candidate did and earned -- experience bullets, education,
+  // certifications, projects. It is NOT answered by the skills list or
+  // Core Competencies, because those were written by the same pass that
+  // wrote the summary. A competency line reading "Anti-Financial Crime"
+  // is the claim restated, not evidence for it, and scoring the summary
+  // against it would let any invented domain vouch for itself.
+  //
+  // Unsupported clauses come out. Nothing is invented to replace them,
+  // same rule as the pivot rewrite above.
+  //
+  // The tolerance is deliberately generous, because wrongly deleting a
+  // true claim makes the CV weaker and that is the opposite of
+  // tailoring. A claim survives on a single word of support; it is cut
+  // only when the record contains nothing of it at all, or when a long
+  // domain phrase is carried by one incidental word.
+  const _CLAIM_HEAD = new RegExp('^\\s*(?:PROFESSIONAL\\s+SUMMARY|SUMMARY|PROFILE|OBJECTIVE'
+    + '|(?:CORE\\s+|KEY\\s+|TECHNICAL\\s+|RELEVANT\\s+)?(?:COMPETENC(?:Y|IES)|SKILLS'
+    + '|EXPERTISE|STRENGTHS)|AREAS\\s+OF\\s+EXPERTISE)\\s*:?\\s*$', 'i');
+
+  const _YEARS_CLAUSE = new RegExp(
+    // Optional connective, which is where the cut lands when there is one.
+    '(?:,?\\s*\\b(with|bringing|offering|combining)\\b\\s+)?'
+    + '(?:\\b(?:over|more\\s+than|nearly|almost)\\b\\s+)?'
+    + '\\d{1,2}\\s*\\+?\\s*years?(?:’s|\'s)?'
+    + '(?:\\s+of)?'
+    + '(?:\\s+(?:professional|hands-on|combined|progressive|direct|dedicated'
+    + '|practical|international|cumulative))?'
+    + '(?:\\s+experience)?'
+    + '\\s+(?:in|within|across|spanning|supporting|of|with)\\s+'
+    + '([^.;]+)', 'i');
+
+  function stripUnsupportedDomainClaim(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { text, changed: false };
+    const lines = text.split('\n');
+
+    const start = lines.findIndex((l) => _SUMMARY_HEAD.test(l));
+    if (start === -1) return { text, changed: false };
+    let end = start + 1;
+    while (end < lines.length && !_ANY_HEAD.test(lines[end])) end++;
+
+    // The record: sections that report what happened, not sections that
+    // assert what the candidate is good at.
+    let recording = false;
+    const evidence = [];
+    for (const l of lines) {
+      if (_ANY_HEAD.test(l)) { recording = !_CLAIM_HEAD.test(l); continue; }
+      if (recording && l.trim()) evidence.push(l);
+    }
+    const blob = evidence.join(' ').toLowerCase();
+    // With no record to check against there is no basis to cut anything.
+    if (blob.split(/\s+/).length < 8) return { text, changed: false };
+
+    let changed = false;
+    const rewritten = [];
+    for (let i = start + 1; i < end; i++) {
+      const line = lines[i];
+      if (!line.trim()) { rewritten.push(line); continue; }
+
+      const sentences = line.match(/[^.]+\.?/g) || [line];
+      const kept = [];
+      for (const s of sentences) {
+        const m = s.match(_YEARS_CLAUSE);
+        if (!m) { kept.push(s); continue; }
+
+        const words = String(m[2]).toLowerCase().match(/[a-z][a-z-]{3,}/g) || [];
+        const distinctive = words.filter((w) => !_STOP.has(w));
+        if (!distinctive.length) { kept.push(s); continue; }
+        const supported = distinctive.filter((w) => blob.indexOf(w) !== -1).length;
+        const unsupported = supported === 0 || (distinctive.length >= 4 && supported <= 1);
+        if (!unsupported) { kept.push(s); continue; }
+
+        if (m[1]) {
+          // There is a connective to cut at, so the rest of the sentence
+          // survives and still says something the CV backs up.
+          const trimmed = s.replace(_YEARS_CLAUSE, '')
+            .replace(/\s{2,}/g, ' ').replace(/\s+([.,])/g, '$1')
+            .replace(/,\s*\./g, '.').replace(/,\s*$/, '').trim();
+          if (trimmed.split(/\s+/).filter(Boolean).length >= 3) {
+            kept.push(/[.!?]$/.test(trimmed) ? trimmed : trimmed + '.');
+            changed = true;
+            continue;
+          }
+        }
+        // Nothing to cut at, or nothing usable left over: the sentence
+        // WAS the claim, so it goes.
+        changed = true;
+      }
+
+      rewritten.push(kept.join(' ').replace(/\s{2,}/g, ' ').trim());
+    }
+
+    if (!changed) return { text, changed: false };
+    // Never leave an empty summary behind. A CV opening on a blank
+    // section reads worse than one opening on an overreach, so if the
+    // whole block would go, it stays and the model's judgement decides.
+    if (!rewritten.join('').trim()) return { text, changed: false };
+
+    for (let i = start + 1; i < end; i++) lines[i] = rewritten[i - start - 1];
+    return { text: lines.join('\n'), changed: true };
+  }
+
+  // ===================================================================
+  // EDUCATION ENTRIES CARRY THEIR DATES
+  // -------------------------------------------------------------------
+  // A live Workday parse of a generated CV returned both education
+  // entries with `date: ""`. Workday's education block has required
+  // From/To year fields, and it is not alone -- the same required-year
+  // shape appears across the enterprise ATS tier. Every one of those
+  // applications was being hand-typed, on a field the profile already
+  // knows the answer to.
+  //
+  // The cause is that the generator writes the education section from
+  // the model's tailored text, and the model reliably emits degree and
+  // institution and reliably drops the year. Asking it more firmly is
+  // not a guarantee; reading the date out of the structured profile and
+  // putting it back is.
+  //
+  // Nothing is invented. A date is restored only when the profile
+  // carries one for an entry the CV already names, and an entry that
+  // already shows a year is left exactly as it is.
+  const _EDU_HEAD = new RegExp('^\\s*(?:EDUCATION|ACADEMIC\\s+BACKGROUND'
+    + '|ACADEMIC\\s+QUALIFICATIONS|EDUCATIONAL\\s+QUALIFICATIONS'
+    + '|ACADEMIC\\s+HISTORY|QUALIFICATIONS)\\s*:?\\s*$', 'i');
+  const _HAS_YEAR = /\b(?:19|20)\d{2}\b/;
+  const _EDU_STOP = new Set(['university', 'college', 'school', 'institute',
+    'academy', 'bachelor', 'master', 'science', 'arts', 'degree', 'honours',
+    'honors', 'with', 'and', 'the', 'of', 'in']);
+
+  // The graduation date arrives under whichever name its source used, so
+  // accept the usual aliases rather than one canonical field.
+  function _eduDates(edu) {
+    if (!edu || typeof edu !== 'object') return '';
+    const one = edu.dates || edu.date || edu.year || edu.graduationDate
+      || edu.graduation_date || edu.graduationYear || edu.graduation_year;
+    if (one) return String(one).trim();
+    const start = edu.startDate || edu.start_date || edu.startYear || edu.start_year;
+    const end = edu.endDate || edu.end_date || edu.endYear || edu.end_year;
+    if (start && end) return String(start).trim() + ' - ' + String(end).trim();
+    return String(start || end || '').trim();
+  }
+
+  // En/em dashes to a hyphen, the separator every documented ATS date
+  // parser splits on, and the same one the experience block already uses.
+  const _prettyEduDate = (d) => String(d).trim()
+    .replace(/\s*[–—]\s*/g, ' - ').replace(/\s*-\s*/g, ' - ')
+    .replace(/\s{2,}/g, ' ').trim();
+
+  const _eduNorm = (s) => String(s || '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  function restoreEducationDates(cvText, education) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(education) || !education.length) return { text, added: 0 };
+    const lines = text.split('\n');
+
+    const start = lines.findIndex((l) => _EDU_HEAD.test(l));
+    if (start === -1) return { text, added: 0 };
+    let end = start + 1;
+    while (end < lines.length && !_ANY_HEAD.test(lines[end])) end++;
+
+    const inserts = [];
+    const claimed = new Set();
+    for (const edu of education) {
+      const dates = _eduDates(edu);
+      if (!dates || !_HAS_YEAR.test(dates)) continue;
+
+      // Anchor on the institution, falling back to the degree. The date
+      // goes under whichever line the CV actually shows, so an entry the
+      // tailoring dropped never gets a date bolted to a different school.
+      let at = -1;
+      const keys = [edu.institution || edu.school || edu.university || edu.name,
+        edu.degree || edu.qualification || edu.course];
+      for (const key of keys) {
+        const k = _eduNorm(key);
+        if (k.length < 4) continue;
+        for (let i = start + 1; i < end; i++) {
+          if (claimed.has(i)) continue;
+          const l = _eduNorm(lines[i]);
+          if (l.length < 4) continue;
+          if (l.indexOf(k) !== -1 || k.indexOf(l) !== -1) { at = i; break; }
+        }
+        if (at !== -1) break;
+      }
+      if (at === -1) continue;
+      claimed.add(at);
+
+      // Already dated somewhere in the entry, so there is nothing to
+      // restore and re-stating the year would read as a duplicate.
+      if (_HAS_YEAR.test(lines[at])) continue;
+      if (_HAS_YEAR.test(lines[at - 1] || '')) continue;
+      const next = (lines[at + 1] || '').trim();
+      if (next && _HAS_YEAR.test(next) && next.split(/\s+/).length <= 6) continue;
+
+      inserts.push({ at, line: _prettyEduDate(dates) });
+    }
+    if (!inserts.length) return { text, added: 0 };
+
+    // Back to front, so earlier indices stay valid as lines are inserted.
+    inserts.sort((a, b) => b.at - a.at);
+    for (const ins of inserts) lines.splice(ins.at + 1, 0, ins.line);
+    return { text: lines.join('\n'), added: inserts.length };
   }
 
   // ===================================================================
@@ -1015,6 +1381,61 @@
     + '|seasonal|maternity cover|parental cover|secondment|consultant|consultancy'
     + '|permanent|perm|remote|hybrid|on[\\s-]?site)'
     + '(?:\\s*,\\s*[a-z\\s-]+)*)\\s*\\)\\s*$', 'i');
+
+  /**
+   * THE COMPANY FIELD IS THE COMPANY'S NAME.
+   *
+   * "Meta (formerly Facebook Inc)" is one text item, and it lands in the
+   * Company field a parser stores. Employers match that field against a
+   * name: "Meta" matches, "Meta (formerly Facebook Inc)" does not. Same
+   * fault as the employment type in the job title, one line up.
+   *
+   * EVERY parenthetical goes, and none of it is kept elsewhere.
+   *
+   * A rename is the employer's corporate history rather than the
+   * candidate's work: nobody screening for Meta experience searches for
+   * Facebook Inc. A descriptor like "(AI Startup)" is a slightly closer
+   * call, but it is a label the candidate applied to the employer, not
+   * something they did, and the bullets under the role already show what
+   * kind of place it was. Neither is worth the risk of a company field
+   * that fails to match the company.
+   */
+  const _COMPANY_PAREN = /\s*\(([^)]{2,60})\)\s*$/;
+
+  function cleanCompanyLine(cvText) {
+    if (!cvText || typeof cvText !== 'string') return { text: cvText || '', cleaned: 0 };
+    const lines = cvText.split('\n');
+    const out = [];
+    let inExp = false, cleaned = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const bare = line.trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; out.push(line); continue; }
+      if (inExp && _ANY_HEAD.test(bare) && !_EXP_HEAD.test(bare)) { inExp = false; out.push(line); continue; }
+
+      // A COMPANY line: inside the experience section, not a bullet, not
+      // itself carrying the dates, and followed by the line that does.
+      // That last condition is what distinguishes it from a job title,
+      // which is handled separately and must not be touched here.
+      const next = (lines[i + 1] || '').trim();
+      const nextNext = (lines[i + 2] || '').trim();
+      // company, then TITLE, then date. The title line is also followed
+      // by a date, so without excluding that this claimed the title too
+      // and took "(Contract, part-time)" off it as though it were a
+      // company parenthetical -- undoing the employment-type rule one
+      // line down and reporting the wrong fix.
+      const isCompany = inExp && bare && !/^\s*[-*•]/.test(line)
+        && !ROLE_DATE_RE.test(bare)
+        && !ROLE_DATE_RE.test(next) && !/\t/.test(bare)
+        && (ROLE_DATE_RE.test(nextNext) || /\t/.test(next));
+      const m = isCompany ? bare.match(_COMPANY_PAREN) : null;
+      if (!m) { out.push(line); continue; }
+
+      out.push(line.replace(_COMPANY_PAREN, ''));
+      cleaned++;
+    }
+    return { text: out.join('\n'), cleaned };
+  }
 
   function moveEmploymentType(cvText) {
     if (!cvText || typeof cvText !== 'string') return { text: cvText || '', moved: 0 };
@@ -2466,6 +2887,7 @@
     originalCV = '',
     jobKeywords = null,
     relevantProjects = null,
+    education = null,
     flags = {},
   } = {}) {
     const t0 = Date.now();
@@ -2569,6 +2991,20 @@
       }
     }
 
+    // The other half of the same sentence. Runs whether or not a title
+    // was borrowed, because "5+ years in X" is just as unsupported under
+    // an honest title, and is checked against the record of what the
+    // candidate did rather than against the skills list, which restates
+    // the claim instead of evidencing it.
+    if (outCV) {
+      const domain = stripUnsupportedDomainClaim(outCV);
+      if (domain.changed) {
+        outCV = domain.text;
+        report.fixes.push('Summary no longer claims years in a field the CV never shows '
+          + '(a parser scores that at 100%; the first human screener stops reading)');
+      }
+    }
+
     // Percentages out. Runs before the wording audits so they see the
     // final sentence rather than one with a figure about to be removed.
     if (outCV) {
@@ -2582,6 +3018,16 @@
     if (outCL) {
       const pctCL = stripPercentages(outCL);
       if (pctCL.removed) outCL = pctCL.text;
+    }
+
+    // The company field is the company's name.
+    if (outCV) {
+      const co = cleanCompanyLine(outCV);
+      outCV = co.text;
+      if (co.cleaned) {
+        report.fixes.push('Took the parenthetical off ' + co.cleaned + ' company name(s) so the '
+          + 'employer field matches the company a recruiter searches for');
+      }
     }
 
     // Employment type out of the job title and into the description.
@@ -2636,6 +3082,21 @@
         if (r.injected) {
           outCV = r.text;
           report.fixes.push(`projects: SELECTED PROJECTS ${r.replaced ? 'normalised' : 'injected'} (${relevantProjects.length} project(s))`);
+        }
+      } catch (e) {}
+    }
+
+    // Education dates back from the structured profile. Workday and the
+    // rest of the enterprise tier have required From/To year fields on
+    // the education block, and the tailored text reliably drops them.
+    if (outCV && Array.isArray(education) && education.length) {
+      try {
+        const r = restoreEducationDates(outCV, education);
+        if (r.added) {
+          outCV = r.text;
+          report.fixes.push('education: graduation date restored on ' + r.added
+            + ' entr' + (r.added === 1 ? 'y' : 'ies')
+            + ' (enterprise ATS education blocks require From/To years)');
         }
       } catch (e) {}
     }
@@ -2995,6 +3456,31 @@
       } catch (e) {}
     }
 
+    // ONE PAGE, LAST.
+    //
+    // Runs after every other pass, because every one of them changes the
+    // length: projects are injected, education gains a date line, a
+    // summary sentence comes out. Measuring before all that would fit the
+    // wrong document.
+    //
+    // The generator squeezes spacing and the type scale first; this only
+    // bites when four roles of real bullets will not fit at any readable
+    // size, and it never takes a role below two bullets, never touches
+    // the sole mention of a posting keyword, and stops the moment it
+    // fits.
+    if (outCV) {
+      try {
+        const fitted = fitToOnePage(outCV, jobKeywords);
+        if (fitted.trimmed) {
+          outCV = fitted.text;
+          report.fixes.push('Fitted to one page: dropped ' + fitted.trimmed
+            + ' least-relevant bullet(s), levelled across the longest roles '
+            + '(never below two per role, never the sole mention of a keyword)');
+        }
+        report.onePage = fitted.fits;
+      } catch (e) {}
+    }
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -3003,7 +3489,7 @@
     runRecruiterAudit,
     // Exported so the boundary between a bolted-on standard and a real
     // mention can be asserted directly.
-    stripBoltedStandards,
+    stripBoltedStandards, cleanCompanyLine,
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,

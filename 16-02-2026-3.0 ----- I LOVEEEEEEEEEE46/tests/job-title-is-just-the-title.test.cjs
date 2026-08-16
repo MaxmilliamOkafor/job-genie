@@ -103,5 +103,58 @@ console.log('\nAND IT IS REPORTED AS A FIX, NOT A WARNING');
     JSON.stringify(out.report.fixes));
 }
 
+console.log('\nAND THE COMPANY FIELD IS THE COMPANY\'S NAME');
+// Same fault one line up. "Meta (formerly Facebook Inc)" is one text
+// item and it lands in the Company field a parser stores. Employers
+// match that against a name: "Meta" matches, the parenthetical does not.
+{
+  const build = (company) => ['Max Okafor', '', 'PROFESSIONAL EXPERIENCE',
+    company, 'Senior Software Engineer', 'January 2023 - Present',
+    '- Built things.', '', 'EDUCATION', 'MSc Artificial Intelligence (Distinction)'].join('\n');
+  const run2 = (cv) => global.RecruiterAudit.runRecruiterAudit({
+    cvText: cv, jdText: 'x', jdTitle: 'Engineer', jobKeywords: ['python'] }).cvText.split('\n');
+
+  // EVERY parenthetical goes and none is kept elsewhere. A rename is the
+  // employer's corporate history rather than the candidate's work. A
+  // descriptor like "(AI Startup)" is a label applied to the employer,
+  // not something the candidate did, and the bullets under the role
+  // already show what kind of place it was.
+  for (const [line, want] of [
+    ['Meta (formerly Facebook Inc)', 'Meta'],
+    ['Acme Ltd (previously Widget Co)', 'Acme Ltd'],
+    ['Beta Group (now part of Gamma)', 'Beta Group'],
+    ['Delta Ltd (t/a Delta Digital)', 'Delta Ltd'],
+    ['SolimHealth (AI Startup)', 'SolimHealth'],
+    ['Acme (Series B)', 'Acme'],
+  ]) {
+    const lines = run2(build(line));
+    t('  ' + line, lines.some((l) => l.trim() === want), JSON.stringify(lines.slice(0, 6)));
+    const inner = line.match(/\(([^)]+)\)/)[1];
+    t('    -> and it is not kept anywhere else',
+      !lines.some((l) => l.includes(inner)),
+      'still present: ' + JSON.stringify(lines.filter((l) => l.includes(inner))));
+  }
+
+  // The adjacency a parser needs to bind a date to a role must survive.
+  {
+    const lines = run2(build('SolimHealth (AI Startup)')).filter((l) => l.trim());
+    const c = lines.findIndex((l) => l.trim() === 'SolimHealth');
+    t('    -> title still follows the company',
+      /Senior Software Engineer/.test(lines[c + 1] || ''), JSON.stringify(lines));
+    t('    -> and the date still follows the title',
+      /January 2023/.test(lines[c + 2] || ''), JSON.stringify(lines));
+  }
+
+  // A company with no parenthetical, and a degree classification, are
+  // both left exactly as they are.
+  {
+    const lines = run2(build('Accenture'));
+    t('  a plain company name is untouched',
+      lines.some((l) => l.trim() === 'Accenture'), JSON.stringify(lines.slice(0, 6)));
+    t('  and a degree keeps its classification',
+      lines.some((l) => /\(Distinction\)/.test(l)), JSON.stringify(lines));
+  }
+}
+
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');
 process.exit(FAIL ? 1 : 0);
