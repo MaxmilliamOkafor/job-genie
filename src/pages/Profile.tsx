@@ -1748,6 +1748,8 @@ const Profile = () => {
                     degree: 'Degree Name',
                     institution: 'Institution Name',
                     gpa: '',
+                    start_year: '',
+                    end_year: '',
                     graduationDate: ''
                   };
                   updateLocalField('education', [...(localProfile.education || []), newEdu]);
