@@ -1024,26 +1024,23 @@
    * name: "Meta" matches, "Meta (formerly Facebook Inc)" does not. Same
    * fault as the employment type in the job title, one line up.
    *
-   * A RENAME is dropped. "formerly Facebook Inc", "previously Acme Ltd",
-   * "now part of X" is information about the employer's corporate
-   * history, not about the candidate's work, and the current name is
-   * what any database holds. Nobody screening for Meta experience
-   * searches for Facebook Inc.
+   * EVERY parenthetical goes, and none of it is kept elsewhere.
    *
-   * ANYTHING ELSE MOVES rather than disappears. "SolimHealth (AI
-   * Startup)" carries real context about the environment worked in, so
-   * it becomes the role's first description line instead of being
-   * deleted. Losing it would make the CV weaker, which is the opposite
-   * of the point.
+   * A rename is the employer's corporate history rather than the
+   * candidate's work: nobody screening for Meta experience searches for
+   * Facebook Inc. A descriptor like "(AI Startup)" is a slightly closer
+   * call, but it is a label the candidate applied to the employer, not
+   * something they did, and the bullets under the role already show what
+   * kind of place it was. Neither is worth the risk of a company field
+   * that fails to match the company.
    */
-  const _RENAME = /^(?:formerly|previously|prev\.?|f\.?k\.?a\.?|née|nee|now|now part of|acquired by|trading as|t\/a)\b/i;
   const _COMPANY_PAREN = /\s*\(([^)]{2,60})\)\s*$/;
 
   function cleanCompanyLine(cvText) {
-    if (!cvText || typeof cvText !== 'string') return { text: cvText || '', cleaned: 0, kept: 0 };
+    if (!cvText || typeof cvText !== 'string') return { text: cvText || '', cleaned: 0 };
     const lines = cvText.split('\n');
     const out = [];
-    let inExp = false, cleaned = 0, kept = 0;
+    let inExp = false, cleaned = 0;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const bare = line.trim();
@@ -1070,21 +1067,8 @@
 
       out.push(line.replace(_COMPANY_PAREN, ''));
       cleaned++;
-      if (!_RENAME.test(m[1].trim())) {
-        // Held back until after the title and date lines, so the
-        // adjacency a parser needs to bind a date to a role survives.
-        let j = i + 1;
-        while (j < lines.length && lines[j].trim()
-          && !/^\s*[-*•]/.test(lines[j]) && (j - i) <= 2) {
-          out.push(lines[j]); j++;
-        }
-        const label = m[1].replace(/\s+/g, ' ').trim();
-        out.push('- ' + label.charAt(0).toUpperCase() + label.slice(1) + '.');
-        kept++;
-        i = j - 1;
-      }
     }
-    return { text: out.join('\n'), cleaned, kept };
+    return { text: out.join('\n'), cleaned };
   }
 
   function moveEmploymentType(cvText) {
@@ -2661,8 +2645,7 @@
       outCV = co.text;
       if (co.cleaned) {
         report.fixes.push('Took the parenthetical off ' + co.cleaned + ' company name(s) so the '
-          + 'employer field matches the company a recruiter searches for'
-          + (co.kept ? ', keeping ' + co.kept + ' of them in the role description' : ''));
+          + 'employer field matches the company a recruiter searches for');
       }
     }
 

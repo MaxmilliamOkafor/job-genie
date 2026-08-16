@@ -99,6 +99,9 @@ try {
     !/P\s+R\s+O\s+F\s+E/i.test(text), (text.match(/.{0,40}P\s+R\s+O\s+F.{0,20}/) || [''])[0]);
   check('no en or em dash survived', !/[–—]/.test(text),
     (text.match(/.{0,25}[–—].{0,25}/) || [''])[0]);
+  check('the company is a bare name',
+    /Meta/.test(text) && !/formerly Facebook/i.test(text),
+    'the parenthetical reached the company field');
   check('the job title carries no employment type',
     !/\(Contract, part-time\)/i.test(text), 'the qualifier is still in the title');
   check('no standard is bolted onto a bullet', !/,\s*with iso 9001/i.test(text),

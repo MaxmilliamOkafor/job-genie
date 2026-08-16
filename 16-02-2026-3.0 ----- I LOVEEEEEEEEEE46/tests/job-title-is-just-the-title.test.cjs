@@ -114,29 +114,25 @@ console.log('\nAND THE COMPANY FIELD IS THE COMPANY\'S NAME');
   const run2 = (cv) => global.RecruiterAudit.runRecruiterAudit({
     cvText: cv, jdText: 'x', jdTitle: 'Engineer', jobKeywords: ['python'] }).cvText.split('\n');
 
-  // A rename is dropped: it is the employer's corporate history, not the
-  // candidate's work, and nobody screening for Meta searches Facebook Inc.
+  // EVERY parenthetical goes and none is kept elsewhere. A rename is the
+  // employer's corporate history rather than the candidate's work. A
+  // descriptor like "(AI Startup)" is a label applied to the employer,
+  // not something the candidate did, and the bullets under the role
+  // already show what kind of place it was.
   for (const [line, want] of [
     ['Meta (formerly Facebook Inc)', 'Meta'],
     ['Acme Ltd (previously Widget Co)', 'Acme Ltd'],
     ['Beta Group (now part of Gamma)', 'Beta Group'],
     ['Delta Ltd (t/a Delta Digital)', 'Delta Ltd'],
+    ['SolimHealth (AI Startup)', 'SolimHealth'],
+    ['Acme (Series B)', 'Acme'],
   ]) {
     const lines = run2(build(line));
     t('  ' + line, lines.some((l) => l.trim() === want), JSON.stringify(lines.slice(0, 6)));
-    t('    -> the rename is not kept as a bullet',
-      !lines.some((l) => /formerly|previously|now part of|t\/a/i.test(l)),
-      JSON.stringify(lines.filter((l) => /^\s*-/.test(l))));
-  }
-
-  // Anything else is real context and moves rather than disappearing.
-  {
-    const lines = run2(build('SolimHealth (AI Startup)'));
-    t('  SolimHealth (AI Startup) -> SolimHealth',
-      lines.some((l) => l.trim() === 'SolimHealth'), JSON.stringify(lines.slice(0, 6)));
-    t('    -> and "AI Startup" is kept in the description',
-      lines.some((l) => /^\s*-\s*AI Startup\./i.test(l)),
-      JSON.stringify(lines.filter((l) => /^\s*-/.test(l))));
+    const inner = line.match(/\(([^)]+)\)/)[1];
+    t('    -> and it is not kept anywhere else',
+      !lines.some((l) => l.includes(inner)),
+      'still present: ' + JSON.stringify(lines.filter((l) => l.includes(inner))));
   }
 
   // The adjacency a parser needs to bind a date to a role must survive.
