@@ -51,27 +51,61 @@ jobs:
         run: |
           pdftotext -raw main.pdf - | tee extracted.txt
           echo '--- checks ---'
-          grep -q '+353 087 426 1508' extracted.txt \
-            || { echo '::error::phone did not extract'; exit 1; }
-          grep -q 'maxokafordev@gmail.com' extracted.txt \
-            || { echo '::error::email did not extract'; exit 1; }
-          # Sections must come out in order, not interleaved.
           python3 - <<'PY'
           import re, sys
           t = open('extracted.txt', encoding='utf-8').read()
+          bad = []
+
+          def need(pattern, why, flags=0):
+              if not re.search(pattern, t, flags):
+                  bad.append(why)
+
+          need(r'\+353 087 426 1508', 'phone did not extract')
+          need(r'maxokafordev@gmail\.com', 'email did not extract')
+
+          # Sections must come out in order, not interleaved. Matched
+          # case-insensitively: \scshape renders small caps, and
+          # pdftotext returns them UPPERCASE, so a title-case search
+          # finds nothing even though the heading is right there.
           want = ['Core Competencies', 'Professional Experience',
                   'Selected Projects', 'Technical Expertise', 'Education']
           pos = []
           for w in want:
-              i = t.find(w)
-              if i < 0:
-                  print('::error::section missing from extracted text: ' + w)
-                  sys.exit(1)
-              pos.append((w, i))
+              m = re.search(re.escape(w), t, re.I)
+              if not m:
+                  bad.append('section missing from extracted text: ' + w)
+              else:
+                  pos.append((w, m.start()))
           if pos != sorted(pos, key=lambda p: p[1]):
-              print('::error::sections extract out of order: ' + repr(pos))
+              bad.append('sections extract out of order: ' + repr(pos))
+
+          # NO EN OR EM DASH ANYWHERE. Two ways LaTeX puts one in without
+          # being asked, and both bit this file:
+          #
+          #   "--" in source becomes an EN DASH, so every date range came
+          #   out "January 2023 – Present". ATS date parsers are
+          #   documented against "Month YYYY - Month YYYY" with a plain
+          #   hyphen, and a dash there costs an employment record.
+          #
+          #   A bare "|" in OT1 Times is NOT a pipe, it renders as an EM
+          #   DASH, so the contact line came out
+          #   "Dublin, Ireland — +353 ... — maxokafordev@gmail.com".
+          #   Use $|$.
+          for d, name in ((u'–', 'en dash'), (u'—', 'em dash')):
+              if d in t:
+                  ctx = re.search(r'.{0,30}' + d + r'.{0,30}', t)
+                  bad.append(name + ' in the extracted text: '
+                             + repr(ctx.group(0) if ctx else d))
+
+          # The date range shape an ATS is documented to read.
+          need(r'January 2023 - Present', 'the current role lost its date range')
+
+          if bad:
+              for b in bad:
+                  print('::error::' + b)
               sys.exit(1)
           print('sections in order:', [w for w, _ in pos])
+          print('no en/em dash, contact details intact')
           PY
 
       - uses: actions/upload-artifact@v4
