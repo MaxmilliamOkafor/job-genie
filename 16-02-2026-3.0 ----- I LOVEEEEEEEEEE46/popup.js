@@ -7607,10 +7607,28 @@ class ATSTailor {
       };
       
       // Acronyms to keep uppercase (2-5 chars)
+      // A term missing from this set gets title-cased, and an acronym in
+      // title case is a tell: a real parse of a generated CV ended its
+      // skills line with "Gdpr". The set was software-only, so every
+      // regulatory, quality and finance acronym fell through -- exactly
+      // the fields where they matter most.
       const ACRONYMS = new Set([
         'AWS', 'GCP', 'SQL', 'API', 'CSS', 'HTML', 'XML', 'JSON', 'REST',
         'CI', 'CD', 'ML', 'AI', 'UI', 'UX', 'ETL', 'LLM', 'IAC', 'SRE',
-        'PMP', 'CPA', 'CFA', 'MBA', 'PHD', 'IIBA', 'CBAP', 'ITIL'
+        'PMP', 'CPA', 'CFA', 'MBA', 'PHD', 'IIBA', 'CBAP', 'ITIL',
+        // Regulatory, risk and financial crime
+        'GDPR', 'AML', 'KYC', 'CDD', 'EDD', 'AFC', 'CTF', 'PEP', 'SAR',
+        'FATF', 'MiFID', 'PSD2', 'DORA', 'SOX', 'PCI', 'DSS', 'HIPAA',
+        'IFRS', 'GAAP', 'VAT', 'ESG', 'BSA', 'OFAC', 'FCA', 'SEC',
+        // Quality, engineering and operations
+        'ISO', 'GMP', 'GLP', 'QA', 'QC', 'CAD', 'CAM', 'CNC', 'PLC',
+        'SCADA', 'ERP', 'MRP', 'WMS', 'EWM', 'OEE', 'FMEA', 'SPC',
+        'RCA', '5S', 'TPM', 'GDT', 'BOM', 'NPI', 'EHS', 'OSHA',
+        // Clinical and care
+        'NMC', 'HCPC', 'CQC', 'NEWS2', 'BLS', 'ILS', 'ALS', 'PPE',
+        // General business
+        'HR', 'HRIS', 'CRM', 'KPI', 'SLA', 'RFP', 'RFI', 'B2B', 'B2C',
+        'P&L', 'SME', 'PMO', 'BAU', 'TUPE', 'IT', 'EU', 'UK', 'US',
       ]);
       
       // Split by comma, normalise each term

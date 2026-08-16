@@ -124,9 +124,9 @@ console.log('\n4. CONTACT DETAILS ARE IN THE BODY, WITH PLAIN-TEXT LABELS');
   t('  a phone is extractable at all', !!phoneHit,
     'the contact line as built: ' + JSON.stringify(lines.find((l) => /\+/.test(l)) || ''));
   t('  and it is the national number, not a fragment of the country code',
-    phoneHit === '0874261508',
-    'got ' + JSON.stringify(phoneHit) + '. "353 0874261" means a space or hyphen '
-      + 'follows the country code and the match ran straight through it.');
+    phoneHit === '087 426 1508',
+    'got ' + JSON.stringify(phoneHit) + '. "353 0874261" means the national part '
+      + 'is not grouped, so the match ran straight through the country code.');
   t('  the country code survives for a human and for international dialling',
     /\+353/.test(text), JSON.stringify(lines.find((l) => /\d{7}/.test(l)) || ''));
   t('  the email carries an "Email:" label', /Email:\s*\S+@/.test(text),
@@ -205,7 +205,7 @@ console.log('\n9. THE COVER LETTER, NOT JUST THE CV');
     !/<w:spacing w:val="(?:[1-9]\d|9)"\/>/.test(x),
     (x.match(/<w:spacing w:val="\d+"\/>/g) || []).join(' '));
   t('  the phone is the same parseable form as the CV',
-    (clText.match(/\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/) || [''])[0] === '0874261508',
+    (clText.match(/\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/) || [''])[0] === '087 426 1508',
     JSON.stringify((clText.match(/\+\d+:?[\d ]+/) || [''])[0]));
   t('  no en or em dash', !/[–—]/.test(clText),
     JSON.stringify((clText.match(/.{0,20}[–—].{0,20}/) || [''])[0]));
