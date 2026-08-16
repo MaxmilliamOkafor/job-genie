@@ -869,12 +869,33 @@
     // which is worse than the claim it replaced. Roles are already in
     // newest-first order by the time this runs.
     const DATE_RE = /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|\d{1,2}\/\d{4}|\d{4})\s*[-–—]/i;
+    // Two layouts, and only one used to work.
+    //
+    //   "Software Engineer\tJanuary 2023 - Present"   title and date share
+    //                                                 a line: split it
+    //   "Software Engineer"                           title and date on
+    //   "January 2023 - Present"                      SEPARATE lines
+    //
+    // The second is what the generator emits, and splitting its date line
+    // yields an empty string before the date, so no real title was found
+    // and this returned unchanged. A CV claiming "AFC Advisory Manager,
+    // 5+ years anti-financial crime" over Meta and Citigroup software
+    // bullets went through untouched, which is the entire case this
+    // function exists for.
+    const _cleanTitle = (t) => String(t || '')
+      .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
+    const _isTitle = (t) => !!t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7;
     let realTitle = '';
-    for (const l of roleLines) {
+    for (let i = 0; i < roleLines.length; i++) {
+      const l = roleLines[i];
       if (!DATE_RE.test(l)) continue;
-      const t = l.split('\t')[0].split(DATE_RE)[0]
-        .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
-      if (t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7) { realTitle = t; break; }
+      const sameLine = _cleanTitle(l.split('\t')[0].split(DATE_RE)[0]);
+      if (_isTitle(sameLine)) { realTitle = sameLine; break; }
+      // Nothing before the date on this line, so the title is the line
+      // above it. The line above THAT is the company, which is why this
+      // takes the nearest one and not the first.
+      const prev = _cleanTitle(roleLines[i - 1]);
+      if (_isTitle(prev) && !DATE_RE.test(prev)) { realTitle = prev; break; }
     }
     if (!realTitle) return { text, changed: false };
 
