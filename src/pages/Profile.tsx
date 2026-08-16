@@ -1887,6 +1887,11 @@ const Profile = () => {
                   <>
                     <h3 className="font-semibold">{edu.degree}</h3>
                     <p className="text-muted-foreground">{edu.institution}</p>
+                    {(edu.start_year || edu.end_year) && (
+                      <p className="text-sm text-muted-foreground">
+                        {[edu.start_year, edu.end_year].filter(Boolean).join(' - ')}
+                      </p>
+                    )}
                     {edu.description && (
                       <p className="text-sm text-muted-foreground mt-1">{edu.description}</p>
                     )}
