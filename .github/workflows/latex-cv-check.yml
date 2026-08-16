@@ -51,7 +51,7 @@ jobs:
         run: |
           pdftotext -raw main.pdf - | tee extracted.txt
           echo '--- checks ---'
-          grep -q '+353 87 426 1508' extracted.txt \
+          grep -q '+353 087 426 1508' extracted.txt \
             || { echo '::error::phone did not extract'; exit 1; }
           grep -q 'maxokafordev@gmail.com' extracted.txt \
             || { echo '::error::email did not extract'; exit 1; }

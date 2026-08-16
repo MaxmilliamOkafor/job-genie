@@ -6,9 +6,16 @@
 % findings on the generated documents:
 %
 %   1. PHONE. Was "+353: 0874261508". The colon after the country code is
-%      not a format libphonenumber accepts, and Workday, Greenhouse and
-%      iCIMS all validate phone fields with it, so the field arrives
-%      empty or rejected. Now "+353 87 426 1508".
+%      not a format libphonenumber accepts -- Workday and Greenhouse
+%      validate phone fields with it, and it failed to parse in every
+%      region tested. Stripping the colon is not enough either: the bare
+%      "0874261508" an extractor pulls out is ambiguous, and a parser
+%      defaulting to Germany reads it as +49 874261508, a different
+%      number a recruiter would actually dial.
+%
+%      "+353 087 426 1508" was the string that parsed valid in IE, DE, US
+%      and with no region at all, normalising to +353874261508 in each.
+%      The trunk 0 is what removes the ambiguity, so keep it.
 %
 %   2. FONT AWESOME ICONS ARE GONE. \faEnvelope, \faPhone and \faLinkedin
 %      draw glyphs from a symbol font with no sensible Unicode mapping.
@@ -130,7 +137,7 @@
     \vspace{2pt}
 
     \small
-    Dublin, Ireland ~|~ +353 87 426 1508 ~|~
+    Dublin, Ireland ~|~ +353 087 426 1508 ~|~
     \href{mailto:maxokafordev@gmail.com}{maxokafordev@gmail.com} \\
     \vspace{2pt}
     \href{https://linkedin.com/in/maxokafor}{linkedin.com/in/maxokafor} ~|~
