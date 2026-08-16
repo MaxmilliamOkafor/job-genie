@@ -1794,6 +1794,69 @@ const Profile = () => {
                       }}
                       placeholder="Institution"
                     />
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <Input
+                          value={edu.start_year || ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            const edus = [...(localProfile.education || [])];
+                            edus[eduIndex] = { ...edus[eduIndex], start_year: raw };
+                            updateLocalField('education', edus);
+                          }}
+                          placeholder="2016"
+                          inputMode="numeric"
+                          maxLength={4}
+                          className="w-24"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <Input
+                          value={edu.end_year === 'Present' ? 'Present' : (edu.end_year || '')}
+                          disabled={edu.end_year === 'Present'}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            const edus = [...(localProfile.education || [])];
+                            edus[eduIndex] = { ...edus[eduIndex], end_year: raw };
+                            updateLocalField('education', edus);
+                          }}
+                          placeholder="2020"
+                          inputMode="numeric"
+                          maxLength={4}
+                          className="w-24"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary"
+                          checked={edu.end_year === 'Present'}
+                          onChange={(e) => {
+                            const edus = [...(localProfile.education || [])];
+                            edus[eduIndex] = { ...edus[eduIndex], end_year: e.target.checked ? 'Present' : '' };
+                            updateLocalField('education', edus);
+                          }}
+                        />
+                        Currently studying
+                      </label>
+                    </div>
+                    {(() => {
+                      const maxYear = new Date().getFullYear() + 8;
+                      const s = edu.start_year;
+                      const en = edu.end_year;
+                      const bad = (y: any) => y && (!/^\d{4}$/.test(y) || Number(y) < 1950 || Number(y) > maxYear);
+                      const messages: string[] = [];
+                      if (bad(s)) messages.push(`From year must be between 1950 and ${maxYear}.`);
+                      if (en !== 'Present' && bad(en)) messages.push(`To year must be between 1950 and ${maxYear}.`);
+                      if (s && en && en !== 'Present' && /^\d{4}$/.test(s) && /^\d{4}$/.test(en) && Number(en) < Number(s)) {
+                        messages.push('To year cannot be earlier than From year.');
+                      }
+                      return messages.length ? (
+                        <p className="text-xs text-destructive">{messages.join(' ')}</p>
+                      ) : null;
+                    })()}
                     <Textarea 
                       value={edu.description || ''} 
                       onChange={(e) => {
