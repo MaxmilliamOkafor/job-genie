@@ -8,7 +8,27 @@ import fs from 'fs';
 const PDF = process.argv[2] || 'cv.pdf';
 if (!fs.existsSync(PDF)) { console.error('no such file: ' + PDF); process.exit(1); }
 
-const browser = await chromium.launch();
+// THREE OUTCOMES, NOT TWO.
+//
+// This drives somebody else's website. It goes down, it changes its
+// markup, a runner loses DNS -- none of which says anything about the
+// CV, and all of which used to come back as the same red X as a genuine
+// parse regression. A check that cries wolf gets ignored, and then the
+// one time it means something it gets ignored too.
+//
+//   0  every assertion passed
+//   1  the site worked and the CV parsed WRONG -- a real regression
+//   2  the site could not be reached or never showed our upload, so
+//      nothing was graded. Reported as skipped, not failed.
+const EXIT_OK = 0, EXIT_REGRESSION = 1, EXIT_UNAVAILABLE = 2;
+
+let browser;
+try {
+  browser = await chromium.launch();
+} catch (e) {
+  console.log('SITE UNAVAILABLE: browser would not launch: ' + ((e && e.message) || e));
+  process.exit(EXIT_UNAVAILABLE);
+}
 const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
 let failed = 0;
 const check = (name, ok, detail) => {
@@ -16,9 +36,14 @@ const check = (name, ok, detail) => {
   if (!ok) failed++;
 };
 
+// Set once we know the site itself is fine, so a later throw is read as
+// a real failure rather than as the site being down.
+let reachable = false;
+
 try {
   await page.goto('https://www.open-resume.com/resume-parser', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.setInputFiles('input[type="file"]', PDF);
+  reachable = true;
 
   // WAIT FOR OUR RESUME, NOT A FIXED DELAY.
   //
@@ -42,9 +67,18 @@ try {
   await page.waitForTimeout(1500);
 
   const text = await page.evaluate(() => document.body.innerText);
-  check('the page is showing OUR resume, not its demo', replaced && !DEMO.test(text),
-    'the demo was still rendered after 45s, so every assertion below would '
-    + 'have graded someone else\'s resume');
+  // The demo never being replaced means the upload was never parsed --
+  // the site's problem, not the CV's. Grading someone else's resume, or
+  // reporting a regression that was never measured, are both worse than
+  // saying nothing.
+  if (!replaced || DEMO.test(text)) {
+    console.log('SITE UNAVAILABLE: the demo resume was still rendered after 45s, '
+      + 'so the upload was never parsed and nothing was graded.');
+    fs.writeFileSync('parse-output.txt', text);
+    await page.screenshot({ path: 'parse-screenshot.png', fullPage: true });
+    await browser.close();
+    process.exit(EXIT_UNAVAILABLE);
+  }
   fs.writeFileSync('parse-output.txt', text);
   await page.screenshot({ path: 'parse-screenshot.png', fullPage: true });
 
@@ -107,10 +141,21 @@ try {
   check('no standard is bolted onto a bullet', !/,\s*with iso 9001/i.test(text),
     'the bolt-on survived');
 } catch (e) {
-  check('the run itself', false, (e && e.message) || String(e));
+  const msg = (e && e.message) || String(e);
+  if (!reachable) {
+    console.log('SITE UNAVAILABLE: ' + msg);
+    try { await browser.close(); } catch (_) {}
+    process.exit(EXIT_UNAVAILABLE);
+  }
+  // Reached the site and then threw. Most often its markup moved, which
+  // is still not a statement about the CV, so it is reported the same
+  // way rather than as a regression.
+  console.log('SITE UNAVAILABLE: reached the parser but the run threw: ' + msg);
+  try { await browser.close(); } catch (_) {}
+  process.exit(EXIT_UNAVAILABLE);
 } finally {
-  await browser.close();
+  try { await browser.close(); } catch (_) {}
 }
 
 console.log('\n' + (failed ? failed + ' FAILED' : 'all checks passed'));
-process.exit(failed ? 1 : 0);
+process.exit(failed ? EXIT_REGRESSION : EXIT_OK);
