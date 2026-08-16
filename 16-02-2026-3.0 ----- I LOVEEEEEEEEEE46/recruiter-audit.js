@@ -938,6 +938,125 @@
   }
 
   // ===================================================================
+  // A YEARS-IN-A-FIELD CLAIM NEEDS A FIELD THE CV ACTUALLY SHOWS
+  // -------------------------------------------------------------------
+  // The title half of the problem above is only half. Replace the
+  // borrowed title and the sentence still reads:
+  //
+  //   "Experienced Software Engineer with 5+ years in anti-financial
+  //    crime compliance and AFC governance across EU markets."
+  //
+  // over bullets that are Kafka, Kubernetes and MLflow start to finish.
+  // Every parser scores that at 100%. The first human or LLM screener
+  // reads two lines, sees the contradiction, and stops. It is the most
+  // expensive sentence in the document precisely because nothing
+  // automated flags it.
+  //
+  // What makes it checkable is the choice of evidence base. A claim
+  // about years spent in a field is answered by the record of what the
+  // candidate did and earned -- experience bullets, education,
+  // certifications, projects. It is NOT answered by the skills list or
+  // Core Competencies, because those were written by the same pass that
+  // wrote the summary. A competency line reading "Anti-Financial Crime"
+  // is the claim restated, not evidence for it, and scoring the summary
+  // against it would let any invented domain vouch for itself.
+  //
+  // Unsupported clauses come out. Nothing is invented to replace them,
+  // same rule as the pivot rewrite above.
+  //
+  // The tolerance is deliberately generous, because wrongly deleting a
+  // true claim makes the CV weaker and that is the opposite of
+  // tailoring. A claim survives on a single word of support; it is cut
+  // only when the record contains nothing of it at all, or when a long
+  // domain phrase is carried by one incidental word.
+  const _CLAIM_HEAD = new RegExp('^\\s*(?:PROFESSIONAL\\s+SUMMARY|SUMMARY|PROFILE|OBJECTIVE'
+    + '|(?:CORE\\s+|KEY\\s+|TECHNICAL\\s+|RELEVANT\\s+)?(?:COMPETENC(?:Y|IES)|SKILLS'
+    + '|EXPERTISE|STRENGTHS)|AREAS\\s+OF\\s+EXPERTISE)\\s*:?\\s*$', 'i');
+
+  const _YEARS_CLAUSE = new RegExp(
+    // Optional connective, which is where the cut lands when there is one.
+    '(?:,?\\s*\\b(with|bringing|offering|combining)\\b\\s+)?'
+    + '(?:\\b(?:over|more\\s+than|nearly|almost)\\b\\s+)?'
+    + '\\d{1,2}\\s*\\+?\\s*years?(?:’s|\'s)?'
+    + '(?:\\s+of)?'
+    + '(?:\\s+(?:professional|hands-on|combined|progressive|direct|dedicated'
+    + '|practical|international|cumulative))?'
+    + '(?:\\s+experience)?'
+    + '\\s+(?:in|within|across|spanning|supporting|of|with)\\s+'
+    + '([^.;]+)', 'i');
+
+  function stripUnsupportedDomainClaim(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { text, changed: false };
+    const lines = text.split('\n');
+
+    const start = lines.findIndex((l) => _SUMMARY_HEAD.test(l));
+    if (start === -1) return { text, changed: false };
+    let end = start + 1;
+    while (end < lines.length && !_ANY_HEAD.test(lines[end])) end++;
+
+    // The record: sections that report what happened, not sections that
+    // assert what the candidate is good at.
+    let recording = false;
+    const evidence = [];
+    for (const l of lines) {
+      if (_ANY_HEAD.test(l)) { recording = !_CLAIM_HEAD.test(l); continue; }
+      if (recording && l.trim()) evidence.push(l);
+    }
+    const blob = evidence.join(' ').toLowerCase();
+    // With no record to check against there is no basis to cut anything.
+    if (blob.split(/\s+/).length < 8) return { text, changed: false };
+
+    let changed = false;
+    const rewritten = [];
+    for (let i = start + 1; i < end; i++) {
+      const line = lines[i];
+      if (!line.trim()) { rewritten.push(line); continue; }
+
+      const sentences = line.match(/[^.]+\.?/g) || [line];
+      const kept = [];
+      for (const s of sentences) {
+        const m = s.match(_YEARS_CLAUSE);
+        if (!m) { kept.push(s); continue; }
+
+        const words = String(m[2]).toLowerCase().match(/[a-z][a-z-]{3,}/g) || [];
+        const distinctive = words.filter((w) => !_STOP.has(w));
+        if (!distinctive.length) { kept.push(s); continue; }
+        const supported = distinctive.filter((w) => blob.indexOf(w) !== -1).length;
+        const unsupported = supported === 0 || (distinctive.length >= 4 && supported <= 1);
+        if (!unsupported) { kept.push(s); continue; }
+
+        if (m[1]) {
+          // There is a connective to cut at, so the rest of the sentence
+          // survives and still says something the CV backs up.
+          const trimmed = s.replace(_YEARS_CLAUSE, '')
+            .replace(/\s{2,}/g, ' ').replace(/\s+([.,])/g, '$1')
+            .replace(/,\s*\./g, '.').replace(/,\s*$/, '').trim();
+          if (trimmed.split(/\s+/).filter(Boolean).length >= 3) {
+            kept.push(/[.!?]$/.test(trimmed) ? trimmed : trimmed + '.');
+            changed = true;
+            continue;
+          }
+        }
+        // Nothing to cut at, or nothing usable left over: the sentence
+        // WAS the claim, so it goes.
+        changed = true;
+      }
+
+      rewritten.push(kept.join(' ').replace(/\s{2,}/g, ' ').trim());
+    }
+
+    if (!changed) return { text, changed: false };
+    // Never leave an empty summary behind. A CV opening on a blank
+    // section reads worse than one opening on an overreach, so if the
+    // whole block would go, it stays and the model's judgement decides.
+    if (!rewritten.join('').trim()) return { text, changed: false };
+
+    for (let i = start + 1; i < end; i++) lines[i] = rewritten[i - start - 1];
+    return { text: lines.join('\n'), changed: true };
+  }
+
+  // ===================================================================
   // PERCENTAGES COME OUT
   // -------------------------------------------------------------------
   // A percentage is the easiest figure to invent and the hardest for a
@@ -2642,6 +2761,20 @@
         outCV = pivot.text;
         report.fixes.push('Summary no longer claims a title the employment history '
           + 'does not contain (a pivot is argued with real overlap, not a borrowed title)');
+      }
+    }
+
+    // The other half of the same sentence. Runs whether or not a title
+    // was borrowed, because "5+ years in X" is just as unsupported under
+    // an honest title, and is checked against the record of what the
+    // candidate did rather than against the skills list, which restates
+    // the claim instead of evidencing it.
+    if (outCV) {
+      const domain = stripUnsupportedDomainClaim(outCV);
+      if (domain.changed) {
+        outCV = domain.text;
+        report.fixes.push('Summary no longer claims years in a field the CV never shows '
+          + '(a parser scores that at 100%; the first human screener stops reading)');
       }
     }
 
