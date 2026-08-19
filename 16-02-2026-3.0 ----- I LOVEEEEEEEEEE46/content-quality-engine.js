@@ -936,6 +936,45 @@
       return result;
     },
 
+    // ============ AN UNFILLED PLACEHOLDER MUST NEVER SHIP ============
+    //
+    // A generated cover letter went out containing, verbatim:
+    //
+    //   "I am eager to expand my knowledge in specific areas such as
+    //    [insert specific technology or skill mentioned in the job
+    //    description that the candidate lacks]."
+    //
+    // That is an instruction to the model, printed to the recruiter. It
+    // is worse than any AI-detection score: it says the letter was
+    // generated AND never read, and it volunteers a gap in the same
+    // breath. One of those ends an application on its own.
+    //
+    // The guard removes the whole SENTENCE, not just the brackets.
+    // Deleting the bracket alone leaves "...areas such as ." which is
+    // its own tell, and the sentence exists only to host the placeholder.
+    // If that empties a paragraph, the paragraph goes too: a missing
+    // paragraph is invisible, a broken one is not.
+    stripUnfilledPlaceholders(text) {
+      if (!text || typeof text !== 'string') return text;
+
+      // Square brackets are the common shape, but the same leak arrives
+      // as {{mustache}}, <angle>, and bare TBD/TODO/XXX markers.
+      const PLACEHOLDER = /(\[[^\]\n]{3,}\]|\{\{[^}\n]+\}\}|<[a-z][^>\n]{3,}>|\b(?:TBD|TODO|XXX|FIXME|LOREM IPSUM)\b|\byour company name\b|\binsert [a-z][^.!?\n]{0,80})/i;
+
+      const paragraphs = text.split(/\n/);
+      const kept = paragraphs.map((para) => {
+        if (!PLACEHOLDER.test(para)) return para;
+        // Split into sentences, drop only the offending ones.
+        const sentences = para.match(/[^.!?]+[.!?]*/g) || [para];
+        const survivors = sentences.filter((sn) => !PLACEHOLDER.test(sn));
+        const rebuilt = survivors.join(' ').replace(/\s{2,}/g, ' ').trim();
+        // A paragraph reduced to a fragment is worse than one removed.
+        return rebuilt.split(/\s+/).filter(Boolean).length >= 4 ? rebuilt : '';
+      });
+
+      return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    },
+
     // ============ NEVER-LEAK GUARD ============
     // Absolute last-resort catch for words that MUST NEVER appear in output
     // `spelling` is 'UK' (default, and what this always did) or 'US'.
@@ -944,6 +983,9 @@
     // country and never flips.
     neverLeakGuard(text, spelling) {
       if (!text || typeof text !== 'string') return text;
+
+      // First, because a placeholder shipping is worse than any spelling.
+      text = this.stripUnfilledPlaceholders(text);
 
       // Spelling, in whichever English the posting is written in. These
       // exist because the map upstream can be bypassed; the guard is the
