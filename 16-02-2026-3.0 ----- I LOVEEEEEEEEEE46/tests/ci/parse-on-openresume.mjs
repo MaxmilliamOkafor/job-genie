@@ -42,8 +42,31 @@ let reachable = false;
 
 try {
   await page.goto('https://www.open-resume.com/resume-parser', { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.setInputFiles('input[type="file"]', PDF);
   reachable = true;
+
+  // WAIT FOR THE INPUT, THEN CONFIRM THE UPLOAD REGISTERED.
+  //
+  // Three runs came back "the demo was still rendered after 45s", which
+  // says the upload was never parsed but not WHY. Setting files on an
+  // input that has not been hydrated yet succeeds silently and the page
+  // never reacts, and that is indistinguishable from a slow parse unless
+  // the two are checked separately.
+  //
+  // So: wait for the input to exist, set the file, then look for the
+  // filename on the page. If the name never appears the upload did not
+  // register; if it appears and the demo still does not clear, their
+  // parser is the thing that did not finish. Different problems, and
+  // only the second one is worth a retry.
+  await page.waitForSelector('input[type="file"]', { state: 'attached', timeout: 30000 });
+  await page.setInputFiles('input[type="file"]', PDF);
+
+  let uploadRegistered = false;
+  try {
+    await page.waitForFunction(
+      () => /cv\.pdf/i.test(document.body.innerText), { timeout: 15000 });
+    uploadRegistered = true;
+  } catch (e) { /* reported below */ }
+  console.log('  upload registered on the page: ' + uploadRegistered);
 
   // WAIT FOR OUR RESUME, NOT A FIXED DELAY.
   //
@@ -72,8 +95,12 @@ try {
   // reporting a regression that was never measured, are both worse than
   // saying nothing.
   if (!replaced || DEMO.test(text)) {
-    console.log('SITE UNAVAILABLE: the demo resume was still rendered after 45s, '
-      + 'so the upload was never parsed and nothing was graded.');
+    console.log('SITE UNAVAILABLE: ' + (uploadRegistered
+      ? 'the file attached (cv.pdf is on the page) but their parser never '
+        + 'replaced the demo resume within 45s, so nothing was graded.'
+      : 'the file never registered on the page at all -- the input was set '
+        + 'but the app did not react, which usually means their upload '
+        + 'handler changed. Nothing was graded.'));
     fs.writeFileSync('parse-output.txt', text);
     await page.screenshot({ path: 'parse-screenshot.png', fullPage: true });
     await browser.close();
