@@ -841,7 +841,18 @@
         // Everything collapses to single spaces, and the field is capped
         // -- a location long enough to wrap would push the right-aligned
         // text off its tab stop and back onto the company name.
-        const loc = String(src.location || src.city || '')
+        // KEY NAME, DEFENSIVELY.
+        //
+        // The profile is edited in a separate app, so the exact key this
+        // lands under is not under this code's control. Reading only
+        // "location" means a near-miss like "role_location" does nothing
+        // at all AND says nothing -- the CV just quietly comes out
+        // without the field, which is indistinguishable from not having
+        // filled it in. Accept the names the same field plausibly gets.
+        const loc = String(src.location || src.city || src.role_location
+          || src.roleLocation || src.job_location || src.jobLocation
+          || src.work_location || src.workLocation || src.based_in
+          || src.basedIn || src.locationName || '')
           .replace(/[\t\r\n\v\f]+/g, ' ')
           .replace(/\s{2,}/g, ' ')
           .trim()
