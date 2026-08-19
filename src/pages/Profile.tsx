@@ -1408,6 +1408,9 @@ const Profile = () => {
                     ) : (
                       <>
                         <h3 className="font-bold">{exp.company}</h3>
+                        {exp.location && (
+                          <p className="text-sm text-muted-foreground">{exp.location}</p>
+                        )}
                         <div className="flex justify-between items-baseline">
                           {(() => {
                             const extracted = extractDatesFromTitle(exp.title || '');
