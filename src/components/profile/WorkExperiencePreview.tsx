@@ -6,6 +6,7 @@ interface WorkExperience {
   id?: string;
   company?: string;
   title?: string;
+  location?: string;
   startDate?: string;
   endDate?: string;
   bullets?: string[];
