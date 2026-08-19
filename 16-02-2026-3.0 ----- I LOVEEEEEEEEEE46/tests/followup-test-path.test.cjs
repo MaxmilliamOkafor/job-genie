@@ -4,7 +4,12 @@
 // actually receive, which is the only thing it is for. This locks the two
 // paths together structurally.
 let PASS=0,FAIL=0; const t=(n,c,x)=>{c?PASS++:FAIL++;console.log((c?'  PASS  ':'  FAIL  ')+n+(c?'':'\n           >> '+x));};
-const src=require('fs').readFileSync('/home/user/job-genie/16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/popup.js','utf8');
+// Resolved from __dirname, not an absolute path. This read a hardcoded
+// /home/user/... path, so it passed on the machine it was written on and
+// ENOENT'd everywhere else -- including CI, which was the only thing
+// telling the truth about it.
+const path = require('path');
+const src = require('fs').readFileSync(path.join(__dirname, '..', 'popup.js'), 'utf8');
 const fnMatch=/^  async followupSend\(\{ test \}\) \{[\s\S]*?\n  \}/m.exec(src);
 if(!fnMatch){console.log('could not locate followupSend');process.exit(1);}
 const fn=fnMatch[0];

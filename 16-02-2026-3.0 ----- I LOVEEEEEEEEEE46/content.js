@@ -1425,7 +1425,7 @@
     
     // Fallback: trigger standard tailor
     updateBanner('🔄 Running standard tailor...', 'working');
-    await autoTailorDocuments();
+    await autoTailorDocuments({ manual: true });  // explicit Workday message, never a background trigger
     return null;
   }
 
@@ -1700,7 +1700,7 @@
     
     // Unknown page state - run generic tailor
     updateBanner('🚀 Workday: Running tailor...', 'working');
-    autoTailorDocuments();
+    autoTailorDocuments({ manual: true });  // explicit Workday message, never a background trigger
   }
   
   // ============ WORKDAY PAGE DETECTION ============
@@ -2698,7 +2698,40 @@
   }
 
   // ============ AUTO-TAILOR DOCUMENTS ============
-  async function autoTailorDocuments() {
+  // ===================================================================
+  // THE TOGGLE MEANS "DO NOTHING UNTIL I ASK"
+  // -------------------------------------------------------------------
+  // The master toggle used to gate the form-filling path only, on the
+  // reasoning that tailoring is a separate feature. From the outside
+  // that distinction does not exist. With the toggle OFF, opening any
+  // recognised ATS page still put a banner over the page and started
+  // generating a CV -- unasked, on someone else's work, and impossible
+  // to stop except by dismissing the banner every time.
+  //
+  // A toggle labelled off has to mean the extension does nothing on its
+  // own. So every UNPROMPTED path now checks it. Anything the user
+  // actually asked for passes { manual: true } and is never blocked:
+  // turning off background behaviour must not disable the button you
+  // came here to press.
+  async function autoRunAllowed() {
+    try {
+      const { autofill_enabled } = await new Promise((r) =>
+        chrome.storage.local.get(['autofill_enabled'], r)
+      );
+      return autofill_enabled === true;
+    } catch (e) {
+      // Storage unreadable. Staying quiet is the safer failure: an
+      // extension that acts when it cannot confirm permission is the
+      // exact behaviour being fixed.
+      return false;
+    }
+  }
+
+  async function autoTailorDocuments(opts = {}) {
+    if (!opts.manual && !(await autoRunAllowed())) {
+      console.log('[ATS Tailor] Auto-tailor skipped: AI Page Autofill is OFF');
+      return;
+    }
     // ATOMIC guard: set the flags BEFORE any await so a second concurrent
     // caller (mutation-observer fire + setTimeout fallback fire is the
     // common case) cannot pass through this gate.  If the cache lookup
@@ -3377,11 +3410,18 @@
       if (tier1Detection.isJobListing) {
         // AUTO: Job listing page - run TurboPipeline immediately
         console.log('[ATS Tailor] 🚀 AUTO-TRIGGER: Tier 1 job listing - running TurboPipeline...');
-        createStatusBanner();
-        updateBanner(`🏆 Tier 1: ${tier1Detection.company} - Auto-tailoring...`, 'working');
-        
+        // The banner is created INSIDE the gate. Creating it first put
+        // "ATS TAILOR / Generating PDF..." over the page before anything
+        // had checked whether the user wanted the extension running at
+        // all, so switching the toggle off changed nothing visible.
         setTimeout(async () => {
           try {
+            if (!(await autoRunAllowed())) {
+              console.log('[ATS Tailor] Tier 1 auto-trigger skipped: AI Page Autofill is OFF');
+              return;
+            }
+            createStatusBanner();
+            updateBanner(`🏆 Tier 1: ${tier1Detection.company} - Auto-tailoring...`, 'working');
             await runTier1TurboPipeline(tier1Detection);
           } catch (e) {
             console.error('[ATS Tailor] Tier 1 auto-trigger error:', e);
@@ -3436,7 +3476,14 @@
   }
   
   // ============ TIER 1 TURBO PIPELINE ============
-  async function runTier1TurboPipeline(tier1Detection) {
+  async function runTier1TurboPipeline(tier1Detection, opts = {}) {
+    // Second gate, on the worker itself. The caller above checks too, but
+    // this function is reachable from more than one place and a gate that
+    // only exists at one call site is one refactor away from being gone.
+    if (!opts.manual && !(await autoRunAllowed())) {
+      console.log('[ATS Tailor] Tier 1 pipeline skipped: AI Page Autofill is OFF');
+      return;
+    }
     const start = performance.now();
     hasTriggeredTailor = true;
     tailoringInProgress = true;
@@ -3542,13 +3589,13 @@
       } else {
         // Fallback to standard API
         console.log('[ATS Tailor] Tier 1 PDF generation failed, falling back to API...');
-        await autoTailorDocuments();
+        await autoTailorDocuments(opts);
       }
       
     } catch (error) {
       console.error('[ATS Tailor] Tier 1 TurboPipeline error:', error);
       updateBanner('⚠️ Falling back to standard flow...', 'working');
-      await autoTailorDocuments();
+      await autoTailorDocuments(opts);
     } finally {
       tailoringInProgress = false;
     }

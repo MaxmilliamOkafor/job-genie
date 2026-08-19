@@ -108,21 +108,40 @@ t('the extractor returns text, not markup',
 const compIndex = linesKeepingTabs.findIndex((l) => /^CORE COMPETENCIES$/i.test(l));
 t('the section header survives', compIndex !== -1, JSON.stringify(linesKeepingTabs.slice(0, 6)));
 
-const after = linesKeepingTabs.slice(compIndex + 1, compIndex + 1 + COMPETENCIES.length + 2);
+// Bounded by the NEXT section heading, not by a count of items. The
+// window used to be COMPETENCIES.length + 2 lines, which was right only
+// while each item owned a line. Now that the section is one wrapped
+// paragraph, a fixed window runs straight into PROFESSIONAL EXPERIENCE
+// and the assertions start grading the role line -- its tab reads as a
+// competencies tab, and its first word gets appended to the last skill.
+const nextHead = linesKeepingTabs.findIndex(
+  (l, i) => i > compIndex && /^[A-Z][A-Z &/'-]{3,}$/.test(l.trim()));
+const after = linesKeepingTabs.slice(
+  compIndex + 1, nextHead === -1 ? linesKeepingTabs.length : nextHead);
 
 console.log('\nNO TABS ANYWHERE IN THE SECTION');
 t('the competencies contain no tab characters',
   !after.some((l) => l.includes('\t')),
   'a tab is a delimiter parsers disagree about: ' + JSON.stringify(after.slice(0, 3)));
 
-console.log('\nONE COMPETENCY PER LINE');
+console.log('\nEVERY COMPETENCY IS RECOVERABLE BY SPLITTING ON COMMAS');
+// One item per line was the fix for the old three-up TAB grid, and it
+// worked -- at the cost of eight lines to carry eight short phrases on a
+// line built for about a hundred characters. A comma is the delimiter
+// that section wanted all along: no parser disagrees about what it means,
+// the paragraph wraps instead of overflowing on a phone, and it extracts
+// in reading order. What matters is not that each item owns a line, but
+// that each item comes back out whole and separate.
+const compBlock = after.join(' ');
+const recovered = compBlock.split(/\s*,\s*/).map((x) => x.replace(/^[•\-*]\s*/, '').trim());
 for (const c of COMPETENCIES) {
-  const line = linesKeepingTabs.find((l) => l.replace(/^[•\-*]\s*/, '').trim() === c);
-  t('"' + c + '" is its own line', !!line,
-    'found instead: ' + JSON.stringify(after.filter((l) => l.includes(c.split(' ')[0]))));
+  t('"' + c + '" is recoverable as its own item', recovered.includes(c),
+    'got: ' + JSON.stringify(recovered.slice(0, 10)));
 }
 
 console.log('\nAND STILL SEPARATE WHEN A PARSER DROPS FORMATTING');
+// Unchanged and still the point: whatever the delimiter, two skills
+// must never arrive as one unmatchable phrase.
 // The failure this replaces: with tabs dropped, "Stakeholder management"
 // and "Azure DevOps" arrived welded into one string.
 for (let i = 0; i < COMPETENCIES.length - 1; i++) {
