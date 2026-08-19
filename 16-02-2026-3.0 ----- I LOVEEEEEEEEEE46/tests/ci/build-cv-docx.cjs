@@ -51,9 +51,21 @@ const RAW = [
 ].join('\n');
 
 // Every renderer-level guarantee runs, exactly as it does in the popup.
+// Per-role locations go through the live parser too. The layout puts the
+// city right-aligned on the COMPANY line, and the open question is
+// whether OpenResume then reads the city as the company: its company
+// feature is "is bolded or doesn't match job title & date", and a city
+// matches neither a title nor a date. The company is bolded and the city
+// is not, which should settle it -- should, so it gets measured against
+// the real parser rather than argued about.
 const audited = global.RecruiterAudit.runRecruiterAudit({
   cvText: RAW, jdText: 'manufacturing engineer quality standards',
   jdTitle: 'Manufacturing Engineer', jobKeywords: ['quality standards', 'iso 9001'],
+  experience: [
+    { company: 'Meta', location: 'Dublin, Ireland' },
+    { company: 'Accenture', location: 'London, UK' },
+    { company: 'Citigroup', location: 'Remote' },
+  ],
 });
 const built = global.DocxGenerator.fromCvText(audited.cvText, { name: 'Maxmilliam Okafor' });
 if (!built || !built.success) {

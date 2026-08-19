@@ -788,6 +788,13 @@
 
       let result = text;
 
+      // Step 0: Swap the letter formulas for plainer wording BEFORE any
+      // deletion pass sees them. Order is the whole point: run after the
+      // banned-phrase removal and there is nothing left to swap, only the
+      // wreckage it left -- ", my interest in X" and "The opportunity to
+      // work at Acme" were both produced that way.
+      result = this.letterBoilerplate(result);
+
       // Step 1: Remove banned words and phrases FIRST (before spelling, since some banned words have US spelling)
       if (removeBannedWords) {
         result = this.removeBannedContent(result);
@@ -936,6 +943,256 @@
       return result;
     },
 
+    // ============ INBUILT AI-TELL SCORER ============
+    //
+    // Runs locally, in the extension, with no model and no dependency.
+    //
+    // The alternative was a real classifier -- Desklib, the old OpenAI
+    // RoBERTa detector -- and both are Python and PyTorch. Running one
+    // means sending the CV to a server, which is precisely the exposure
+    // this extension exists to avoid. A detector that leaks the document
+    // it is protecting is not a trade worth making.
+    //
+    // So this takes the heuristics rather than the model: vocabulary
+    // diversity, sentence-length variation, passive voice and stock
+    // phrasing are all a handful of statistics over the text, and they
+    // are the same signals the lightweight open-source detectors use.
+    //
+    // WHAT THIS SCORE IS NOT: it is not QuillBot's number and will never
+    // match it. Different model, different training, and their own report
+    // says no detector is reliable. What it is good for is direction --
+    // it falls when the text genuinely improves, and it names the
+    // sentences responsible so they can be fixed rather than guessed at.
+    scoreAiTells(text) {
+      const src = String(text || '');
+      const tells = [];
+      if (src.trim().split(/\s+/).filter(Boolean).length < 40) {
+        return { score: 0, tells: [], note: 'too short to judge' };
+      }
+
+      const sentences = (src.match(/[^.!?\n]+[.!?]/g) || [])
+        .map((x) => x.trim()).filter((x) => x.split(/\s+/).length > 2);
+      const words = src.toLowerCase().match(/[a-z][a-z'-]+/g) || [];
+      let score = 0;
+
+      // 1. BURSTINESS. Human writing varies sentence length a lot; a
+      // model holds a steady rhythm. Measured as the coefficient of
+      // variation, which is scale-free so it works on any length.
+      if (sentences.length >= 4) {
+        const lens = sentences.map((x) => x.split(/\s+/).length);
+        const mean = lens.reduce((a, b) => a + b, 0) / lens.length;
+        const sd = Math.sqrt(lens.reduce((a, b) => a + (b - mean) ** 2, 0) / lens.length);
+        const cv = mean ? sd / mean : 0;
+        if (cv < 0.35) {
+          score += 25;
+          tells.push({ kind: 'uniform-sentence-length', detail:
+            'sentences vary by only ' + Math.round(cv * 100) + '% around the mean; '
+            + 'human writing usually varies 40% or more' });
+        }
+      }
+
+      // 2. VOCABULARY DIVERSITY, over the first 200 words so the ratio
+      // is not simply a function of length.
+      const window = words.slice(0, 200);
+      if (window.length >= 80) {
+        const ttr = new Set(window).size / window.length;
+        if (ttr < 0.45) {
+          score += 15;
+          tells.push({ kind: 'low-vocabulary-diversity', detail:
+            Math.round(ttr * 100) + '% unique words in the first 200' });
+        }
+      }
+
+      // 3. PARTICIPIAL TAILS. ", enabling X", ", ensuring Y", ", allowing
+      // Z" closing a clause is the single most characteristic shape of
+      // generated CV prose, and rare in writing people do themselves.
+      const tails = (src.match(/,\s+(?:enabling|ensuring|allowing|providing|delivering|driving|leveraging|facilitating|streamlining|empowering)\b/gi) || []);
+      if (tails.length >= 2) {
+        score += Math.min(25, tails.length * 8);
+        tells.push({ kind: 'participial-tails', count: tails.length, detail:
+          tails.length + ' clauses end with ", enabling/ensuring/allowing ..."' });
+      }
+
+      // 4. TRICOLONS. "A, B, and C" once is normal; three times in a
+      // short document is a rhythm, not a coincidence.
+      const tri = (src.match(/\b\w+, \w+,? and \w+/g) || []);
+      if (tri.length >= 3) {
+        score += 10;
+        tells.push({ kind: 'tricolon-rhythm', count: tri.length, detail:
+          tri.length + ' three-item lists' });
+      }
+
+      // 5. STOCK PHRASING that survived the substitutions above.
+      const STOCK = [/\bfast-paced environment/i, /\bproven track record/i,
+        /\bresults-driven/i, /\bdynamic professional/i, /\bcross-functional teams\b/i,
+        /\bhigh-quality (?:solutions|products|results)/i, /\bmake a difference/i,
+        /\bwealth of experience/i, /\bpassionate about/i, /\bseamless(?:ly)?\b/i,
+        /\bcutting-edge/i, /\bmeticulous/i, /\bhoned my skills/i];
+      const stockHits = STOCK.filter((re) => re.test(src));
+      if (stockHits.length) {
+        score += Math.min(20, stockHits.length * 7);
+        tells.push({ kind: 'stock-phrasing', count: stockHits.length, detail:
+          stockHits.length + ' stock phrase(s) still present' });
+      }
+
+      // 6. PASSIVE VOICE, which models reach for far more than people do.
+      if (sentences.length >= 4) {
+        const passive = sentences.filter((x) =>
+          /\b(?:was|were|been|being|is|are)\s+\w+(?:ed|en)\b/i.test(x)).length;
+        const rate = passive / sentences.length;
+        if (rate > 0.3) {
+          score += 10;
+          tells.push({ kind: 'passive-voice', detail:
+            Math.round(rate * 100) + '% of sentences are passive' });
+        }
+      }
+
+      return {
+        score: Math.min(100, score),
+        tells,
+        sentences: sentences.length,
+        note: 'local heuristic, not a classifier; use it for direction, not as a verdict',
+      };
+    },
+
+    // ============ TURN THE TELLS INTO A REWRITE INSTRUCTION ============
+    //
+    // The scorer says what is wrong. This says what to do about it, in a
+    // form that can be appended to the generation prompt so the next
+    // draft comes out right instead of being patched afterwards.
+    //
+    // Why not just rewrite the text here: this session established, at
+    // some cost, that mechanically editing real prose reads WORSE than
+    // leaving it. Deleting a buzzword produced "with a ability" and "with
+    // in driving"; splitting a bullet at its participial tail would need
+    // the same kind of surgery on grammar the code cannot actually
+    // parse. A model writing fresh produces grammatical sentences; a
+    // regex operating on someone's CV produces wreckage, and wreckage is
+    // the loudest machine tell there is.
+    //
+    // So the tells go back into generation. The instructions are concrete
+    // and about STRUCTURE, never about inserting errors or padding --
+    // varied sentence length and fewer three-item lists are simply what
+    // good CV writing looks like, which is why they read as human.
+    aiTellsInstruction(text) {
+      const r = this.scoreAiTells(text);
+      if (!r.tells.length) return '';
+      const lines = [];
+      for (const tell of r.tells) {
+        if (tell.kind === 'uniform-sentence-length') {
+          lines.push('Vary the length of the bullets sharply. Right now they are '
+            + 'all within a few words of each other, which is the single clearest '
+            + 'sign of generated text. Mix short ones of eight to twelve words with '
+            + 'longer ones; let at least two be under twelve words.');
+        } else if (tell.kind === 'participial-tails') {
+          lines.push('Stop ending clauses with ", enabling ...", ", ensuring ..." '
+            + 'or ", allowing ...". There are ' + tell.count + '. Put the result in '
+            + 'its own short sentence, or state it directly.');
+        } else if (tell.kind === 'tricolon-rhythm') {
+          lines.push('Reduce the three-item lists ("A, B, and C"). There are '
+            + tell.count + '. Two items, or one specific item, reads as a person '
+            + 'writing rather than a pattern being filled.');
+        } else if (tell.kind === 'stock-phrasing') {
+          lines.push('Remove the remaining stock phrasing and say the specific '
+            + 'thing instead.');
+        } else if (tell.kind === 'low-vocabulary-diversity') {
+          lines.push('Widen the vocabulary; the same words are repeating.');
+        } else if (tell.kind === 'passive-voice') {
+          lines.push('Use the active voice. ' + tell.detail + '.');
+        }
+      }
+      return lines.length
+        ? 'REWRITE NOTES (structure only -- keep every fact, never add errors '
+          + 'or padding):\n- ' + lines.join('\n- ')
+        : '';
+    },
+
+    // ============ REPLACE LETTER BOILERPLATE, DO NOT DELETE IT ============
+    //
+    // A cover letter scored 100% AI. The tells were not subtle words --
+    // they were whole formulas that every generated letter opens and
+    // closes with:
+    //
+    //   "I am writing to express my interest in the X position at Y"
+    //   "I am excited about the opportunity to ... make a difference"
+    //   "at your earliest convenience"
+    //   "This experience honed my skills in ..."
+    //
+    // Deleting them made it worse, not better. "I am writing to express
+    // my interest in X" became ", my interest in X" -- a sentence opening
+    // with a comma -- and "I am excited about the opportunity to work at
+    // Acme" became "The opportunity to work at Acme", which is not a
+    // sentence. Wreckage reads as machine-written far more loudly than
+    // the boilerplate did.
+    //
+    // So these are SUBSTITUTED for the plainer thing a person actually
+    // writes, before any deletion pass can see them. Same meaning, no
+    // debris, and none of it is the phrasing a detector has been trained
+    // on. This runs first for that reason.
+    letterBoilerplate(text) {
+      if (!text || typeof text !== 'string') return text;
+      const SWAPS = [
+        [/\bI am writing to (?:express|convey|share) my (?:strong |keen |genuine )?interest in\b/gi, 'I am applying for'],
+        [/\bI am writing to apply for\b/gi, 'I am applying for'],
+        [/\bI am (?:very |really |truly )?excited (?:about|for) the opportunity to\b/gi, 'I would like to'],
+        [/\bI am (?:very |really |truly )?(?:excited|thrilled|delighted) to (?:apply|submit)\b/gi, 'I am applying'],
+        [/\bat your earliest convenience\b/gi, 'whenever suits you'],
+        [/\bI look forward to (?:the opportunity of )?discussing how my skills(?: and experiences?)? align with your needs\b/gi,
+          'I would welcome the chance to talk it through'],
+        [/\bthis experience honed my skills in\b/gi, 'that work taught me'],
+        [/\bwhich further solidified my expertise in\b/gi, 'which deepened my work in'],
+        [/\bcontribute to innovative projects that make a difference\b/gi, 'do work that matters'],
+        [/\bwith a strong (?:foundation|background) in\b/gi, 'having worked in'],
+        [/\bI have successfully (\w+ed)\b/gi, 'I $1'],
+        [/\bwhich aligns well with\b/gi, 'which matches'],
+        [/\bleveraging my expertise in\b/gi, 'using my work in'],
+        [/\bI am confident that my (?:skills and )?experience\b/gi, 'My experience'],
+        [/\bthank you for (?:your time and )?considering my application\b/gi, 'Thank you for reading this'],
+      ];
+      let out = text;
+      for (const [re, to] of SWAPS) out = out.replace(re, to);
+      return out;
+    },
+
+    // ============ AN UNFILLED PLACEHOLDER MUST NEVER SHIP ============
+    //
+    // A generated cover letter went out containing, verbatim:
+    //
+    //   "I am eager to expand my knowledge in specific areas such as
+    //    [insert specific technology or skill mentioned in the job
+    //    description that the candidate lacks]."
+    //
+    // That is an instruction to the model, printed to the recruiter. It
+    // is worse than any AI-detection score: it says the letter was
+    // generated AND never read, and it volunteers a gap in the same
+    // breath. One of those ends an application on its own.
+    //
+    // The guard removes the whole SENTENCE, not just the brackets.
+    // Deleting the bracket alone leaves "...areas such as ." which is
+    // its own tell, and the sentence exists only to host the placeholder.
+    // If that empties a paragraph, the paragraph goes too: a missing
+    // paragraph is invisible, a broken one is not.
+    stripUnfilledPlaceholders(text) {
+      if (!text || typeof text !== 'string') return text;
+
+      // Square brackets are the common shape, but the same leak arrives
+      // as {{mustache}}, <angle>, and bare TBD/TODO/XXX markers.
+      const PLACEHOLDER = /(\[[^\]\n]{3,}\]|\{\{[^}\n]+\}\}|<[a-z][^>\n]{3,}>|\b(?:TBD|TODO|XXX|FIXME|LOREM IPSUM)\b|\byour company name\b|\binsert [a-z][^.!?\n]{0,80})/i;
+
+      const paragraphs = text.split(/\n/);
+      const kept = paragraphs.map((para) => {
+        if (!PLACEHOLDER.test(para)) return para;
+        // Split into sentences, drop only the offending ones.
+        const sentences = para.match(/[^.!?]+[.!?]*/g) || [para];
+        const survivors = sentences.filter((sn) => !PLACEHOLDER.test(sn));
+        const rebuilt = survivors.join(' ').replace(/\s{2,}/g, ' ').trim();
+        // A paragraph reduced to a fragment is worse than one removed.
+        return rebuilt.split(/\s+/).filter(Boolean).length >= 4 ? rebuilt : '';
+      });
+
+      return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    },
+
     // ============ NEVER-LEAK GUARD ============
     // Absolute last-resort catch for words that MUST NEVER appear in output
     // `spelling` is 'UK' (default, and what this always did) or 'US'.
@@ -944,6 +1201,9 @@
     // country and never flips.
     neverLeakGuard(text, spelling) {
       if (!text || typeof text !== 'string') return text;
+
+      // First, because a placeholder shipping is worse than any spelling.
+      text = this.stripUnfilledPlaceholders(text);
 
       // Spelling, in whichever English the posting is written in. These
       // exist because the map upstream can be bypassed; the guard is the
@@ -1556,6 +1816,54 @@
     },
 
     // ============ FINAL CLEANUP ============
+    // ============ REPAIR WHAT A REMOVAL LEFT BEHIND ============
+    //
+    // Every purge above deletes words out of the middle of a sentence,
+    // and deleting a word leaves the words either side of it stranded:
+    //
+    //   "with a proven ability"          -> "with a ability"
+    //   "with extensive experience in"   -> "with in"
+    //   "...initiatives. ability to..."  -> a sentence starting lowercase
+    //
+    // All three appeared in a real generated CV. They matter more than
+    // they look: the point of removing a buzzword is to stop the text
+    // reading as machine-written, and mangled grammar reads as machine-
+    // written far more loudly than the buzzword did. A human writer
+    // simply does not produce "with a ability".
+    //
+    // So every removal is followed by a repair pass. It only fixes
+    // damage, never rewrites meaning.
+    repairAfterRemoval(text) {
+      if (!text || typeof text !== 'string') return text;
+      return text
+        // Two prepositions left adjacent by a deletion between them.
+        // The SECOND one is the one that governs what follows, so it
+        // survives: "professional with in driving" -> "professional in
+        // driving".
+        .replace(/\b(with|and|of|for|to|in|on|at|by)\s+(in|of|with|on|at|by|for)\b/gi,
+          (m0, a, b) => b)
+        // An article stranded against the word that followed the one
+        // that was deleted. "a ability" is the tell; the exceptions are
+        // the vowel-initial words English still takes "a" before.
+        .replace(/\ba\s+(?![uU](?:ni|se|ti|ne|ro|k)|[oO]ne\b)([aeiouAEIOU]\w*)/g, 'an $1')
+        .replace(/\ban\s+([^aeiouAEIOU\s\W]\w*)/g, 'a $1')
+        // An article or preposition left hanging at the end of a clause.
+        .replace(/\b(?:a|an|the|with|of|in|and)\s*([.,;])/gi, '$1')
+        // Tidy the punctuation the deletions disturbed.
+        .replace(/\s+([.,;:])/g, '$1')
+        .replace(/([.,;:]){2,}/g, '$1')
+        .replace(/,\s*\./g, '.')
+        .replace(/[ \t]{2,}/g, ' ')
+        // A deletion at a sentence START leaves the punctuation that
+        // followed it stranded at the front: "I am writing to express my
+        // interest in X" became ", my interest in X".
+        .replace(/^[\s,;:]+/, '')
+        .replace(/([.!?]\s+)[,;:]\s*/g, '$1')
+        // A deletion at a sentence start leaves it lowercase.
+        .replace(/(^|[.!?]\s+)([a-z])/g, (m0, pre, ch) => pre + ch.toUpperCase())
+        .trim();
+    },
+
     finalCleanup(text) {
       if (!text) return text;
 
@@ -1577,6 +1885,9 @@
         `^(${SECTION_HEADERS.map(h => h.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})(?:\\s+\\1)+$`,
         'gmi'
       );
+
+      // Repair first, so the capitalisation fix below sees repaired text.
+      text = this.repairAfterRemoval(text);
 
       return text
         // Collapse duplicated section headers (regression guard)

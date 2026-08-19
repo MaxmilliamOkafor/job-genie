@@ -38,6 +38,19 @@ for (const f of ['content-quality-engine.js', 'recruiter-audit.js']) {
 }
 const RA = global.RecruiterAudit;
 
+// The first non-empty line under the summary heading. Read by INDEX
+// before, which broke the moment a role headline was added under the
+// name: every line below shifted by one and the assertions started
+// grading the heading itself. Content, not position.
+const summaryLine = (text) => {
+  const ls = String(text).split('\n');
+  const h = ls.findIndex((l) => /^\s*(PROFESSIONAL\s+SUMMARY|SUMMARY|PROFILE)\s*:?\s*$/i.test(l));
+  if (h === -1) return '';
+  for (let i = h + 1; i < ls.length; i++) if (ls[i].trim()) return ls[i];
+  return '';
+};
+
+
 // A software engineer's real record. Nothing in it is compliance work.
 const EXPERIENCE = [
   'PROFESSIONAL EXPERIENCE',
@@ -66,7 +79,7 @@ const run = (summary, extra, jdTitle) => {
     jdTitle: jdTitle || 'Software Engineer',
     jobKeywords: ['compliance'],
   });
-  return { line: out.cvText.split('\n')[3], text: out.cvText, fixes: out.report.fixes };
+  return { line: summaryLine(out.cvText), text: out.cvText, fixes: out.report.fixes };
 };
 
 console.log('THE UNSUPPORTED DOMAIN CLAIM COMES OUT');

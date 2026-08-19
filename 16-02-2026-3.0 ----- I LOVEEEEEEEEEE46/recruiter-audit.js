@@ -785,6 +785,174 @@
   }
 
   // ===================================================================
+  // EACH ROLE CARRIES WHERE IT HAPPENED
+  // -------------------------------------------------------------------
+  // Workday's "Apply with Resume" has a Location field on every
+  // work-experience block, and it is not alone. With nothing in the CV to
+  // fill it, the field arrives empty and gets typed by hand, once per
+  // role, on every application.
+  //
+  // The location is attached to the COMPANY line with a tab, so the
+  // renderer can set it right-aligned against the employer it belongs to.
+  // That keeps a role header at two lines -- company + location, then
+  // title + dates -- where it currently takes three, so adding a field
+  // makes the CV shorter rather than longer.
+  //
+  // Nothing is invented. A location is attached only when the profile
+  // records one for a company the CV already names.
+  function attachRoleLocations(cvText, experience) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(experience) || !experience.length) {
+      return { text, attached: 0 };
+    }
+    const lines = text.split('\n');
+
+    let inExp = false, attached = 0;
+    const claimed = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      if (_EXP_HEAD.test(lines[i])) { inExp = true; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExp = false; continue; }
+      if (!inExp) continue;
+
+      const l = lines[i].trim();
+      if (!l || /^\s*[-•*]/.test(l) || l.indexOf('\t') !== -1) continue;
+      if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)) continue;
+      // A company line is the one whose NEXT line is the job title. A
+      // title line matched here would put the city beside the title.
+      const next = (lines[i + 1] || '').trim();
+      if (!next || !_TITLE_WORD.test(next)) continue;
+
+      const key = _eduNorm(l);
+      if (key.length < 2) continue;
+      for (let e = 0; e < experience.length; e++) {
+        if (claimed.has(e)) continue;
+        const src = experience[e] || {};
+        const co = _eduNorm(src.company || src.employer || src.organisation
+          || src.organization || src.name);
+        if (!co || (co.indexOf(key) === -1 && key.indexOf(co) === -1)) continue;
+        // THE LOCATION IS TYPED BY A HUMAN INTO A FREE-TEXT BOX.
+        //
+        // Company and location are joined with a TAB, so a tab inside the
+        // location makes three fields where the renderer expects two, and
+        // a newline truncates it: "Dublin\nIreland" arrived as
+        // "Meta\tDublin" with the country silently dropped. Neither is
+        // visible until an ATS reads it back wrong.
+        //
+        // Everything collapses to single spaces, and the field is capped
+        // -- a location long enough to wrap would push the right-aligned
+        // text off its tab stop and back onto the company name.
+        // KEY NAME, DEFENSIVELY.
+        //
+        // The profile is edited in a separate app, so the exact key this
+        // lands under is not under this code's control. Reading only
+        // "location" means a near-miss like "role_location" does nothing
+        // at all AND says nothing -- the CV just quietly comes out
+        // without the field, which is indistinguishable from not having
+        // filled it in. Accept the names the same field plausibly gets.
+        const loc = String(src.location || src.city || src.role_location
+          || src.roleLocation || src.job_location || src.jobLocation
+          || src.work_location || src.workLocation || src.based_in
+          || src.basedIn || src.locationName || '')
+          .replace(/[\t\r\n\v\f]+/g, ' ')
+          .replace(/\s{2,}/g, ' ')
+          .trim()
+          .slice(0, 60)
+          .trim();
+        if (!loc) { claimed.add(e); break; }
+        lines[i] = lines[i].replace(/\s+$/, '') + '\t' + loc;
+        claimed.add(e);
+        attached++;
+        break;
+      }
+    }
+    return { text: lines.join('\n'), attached };
+  }
+
+  // ===================================================================
+  // THE HEADLINE UNDER THE NAME
+  // -------------------------------------------------------------------
+  // A one-line role under the name is the first thing a recruiter's eye
+  // lands on. Reading a CV goes down the left edge and across the top --
+  // the "F" pattern -- so the line directly beneath the name is prime
+  // real estate, and leaving it empty wastes the only glance some
+  // applications get.
+  //
+  // It was removed for a good reason and the reason was not parsing.
+  // Scored against OpenResume's own name features, the bold name gets
+  // +3 for letters-only and +2 for bold, and a headline gets +3; the
+  // name wins every time, so a headline cannot steal the Name field.
+  // What it CAN do is manufacture a claim: prepending the posting's
+  // title gives a software engineer a CV announcing "Microsoft Dynamics
+  // 365 Project Manager", which is a lie in the first line.
+  //
+  // So the line comes back, with the claim checked. The posting's title
+  // is used when the employment history actually contains it -- that is
+  // both true and the best keyword match available. Otherwise the
+  // candidate's own most recent title is used, which is always true.
+  // Nothing is invented, and the slot is never left empty when a real
+  // title exists to fill it.
+  function ensureHeadline(cvText, jdTitle) {
+    const text = String(cvText || '');
+    if (!text) return { text, added: false };
+    const lines = text.split('\n');
+
+    let nameAt = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim()) { nameAt = i; break; }
+    }
+    if (nameAt === -1) return { text, added: false };
+
+    // The role lines, for both the containment test and the fallback.
+    let inExp = false;
+    const roleLines = [];
+    for (const l of lines) {
+      if (_EXP_HEAD.test(l)) { inExp = true; continue; }
+      if (_ANY_HEAD.test(l)) { inExp = false; continue; }
+      if (!inExp) continue;
+      if (/^\s*[-•*]/.test(l) || !l.trim()) continue;
+      roleLines.push(l.trim());
+    }
+    if (!roleLines.length) return { text, added: false };
+
+    const title = String(jdTitle == null ? '' : jdTitle).replace(/\s+/g, ' ').trim();
+    const blob = roleLines.join(' | ').toLowerCase();
+
+    let headline = '';
+    if (title && blob.indexOf(title.toLowerCase()) !== -1) {
+      headline = title;                       // true AND the best keyword match
+    } else {
+      // The candidate's own most recent title: the line after a company
+      // that is not itself a date.
+      for (let i = 0; i < roleLines.length; i++) {
+        const l = roleLines[i];
+        if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)) continue;
+        if (_TITLE_WORD.test(l) && l.split(/\s+/).length <= 7) {
+          // Without the employment-type parenthetical. The role line still
+          // carries "(Contract, part-time)" at this point -- a later pass
+          // moves it into the first bullet -- and a headline reading
+          // "Data Analyst (Internship)" under the name sells the job
+          // short in the one line that gets read first.
+          headline = l.replace(/\s*\([^)]*\)\s*$/, '').trim();
+          if (headline) break;
+        }
+      }
+    }
+    if (!headline) return { text, added: false };
+
+    // Already there, in any form? Adding a second one would read as a
+    // stutter directly under the name.
+    const next = (lines[nameAt + 1] || '').trim();
+    if (next && next.toLowerCase() === headline.toLowerCase()) return { text, added: false };
+    if (next && _TITLE_WORD.test(next) && next.indexOf('|') === -1
+      && next.indexOf('@') === -1 && next.split(/\s+/).length <= 8) {
+      return { text, added: false };          // some headline is already there
+    }
+
+    lines.splice(nameAt + 1, 0, headline);
+    return { text: lines.join('\n'), added: true, headline };
+  }
+
+  // ===================================================================
   // A COMPANY LINE IS THE COMPANY, ON ITS OWN
   // -------------------------------------------------------------------
   // A generated CV opened its experience section with:
@@ -2965,6 +3133,7 @@
     jobKeywords = null,
     relevantProjects = null,
     education = null,
+    experience = null,
     flags = {},
   } = {}) {
     const t0 = Date.now();
@@ -3068,6 +3237,34 @@
           report.fixes.push('Split ' + sp.split + ' merged company/title line(s) '
             + '(a combined "Meta, Software Engineer" line fills Workday\'s required '
             + 'Company field with nothing and puts the same string in both fields)');
+        }
+      } catch (e) {}
+    }
+
+    // Where each role happened, onto the company line. After the split
+    // above, so a company line is a company line.
+    if (outCV && Array.isArray(experience) && experience.length) {
+      try {
+        const rl = attachRoleLocations(outCV, experience);
+        if (rl.attached) {
+          outCV = rl.text;
+          report.fixes.push('Added the location to ' + rl.attached + ' role(s), '
+            + 'right-aligned on the company line (Workday and others map a '
+            + 'per-role Location field, and this costs no extra lines)');
+        }
+      } catch (e) {}
+    }
+
+    // The headline under the name. Runs AFTER the company/title split, so
+    // the real most-recent title is readable as its own line.
+    if (outCV) {
+      try {
+        const hl = ensureHeadline(outCV, jdTitle);
+        if (hl.added) {
+          outCV = hl.text;
+          report.fixes.push('Added the role headline under your name ("' + hl.headline
+            + '") -- the first line a recruiter\'s eye lands on, and only ever a '
+            + 'title your history actually contains');
         }
       } catch (e) {}
     }
@@ -3572,6 +3769,26 @@
         report.onePage = fitted.fits;
       } catch (e) {}
     }
+
+    // The AI-tell reading, on the FINAL text, so the caller can drive a
+    // rewrite from it rather than guessing. Reported, never acted on
+    // here: the fix for a machine rhythm is a model writing differently,
+    // not a regex operating on someone's CV.
+    try {
+      const CQ = (typeof window !== 'undefined' && window.ContentQualityEngine)
+        || (typeof global !== 'undefined' && global.ContentQualityEngine);
+      if (CQ && typeof CQ.scoreAiTells === 'function') {
+        const prose = [outCV, outCL].filter(Boolean).join('\n');
+        const r = CQ.scoreAiTells(prose);
+        report.aiTells = {
+          score: r.score,
+          tells: r.tells,
+          instruction: (typeof CQ.aiTellsInstruction === 'function')
+            ? CQ.aiTellsInstruction(prose) : '',
+          note: r.note,
+        };
+      }
+    } catch (e) {}
 
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };

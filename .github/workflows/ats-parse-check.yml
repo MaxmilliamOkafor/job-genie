@@ -20,6 +20,21 @@ on:
       - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/tests/**'
       - '.github/workflows/ats-parse-check.yml'
 
+# ONE RUN PER BRANCH.
+#
+# Without this every push starts a full run and the previous one is
+# left to be cancelled, which shows on the pull request as a red X
+# against a commit that was never actually broken. Cancelled and
+# failed look identical at a glance, so a genuine failure stops
+# standing out -- which is the whole point of the check.
+#
+# Superseding a run is also just correct here: the parse job drives
+# third-party sites and takes minutes, and only the newest commit
+# is worth measuring.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # WHAT GATES THE MERGE.
   #
@@ -148,6 +163,39 @@ jobs:
           node tests/ci/probe-parser.mjs https://pastthebots.com cv.pdf pastthebots
           node tests/ci/probe-parser.mjs https://jobloo.co cv.pdf jobloo
           node tests/ci/probe-parser.mjs https://www.yena.ai cv.pdf yena
+
+      # THE VERDICT, LAST, WHERE IT CAN BE READ.
+      #
+      # The live-parse result is printed by step 8, and the three probe
+      # steps after it dump ~70 lines of somebody else's landing page
+      # each. Every log viewer shows the TAIL, so the one output that
+      # matters was reliably scrolled off the end and the run had to be
+      # judged by how long a step took. Re-printing it last costs nothing
+      # and makes the answer the first thing visible.
+      - name: The live parse verdict
+        if: always()
+        working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
+        run: |
+          echo '================ LIVE OPENRESUME VERDICT ================'
+          case "${{ steps.liveparse.outputs.code }}" in
+            0) echo 'PASSED - every live assertion held.' ;;
+            2) echo 'SKIPPED - the site was unreachable or never rendered the'
+               echo '          upload. Nothing was graded; this says nothing'
+               echo '          about the CV.' ;;
+            *) echo 'REGRESSION - the parser worked and the CV came back wrong.' ;;
+          esac
+          echo '--------------------------------------------------------'
+          # `sed -n '/pat/,$p'` EXITS 0 WHEN IT MATCHES NOTHING, so the
+          # `|| fallback` after it never ran and a SKIPPED run printed the
+          # verdict with no reason under it -- twice. Print the head of the
+          # log unconditionally instead; on a skip that head IS the reason.
+          if grep -q '=== THE ASSERTIONS ===' live-parse.log 2>/dev/null; then
+            sed -n '/=== WHAT THE LIVE PARSER EXTRACTED ===/,$p' live-parse.log
+          else
+            echo 'No assertions were reached. What the script reported:'
+            head -25 live-parse.log 2>/dev/null || echo '(no log file)'
+          fi
+          echo '========================================================'
 
       - name: Keep the evidence
         if: always()

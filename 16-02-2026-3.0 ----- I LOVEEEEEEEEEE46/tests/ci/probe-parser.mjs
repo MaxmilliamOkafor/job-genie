@@ -64,8 +64,8 @@ try {
             await page.waitForTimeout(15000);
             const after = await page.evaluate(() => document.body.innerText);
             fs.writeFileSync('probe-' + TAG + '.txt', after);
-            console.log('  --- after upload, first 70 lines ---');
-            console.log(after.split('\n').slice(0, 70).map((l) => '  | ' + l).join('\n'));
+            console.log('  --- after upload, first 12 lines ---');
+            console.log(after.split('\n').slice(0, 12).map((l) => '  | ' + l).join('\n'));
             await page.screenshot({ path: 'probe-' + TAG + '.png', fullPage: true });
             break;
           }

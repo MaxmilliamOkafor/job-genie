@@ -39,6 +39,19 @@ for (const f of ['content-quality-engine.js', 'recruiter-audit.js']) {
 }
 const RA = global.RecruiterAudit;
 
+// The first non-empty line under the summary heading. Read by INDEX
+// before, which broke the moment a role headline was added under the
+// name: every line below shifted by one and the assertions started
+// grading the heading itself. Content, not position.
+const summaryLine = (text) => {
+  const ls = String(text).split('\n');
+  const h = ls.findIndex((l) => /^\s*(PROFESSIONAL\s+SUMMARY|SUMMARY|PROFILE)\s*:?\s*$/i.test(l));
+  if (h === -1) return '';
+  for (let i = h + 1; i < ls.length; i++) if (ls[i].trim()) return ls[i];
+  return '';
+};
+
+
 const cvWith = (summary) => ['Maxmilliam Okafor', '', 'PROFESSIONAL SUMMARY', summary, '',
   'PROFESSIONAL EXPERIENCE',
   'Meta', 'Software Engineer\tJanuary 2023 - Present',
@@ -49,7 +62,7 @@ const cvWith = (summary) => ['Maxmilliam Okafor', '', 'PROFESSIONAL SUMMARY', su
 const run = (summary, jdTitle) => {
   const out = RA.runRecruiterAudit({ cvText: cvWith(summary), jdText: 'clinical pharmacy leadership',
     jdTitle, jobKeywords: ['clinical'] });
-  return { line: out.cvText.split('\n')[3], fixes: out.report.fixes };
+  return { line: summaryLine(out.cvText), fixes: out.report.fixes };
 };
 
 // The exact sentence from the real generated CV.

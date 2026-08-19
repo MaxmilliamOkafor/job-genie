@@ -15,6 +15,21 @@ on:
       - '.github/workflows/latex-cv-check.yml'
   workflow_dispatch:
 
+# ONE RUN PER BRANCH.
+#
+# Without this every push starts a full run and the previous one is
+# left to be cancelled, which shows on the pull request as a red X
+# against a commit that was never actually broken. Cancelled and
+# failed look identical at a glance, so a genuine failure stops
+# standing out -- which is the whole point of the check.
+#
+# Superseding a run is also just correct here: the parse job drives
+# third-party sites and takes minutes, and only the newest commit
+# is worth measuring.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

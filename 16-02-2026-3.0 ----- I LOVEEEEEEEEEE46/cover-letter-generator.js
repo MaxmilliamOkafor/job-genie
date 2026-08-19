@@ -118,6 +118,46 @@
   ];
 
   // ============ COVER LETTER GENERATOR ============
+  // ============ A SCRAPED COMPANY NAME IS NOT A COMPANY NAME ============
+  //
+  // A generated cover letter went out addressed to "Career2": "I am
+  // writing to express my interest in the Integration Engineer position
+  // at Career2." That is site chrome -- a careers-portal label with a
+  // digit on it -- scraped and used as the employer.
+  //
+  // The existing checks are exact matches against a list of generic
+  // words, so "company" and "employer" are caught and "Career2",
+  // "Careers", "Jobs2", "Apply" and "Workday" all pass. The shape is
+  // what gives them away, not the exact string, so this matches the
+  // shape:
+  //
+  //   * portal and navigation words, with or without a trailing digit
+  //     or punctuation: Career2, Careers, Jobs, Apply, Portal, Home
+  //   * the ATS VENDOR rather than the employer. Workday and Greenhouse
+  //     host the page; they are not who you would be working for, and
+  //     addressing a letter to them is worse than addressing nobody.
+  //   * anything with no letters in it at all
+  //
+  // Getting this wrong in the other direction matters too, so real
+  // employers whose names contain these words are protected by requiring
+  // the junk word to be the WHOLE name: "Career Group Companies" and
+  // "Jobs Ireland" are left alone.
+  const _JUNK_COMPANY = new RegExp(
+    '^(?:'
+    + 'careers?|jobs?|vacancy|vacancies|opportunit(?:y|ies)|openings?|'
+    + 'apply|application|applications|recruit(?:ing|ment)?|hiring|'
+    + 'portal|home|search|login|signin|sign-in|register|welcome|'
+    + 'workday|myworkdayjobs|taleo|greenhouse|lever|icims|successfactors|'
+    + 'brassring|smartrecruiters|jobvite|bamboohr|ashby|workable'
+    + ')[\\s._-]*\\d*$', 'i');
+
+  function _isJunkCompany(name) {
+    const v = String(name == null ? '' : name).trim();
+    if (!v) return true;
+    if (!/[a-z]/i.test(v)) return true;          // digits or symbols only
+    return _JUNK_COMPANY.test(v);
+  }
+
   const CoverLetterGenerator = {
 
     // ============ MAIN GENERATE FUNCTION ============
@@ -158,7 +198,8 @@
         'organization', 'the organization', 'n/a', 'unknown', '', 'employer'
       ];
       
-      if (!company || invalidCompanyNames.includes(company.toLowerCase().trim())) {
+      if (!company || invalidCompanyNames.includes(company.toLowerCase().trim())
+          || _isJunkCompany(company)) {
         console.warn(`[CoverLetterGenerator] ⚠️ Invalid company "${company}", using fallback`);
         company = 'the hiring organization';
       }
@@ -763,6 +804,9 @@
         if (genericSingleWords.includes(lower)) return true;
         // v3.2: Reject if it looks like a URL fragment or path
         if (/^https?:\/\//.test(lower) || /^www\./.test(lower)) return true;
+        // Portal chrome and ATS vendor names, which the exact-match lists
+        // above cannot see: "Career2", "Careers", "Apply", "Workday".
+        if (_isJunkCompany(val)) return true;
         return false;
       };
       
