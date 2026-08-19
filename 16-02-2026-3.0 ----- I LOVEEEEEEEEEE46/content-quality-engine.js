@@ -788,6 +788,13 @@
 
       let result = text;
 
+      // Step 0: Swap the letter formulas for plainer wording BEFORE any
+      // deletion pass sees them. Order is the whole point: run after the
+      // banned-phrase removal and there is nothing left to swap, only the
+      // wreckage it left -- ", my interest in X" and "The opportunity to
+      // work at Acme" were both produced that way.
+      result = this.letterBoilerplate(result);
+
       // Step 1: Remove banned words and phrases FIRST (before spelling, since some banned words have US spelling)
       if (removeBannedWords) {
         result = this.removeBannedContent(result);
@@ -934,6 +941,53 @@
       result = this.neverLeakGuard(result, spelling);
 
       return result;
+    },
+
+    // ============ REPLACE LETTER BOILERPLATE, DO NOT DELETE IT ============
+    //
+    // A cover letter scored 100% AI. The tells were not subtle words --
+    // they were whole formulas that every generated letter opens and
+    // closes with:
+    //
+    //   "I am writing to express my interest in the X position at Y"
+    //   "I am excited about the opportunity to ... make a difference"
+    //   "at your earliest convenience"
+    //   "This experience honed my skills in ..."
+    //
+    // Deleting them made it worse, not better. "I am writing to express
+    // my interest in X" became ", my interest in X" -- a sentence opening
+    // with a comma -- and "I am excited about the opportunity to work at
+    // Acme" became "The opportunity to work at Acme", which is not a
+    // sentence. Wreckage reads as machine-written far more loudly than
+    // the boilerplate did.
+    //
+    // So these are SUBSTITUTED for the plainer thing a person actually
+    // writes, before any deletion pass can see them. Same meaning, no
+    // debris, and none of it is the phrasing a detector has been trained
+    // on. This runs first for that reason.
+    letterBoilerplate(text) {
+      if (!text || typeof text !== 'string') return text;
+      const SWAPS = [
+        [/\bI am writing to (?:express|convey|share) my (?:strong |keen |genuine )?interest in\b/gi, 'I am applying for'],
+        [/\bI am writing to apply for\b/gi, 'I am applying for'],
+        [/\bI am (?:very |really |truly )?excited (?:about|for) the opportunity to\b/gi, 'I would like to'],
+        [/\bI am (?:very |really |truly )?(?:excited|thrilled|delighted) to (?:apply|submit)\b/gi, 'I am applying'],
+        [/\bat your earliest convenience\b/gi, 'whenever suits you'],
+        [/\bI look forward to (?:the opportunity of )?discussing how my skills(?: and experiences?)? align with your needs\b/gi,
+          'I would welcome the chance to talk it through'],
+        [/\bthis experience honed my skills in\b/gi, 'that work taught me'],
+        [/\bwhich further solidified my expertise in\b/gi, 'which deepened my work in'],
+        [/\bcontribute to innovative projects that make a difference\b/gi, 'do work that matters'],
+        [/\bwith a strong (?:foundation|background) in\b/gi, 'having worked in'],
+        [/\bI have successfully (\w+ed)\b/gi, 'I $1'],
+        [/\bwhich aligns well with\b/gi, 'which matches'],
+        [/\bleveraging my expertise in\b/gi, 'using my work in'],
+        [/\bI am confident that my (?:skills and )?experience\b/gi, 'My experience'],
+        [/\bthank you for (?:your time and )?considering my application\b/gi, 'Thank you for reading this'],
+      ];
+      let out = text;
+      for (const [re, to] of SWAPS) out = out.replace(re, to);
+      return out;
     },
 
     // ============ AN UNFILLED PLACEHOLDER MUST NEVER SHIP ============
@@ -1636,6 +1690,11 @@
         .replace(/([.,;:]){2,}/g, '$1')
         .replace(/,\s*\./g, '.')
         .replace(/[ \t]{2,}/g, ' ')
+        // A deletion at a sentence START leaves the punctuation that
+        // followed it stranded at the front: "I am writing to express my
+        // interest in X" became ", my interest in X".
+        .replace(/^[\s,;:]+/, '')
+        .replace(/([.!?]\s+)[,;:]\s*/g, '$1')
         // A deletion at a sentence start leaves it lowercase.
         .replace(/(^|[.!?]\s+)([a-z])/g, (m0, pre, ch) => pre + ch.toUpperCase())
         .trim();
