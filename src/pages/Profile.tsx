@@ -1306,6 +1306,7 @@ const Profile = () => {
                             Remote
                           </label>
                         </div>
+                        <div className="flex gap-2">
                           <div className="flex-1">
                             <Label className="text-xs text-muted-foreground">Start Date (MM-YYYY)</Label>
                             <Input
