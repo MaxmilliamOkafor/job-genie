@@ -170,11 +170,16 @@ jobs:
             *) echo 'REGRESSION - the parser worked and the CV came back wrong.' ;;
           esac
           echo '--------------------------------------------------------'
-          sed -n '/=== THE ASSERTIONS ===/,$p' live-parse.log 2>/dev/null \
-            || sed -n '1,25p' live-parse.log 2>/dev/null || echo '(no log)'
-          echo '--------- what the parser put in each field -------------'
-          sed -n '/=== WHAT THE LIVE PARSER EXTRACTED ===/,/=== THE ASSERTIONS ===/p' \
-            live-parse.log 2>/dev/null || true
+          # `sed -n '/pat/,$p'` EXITS 0 WHEN IT MATCHES NOTHING, so the
+          # `|| fallback` after it never ran and a SKIPPED run printed the
+          # verdict with no reason under it -- twice. Print the head of the
+          # log unconditionally instead; on a skip that head IS the reason.
+          if grep -q '=== THE ASSERTIONS ===' live-parse.log 2>/dev/null; then
+            sed -n '/=== WHAT THE LIVE PARSER EXTRACTED ===/,$p' live-parse.log
+          else
+            echo 'No assertions were reached. What the script reported:'
+            head -25 live-parse.log 2>/dev/null || echo '(no log file)'
+          fi
           echo '========================================================'
 
       - name: Keep the evidence
