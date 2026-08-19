@@ -1276,6 +1276,36 @@ const Profile = () => {
                           }}
                           placeholder="Company"
                         />
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1">
+                            <Label className="text-xs text-muted-foreground">Location</Label>
+                            <Input
+                              value={exp.location === 'Remote' ? 'Remote' : (exp.location || '')}
+                              disabled={exp.location === 'Remote'}
+                              onChange={(e) => {
+                                const raw = e.target.value.slice(0, 60);
+                                const exps = [...(localProfile.professional_experience || [])];
+                                exps[expIndex] = { ...exps[expIndex], location: raw };
+                                updateLocalField('professional_experience', exps);
+                              }}
+                              placeholder="Dublin, Ireland"
+                              maxLength={60}
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-primary"
+                              checked={exp.location === 'Remote'}
+                              onChange={(e) => {
+                                const exps = [...(localProfile.professional_experience || [])];
+                                exps[expIndex] = { ...exps[expIndex], location: e.target.checked ? 'Remote' : '' };
+                                updateLocalField('professional_experience', exps);
+                              }}
+                            />
+                            Remote
+                          </label>
+                        </div>
                         <div className="flex gap-2">
                           <div className="flex-1">
                             <Label className="text-xs text-muted-foreground">Start Date (MM-YYYY)</Label>
@@ -1378,6 +1408,9 @@ const Profile = () => {
                     ) : (
                       <>
                         <h3 className="font-bold">{exp.company}</h3>
+                        {exp.location && (
+                          <p className="text-sm text-muted-foreground">{exp.location}</p>
+                        )}
                         <div className="flex justify-between items-baseline">
                           {(() => {
                             const extracted = extractDatesFromTitle(exp.title || '');
