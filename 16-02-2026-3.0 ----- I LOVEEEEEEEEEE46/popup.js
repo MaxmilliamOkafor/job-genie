@@ -6679,6 +6679,11 @@ class ATSTailor {
             // Workday's education block requires. Restored from the profile
             // rather than asked for again in the prompt.
             education: Array.isArray(profile.education) ? profile.education : [],
+            // Per-role locations, for the Location field Workday and others
+            // map on every work-experience block.
+            experience: Array.isArray(profile.professional_experience)
+              ? profile.professional_experience
+              : (Array.isArray(profile.professionalExperience) ? profile.professionalExperience : []),
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;

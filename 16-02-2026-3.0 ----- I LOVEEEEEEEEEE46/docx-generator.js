@@ -1002,6 +1002,40 @@
             continue;
           }
           if (roleState === 'expectCompany') {
+            // COMPANY AND LOCATION SHARE A LINE, LIKE TITLE AND DATE.
+            //
+            // Workday's "Apply with Resume" has a Location field on every
+            // work-experience block, and it is not the only ATS that maps
+            // one. Giving it its own line would cost a line per role; put
+            // right-aligned against the company it belongs to, it costs
+            // nothing and the whole role header is two lines instead of
+            // the three it takes now:
+            //
+            //   Meta                              Dublin, Ireland
+            //   Software Engineer          January 2023 - Present
+            //
+            // The location arrives tab-separated from the audit rather
+            // than being guessed at here. A heuristic that decides "is
+            // this line a location?" would eventually mistake a company
+            // for one and file an employer under Location, and a wrong
+            // employer is worse than a missing city.
+            const tabAt = t.indexOf('\t');
+            if (tabAt > 0) {
+              const co = t.slice(0, tabAt).trim();
+              const loc = t.slice(tabAt + 1).trim();
+              if (co && loc) {
+                out.push(paragraph(
+                  run(co + ' ', { bold: true, color: C.NAVY, sz: SZ.company })
+                    + '<w:r><w:tab/></w:r>'
+                    + run(loc, { italic: true, color: C.MUTED, sz: SZ.date }),
+                  { tabs: [{ pos: 10106, val: 'right' }],
+                    spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
+                    spacingAfter: 20, keepNext: true, keepLines: true }
+                ));
+                roleState = 'expectTitle';
+                continue;
+              }
+            }
             out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: SZ.company }),
               { spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
                 spacingAfter: 20, keepNext: true, keepLines: true }));

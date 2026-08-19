@@ -785,6 +785,63 @@
   }
 
   // ===================================================================
+  // EACH ROLE CARRIES WHERE IT HAPPENED
+  // -------------------------------------------------------------------
+  // Workday's "Apply with Resume" has a Location field on every
+  // work-experience block, and it is not alone. With nothing in the CV to
+  // fill it, the field arrives empty and gets typed by hand, once per
+  // role, on every application.
+  //
+  // The location is attached to the COMPANY line with a tab, so the
+  // renderer can set it right-aligned against the employer it belongs to.
+  // That keeps a role header at two lines -- company + location, then
+  // title + dates -- where it currently takes three, so adding a field
+  // makes the CV shorter rather than longer.
+  //
+  // Nothing is invented. A location is attached only when the profile
+  // records one for a company the CV already names.
+  function attachRoleLocations(cvText, experience) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(experience) || !experience.length) {
+      return { text, attached: 0 };
+    }
+    const lines = text.split('\n');
+
+    let inExp = false, attached = 0;
+    const claimed = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      if (_EXP_HEAD.test(lines[i])) { inExp = true; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExp = false; continue; }
+      if (!inExp) continue;
+
+      const l = lines[i].trim();
+      if (!l || /^\s*[-•*]/.test(l) || l.indexOf('\t') !== -1) continue;
+      if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)) continue;
+      // A company line is the one whose NEXT line is the job title. A
+      // title line matched here would put the city beside the title.
+      const next = (lines[i + 1] || '').trim();
+      if (!next || !_TITLE_WORD.test(next)) continue;
+
+      const key = _eduNorm(l);
+      if (key.length < 2) continue;
+      for (let e = 0; e < experience.length; e++) {
+        if (claimed.has(e)) continue;
+        const src = experience[e] || {};
+        const co = _eduNorm(src.company || src.employer || src.organisation
+          || src.organization || src.name);
+        if (!co || (co.indexOf(key) === -1 && key.indexOf(co) === -1)) continue;
+        const loc = String(src.location || src.city || '').trim();
+        if (!loc) { claimed.add(e); break; }
+        lines[i] = lines[i].replace(/\s+$/, '') + '\t' + loc;
+        claimed.add(e);
+        attached++;
+        break;
+      }
+    }
+    return { text: lines.join('\n'), attached };
+  }
+
+  // ===================================================================
   // THE HEADLINE UNDER THE NAME
   // -------------------------------------------------------------------
   // A one-line role under the name is the first thing a recruiter's eye
@@ -3049,6 +3106,7 @@
     jobKeywords = null,
     relevantProjects = null,
     education = null,
+    experience = null,
     flags = {},
   } = {}) {
     const t0 = Date.now();
@@ -3152,6 +3210,20 @@
           report.fixes.push('Split ' + sp.split + ' merged company/title line(s) '
             + '(a combined "Meta, Software Engineer" line fills Workday\'s required '
             + 'Company field with nothing and puts the same string in both fields)');
+        }
+      } catch (e) {}
+    }
+
+    // Where each role happened, onto the company line. After the split
+    // above, so a company line is a company line.
+    if (outCV && Array.isArray(experience) && experience.length) {
+      try {
+        const rl = attachRoleLocations(outCV, experience);
+        if (rl.attached) {
+          outCV = rl.text;
+          report.fixes.push('Added the location to ' + rl.attached + ' role(s), '
+            + 'right-aligned on the company line (Workday and others map a '
+            + 'per-role Location field, and this costs no extra lines)');
         }
       } catch (e) {}
     }
