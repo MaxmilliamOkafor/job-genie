@@ -133,6 +133,22 @@ try {
     !/P\s+R\s+O\s+F\s+E/i.test(text), (text.match(/.{0,40}P\s+R\s+O\s+F.{0,20}/) || [''])[0]);
   check('no en or em dash survived', !/[–—]/.test(text),
     (text.match(/.{0,25}[–—].{0,25}/) || [''])[0]);
+  // THE COMPANY MUST STILL BE THE COMPANY, WITH A CITY BESIDE IT.
+  //
+  // Locations now sit right-aligned on the company line so a role header
+  // is two lines instead of three. The risk is specific: OpenResume's
+  // company feature is "is bolded or doesn't match job title & date", and
+  // a city matches neither, so the city is also a company candidate. The
+  // company is bolded and the city is not, which should decide it. This
+  // is the assertion that proves it on the real parser.
+  check('the city did not become the company',
+    !/Company[\t\n]\s*(Dublin|London|Remote)/i.test(text)
+      && !/^\s*(Dublin, Ireland|London, UK)\s*$/m.test(field('Company') || ''),
+    'a location was extracted into the Company field: ' + JSON.stringify(field('Company')));
+  check('the employer is still extracted alongside its city',
+    /Meta/.test(text) && /Accenture/i.test(text),
+    'adding the location cost an employer');
+
   check('the company is a bare name',
     /Meta/.test(text) && !/formerly Facebook/i.test(text),
     'the parenthetical reached the company field');
