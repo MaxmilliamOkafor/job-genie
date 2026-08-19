@@ -943,6 +943,118 @@
       return result;
     },
 
+    // ============ INBUILT AI-TELL SCORER ============
+    //
+    // Runs locally, in the extension, with no model and no dependency.
+    //
+    // The alternative was a real classifier -- Desklib, the old OpenAI
+    // RoBERTa detector -- and both are Python and PyTorch. Running one
+    // means sending the CV to a server, which is precisely the exposure
+    // this extension exists to avoid. A detector that leaks the document
+    // it is protecting is not a trade worth making.
+    //
+    // So this takes the heuristics rather than the model: vocabulary
+    // diversity, sentence-length variation, passive voice and stock
+    // phrasing are all a handful of statistics over the text, and they
+    // are the same signals the lightweight open-source detectors use.
+    //
+    // WHAT THIS SCORE IS NOT: it is not QuillBot's number and will never
+    // match it. Different model, different training, and their own report
+    // says no detector is reliable. What it is good for is direction --
+    // it falls when the text genuinely improves, and it names the
+    // sentences responsible so they can be fixed rather than guessed at.
+    scoreAiTells(text) {
+      const src = String(text || '');
+      const tells = [];
+      if (src.trim().split(/\s+/).filter(Boolean).length < 40) {
+        return { score: 0, tells: [], note: 'too short to judge' };
+      }
+
+      const sentences = (src.match(/[^.!?\n]+[.!?]/g) || [])
+        .map((x) => x.trim()).filter((x) => x.split(/\s+/).length > 2);
+      const words = src.toLowerCase().match(/[a-z][a-z'-]+/g) || [];
+      let score = 0;
+
+      // 1. BURSTINESS. Human writing varies sentence length a lot; a
+      // model holds a steady rhythm. Measured as the coefficient of
+      // variation, which is scale-free so it works on any length.
+      if (sentences.length >= 4) {
+        const lens = sentences.map((x) => x.split(/\s+/).length);
+        const mean = lens.reduce((a, b) => a + b, 0) / lens.length;
+        const sd = Math.sqrt(lens.reduce((a, b) => a + (b - mean) ** 2, 0) / lens.length);
+        const cv = mean ? sd / mean : 0;
+        if (cv < 0.35) {
+          score += 25;
+          tells.push({ kind: 'uniform-sentence-length', detail:
+            'sentences vary by only ' + Math.round(cv * 100) + '% around the mean; '
+            + 'human writing usually varies 40% or more' });
+        }
+      }
+
+      // 2. VOCABULARY DIVERSITY, over the first 200 words so the ratio
+      // is not simply a function of length.
+      const window = words.slice(0, 200);
+      if (window.length >= 80) {
+        const ttr = new Set(window).size / window.length;
+        if (ttr < 0.45) {
+          score += 15;
+          tells.push({ kind: 'low-vocabulary-diversity', detail:
+            Math.round(ttr * 100) + '% unique words in the first 200' });
+        }
+      }
+
+      // 3. PARTICIPIAL TAILS. ", enabling X", ", ensuring Y", ", allowing
+      // Z" closing a clause is the single most characteristic shape of
+      // generated CV prose, and rare in writing people do themselves.
+      const tails = (src.match(/,\s+(?:enabling|ensuring|allowing|providing|delivering|driving|leveraging|facilitating|streamlining|empowering)\b/gi) || []);
+      if (tails.length >= 2) {
+        score += Math.min(25, tails.length * 8);
+        tells.push({ kind: 'participial-tails', count: tails.length, detail:
+          tails.length + ' clauses end with ", enabling/ensuring/allowing ..."' });
+      }
+
+      // 4. TRICOLONS. "A, B, and C" once is normal; three times in a
+      // short document is a rhythm, not a coincidence.
+      const tri = (src.match(/\b\w+, \w+,? and \w+/g) || []);
+      if (tri.length >= 3) {
+        score += 10;
+        tells.push({ kind: 'tricolon-rhythm', count: tri.length, detail:
+          tri.length + ' three-item lists' });
+      }
+
+      // 5. STOCK PHRASING that survived the substitutions above.
+      const STOCK = [/\bfast-paced environment/i, /\bproven track record/i,
+        /\bresults-driven/i, /\bdynamic professional/i, /\bcross-functional teams\b/i,
+        /\bhigh-quality (?:solutions|products|results)/i, /\bmake a difference/i,
+        /\bwealth of experience/i, /\bpassionate about/i, /\bseamless(?:ly)?\b/i,
+        /\bcutting-edge/i, /\bmeticulous/i, /\bhoned my skills/i];
+      const stockHits = STOCK.filter((re) => re.test(src));
+      if (stockHits.length) {
+        score += Math.min(20, stockHits.length * 7);
+        tells.push({ kind: 'stock-phrasing', count: stockHits.length, detail:
+          stockHits.length + ' stock phrase(s) still present' });
+      }
+
+      // 6. PASSIVE VOICE, which models reach for far more than people do.
+      if (sentences.length >= 4) {
+        const passive = sentences.filter((x) =>
+          /\b(?:was|were|been|being|is|are)\s+\w+(?:ed|en)\b/i.test(x)).length;
+        const rate = passive / sentences.length;
+        if (rate > 0.3) {
+          score += 10;
+          tells.push({ kind: 'passive-voice', detail:
+            Math.round(rate * 100) + '% of sentences are passive' });
+        }
+      }
+
+      return {
+        score: Math.min(100, score),
+        tells,
+        sentences: sentences.length,
+        note: 'local heuristic, not a classifier; use it for direction, not as a verdict',
+      };
+    },
+
     // ============ REPLACE LETTER BOILERPLATE, DO NOT DELETE IT ============
     //
     // A cover letter scored 100% AI. The tells were not subtle words --
