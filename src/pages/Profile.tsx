@@ -1291,6 +1291,9 @@ const Profile = () => {
                               placeholder="Dublin, Ireland"
                               maxLength={60}
                             />
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              City, Country — e.g. Dublin, Ireland. Use Remote if you worked remotely. Workday and iCIMS map City and Country to separate structured fields, so the comma matters.
+                            </p>
                           </div>
                           <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
                             <input
