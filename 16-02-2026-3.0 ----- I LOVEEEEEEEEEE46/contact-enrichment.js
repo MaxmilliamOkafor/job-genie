@@ -1206,6 +1206,70 @@
       }
     }
 
+    // A running account of what was tried and why. Declared here because
+    // step 0 below records into it too, and a `const` used above its own
+    // declaration is a runtime error rather than a syntax one -- node
+    // --check passes it happily.
+    const trace = [];
+
+    // STEP 0: THE ADDRESS THAT IS ALREADY ON THE PAGE.
+    //
+    // JDContactSources.harvest() pulls emails straight out of the posting
+    // -- mailto links, JSON-LD, meta tags, the body text. The popup has
+    // been running it all along and this function never looked at the
+    // result: it went straight to the paid providers and returned
+    // "no-api-key".
+    //
+    // So a recruiter address sitting in a mailto link on the posting
+    // produced nothing at all unless the user had bought a search key AND
+    // a resolver key. That is the whole reason the feature reads as
+    // broken with nothing configured.
+    //
+    // It goes FIRST, and not only because it is free. An address the
+    // employer published for this specific role is better evidence than
+    // anything a database infers from a name and a domain: it is current,
+    // it is intended for applicants, and it cost no credits to find.
+    const supplied = []
+      .concat(Array.isArray(ctx.emails) ? ctx.emails : [])
+      .concat(Array.isArray(ctx.pageEmails) ? ctx.pageEmails : []);
+    if (supplied.length) {
+      const fromPage = [];
+      const seenPage = new Set();
+      for (const raw of supplied) {
+        // harvest() yields { email, name, source }; a bare string is
+        // accepted too so any caller can feed this.
+        const email = _clean(typeof raw === 'string' ? raw : (raw && raw.email) || '');
+        if (!email) continue;
+        const key = email.toLowerCase();
+        if (seenPage.has(key)) continue;
+        // The same gate every provider result passes: format, placeholder
+        // addresses, and unattended mailboxes. A posting is just as likely
+        // to carry noreply@ as any database is, and a follow-up to one is
+        // worse than sending nothing -- guaranteed unread, and it looks
+        // like an automated blast if a human ever does see it.
+        if (!isRealEmail(email)) {
+          trace.push('Job page: skipped ' + email + ' (unattended, placeholder or malformed)');
+          continue;
+        }
+        seenPage.add(key);
+        fromPage.push({
+          email,
+          name: (typeof raw === 'object' && raw && raw.name) || '',
+          title: '',
+          source: 'job-page',
+          provider: 'job-page',
+          confidence: 'published',
+        });
+      }
+      if (fromPage.length) {
+        trace.push('Job page: ' + fromPage.length + ' address(es) published on the posting: '
+          + fromPage.map((x) => x.email).join(', '));
+        // Cached like any other hit, so the next open is instant.
+        try { await writeCache(cacheKey, fromPage); } catch (e) {}
+        return { ok: true, results: fromPage, source: 'job-page', trace };
+      }
+    }
+
     // Providers cover different situations, so one alone leaves gaps.
     // Closely resolves a NAMED job poster, which is the most accurate
     // answer there is -- but it needs a LinkedIn profile handle, which
@@ -1218,7 +1282,6 @@
     // A running account of what was tried and why. Without it a lookup that
     // quietly does nothing is indistinguishable from one that ran and found
     // nobody, and the user has no way to tell which.
-    const trace = [];
     const chain = [];
     let credentialledButUnusable = 0;
 
