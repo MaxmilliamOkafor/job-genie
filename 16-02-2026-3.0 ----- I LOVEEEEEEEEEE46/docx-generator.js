@@ -76,6 +76,23 @@
   function runText(text, bold) {
     return run(text, { bold: !!bold, color: C.BODY, sz: 21 });
   }
+  // Adds w:before to a paragraph that has already been built. Used for
+  // the entry gap, which is only known to be needed once the NEXT entry
+  // starts -- by which time the paragraph is a string in the output.
+  function withSpacingBefore(xml, twips) {
+    const p = String(xml || '');
+    if (!p.startsWith('<w:p>')) return p;
+    if (/<w:spacing [^>]*w:before="/.test(p)) return p;      // already spaced
+    if (/<w:spacing /.test(p)) {
+      return p.replace(/<w:spacing /, '<w:spacing w:before="' + twips + '" ');
+    }
+    if (p.startsWith('<w:p><w:pPr>')) {
+      return p.replace('<w:p><w:pPr>',
+        '<w:p><w:pPr><w:spacing w:before="' + twips + '"/>');
+    }
+    return p.replace('<w:p>', '<w:p><w:pPr><w:spacing w:before="' + twips + '"/></w:pPr>');
+  }
+
   function paragraph(content, opts = {}) {
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
@@ -380,6 +397,23 @@
     firstAfterHeading: 40,    // 2pt -- the heading already spaced this
     role: 120,                // 6pt between one role and the next
     bullet: 30,               // 1.5pt after a bullet
+    // WHAT SEPARATES ONE ENTRY FROM THE NEXT, OUTSIDE EXPERIENCE.
+    //
+    // A blank line in the CV text used to emit nothing at all, so the gap
+    // between two education entries was the same as the gap between the
+    // two lines INSIDE one. Measured off a real parse: 14 units within an
+    // entry, 17 between them for education, and 13-14 both ways for
+    // projects -- no difference whatsoever.
+    //
+    // OpenResume splits subsections on round(prevY - y) exceeding a
+    // threshold, so with no gap to find it read all four education lines
+    // as ONE entry (one school, one degree, the rest dumped into
+    // descriptions) and all three projects as one project. Two degrees
+    // became one; three projects became one.
+    //
+    // 11pt on top of the line advance roughly doubles the gap, which puts
+    // it unambiguously above the threshold without looking airy.
+    entry: 220,
   };
 
 
@@ -807,6 +841,10 @@
     // SECTION_RANK rank 3.
     const EXPERIENCE_HEADERS = SECTION_HEADERS.filter((h) => rankOf(h) === 3);
 
+    // Entry-gap bookkeeping; see SPACE.entry.
+    let pendingEntryGap = false;
+    let entryGapMark = 0;
+
     let firstNonEmpty = -1;
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].trim()) { firstNonEmpty = i; break; }
@@ -939,8 +977,21 @@
         // non-empty line starts a new employer.
         if (!t) {
           if (inExperience) roleState = 'expectCompany';
+          // A blank line separates one entry from the next. Experience
+          // has its own spacing on the company line; everywhere else the
+          // gap has to be added here or there is none at all.
+          else if (currentSection) { pendingEntryGap = true; entryGapMark = out.length; }
           continue;
         }
+
+        // The blank line above produced no paragraph of its own, so the
+        // gap lands on whatever was emitted first after it -- known only
+        // now, one iteration later.
+        if (pendingEntryGap && out.length > entryGapMark) {
+          out[entryGapMark] = withSpacingBefore(out[entryGapMark], SPACE.entry);
+          pendingEntryGap = false;
+        }
+
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {

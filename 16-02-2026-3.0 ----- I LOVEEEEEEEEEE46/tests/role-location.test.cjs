@@ -115,6 +115,45 @@ console.log('\nA FREE-TEXT BOX PRODUCES FREE TEXT');
     'length ' + co.length);
 }
 
+console.log('\nA COMPANY LINE THAT ALREADY SWALLOWED ITS LOCATION IS RE-DELIMITED');
+// A live parse returned Company = "Meta, Dublin, Ireland". Once the
+// profile carried locations the tailoring model wrote them into the
+// company line comma-joined, and a comma is not a delimiter a parser acts
+// on: the whole string lands in the Company field, so matching an
+// employer named "Meta" fails -- the same failure as "Meta (formerly
+// Facebook Inc)" and "Meta, Software Engineer" before it.
+{
+  const mk = (co) => ['Max', 'a@b.com', '', 'PROFESSIONAL EXPERIENCE',
+    co, 'Software Engineer', 'January 2023 - Present', '- Did work.', '',
+    'EDUCATION', 'Imperial College London'].join('\n');
+  const run = (co) => RA.runRecruiterAudit({ cvText: mk(co), jdText: 'x',
+    jdTitle: 'Software Engineer', jobKeywords: [] }).cvText;
+
+  for (const [inp, company, place] of [
+    ['Meta, Dublin, Ireland', 'Meta', 'Dublin, Ireland'],
+    ['SolimHealth, Dallas, Texas, United States', 'SolimHealth', 'Dallas, Texas, United States'],
+    ['Accenture, London, United Kingdom', 'Accenture', 'London, United Kingdom'],
+    ['Deloitte, Dublin', 'Deloitte', 'Dublin'],
+  ]) {
+    const got = run(inp).split('\n').filter((l) => l.indexOf(company) === 0)[0] || '';
+    t('  "' + inp + '" splits', got === company + '\t' + place, JSON.stringify(got));
+  }
+}
+
+console.log('\nBUT A COMMA THAT IS PART OF THE NAME IS NOT A LOCATION');
+// Discarding half a real employer name is worse than the bug being fixed.
+{
+  const mk = (co) => ['Max', 'a@b.com', '', 'PROFESSIONAL EXPERIENCE',
+    co, 'Software Engineer', 'January 2023 - Present', '- Did work.', '',
+    'EDUCATION', 'Imperial College London'].join('\n');
+  const run = (co) => RA.runRecruiterAudit({ cvText: mk(co), jdText: 'x',
+    jdTitle: 'Software Engineer', jobKeywords: [] }).cvText;
+  for (const keep of ['Booz Allen Hamilton, Inc.', 'Marks, Spencer and Co', 'Acme, Ltd']) {
+    const got = run(keep).split('\n').filter((l) => l.indexOf(keep.split(',')[0]) === 0)[0] || '';
+    t('  "' + keep + '" is left whole', got === keep, JSON.stringify(got));
+  }
+}
+
 console.log('\nAND THE ROLE HEADER IS TWO LINES, NOT THREE');
 {
   const out = audit([{ company: 'Meta', location: 'Dublin, Ireland' }]);
