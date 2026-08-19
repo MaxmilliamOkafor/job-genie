@@ -83,6 +83,38 @@ console.log('\nNOTHING IS INVENTED');
     out.cvText.split('PROFESSIONAL EXPERIENCE')[1] || ''), 'a tab appeared unbidden');
 }
 
+console.log('\nA FREE-TEXT BOX PRODUCES FREE TEXT');
+// Company and location are joined with a TAB, so what a person types
+// into the profile can break the encoding. Neither failure below is
+// visible until an ATS reads it back wrong.
+{
+  const tabbed = audit([{ company: 'Meta', location: 'Dublin\tIreland' }]);
+  const co = tabbed.cvText.split('\n').filter((l) => l.indexOf('Meta') === 0)[0] || '';
+  t('  a tab inside the location does not make a third field',
+    (co.match(/\t/g) || []).length === 1, JSON.stringify(co));
+  t('  and nothing is lost to it', /Dublin Ireland/.test(co), JSON.stringify(co));
+}
+{
+  const nl = audit([{ company: 'Meta', location: 'Dublin\nIreland' }]);
+  const co = nl.cvText.split('\n').filter((l) => l.indexOf('Meta') === 0)[0] || '';
+  t('  a newline does not silently truncate the country',
+    /Dublin Ireland/.test(co), JSON.stringify(co));
+}
+{
+  const messy = audit([{ company: 'Meta', location: '  Dublin,   Ireland  ' }]);
+  t('  stray whitespace is tidied',
+    /^Meta\tDublin, Ireland$/m.test(messy.cvText),
+    JSON.stringify(messy.cvText.split('\n').filter((l) => l.indexOf('Meta') === 0)[0]));
+}
+{
+  // A location long enough to wrap pushes the right-aligned text off its
+  // tab stop and back over the company name.
+  const long = audit([{ company: 'Meta', location: 'X'.repeat(200) }]);
+  const co = long.cvText.split('\n').filter((l) => l.indexOf('Meta') === 0)[0] || '';
+  t('  an absurd location is capped', co.length <= 'Meta\t'.length + 60,
+    'length ' + co.length);
+}
+
 console.log('\nAND THE ROLE HEADER IS TWO LINES, NOT THREE');
 {
   const out = audit([{ company: 'Meta', location: 'Dublin, Ireland' }]);

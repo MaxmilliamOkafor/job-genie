@@ -830,7 +830,23 @@
         const co = _eduNorm(src.company || src.employer || src.organisation
           || src.organization || src.name);
         if (!co || (co.indexOf(key) === -1 && key.indexOf(co) === -1)) continue;
-        const loc = String(src.location || src.city || '').trim();
+        // THE LOCATION IS TYPED BY A HUMAN INTO A FREE-TEXT BOX.
+        //
+        // Company and location are joined with a TAB, so a tab inside the
+        // location makes three fields where the renderer expects two, and
+        // a newline truncates it: "Dublin\nIreland" arrived as
+        // "Meta\tDublin" with the country silently dropped. Neither is
+        // visible until an ATS reads it back wrong.
+        //
+        // Everything collapses to single spaces, and the field is capped
+        // -- a location long enough to wrap would push the right-aligned
+        // text off its tab stop and back onto the company name.
+        const loc = String(src.location || src.city || '')
+          .replace(/[\t\r\n\v\f]+/g, ' ')
+          .replace(/\s{2,}/g, ' ')
+          .trim()
+          .slice(0, 60)
+          .trim();
         if (!loc) { claimed.add(e); break; }
         lines[i] = lines[i].replace(/\s+$/, '') + '\t' + loc;
         claimed.add(e);
