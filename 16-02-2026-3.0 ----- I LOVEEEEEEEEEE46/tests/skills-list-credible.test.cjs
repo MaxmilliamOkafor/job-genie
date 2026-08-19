@@ -33,6 +33,19 @@ global.window = global;
 })();
 const RA = global.RecruiterAudit;
 
+// The first non-empty line under the summary heading. Read by INDEX
+// before, which broke the moment a role headline was added under the
+// name: every line below shifted by one and the assertions started
+// grading the heading itself. Content, not position.
+const summaryLine = (text) => {
+  const ls = String(text).split('\n');
+  const h = ls.findIndex((l) => /^\s*(PROFESSIONAL\s+SUMMARY|SUMMARY|PROFILE)\s*:?\s*$/i.test(l));
+  if (h === -1) return '';
+  for (let i = h + 1; i < ls.length; i++) if (ls[i].trim()) return ls[i];
+  return '';
+};
+
+
 const skillsLine = (list) => {
   const cv = ['Maxmilliam Okafor', '', 'TECHNICAL PROFICIENCIES', list, '', 'EDUCATION', 'MSc AI'].join('\n');
   const out = RA.runRecruiterAudit({ cvText: cv, jdText: 'Python and Kubernetes for our b2b saas platform', jdTitle: 'Engineer' });
@@ -110,8 +123,8 @@ console.log('\nA STRIPPED ADJECTIVE MUST NOT LEAVE BROKEN ENGLISH');
 const summaryOf = (text) => {
   const cv = ['Maxmilliam Okafor', '', 'PROFESSIONAL SUMMARY', text, '',
     'EDUCATION', 'MSc AI'].join('\n');
-  return RA.runRecruiterAudit({ cvText: cv, jdText: 'Python', jdTitle: 'Engineer' })
-    .cvText.split('\n')[3];
+  return summaryLine(
+    RA.runRecruiterAudit({ cvText: cv, jdText: 'Python', jdTitle: 'Engineer' }).cvText);
 };
 const purged = summaryOf('Dynamic and results-driven professional with a proven track record '
   + 'of leveraging innovative technology to deliver high-impact solutions in fast-paced environments.');

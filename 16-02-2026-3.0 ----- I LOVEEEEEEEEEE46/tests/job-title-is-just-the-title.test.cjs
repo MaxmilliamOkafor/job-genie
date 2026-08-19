@@ -52,7 +52,9 @@ for (const [title, clean, moved] of [
   ['Ops Manager (Maternity cover)', 'Ops Manager', 'Maternity cover'],
   ['Analyst (Temporary)', 'Analyst', 'Temporary'],
 ]) {
-  const lines = run(build(title));
+  const all2 = run(build(title));
+  const expAt2 = all2.findIndex((l) => /^PROFESSIONAL EXPERIENCE$/i.test(l.trim()));
+  const lines = all2.slice(expAt2 + 1);
   const titleLine = lines.find((l) => l.trim().startsWith(clean));
   t('  ' + title, titleLine && titleLine.trim() === clean, 'title line: ' + JSON.stringify(titleLine));
   t('    -> kept as "' + moved + '"',
@@ -81,7 +83,13 @@ console.log('\nAND THE DATE STAYS GLUED TO ITS TITLE');
 // The adjacency is what binds a date to a role. Inserting the bullet
 // between them would hand the date to whichever title came before.
 {
-  const lines = run(build('AI Product Manager (Contract, part-time)')).filter((l) => l.trim());
+  // Scoped to the EXPERIENCE section. Searching the whole document found
+  // the role headline under the name first -- a different line that is
+  // also just the title -- and then measured the distance from it to the
+  // date, which is not the adjacency this is about.
+  const all = run(build('AI Product Manager (Contract, part-time)')).filter((l) => l.trim());
+  const expAt = all.findIndex((l) => /^PROFESSIONAL EXPERIENCE$/i.test(l.trim()));
+  const lines = all.slice(expAt + 1);
   const ti = lines.findIndex((l) => l.trim() === 'AI Product Manager');
   const di = lines.findIndex((l) => /August 2022/.test(l));
   t('  the date is the very next line', ti > -1 && di === ti + 1,

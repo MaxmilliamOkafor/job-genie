@@ -785,6 +785,90 @@
   }
 
   // ===================================================================
+  // THE HEADLINE UNDER THE NAME
+  // -------------------------------------------------------------------
+  // A one-line role under the name is the first thing a recruiter's eye
+  // lands on. Reading a CV goes down the left edge and across the top --
+  // the "F" pattern -- so the line directly beneath the name is prime
+  // real estate, and leaving it empty wastes the only glance some
+  // applications get.
+  //
+  // It was removed for a good reason and the reason was not parsing.
+  // Scored against OpenResume's own name features, the bold name gets
+  // +3 for letters-only and +2 for bold, and a headline gets +3; the
+  // name wins every time, so a headline cannot steal the Name field.
+  // What it CAN do is manufacture a claim: prepending the posting's
+  // title gives a software engineer a CV announcing "Microsoft Dynamics
+  // 365 Project Manager", which is a lie in the first line.
+  //
+  // So the line comes back, with the claim checked. The posting's title
+  // is used when the employment history actually contains it -- that is
+  // both true and the best keyword match available. Otherwise the
+  // candidate's own most recent title is used, which is always true.
+  // Nothing is invented, and the slot is never left empty when a real
+  // title exists to fill it.
+  function ensureHeadline(cvText, jdTitle) {
+    const text = String(cvText || '');
+    if (!text) return { text, added: false };
+    const lines = text.split('\n');
+
+    let nameAt = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim()) { nameAt = i; break; }
+    }
+    if (nameAt === -1) return { text, added: false };
+
+    // The role lines, for both the containment test and the fallback.
+    let inExp = false;
+    const roleLines = [];
+    for (const l of lines) {
+      if (_EXP_HEAD.test(l)) { inExp = true; continue; }
+      if (_ANY_HEAD.test(l)) { inExp = false; continue; }
+      if (!inExp) continue;
+      if (/^\s*[-•*]/.test(l) || !l.trim()) continue;
+      roleLines.push(l.trim());
+    }
+    if (!roleLines.length) return { text, added: false };
+
+    const title = String(jdTitle == null ? '' : jdTitle).replace(/\s+/g, ' ').trim();
+    const blob = roleLines.join(' | ').toLowerCase();
+
+    let headline = '';
+    if (title && blob.indexOf(title.toLowerCase()) !== -1) {
+      headline = title;                       // true AND the best keyword match
+    } else {
+      // The candidate's own most recent title: the line after a company
+      // that is not itself a date.
+      for (let i = 0; i < roleLines.length; i++) {
+        const l = roleLines[i];
+        if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)) continue;
+        if (_TITLE_WORD.test(l) && l.split(/\s+/).length <= 7) {
+          // Without the employment-type parenthetical. The role line still
+          // carries "(Contract, part-time)" at this point -- a later pass
+          // moves it into the first bullet -- and a headline reading
+          // "Data Analyst (Internship)" under the name sells the job
+          // short in the one line that gets read first.
+          headline = l.replace(/\s*\([^)]*\)\s*$/, '').trim();
+          if (headline) break;
+        }
+      }
+    }
+    if (!headline) return { text, added: false };
+
+    // Already there, in any form? Adding a second one would read as a
+    // stutter directly under the name.
+    const next = (lines[nameAt + 1] || '').trim();
+    if (next && next.toLowerCase() === headline.toLowerCase()) return { text, added: false };
+    if (next && _TITLE_WORD.test(next) && next.indexOf('|') === -1
+      && next.indexOf('@') === -1 && next.split(/\s+/).length <= 8) {
+      return { text, added: false };          // some headline is already there
+    }
+
+    lines.splice(nameAt + 1, 0, headline);
+    return { text: lines.join('\n'), added: true, headline };
+  }
+
+  // ===================================================================
   // A COMPANY LINE IS THE COMPANY, ON ITS OWN
   // -------------------------------------------------------------------
   // A generated CV opened its experience section with:
@@ -3068,6 +3152,20 @@
           report.fixes.push('Split ' + sp.split + ' merged company/title line(s) '
             + '(a combined "Meta, Software Engineer" line fills Workday\'s required '
             + 'Company field with nothing and puts the same string in both fields)');
+        }
+      } catch (e) {}
+    }
+
+    // The headline under the name. Runs AFTER the company/title split, so
+    // the real most-recent title is readable as its own line.
+    if (outCV) {
+      try {
+        const hl = ensureHeadline(outCV, jdTitle);
+        if (hl.added) {
+          outCV = hl.text;
+          report.fixes.push('Added the role headline under your name ("' + hl.headline
+            + '") -- the first line a recruiter\'s eye lands on, and only ever a '
+            + 'title your history actually contains');
         }
       } catch (e) {}
     }
