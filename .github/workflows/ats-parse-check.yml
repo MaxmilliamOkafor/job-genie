@@ -20,6 +20,21 @@ on:
       - '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46/tests/**'
       - '.github/workflows/ats-parse-check.yml'
 
+# ONE RUN PER BRANCH.
+#
+# Without this every push starts a full run and the previous one is
+# left to be cancelled, which shows on the pull request as a red X
+# against a commit that was never actually broken. Cancelled and
+# failed look identical at a glance, so a genuine failure stops
+# standing out -- which is the whole point of the check.
+#
+# Superseding a run is also just correct here: the parse job drives
+# third-party sites and takes minutes, and only the newest commit
+# is worth measuring.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # WHAT GATES THE MERGE.
   #
