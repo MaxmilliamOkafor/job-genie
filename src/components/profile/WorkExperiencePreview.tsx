@@ -79,6 +79,13 @@ export function WorkExperiencePreview({ workExperience }: WorkExperiencePreviewP
                   {company}
                 </div>
                 
+                {/* Line 1b: Location */}
+                {exp.location && (
+                  <div className="text-sm text-gray-600" style={{ fontSize: '10pt' }}>
+                    {exp.location}
+                  </div>
+                )}
+                
                 {/* Line 2: Job Title with Dates right-aligned (MM-YYYY format) */}
                 <div className="flex justify-between text-sm" style={{ fontSize: '10.5pt' }}>
                   <span>{title}</span>
