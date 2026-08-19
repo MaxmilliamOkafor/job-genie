@@ -798,6 +798,14 @@ function forceCityCountryFormat(input, fallbackLocation = 'Dublin, IE') {
     const cityHit = _findCity(city);
     if (cityHit?.countryCode) return `${cityHit.name || city}, ${cityHit.countryCode}`;
 
+    // Before giving up, ask what country the CITY is in. The fallback is
+    // the CANDIDATE's country, so reaching for it first labels a foreign
+    // job with the applicant's own country -- "Frankfurt am Main" came
+    // out as "Frankfurt am Main, IE", a German city marked Ireland, in a
+    // field Workday and iCIMS map to a structured country.
+    const inferred = inferCountryFromCity(city);
+    if (inferred) return `${city}, ${_toISO2(inferred) || inferred}`;
+
     // Last resort: use fallback country
     const fbISO2 = _toISO2(fallbackCountryToken) || fallbackCountryToken;
     return `${city}, ${fbISO2}`;
@@ -1239,6 +1247,39 @@ function inferCountryFromCity(city) {
     const name = db?.countryNameFromISO2?.(cityHit.countryCode);
     return name || cityHit.countryCode;
   }
+
+  // A CITY'S QUALIFIER MUST NOT COST IT ITS COUNTRY.
+  //
+  // "Frankfurt am Main" is how German job boards write Frankfurt, and it
+  // resolved to nothing: the map holds "frankfurt", the dataset was not
+  // asked about the shorter form, and the caller then fell back to the
+  // candidate's own country. A Frankfurt job came out as "Frankfurt Am
+  // Main, IE" -- a German city labelled Ireland, in a field Workday and
+  // iCIMS map to a structured country.
+  //
+  // Real city names carry these qualifiers everywhere: Frankfurt am
+  // Main, Newcastle upon Tyne, Stratford-upon-Avon, Den Haag / The
+  // Hague. Dropping trailing words one at a time finds the base name
+  // without needing every variant enumerated.
+  //
+  // It stops at two words rather than one, so "New York" and "San
+  // Francisco" are still tried whole before anything is dropped, and a
+  // single leading word is never matched on its own -- "Springfield
+  // Illinois" must not resolve off "Springfield" alone.
+  const words = cityLower.split(/\s+/).filter(Boolean);
+  for (let n = words.length - 1; n >= 2; n--) {
+    const shorter = words.slice(0, n).join(' ');
+    const m2 = CITY_COUNTRY_MAP[shorter];
+    if (m2) return m2;
+    const hit2 = _findCity(shorter);
+    if (hit2?.countryCode) {
+      const db = _getDB();
+      return db?.countryNameFromISO2?.(hit2.countryCode) || hit2.countryCode;
+    }
+  }
+  // One-word base names are only accepted from the curated map, never
+  // from the fuzzy dataset, because a bare common word matches too much.
+  if (words.length > 1 && CITY_COUNTRY_MAP[words[0]]) return CITY_COUNTRY_MAP[words[0]];
 
   return null;
 }

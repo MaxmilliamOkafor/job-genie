@@ -785,6 +785,83 @@
   }
 
   // ===================================================================
+  // A COMPANY LINE IS THE COMPANY, ON ITS OWN
+  // -------------------------------------------------------------------
+  // A generated CV opened its experience section with:
+  //
+  //   Meta, Software Engineer
+  //   January 2023 - Present
+  //
+  // One bold line carrying both. Measured on two real parsers, this is
+  // the most expensive line in the document.
+  //
+  // OpenResume returned Company "Meta, Software Engineer" and Job Title
+  // "Meta, Software Engineer" -- the SAME string in both fields. Its
+  // company feature is "is bolded or doesn't match job title & date" and
+  // its title feature is "contains a job title keyword". A line that is
+  // bolded AND contains "Engineer" wins both, so one field is always
+  // wrong and an employer search for "Meta" matches neither.
+  //
+  // Workday was worse, because Workday asks the human to fix it: the
+  // live "Apply with Resume" form came back with Job Title "Meta,
+  // Software Engineer" and Company EMPTY -- and Company is a REQUIRED
+  // field. Every application meant retyping four employers by hand.
+  //
+  // The generator already renders company, then title, then date on
+  // separate lines. This is the guarantee for text that arrives with
+  // them already merged, which is what the tailoring model emits when
+  // left to itself.
+  //
+  // Splitting only happens on real evidence: a single comma, a right
+  // side that reads as a job title, and a left side short enough to be a
+  // company. "Booz Allen Hamilton" has no comma and is untouched;
+  // "Meta, Software Engineer" splits; "Johnson & Johnson, Senior
+  // Engineer" splits at the last comma, keeping the employer whole.
+  const _TITLE_WORD = new RegExp('\\b(?:engineer|developer|analyst|manager|director'
+    + '|architect|scientist|consultant|specialist|administrator|designer|lead'
+    + '|officer|associate|assistant|coordinator|supervisor|technician|advisor'
+    + '|strategist|researcher|programmer|intern|president|head|chief|partner'
+    + '|controller|accountant|nurse|teacher|editor|writer|recruiter|planner)\\b', 'i');
+
+  function splitCompanyAndTitle(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { text, split: 0 };
+    const lines = text.split('\n');
+
+    let inExp = false, split = 0;
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (_EXP_HEAD.test(raw)) { inExp = true; out.push(raw); continue; }
+      if (_ANY_HEAD.test(raw)) { inExp = false; out.push(raw); continue; }
+      const l = raw.trim();
+      if (!inExp || !l || /^\s*[-•*]/.test(l)) { out.push(raw); continue; }
+
+      // A role line already carrying its own date is a different shape
+      // and is handled elsewhere. Only the bare "A, B" line is in scope.
+      if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)
+        || l.indexOf('\t') !== -1) { out.push(raw); continue; }
+      if ((l.match(/,/g) || []).length !== 1) { out.push(raw); continue; }
+
+      const cut = l.lastIndexOf(',');
+      const left = l.slice(0, cut).trim();
+      const right = l.slice(cut + 1).trim();
+      // The right side must read as a title, the left as an employer.
+      // Without both, leave it alone -- a wrongly split line invents an
+      // employer, which is worse than the merge it was fixing.
+      const ok = left.length >= 2 && left.split(/\s+/).length <= 6
+        && right.length >= 3 && right.split(/\s+/).length <= 6
+        && _TITLE_WORD.test(right) && !_TITLE_WORD.test(left);
+      if (!ok) { out.push(raw); continue; }
+
+      out.push(left);
+      out.push(right);
+      split++;
+    }
+    return { text: out.join('\n'), split };
+  }
+
+  // ===================================================================
   // ONE PAGE
   // -------------------------------------------------------------------
   // A recruiter working through a stack decides whether to read a CV
@@ -2978,6 +3055,21 @@
           + capped.roles + ' role(s) to ' + RECENT_ROLE_CAP + ' recent / '
           + OLDER_ROLE_CAP + ' older (kept every sole mention of a posting keyword)');
       }
+    }
+
+    // Company and title on separate lines. Runs early: the role-shape
+    // passes below all assume company, then title, then date, and a
+    // merged line silently defeats every one of them.
+    if (outCV) {
+      try {
+        const sp = splitCompanyAndTitle(outCV);
+        if (sp.split) {
+          outCV = sp.text;
+          report.fixes.push('Split ' + sp.split + ' merged company/title line(s) '
+            + '(a combined "Meta, Software Engineer" line fills Workday\'s required '
+            + 'Company field with nothing and puts the same string in both fields)');
+        }
+      } catch (e) {}
     }
 
     // A pivot must not open by borrowing the posting's title. Runs before

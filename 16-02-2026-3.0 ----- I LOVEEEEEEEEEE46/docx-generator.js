@@ -358,6 +358,32 @@
   }
 
   // ===================================================================
+  // BLOCK SPACING, IN TWIPS (20 to the point)
+  // -------------------------------------------------------------------
+  // Separation between blocks lives here rather than in blank lines. A
+  // blank line costs a full line height, about 14pt, and cannot be tuned;
+  // these are a few points each and are what the density profiles scale.
+  //
+  // Chosen against the gaps measured on a real parse, where a body line
+  // is about 13pt and every section gap was coming out at 36:
+  //
+  //   last bullet -> next role title   bullet(30) + role(120)      = 7.5pt
+  //   last bullet -> section heading   bullet(30) + section(200)   = 11.5pt
+  //   heading -> first entry           afterHeading(60) + 40       = 5pt
+  //
+  // The heading case needs its own value: a company line directly under a
+  // heading would otherwise add the heading's trailing space to a full
+  // role gap and reopen the hole this closed.
+  const SPACE = {
+    section: 200,             // 10pt above a section heading
+    afterHeading: 60,         // 3pt below it, before its first entry
+    firstAfterHeading: 40,    // 2pt -- the heading already spaced this
+    role: 120,                // 6pt between one role and the next
+    bullet: 30,               // 1.5pt after a bullet
+  };
+
+
+  // ===================================================================
   // THE TYPE SCALE, AND WHY BODY COPY IS THE SMALLEST THING ON IT
   // -------------------------------------------------------------------
   // Sizes are half-points, as OOXML counts them. Everything used to sit
@@ -836,6 +862,14 @@
       // four-digit line is too easy to hit by accident elsewhere. Inside
       // the education section there is nothing else it could be.
       const isEduDateLine = (t) => isDateLine(t) || /^(?:19|20)\d{2}$/.test(t);
+      // Degree keywords are the same ones OpenResume itself matches on,
+      // so a line this recognises is a line the parser will treat as the
+      // start of an education entry.
+      const _DEGREE_RE = /\b(?:bachelor|master|magister|doctor|doctorate|ph\.?d|m\.?b\.?a|associate|diploma|certificate|b\.?sc|m\.?sc|b\.?a\b|m\.?a\b|b\.?eng|m\.?eng|llb|llm|hnd|foundation degree)\b/i;
+      let sawDegree = false;
+      // True for the first content line after a section heading, so the
+      // heading's trailing space is not added to a full role gap.
+      let afterHeading = false;
       // Sections rendered as one item per line, single column.
       //
       // These used to be a three-up grid built from TAB characters. The
@@ -881,12 +915,29 @@
       // A helper to emit a single navy-bullet item paragraph.
       const emitBullet = (item) => out.push(paragraph(
         run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
-        { indent: 360, hanging: 240, spacingAfter: 50, line: 288, lineRule: 'auto' }
+        { indent: 360, hanging: 240, spacingAfter: SPACE.bullet, line: 288, lineRule: 'auto' }
       ));
       for (; i < lines.length; i++) {
         const t = lines[i].trim();
+        // A BLANK LINE IS A SIGNAL, NOT A PARAGRAPH.
+        //
+        // This used to emit an empty paragraph for every blank line in
+        // the CV text. An empty paragraph is not free: it occupies a full
+        // line height plus its own spacing, about 14pt, and the text has
+        // one before every role and every section.
+        //
+        // Measured on a real parse, the gap from the PROFESSIONAL
+        // EXPERIENCE heading to "Meta" was 36 units where a line of body
+        // text is 13. Same between every role, and between the last
+        // bullet and PROJECTS. Fifteen of those is roughly three inches
+        // of nothing, which is most of a page.
+        //
+        // Separation between blocks belongs to the blocks themselves, as
+        // spacingBefore/spacingAfter, where it is a few points instead of
+        // a whole line and cannot accumulate. The blank line still does
+        // its real job here: telling the role state machine that the next
+        // non-empty line starts a new employer.
         if (!t) {
-          out.push(paragraph('', { spacingAfter: 40 }));
           if (inExperience) roleState = 'expectCompany';
           continue;
         }
@@ -919,14 +970,22 @@
           // spacing: 4, which is a fifth of this and parsed correctly.
           out.push(paragraph(
             run(upper, { bold: true, caps: true, color: C.NAVY, sz: SZ.heading }),
-            { spacingBefore: 240, spacingAfter: 60, keepNext: true, keepLines: true,
+            { spacingBefore: SPACE.section, spacingAfter: SPACE.afterHeading, keepNext: true, keepLines: true,
               bottomBorder: { color: C.RULE, sz: 4 } }
           ));
           inExperience = EXPERIENCE_HEADERS.includes(upper);
+          sawDegree = false;   // the gap rule is per education section
+          afterHeading = true;
           roleState = inExperience ? 'expectCompany' : 'none';
           currentSection = upper;
           continue;
         }
+
+        // Consumed by whichever branch below emits this line, then
+        // cleared: only the FIRST content line after a heading gets the
+        // reduced gap.
+        const isFirstAfterHeading = afterHeading;
+        afterHeading = false;
 
         if (/^([\-*•]|\d+\.)\s+/.test(t)) {
           const item = t.replace(/^([\-*•]|\d+\.)\s+/, '');
@@ -944,7 +1003,8 @@
           }
           if (roleState === 'expectCompany') {
             out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: SZ.company }),
-              { spacingBefore: 80, spacingAfter: 20, keepNext: true, keepLines: true }));
+              { spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
+                spacingAfter: 20, keepNext: true, keepLines: true }));
             roleState = 'expectTitle';
             continue;
           }
@@ -983,6 +1043,28 @@
         // aligned, exactly as a role and its dates do. A date on its own
         // line parses as a stray text item and binds to nothing.
         if (EDU_SECTIONS.has(currentSection)) {
+          // A SECOND DEGREE NEEDS A VISIBLE GAP ABOVE IT.
+          //
+          // A live OpenResume parse returned ONE education entry for a CV
+          // that lists two. Both degrees and both universities came back
+          // as a single school + degree, with the other three lines
+          // dumped into "descriptions".
+          //
+          // The cause is geometry, not wording. The four lines sat at
+          // y=734, 720, 707, 693 -- gaps of 14, 13, 14. OpenResume splits
+          // a section into subsections on a vertical gap noticeably
+          // larger than the line pitch, and there wasn't one, so it saw
+          // one block. Every degree after the first was invisible.
+          //
+          // A degree line that is not the first in the section gets real
+          // space above it. This is the same signal a human reads as "new
+          // entry", which is why the parser looks for it.
+          if (_DEGREE_RE.test(t) && sawDegree) {
+            out.push(paragraph(run(t, { color: C.BODY, sz: SZ.body }),
+              { spacingBefore: 200, spacingAfter: 20, keepNext: true, keepLines: true }));
+            continue;
+          }
+          if (_DEGREE_RE.test(t)) sawDegree = true;
           if (isEduDateLine(t)) {
             out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: SZ.date }),
               { spacingAfter: 40 }));
