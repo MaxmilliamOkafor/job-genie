@@ -149,6 +149,34 @@ jobs:
           node tests/ci/probe-parser.mjs https://jobloo.co cv.pdf jobloo
           node tests/ci/probe-parser.mjs https://www.yena.ai cv.pdf yena
 
+      # THE VERDICT, LAST, WHERE IT CAN BE READ.
+      #
+      # The live-parse result is printed by step 8, and the three probe
+      # steps after it dump ~70 lines of somebody else's landing page
+      # each. Every log viewer shows the TAIL, so the one output that
+      # matters was reliably scrolled off the end and the run had to be
+      # judged by how long a step took. Re-printing it last costs nothing
+      # and makes the answer the first thing visible.
+      - name: The live parse verdict
+        if: always()
+        working-directory: '16-02-2026-3.0 ----- I LOVEEEEEEEEEE46'
+        run: |
+          echo '================ LIVE OPENRESUME VERDICT ================'
+          case "${{ steps.liveparse.outputs.code }}" in
+            0) echo 'PASSED - every live assertion held.' ;;
+            2) echo 'SKIPPED - the site was unreachable or never rendered the'
+               echo '          upload. Nothing was graded; this says nothing'
+               echo '          about the CV.' ;;
+            *) echo 'REGRESSION - the parser worked and the CV came back wrong.' ;;
+          esac
+          echo '--------------------------------------------------------'
+          sed -n '/=== THE ASSERTIONS ===/,$p' live-parse.log 2>/dev/null \
+            || sed -n '1,25p' live-parse.log 2>/dev/null || echo '(no log)'
+          echo '--------- what the parser put in each field -------------'
+          sed -n '/=== WHAT THE LIVE PARSER EXTRACTED ===/,/=== THE ASSERTIONS ===/p' \
+            live-parse.log 2>/dev/null || true
+          echo '========================================================'
+
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@v4
