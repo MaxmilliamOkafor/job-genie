@@ -3743,6 +3743,26 @@
       } catch (e) {}
     }
 
+    // The AI-tell reading, on the FINAL text, so the caller can drive a
+    // rewrite from it rather than guessing. Reported, never acted on
+    // here: the fix for a machine rhythm is a model writing differently,
+    // not a regex operating on someone's CV.
+    try {
+      const CQ = (typeof window !== 'undefined' && window.ContentQualityEngine)
+        || (typeof global !== 'undefined' && global.ContentQualityEngine);
+      if (CQ && typeof CQ.scoreAiTells === 'function') {
+        const prose = [outCV, outCL].filter(Boolean).join('\n');
+        const r = CQ.scoreAiTells(prose);
+        report.aiTells = {
+          score: r.score,
+          tells: r.tells,
+          instruction: (typeof CQ.aiTellsInstruction === 'function')
+            ? CQ.aiTellsInstruction(prose) : '',
+          note: r.note,
+        };
+      }
+    } catch (e) {}
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }

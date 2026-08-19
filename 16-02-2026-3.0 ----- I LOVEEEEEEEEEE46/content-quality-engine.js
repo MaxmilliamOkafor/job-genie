@@ -1055,6 +1055,58 @@
       };
     },
 
+    // ============ TURN THE TELLS INTO A REWRITE INSTRUCTION ============
+    //
+    // The scorer says what is wrong. This says what to do about it, in a
+    // form that can be appended to the generation prompt so the next
+    // draft comes out right instead of being patched afterwards.
+    //
+    // Why not just rewrite the text here: this session established, at
+    // some cost, that mechanically editing real prose reads WORSE than
+    // leaving it. Deleting a buzzword produced "with a ability" and "with
+    // in driving"; splitting a bullet at its participial tail would need
+    // the same kind of surgery on grammar the code cannot actually
+    // parse. A model writing fresh produces grammatical sentences; a
+    // regex operating on someone's CV produces wreckage, and wreckage is
+    // the loudest machine tell there is.
+    //
+    // So the tells go back into generation. The instructions are concrete
+    // and about STRUCTURE, never about inserting errors or padding --
+    // varied sentence length and fewer three-item lists are simply what
+    // good CV writing looks like, which is why they read as human.
+    aiTellsInstruction(text) {
+      const r = this.scoreAiTells(text);
+      if (!r.tells.length) return '';
+      const lines = [];
+      for (const tell of r.tells) {
+        if (tell.kind === 'uniform-sentence-length') {
+          lines.push('Vary the length of the bullets sharply. Right now they are '
+            + 'all within a few words of each other, which is the single clearest '
+            + 'sign of generated text. Mix short ones of eight to twelve words with '
+            + 'longer ones; let at least two be under twelve words.');
+        } else if (tell.kind === 'participial-tails') {
+          lines.push('Stop ending clauses with ", enabling ...", ", ensuring ..." '
+            + 'or ", allowing ...". There are ' + tell.count + '. Put the result in '
+            + 'its own short sentence, or state it directly.');
+        } else if (tell.kind === 'tricolon-rhythm') {
+          lines.push('Reduce the three-item lists ("A, B, and C"). There are '
+            + tell.count + '. Two items, or one specific item, reads as a person '
+            + 'writing rather than a pattern being filled.');
+        } else if (tell.kind === 'stock-phrasing') {
+          lines.push('Remove the remaining stock phrasing and say the specific '
+            + 'thing instead.');
+        } else if (tell.kind === 'low-vocabulary-diversity') {
+          lines.push('Widen the vocabulary; the same words are repeating.');
+        } else if (tell.kind === 'passive-voice') {
+          lines.push('Use the active voice. ' + tell.detail + '.');
+        }
+      }
+      return lines.length
+        ? 'REWRITE NOTES (structure only -- keep every fact, never add errors '
+          + 'or padding):\n- ' + lines.join('\n- ')
+        : '';
+    },
+
     // ============ REPLACE LETTER BOILERPLATE, DO NOT DELETE IT ============
     //
     // A cover letter scored 100% AI. The tells were not subtle words --
