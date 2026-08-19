@@ -1096,11 +1096,25 @@
             const items = t.split(/,\s*/)
               .map((s) => s.replace(/^[•\-*]\s*/, '').trim())
               .filter((s) => s.length > 0);
-            if (GRID_SECTIONS.has(currentSection)) {
-              emitGrid(items);
-            } else {
-              items.forEach(emitBullet);
-            }
+            // ONE FLOWING LINE, NOT ONE ITEM PER LINE.
+            //
+            // These were a three-up TAB grid, which welded items together
+            // on any parser that drops <w:tab/>, and were then changed to
+            // one item per paragraph to fix that. It did fix it, and cost
+            // a great deal: eight competencies became eight lines and
+            // seven certifications seven more, each holding two or three
+            // words on a line built for about a hundred characters.
+            // Fifteen lines, over two inches, to say what fits in four.
+            //
+            // A comma is the delimiter this wanted all along. Unlike a
+            // tab, no parser disagrees about what it means, and unlike
+            // one-per-line it costs nothing: the paragraph wraps, so it
+            // reflows on a phone instead of overflowing, and extracts as
+            // "A, B, C" in reading order. It is what the skills section
+            // has always done, and that section parses cleanly.
+            const joined = items.join(', ');
+            out.push(paragraph(run(joined, { color: C.BODY, sz: SZ.body }),
+              { spacingAfter: SPACE.bullet, line: 276, lineRule: 'auto' }));
             continue;
           }
         }
