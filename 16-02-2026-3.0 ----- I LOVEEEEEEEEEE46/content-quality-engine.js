@@ -1556,6 +1556,49 @@
     },
 
     // ============ FINAL CLEANUP ============
+    // ============ REPAIR WHAT A REMOVAL LEFT BEHIND ============
+    //
+    // Every purge above deletes words out of the middle of a sentence,
+    // and deleting a word leaves the words either side of it stranded:
+    //
+    //   "with a proven ability"          -> "with a ability"
+    //   "with extensive experience in"   -> "with in"
+    //   "...initiatives. ability to..."  -> a sentence starting lowercase
+    //
+    // All three appeared in a real generated CV. They matter more than
+    // they look: the point of removing a buzzword is to stop the text
+    // reading as machine-written, and mangled grammar reads as machine-
+    // written far more loudly than the buzzword did. A human writer
+    // simply does not produce "with a ability".
+    //
+    // So every removal is followed by a repair pass. It only fixes
+    // damage, never rewrites meaning.
+    repairAfterRemoval(text) {
+      if (!text || typeof text !== 'string') return text;
+      return text
+        // Two prepositions left adjacent by a deletion between them.
+        // The SECOND one is the one that governs what follows, so it
+        // survives: "professional with in driving" -> "professional in
+        // driving".
+        .replace(/\b(with|and|of|for|to|in|on|at|by)\s+(in|of|with|on|at|by|for)\b/gi,
+          (m0, a, b) => b)
+        // An article stranded against the word that followed the one
+        // that was deleted. "a ability" is the tell; the exceptions are
+        // the vowel-initial words English still takes "a" before.
+        .replace(/\ba\s+(?![uU](?:ni|se|ti|ne|ro|k)|[oO]ne\b)([aeiouAEIOU]\w*)/g, 'an $1')
+        .replace(/\ban\s+([^aeiouAEIOU\s\W]\w*)/g, 'a $1')
+        // An article or preposition left hanging at the end of a clause.
+        .replace(/\b(?:a|an|the|with|of|in|and)\s*([.,;])/gi, '$1')
+        // Tidy the punctuation the deletions disturbed.
+        .replace(/\s+([.,;:])/g, '$1')
+        .replace(/([.,;:]){2,}/g, '$1')
+        .replace(/,\s*\./g, '.')
+        .replace(/[ \t]{2,}/g, ' ')
+        // A deletion at a sentence start leaves it lowercase.
+        .replace(/(^|[.!?]\s+)([a-z])/g, (m0, pre, ch) => pre + ch.toUpperCase())
+        .trim();
+    },
+
     finalCleanup(text) {
       if (!text) return text;
 
@@ -1577,6 +1620,9 @@
         `^(${SECTION_HEADERS.map(h => h.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})(?:\\s+\\1)+$`,
         'gmi'
       );
+
+      // Repair first, so the capitalisation fix below sees repaired text.
+      text = this.repairAfterRemoval(text);
 
       return text
         // Collapse duplicated section headers (regression guard)
