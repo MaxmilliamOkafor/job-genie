@@ -529,10 +529,6 @@ export const validateProfileForSave = (profile: Record<string, any>): string[] =
     }
   });
 
-  if ((profile.certifications || []).length > CERTIFICATIONS_MAX) {
-    errors.push(`Too many certifications. ${CERTIFICATIONS_CAP_MESSAGE}`);
-  }
-
   return errors;
 };
 
