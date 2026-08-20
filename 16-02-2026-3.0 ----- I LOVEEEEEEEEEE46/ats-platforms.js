@@ -23,6 +23,24 @@
  *   jobId       URL pattern capturing the requisition ID, when the URL
  *               carries one
  *   apply       selectors for the apply/submit control, for autofill
+ *   descriptionParts
+ *               ALL of these, concatenated in order, when the platform
+ *               splits the posting across several nodes. `description`
+ *               above takes the FIRST selector that matches, which is
+ *               right when one node holds the posting and wrong when it
+ *               holds only the opening paragraph. A live audit found
+ *               three platforms doing the latter: Workable keeps its
+ *               requirements in [data-ui="job-requirements"] and its
+ *               benefits elsewhere, SmartRecruiters splits into four
+ *               ids, Lever into two. Reading only the first node means
+ *               tailoring against the overview and never seeing what
+ *               the employer actually asked for -- the exact truncation
+ *               this file was written to stop, arriving by a different
+ *               route.
+ *   weightedParts
+ *               { label: selector } for the parts worth more than the
+ *               rest when tailoring. Qualifications sections are what a
+ *               CV is scored against; benefits copy is noise.
  *
  *   window.ATSPlatforms
  */
@@ -41,7 +59,15 @@
       title: ['h1.app-title', 'h1.posting-headline', '[data-test="posting-title"]', '.job__title h1', 'h1'],
       company: ['#company-name', '.company-name', '.posting-categories strong', '[class*="company"]'],
       location: ['.location', '.posting-categories .location', '.job__location'],
-      description: ['#content', '.job__description', '.posting-description', '.posting', '#app_body'],
+      // .job__description.body first, verified live 2026-08-20 on
+      // job-boards.greenhouse.io. #content led this list and does not
+      // exist on the current board at all, so every Greenhouse posting
+      // was read by the second or third selector -- and .posting matches
+      // the whole page including the application form, about 15k
+      // characters of field labels the tailor then treats as the
+      // posting. Kept last as a fallback for older boards.
+      description: ['.job__description.body', '.job__description', '.posting-description',
+        '#content', '.posting', '#app_body'],
       jobId: /greenhouse\.io\/[^/]+\/jobs\/(\d{5,})/i,
       apply: ['#apply_button', '[data-mapped="apply"]', 'button[type="submit"]'],
     },
@@ -65,6 +91,11 @@
       company: ['[data-test="job-company-name"]', '.company-name'],
       location: ['[data-test="job-location"]', '.job-location', '[itemprop="jobLocation"]'],
       description: ['[data-test="job-description"]', '#st-jobDescription', '.job-sections', '.jobad-main'],
+      // Pre-split into four stable ids. #st-qualifications is the part
+      // a CV is actually scored against.
+      descriptionParts: ['#st-companyDescription', '#st-jobDescription', '#st-qualifications',
+        '#st-additionalInformation'],
+      weightedParts: { qualifications: '#st-qualifications' },
       jobId: /smartrecruiters\.com\/[^/]+\/(\d{6,})/i,
       apply: ['#st-applyButton', 'button[data-test="apply-button"]'],
     },
@@ -75,6 +106,12 @@
       company: ['[data-ui="company-name"]', '[data-ui="company"]'],
       location: ['[data-ui="job-location"]', '[data-ui="location"]'],
       description: ['[data-ui="job-description"]', '[data-ui="overview"]', '.section--text'],
+      // Verified live 2026-08-20: the posting is three nodes. Reading
+      // only job-description tailors against the overview and never
+      // sees a single requirement.
+      descriptionParts: ['[data-ui="job-description"]', '[data-ui="job-requirements"]',
+        '[data-ui="job-benefits"]'],
+      weightedParts: { qualifications: '[data-ui="job-requirements"]' },
       jobId: /workable\.com\/[^/]+\/j\/([A-Z0-9]{6,})/i,
       apply: ['[data-ui="apply-button"]', 'button[type="submit"]'],
     },
@@ -420,6 +457,31 @@
    * returns something, so a caller never has to special-case an unknown
    * platform.
    */
+  /**
+   * The nodes that together make up the posting, for a platform that
+   * splits it. Empty for a platform that keeps it in one node, which is
+   * the caller's signal to use `description` as before.
+   *
+   * Returned as { selector, weight } so the caller can tell the
+   * qualifications section from the benefits copy. Weight is advisory:
+   * every part is still read, in order, and concatenated.
+   */
+  function descriptionPartsFor(platformKey) {
+    const p = PLATFORMS[platformKey];
+    const parts = (p && p.descriptionParts) || [];
+    if (!parts.length) return [];
+    const weighted = (p && p.weightedParts) || {};
+    const heavy = Object.keys(weighted).reduce((acc, label) => {
+      acc[weighted[label]] = label;
+      return acc;
+    }, {});
+    return parts.map((selector) => ({
+      selector,
+      weight: heavy[selector] ? 2 : 1,
+      label: heavy[selector] || '',
+    }));
+  }
+
   function selectorsFor(platformKey, field) {
     const p = PLATFORMS[platformKey];
     const own = (p && p[field]) || [];
@@ -539,7 +601,8 @@
   }
 
   global.ATSPlatforms = {
-    PLATFORMS, GENERIC, detect, selectorsFor, allDescriptionSelectors, jobIdFromUrl, list,
+    PLATFORMS, GENERIC, detect, selectorsFor, descriptionPartsFor,
+    allDescriptionSelectors, jobIdFromUrl, list,
     fromJobPostingLd,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.ATSPlatforms;

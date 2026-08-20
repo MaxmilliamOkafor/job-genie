@@ -2634,7 +2634,40 @@
     // complete by construction, but a few sites emit a one-line summary
     // there and render the real posting in the page -- and a truncated
     // description is what surfaces as "could not extract keywords".
-    const cssDesc = (selectors ? getText(selectors.description) : '') || '';
+    // A POSTING SPLIT ACROSS SEVERAL NODES IS STILL ONE POSTING.
+    //
+    // getText takes the FIRST selector that matches, which is right when
+    // one node holds the description and wrong when it holds only the
+    // opening paragraph. Verified live on 2026-08-20: Workable keeps its
+    // requirements in [data-ui="job-requirements"], SmartRecruiters
+    // splits into four ids. Reading the first node alone tailors against
+    // the overview and never sees a single requirement -- the truncation
+    // ats-platforms.js exists to prevent, arriving by another route.
+    //
+    // Every part is read and concatenated in document order. A part that
+    // is missing contributes nothing rather than failing.
+    const partsDesc = (() => {
+      if (!AP || typeof AP.descriptionPartsFor !== 'function') return '';
+      const parts = AP.descriptionPartsFor(platformKey);
+      if (!parts.length) return '';
+      const seen = [];
+      for (const part of parts) {
+        let text = '';
+        try { text = elementText(document.querySelector(part.selector)) || ''; } catch (e) {}
+        text = text.trim();
+        // The same node reached by two selectors, or a container that
+        // also holds a part already read.
+        if (!text || seen.some((s) => s.indexOf(text) !== -1)) continue;
+        seen.push(text);
+      }
+      if (!seen.length) return '';
+      const joined = seen.join('\n\n');
+      console.log('[ATS Tailor] Description assembled from', seen.length, 'of',
+        parts.length, 'parts:', joined.length, 'chars');
+      return joined;
+    })();
+
+    const cssDesc = partsDesc || (selectors ? getText(selectors.description) : '') || '';
     const ldDesc = ld.description || '';
     const rawDesc = ldDesc.length >= cssDesc.length ? ldDesc : cssDesc;
     const description = rawDesc?.trim()?.length > 80 ? rawDesc.trim().substring(0, 3000) : '';
