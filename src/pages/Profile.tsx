@@ -1337,9 +1337,42 @@ const Profile = () => {
                             exps[expIndex] = { ...exps[expIndex], title: e.target.value };
                             updateLocalField('professional_experience', exps);
                           }}
+                          onBlur={() => {
+                            const exps = [...(localProfile.professional_experience || [])];
+                            const { title, employment_type } = splitTitleAndEmploymentType(
+                              exps[expIndex]?.title,
+                              exps[expIndex]?.employment_type
+                            );
+                            exps[expIndex] = { ...exps[expIndex], title, employment_type };
+                            updateLocalField('professional_experience', exps);
+                          }}
                           placeholder="Job Title (e.g., Senior Software Engineer)"
                           className="font-semibold"
                         />
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Employment type</Label>
+                          <Select
+                            value={exp.employment_type || 'none'}
+                            onValueChange={(v) => {
+                              const exps = [...(localProfile.professional_experience || [])];
+                              exps[expIndex] = { ...exps[expIndex], employment_type: v === 'none' ? '' : v };
+                              updateLocalField('professional_experience', exps);
+                            }}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Not specified" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not specified</SelectItem>
+                              {EMPLOYMENT_TYPES.map((t) => (
+                                <SelectItem key={t} value={t}>{t}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Job title alone in the Title field - recruiters search on the title.
+                          </p>
+                        </div>
                         <Input
                           value={exp.company || ''}
                           onChange={(e) => {
@@ -1347,8 +1380,29 @@ const Profile = () => {
                             exps[expIndex] = { ...exps[expIndex], company: e.target.value };
                             updateLocalField('professional_experience', exps);
                           }}
+                          onBlur={() => {
+                            const exps = [...(localProfile.professional_experience || [])];
+                            const { company, location } = normaliseCompany(exps[expIndex]?.company);
+                            exps[expIndex] = {
+                              ...exps[expIndex],
+                              company,
+                              location: normaliseLocation(location || exps[expIndex]?.location || ''),
+                            };
+                            updateLocalField('professional_experience', exps);
+                          }}
                           placeholder="Company"
                         />
+                        {(() => {
+                          const split = normaliseCompany(exp.company);
+                          const previewLocation = normaliseLocation(split.location || exp.location || '');
+                          return (
+                            <p className="text-xs text-muted-foreground">
+                              Company: <span className="text-foreground">{split.company || '-'}</span>
+                              {'   '}
+                              Location: <span className="text-foreground">{previewLocation || '-'}</span>
+                            </p>
+                          );
+                        })()}
                         <div className="flex gap-2 items-end">
                           <div className="flex-1">
                             <Label className="text-xs text-muted-foreground">Location</Label>
@@ -1361,11 +1415,25 @@ const Profile = () => {
                                 exps[expIndex] = { ...exps[expIndex], location: raw };
                                 updateLocalField('professional_experience', exps);
                               }}
+                              onBlur={() => {
+                                const exps = [...(localProfile.professional_experience || [])];
+                                exps[expIndex] = {
+                                  ...exps[expIndex],
+                                  location: normaliseLocation(exps[expIndex]?.location || ''),
+                                };
+                                updateLocalField('professional_experience', exps);
+                              }}
                               placeholder="Dublin, Ireland"
                               maxLength={60}
                             />
+                            {(() => {
+                              const err = validateLocation(exp.location);
+                              return err ? (
+                                <p className="text-xs text-destructive mt-0.5">{err}</p>
+                              ) : null;
+                            })()}
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              City, Country — e.g. Dublin, Ireland. Use Remote if you worked remotely. Workday and iCIMS map City and Country to separate structured fields, so the comma matters.
+                              City, Country - e.g. Dublin, Ireland. Also accepted: City, State, Country / Remote / Remote, Country. Workday and iCIMS map City and Country to separate structured fields, so the comma matters.
                             </p>
                           </div>
                           <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
