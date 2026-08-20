@@ -1126,6 +1126,64 @@
     return true;
   }
 
+  // ---- the cheaper levers, spent before a bullet is --------------------
+  //
+  // A bullet from a real job was the ONLY thing this could spend, so a CV
+  // with more on it than a page holds paid for the page entirely out of
+  // its employment history: four roles, every one cut to the floor of
+  // two. The user's own words -- "why did you limit my professional
+  // experience roles bullets to 2 each, I never asked for that".
+  //
+  // Two lines are worth less than a bullet at Meta. Group labels are a
+  // reading aid, and a third personal project sits under four roles of
+  // real work. Both go first.
+
+  // Labelled skill groups back to one comma list. Saves two or three
+  // lines and loses no term.
+  function _flattenSkillGroups(lines) {
+    const at = lines.findIndex((l) => _SKILL_HEAD.test(l.trim()));
+    if (at === -1) return false;
+    let end = at + 1;
+    const body = [];
+    for (; end < lines.length; end++) {
+      const t = lines[end].trim();
+      if (!t) { if (body.length) break; continue; }
+      if (/^[A-Z][A-Z &/]{3,}\s*:?\s*$/.test(t)) break;
+      body.push(t);
+    }
+    if (body.length < 2 || !body.every((l) => /^[A-Z][A-Za-z &/]{1,28}:\s*\S/.test(l))) return false;
+    const flat = body.map((l) => l.replace(/^[A-Z][A-Za-z &/]{1,28}:\s*/, '')).join(', ');
+    lines.splice(at + 1, end - (at + 1), flat);
+    return true;
+  }
+
+  // The last project, whole. Never below two: a projects section with one
+  // entry reads as an afterthought, and the section is there to show
+  // range.
+  const _MIN_PROJECTS = 2;
+  function _dropLastProject(lines) {
+    const at = lines.findIndex((l) => /^\s*(SELECTED PROJECTS|PROJECTS)\s*:?\s*$/i.test(l));
+    if (at === -1) return false;
+    let end = at + 1;
+    for (; end < lines.length; end++) {
+      if (_ANY_HEAD.test(lines[end]) && !/^\s*(SELECTED PROJECTS|PROJECTS)\s*:?\s*$/i.test(lines[end])) break;
+    }
+    // A project starts on a line that is neither a bullet nor a link.
+    const starts = [];
+    for (let i = at + 1; i < end; i++) {
+      const t = lines[i].trim();
+      if (!t || /^[-•*]/.test(t) || /https?:\/\/|\b\w+\.[a-z]{2,}\//i.test(t)) continue;
+      if (starts.length && i === starts[starts.length - 1] + 1) continue;  // its tech-stack line
+      starts.push(i);
+    }
+    if (starts.length <= _MIN_PROJECTS) return false;
+    const from = starts[starts.length - 1];
+    let to = end;
+    while (to > from && !lines[to - 1].trim()) to--;     // keep the blank line
+    lines.splice(from, to - from);
+    return true;
+  }
+
   function fitToOnePage(cvText, jobKeywords) {
     const text = String(cvText || '');
     if (!text || _fits(text)) return { text, trimmed: 0, fits: true };
@@ -1148,7 +1206,16 @@
       return false;
     };
 
-    let trimmed = 0;
+    let trimmed = 0, flattened = false, projectsDropped = 0;
+
+    // Cheapest first: the group labels, then projects down to two.
+    if (!_fits(lines.join('\n')) && _flattenSkillGroups(lines)) flattened = true;
+    for (let g = 0; g < 6; g++) {
+      if (_fits(lines.join('\n'))) break;
+      if (!_dropLastProject(lines)) break;
+      projectsDropped++;
+    }
+
     // Each pass removes at most one bullet, from the last bullet of the
     // LAST role that can still spare one -- oldest work, least relevant
     // bullet, which is the cheapest line on the page.
@@ -1192,7 +1259,19 @@
     }
 
     const out = lines.join('\n');
-    return { text: out, trimmed, fits: _fits(out) };
+    const fits = _fits(out);
+
+    // IF IT DID NOT WORK, PUT IT BACK.
+    //
+    // The CV that prompted this was 139% of a page. Every role was cut to
+    // the floor, the projects and the labels went, and it was still 1.3
+    // pages -- so the entire employment history was mutilated to buy
+    // nothing at all. A two-page CV with whole roles is strictly better
+    // than a 1.3-page CV with gutted ones, and the caller gets a warning
+    // naming what would actually have to go.
+    if (!fits) return { text, trimmed: 0, fits: false, reverted: true };
+
+    return { text: out, trimmed, fits, flattened, projectsDropped };
   }
 
   // ===================================================================
@@ -3247,6 +3326,21 @@
     'engineering excellence', 'attention to detail', 'time management',
   ].join('|') + ')$', 'i');
 
+  // A SHAPE, NOT A LIST.
+  //
+  // The list above is exact-match, so it catches "entrepreneurial
+  // mindset" and misses "collaborative mindset". A real CV went out
+  // reading "... Windows and macOS Support, collaborative mindset,
+  // discipline, customer-centric mentality, Python ..." -- three
+  // unfalsifiable claims, in lower case, in the middle of a list of
+  // tools. Anything of that shape is the same thing under a different
+  // noun, so the shape is what gets matched.
+  const _FLUFF_SHAPE = new RegExp('^(?:'
+    + '.*\\b(?:mindset|mentality|attitude|ethos|demeanou?r|disposition)$'
+    + '|discipline|professionalism|positivity|enthusiasm|passion|drive'
+    + '|integrity|reliability|flexibility|patience|empathy|initiative'
+    + ')$', 'i');
+
   // Short lowercase abbreviations that look unprofessional spelled out.
   const SKILL_EXPANSIONS = { ts: 'TypeScript', js: 'JavaScript', py: 'Python', k8s: 'Kubernetes' };
 
@@ -3271,7 +3365,7 @@
         const kept = [];
         for (let item of items) {
           const bare = item.replace(/^[•\-*]\s*/, '').trim();
-          if (NON_TECHNICAL_SKILL.test(bare)) { removed++; continue; }
+          if (NON_TECHNICAL_SKILL.test(bare) || _FLUFF_SHAPE.test(bare)) { removed++; continue; }
           const exp = SKILL_EXPANSIONS[bare.toLowerCase()];
           if (exp) item = item.replace(bare, exp);
           kept.push(item);
@@ -3283,6 +3377,193 @@
       }
     }
     return { text: out.join('\n'), removed };
+  }
+
+  /**
+   * THE SKILLS SECTION IS SCANNED, NOT READ.
+   *
+   * The two skills sections became one, which fixed the parsing, and
+   * left a thirty-eight term comma list under a single heading:
+   *
+   *   Customer Support, Cybersecurity Solutions, Technical
+   *   Problem-Solving, Team Collaboration, Training and Mentoring,
+   *   Windows and macOS Support, Python, Java, TypeScript, C++, SQL,
+   *   Node.js, React, AWS, Azure, Google Cloud Platform, Kubernetes...
+   *
+   * A recruiter filling a support role has to read all thirty-eight to
+   * find out whether the two that matter are there. Labelled groups are
+   * read by jumping to the label -- and an ATS is indifferent, because
+   * "Programming Languages: Python, Java" carries the same terms with
+   * the same comma delimiter it already parses.
+   *
+   * WHAT THIS WILL NOT DO IS INVENT A TAXONOMY IT DOES NOT HAVE. The
+   * groups below are recognised by name. A CV for a nurse, a solicitor
+   * or an accountant matches almost none of them, and rather than
+   * inventing labels for terms it does not understand, this leaves the
+   * list exactly as it found it. Categorising is an improvement only
+   * when the categories are right.
+   */
+  const _SKILL_GROUPS = [
+    ['Programming Languages', /^(?:python|java|javascript|typescript|c\+\+|c#|c|go|golang|rust|ruby|php|swift|kotlin|scala|r|sql|t-sql|pl\/sql|bash|shell scripting|shell|powershell|matlab|perl|dart|vba|objective-c|solidity|assembly)$/i],
+    ['Frameworks & Libraries', /^(?:react(?:\.js)?|angular|vue(?:\.js)?|next\.js|node(?:\.js)?|express(?:\.js)?|django|flask|fastapi|spring(?: boot)?|\.net|asp\.net|rails|laravel|jquery|graphql|rest apis?|restful apis?|html|html5|css|css3|tailwind|bootstrap|hugging face transformers|streamlit)$/i],
+    ['Cloud & DevOps', /^(?:aws|amazon web services|azure|microsoft azure|gcp|google cloud(?: platform)?|kubernetes|k8s|docker|terraform|ansible|helm|jenkins|github actions|gitlab ci|ci\/cd|cloudformation|openshift|linux|unix|prometheus|grafana|datadog|elk stack|observability|monitoring|serverless|aws lambda|git|github|gitlab|cloud security|cloud migration)$/i],
+    ['Data & AI', /^(?:machine learning|deep learning|pytorch|tensorflow|keras|scikit-learn|xgboost|nlp|natural language processing|computer vision|llms?|rag|mlops|mlflow|(?:apache )?spark|(?:apache )?airflow|(?:apache )?kafka|snowflake|databricks|dbt|etl|elt|hadoop|pandas|numpy|power bi|tableau|looker|data modell?ing|data warehousing|data engineering|data analysis|data analytics|data pipelines|analytics|statistics|a\/b testing|generative ai|prompt engineering)$/i],
+    ['Databases', /^(?:postgresql|postgres|mysql|mongodb|redis|oracle|sql server|dynamodb|elasticsearch|bigquery|cassandra|neo4j|sqlite|nosql)$/i],
+    ['Security', /^(?:cyber ?security(?: solutions)?|information security|infosec|siem|soc|penetration testing|pen testing|owasp|incident response|vulnerability management|identity and access management|iam|zero trust|encryption|gdpr|iso 27001|soc 2|hipaa compliance|threat detection|security operations)$/i],
+    ['Support & Platforms', /^(?:customer support|technical support|it support|end[- ]user support|help ?desk|service desk|troubleshooting|itil|zendesk|jira|confluence|servicenow|salesforce|freshdesk|intercom|sla management|escalation management|windows(?: and macos support| support)?|macos(?: support)?|ios|android|active directory|office 365|microsoft 365|remote desktop|ticketing systems)$/i],
+    ['Architecture & Systems', /^(?:distributed systems|microservices|system design|systems design|cloud architecture|solution architecture|software architecture|event[- ]driven architecture|scalability|high availability|disaster recovery|site reliability|sre|api design|networking|infrastructure as code)$/i],
+    // Last, and deliberately a shape rather than a list: these are the
+    // tailored phrases, and they are the half of the section a recruiter
+    // reads first.
+    ['Core Competencies', /(?:management|collaboration|mentoring|mentorship|coaching|training|communication|leadership|problem[- ]solving|stakeholder|documentation|process improvement|onboarding|delivery|governance|reporting|facilitation|quality assurance|^agile$|^scrum$|^kanban$|^waterfall$|cost optimisation|cost optimization)/i],
+  ];
+
+  const _SKILL_HEAD = /^(?:TECHNICAL SKILLS|TECHNICAL PROFICIENCIES|SKILLS|CORE COMPETENCIES|AREAS OF EXPERTISE)\s*:?\s*$/i;
+  const _MAX_SKILL_GROUPS = 6;
+
+  function categoriseSkills(cvText, jobKeywords) {
+    const text = String(cvText || '');
+    if (!text) return { text, grouped: 0 };
+    const lines = text.split('\n');
+
+    const at = lines.findIndex((l) => _SKILL_HEAD.test(l.trim()));
+    if (at === -1) return { text, grouped: 0 };
+
+    let end = at + 1;
+    const body = [];
+    for (; end < lines.length; end++) {
+      const t = lines[end].trim();
+      if (!t) { if (body.length) break; continue; }
+      if (/^[A-Z][A-Z &/]{3,}\s*:?\s*$/.test(t)) break;
+      body.push(t);
+    }
+    if (!body.length) return { text, grouped: 0 };
+
+    // ALREADY DONE. The generator runs this pass again on its way to the
+    // file, and a second pass must find nothing to do or the two
+    // documents drift apart.
+    if (body.some((l) => /^[A-Z][A-Za-z &/]{1,28}:\s*\S/.test(l))) {
+      return { text, grouped: 0 };
+    }
+
+    let items = body.join(', ').split(/\s*,\s*/)
+      .map((s) => s.replace(/^[•\-*]\s*/, '').trim())
+      .filter(Boolean);
+    if (items.length < 8) return { text, grouped: 0 };   // short list reads fine as it is
+
+    // A TERM ALREADY SPELLED OUT INSIDE ANOTHER IS NOT A SECOND TERM.
+    //
+    // The live CV listed "Cybersecurity Solutions" and "Cybersecurity",
+    // "Windows and macOS Support" and "macOS". Dropping the shorter one
+    // loses no keyword at all, because its text is still there, inside
+    // the longer one, for any parser matching on substrings.
+    const kept = [];
+    for (const it of items) {
+      const lc = it.toLowerCase();
+      const swallowed = items.some((other) => {
+        if (other === it) return false;
+        const ol = other.toLowerCase();
+        return ol.length > lc.length
+          && new RegExp('\\b' + lc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(ol);
+      });
+      if (!swallowed && !kept.some((k) => k.toLowerCase() === lc)) kept.push(it);
+    }
+    items = kept;
+
+    const buckets = new Map();
+    let classified = 0;
+    for (const it of items) {
+      let label = '';
+      for (const [name, re] of _SKILL_GROUPS) {
+        if (re.test(it)) { label = name; break; }
+      }
+      if (!label) continue;
+      classified++;
+      if (!buckets.has(label)) buckets.set(label, []);
+      buckets.get(label).push(it);
+    }
+
+    // Not enough of it is understood to label honestly.
+    if (buckets.size < 3 || classified < items.length * 0.6) return { text, grouped: 0 };
+
+    // Terms the taxonomy does not recognise go on their own line, which
+    // claims nothing about them, rather than under a label that would be
+    // wrong.
+    const unknown = items.filter((it) => !_SKILL_GROUPS.some(([, re]) => re.test(it)));
+    if (unknown.length) buckets.set('Additional', unknown);
+
+    // TOO MANY LABELS IS ITS OWN PROBLEM, AND THE FIX IS NOT TO PUT A
+    // TERM UNDER THE WRONG ONE.
+    //
+    // Spilling the overflow into whichever group came last put React and
+    // Node.js under "Programming Languages", which is wrong in a way any
+    // engineer reading the CV would notice.
+    //
+    // Two moves instead, in this order, until the section is back inside
+    // its line budget: merge two groups that share a real combined name,
+    // then move the smallest group's terms down to "Additional". A group
+    // holding one term is the first to go -- a whole line to say
+    // "Databases: PostgreSQL" is not what the labels are for.
+    const rankOfGroup = new Map();
+    _SKILL_GROUPS.forEach(([name], i) => rankOfGroup.set(name, i));
+    rankOfGroup.set('Additional', _SKILL_GROUPS.length + 1);   // always last
+
+    const PAIRS = [
+      ['Frameworks & Libraries', 'Programming Languages', 'Languages & Frameworks'],
+      ['Databases', 'Data & AI', 'Data & Databases'],
+      ['Security', 'Support & Platforms', 'Support & Security'],
+      ['Architecture & Systems', 'Cloud & DevOps', 'Cloud & Architecture'],
+    ];
+    let guard = 20;
+    while (buckets.size > _MAX_SKILL_GROUPS && guard-- > 0) {
+      const pair = PAIRS.find(([from, into]) => buckets.has(from) && buckets.has(into));
+      if (pair) {
+        const [from, into, combined] = pair;
+        const merged = buckets.get(into).concat(buckets.get(from));
+        rankOfGroup.set(combined, Math.min(rankOfGroup.get(into), rankOfGroup.get(from)));
+        buckets.delete(from);
+        buckets.delete(into);
+        buckets.set(combined, merged);
+        continue;
+      }
+      const smallest = [...buckets.keys()]
+        .filter((k) => k !== 'Additional' && k !== 'Core Competencies')
+        .sort((a, b) => buckets.get(a).length - buckets.get(b).length)[0];
+      if (!smallest) break;
+      const spilled = buckets.get(smallest);
+      buckets.delete(smallest);
+      buckets.set('Additional', (buckets.get('Additional') || []).concat(spilled));
+    }
+
+    const kw = (Array.isArray(jobKeywords) ? jobKeywords : [])
+      .map((k) => String(k || '').toLowerCase()).filter(Boolean);
+    const relevance = (list) => list.filter((s) =>
+      kw.some((k) => s.toLowerCase().indexOf(k) !== -1 || k.indexOf(s.toLowerCase()) !== -1)).length;
+    // Taxonomy order breaks the ties. Size is not a tie-break worth
+    // having: it would rank a long list of frameworks above the
+    // languages they are written in.
+    const taxonomyAt = (label) => {
+      const i = rankOfGroup.has(label) ? rankOfGroup.get(label) : -1;
+      return i === -1 ? _SKILL_GROUPS.length : i;
+    };
+
+    // Core Competencies leads: it is the tailored half and the half a
+    // recruiter reads first. The rest follow by how much of each group
+    // the posting actually asked for, so a support role does not open
+    // its skills section with deep-learning frameworks.
+    const order = [...buckets.keys()].sort((a, b) => {
+      if (a === 'Core Competencies') return -1;
+      if (b === 'Core Competencies') return 1;
+      if (a === 'Additional') return 1;
+      if (b === 'Additional') return -1;
+      const d = relevance(buckets.get(b)) - relevance(buckets.get(a));
+      if (d) return d;
+      return taxonomyAt(a) - taxonomyAt(b);
+    });
+
+    const out = order.map((label) => label + ': ' + buckets.get(label).join(', '));
+    lines.splice(at + 1, end - (at + 1), ...out);
+    return { text: lines.join('\n'), grouped: out.length };
   }
 
   function scrubRedFlags(text) {
@@ -3425,12 +3706,39 @@
     // without profile data.
     if (outCV) {
       try {
-        const rl = attachRoleLocations(outCV, Array.isArray(experience) ? experience : []);
+        const roles = Array.isArray(experience) ? experience : [];
+        const rl = attachRoleLocations(outCV, roles);
         if (rl.attached) {
           outCV = rl.text;
           report.fixes.push('Added the location to ' + rl.attached + ' role(s), '
             + 'right-aligned on the company line (Workday and others map a '
             + 'per-role Location field, and this costs no extra lines)');
+        }
+        // A LOCATION THAT NEVER ARRIVES LOOKS EXACTLY LIKE ONE THAT WAS
+        // NEVER ASKED FOR.
+        //
+        // Nothing here can invent a city, so a profile with no location
+        // on a role simply produces a CV without one -- and the only
+        // symptom is an absence, which is invisible until an employer's
+        // form asks for it and it has to be typed by hand again. Say
+        // which roles, by name.
+        const placeless = roles
+          .filter((r) => r && (r.company || r.employer || r.name))
+          .filter((r) => !String(r.location || r.city || r.role_location || r.roleLocation
+            || r.job_location || r.jobLocation || r.work_location || r.workLocation
+            || r.based_in || r.basedIn || r.locationName || '').trim())
+          .map((r) => String(r.company || r.employer || r.name).trim());
+        if (placeless.length) {
+          report.warnings.push({
+            kind: 'roles-without-location',
+            count: placeless.length,
+            samples: placeless.slice(0, 4),
+            note: placeless.length + ' role(s) in your profile have no location, so the CV '
+              + 'goes out without one: ' + placeless.slice(0, 4).join(', ')
+              + '. Workday and Greenhouse both map a Location field on every '
+              + 'work-experience block, and an empty one gets typed by hand on '
+              + 'every application. Add it as "City, Country" in your profile.',
+          });
         }
       } catch (e) {}
     }
@@ -3970,6 +4278,21 @@
       } catch (e) {}
     }
 
+    // Labelled groups, once the two skills sections are one section.
+    // Runs after the merge above and before the page is measured, since
+    // it changes how many lines the section takes.
+    if (outCV) {
+      try {
+        const grp = categoriseSkills(outCV, jobKeywords);
+        if (grp.grouped) {
+          outCV = grp.text;
+          report.fixes.push('Grouped the skills section under ' + grp.grouped
+            + ' labels (Programming Languages, Core Competencies and so on) so a '
+            + 'recruiter scanning it can jump to the group the posting asked for');
+        }
+      } catch (e) {}
+    }
+
     // ONE PAGE, LAST.
     //
     // Runs after every other pass, because every one of them changes the
@@ -3985,13 +4308,35 @@
     if (outCV) {
       try {
         const fitted = fitToOnePage(outCV, jobKeywords);
-        if (fitted.trimmed) {
+        if (fitted.fits && (fitted.trimmed || fitted.projectsDropped || fitted.flattened)) {
           outCV = fitted.text;
-          report.fixes.push('Fitted to one page: dropped ' + fitted.trimmed
-            + ' least-relevant bullet(s), levelled across the longest roles '
-            + '(never below two per role, never the sole mention of a keyword)');
+          const spent = [];
+          if (fitted.flattened) spent.push('grouped the skills back into one line');
+          if (fitted.projectsDropped) spent.push('dropped ' + fitted.projectsDropped + ' project(s)');
+          if (fitted.trimmed) {
+            spent.push('dropped ' + fitted.trimmed + ' least-relevant bullet(s), levelled '
+              + 'across the longest roles (never below two per role, never the sole '
+              + 'mention of a keyword)');
+          }
+          report.fixes.push('Fitted to one page: ' + spent.join('; '));
         }
         report.onePage = fitted.fits;
+        // NOTHING WAS CUT, BECAUSE CUTTING WOULD NOT HAVE WORKED.
+        //
+        // Say so, and say what would. A CV 40% over a page cannot be
+        // rescued by trimming bullets, and silently gutting the
+        // employment history to arrive at 1.3 pages is the worst of both.
+        if (fitted.reverted) {
+          report.warnings.push({
+            kind: 'two-pages',
+            note: 'This CV runs to two pages and trimming bullets would not have '
+              + 'changed that, so nothing was cut -- the roles are intact. To reach '
+              + 'one page the content itself has to come down: shorten the project '
+              + 'descriptions to a single line each, keep your four strongest '
+              + 'certifications, and cut the summary to two sentences. Two pages '
+              + 'with whole roles beats one and a bit with hollow ones.',
+          });
+        }
       } catch (e) {}
     }
 

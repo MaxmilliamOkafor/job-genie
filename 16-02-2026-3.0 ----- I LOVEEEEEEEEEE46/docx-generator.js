@@ -757,14 +757,33 @@
   // "Live demo: https://..." and "Microsoft Certified: Azure AI
   // Engineer Associate" alone, which is why the check is membership
   // rather than a shape.
+  // A LABEL INSIDE A SECTION IS NOT A HEADING FOR THAT SAME SECTION.
+  //
+  // The skills section is written as labelled groups now:
+  //
+  //   TECHNICAL SKILLS
+  //   Core Competencies: Technical Problem-Solving, Team Collaboration
+  //   Languages & Frameworks: Python, Java, SQL, React
+  //
+  // "Core Competencies" is also a section name, so this split it back
+  // out into a heading, which then merged into the skills section it was
+  // already inside -- silently deleting the label and undoing the
+  // grouping. Tracking which section is open costs one variable and
+  // tells the two cases apart: a heading that opens a DIFFERENT section
+  // still splits, a label for the section already open does not.
   function splitInlineHeadings(lines) {
     const out = [];
     let split = 0;
+    let openRank = 0;
     for (const line of lines) {
+      const bare = line.trim().toUpperCase();
+      if (SECTION_HEADERS.includes(bare)) { openRank = rankOf(bare); out.push(line); continue; }
       const m = line.match(/^\s*([A-Za-z][A-Za-z &/]{2,40}?)\s*:\s*(\S.*)$/);
-      if (m && SECTION_HEADERS.includes(m[1].trim().toUpperCase())) {
+      if (m && SECTION_HEADERS.includes(m[1].trim().toUpperCase())
+          && rankOf(m[1].trim().toUpperCase()) !== openRank) {
         out.push(m[1].trim().toUpperCase());
         out.push(m[2].trim());
+        openRank = rankOf(m[1].trim().toUpperCase());
         split++;
         continue;
       }
