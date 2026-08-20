@@ -10,7 +10,7 @@ interface DataPreviewPanelProps {
 }
 
 /**
- * Shows the exact JSON the extension reads, so a silent key mismatch
+ * Shows the exact saved JSON payload the extension reads, so a silent key mismatch
  * (e.g. a missing `location` on a role) is a five-second check.
  */
 export function DataPreviewPanel({ profile }: DataPreviewPanelProps) {
@@ -60,7 +60,7 @@ export function DataPreviewPanel({ profile }: DataPreviewPanelProps) {
       {open && (
         <CardContent>
           <p className="text-xs text-muted-foreground mb-3">
-            Exactly what the extension reads. Certifications are capped at the top {CERTIFICATIONS_MAX} in this
+            Exact saved data read by the extension. Certifications are capped at the top {CERTIFICATIONS_MAX} in this
             payload; the full list stays stored.
           </p>
           <pre className="max-h-[480px] overflow-auto rounded-md border bg-muted/40 p-3 text-xs leading-relaxed">

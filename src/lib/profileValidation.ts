@@ -480,7 +480,9 @@ export const normaliseProfileForSave = <T extends Record<string, any>>(profile: 
   next.professional_experience = (next.professional_experience || []).map((exp: any) => {
     const { title, employment_type } = splitTitleAndEmploymentType(exp.title, exp.employment_type);
     const fromCompany = normaliseCompany(exp.company);
-    const location = normaliseLocation(exp.location || fromCompany.location);
+    const legacyLocation =
+      exp.role_location || exp.city || exp.job_location || exp.work_location || exp.based_in || '';
+    const location = normaliseLocation(exp.location || legacyLocation || fromCompany.location);
     return {
       ...exp,
       title,
