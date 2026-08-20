@@ -387,6 +387,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   
+  // THE POSTING FROM THE PLATFORM'S OWN API, FETCHED HERE.
+  //
+  // A content script's fetch carries the page's origin, so a
+  // cross-origin call to boards-api.greenhouse.io is a CORS request that
+  // the page cannot make. The service worker has the extension's host
+  // permissions and no such restriction, which is why this hop exists
+  // rather than fetching inline.
+  //
+  // The URL is built by ats-platforms.js from the page's own URL, and
+  // checked again here: a message handler that fetches whatever it is
+  // handed is an open proxy inside the extension's permissions.
+  if (message.action === 'JD_API_FETCH' && message.url) {
+    (async () => {
+      const ALLOWED = [
+        /^https:\/\/boards-api\.greenhouse\.io\/v1\/boards\//,
+        /^https:\/\/[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com\/wday\/cxs\//i,
+      ];
+      if (!ALLOWED.some((re) => re.test(message.url))) {
+        sendResponse({ ok: false, error: 'url not allowed' });
+        return;
+      }
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 6000);
+      try {
+        const res = await fetch(message.url, {
+          method: 'GET',
+          headers: Object.assign({ Accept: 'application/json' }, message.headers || {}),
+          credentials: 'omit',
+          signal: ctl.signal,
+        });
+        if (!res.ok) { sendResponse({ ok: false, error: 'HTTP ' + res.status }); return; }
+        const text = await res.text();
+        // A posting is tens of kilobytes; anything far larger is not the
+        // thing we asked for.
+        sendResponse(text.length > 600000
+          ? { ok: false, error: 'response too large' }
+          : { ok: true, body: text });
+      } catch (e) {
+        sendResponse({ ok: false, error: (e && e.name === 'AbortError') ? 'timeout' : String(e && e.message) });
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+    return true;                       // async sendResponse
+  }
+
   // Reset processed tab for re-triggering
   if (message.action === 'resetProcessedTab' && message.tabId) {
     processedTabs.delete(message.tabId);

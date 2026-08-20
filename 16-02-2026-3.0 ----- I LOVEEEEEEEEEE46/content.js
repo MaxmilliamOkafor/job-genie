@@ -316,9 +316,79 @@
   // it -- only the extension's own executeScript can.
   window.__jgExtractJobInfoWithContext = (...a) => extractJobInfoWithContext(...a);
 
-  async function extractJobInfoWithContext(existing) {
-    const info = existing || extractJobInfo();
+  // THE PLATFORM'S OWN API, ASKED FIRST.
+  //
+  // A selector describes where the text sits in today's markup, and
+  // markup gets redesigned -- which is how Greenhouse's #content came to
+  // match nothing while still leading the list. These endpoints are
+  // unauthenticated and return the posting as data. Verified live on
+  // 2026-08-20 for Greenhouse and Workday; nothing else has one here,
+  // and those fall through to JSON-LD as before.
+  //
+  // The fetch happens in the service worker: a content script's fetch
+  // carries the page's origin, so the cross-origin call would be a CORS
+  // request the page is not allowed to make.
+  async function jdFromPlatformApi() {
     try {
+      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
+        : (typeof window !== 'undefined' ? window.ATSPlatforms : null);
+      if (!AP || typeof AP.apiRequestFor !== 'function') return null;
+      const key = AP.detect(window.location.hostname, window.location.href);
+      const req = AP.apiRequestFor(key, window.location.href);
+      if (!req) return null;
+
+      const res = await new Promise((resolve) => {
+        let settled = false;
+        const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+        setTimeout(() => done(null), 7000);
+        try {
+          chrome.runtime.sendMessage(
+            { action: 'JD_API_FETCH', url: req.url, headers: req.headers || {} },
+            (r) => { void chrome.runtime.lastError; done(r || null); }
+          );
+        } catch (e) { done(null); }
+      });
+      if (!res || !res.ok || !res.body) {
+        if (res && res.error) console.log('[ATS Tailor] platform API unavailable:', res.error);
+        return null;
+      }
+
+      let json = null;
+      try { json = JSON.parse(res.body); } catch (e) { return null; }
+      const mapped = AP.fromApiResponse(json, req.map);
+      if (!mapped.found) return null;
+      console.log('[ATS Tailor] posting read from the platform API:',
+        mapped.description.length, 'chars');
+      return mapped;
+    } catch (e) {
+      console.warn('[ATS Tailor] platform API step skipped:', e && e.message);
+      return null;
+    }
+  }
+
+  async function extractJobInfoWithContext(existing) {
+    let info = existing || extractJobInfo();
+    try {
+      // Ahead of everything else, because it is the only source that is
+      // complete by construction and cannot be broken by a redesign.
+      const viaApi = await jdFromPlatformApi();
+      if (viaApi && viaApi.description.length > (info.description || '').length) {
+        info = Object.assign({}, info, {
+          title: viaApi.title || info.title,
+          company: viaApi.company || info.company,
+          location: viaApi.location || info.location,
+          description: viaApi.description,
+          jobId: viaApi.jobId || info.jobId,
+          _via: 'platform-api',
+        });
+        // Workday says, per tenant, whether it will parse the CV at all
+        // once the user has made an account. Worth knowing before they
+        // do, since making the account is the cost.
+        if (viaApi.resumeParsingEnabled !== null && viaApi.resumeParsingEnabled !== undefined) {
+          info.resumeParsingEnabled = viaApi.resumeParsingEnabled;
+        }
+      }
+
       if (typeof JDContext === 'undefined') return info;
       // Nothing to do when this page has the description itself.
       if ((info.description || '').trim().length > 400) return info;

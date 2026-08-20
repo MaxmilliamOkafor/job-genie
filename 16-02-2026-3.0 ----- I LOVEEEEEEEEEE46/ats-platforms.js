@@ -578,6 +578,101 @@
     return out;
   }
 
+  /**
+   * THE POSTING AS THE PLATFORM'S OWN API RETURNS IT.
+   *
+   * A selector describes where the text sits in today's markup, and
+   * markup is redesigned. These endpoints are unauthenticated, return
+   * the posting as data, and do not move: Greenhouse's board API and
+   * Workday's CXS endpoint were both verified live on 2026-08-20.
+   *
+   * Only the two that were actually verified are here. Lever's API is
+   * real but Lever is deliberately absent from this map; Recruitee's
+   * single-offer shape was never confirmed, and guessing at it would put
+   * an invented endpoint in a file whose whole point is that its entries
+   * are true. Both fall through to JSON-LD, which is verified for them.
+   *
+   * Returns { url, map } where map names the JSON paths, or null.
+   */
+  const API_BUILDERS = {
+    greenhouse(u) {
+      // job-boards.greenhouse.io/{boardToken}/jobs/{jobId}
+      const m = u.pathname.match(/^\/([^/]+)\/jobs\/(\d{4,})/);
+      if (!m) return null;
+      return {
+        url: 'https://boards-api.greenhouse.io/v1/boards/' + m[1] + '/jobs/' + m[2] + '?content=true',
+        map: { title: 'title', descriptionHtml: 'content', location: 'location.name',
+          company: 'company_name', jobId: 'requisition_id' },
+      };
+    },
+    workday(u) {
+      // {tenant}.wd{N}.myworkdayjobs.com/{lang}/{site}/job/{...}
+      //   -> /wday/cxs/{tenant}/{site}/job/{...}
+      const tenant = u.hostname.split('.')[0];
+      if (!tenant) return null;
+      const seg = u.pathname.split('/').filter(Boolean);
+      // The language segment is optional and looks like en-US or en_GB.
+      if (seg.length && /^[a-z]{2}([-_][A-Za-z]{2})?$/.test(seg[0])) seg.shift();
+      if (seg.length < 3 || seg[1] !== 'job') return null;
+      const site = seg[0];
+      const rest = seg.slice(1).join('/');
+      return {
+        url: u.origin + '/wday/cxs/' + tenant + '/' + site + '/' + rest,
+        headers: { Accept: 'application/json' },
+        map: { title: 'jobPostingInfo.title', descriptionHtml: 'jobPostingInfo.jobDescription',
+          location: 'jobPostingInfo.location', company: 'hiringOrganization.name',
+          jobId: 'jobPostingInfo.jobReqId',
+          // Per-tenant: whether Workday will parse the CV at all once the
+          // user has made an account. Worth knowing BEFORE signing up.
+          resumeParsingEnabled: 'jobPostingInfo.includeResumeParsing' },
+      };
+    },
+  };
+
+  function apiRequestFor(platformKey, href) {
+    const build = API_BUILDERS[platformKey];
+    if (!build) return null;
+    try {
+      const req = build(new URL(String(href || '')));
+      return req && req.url ? req : null;
+    } catch (e) { return null; }
+  }
+
+  /** Read a dotted path out of a parsed API response. */
+  function pluck(obj, dotted) {
+    let cur = obj;
+    for (const key of String(dotted || '').split('.')) {
+      if (cur === null || cur === undefined) return undefined;
+      cur = cur[key];
+    }
+    return cur;
+  }
+
+  /** An API response mapped into the shape extractJobInfo works in. */
+  function fromApiResponse(json, map) {
+    const out = { title: '', company: '', location: '', description: '', jobId: '',
+      resumeParsingEnabled: null, found: false };
+    if (!json || !map) return out;
+    const html = pluck(json, map.descriptionHtml);
+    const description = _stripHtml(html);
+    // A response that carries no description is not worth preferring
+    // over the page: something changed, and the ladder should fall
+    // through rather than report an empty posting.
+    if (!description || description.length < 80) return out;
+    out.description = description;
+    out.title = String(pluck(json, map.title) || '').trim();
+    out.company = String(pluck(json, map.company) || '').trim();
+    const loc = pluck(json, map.location);
+    out.location = String((loc && loc.name) || loc || '').trim();
+    out.jobId = String(pluck(json, map.jobId) || '').trim();
+    if (map.resumeParsingEnabled) {
+      const flag = pluck(json, map.resumeParsingEnabled);
+      if (typeof flag === 'boolean') out.resumeParsingEnabled = flag;
+    }
+    out.found = true;
+    return out;
+  }
+
   /** Requisition ID from the URL, using whichever platform matches. */
   function jobIdFromUrl(url) {
     const u = String(url || '');
@@ -602,6 +697,7 @@
 
   global.ATSPlatforms = {
     PLATFORMS, GENERIC, detect, selectorsFor, descriptionPartsFor,
+    apiRequestFor, fromApiResponse,
     allDescriptionSelectors, jobIdFromUrl, list,
     fromJobPostingLd,
   };
