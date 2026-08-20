@@ -42,10 +42,27 @@ global.window = global;
 })();
 const RA = global.RecruiterAudit;
 
+// THE WHOLE SECTION, NOT THE FIRST LINE OF IT.
+//
+// This took the first line matching a skill name, which was the whole
+// section back when the section was one comma list. It is labelled
+// groups now, so that read "Programming Languages: Python" and reported
+// the other twenty-five keywords as lost when every one of them was on
+// the page, one line further down.
 const skillsLine = (cvSkills, jd) => {
   const cv = ['Maxmilliam Okafor', '', 'TECHNICAL SKILLS', cvSkills, '', 'EDUCATION', 'MSc AI'].join('\n');
   const out = RA.runRecruiterAudit({ cvText: cv, jdText: jd, jdTitle: 'Engineer' });
-  return (out.cvText.split('\n').find((l) => /Python|Machine|ML|Postgres|REST/i.test(l)) || '').trim();
+  const lines = out.cvText.split('\n');
+  const at = lines.findIndex((l) => /^\s*TECHNICAL SKILLS\s*$/i.test(l));
+  if (at === -1) return '';
+  const body = [];
+  for (let i = at + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t) { if (body.length) break; continue; }
+    if (/^[A-Z][A-Z &/]{3,}\s*:?\s*$/.test(t)) break;
+    body.push(t);
+  }
+  return body.join(', ');
 };
 
 console.log('NOT ONE EVIDENCED KEYWORD IS LOST');

@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env overrides. The Lovable-managed .env is committed on purpose:
+# it holds only the publishable Supabase keys, which ship in the client
+# bundle anyway. Anything genuinely secret goes in a .local file, and
+# those must never be committed.
+.env.local
+.env.*.local

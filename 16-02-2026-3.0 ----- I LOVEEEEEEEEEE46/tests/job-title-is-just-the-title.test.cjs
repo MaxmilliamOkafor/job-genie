@@ -111,6 +111,82 @@ console.log('\nAND IT IS REPORTED AS A FIX, NOT A WARNING');
     JSON.stringify(out.report.fixes));
 }
 
+console.log('\nAND IT STILL REACHES THE CV WHEN THE PROFILE HOLDS IT SEPARATELY');
+// The profile now splits the employment type into its own field, so the
+// title arrives clean and the rule above finds nothing to do. Without
+// this the information simply disappears, and a contract or part-time
+// role reads as permanent and full-time -- a misrepresentation by
+// omission that surfaces at reference stage.
+{
+  const withField = (type, title) => global.RecruiterAudit.runRecruiterAudit({
+    cvText: build(title || 'AI Product Manager'),
+    jdText: 'product', jdTitle: 'AI Product Manager', jobKeywords: ['genai'],
+    experience: [{ company: 'SolimHealth', employment_type: type }],
+  });
+
+  for (const type of ['Contract, part-time', 'Internship', 'Freelance', 'Fixed-term']) {
+    const out = withField(type);
+    const lines = out.cvText.split('\n');
+    t('  "' + type + '" is stated in the description',
+      lines.some((l) => l.trim().toLowerCase() === '- ' + type.toLowerCase() + '.'),
+      JSON.stringify(lines));
+    t('    -> and never in the title',
+      lines.some((l) => l.trim() === 'AI Product Manager')
+        && !lines.some((l) => /AI Product Manager.*\(/.test(l)),
+      JSON.stringify(lines.filter((l) => /Product Manager/.test(l))));
+  }
+
+  // The date must still sit directly under the title.
+  {
+    const lines = withField('Contract').cvText.split('\n').filter((l) => l.trim());
+    const ti = lines.findIndex((l) => l.trim() === 'AI Product Manager' && lines[lines.indexOf(l) + 1]);
+    const exp = lines.slice(lines.findIndex((l) => /^PROFESSIONAL EXPERIENCE$/i.test(l.trim())) + 1);
+    const at = exp.findIndex((l) => l.trim() === 'AI Product Manager');
+    t('  the date is still the line after the title',
+      at > -1 && /August 2022/.test(exp[at + 1] || ''),
+      JSON.stringify(exp.slice(0, 5)) + ' (ti ' + ti + ')');
+  }
+
+  // Full-time and permanent are what a reader assumes, so saying them
+  // costs a line per role and adds nothing.
+  for (const assumed of ['Full-time', 'Permanent', '']) {
+    const out = withField(assumed);
+    t('  "' + (assumed || '(blank)') + '" is not printed',
+      !/^\s*-\s*(full|permanent)/im.test(out.cvText),
+      JSON.stringify(out.cvText.split('\n').filter((l) => /^-/.test(l))));
+  }
+
+  // And it is never said twice, whichever route it took.
+  {
+    const both = global.RecruiterAudit.runRecruiterAudit({
+      cvText: build('AI Product Manager (Contract, part-time)'),
+      jdText: 'product', jdTitle: 'AI Product Manager', jobKeywords: ['genai'],
+      experience: [{ company: 'SolimHealth', employment_type: 'Contract, part-time' }],
+    }).cvText;
+    t('  stated once when the title carried it as well',
+      (both.match(/Contract/gi) || []).length === 1,
+      JSON.stringify(both.split('\n').filter((l) => /Contract/i.test(l))));
+  }
+
+  // A company the CV does not name contributes nothing.
+  {
+    const other = global.RecruiterAudit.runRecruiterAudit({
+      cvText: build('AI Product Manager'),
+      jdText: 'product', jdTitle: 'AI Product Manager', jobKeywords: ['genai'],
+      experience: [{ company: 'Google', employment_type: 'Internship' }],
+    }).cvText;
+    t('  another employer\'s contract type is not attached',
+      !/Internship/i.test(other), JSON.stringify(other));
+  }
+
+  // Free text in a profile field is still free text.
+  {
+    const junk = withField('whatever I felt like typing').cvText;
+    t('  a value that is not an employment type is ignored',
+      !/whatever I felt/i.test(junk), JSON.stringify(junk));
+  }
+}
+
 console.log('\nAND THE COMPANY FIELD IS THE COMPANY\'S NAME');
 // Same fault one line up. "Meta (formerly Facebook Inc)" is one text
 // item and it lands in the Company field a parser stores. Employers

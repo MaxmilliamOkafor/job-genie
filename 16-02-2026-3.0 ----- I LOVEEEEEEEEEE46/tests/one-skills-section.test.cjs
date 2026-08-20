@@ -77,22 +77,36 @@ t('  one heading contains the word a parser looks for',
   skillHeads.length === 1, JSON.stringify(headings));
 t('  and it is the conventional wording',
   skillHeads[0] === 'TECHNICAL SKILLS', JSON.stringify(skillHeads));
-t('  the competencies wording is gone from the document',
-  !paras.some((l) => /CORE COMPETENCIES/i.test(l)),
+// As a HEADING. "Core Competencies:" survives as a group label inside
+// the skills section, which is the point of the labels: it is the line
+// a recruiter jumps to, and it sits under a heading a parser can find.
+t('  the competencies wording is gone as a heading of its own',
+  !paras.some((l) => /^CORE COMPETENCIES$/i.test(l.trim())),
   'a section a parser cannot find is still carrying keywords');
 
 console.log('\nAND NOTHING WAS LOST TO THE MERGE');
 const skillsIdx = paras.indexOf('TECHNICAL SKILLS');
 const nextHeadIdx = paras.findIndex((l, i) => i > skillsIdx && /^[A-Z][A-Z &/]{3,}$/.test(l));
+// The section is labelled groups, so each paragraph is
+// "Label: a, b, c". A term is recoverable if splitting on the comma
+// delimiter yields it, which is exactly what a parser does -- the label
+// is simply the first item of its own line.
 const items = paras.slice(skillsIdx + 1, nextHeadIdx === -1 ? paras.length : nextHeadIdx)
-  .join(' ').split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+  .join(', ').split(/\s*,\s*/)
+  .map((s) => s.replace(/^[A-Z][A-Za-z &/]{1,28}:\s*/, '').trim())
+  .filter(Boolean);
 for (const term of ['Machine Learning', 'MLOps', 'Data Engineering', 'Cloud Architecture',
   'Stakeholder Management', 'Python', 'SQL', 'Kubernetes', 'Terraform', 'Airflow']) {
   t('  "' + term + '" is recoverable as its own item', items.includes(term),
     JSON.stringify(items));
 }
-t('  the competencies lead, where a recruiter scans',
-  items[0] === 'Machine Learning', JSON.stringify(items.slice(0, 3)));
+// The section is grouped by what each term IS, not by which of the two
+// lists it arrived in, so a competency naming a tool is filed with the
+// tools. What leads the section is the competencies GROUP: the tailored
+// phrases, on the first line, where a recruiter scans.
+t('  the competencies group leads, where a recruiter scans',
+  /^Core Competencies:/.test(paras[skillsIdx + 1] || ''),
+  JSON.stringify(paras.slice(skillsIdx + 1, skillsIdx + 3)));
 t('  "mlops" is folded into "MLOps" rather than listed beside it',
   items.filter((s) => /^mlops$/i.test(s)).length === 1, JSON.stringify(items));
 

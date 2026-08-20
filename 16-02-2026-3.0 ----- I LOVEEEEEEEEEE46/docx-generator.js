@@ -757,14 +757,33 @@
   // "Live demo: https://..." and "Microsoft Certified: Azure AI
   // Engineer Associate" alone, which is why the check is membership
   // rather than a shape.
+  // A LABEL INSIDE A SECTION IS NOT A HEADING FOR THAT SAME SECTION.
+  //
+  // The skills section is written as labelled groups now:
+  //
+  //   TECHNICAL SKILLS
+  //   Core Competencies: Technical Problem-Solving, Team Collaboration
+  //   Languages & Frameworks: Python, Java, SQL, React
+  //
+  // "Core Competencies" is also a section name, so this split it back
+  // out into a heading, which then merged into the skills section it was
+  // already inside -- silently deleting the label and undoing the
+  // grouping. Tracking which section is open costs one variable and
+  // tells the two cases apart: a heading that opens a DIFFERENT section
+  // still splits, a label for the section already open does not.
   function splitInlineHeadings(lines) {
     const out = [];
     let split = 0;
+    let openRank = 0;
     for (const line of lines) {
+      const bare = line.trim().toUpperCase();
+      if (SECTION_HEADERS.includes(bare)) { openRank = rankOf(bare); out.push(line); continue; }
       const m = line.match(/^\s*([A-Za-z][A-Za-z &/]{2,40}?)\s*:\s*(\S.*)$/);
-      if (m && SECTION_HEADERS.includes(m[1].trim().toUpperCase())) {
+      if (m && SECTION_HEADERS.includes(m[1].trim().toUpperCase())
+          && rankOf(m[1].trim().toUpperCase()) !== openRank) {
         out.push(m[1].trim().toUpperCase());
         out.push(m[2].trim());
+        openRank = rankOf(m[1].trim().toUpperCase());
         split++;
         continue;
       }
@@ -916,6 +935,47 @@
       // report confirmed works: title and date stay two separate text
       // items and land in two separate fields.
       const PROJECT_SECTIONS = new Set(['PROJECTS', 'SELECTED PROJECTS']);
+
+      // ONE SHAPE FOR THE WHOLE PROJECTS SECTION, DECIDED BEFORE ANY OF
+      // IT IS RENDERED.
+      //
+      // Whether a title and its tech stack can share a line depends on
+      // their combined length, so deciding per project produced a
+      // section where two entries were one line and the third was two.
+      // A parser that segments by entry shape reads the odd one as part
+      // of the entry above it. So the whole section takes the tabbed
+      // form only if EVERY pair in it fits.
+      // WHAT A TECH-STACK LINE IS, AND WHETHER IT FITS, ARE TWO
+      // QUESTIONS AND THEY MUST NOT BE ASKED WITH THE SAME NUMBER.
+      //
+      // They were: a stack was "a comma list of at most 60 characters",
+      // and a pair was tabbed when title + stack came to 96 or less. A
+      // 61-character stack therefore failed to be a stack at all, fell
+      // through to the ordinary body branch, and printed on its own line
+      // while its 58-character siblings sat tab-joined to their titles.
+      // That is how the live CV came out. Identification is by shape;
+      // 80 is only there to stop a paragraph being mistaken for a stack.
+      const isStackLine = (s) => !!s && s.indexOf(',') !== -1
+        && !/^([-•*]|\d+\.)\s+/.test(s) && !/https?:\/\//.test(s)
+        && !/[.!?]$/.test(s) && s.length <= 80;
+      const pairFits = (title, stack) => (title.length + stack.length) <= 96;
+
+      const projectsTabbed = (() => {
+        let inProjects = false, pairs = 0;
+        for (let k = 0; k < lines.length; k++) {
+          const cur = lines[k].trim();
+          const upper = cur.toUpperCase();
+          if (SECTION_HEADERS.includes(upper)) { inProjects = PROJECT_SECTIONS.has(upper); continue; }
+          if (!inProjects || !cur) continue;
+          if (/^([-•*]|\d+\.)\s+/.test(cur) || /https?:\/\//.test(cur)) continue;
+          const nxt = (lines[k + 1] || '').trim();
+          if (!isStackLine(nxt)) continue;
+          pairs++;
+          if (!pairFits(cur, nxt)) return false;   // one cannot, so none do
+          k++;                                     // skip the stack line
+        }
+        return pairs > 0;
+      })();
       const EDU_SECTIONS = new Set([
         'EDUCATION', 'ACADEMIC BACKGROUND', 'ACADEMIC QUALIFICATIONS',
         'EDUCATIONAL QUALIFICATIONS', 'ACADEMIC HISTORY', 'QUALIFICATIONS',
@@ -1206,16 +1266,20 @@
         // Only when they FIT. A long title plus a long stack would wrap,
         // and a wrapped right-aligned run lands back on top of the title,
         // which is worse than the line it saved.
+        // AND EVERY PROJECT IN THE SECTION IS SHAPED THE SAME WAY.
+        //
+        // The decision above used to be taken per project, so a stack too
+        // long to share its title's line put that one project on two
+        // lines while its siblings stayed on one. A live CV shipped
+        // exactly that: SignalDesk and LedgerLens tab-joined, DriftGuard
+        // not. Feature-scoring parsers segment a section by the SHAPE of
+        // its entries, so the odd one out is read as a continuation of
+        // the entry above it and the project is lost. Uniform or not at
+        // all -- see projectsTabbed.
         if (PROJECT_SECTIONS.has(currentSection)
             && !/^([-•*]|\d+\.)\s+/.test(t) && !/https?:\/\//.test(t)) {
           const nextT = (lines[i + 1] || '').trim();
-          const looksLikeStack = nextT
-            && nextT.indexOf(',') !== -1
-            && !/^([-•*]|\d+\.)\s+/.test(nextT)
-            && !/https?:\/\//.test(nextT)
-            && !/[.!?]$/.test(nextT)
-            && nextT.length <= 60;
-          if (looksLikeStack && (t.length + nextT.length) <= 96) {
+          if (isStackLine(nextT) && projectsTabbed) {
             out.push(paragraph(
               run(t + ' ', { bold: true, color: C.BODY, sz: SZ.title })
                 + '<w:r><w:tab/></w:r>'
