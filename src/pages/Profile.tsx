@@ -26,6 +26,22 @@ import {
 import { toast } from 'sonner';
 
 import { normalizeWorkExperience, formatDateRange, extractDatesFromTitle } from '@/lib/workExperienceNormalization';
+import {
+  EMPLOYMENT_TYPES,
+  COMPETENCY_CATEGORY,
+  normaliseProfileForSave,
+  validateProfileForSave,
+  normaliseCompany,
+  normaliseLocation,
+  validateLocation,
+  splitTitleAndEmploymentType,
+  splitSkillLists,
+  crossListDuplicates,
+  combinedSkillsPreview,
+  validateSkills,
+  projectIssues,
+  validateEducationEntry,
+} from '@/lib/profileValidation';
 
 
 
