@@ -18,10 +18,11 @@ import { WorkExperiencePreview } from '@/components/profile/WorkExperiencePrevie
 import { RelevantProjectsPreview } from '@/components/profile/RelevantProjectsPreview';
 import { CVPreviewModal } from '@/components/profile/CVPreviewModal';
 import { ProfileVersionHistory, createExportWithHistory } from '@/components/profile/ProfileVersionHistory';
+import { DataPreviewPanel } from '@/components/profile/DataPreviewPanel';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
-  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown, FolderGit2
+  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown, FolderGit2, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -41,6 +42,9 @@ import {
   validateSkills,
   projectIssues,
   validateEducationEntry,
+  PROJECT_DESCRIPTION_MAX,
+  CERTIFICATIONS_MAX,
+  CERTIFICATIONS_CAP_MESSAGE,
 } from '@/lib/profileValidation';
 
 
@@ -325,7 +329,21 @@ const Profile = () => {
 
   const addCertification = (cert: string) => {
     if (!cert.trim()) return;
-    const certs = [...(localProfile.certifications || []), cert];
+    const existing = [...(localProfile.certifications || [])];
+    if (existing.length >= CERTIFICATIONS_MAX) {
+      toast.error(CERTIFICATIONS_CAP_MESSAGE, {
+        description: `Remove one of your ${existing.length} certifications first.`,
+      });
+      return;
+    }
+    updateLocalField('certifications', [...existing, cert]);
+  };
+
+  const moveCertification = (index: number, direction: -1 | 1) => {
+    const certs = [...(localProfile.certifications || [])];
+    const target = index + direction;
+    if (target < 0 || target >= certs.length) return;
+    [certs[index], certs[target]] = [certs[target], certs[index]];
     updateLocalField('certifications', certs);
   };
 
@@ -1175,23 +1193,62 @@ const Profile = () => {
                 </Button>
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              {(localProfile.certifications || []).map((cert: string, i: number) => (
-                <Badge 
-                  key={i} 
-                  variant="outline"
-                  className="flex items-center gap-1"
-                >
-                  {cert}
-                  {editMode && (
-                    <X 
-                      className="h-3 w-3 cursor-pointer hover:text-destructive" 
+            {editMode && (
+              <p className="text-xs text-muted-foreground mb-3">
+                {CERTIFICATIONS_CAP_MESSAGE} Only the top {CERTIFICATIONS_MAX} are sent to the extension
+                ({(localProfile.certifications || []).length} stored).
+              </p>
+            )}
+            {editMode ? (
+              <div className="space-y-2">
+                {(localProfile.certifications || []).map((cert: string, i: number) => (
+                  <div
+                    key={`${cert}-${i}`}
+                    className={`flex items-center gap-2 rounded-md border p-2 ${i >= CERTIFICATIONS_MAX ? 'opacity-50' : ''}`}
+                  >
+                    <span className="w-6 text-xs text-muted-foreground">{i + 1}.</span>
+                    <span className="flex-1 text-sm">{cert}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={`Move ${cert} up`}
+                      disabled={i === 0}
+                      onClick={() => moveCertification(i, -1)}
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={`Move ${cert} down`}
+                      disabled={i === (localProfile.certifications || []).length - 1}
+                      onClick={() => moveCertification(i, 1)}
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={`Remove ${cert}`}
                       onClick={() => removeCertification(i)}
-                    />
-                  )}
-                </Badge>
-              ))}
-            </div>
+                    >
+                      <X className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(localProfile.certifications || []).map((cert: string, i: number) => (
+                  <Badge key={i} variant="outline" className={i >= CERTIFICATIONS_MAX ? 'opacity-50' : ''}>
+                    {cert}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1753,6 +1810,24 @@ const Profile = () => {
                         <p className="text-xs text-muted-foreground">
                           Tech stack: {(project.techStack || '').length}/60 characters - it prints right-aligned on the title line.
                         </p>
+                        <Textarea
+                          value={project.description || ''}
+                          onChange={(e) => {
+                            const projects = [...(localProfile.relevant_projects || [])];
+                            projects[projectIndex] = {
+                              ...projects[projectIndex],
+                              description: e.target.value.slice(0, PROJECT_DESCRIPTION_MAX),
+                            };
+                            updateLocalField('relevant_projects', projects);
+                          }}
+                          maxLength={PROJECT_DESCRIPTION_MAX}
+                          rows={3}
+                          className="text-sm resize-none"
+                          placeholder="Streams live financial news through an LLM that extracts entities and sentiment, with inline citations."
+                        />
+                        <p className={`text-xs ${(project.description || '').length > PROJECT_DESCRIPTION_MAX ? 'text-destructive' : 'text-muted-foreground'}`}>
+                          Description: {(project.description || '').length}/{PROJECT_DESCRIPTION_MAX} characters - one rendered line per project.
+                        </p>
                         <Input
                           value={project.liveUrl || ''}
                           onChange={(e) => {
@@ -2189,6 +2264,9 @@ const Profile = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Data preview - exactly what the extension reads */}
+        <DataPreviewPanel profile={localProfile} />
       </div>
     </AppLayout>
   );
