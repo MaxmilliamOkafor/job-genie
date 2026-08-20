@@ -126,10 +126,11 @@ console.log('WHEN THE PAGE CANNOT BE REACHED, NOTHING IS CUT');
 }
 
 console.log('\nWHEN IT CAN, THE CHEAP LINES GO FIRST');
-// A CV just over the line: the third project is four lines, a bullet at
-// Meta is one. The project goes.
+// A CV over the line. The ladder spends the cheap things first: the
+// project descriptions come down to one line each, then whole projects
+// go, and only then would a bullet at Meta be touched.
 {
-  const cv = build({ bullets: 2, projects: 4, roles: 4 });
+  const cv = build({ bullets: 2, projects: 6, roles: 4 });
   const before = DG.measureCv(cv);
   const out = audit(cv);
   const after = DG.measureCv(out.cvText);
@@ -140,8 +141,11 @@ console.log('\nWHEN IT CAN, THE CHEAP LINES GO FIRST');
     t('  every role kept its bullets',
       bulletsPerRole(out.cvText).every((n) => n === 2),
       JSON.stringify(bulletsPerRole(out.cvText)));
-    t('  a project was spent instead',
-      (out.cvText.match(/A Real-Time Engine/g) || []).length < 4,
+    t('  the descriptions came down to one line each',
+      out.cvText.split('\n').filter((l) => /^- Streams/.test(l)).every((l) => l.length <= 100),
+      JSON.stringify(out.cvText.split('\n').filter((l) => /^- Streams/.test(l)).map((l) => l.length)));
+    t('  and projects were spent before a bullet was',
+      (out.cvText.match(/A Real-Time Engine/g) || []).length < 6,
       'the projects are untouched and a bullet went instead');
     t('  but never below two projects',
       (out.cvText.match(/A Real-Time Engine/g) || []).length >= 2,

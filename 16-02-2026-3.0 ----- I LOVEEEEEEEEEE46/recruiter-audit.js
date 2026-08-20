@@ -2813,6 +2813,105 @@
     return /^https?:\/\//i.test(u) || /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u);
   }
 
+  /**
+   * A PROJECT DESCRIPTION IS ONE LINE.
+   *
+   * Asked for twice -- "is there a way to make the project better look
+   * better and more concist", then "make project more concist" -- and
+   * the layout was what got fixed both times: title and tech stack on
+   * one line, both links on another. The DESCRIPTION was never touched,
+   * and it is the part that costs:
+   *
+   *   "Streams live financial news and filings through an LLM that
+   *    extracts entities and sentiment with inline source citations and
+   *    a hallucination-eval harness, surfacing ticker-level signals on a
+   *    live dashboard updated within seconds of publication."
+   *
+   * 240 characters, three rendered lines, one of three projects. Nine
+   * lines of a page spent on the descriptions alone, on a CV whose
+   * employment history was being cut to two bullets a role to save two.
+   *
+   * A bullet paragraph is indented 360 twips inside a 10106 twip page
+   * and set at 10.5pt, which is 98 characters to the line. So the limit
+   * is what fits: one line, cut at a clause boundary so it still reads
+   * as a sentence, and never left ending on a conjunction.
+   */
+  const _PROJECT_LINE_CHARS = 96;
+  // What a truncated clause must not end on. The function words are the
+  // obvious half; the adverb is the one that bit -- cutting at a word
+  // boundary produced "...watches a deployed model for data and concept
+  // drift and automatically.", which reads as a typo rather than as a
+  // decision. Stripping repeatedly walks back "and automatically" to
+  // "concept drift", which is a whole thought.
+  const _DANGLING = /\s+(?:and|or|with|through|that|which|for|to|of|in|on|by|using|from|while|plus|including|via|as|at|a|an|the|[a-z]+ly)$/i;
+
+  function _tightenSentence(text, limit) {
+    let s = String(text || '').trim();
+    if (s.length <= limit) return s;
+
+    // The first sentence, when there is more than one and it fits.
+    const firstStop = s.search(/[.!?](?:\s|$)/);
+    if (firstStop !== -1 && firstStop + 1 <= limit) return s.slice(0, firstStop + 1);
+
+    // Otherwise the last clause boundary that fits. A comma is where the
+    // writer already decided one thought ended.
+    const head = s.slice(0, limit + 1);
+    let cut = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '));
+    if (cut < limit * 0.5) cut = head.lastIndexOf(' ');   // no clause: last whole word
+    if (cut <= 0) return s.slice(0, limit).trim();
+
+    let out = s.slice(0, cut).replace(/[\s,;:]+$/, '');
+    // Cutting mid-clause can strand the word that was leading into the
+    // next one, which reads as a typo rather than a decision.
+    for (let i = 0; i < 3 && _DANGLING.test(out); i++) out = out.replace(_DANGLING, '');
+    out = out.replace(/[\s,;:]+$/, '');
+    return out ? out + '.' : s.slice(0, limit).trim();
+  }
+
+  const _PROJECT_HEAD = /^\s*(SELECTED PROJECTS|PROJECTS)\s*:?\s*$/i;
+
+  function tightenProjectBullets(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { text, tightened: 0, dropped: 0 };
+    const lines = text.split('\n');
+    const at = lines.findIndex((l) => _PROJECT_HEAD.test(l));
+    if (at === -1) return { text, tightened: 0, dropped: 0 };
+
+    let end = at + 1;
+    for (; end < lines.length; end++) {
+      if (_ANY_HEAD.test(lines[end]) && !_PROJECT_HEAD.test(lines[end])) break;
+    }
+
+    const out = [];
+    let tightened = 0, dropped = 0, seenInThisProject = 0;
+    for (let i = at + 1; i < end; i++) {
+      const raw = lines[i];
+      const t = raw.trim();
+      const isBullet = /^[-•*]\s*\S/.test(t);
+
+      if (!isBullet) {
+        // A title, a tech stack or a links line: the next bullet belongs
+        // to a new project only when a non-bullet line separated them.
+        if (t) seenInThisProject = 0;
+        out.push(raw);
+        continue;
+      }
+
+      // ONE BULLET PER PROJECT. A second is a paragraph about a side
+      // project sitting under four roles of paid work.
+      if (seenInThisProject >= 1) { dropped++; continue; }
+      seenInThisProject++;
+
+      const body = t.replace(/^[-•*]\s*/, '');
+      const tight = _tightenSentence(body, _PROJECT_LINE_CHARS);
+      if (tight !== body) tightened++;
+      out.push('- ' + tight);
+    }
+
+    lines.splice(at + 1, end - (at + 1), ...out);
+    return { text: lines.join('\n'), tightened, dropped };
+  }
+
   function buildProjectsSectionText(projects, ownHandle) {
     if (!Array.isArray(projects) || projects.length === 0) return '';
     const blocks = [];
@@ -3873,6 +3972,23 @@
         if (r.injected) {
           outCV = r.text;
           report.fixes.push(`projects: SELECTED PROJECTS ${r.replaced ? 'normalised' : 'injected'} (${relevantProjects.length} project(s))`);
+        }
+      } catch (e) {}
+    }
+
+    // One line per project, whichever route the section arrived by --
+    // injected from the profile above, or written by the model.
+    if (outCV) {
+      try {
+        const tp = tightenProjectBullets(outCV);
+        if (tp.tightened || tp.dropped) {
+          outCV = tp.text;
+          const parts = [];
+          if (tp.tightened) parts.push('shortened ' + tp.tightened + ' description(s) to one line');
+          if (tp.dropped) parts.push('kept one bullet each, dropping ' + tp.dropped);
+          report.fixes.push('Projects made concise: ' + parts.join('; ')
+            + ' -- three descriptions at three lines each is nine lines of a page '
+            + 'spent on side projects');
         }
       } catch (e) {}
     }
