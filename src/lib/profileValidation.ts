@@ -423,6 +423,11 @@ export const validateEducationEntry = (edu: any): string[] => {
 /* 6. Projects                                                         */
 /* ------------------------------------------------------------------ */
 
+export const PROJECT_DESCRIPTION_MAX = 200;
+export const CERTIFICATIONS_MAX = 6;
+export const CERTIFICATIONS_CAP_MESSAGE =
+  'Six is the most that earns its space. Move your strongest to the top.';
+
 export const projectIssues = (project: any): string[] => {
   const issues: string[] = [];
   const name = tidyText(project?.name || '');
@@ -432,6 +437,11 @@ export const projectIssues = (project: any): string[] => {
   const tech = tidyText(project?.techStack || '');
   if (!tech) issues.push('Tech stack is required.');
   else if (tech.length > 60) issues.push('Tech stack must be 60 characters or fewer.');
+
+  const description = String(project?.description ?? '');
+  if (description.length > PROJECT_DESCRIPTION_MAX) {
+    issues.push(`Description must be ${PROJECT_DESCRIPTION_MAX} characters or fewer (currently ${description.length}).`);
+  }
 
   const bullets = (project?.bullets || []).map((b: string) => tidyText(b)).filter(Boolean);
   if (bullets.length < 1 || bullets.length > 2) issues.push('Use 1 to 2 bullets.');
@@ -443,6 +453,7 @@ export const projectIssues = (project: any): string[] => {
 
   return issues;
 };
+
 
 /* ------------------------------------------------------------------ */
 /* Whole-profile normalisation + validation                            */
@@ -509,5 +520,15 @@ export const validateProfileForSave = (profile: Record<string, any>): string[] =
 
   errors.push(...validateSkills(profile.skills || []));
 
+  (profile.relevant_projects || []).forEach((p: any) => {
+    const description = String(p?.description ?? '');
+    if (description.length > PROJECT_DESCRIPTION_MAX) {
+      errors.push(
+        `${p?.name || 'Project'}: description must be ${PROJECT_DESCRIPTION_MAX} characters or fewer (currently ${description.length}).`,
+      );
+    }
+  });
+
   return errors;
 };
+

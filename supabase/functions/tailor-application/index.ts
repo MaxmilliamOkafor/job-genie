@@ -261,7 +261,7 @@ function validateRequest(data: any): TailorRequest {
     education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
     skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
     certifications: validateStringArray(
-      profile.certifications || [],
+      (profile.certifications || []).slice(0, 6),
       MAX_ARRAY_SIZE,
       MAX_STRING_MEDIUM,
       "certifications",
