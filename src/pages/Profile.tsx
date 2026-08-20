@@ -1059,6 +1059,7 @@ const Profile = () => {
               });
               
               const categoryLabels: Record<string, string> = {
+                [COMPETENCY_CATEGORY]: 'Core Competencies',
                 technical: 'Technical',
                 tools: 'Tools',
                 soft: 'Leadership',
@@ -1089,9 +1090,54 @@ const Profile = () => {
                 </div>
               );
             })()}
-            <p className="text-xs text-muted-foreground mt-3">
-              Skills not in your profile will default to 7 years for automation
-            </p>
+
+            {/* Live duplicate + rule warnings, and the combined print preview */}
+            {(() => {
+              const skills = (localProfile.skills || []) as any[];
+              const { competencies } = splitSkillLists(skills as any);
+              const typedDuplicate =
+                newSkill.name.trim() &&
+                skills.some(
+                  (s: any) =>
+                    String(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                    newSkill.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+                );
+              const cross = crossListDuplicates(skills as any);
+              const errors = validateSkills(skills as any);
+              const preview = combinedSkillsPreview(skills as any);
+
+              return (
+                <div className="mt-4 space-y-2">
+                  {typedDuplicate && (
+                    <p className="text-xs text-destructive">
+                      "{newSkill.name}" is already in your lists - each term prints once.
+                    </p>
+                  )}
+                  {cross.length > 0 && (
+                    <p className="text-xs text-destructive">
+                      In both lists: {cross.join(', ')}. Remove it from one.
+                    </p>
+                  )}
+                  {errors
+                    .filter((e) => !e.startsWith('Duplicate term in both lists'))
+                    .map((e) => (
+                      <p key={e} className="text-xs text-destructive">{e}</p>
+                    ))}
+                  <div className="rounded-md border border-border bg-muted/30 p-3">
+                    <p className="text-xs font-semibold tracking-wide text-foreground">TECHNICAL SKILLS</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {preview.length ? preview.join(' | ') : 'No terms yet.'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      Prints as one section: {competencies.length} competencies first, then technical terms.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Skills not in your profile will default to 7 years for automation
+                  </p>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
