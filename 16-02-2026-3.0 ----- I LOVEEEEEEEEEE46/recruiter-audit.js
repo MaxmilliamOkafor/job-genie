@@ -3791,6 +3791,37 @@
       } catch (e) {}
     }
 
+    // WHAT IS PREVIEWED IS WHAT IS SENT.
+    //
+    // Section order, the canonical headings and the merge of the two
+    // skills sections are all decided inside the DOCX generator, on the
+    // way to the file. So the panel showed the model's raw output --
+    // EDUCATION wherever it happened to land, CORE COMPETENCIES and
+    // TECHNICAL SKILLS as two separate blocks -- while the attachment
+    // went out reordered, renamed and merged. Two documents, one of them
+    // invisible until it reached an employer.
+    //
+    // Calling the generator's own pass here, rather than reimplementing
+    // it, is the same decision as measuring the page with measureCv:
+    // there is one definition of the finished shape and both paths use
+    // it. It is idempotent, so the generator running it again on the way
+    // to the file changes nothing.
+    if (outCV) {
+      try {
+        const DG = (typeof window !== 'undefined' && window.DocxGenerator)
+          || (typeof global !== 'undefined' && global.DocxGenerator);
+        if (DG && typeof DG.normalizeSections === 'function') {
+          const before = outCV;
+          const normalised = DG.normalizeSections(outCV);
+          if (normalised && normalised !== before) {
+            outCV = normalised;
+            report.fixes.push('Sections normalised for the preview: standard headings, '
+              + 'education last, one skills section');
+          }
+        }
+      } catch (e) {}
+    }
+
     // ONE PAGE, LAST.
     //
     // Runs after every other pass, because every one of them changes the

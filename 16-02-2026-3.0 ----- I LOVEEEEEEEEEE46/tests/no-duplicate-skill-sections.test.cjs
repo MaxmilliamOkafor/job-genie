@@ -1,14 +1,22 @@
-// A SKILL BELONGS TO ONE SECTION.
+// THERE IS ONE SKILLS SECTION, AND A SKILL APPEARS IN IT ONCE.
 //
-// The CV renders CORE COMPETENCIES and TECHNICAL PROFICIENCIES from two
+// The CV rendered CORE COMPETENCIES and TECHNICAL PROFICIENCIES from two
 // separate fields (coreCompetencies, skills) through two separate
 // renderers, and nothing connected them. When both were populated the
-// same skill printed under both headings.
+// same skill printed under both headings: padding to a human, and a
+// keyword an ATS was already counting.
 //
-// A human reads that as padding. A keyword-scoring ATS counts the term
-// twice and gains nothing by it. Competencies win -- they are the
-// tailored, job-matched list -- and proficiencies keep only what is
-// genuinely additional.
+// Removing the overlap fixed the repetition and left the real problem
+// standing. A parser finds the skills section by looking for the word
+// "skill" in a heading, so nothing under CORE COMPETENCIES was ever
+// indexed as a skill -- a live parse of a real generated CV came back
+// with that section empty. Worse, the lookup returns the FIRST heading
+// that matches and stops, so two skills-named sections lose one of them
+// whichever way they are named.
+//
+// So the two lists are one list, under TECHNICAL SKILLS, competencies
+// first because they are the tailored job-matched phrases, each skill
+// once, compared by shape rather than spelling.
 //
 // The static half runs anywhere. The render half needs jspdf/pdf-parse
 // and skips cleanly when they are absent, since the repo carries no
@@ -56,7 +64,7 @@ for (const [a, b, same] of [
 t('  an empty key does not swallow real skills', E.skillKey('') === '' && E.skillKey(null) === '');
 
 // ---- structureCVData is where the decision is made -------------------
-console.log('\nTHE OVERLAP IS REMOVED FROM PROFICIENCIES, NOT COMPETENCIES');
+console.log('\nTHE TWO LISTS BECOME ONE, COMPETENCIES FIRST');
 const structured = E.structureCVData(
   { firstName: 'Max', lastName: 'Okafor' },
   { summary: 's',
@@ -64,27 +72,42 @@ const structured = E.structureCVData(
     skills: 'power bi, PowerBI, Terraform, Azure DevOps, Kubernetes' },
   null);
 
-const compKeys = structured.coreCompetencies.map((c) => E.skillKey(c));
 const skillKeys = structured.skills.map((s) => E.skillKey(s));
 
-t('  competencies are untouched', structured.coreCompetencies.length === 3,
-  JSON.stringify(structured.coreCompetencies));
-t('  no skill also appears as a competency',
-  !skillKeys.some((k) => compKeys.includes(k)),
+t('  nothing is left in a second section',
+  structured.coreCompetencies.length === 0,
+  'a section a parser cannot find still holds ' + JSON.stringify(structured.coreCompetencies));
+t('  every competency is in the skills list',
+  ['Stakeholder management', 'Azure DevOps', 'Power BI']
+    .every((c) => skillKeys.includes(E.skillKey(c))),
+  'a tailored keyword phrase was dropped: ' + JSON.stringify(structured.skills));
+t('  ...and leads it, where a recruiter scans',
+  structured.skills[0] === 'Stakeholder management', JSON.stringify(structured.skills));
+t('  no skill is listed twice',
+  new Set(skillKeys).size === skillKeys.length,
   'still duplicated: ' + JSON.stringify(structured.skills));
+// The competency spelling is the one that prints, because that list is
+// written for the reader; the skills list arrives from a parsed CV and
+// carries whatever casing the source had. "power bi" on a CV is the tell
+// that a machine assembled the line.
+t('  the competency spelling wins over the copy in the skills list',
+  structured.skills.includes('Power BI') && !structured.skills.includes('power bi'),
+  JSON.stringify(structured.skills));
 for (const keep of ['Terraform', 'Kubernetes']) {
   t('  "' + keep + '" survives as a genuine extra',
     skillKeys.includes(E.skillKey(keep)), JSON.stringify(structured.skills));
 }
 
-// ---- and the heading goes when nothing is left -----------------------
-console.log('\nAN EMPTIED SECTION LOSES ITS HEADING');
+// ---- nothing is lost when the two lists say the same thing -----------
+console.log('\nA FULLY OVERLAPPING PAIR IS STILL A FULL SECTION');
 const allDupes = E.structureCVData(
   { firstName: 'Max' },
   { summary: 's', coreCompetencies: ['Power BI', 'Terraform'], skills: 'power bi, terraform' },
   null);
-t('  skills is empty when every entry was a duplicate',
-  allDupes.skills.length === 0, JSON.stringify(allDupes.skills));
+t('  each term survives exactly once',
+  allDupes.skills.length === 2
+    && allDupes.skills.map((s) => E.skillKey(s)).join('|') === 'powerbi|terraform',
+  JSON.stringify(allDupes.skills));
 
 // ---- nothing changes when only one field is populated ----------------
 console.log('\nTHE COMMON CASE IS UNAFFECTED');

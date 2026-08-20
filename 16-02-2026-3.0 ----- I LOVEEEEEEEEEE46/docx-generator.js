@@ -628,12 +628,34 @@
   // "can this person do THIS job" come first, and education goes last:
   // education above experience is the graduate convention and reads as
   // early-career on a CV with years of history behind it.
+  //
+  // ---- ONE SKILLS SECTION, NOT TWO ------------------------------------
+  //
+  // CORE COMPETENCIES and TECHNICAL SKILLS shared a rank each, printed as
+  // two headings, and a live parse of a real generated CV showed what that
+  // costs: the competencies came back EMPTY. A parser looks for its skills
+  // section by keyword -- OpenResume's is literally `["skill"]` -- and
+  // "CORE COMPETENCIES" contains no such word, so eight tailored,
+  // job-matched keyword phrases sitting in the six-second scan zone were
+  // never indexed as skills at all.
+  //
+  // Renaming the heading alone would have made it worse. That same lookup
+  // returns the FIRST section whose name matches and stops, so a CV with
+  // "CORE SKILLS" up top and "TECHNICAL SKILLS" lower down loses the
+  // second one instead -- the same bug, pointed the other way.
+  //
+  // One section is the only shape with no losing case: every term is
+  // indexed, the heading is the conventional one, and it stays where the
+  // competencies were, directly under the summary, which is where a
+  // recruiter scanning for six seconds looks. Giving both headings the
+  // same rank is all it takes -- the merge, the ordering and the
+  // case-insensitive de-duplication are what this function already does
+  // for a repeated heading.
   const SECTION_RANK = [
     [/^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/, 1],
-    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE)$/, 2],
+    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE|TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 2],
     [/^(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE)$/, 3],
     [/^(SELECTED PROJECTS|PROJECTS)$/, 4],
-    [/^(TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 5],
     [/^CERTIFICATIONS$/, 6],
     [/^AWARDS$/, 7],
     [/^EDUCATION$/, 9],          // last, deliberately
@@ -653,9 +675,8 @@
   // does not recognise is left exactly as the writer set it.
   const CANONICAL_HEADER = {
     1: 'PROFESSIONAL SUMMARY',
-    2: 'CORE COMPETENCIES',
+    2: 'TECHNICAL SKILLS',
     3: 'PROFESSIONAL EXPERIENCE',
-    5: 'TECHNICAL SKILLS',
     6: 'CERTIFICATIONS',
     9: 'EDUCATION',
   };
@@ -799,41 +820,17 @@
       .map((x) => x.b);
     // Nothing to merge, nothing to split, already in order: leave it
     // exactly as it is.
-    let dedupedSkills = false;
-    // ---- the two skills sections must not repeat each other ----------
     //
     // A real generated CV listed nine Core Competencies, six of which
     // appeared again verbatim in Technical Skills sixty lines later:
     // Data Profiling, Data Modelling, Databricks, SQL, Power BI, Data
     // Warehousing. Two thirds of the scan zone was padding, and a
     // recruiter reading the same six terms twice draws the obvious
-    // conclusion. The prompt already forbids this (RULE 15c); the model
-    // did it anyway, so the renderer enforces it and no deploy is
-    // needed.
-    //
-    // Trimmed from TECHNICAL SKILLS rather than CORE COMPETENCIES.
-    // Both map to "skills" in every parser here, so the term is still
-    // indexed either way and no keyword is lost -- but Core Competencies
-    // is the six-second scan zone and gutting it to three lines would
-    // trade one problem for another. A floor keeps the technical list
-    // substantial: if trimming would leave it thin, the duplication is
-    // the lesser evil and nothing is touched.
-    (() => {
-      const cc = sorted.find((b) => b.rank === 2);
-      const ts = sorted.find((b) => b.rank === 5);
-      if (!cc || !ts) return;
-      const itemsOf = (block) => block.lines.slice(1).join('\n')
-        .split(/[,\n]/).map((s) => s.replace(/^\s*[•\-*]\s*/, '').trim()).filter(Boolean);
-      const owned = new Set(itemsOf(cc).map((s) => s.toLowerCase()));
-      if (!owned.size) return;
-      const kept = itemsOf(ts).filter((s) => !owned.has(s.toLowerCase()));
-      if (kept.length === itemsOf(ts).length) return;      // nothing repeated
-      if (kept.length < 8) return;                          // would leave it thin
-      ts.lines = [ts.lines[0], kept.join(', '), ''];
-      dedupedSkills = true;
-    })();
-
-    if (!mergedAny && !inline.split && !renamed && !dedupedSkills && sorted.every((b, i) => b === blocks[i])) return cvText;
+    // conclusion. That used to be trimmed here, block against block.
+    // Now the two blocks ARE one block by the time this runs, and
+    // mergeCommaLists drops the repeat while it merges them -- keeping
+    // the properly-cased spelling, which the trimmer could not do.
+    if (!mergedAny && !inline.split && !renamed && sorted.every((b, i) => b === blocks[i])) return cvText;
 
     // Exactly one blank line between sections. Reordering moves blocks
     // that did not end in one, which is how EDUCATION ended up welded to
@@ -1705,8 +1702,18 @@
   // copy of this logic, with the same faults, and the DOCX got fixed
   // while the PDF stayed broken. One implementation, used by every path
   // that writes a contact line.
+  // normalizeSections is exported for the same reason measureCv is: the
+  // document the user READS in the panel and the document that gets
+  // attached must be the same document. Section order, the canonical
+  // headings and the single skills section were all decided here, inside
+  // the renderer, so the preview showed the model's raw wording and
+  // ordering while the file went out with something else. The audit calls
+  // this as its last pass, so what is previewed is what is sent. Running
+  // it twice changes nothing -- text already in this shape is returned
+  // untouched.
   global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase,
-    measureCv, normalizePhone: normalizePhoneToken };
+    measureCv, normalizeSections: reorderSections,
+    normalizePhone: normalizePhoneToken };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }

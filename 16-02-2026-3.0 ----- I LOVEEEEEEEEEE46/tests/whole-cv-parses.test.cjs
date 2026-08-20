@@ -124,10 +124,21 @@ chk('links fit one line',(plain.filter(x=>x.indexOf('Live demo')===0)[0]||'').le
 chk('links still URL-shaped',/\S+\.[a-z]+\/\S+/.test(plain.filter(x=>x.indexOf('Live demo')===0)[0]||''),'not extractable as a URL');
 
 console.log('\n=== SECTION ORDER (reading order an ATS consumes) ===');
-const want=['PROFESSIONAL SUMMARY','CORE COMPETENCIES','PROFESSIONAL EXPERIENCE','PROJECTS','TECHNICAL SKILLS','EDUCATION'];
+const want=['PROFESSIONAL SUMMARY','TECHNICAL SKILLS','PROFESSIONAL EXPERIENCE','PROJECTS','EDUCATION'];
 const pos=want.map(w=>[w,flat.indexOf(w)]);
 chk('every section present',pos.every(([,i])=>i>=0),JSON.stringify(pos));
 chk('sections in order',JSON.stringify(pos)===JSON.stringify(pos.slice().sort((a,b)=>a[1]-b[1])),JSON.stringify(pos));
+// The CV arrives with CORE COMPETENCIES and TECHNICAL SKILLS as separate
+// sections. A parser finds the skills section by looking for the word
+// "skill" in a heading and takes the first match, so two of them means
+// one is dropped -- which is what a live parse showed, with the
+// competencies coming back empty. One section, every term in it.
+chk('exactly one heading a parser reads as skills',
+  plain.filter(x=>/^[A-Z][A-Z ]*SKILLS$/.test(x.trim())).length===1,
+  JSON.stringify(plain.filter(x=>/SKILL/i.test(x))));
+chk('no competencies heading survives',!/CORE COMPETENCIES/.test(flat),'two skills sections');
+for(const term of ['Machine Learning','MLOps','Data Engineering','Cloud Architecture','Terraform','Airflow'])
+  chk('  kept: '+term,flat.indexOf(term)>=0,'the merge dropped a keyword');
 
 console.log('\n=== ONE PAGE ===');
 const m=DG.measureCv(out.cvText);

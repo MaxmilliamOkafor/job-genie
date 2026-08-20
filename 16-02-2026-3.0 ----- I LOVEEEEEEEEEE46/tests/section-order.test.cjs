@@ -3,19 +3,26 @@
 // A recruiter reads top-down and stops early, so the sections that answer
 // "can this person do THIS job" come before the ones that do not:
 //
-//   Summary -> Core Competencies -> Work Experience
-//     -> Technical Proficiencies -> Certifications -> Education
+//   Summary -> Technical Skills -> Work Experience
+//     -> Certifications -> Education
 //
-// Education last is the point. Education above experience is the graduate
+// The skills used to be two sections -- Core Competencies at the top for
+// the scan, Technical Proficiencies lower down as the detail block. They
+// are one section now, at the top, because a parser looks for a skills
+// section by finding the word "skill" in a heading and takes the FIRST
+// one that matches: two of them means one is dropped, and a live parse
+// of a real generated CV showed exactly that, with the competencies
+// coming back empty.
+//
+// Education last is the other point. Above experience it is the graduate
 // convention and reads as early-career on a CV with years of history
-// behind it. Putting it after the skills also stops the skills being split
-// in two with education wedged between them: Core Competencies at the top
-// for the scan, Proficiencies and Certifications together lower down.
+// behind it.
 //
 // Section order does NOT affect ATS parsing -- parsers find sections by
-// their headings, wherever they sit. This is entirely for the human, which
-// is why it has to be identical in every renderer: the same application
-// must not look different depending on which file the portal accepted.
+// their headings, wherever they sit. That part is entirely for the human,
+// which is why it has to be identical in every renderer: the same
+// application must not look different depending on which file the portal
+// accepted.
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -23,7 +30,11 @@ const fs = require('fs'), path = require('path');
 const DIR = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(DIR, f), 'utf8');
 
-const ORDER = ['summary', 'competencies', 'experience', 'skills', 'certifications', 'education'];
+// The competencies renderer is still called -- it prints nothing now that
+// structureCVData folds that list into the skills one, and it sits
+// immediately after the skills section so that anything reaching it lands
+// where it belongs rather than at the foot of the page.
+const ORDER = ['summary', 'skills', 'competencies', 'experience', 'certifications', 'education'];
 const seq = (arr) => arr.join(' -> ');
 
 console.log('THE PDF ENGINE RENDERS IN THAT ORDER');
@@ -78,14 +89,19 @@ function headingsOf(cvText) {
 const got = headingsOf(WRONG_ORDER);
 t('  the document generates', !!got, 'generation failed');
 if (got) {
-  const want = ['PROFESSIONAL SUMMARY', 'CORE COMPETENCIES', 'PROFESSIONAL EXPERIENCE',
-    'PROJECTS', 'TECHNICAL SKILLS', 'CERTIFICATIONS', 'EDUCATION'];
+  // Six headings out of seven in: the competencies and the proficiencies
+  // arrive as two sections and print as one.
+  const want = ['PROFESSIONAL SUMMARY', 'TECHNICAL SKILLS', 'PROFESSIONAL EXPERIENCE',
+    'PROJECTS', 'CERTIFICATIONS', 'EDUCATION'];
   t('  ' + got.join(' -> '), seq(got) === seq(want), 'expected ' + seq(want));
   t('  education is last however it arrived',
     got[got.length - 1] === 'EDUCATION', got.join(' -> '));
   t('  no section is lost or duplicated',
     new Set(got).size === got.length && got.length === want.length,
     got.join(' -> '));
+  t('  only one heading a parser reads as skills',
+    got.filter((h) => /SKILL/.test(h)).length === 1,
+    'a parser takes the first match and drops the rest: ' + got.join(' -> '));
 }
 console.log('\nAND A HEADING PRINTS ONCE, HOWEVER MANY INJECTORS ADDED ONE');
 // This shipped. A CV went out with:
@@ -160,12 +176,12 @@ const INLINE = ['Maxmilliam Okafor', 'Dublin | max@example.com', '',
 const inl = headingsOf(INLINE);
 t('  the document generates', !!inl, 'generation failed');
 if (inl) {
-  t('  CORE COMPETENCIES becomes a heading of its own',
-    inl.includes('CORE COMPETENCIES'), inl.join(' -> '));
+  t('  it becomes a heading of its own',
+    inl.includes('TECHNICAL SKILLS'), inl.join(' -> '));
   t('  ...and sits above PROFESSIONAL EXPERIENCE',
-    inl.indexOf('CORE COMPETENCIES') < inl.indexOf('PROFESSIONAL EXPERIENCE'), inl.join(' -> '));
+    inl.indexOf('TECHNICAL SKILLS') < inl.indexOf('PROFESSIONAL EXPERIENCE'), inl.join(' -> '));
   t('  ...with the list no longer welded into the heading',
-    !inl.some((h) => /CORE COMPETENCIES:/.test(h)), inl.join(' -> '));
+    !inl.some((h) => /:/.test(h)), inl.join(' -> '));
 }
 // The split keys off known section names, not off "word followed by a
 // colon", precisely so these survive intact.
