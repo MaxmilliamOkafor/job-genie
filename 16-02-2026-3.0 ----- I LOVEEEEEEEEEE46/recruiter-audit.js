@@ -1792,6 +1792,98 @@
     return { text: out.join('\n'), moved };
   }
 
+  /**
+   * THE EMPLOYMENT TYPE NOW ARRIVES IN ITS OWN FIELD.
+   *
+   * moveEmploymentType above takes "(Contract, part-time)" off a job
+   * title and writes it as the role's first bullet, because the title
+   * field is searched and matched directly and a qualifier in it costs
+   * the match. That pass reads the CV TEXT, which is where the qualifier
+   * used to be.
+   *
+   * The profile now splits it out at source into employment_type, so the
+   * title arrives clean and moveEmploymentType finds nothing to do --
+   * and the information disappears. A contract or part-time role
+   * presented as though it were permanent and full-time is a
+   * misrepresentation by omission, and it surfaces at reference stage,
+   * which is the worst possible moment for it.
+   *
+   * So it is put back where it was: the role's first bullet, read in the
+   * same glance, in no structured field.
+   *
+   * FULL-TIME AND PERMANENT ARE NOT ANNOTATED. They are what a reader
+   * assumes, so stating them says nothing and costs a line per role.
+   */
+  const _EMP_TYPE_VALUE = new RegExp(
+    '^(?:contract|contractor|part[\\s-]?time|freelance|temporary|temp'
+    + '|fixed[\\s-]?term|interim|internship|intern|placement|seasonal'
+    + '|maternity cover|parental cover|secondment|consultant|consultancy)'
+    + '(?:\\s*,\\s*[a-z\\s-]+)*$', 'i');
+
+  function attachEmploymentTypes(cvText, experience) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(experience) || !experience.length) {
+      return { text, attached: 0 };
+    }
+    const lines = text.split('\n');
+    let inExp = false, attached = 0;
+    const claimed = new Set();
+
+    for (let i = 0; i < lines.length; i++) {
+      if (_EXP_HEAD.test(lines[i])) { inExp = true; continue; }
+      if (_ANY_HEAD.test(lines[i])) { inExp = false; continue; }
+      if (!inExp) continue;
+
+      const bare = lines[i].trim();
+      if (!bare || /^\s*[-•*]/.test(bare)) continue;
+      // The company line, whether or not it carries its location.
+      const head = bare.indexOf('\t') === -1 ? bare : bare.slice(0, bare.indexOf('\t'));
+      if (ROLE_DATE_RE.test(head)) continue;
+      const next = (lines[i + 1] || '').trim();
+      if (!next || !_TITLE_WORD.test(next) || ROLE_DATE_RE.test(next)) continue;
+
+      const key = _eduNorm(head);
+      if (key.length < 2) continue;
+
+      for (let e = 0; e < experience.length; e++) {
+        if (claimed.has(e)) continue;
+        const src = experience[e] || {};
+        const co = _eduNorm(src.company || src.employer || src.organisation
+          || src.organization || src.name);
+        if (!co || (co.indexOf(key) === -1 && key.indexOf(co) === -1)) continue;
+        claimed.add(e);
+
+        // Named defensively, like the location field: the profile is
+        // edited in a separate app and a near-miss key would otherwise
+        // do nothing and say nothing.
+        const raw = String(src.employment_type || src.employmentType
+          || src.contract_type || src.contractType || src.work_type
+          || src.workType || src.job_type || src.jobType || '')
+          .replace(/[\t\r\n\v\f]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        if (!raw || !_EMP_TYPE_VALUE.test(raw)) break;
+
+        // Where the bullet goes: after the title, and after the date line
+        // when there is one. That adjacency is how a parser binds a date
+        // to a role and it must not be broken.
+        let at = i + 2;
+        if (ROLE_DATE_RE.test((lines[i + 2] || '').trim())) at = i + 3;
+
+        // Already stated, by moveEmploymentType or by the writer.
+        const already = [lines[i], lines[i + 1], lines[at], lines[at + 1]]
+          .map((l) => String(l || '').toLowerCase()).join(' ');
+        const first = raw.split(',')[0].trim().toLowerCase();
+        if (first && already.indexOf(first) !== -1) break;
+
+        const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+        lines.splice(at, 0, '- ' + label.replace(/\.*$/, '') + '.');
+        attached++;
+        i = at;                       // resume past what was inserted
+        break;
+      }
+    }
+    return { text: lines.join('\n'), attached };
+  }
+
   function stripBoltedStandards(text) {
     if (!text || typeof text !== 'string') return { text: text || '', removed: 0, recased: 0 };
     let removed = 0, recased = 0;
@@ -3415,6 +3507,20 @@
         report.fixes.push('Moved the employment type out of ' + emp.moved
           + ' job title(s) and into the role description, so the title field '
           + 'a recruiter searches on is the title alone');
+      }
+    }
+
+    // And the same information when the profile carries it in its own
+    // field rather than welded to the title. Runs second, so a role that
+    // still arrives with "(Contract)" in the title is handled by the
+    // pass above and not stated twice.
+    if (outCV) {
+      const et = attachEmploymentTypes(outCV, Array.isArray(experience) ? experience : []);
+      if (et.attached) {
+        outCV = et.text;
+        report.fixes.push('Stated the employment type on ' + et.attached
+          + ' role(s) from your profile, in the description rather than the '
+          + 'title field, so a contract or part-time role is not read as permanent');
       }
     }
 
