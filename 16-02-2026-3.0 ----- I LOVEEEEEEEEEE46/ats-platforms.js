@@ -41,6 +41,30 @@
  *               { label: selector } for the parts worth more than the
  *               rest when tailoring. Qualifications sections are what a
  *               CV is scored against; benefits copy is noise.
+ *   autofill    what the platform does with an uploaded CV. A live audit
+ *               of ten of them found that only THREE parse it into the
+ *               form at all, which is the difference between two jobs
+ *               this extension can do:
+ *
+ *                 full / partial  the parse is visible in the DOM, so it
+ *                                 can be read back and CHECKED against
+ *                                 the profile -- a reversed name, a
+ *                                 dropped country code, an empty
+ *                                 portfolio field
+ *                 none            the file attaches and every field
+ *                                 stays blank; there is nothing to
+ *                                 verify and the job is form-filling
+ *                 gated           the upload sits behind a sign-in or a
+ *                                 consent step, so say so rather than
+ *                                 appearing to hang
+ *                 exists-untested it advertises autofill and nobody has
+ *                                 watched it work. Not the same as
+ *                                 working.
+ *
+ *               phoneCountryDefault records a selector that defaults to
+ *               the wrong country -- Teamtailor to +46, Recruitee to
+ *               +61 -- which on a no-autofill platform the user
+ *               otherwise corrects by hand on every application.
  *
  *   window.ATSPlatforms
  */
@@ -70,6 +94,10 @@
         '#content', '.posting', '#app_body'],
       jobId: /greenhouse\.io\/[^/]+\/jobs\/(\d{5,})/i,
       apply: ['#apply_button', '[data-mapped="apply"]', 'button[type="submit"]'],
+      // Verified live 2026-08-20: the file attaches and all eight
+      // fields stay blank. Parsing happens server-side, where only
+      // the recruiter sees it, so there is nothing here to read back.
+      autofill: { mode: 'none', verified: true },
     },
     workday: {
       label: 'Workday',
@@ -83,6 +111,11 @@
       description: ['[data-automation-id="jobPostingDescription"]', '[data-automation-id="job-posting-details"]'],
       jobId: /myworkdayjobs?\.com\/.*?[_-](R-?\d{4,})/i,
       apply: ['[data-automation-id="adventureButton"]', '[data-automation-id="applyButton"]'],
+      // Verified live 2026-08-20: step 1 of the wizard is Create
+      // Account, and 'Autofill with Resume' is step 2, so it cannot
+      // be reached anonymously. Whether the parse then happens is
+      // per-tenant -- see includeResumeParsing in API_BUILDERS.
+      autofill: { mode: 'gated', verified: true, gate: 'account-creation' },
     },
     smartrecruiters: {
       label: 'SmartRecruiters',
@@ -98,6 +131,14 @@
       weightedParts: { qualifications: '#st-qualifications' },
       jobId: /smartrecruiters\.com\/[^/]+\/(\d{6,})/i,
       apply: ['#st-applyButton', 'button[data-test="apply-button"]'],
+      // The Easy Apply dropzone advertises autocomplete, but the
+      // file input lives inside a <spl-dropzone> shadow root whose Lit
+      // component ignores synthetic events -- so the audit could not
+      // drive it from the page. A content script CAN reach a shadow
+      // root via element.shadowRoot, so this is ours to try. Until
+      // someone watches it work, it is untested rather than working.
+      autofill: { mode: 'exists-untested', verified: false,
+        note: 'file input is inside a spl-dropzone shadow root' },
     },
     workable: {
       label: 'Workable',
@@ -114,6 +155,14 @@
       weightedParts: { qualifications: '[data-ui="job-requirements"]' },
       jobId: /workable\.com\/[^/]+\/j\/([A-Z0-9]{6,})/i,
       apply: ['[data-ui="apply-button"]', 'button[type="submit"]'],
+      // Verified live 2026-08-20, and the strongest parser tested:
+      // all four jobs with date ranges, both degrees with school and
+      // field of study. The trigger matters -- dropping a file into
+      // the Resume field alone does NOT start the parse.
+      autofill: { mode: 'full', verified: true,
+        trigger: 'Import resume from > My computer',
+        fields: ['firstName', 'lastName', 'email', 'headline', 'phone',
+          'address', 'educationRecords', 'experienceRecords'] },
     },
     icims: {
       label: 'iCIMS',
@@ -124,6 +173,10 @@
       description: ['.iCIMS_JobContent', '.iCIMS_InfoMsg_Job', '.iCIMS_Expandable_Container'],
       jobId: /icims\.com\/jobs\/(\d{4,})/i,
       apply: ['.iCIMS_ApplyOnlineButton', 'a[title*="Apply"]'],
+      // Verified live 2026-08-20: the upload sits behind an 'Enter
+      // Your Information' step needing an email and a GDPR consent
+      // tick before the resume screen exists.
+      autofill: { mode: 'gated', verified: true, gate: 'email-and-consent' },
     },
     taleo: {
       label: 'Taleo',
@@ -144,6 +197,9 @@
       description: ['[data-controller*="job"]', '.block-body', '#job-description'],
       jobId: /teamtailor\.com\/jobs\/(\d{4,})/i,
       apply: ['a[href*="/applications/new"]', 'button[type="submit"]'],
+      // Verified live 2026-08-20: the file reaches S3 and every field
+      // stays blank. The phone country selector defaults to Sweden.
+      autofill: { mode: 'none', verified: true, phoneCountryDefault: '+46' },
     },
     bamboohr: {
       label: 'BambooHR',
@@ -164,6 +220,9 @@
       description: ['.job-description', '#job-description', '[class*="description"]'],
       jobId: /recruitee\.com\/o\/([a-z0-9-]+)/i,
       apply: ['a[href*="/apply"]', 'button[type="submit"]'],
+      // Verified live 2026-08-20: nothing populates. The phone country
+      // selector defaults to Australia.
+      autofill: { mode: 'none', verified: true, phoneCountryDefault: '+61' },
     },
     jazzhr: {
       label: 'JazzHR',
@@ -274,6 +333,8 @@
       description: ['.position', '.description', '[class*="description"]'],
       jobId: /breezy\.hr\/p\/([0-9a-f]+)/i,
       apply: ['a[href*="apply"]', 'button[type="submit"]'],
+      // Verified live 2026-08-20: the file attaches, nothing populates.
+      autofill: { mode: 'none', verified: true },
     },
     dover: {
       label: 'Dover',
@@ -294,6 +355,8 @@
       description: ['.job-description', '#job-description', '[class*="description"]'],
       jobId: /pinpointhq\.com\/(?:jobs|postings)\/(\d+)/i,
       apply: ['a[href*="apply"]', 'button[type="submit"]'],
+      // Verified live 2026-08-20: phone and LinkedIn both stay blank.
+      autofill: { mode: 'none', verified: true },
     },
     zohorecruit: {
       label: 'Zoho Recruit',
@@ -629,6 +692,31 @@
     },
   };
 
+  /**
+   * What this platform does with an uploaded CV.
+   *
+   * Unknown by default, and unknown is its own answer: a platform nobody
+   * has watched must not be treated as one that autofills, or the
+   * extension waits for a parse that is never coming and reports its
+   * absence as a failure.
+   */
+  function autofillCapability(platformKey) {
+    const p = PLATFORMS[platformKey];
+    const a = (p && p.autofill) || null;
+    return {
+      mode: (a && a.mode) || 'unknown',
+      verified: !!(a && a.verified),
+      gate: (a && a.gate) || '',
+      trigger: (a && a.trigger) || '',
+      phoneCountryDefault: (a && a.phoneCountryDefault) || '',
+      fields: (a && a.fields) || [],
+      note: (a && a.note) || '',
+      // The two questions a caller actually asks.
+      parsesCv: !!(a && (a.mode === 'full' || a.mode === 'partial')),
+      blocked: !!(a && a.mode === 'gated'),
+    };
+  }
+
   function apiRequestFor(platformKey, href) {
     const build = API_BUILDERS[platformKey];
     if (!build) return null;
@@ -697,7 +785,7 @@
 
   global.ATSPlatforms = {
     PLATFORMS, GENERIC, detect, selectorsFor, descriptionPartsFor,
-    apiRequestFor, fromApiResponse,
+    apiRequestFor, fromApiResponse, autofillCapability,
     allDescriptionSelectors, jobIdFromUrl, list,
     fromJobPostingLd,
   };
