@@ -83,8 +83,11 @@ for (const [what, needle] of [
 console.log('\nBUT A LINE INSIDE AN ENTRY DOES NOT');
 // The gap has to be a DIFFERENCE. Spacing every line equally restores the
 // exact problem: nothing for the splitter to find.
+// The tech stack is no longer a paragraph of its own -- it shares the
+// title line on a right tab stop -- so the standalone line inside a
+// project is now the description.
 for (const [what, needle] of [
-  ['a project tech line', 'Python, MLflow, Docker'],
+  ['a project description', 'Watches for drift'],
   ['an institution line', 'University of Derby'],
 ]) {
   t('  ' + what + ' has no leading gap', before(needle) < 150,

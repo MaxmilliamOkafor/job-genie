@@ -284,8 +284,23 @@
       const target = raw.replace(/[).,;]+$/, '');
       const id = `rIdLink${relsCollector.length + 1}`;
       relsCollector.push({ id, target });
-      out += `<w:hyperlink r:id="${id}">${run(target, Object.assign({}, runOpts, { color: C.LINK, underline: true }))}</w:hyperlink>`;
+      // SHOW THE SHORT FORM, LINK THE FULL ONE.
+      //
+      // The scheme and a trailing slash are nine characters that carry no
+      // information a reader or a parser needs. Across a project's two
+      // links that is eighteen, which is the difference between the links
+      // fitting on one line and wrapping onto two -- and with three
+      // projects, three lines of a one-page CV spent on "https://".
+      //
+      // The href keeps the full URL so the link still works, and the
+      // visible text still matches the shape a parser looks for
+      // (\S+\.[a-z]+/\S+), so it is still extracted as a URL. Nothing is
+      // hidden: every character removed is one the reader could not use.
+      const shown = target.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      out += `<w:hyperlink r:id="${id}">${run(shown, Object.assign({}, runOpts, { color: C.LINK, underline: true }))}</w:hyperlink>`;
       if (target.length < raw.length) out += run(raw.slice(target.length), runOpts);
+      // (raw/target lengths, not `shown` -- the trailing ")." belongs to
+      // the source text and is unaffected by how the link is displayed.)
       last = m.index + raw.length;
     }
     if (last < text.length) out += run(text.slice(last), runOpts);
@@ -433,13 +448,25 @@
   // The scale now descends: heading and company, then title, then body,
   // then dates. Body copy being the smallest is the point, not a
   // compromise -- it is the most of the page and the least of the scan.
+  // The first version of this scale fixed the flatness by lowering the
+  // BODY to 10pt. That worked on the hierarchy and cost readability,
+  // which is the wrong trade: bullets are what a recruiter actually
+  // reads, and they are the text most likely to be printed, forwarded as
+  // a scan, or read on a phone.
+  //
+  // The hierarchy is a set of DIFFERENCES, so it can be built by raising
+  // the structure instead of shrinking the prose. Body is back at 10.5pt
+  // and every structural line moved up half a point around it. Same
+  // descending order, nothing harder to read than before, and the
+  // one-page fitter absorbs the extra height by choosing a tighter
+  // spacing profile when it needs to.
   const SZ_BASE = {
     name: 44,       // 22pt
-    heading: 22,    // 11pt
-    company: 22,    // 11pt -- was 21, tied with the body
-    title: 21,      // 10.5pt
-    body: 20,       // 10pt  -- was 21
-    date: 19,       // 9.5pt
+    heading: 23,    // 11.5pt
+    company: 23,    // 11.5pt
+    title: 22,      // 11pt
+    body: 21,       // 10.5pt -- restored; this is the text that gets read
+    date: 20,       // 10pt
   };
 
   // ===================================================================
@@ -891,6 +918,7 @@
       // every application. The right tab stop is the layout the parse
       // report confirmed works: title and date stay two separate text
       // items and land in two separate fields.
+      const PROJECT_SECTIONS = new Set(['PROJECTS', 'SELECTED PROJECTS']);
       const EDU_SECTIONS = new Set([
         'EDUCATION', 'ACADEMIC BACKGROUND', 'ACADEMIC QUALIFICATIONS',
         'EDUCATIONAL QUALIFICATIONS', 'ACADEMIC HISTORY', 'QUALIFICATIONS',
@@ -1200,6 +1228,46 @@
             const joined = items.join(', ');
             out.push(paragraph(run(joined, { color: C.BODY, sz: SZ.body }),
               { spacingAfter: SPACE.bullet, line: 276, lineRule: 'auto' }));
+            continue;
+          }
+        }
+
+        // A PROJECT TITLE AND ITS TECH STACK SHARE A LINE.
+        //
+        // A project cost seven rendered lines: title, tech stack, a
+        // three-line description and a two-line link row. Three projects
+        // was twenty-one lines, close to forty per cent of a page, for
+        // three items.
+        //
+        // The stack goes right-aligned against its own title, on the same
+        // right tab stop the role header and the education entry already
+        // use -- the shape the parse report confirmed keeps two separate
+        // text items landing in two separate fields. The title is still
+        // the first item on the line, which is what a parser reads as the
+        // project name, and the stack is still present in full, which is
+        // where most of a project's keywords live.
+        //
+        // Only when they FIT. A long title plus a long stack would wrap,
+        // and a wrapped right-aligned run lands back on top of the title,
+        // which is worse than the line it saved.
+        if (PROJECT_SECTIONS.has(currentSection)
+            && !/^([-•*]|\d+\.)\s+/.test(t) && !/https?:\/\//.test(t)) {
+          const nextT = (lines[i + 1] || '').trim();
+          const looksLikeStack = nextT
+            && nextT.indexOf(',') !== -1
+            && !/^([-•*]|\d+\.)\s+/.test(nextT)
+            && !/https?:\/\//.test(nextT)
+            && !/[.!?]$/.test(nextT)
+            && nextT.length <= 60;
+          if (looksLikeStack && (t.length + nextT.length) <= 96) {
+            out.push(paragraph(
+              run(t + ' ', { bold: true, color: C.BODY, sz: SZ.title })
+                + '<w:r><w:tab/></w:r>'
+                + run(nextT, { italic: true, color: C.MUTED, sz: SZ.date }),
+              { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 30,
+                keepNext: true, keepLines: true }
+            ));
+            i++;                        // the stack line is consumed
             continue;
           }
         }

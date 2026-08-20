@@ -182,8 +182,15 @@ const inlBody = (() => {
 t('  a certification title keeping its colon is untouched',
   /Microsoft Certified: Azure AI Engineer Associate/.test(inlBody),
   'splitting on any colon would decapitate this');
+// What this guards is that the colon-splitter does not cut a link away
+// from its label. It used to assert "Live demo: https", which pinned the
+// visible SCHEME rather than that behaviour -- and broke the moment the
+// renderer started displaying links without "https://" while keeping the
+// full URL in the href. Asserting the shape of a URL, not its scheme.
 t('  a project link keeping its colon is untouched',
-  /Live demo: https/.test(inlBody), 'the demo URL must stay on its label');
+  /Live demo:\s+\S+\.[a-z]+\/\S+/.test(inlBody),
+  'the demo URL must stay on its label: ' + JSON.stringify(
+    (inlBody.match(/Live demo:.{0,60}/) || [''])[0]));
 t('  the competencies themselves survive the split',
   /LLM Implementation/.test(inlBody) && /Real-Time Applications/.test(inlBody), inlBody.slice(0, 200));
 
