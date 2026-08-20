@@ -21,6 +21,14 @@ const RAW = [
   'Manufacturing engineering technician with a foundation in process optimisation, '
     + 'quality assurance and documentation.',
   '',
+  // Two skills sections, as the model emits them. The reported failure:
+  // this one came back EMPTY from the live parser, because a skills
+  // section is found by searching headings for "skill" and this heading
+  // has no such word in it. The renderer merges the two, so what the
+  // live run measures is whether these phrases arrive at all.
+  'CORE COMPETENCIES',
+  'Process Optimisation, Quality Assurance, Root Cause Analysis, Continuous Improvement',
+  '',
   'PROFESSIONAL EXPERIENCE',
   'Meta (formerly Facebook Inc)',
   'Senior Software Engineer (Contract, part-time)',

@@ -154,6 +154,14 @@ try {
   check('EDUCATION is not empty',
     /Imperial College London/i.test(text) || /Derby/i.test(text), 'absent');
   check('SKILLS is not empty', /Python|Kubernetes/i.test(text), 'absent');
+  // The reported failure, measured rather than argued about: the
+  // competencies came back empty because their heading has no "skill" in
+  // it and the parser looks for exactly that word. They are part of the
+  // one skills section now, so a phrase that only ever appeared under
+  // CORE COMPETENCIES must arrive.
+  check('the competencies reached the parse',
+    /Root Cause Analysis/i.test(text),
+    'a phrase from the competencies list is absent from the parsed output');
 
   // The renderer guarantees, seen through a real parse.
   check('no heading arrived letter-spaced',

@@ -1293,8 +1293,15 @@
     // 5+ years anti-financial crime" over Meta and Citigroup software
     // bullets went through untouched, which is the entire case this
     // function exists for.
+    // Without the employment-type parenthetical. The role line still
+    // carries "(Contract, part-time)" when this runs -- a later pass
+    // moves it into the first bullet -- and a summary opening "Senior
+    // Software Engineer (Contract, part-time) with a foundation in..."
+    // announces part-time in the first six words of the CV. The headline
+    // pass strips it for exactly this reason; this one did not.
     const _cleanTitle = (t) => String(t || '')
-      .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
+      .replace(/\s{2,}.*$/, '').replace(/\s*\([^)]*\)\s*$/, '')
+      .replace(/[,|·-]\s*$/, '').trim();
     const _isTitle = (t) => !!t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7;
     let realTitle = '';
     for (let i = 0; i < roleLines.length; i++) {
@@ -1326,7 +1333,18 @@
       if (!line.trim()) continue;
 
       // 1. The borrowed title.
-      const re = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      //
+      // ON A WORD BOUNDARY, or it cuts a word in half. A posting titled
+      // "Manufacturing Engineer" matched inside "Manufacturing
+      // engineering technician" and the summary went out reading
+      // "Senior Software Engineering technician with a foundation in
+      // process optimisation" -- the opening line of the CV, and not
+      // English. The boundary is added only where the title itself ends
+      // in a word character: a title like "Engineer (Remote)" ends in a
+      // bracket, and \b after it would never match anything.
+      const esc = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp((/^\w/.test(title) ? '\\b' : '') + esc
+        + (/\w$/.test(title) ? '\\b' : ''), 'i');
       if (re.test(line)) { line = line.replace(re, realTitle); changed = true; }
 
       // 2. An unsupported "background in X" clause.
