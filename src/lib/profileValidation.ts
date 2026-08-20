@@ -520,5 +520,19 @@ export const validateProfileForSave = (profile: Record<string, any>): string[] =
 
   errors.push(...validateSkills(profile.skills || []));
 
+  (profile.relevant_projects || []).forEach((p: any) => {
+    const description = String(p?.description ?? '');
+    if (description.length > PROJECT_DESCRIPTION_MAX) {
+      errors.push(
+        `${p?.name || 'Project'}: description must be ${PROJECT_DESCRIPTION_MAX} characters or fewer (currently ${description.length}).`,
+      );
+    }
+  });
+
+  if ((profile.certifications || []).length > CERTIFICATIONS_MAX) {
+    errors.push(`Too many certifications. ${CERTIFICATIONS_CAP_MESSAGE}`);
+  }
+
   return errors;
 };
+
