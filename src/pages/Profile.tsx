@@ -1036,6 +1036,7 @@ const Profile = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={COMPETENCY_CATEGORY}>Core Competency</SelectItem>
                     <SelectItem value="technical">Technical</SelectItem>
                     <SelectItem value="tools">Tools</SelectItem>
                     <SelectItem value="soft">Soft Skills</SelectItem>
