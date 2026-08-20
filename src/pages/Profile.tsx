@@ -1748,7 +1748,11 @@ const Profile = () => {
                             updateLocalField('relevant_projects', projects);
                           }}
                           placeholder="Tech Stack (e.g., Python, FastAPI, React, AWS)"
+                          maxLength={60}
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Tech stack: {(project.techStack || '').length}/60 characters - it prints right-aligned on the title line.
+                        </p>
                         <Input
                           value={project.liveUrl || ''}
                           onChange={(e) => {
@@ -1767,6 +1771,19 @@ const Profile = () => {
                           }}
                           placeholder="Code / GitHub URL (https://github.com/...)"
                         />
+                        {(() => {
+                          const issues = projectIssues(project);
+                          return issues.length ? (
+                            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2">
+                              <p className="text-xs font-medium text-destructive">Incomplete project</p>
+                              {issues.map((i) => (
+                                <p key={i} className="text-xs text-destructive">- {i}</p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Complete - both links present.</p>
+                          );
+                        })()}
                         <p className="text-sm text-muted-foreground italic">
                           💡 Include dates in your role above for better CV generation
                         </p>
