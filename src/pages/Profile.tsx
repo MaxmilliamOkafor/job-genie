@@ -1992,7 +1992,7 @@ const Profile = () => {
                     />
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <Label className="text-xs text-muted-foreground">From (year)</Label>
                         <Input
                           value={edu.start_year || ''}
                           onChange={(e) => {
@@ -2008,7 +2008,7 @@ const Profile = () => {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <Label className="text-xs text-muted-foreground">To (year)</Label>
                         <Input
                           value={edu.end_year === 'Present' ? 'Present' : (edu.end_year || '')}
                           disabled={edu.end_year === 'Present'}
@@ -2039,19 +2039,16 @@ const Profile = () => {
                       </label>
                     </div>
                     {(() => {
-                      const maxYear = new Date().getFullYear() + 8;
-                      const s = edu.start_year;
-                      const en = edu.end_year;
-                      const bad = (y: any) => y && (!/^\d{4}$/.test(y) || Number(y) < 1950 || Number(y) > maxYear);
-                      const messages: string[] = [];
-                      if (bad(s)) messages.push(`From year must be between 1950 and ${maxYear}.`);
-                      if (en !== 'Present' && bad(en)) messages.push(`To year must be between 1950 and ${maxYear}.`);
-                      if (s && en && en !== 'Present' && /^\d{4}$/.test(s) && /^\d{4}$/.test(en) && Number(en) < Number(s)) {
-                        messages.push('To year cannot be earlier than From year.');
-                      }
+                      const messages = validateEducationEntry(edu);
                       return messages.length ? (
-                        <p className="text-xs text-destructive">{messages.join(' ')}</p>
-                      ) : null;
+                        <p className="text-xs text-destructive">
+                          {messages.map((m) => m.replace(/^[^:]+:\s*/, '')).join(' ')}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Workday requires both years - saving is blocked until they are filled.
+                        </p>
+                      );
                     })()}
                     <Textarea 
                       value={edu.description || ''} 
