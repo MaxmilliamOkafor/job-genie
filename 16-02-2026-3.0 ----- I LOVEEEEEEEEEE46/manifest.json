@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Job Genie \u2014 Smart CV, Cover Letter & AI Page Autofill",
+  "name": "Job Genie — Smart CV, Cover Letter & AI Page Autofill",
   "version": "3.4.0",
-  "description": "Automatically tailor your CV and cover letter to every job posting, plus 1-click AI Page Autofill across 150+ ATS platforms. Intelligent keyword matching, ATS-optimised PDF generation, cover letter builder, STAR-format behavioral answers, 500+ pre-seeded responses, and knockout-question intelligence \u2014 with a master toggle for full user control over API usage.",
+  "description": "Automatically tailor your CV and cover letter to every job posting, plus 1-click AI Page Autofill across 150+ ATS platforms. Intelligent keyword matching, ATS-optimised PDF generation, cover letter builder, STAR-format behavioral answers, 500+ pre-seeded responses, and knockout-question intelligence — with a master toggle for full user control over API usage.",
   "permissions": [
     "storage",
     "cookies",
@@ -402,7 +402,6 @@
         "ats-location-extractor.js",
         "universal-location-strategy.js",
         "pdf-ats-turbo.js",
-        "file-attacher-turbo.js",
         "professional-pdf-engine.js",
         "smart-cv-parser.js",
         "cover-letter-generator.js",
