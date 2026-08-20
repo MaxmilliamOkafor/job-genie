@@ -85,6 +85,62 @@ t('  salutation', /Dear Hiring Manager,/.test(pun), pun);
 t('  sign-off', /Yours sincerely,/.test(pun), pun);
 t('  the blank line after the salutation survives', /Manager,\n\s*\nI came/.test(pun), JSON.stringify(pun));
 
+console.log('\nAND THE SIGNATURE IS A NAME, NOT A SENTENCE');
+// Every letter went out signed "Maxmilliam Okafor." The rule that makes
+// sure a sentence ends in a full stop matched the last line, and the
+// exemption list covered "Yours sincerely," but not the name beneath it.
+t('  no full stop after the signature', /Yours sincerely,\nMaxmilliam Okafor$/.test(pun.trim()),
+  JSON.stringify(pun.trim().slice(-40)));
+{
+  let dotted = 0;
+  for (let i = 0; i < RUNS; i++) {
+    const last = letter().trim().split('\n').pop().trim();
+    if (/[.!?]$/.test(last)) dotted++;
+  }
+  t('  ...in a generated letter either', dotted === 0,
+    dotted + '/' + RUNS + ' were signed with a full stop after the name');
+}
+
+console.log('\nEVERY SENTENCE HAS A MAIN CLAUSE');
+// "A lot of that work involved Python, Kubernetes and observability.
+// All of which show up in your job description too." The second half is
+// a fragment, and it shipped in every letter with three overlapping
+// keywords, which is most of them.
+{
+  let frags = 0;
+  for (let i = 0; i < RUNS; i++) {
+    if (/[.!?]\s+(?:All|Both|Each|Most|None)\s+of\s+which\b/i.test(letter())) frags++;
+  }
+  t('  no "All of which" left stranded as its own sentence', frags === 0,
+    frags + '/' + RUNS + ' contained the fragment');
+}
+
+console.log('\nAND THE CLOSING OFFERS A CONVERSATION ONCE');
+// Three passes each added one: the template, the keyword injection and
+// the company-naming tail. A paragraph went out reading "I would be
+// happy to chat about how my background fits the role. Thank you for
+// reading this far. I appreciate your time. I am happy to talk through
+// how I could help at Stripe." Four sentences, three the same gesture.
+{
+  let repeats = 0, named = 0, worst = '';
+  for (let i = 0; i < RUNS; i++) {
+    const L = letter();
+    const closing = (L.split(/\n\s*\n/).slice(-2)[0] || '').trim();
+    const offers = (closing.match(/\b(chat|talk|speak|discuss|conversation|more detail|go deeper)\b/gi) || []).length;
+    if (offers > 1) { repeats++; worst = closing; }
+    if (/Stripe/.test(closing)) named++;
+    const thanks = (closing.match(/thank you|appreciate your time|thanks/gi) || []).length;
+    if (thanks > 1) { repeats++; worst = closing; }
+  }
+  t('  one offer and one thank-you per closing', repeats === 0,
+    repeats + '/' + RUNS + ': ' + JSON.stringify(worst));
+  // Naming the company at the close is still worth doing -- just never
+  // by adding a second offer. It is grafted onto "the role" where the
+  // template gives it somewhere to go.
+  t('  and the company is still named at the close most of the time',
+    named >= RUNS / 2, named + '/' + RUNS);
+}
+
 console.log('\nDELETING A BANNED PHRASE MUST NOT STRAND THE VERB');
 // "welcome the chance" is deleted outright, which turned "I would
 // welcome the chance to talk" into "I would to talk" -- and the

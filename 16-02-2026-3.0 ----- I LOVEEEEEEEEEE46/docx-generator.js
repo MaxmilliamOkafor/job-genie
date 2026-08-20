@@ -76,6 +76,23 @@
   function runText(text, bold) {
     return run(text, { bold: !!bold, color: C.BODY, sz: 21 });
   }
+  // Adds w:before to a paragraph that has already been built. Used for
+  // the entry gap, which is only known to be needed once the NEXT entry
+  // starts -- by which time the paragraph is a string in the output.
+  function withSpacingBefore(xml, twips) {
+    const p = String(xml || '');
+    if (!p.startsWith('<w:p>')) return p;
+    if (/<w:spacing [^>]*w:before="/.test(p)) return p;      // already spaced
+    if (/<w:spacing /.test(p)) {
+      return p.replace(/<w:spacing /, '<w:spacing w:before="' + twips + '" ');
+    }
+    if (p.startsWith('<w:p><w:pPr>')) {
+      return p.replace('<w:p><w:pPr>',
+        '<w:p><w:pPr><w:spacing w:before="' + twips + '"/>');
+    }
+    return p.replace('<w:p>', '<w:p><w:pPr><w:spacing w:before="' + twips + '"/></w:pPr>');
+  }
+
   function paragraph(content, opts = {}) {
     const ppr = [];
     if (opts.style) ppr.push(`<w:pStyle w:val="${opts.style}"/>`);
@@ -267,8 +284,23 @@
       const target = raw.replace(/[).,;]+$/, '');
       const id = `rIdLink${relsCollector.length + 1}`;
       relsCollector.push({ id, target });
-      out += `<w:hyperlink r:id="${id}">${run(target, Object.assign({}, runOpts, { color: C.LINK, underline: true }))}</w:hyperlink>`;
+      // SHOW THE SHORT FORM, LINK THE FULL ONE.
+      //
+      // The scheme and a trailing slash are nine characters that carry no
+      // information a reader or a parser needs. Across a project's two
+      // links that is eighteen, which is the difference between the links
+      // fitting on one line and wrapping onto two -- and with three
+      // projects, three lines of a one-page CV spent on "https://".
+      //
+      // The href keeps the full URL so the link still works, and the
+      // visible text still matches the shape a parser looks for
+      // (\S+\.[a-z]+/\S+), so it is still extracted as a URL. Nothing is
+      // hidden: every character removed is one the reader could not use.
+      const shown = target.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      out += `<w:hyperlink r:id="${id}">${run(shown, Object.assign({}, runOpts, { color: C.LINK, underline: true }))}</w:hyperlink>`;
       if (target.length < raw.length) out += run(raw.slice(target.length), runOpts);
+      // (raw/target lengths, not `shown` -- the trailing ")." belongs to
+      // the source text and is unaffected by how the link is displayed.)
       last = m.index + raw.length;
     }
     if (last < text.length) out += run(text.slice(last), runOpts);
@@ -380,6 +412,23 @@
     firstAfterHeading: 40,    // 2pt -- the heading already spaced this
     role: 120,                // 6pt between one role and the next
     bullet: 30,               // 1.5pt after a bullet
+    // WHAT SEPARATES ONE ENTRY FROM THE NEXT, OUTSIDE EXPERIENCE.
+    //
+    // A blank line in the CV text used to emit nothing at all, so the gap
+    // between two education entries was the same as the gap between the
+    // two lines INSIDE one. Measured off a real parse: 14 units within an
+    // entry, 17 between them for education, and 13-14 both ways for
+    // projects -- no difference whatsoever.
+    //
+    // OpenResume splits subsections on round(prevY - y) exceeding a
+    // threshold, so with no gap to find it read all four education lines
+    // as ONE entry (one school, one degree, the rest dumped into
+    // descriptions) and all three projects as one project. Two degrees
+    // became one; three projects became one.
+    //
+    // 11pt on top of the line advance roughly doubles the gap, which puts
+    // it unambiguously above the threshold without looking airy.
+    entry: 220,
   };
 
 
@@ -399,13 +448,25 @@
   // The scale now descends: heading and company, then title, then body,
   // then dates. Body copy being the smallest is the point, not a
   // compromise -- it is the most of the page and the least of the scan.
+  // The first version of this scale fixed the flatness by lowering the
+  // BODY to 10pt. That worked on the hierarchy and cost readability,
+  // which is the wrong trade: bullets are what a recruiter actually
+  // reads, and they are the text most likely to be printed, forwarded as
+  // a scan, or read on a phone.
+  //
+  // The hierarchy is a set of DIFFERENCES, so it can be built by raising
+  // the structure instead of shrinking the prose. Body is back at 10.5pt
+  // and every structural line moved up half a point around it. Same
+  // descending order, nothing harder to read than before, and the
+  // one-page fitter absorbs the extra height by choosing a tighter
+  // spacing profile when it needs to.
   const SZ_BASE = {
     name: 44,       // 22pt
-    heading: 22,    // 11pt
-    company: 22,    // 11pt -- was 21, tied with the body
-    title: 21,      // 10.5pt
-    body: 20,       // 10pt  -- was 21
-    date: 19,       // 9.5pt
+    heading: 23,    // 11.5pt
+    company: 23,    // 11.5pt
+    title: 22,      // 11pt
+    body: 21,       // 10.5pt -- restored; this is the text that gets read
+    date: 20,       // 10pt
   };
 
   // ===================================================================
@@ -567,12 +628,34 @@
   // "can this person do THIS job" come first, and education goes last:
   // education above experience is the graduate convention and reads as
   // early-career on a CV with years of history behind it.
+  //
+  // ---- ONE SKILLS SECTION, NOT TWO ------------------------------------
+  //
+  // CORE COMPETENCIES and TECHNICAL SKILLS shared a rank each, printed as
+  // two headings, and a live parse of a real generated CV showed what that
+  // costs: the competencies came back EMPTY. A parser looks for its skills
+  // section by keyword -- OpenResume's is literally `["skill"]` -- and
+  // "CORE COMPETENCIES" contains no such word, so eight tailored,
+  // job-matched keyword phrases sitting in the six-second scan zone were
+  // never indexed as skills at all.
+  //
+  // Renaming the heading alone would have made it worse. That same lookup
+  // returns the FIRST section whose name matches and stops, so a CV with
+  // "CORE SKILLS" up top and "TECHNICAL SKILLS" lower down loses the
+  // second one instead -- the same bug, pointed the other way.
+  //
+  // One section is the only shape with no losing case: every term is
+  // indexed, the heading is the conventional one, and it stays where the
+  // competencies were, directly under the summary, which is where a
+  // recruiter scanning for six seconds looks. Giving both headings the
+  // same rank is all it takes -- the merge, the ordering and the
+  // case-insensitive de-duplication are what this function already does
+  // for a repeated heading.
   const SECTION_RANK = [
     [/^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/, 1],
-    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE)$/, 2],
+    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE|TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 2],
     [/^(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE)$/, 3],
     [/^(SELECTED PROJECTS|PROJECTS)$/, 4],
-    [/^(TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 5],
     [/^CERTIFICATIONS$/, 6],
     [/^AWARDS$/, 7],
     [/^EDUCATION$/, 9],          // last, deliberately
@@ -592,9 +675,8 @@
   // does not recognise is left exactly as the writer set it.
   const CANONICAL_HEADER = {
     1: 'PROFESSIONAL SUMMARY',
-    2: 'CORE COMPETENCIES',
+    2: 'TECHNICAL SKILLS',
     3: 'PROFESSIONAL EXPERIENCE',
-    5: 'TECHNICAL SKILLS',
     6: 'CERTIFICATIONS',
     9: 'EDUCATION',
   };
@@ -738,41 +820,17 @@
       .map((x) => x.b);
     // Nothing to merge, nothing to split, already in order: leave it
     // exactly as it is.
-    let dedupedSkills = false;
-    // ---- the two skills sections must not repeat each other ----------
     //
     // A real generated CV listed nine Core Competencies, six of which
     // appeared again verbatim in Technical Skills sixty lines later:
     // Data Profiling, Data Modelling, Databricks, SQL, Power BI, Data
     // Warehousing. Two thirds of the scan zone was padding, and a
     // recruiter reading the same six terms twice draws the obvious
-    // conclusion. The prompt already forbids this (RULE 15c); the model
-    // did it anyway, so the renderer enforces it and no deploy is
-    // needed.
-    //
-    // Trimmed from TECHNICAL SKILLS rather than CORE COMPETENCIES.
-    // Both map to "skills" in every parser here, so the term is still
-    // indexed either way and no keyword is lost -- but Core Competencies
-    // is the six-second scan zone and gutting it to three lines would
-    // trade one problem for another. A floor keeps the technical list
-    // substantial: if trimming would leave it thin, the duplication is
-    // the lesser evil and nothing is touched.
-    (() => {
-      const cc = sorted.find((b) => b.rank === 2);
-      const ts = sorted.find((b) => b.rank === 5);
-      if (!cc || !ts) return;
-      const itemsOf = (block) => block.lines.slice(1).join('\n')
-        .split(/[,\n]/).map((s) => s.replace(/^\s*[•\-*]\s*/, '').trim()).filter(Boolean);
-      const owned = new Set(itemsOf(cc).map((s) => s.toLowerCase()));
-      if (!owned.size) return;
-      const kept = itemsOf(ts).filter((s) => !owned.has(s.toLowerCase()));
-      if (kept.length === itemsOf(ts).length) return;      // nothing repeated
-      if (kept.length < 8) return;                          // would leave it thin
-      ts.lines = [ts.lines[0], kept.join(', '), ''];
-      dedupedSkills = true;
-    })();
-
-    if (!mergedAny && !inline.split && !renamed && !dedupedSkills && sorted.every((b, i) => b === blocks[i])) return cvText;
+    // conclusion. That used to be trimmed here, block against block.
+    // Now the two blocks ARE one block by the time this runs, and
+    // mergeCommaLists drops the repeat while it merges them -- keeping
+    // the properly-cased spelling, which the trimmer could not do.
+    if (!mergedAny && !inline.split && !renamed && sorted.every((b, i) => b === blocks[i])) return cvText;
 
     // Exactly one blank line between sections. Reordering moves blocks
     // that did not end in one, which is how EDUCATION ended up welded to
@@ -806,6 +864,10 @@
     // fails when the list does not match. Kept in step with
     // SECTION_RANK rank 3.
     const EXPERIENCE_HEADERS = SECTION_HEADERS.filter((h) => rankOf(h) === 3);
+
+    // Entry-gap bookkeeping; see SPACE.entry.
+    let pendingEntryGap = false;
+    let entryGapMark = 0;
 
     let firstNonEmpty = -1;
     for (let i = 0; i < lines.length; i++) {
@@ -853,6 +915,7 @@
       // every application. The right tab stop is the layout the parse
       // report confirmed works: title and date stay two separate text
       // items and land in two separate fields.
+      const PROJECT_SECTIONS = new Set(['PROJECTS', 'SELECTED PROJECTS']);
       const EDU_SECTIONS = new Set([
         'EDUCATION', 'ACADEMIC BACKGROUND', 'ACADEMIC QUALIFICATIONS',
         'EDUCATIONAL QUALIFICATIONS', 'ACADEMIC HISTORY', 'QUALIFICATIONS',
@@ -870,48 +933,6 @@
       // True for the first content line after a section heading, so the
       // heading's trailing space is not added to a full role gap.
       let afterHeading = false;
-      // Sections rendered as one item per line, single column.
-      //
-      // These used to be a three-up grid built from TAB characters. The
-      // structure was genuinely single-column -- no tables, no Word
-      // columns -- which is why it read as ATS-safe. The tabs were not.
-      // Parsers disagree about <w:tab/>: some emit "\t", some drop it
-      // entirely, and when it is dropped adjacent items glue together --
-      // "Project ManagementQuality AssuranceRisk Management", one
-      // unmatchable blob in the section an ATS scores most directly.
-      //
-      // That was previously patched by padding each item with a trailing
-      // space so a word boundary survived. It treated the symptom: the
-      // items were still undelimited, just no longer welded. And the tab
-      // stops were fixed positions measured for A4, so on a phone the
-      // columns did not reflow, they overflowed.
-      //
-      // A line break is a delimiter no parser can misread.
-      const GRID_SECTIONS = new Set([
-        'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
-      ]);
-      // ONE ITEM PER PARAGRAPH.
-      //
-      // This was a three-up grid: one paragraph per row, with items
-      // separated by TAB characters. It is a single-column paragraph
-      // structure, which is why it looked safe -- but text extraction
-      // yields the tabs, and every ATS then has to guess what they mean.
-      // Some drop them, giving "Stakeholder managementAzure DevOps"; some
-      // render a space, merging three skills into one long phrase. Either
-      // way the delimiter between skills is lost, which is the one thing
-      // a skills section has to get right.
-      //
-      // The tab stops were also fixed positions measured for A4, so on a
-      // phone the columns do not reflow -- they overflow.
-      //
-      // A line break is a delimiter no parser can misread, and a short
-      // line fits any screen.
-      const emitGrid = (items) => { items.forEach(emitCompetency); };
-      // Competencies: bulleted, one per line, single column.
-      const emitCompetency = (item) => out.push(paragraph(
-        run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
-        { indent: 360, hanging: 240, spacingAfter: 30, line: 276, lineRule: 'auto' }
-      ));
       // A helper to emit a single navy-bullet item paragraph.
       const emitBullet = (item) => out.push(paragraph(
         run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
@@ -939,8 +960,21 @@
         // non-empty line starts a new employer.
         if (!t) {
           if (inExperience) roleState = 'expectCompany';
+          // A blank line separates one entry from the next. Experience
+          // has its own spacing on the company line; everywhere else the
+          // gap has to be added here or there is none at all.
+          else if (currentSection) { pendingEntryGap = true; entryGapMark = out.length; }
           continue;
         }
+
+        // The blank line above produced no paragraph of its own, so the
+        // gap lands on whatever was emitted first after it -- known only
+        // now, one iteration later.
+        if (pendingEntryGap && out.length > entryGapMark) {
+          out[entryGapMark] = withSpacingBefore(out[entryGapMark], SPACE.entry);
+          pendingEntryGap = false;
+        }
+
         const upper = t.toUpperCase().replace(/:$/, '');
 
         if (SECTION_HEADERS.includes(upper)) {
@@ -1121,10 +1155,11 @@
         }
 
         // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items
-        // with no sentence punctuation gets split into per-item paragraphs.
-        // CORE COMPETENCIES / AREAS OF EXPERTISE -> one item per line.
-        // CERTIFICATIONS / AWARDS                -> one bullet per line.
-        if (LIST_SECTIONS.has(currentSection) || GRID_SECTIONS.has(currentSection)) {
+        // with no sentence punctuation, re-joined as one flowing line.
+        // CERTIFICATIONS and AWARDS only -- the competencies are part of
+        // the skills section now and take the ordinary body treatment,
+        // which is what that section always used.
+        if (LIST_SECTIONS.has(currentSection)) {
           const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
           if (looksLikeList) {
             const items = t.split(/,\s*/)
@@ -1149,6 +1184,46 @@
             const joined = items.join(', ');
             out.push(paragraph(run(joined, { color: C.BODY, sz: SZ.body }),
               { spacingAfter: SPACE.bullet, line: 276, lineRule: 'auto' }));
+            continue;
+          }
+        }
+
+        // A PROJECT TITLE AND ITS TECH STACK SHARE A LINE.
+        //
+        // A project cost seven rendered lines: title, tech stack, a
+        // three-line description and a two-line link row. Three projects
+        // was twenty-one lines, close to forty per cent of a page, for
+        // three items.
+        //
+        // The stack goes right-aligned against its own title, on the same
+        // right tab stop the role header and the education entry already
+        // use -- the shape the parse report confirmed keeps two separate
+        // text items landing in two separate fields. The title is still
+        // the first item on the line, which is what a parser reads as the
+        // project name, and the stack is still present in full, which is
+        // where most of a project's keywords live.
+        //
+        // Only when they FIT. A long title plus a long stack would wrap,
+        // and a wrapped right-aligned run lands back on top of the title,
+        // which is worse than the line it saved.
+        if (PROJECT_SECTIONS.has(currentSection)
+            && !/^([-•*]|\d+\.)\s+/.test(t) && !/https?:\/\//.test(t)) {
+          const nextT = (lines[i + 1] || '').trim();
+          const looksLikeStack = nextT
+            && nextT.indexOf(',') !== -1
+            && !/^([-•*]|\d+\.)\s+/.test(nextT)
+            && !/https?:\/\//.test(nextT)
+            && !/[.!?]$/.test(nextT)
+            && nextT.length <= 60;
+          if (looksLikeStack && (t.length + nextT.length) <= 96) {
+            out.push(paragraph(
+              run(t + ' ', { bold: true, color: C.BODY, sz: SZ.title })
+                + '<w:r><w:tab/></w:r>'
+                + run(nextT, { italic: true, color: C.MUTED, sz: SZ.date }),
+              { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 30,
+                keepNext: true, keepLines: true }
+            ));
+            i++;                        // the stack line is consumed
             continue;
           }
         }
@@ -1586,8 +1661,18 @@
   // copy of this logic, with the same faults, and the DOCX got fixed
   // while the PDF stayed broken. One implementation, used by every path
   // that writes a contact line.
+  // normalizeSections is exported for the same reason measureCv is: the
+  // document the user READS in the panel and the document that gets
+  // attached must be the same document. Section order, the canonical
+  // headings and the single skills section were all decided here, inside
+  // the renderer, so the preview showed the model's raw wording and
+  // ordering while the file went out with something else. The audit calls
+  // this as its last pass, so what is previewed is what is sent. Running
+  // it twice changes nothing -- text already in this shape is returned
+  // untouched.
   global.DocxGenerator = { fromCvText, fromCoverLetterText, buildFileBase,
-    measureCv, normalizePhone: normalizePhoneToken };
+    measureCv, normalizeSections: reorderSections,
+    normalizePhone: normalizePhoneToken };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = global.DocxGenerator;
   }

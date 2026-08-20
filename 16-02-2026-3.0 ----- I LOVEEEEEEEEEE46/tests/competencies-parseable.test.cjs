@@ -1,4 +1,4 @@
-// CORE COMPETENCIES MUST SURVIVE TEXT EXTRACTION.
+// THE COMPETENCIES MUST SURVIVE TEXT EXTRACTION.
 //
 // Reported: the section looks messy on a phone, and it has to be
 // parseable by every ATS. Those are the same bug.
@@ -105,8 +105,19 @@ t('the extractor returns text, not markup',
   'raw XML leaked into the extracted text: '
     + JSON.stringify(linesKeepingTabs.filter((l) => /<w:/.test(l)).slice(0, 1)));
 
-const compIndex = linesKeepingTabs.findIndex((l) => /^CORE COMPETENCIES$/i.test(l));
-t('the section header survives', compIndex !== -1, JSON.stringify(linesKeepingTabs.slice(0, 6)));
+// The heading a parser goes looking for. A skills section is found by
+// searching headings for the word "skill" -- OpenResume's lookup is
+// literally `["skill"]` -- so a section called CORE COMPETENCIES is not
+// found at all, and a live parse of a real generated CV proved it: the
+// competencies came back empty. The text still arrives with the model's
+// wording; what is asserted is that the DOCX prints one a parser can
+// find.
+const compIndex = linesKeepingTabs.findIndex((l) => /SKILLS$/i.test(l.trim()));
+t('the section is headed so a parser can find it', compIndex !== -1,
+  JSON.stringify(linesKeepingTabs.slice(0, 6)));
+t('...and the competencies wording does not survive as a second heading',
+  !linesKeepingTabs.some((l) => /^CORE COMPETENCIES$/i.test(l.trim())),
+  'two skills sections: a parser that returns the first match loses the other');
 
 // Bounded by the NEXT section heading, not by a count of items. The
 // window used to be COMPETENCIES.length + 2 lines, which was right only

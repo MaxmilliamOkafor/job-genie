@@ -131,17 +131,15 @@
         let currentY = PDF_CONFIG.margins.top;
         currentY = this.renderHeader(doc, cvData.contact, currentY);
         currentY = this.renderSummary(doc, cvData.summary, currentY);
+        // Skills directly under the summary, in the six-second scan zone
+        // where the competencies used to sit -- they are the same section
+        // now, and structureCVData has already folded them together.
+        // Education last: above experience it is the graduate convention
+        // and reads as early-career on a CV with years of history behind
+        // it. Certifications sit between them as the detail block.
+        currentY = this.renderSkills(doc, cvData.skills, currentY);
         currentY = this.renderCoreCompetencies(doc, cvData.coreCompetencies, currentY, cvData);
         currentY = this.renderExperience(doc, cvData.experience, currentY);
-        // Skills and certifications above education. A recruiter scanning
-        // for six seconds reads top-down, so the sections that answer "can
-        // they do this job now" come first. Education above experience is
-        // the graduate convention and reads as early-career on a CV with
-        // years of history behind it. It also stops the skills being split
-        // in two with education wedged between them: Core Competencies at
-        // the top for the scan, Technical Proficiencies and Certifications
-        // together lower down as the detail block.
-        currentY = this.renderSkills(doc, cvData.skills, currentY);
         currentY = this.renderCertifications(doc, cvData.certifications, currentY);
         currentY = this.renderEducation(doc, cvData.education, currentY);
 
@@ -299,19 +297,36 @@
         }
       }
 
-      // CORE COMPETENCIES and TECHNICAL PROFICIENCIES are rendered from two
-      // separate fields by two separate renderers, and nothing stopped the
-      // same skill appearing in both -- so a CV could list "Power BI" twice
-      // under two headings. A human reads that as padding; a keyword-scoring
-      // ATS counts the term twice for no gain.
+      // ONE SKILLS SECTION, NOT TWO.
       //
-      // Competencies win, because they are the tailored, job-matched list.
-      // Proficiencies keep whatever is genuinely additional, and if that
-      // leaves nothing, renderSkills drops the heading rather than printing
-      // an empty section.
-      if (data.coreCompetencies.length && data.skills.length) {
-        const claimed = new Set(data.coreCompetencies.map((c) => this.skillKey(c)));
-        data.skills = data.skills.filter((s) => !claimed.has(this.skillKey(s)));
+      // Competencies and proficiencies were two fields, two renderers and
+      // two headings, and the same skill could print under both -- padding
+      // to a human, and no gain at all to a keyword-scoring ATS. That was
+      // patched by removing the overlap from proficiencies, which fixed
+      // the repetition and left the deeper problem in place: a parser
+      // finds the skills section by looking for the word "skill" in the
+      // heading, so everything under CORE COMPETENCIES was never indexed
+      // as a skill. A live parse of a real generated CV came back with the
+      // competencies empty.
+      //
+      // The two lists are one list. Competencies lead, because they are
+      // the tailored, job-matched phrases, and the rest follows in order,
+      // each skill once, compared by shape rather than spelling. The
+      // heading that prints over it is TECHNICAL SKILLS, and the DOCX
+      // generator does exactly the same thing to the tailored text, so
+      // the same application looks the same whichever file the portal
+      // accepted.
+      if (data.coreCompetencies.length) {
+        const seen = new Set();
+        const merged = [];
+        for (const s of data.coreCompetencies.concat(data.skills)) {
+          const k = this.skillKey(s);
+          if (!k || seen.has(k)) continue;
+          seen.add(k);
+          merged.push(String(s).trim());
+        }
+        data.skills = merged;
+        data.coreCompetencies = [];
       }
 
       return data;
@@ -1263,8 +1278,13 @@
 
       y = this.renderSectionTitle(doc, 'TECHNICAL SKILLS', y);
 
-      // Format skills as comma-separated list (max 25)
-      const skillsText = skills.slice(0, 25).join(', ');
+      // One comma-separated list. The cap was 25, set when this section
+      // held only the technical list; it now holds the competencies too,
+      // so the same cap would silently drop the tail of a list that
+      // printed in full yesterday. Raised by the nine competencies that
+      // moved into it -- a cap is still worth having, since a runaway
+      // list is a page of keywords rather than a CV.
+      const skillsText = skills.slice(0, 34).join(', ');
       y = this.renderParagraph(doc, skillsText, y);
 
       return y + PDF_CONFIG.spacing.beforeSection;

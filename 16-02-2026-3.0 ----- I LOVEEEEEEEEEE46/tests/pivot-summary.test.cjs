@@ -97,6 +97,52 @@ console.log('\nBUT A TITLE THE HISTORY DOES CONTAIN IS LEFT ALONE');
     JSON.stringify(r.fixes));
 }
 
+console.log('\nTHE REPLACEMENT LANDS ON A WORD, NOT INSIDE ONE');
+// Found in a generated CV, on the opening line: a posting titled
+// "Manufacturing Engineer" matched inside "Manufacturing engineering
+// technician", and the summary went out reading "Senior Software
+// Engineering technician with a foundation in process optimisation".
+// The claim was honest to begin with -- a technician is not an engineer,
+// and the sentence never borrowed the title -- so the rewrite had
+// nothing to fix and broke the sentence instead.
+{
+  const r = run('Manufacturing engineering technician with a foundation in process '
+    + 'optimisation, quality assurance and documentation.', 'Manufacturing Engineer');
+  t('  a longer word containing the title is left whole',
+    /Manufacturing engineering technician/.test(r.line), r.line);
+  t('  no word is cut in half',
+    !/\bing technician/.test(r.line.replace(/engineering technician/, '')), r.line);
+}
+{
+  // And the real claim is still caught: same title, actually asserted.
+  const r = run('Experienced Manufacturing Engineer with a foundation in process optimisation.',
+    'Manufacturing Engineer');
+  t('  the title asserted as the candidate\'s own is still replaced',
+    !/Manufacturing Engineer\b/.test(r.line) && /Software Engineer/.test(r.line), r.line);
+}
+
+console.log('\nAND IT DOES NOT IMPORT THE EMPLOYMENT TYPE');
+// The real title is read off the role line, which still carries
+// "(Contract, part-time)" at this point -- a later pass moves it into
+// the first bullet. A summary opening "Senior Software Engineer
+// (Contract, part-time) with a background in..." announces part-time in
+// the first six words of the CV. The headline pass under the name
+// strips it for exactly this reason; this one did not.
+{
+  const cv = ['Maxmilliam Okafor', '', 'PROFESSIONAL SUMMARY',
+    'Experienced Manager of Clinical Services with a strong background in clinical pharmacy.', '',
+    'PROFESSIONAL EXPERIENCE',
+    'Meta', 'Senior Software Engineer (Contract, part-time)', 'January 2023 - Present',
+    '- Mentored junior engineers through pairing and design reviews.', '',
+    'EDUCATION', 'MSc Artificial Intelligence'].join('\n');
+  const out = RA.runRecruiterAudit({ cvText: cv, jdText: 'clinical',
+    jdTitle: 'Manager of Clinical Services', jobKeywords: ['clinical'] });
+  const line = summaryLine(out.cvText);
+  t('  the real title reaches the summary', /Senior Software Engineer/.test(line), line);
+  t('  without the employment-type parenthetical',
+    !/\(Contract/i.test(line) && !/part-time/i.test(line), line);
+}
+
 console.log('\nAND A SUPPORTED CLAIM SURVIVES');
 // Tolerance matters as much as the guard: dropping evidenced material
 // would make the CV weaker, which is the opposite of tailoring.

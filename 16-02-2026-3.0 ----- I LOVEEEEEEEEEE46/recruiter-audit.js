@@ -800,11 +800,43 @@
   //
   // Nothing is invented. A location is attached only when the profile
   // records one for a company the CV already names.
+  // A COMPANY LINE THAT ALREADY SWALLOWED ITS LOCATION.
+  //
+  // A live parse returned Company = "Meta, Dublin, Ireland". The tailoring
+  // model, once the profile carried locations, wrote them straight into
+  // the company line comma-joined, and a comma is not a delimiter a parser
+  // can act on: the whole string lands in the Company field, so matching
+  // an employer named "Meta" fails, exactly as "Meta (formerly Facebook
+  // Inc)" and "Meta, Software Engineer" did before it.
+  //
+  // Split on the FIRST comma whose tail looks like a place: a short,
+  // capitalised, comma-separated trail with no digits and no company
+  // suffix. "Meta, Dublin, Ireland" splits; "Booz Allen Hamilton, Inc."
+  // and "Marks, Spencer and Co" do not.
+  const _CO_SUFFIX = /\b(?:inc|llc|ltd|limited|plc|gmbh|ag|sa|bv|nv|oy|ab|as|pty|co|corp|corporation|company|group|holdings|partners|llp|lp)\b\.?$/i;
+  const _PLACE_TAIL = /^[A-Z][A-Za-z.'\u00C0-\u024F -]{1,28}(?:,\s*[A-Z][A-Za-z.'\u00C0-\u024F -]{1,28}){0,2}$/;
+
+  function _splitCompanyAndPlace(line) {
+    const raw = String(line || '');
+    if (raw.indexOf('\t') !== -1) return null;          // already delimited
+    const bits = raw.split(',');
+    if (bits.length < 2) return null;
+    for (let cut = 1; cut < bits.length; cut++) {
+      const head = bits.slice(0, cut).join(',').trim();
+      const tail = bits.slice(cut).join(',').trim();
+      if (!head || !tail) continue;
+      if (/\d/.test(tail)) continue;                    // dates, street numbers
+      if (_CO_SUFFIX.test(head) && cut === 1) continue;  // "Acme, Inc." is the name
+      if (_CO_SUFFIX.test(tail.replace(/,.*$/, ''))) continue;
+      if (!_PLACE_TAIL.test(tail)) continue;
+      return { company: head, place: tail };
+    }
+    return null;
+  }
+
   function attachRoleLocations(cvText, experience) {
     const text = String(cvText || '');
-    if (!text || !Array.isArray(experience) || !experience.length) {
-      return { text, attached: 0 };
-    }
+    if (!text) return { text, attached: 0 };
     const lines = text.split('\n');
 
     let inExp = false, attached = 0;
@@ -821,6 +853,16 @@
       // title line matched here would put the city beside the title.
       const next = (lines[i + 1] || '').trim();
       if (!next || !_TITLE_WORD.test(next)) continue;
+
+      // A company line that already carries its location comma-joined is
+      // re-delimited here, with or without profile data, because the
+      // damage is done by the comma rather than by the location.
+      const split = _splitCompanyAndPlace(l);
+      if (split) {
+        lines[i] = split.company + '\t' + split.place;
+        attached++;
+        continue;
+      }
 
       const key = _eduNorm(l);
       if (key.length < 2) continue;
@@ -1251,8 +1293,15 @@
     // 5+ years anti-financial crime" over Meta and Citigroup software
     // bullets went through untouched, which is the entire case this
     // function exists for.
+    // Without the employment-type parenthetical. The role line still
+    // carries "(Contract, part-time)" when this runs -- a later pass
+    // moves it into the first bullet -- and a summary opening "Senior
+    // Software Engineer (Contract, part-time) with a foundation in..."
+    // announces part-time in the first six words of the CV. The headline
+    // pass strips it for exactly this reason; this one did not.
     const _cleanTitle = (t) => String(t || '')
-      .replace(/\s{2,}.*$/, '').replace(/[,|·-]\s*$/, '').trim();
+      .replace(/\s{2,}.*$/, '').replace(/\s*\([^)]*\)\s*$/, '')
+      .replace(/[,|·-]\s*$/, '').trim();
     const _isTitle = (t) => !!t && /[a-z]/.test(t) && t.split(/\s+/).length <= 7;
     let realTitle = '';
     for (let i = 0; i < roleLines.length; i++) {
@@ -1284,7 +1333,18 @@
       if (!line.trim()) continue;
 
       // 1. The borrowed title.
-      const re = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      //
+      // ON A WORD BOUNDARY, or it cuts a word in half. A posting titled
+      // "Manufacturing Engineer" matched inside "Manufacturing
+      // engineering technician" and the summary went out reading
+      // "Senior Software Engineering technician with a foundation in
+      // process optimisation" -- the opening line of the CV, and not
+      // English. The boundary is added only where the title itself ends
+      // in a word character: a title like "Engineer (Remote)" ends in a
+      // bracket, and \b after it would never match anything.
+      const esc = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp((/^\w/.test(title) ? '\\b' : '') + esc
+        + (/\w$/.test(title) ? '\\b' : ''), 'i');
       if (re.test(line)) { line = line.replace(re, realTitle); changed = true; }
 
       // 2. An unsupported "background in X" clause.
@@ -1664,19 +1724,43 @@
       // which is handled separately and must not be touched here.
       const next = (lines[i + 1] || '').trim();
       const nextNext = (lines[i + 2] || '').trim();
+
+      // THE COMPANY LINE NOW CARRIES ITS LOCATION.
+      //
+      // This used to require the line to hold no tab at all, which was
+      // true when it was written and stopped being true the day
+      // per-role locations were added: the company line became
+      // "Meta (formerly Facebook Inc)\tDublin, Ireland", the tab test
+      // rejected it, and the rename went straight back into the Company
+      // field -- the exact fault this function exists to prevent,
+      // reintroduced by a feature that never touched it. It only showed
+      // when the profile HAD a location for the role, which is now the
+      // normal case.
+      //
+      // So the line is split at the tab and only the company half is
+      // examined. The tab test earned its place by keeping the title out
+      // of here -- "Software Engineer\tJanuary 2023 - Present" would
+      // otherwise have lost its "(Contract, part-time)" to a rule about
+      // company names -- and that job is done by checking the half after
+      // the tab for a date instead.
+      const lead = line.slice(0, line.length - line.trimStart().length);
+      const tabAt = bare.indexOf('\t');
+      const head = tabAt === -1 ? bare : bare.slice(0, tabAt);
+      const tail = tabAt === -1 ? '' : bare.slice(tabAt);
+
       // company, then TITLE, then date. The title line is also followed
       // by a date, so without excluding that this claimed the title too
       // and took "(Contract, part-time)" off it as though it were a
       // company parenthetical -- undoing the employment-type rule one
       // line down and reporting the wrong fix.
       const isCompany = inExp && bare && !/^\s*[-*•]/.test(line)
-        && !ROLE_DATE_RE.test(bare)
-        && !ROLE_DATE_RE.test(next) && !/\t/.test(bare)
+        && !ROLE_DATE_RE.test(head) && !ROLE_DATE_RE.test(tail)
+        && !ROLE_DATE_RE.test(next)
         && (ROLE_DATE_RE.test(nextNext) || /\t/.test(next));
-      const m = isCompany ? bare.match(_COMPANY_PAREN) : null;
+      const m = isCompany ? head.match(_COMPANY_PAREN) : null;
       if (!m) { out.push(line); continue; }
 
-      out.push(line.replace(_COMPANY_PAREN, ''));
+      out.push(lead + head.replace(_COMPANY_PAREN, '') + tail);
       cleaned++;
     }
     return { text: out.join('\n'), cleaned };
@@ -3243,9 +3327,13 @@
 
     // Where each role happened, onto the company line. After the split
     // above, so a company line is a company line.
-    if (outCV && Array.isArray(experience) && experience.length) {
+    // Runs whenever there is a CV, not only when the profile carries
+    // locations: half its job is re-delimiting a company line that
+    // already swallowed its location, and that damage exists with or
+    // without profile data.
+    if (outCV) {
       try {
-        const rl = attachRoleLocations(outCV, experience);
+        const rl = attachRoleLocations(outCV, Array.isArray(experience) ? experience : []);
         if (rl.attached) {
           outCV = rl.text;
           report.fixes.push('Added the location to ' + rl.attached + ' role(s), '
@@ -3741,6 +3829,37 @@
             note: `The summary presents you as "${drift.claimedTitle}", which appears nowhere in your genuine CV. ` +
               `Tailoring should reframe your real background, not invent a different profession. Review before submitting.`,
           });
+        }
+      } catch (e) {}
+    }
+
+    // WHAT IS PREVIEWED IS WHAT IS SENT.
+    //
+    // Section order, the canonical headings and the merge of the two
+    // skills sections are all decided inside the DOCX generator, on the
+    // way to the file. So the panel showed the model's raw output --
+    // EDUCATION wherever it happened to land, CORE COMPETENCIES and
+    // TECHNICAL SKILLS as two separate blocks -- while the attachment
+    // went out reordered, renamed and merged. Two documents, one of them
+    // invisible until it reached an employer.
+    //
+    // Calling the generator's own pass here, rather than reimplementing
+    // it, is the same decision as measuring the page with measureCv:
+    // there is one definition of the finished shape and both paths use
+    // it. It is idempotent, so the generator running it again on the way
+    // to the file changes nothing.
+    if (outCV) {
+      try {
+        const DG = (typeof window !== 'undefined' && window.DocxGenerator)
+          || (typeof global !== 'undefined' && global.DocxGenerator);
+        if (DG && typeof DG.normalizeSections === 'function') {
+          const before = outCV;
+          const normalised = DG.normalizeSections(outCV);
+          if (normalised && normalised !== before) {
+            outCV = normalised;
+            report.fixes.push('Sections normalised for the preview: standard headings, '
+              + 'education last, one skills section');
+          }
         }
       } catch (e) {}
     }

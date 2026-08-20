@@ -1757,6 +1757,8 @@
       // convention, and a signature line is not a sentence. Neither
       // should be 'corrected'.
       const LETTER_LINE = /^\s*(dear\b|hi\b|hello\b|yours\b|kind regards|best regards|regards|sincerely)/i;
+      // The line a signature sits under.
+      const SIGN_OFF = /^\s*(yours\b|kind regards|best regards|regards|sincerely|best wishes|many thanks)/i;
       return text
         // Remove excessive commas
         .replace(/,(\s*,)+/g, ',')
@@ -1779,9 +1781,22 @@
           return LETTER_LINE.test(line) ? m : tail;
         })
         // Ensure sentences end with period, leaving those lines alone.
+        //
+        // And leaving the SIGNATURE alone. "Yours sincerely," is matched
+        // by LETTER_LINE and survives; the name on the line under it was
+        // not, so every letter went out signed "Maxmilliam Okafor." A
+        // name is not a sentence, and a full stop after it is the kind of
+        // small wrongness a reader notices without being able to say why.
+        // The signature is identified by what precedes it rather than by
+        // guessing at the shape of a name.
         .replace(/([a-z])([ \t]*)$/gm, (m, ch, tail, off, whole) => {
-          const line = whole.slice(whole.lastIndexOf('\n', off - 1) + 1, off + 1);
-          return LETTER_LINE.test(line) ? m : ch + '.' + tail;
+          const lineStart = whole.lastIndexOf('\n', off - 1) + 1;
+          const line = whole.slice(lineStart, off + 1);
+          if (LETTER_LINE.test(line)) return m;
+          const prevStart = lineStart > 1 ? whole.lastIndexOf('\n', lineStart - 2) + 1 : 0;
+          const prev = lineStart > 0 ? whole.slice(prevStart, lineStart - 1) : '';
+          if (SIGN_OFF.test(prev)) return m;
+          return ch + '.' + tail;
         })
         // Deleting a banned phrase from the middle of a sentence can
         // strand the verb before an infinitive -- removing "welcome the

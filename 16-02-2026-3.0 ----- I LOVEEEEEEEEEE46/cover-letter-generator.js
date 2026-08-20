@@ -30,7 +30,7 @@
         'My {yearsExp} years in {domain} have given me a good mix of hands-on technical ability and the softer skills you need when working with clients, leadership, or teams under pressure.'
       ],
       closing: [
-        'I would be happy to chat about how my background fits the role. Thank you for reading this far. I appreciate your time.',
+        'I would be happy to chat about how my background fits the role. Thank you for reading this far.',
         'If the above sounds like a fit, I am free to talk whenever works for you. Thanks for considering me.',
         'I hope this gives a good sense of what I can bring. I am available to discuss the role at your convenience. Thank you.',
         'Happy to go into more detail on any of the above. Thanks for your time, and I hope to hear from you.',
@@ -467,7 +467,11 @@
     },
 
     // ============ BUILD CLOSING WITH KEYWORDS ============
+    // A closing paragraph makes ONE offer of a conversation. Two passes
+    // used to add one each, on top of a template that already made it.
+    _OFFER_RE: /\b(chat|talk|speak|discuss|conversation|hear from you|more detail|go deeper|available)\b/i,
     buildClosingWithKeywords(closingTemplates, replacements, keywords) {
+      const OFFER_RE = this._OFFER_RE;
       let closing = this.selectRandom(closingTemplates, replacements);
 
       // Name the employer once more at the close. A letter that mentions
@@ -476,25 +480,73 @@
       // asks the final paragraph to say why this company specifically.
       const co = replacements && replacements.company;
       if (co && !new RegExp('\\b' + String(co).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(closing)) {
-        // Wording chosen to avoid the sanitiser's banned-phrase list.
-        // "welcome the chance" is deleted outright there, which turned
-        // "I would welcome the chance to talk" into "I would to talk".
-        const tails = [
-          ` I would be glad to discuss what I could bring to ${co}.`,
-          ` I am happy to talk through how I could help at ${co}.`,
-          ` I would like to discuss the role and ${co} further.`,
+        // NAME THE COMPANY IN THE OFFER THAT IS ALREADY THERE.
+        //
+        // Every closing template already offers a conversation, so
+        // appending another one produced a paragraph that said the same
+        // thing twice: "I would be happy to chat about how my background
+        // fits the role. Thank you for reading this far. I appreciate
+        // your time. I am happy to talk through how I could help at
+        // Stripe." Four sentences, three of them the same gesture, at
+        // the end of a letter arguing the candidate is a clear thinker.
+        //
+        // Putting the company into the existing offer names it once and
+        // costs nothing.
+        // The slots the templates actually give it, in order. First
+        // match wins, and each produces one grammatical sentence rather
+        // than a new one.
+        const GRAFTS = [
+          [/\b(?:the|this)\s+(?:role|position|opportunity)\b/i, (m) => m + ' at ' + co],
+          [/\b(?:Thanks|Thank you) for considering me\b/i, (m) => m + ' for the role at ' + co],
+          [/\bhope to (?:hear|speak) (?:from|with) you(?: soon)?\b/i, (m) => m + ' about the role at ' + co],
+          [/\b(?:Looking forward to )?hearing from you\b/i, (m) => m + ' about the role at ' + co],
+          [/\b(Thanks|Thank you) for your time\b/i,
+            (m, word) => word + ' for your time and for considering me for the role at ' + co],
         ];
-        closing = closing.replace(/\s*$/, '') + tails[Math.floor(Math.random() * tails.length)];
+        let named = closing;
+        for (const [re, fn] of GRAFTS) {
+          const next = closing.replace(re, fn);
+          if (next !== closing) { named = next; break; }
+        }
+        if (named !== closing) {
+          closing = named;
+        } else if (!OFFER_RE.test(closing)) {
+          // Nothing to graft onto and no offer already made, so a
+          // sentence is genuinely needed. Wording chosen to avoid the
+          // sanitiser's banned-phrase list: "welcome the chance" is
+          // deleted outright there, which turned "I would welcome the
+          // chance to talk" into "I would to talk".
+          const tails = [
+            ` I would be glad to discuss what I could bring to ${co}.`,
+            ` I am happy to talk through how I could help at ${co}.`,
+            ` I would like to discuss the role and ${co} further.`,
+          ];
+          closing = closing.replace(/\s*$/, '') + tails[Math.floor(Math.random() * tails.length)];
+        }
+        // Otherwise the closing already offers a conversation and has no
+        // natural slot for the name. The opening line names the company;
+        // saying it again at the cost of a third "happy to talk" is not
+        // a trade worth making.
       }
 
       if (keywords.length >= 5) {
         const kw = keywords[4] || keywords[0];
         const hasKeyword = keywords.some(k => closing.toLowerCase().includes(k.toLowerCase()));
-        if (!hasKeyword && closing.includes('Thank')) {
+        // NOT ON TOP OF AN OFFER THAT IS ALREADY THERE.
+        //
+        // This prepended a sentence whenever the closing said "Thank",
+        // which every template does, so a paragraph could open "I am
+        // also happy to discuss my APIs experience in more detail."
+        // above "Happy to go into more detail on any of the above." --
+        // the same offer, twice, in consecutive sentences. And "my APIs
+        // experience" is not how anyone writes it.
+        if (!hasKeyword && closing.includes('Thank') && !OFFER_RE.test(closing)) {
           const injections = [
-            `I am also happy to discuss my ${kw} experience in more detail. `,
-            `If ${kw} matters for this role, I have plenty to share on that front. `,
-            `Happy to go deeper on ${kw} or anything else. `
+            `I am happy to go into my experience with ${kw} in more detail. `,
+            // Phrased without a verb that has to agree with the keyword:
+            // "If APIs matters for this role" was what the old wording
+            // produced, and a plural skill name is common.
+            `If the role leans on ${kw}, I have plenty to share on that front. `,
           ];
           closing = injections[Math.floor(Math.random() * injections.length)] + closing;
         }
@@ -675,7 +727,11 @@
           if (!para1.endsWith('.')) para1 += '.';
         }
         if (kw1 && kw2 && kw3) {
-          para1 += ` A lot of that work involved ${kw1}, ${kw2}, and ${kw3}. All of which show up in your job description too.`;
+          // ONE SENTENCE. "All of which show up in your job description
+          // too." has no main clause -- it is a fragment, and it went out
+          // in every letter that had three overlapping keywords, which is
+          // most of them. A comma joins it to the clause it belongs to.
+          para1 += ` A lot of that work involved ${kw1}, ${kw2} and ${kw3}, all of which show up in your job description too.`;
         } else if (kw1 && kw2) {
           para1 += ` Both ${kw1} and ${kw2} were central to that work.`;
         }
