@@ -287,11 +287,21 @@ const Profile = () => {
 
 
   const handleSave = async () => {
-    const normalized = {
+    const normalized = normaliseProfileForSave({
       ...localProfile,
       professional_experience: normalizeWorkExperience(localProfile.professional_experience || []),
-    };
+    });
 
+    const errors = validateProfileForSave(normalized);
+    if (errors.length) {
+      setLocalProfile(normalized);
+      toast.error(errors[0], {
+        description: errors.length > 1 ? `${errors.length - 1} more issue(s) to fix.` : undefined,
+      });
+      return;
+    }
+
+    setLocalProfile(normalized);
     await updateProfile(normalized);
     setEditMode(false);
   };
