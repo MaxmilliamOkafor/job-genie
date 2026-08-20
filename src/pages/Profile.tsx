@@ -26,6 +26,22 @@ import {
 import { toast } from 'sonner';
 
 import { normalizeWorkExperience, formatDateRange, extractDatesFromTitle } from '@/lib/workExperienceNormalization';
+import {
+  EMPLOYMENT_TYPES,
+  COMPETENCY_CATEGORY,
+  normaliseProfileForSave,
+  validateProfileForSave,
+  normaliseCompany,
+  normaliseLocation,
+  validateLocation,
+  splitTitleAndEmploymentType,
+  splitSkillLists,
+  crossListDuplicates,
+  combinedSkillsPreview,
+  validateSkills,
+  projectIssues,
+  validateEducationEntry,
+} from '@/lib/profileValidation';
 
 
 
@@ -271,11 +287,21 @@ const Profile = () => {
 
 
   const handleSave = async () => {
-    const normalized = {
+    const normalized = normaliseProfileForSave({
       ...localProfile,
       professional_experience: normalizeWorkExperience(localProfile.professional_experience || []),
-    };
+    });
 
+    const errors = validateProfileForSave(normalized);
+    if (errors.length) {
+      setLocalProfile(normalized);
+      toast.error(errors[0], {
+        description: errors.length > 1 ? `${errors.length - 1} more issue(s) to fix.` : undefined,
+      });
+      return;
+    }
+
+    setLocalProfile(normalized);
     await updateProfile(normalized);
     setEditMode(false);
   };
@@ -1010,6 +1036,7 @@ const Profile = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={COMPETENCY_CATEGORY}>Core Competency</SelectItem>
                     <SelectItem value="technical">Technical</SelectItem>
                     <SelectItem value="tools">Tools</SelectItem>
                     <SelectItem value="soft">Soft Skills</SelectItem>
@@ -1032,6 +1059,7 @@ const Profile = () => {
               });
               
               const categoryLabels: Record<string, string> = {
+                [COMPETENCY_CATEGORY]: 'Core Competencies',
                 technical: 'Technical',
                 tools: 'Tools',
                 soft: 'Leadership',
@@ -1062,9 +1090,54 @@ const Profile = () => {
                 </div>
               );
             })()}
-            <p className="text-xs text-muted-foreground mt-3">
-              Skills not in your profile will default to 7 years for automation
-            </p>
+
+            {/* Live duplicate + rule warnings, and the combined print preview */}
+            {(() => {
+              const skills = (localProfile.skills || []) as any[];
+              const { competencies } = splitSkillLists(skills as any);
+              const typedDuplicate =
+                newSkill.name.trim() &&
+                skills.some(
+                  (s: any) =>
+                    String(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') ===
+                    newSkill.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+                );
+              const cross = crossListDuplicates(skills as any);
+              const errors = validateSkills(skills as any);
+              const preview = combinedSkillsPreview(skills as any);
+
+              return (
+                <div className="mt-4 space-y-2">
+                  {typedDuplicate && (
+                    <p className="text-xs text-destructive">
+                      "{newSkill.name}" is already in your lists - each term prints once.
+                    </p>
+                  )}
+                  {cross.length > 0 && (
+                    <p className="text-xs text-destructive">
+                      In both lists: {cross.join(', ')}. Remove it from one.
+                    </p>
+                  )}
+                  {errors
+                    .filter((e) => !e.startsWith('Duplicate term in both lists'))
+                    .map((e) => (
+                      <p key={e} className="text-xs text-destructive">{e}</p>
+                    ))}
+                  <div className="rounded-md border border-border bg-muted/30 p-3">
+                    <p className="text-xs font-semibold tracking-wide text-foreground">TECHNICAL SKILLS</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {preview.length ? preview.join(' | ') : 'No terms yet.'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      Prints as one section: {competencies.length} competencies first, then technical terms.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Skills not in your profile will default to 7 years for automation
+                  </p>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -1264,9 +1337,42 @@ const Profile = () => {
                             exps[expIndex] = { ...exps[expIndex], title: e.target.value };
                             updateLocalField('professional_experience', exps);
                           }}
+                          onBlur={() => {
+                            const exps = [...(localProfile.professional_experience || [])];
+                            const { title, employment_type } = splitTitleAndEmploymentType(
+                              exps[expIndex]?.title,
+                              exps[expIndex]?.employment_type
+                            );
+                            exps[expIndex] = { ...exps[expIndex], title, employment_type };
+                            updateLocalField('professional_experience', exps);
+                          }}
                           placeholder="Job Title (e.g., Senior Software Engineer)"
                           className="font-semibold"
                         />
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Employment type</Label>
+                          <Select
+                            value={exp.employment_type || 'none'}
+                            onValueChange={(v) => {
+                              const exps = [...(localProfile.professional_experience || [])];
+                              exps[expIndex] = { ...exps[expIndex], employment_type: v === 'none' ? '' : v };
+                              updateLocalField('professional_experience', exps);
+                            }}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Not specified" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not specified</SelectItem>
+                              {EMPLOYMENT_TYPES.map((t) => (
+                                <SelectItem key={t} value={t}>{t}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Job title alone in the Title field - recruiters search on the title.
+                          </p>
+                        </div>
                         <Input
                           value={exp.company || ''}
                           onChange={(e) => {
@@ -1274,8 +1380,29 @@ const Profile = () => {
                             exps[expIndex] = { ...exps[expIndex], company: e.target.value };
                             updateLocalField('professional_experience', exps);
                           }}
+                          onBlur={() => {
+                            const exps = [...(localProfile.professional_experience || [])];
+                            const { company, location } = normaliseCompany(exps[expIndex]?.company);
+                            exps[expIndex] = {
+                              ...exps[expIndex],
+                              company,
+                              location: normaliseLocation(location || exps[expIndex]?.location || ''),
+                            };
+                            updateLocalField('professional_experience', exps);
+                          }}
                           placeholder="Company"
                         />
+                        {(() => {
+                          const split = normaliseCompany(exp.company);
+                          const previewLocation = normaliseLocation(split.location || exp.location || '');
+                          return (
+                            <p className="text-xs text-muted-foreground">
+                              Company: <span className="text-foreground">{split.company || '-'}</span>
+                              {'   '}
+                              Location: <span className="text-foreground">{previewLocation || '-'}</span>
+                            </p>
+                          );
+                        })()}
                         <div className="flex gap-2 items-end">
                           <div className="flex-1">
                             <Label className="text-xs text-muted-foreground">Location</Label>
@@ -1288,11 +1415,25 @@ const Profile = () => {
                                 exps[expIndex] = { ...exps[expIndex], location: raw };
                                 updateLocalField('professional_experience', exps);
                               }}
+                              onBlur={() => {
+                                const exps = [...(localProfile.professional_experience || [])];
+                                exps[expIndex] = {
+                                  ...exps[expIndex],
+                                  location: normaliseLocation(exps[expIndex]?.location || ''),
+                                };
+                                updateLocalField('professional_experience', exps);
+                              }}
                               placeholder="Dublin, Ireland"
                               maxLength={60}
                             />
+                            {(() => {
+                              const err = validateLocation(exp.location);
+                              return err ? (
+                                <p className="text-xs text-destructive mt-0.5">{err}</p>
+                              ) : null;
+                            })()}
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              City, Country — e.g. Dublin, Ireland. Use Remote if you worked remotely. Workday and iCIMS map City and Country to separate structured fields, so the comma matters.
+                              City, Country - e.g. Dublin, Ireland. Also accepted: City, State, Country / Remote / Remote, Country. Workday and iCIMS map City and Country to separate structured fields, so the comma matters.
                             </p>
                           </div>
                           <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
@@ -1607,7 +1748,11 @@ const Profile = () => {
                             updateLocalField('relevant_projects', projects);
                           }}
                           placeholder="Tech Stack (e.g., Python, FastAPI, React, AWS)"
+                          maxLength={60}
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Tech stack: {(project.techStack || '').length}/60 characters - it prints right-aligned on the title line.
+                        </p>
                         <Input
                           value={project.liveUrl || ''}
                           onChange={(e) => {
@@ -1626,6 +1771,19 @@ const Profile = () => {
                           }}
                           placeholder="Code / GitHub URL (https://github.com/...)"
                         />
+                        {(() => {
+                          const issues = projectIssues(project);
+                          return issues.length ? (
+                            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2">
+                              <p className="text-xs font-medium text-destructive">Incomplete project</p>
+                              {issues.map((i) => (
+                                <p key={i} className="text-xs text-destructive">- {i}</p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Complete - both links present.</p>
+                          );
+                        })()}
                         <p className="text-sm text-muted-foreground italic">
                           💡 Include dates in your role above for better CV generation
                         </p>
@@ -1834,7 +1992,7 @@ const Profile = () => {
                     />
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <Label className="text-xs text-muted-foreground">From (year)</Label>
                         <Input
                           value={edu.start_year || ''}
                           onChange={(e) => {
@@ -1850,7 +2008,7 @@ const Profile = () => {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <Label className="text-xs text-muted-foreground">To (year)</Label>
                         <Input
                           value={edu.end_year === 'Present' ? 'Present' : (edu.end_year || '')}
                           disabled={edu.end_year === 'Present'}
@@ -1881,19 +2039,16 @@ const Profile = () => {
                       </label>
                     </div>
                     {(() => {
-                      const maxYear = new Date().getFullYear() + 8;
-                      const s = edu.start_year;
-                      const en = edu.end_year;
-                      const bad = (y: any) => y && (!/^\d{4}$/.test(y) || Number(y) < 1950 || Number(y) > maxYear);
-                      const messages: string[] = [];
-                      if (bad(s)) messages.push(`From year must be between 1950 and ${maxYear}.`);
-                      if (en !== 'Present' && bad(en)) messages.push(`To year must be between 1950 and ${maxYear}.`);
-                      if (s && en && en !== 'Present' && /^\d{4}$/.test(s) && /^\d{4}$/.test(en) && Number(en) < Number(s)) {
-                        messages.push('To year cannot be earlier than From year.');
-                      }
+                      const messages = validateEducationEntry(edu);
                       return messages.length ? (
-                        <p className="text-xs text-destructive">{messages.join(' ')}</p>
-                      ) : null;
+                        <p className="text-xs text-destructive">
+                          {messages.map((m) => m.replace(/^[^:]+:\s*/, '')).join(' ')}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Workday requires both years - saving is blocked until they are filled.
+                        </p>
+                      );
                     })()}
                     <Textarea 
                       value={edu.description || ''} 
