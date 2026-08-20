@@ -933,48 +933,6 @@
       // True for the first content line after a section heading, so the
       // heading's trailing space is not added to a full role gap.
       let afterHeading = false;
-      // Sections rendered as one item per line, single column.
-      //
-      // These used to be a three-up grid built from TAB characters. The
-      // structure was genuinely single-column -- no tables, no Word
-      // columns -- which is why it read as ATS-safe. The tabs were not.
-      // Parsers disagree about <w:tab/>: some emit "\t", some drop it
-      // entirely, and when it is dropped adjacent items glue together --
-      // "Project ManagementQuality AssuranceRisk Management", one
-      // unmatchable blob in the section an ATS scores most directly.
-      //
-      // That was previously patched by padding each item with a trailing
-      // space so a word boundary survived. It treated the symptom: the
-      // items were still undelimited, just no longer welded. And the tab
-      // stops were fixed positions measured for A4, so on a phone the
-      // columns did not reflow, they overflowed.
-      //
-      // A line break is a delimiter no parser can misread.
-      const GRID_SECTIONS = new Set([
-        'CORE COMPETENCIES', 'AREAS OF EXPERTISE',
-      ]);
-      // ONE ITEM PER PARAGRAPH.
-      //
-      // This was a three-up grid: one paragraph per row, with items
-      // separated by TAB characters. It is a single-column paragraph
-      // structure, which is why it looked safe -- but text extraction
-      // yields the tabs, and every ATS then has to guess what they mean.
-      // Some drop them, giving "Stakeholder managementAzure DevOps"; some
-      // render a space, merging three skills into one long phrase. Either
-      // way the delimiter between skills is lost, which is the one thing
-      // a skills section has to get right.
-      //
-      // The tab stops were also fixed positions measured for A4, so on a
-      // phone the columns do not reflow -- they overflow.
-      //
-      // A line break is a delimiter no parser can misread, and a short
-      // line fits any screen.
-      const emitGrid = (items) => { items.forEach(emitCompetency); };
-      // Competencies: bulleted, one per line, single column.
-      const emitCompetency = (item) => out.push(paragraph(
-        run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
-        { indent: 360, hanging: 240, spacingAfter: 30, line: 276, lineRule: 'auto' }
-      ));
       // A helper to emit a single navy-bullet item paragraph.
       const emitBullet = (item) => out.push(paragraph(
         run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
@@ -1197,10 +1155,11 @@
         }
 
         // LIST-SHAPED SECTIONS: a single line of 2+ comma-separated items
-        // with no sentence punctuation gets split into per-item paragraphs.
-        // CORE COMPETENCIES / AREAS OF EXPERTISE -> one item per line.
-        // CERTIFICATIONS / AWARDS                -> one bullet per line.
-        if (LIST_SECTIONS.has(currentSection) || GRID_SECTIONS.has(currentSection)) {
+        // with no sentence punctuation, re-joined as one flowing line.
+        // CERTIFICATIONS and AWARDS only -- the competencies are part of
+        // the skills section now and take the ordinary body treatment,
+        // which is what that section always used.
+        if (LIST_SECTIONS.has(currentSection)) {
           const looksLikeList = /,/.test(t) && !/[.!?]\s/.test(t) && t.split(',').length >= 2;
           if (looksLikeList) {
             const items = t.split(/,\s*/)
