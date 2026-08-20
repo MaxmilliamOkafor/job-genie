@@ -57,15 +57,16 @@ try {
   // register; if it appears and the demo still does not clear, their
   // parser is the thing that did not finish. Different problems, and
   // only the second one is worth a retry.
-  await page.waitForSelector('input[type="file"]', { state: 'attached', timeout: 30000 });
-  await page.setInputFiles('input[type="file"]', PDF);
-
-  let uploadRegistered = false;
-  try {
-    await page.waitForFunction(
-      () => /cv\.pdf/i.test(document.body.innerText), { timeout: 15000 });
-    uploadRegistered = true;
-  } catch (e) { /* reported below */ }
+  const upload = async () => {
+    await page.waitForSelector('input[type="file"]', { state: 'attached', timeout: 30000 });
+    await page.setInputFiles('input[type="file"]', PDF);
+    try {
+      await page.waitForFunction(
+        () => /cv\.pdf/i.test(document.body.innerText), { timeout: 15000 });
+      return true;
+    } catch (e) { return false; }
+  };
+  let uploadRegistered = await upload();
   console.log('  upload registered on the page: ' + uploadRegistered);
 
   // WAIT FOR OUR RESUME, NOT A FIXED DELAY.
@@ -79,14 +80,38 @@ try {
   // A test that can silently grade a different document is worse than no
   // test, so this waits for the demo to be REPLACED and refuses to
   // assert if it never is.
+  // TWO MINUTES, AND A SECOND ATTEMPT, BEFORE GIVING UP.
+  //
+  // The window was 45 seconds and one attempt, and the result swung
+  // between graded and skipped on consecutive commits three minutes
+  // apart -- one run read the whole parse and caught a real regression,
+  // the next never got past the demo. The site is the flaky part, and a
+  // skipped run measures nothing, so it is worth waiting longer and
+  // reloading once. The job's own timeout is twenty minutes; this can
+  // spend four of them.
   const DEMO = /Leo Leopard|laverne\.edu|LionLike MindState|Volunteer Swim Coach/i;
-  let replaced = false;
-  try {
-    await page.waitForFunction(
-      () => !/Leo Leopard|laverne\.edu/i.test(document.body.innerText),
-      { timeout: 45000 });
-    replaced = true;
-  } catch (e) { /* reported below */ }
+  const WAIT_MS = 120000;
+  const waitForParse = async () => {
+    try {
+      await page.waitForFunction(
+        () => !/Leo Leopard|laverne\.edu/i.test(document.body.innerText),
+        { timeout: WAIT_MS });
+      return true;
+    } catch (e) { return false; }
+  };
+  let replaced = await waitForParse();
+  if (!replaced) {
+    console.log('  the demo was still rendered after ' + (WAIT_MS / 1000)
+      + 's -- reloading and uploading once more');
+    try {
+      await page.goto('https://www.open-resume.com/resume-parser',
+        { waitUntil: 'domcontentloaded', timeout: 60000 });
+      uploadRegistered = (await upload()) || uploadRegistered;
+      replaced = await waitForParse();
+    } catch (e) {
+      console.log('  the retry could not run: ' + (e && e.message));
+    }
+  }
   await page.waitForTimeout(1500);
 
   const text = await page.evaluate(() => document.body.innerText);
@@ -97,7 +122,8 @@ try {
   if (!replaced || DEMO.test(text)) {
     console.log('SITE UNAVAILABLE: ' + (uploadRegistered
       ? 'the file attached (cv.pdf is on the page) but their parser never '
-        + 'replaced the demo resume within 45s, so nothing was graded.'
+        + 'replaced the demo resume, across two attempts of '
+        + (WAIT_MS / 1000) + 's each, so nothing was graded.'
       : 'the file never registered on the page at all -- the input was set '
         + 'but the app did not react, which usually means their upload '
         + 'handler changed. Nothing was graded.'));
