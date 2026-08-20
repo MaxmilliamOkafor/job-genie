@@ -739,6 +739,7 @@
           return {
             company: job.company || job.companyName || '',
             title: cleanTitle,
+            location: job.location || job.role_location || job.city || job.job_location || job.work_location || job.based_in || '',
             dates: dates,
             bullets: this.normalizeBullets(job.bullets || job.achievements || job.responsibilities || job.description || [])
           };

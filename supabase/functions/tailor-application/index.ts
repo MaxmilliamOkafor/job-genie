@@ -3128,6 +3128,7 @@ ${
       {
         "company": "[Company Name]",
         "title": "[Job Title]",
+        "location": "[City, Country exactly as supplied in the profile]",
         "dates": "[Month YYYY - Month YYYY or Month YYYY - Present]",
         "bullets": ["bullet1 with metrics", "bullet2", "bullet3"]
       }
@@ -3777,6 +3778,8 @@ ${
         experience: (Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []).map((exp: any) => ({
           company: exp?.company || "",
           title: exp?.title || "",
+          location:
+            exp?.location || exp?.role_location || exp?.city || exp?.job_location || exp?.work_location || exp?.based_in || "",
           dates:
             exp?.dates || formatDateRangeATS(exp?.startDate || exp?.start_date, exp?.endDate || exp?.end_date, "Present"),
           // PRIORITY: Use 'bullets' array first (clean structured data), fallback to 'description'

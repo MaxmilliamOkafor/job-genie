@@ -850,6 +850,7 @@ interface StructuredCvPersonalInfo {
 interface StructuredCvExperience {
   company: string;
   title: string;
+  location?: string;
   dates?: string;
   bullets: string[];
 }
@@ -1051,6 +1052,14 @@ function profileToResumeData(profile: Record<string, unknown>): ResumeData {
     ? (profile.professional_experience as Array<Record<string, unknown>>).map((exp) => ({
         company: (exp.company as string) || "",
         title: (exp.title as string) || "",
+        location:
+          (exp.location as string) ||
+          (exp.role_location as string) ||
+          (exp.city as string) ||
+          (exp.job_location as string) ||
+          (exp.work_location as string) ||
+          (exp.based_in as string) ||
+          "",
         dates: formatDateRange(exp.startDate as string, exp.endDate as string),
         bullets: Array.isArray(exp.bullets)
           ? (exp.bullets as string[])
@@ -1172,7 +1181,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
         summary: structuredCv.summary,
         coreCompetencies: structuredCv.coreCompetencies,
         experience: (structuredCv.experience || []).map((e) => ({
-          company: e.company, title: e.title, dates: e.dates,
+          company: e.company, title: e.title, dates: e.dates, location: e.location,
           bullets: (e.bullets || []).slice(0, 6),
         })),
         projects,

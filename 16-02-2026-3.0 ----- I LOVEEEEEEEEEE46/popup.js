@@ -6067,6 +6067,7 @@ class ATSTailor {
               ...aiExp,
               company: origCompany,  // ← LOCKED FROM ORIGINAL PROFILE
               title: origTitle,      // ← LOCKED FROM ORIGINAL PROFILE
+              location: originalExp.location || originalExp.role_location || originalExp.city || originalExp.job_location || originalExp.work_location || originalExp.based_in || '',
               dates: originalExp.dates || _buildMMYYYYRange(originalExp.startDate, originalExp.endDate),  // ← LOCKED (MM-YYYY)
               startDate: _toMMYYYY(originalExp.startDate),  // ← LOCKED (MM-YYYY)
               endDate: _toMMYYYY(originalExp.endDate),      // ← LOCKED (MM-YYYY)

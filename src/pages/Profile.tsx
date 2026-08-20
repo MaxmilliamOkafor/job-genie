@@ -22,7 +22,7 @@ import { DataPreviewPanel } from '@/components/profile/DataPreviewPanel';
 import {
   User, Briefcase, GraduationCap, Award, Download, Save, Plus, X,
   Shield, CheckCircle, Globe, FileText, Languages, Key,
-  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown, FolderGit2, ArrowUp, ArrowDown
+  Loader2, Activity, Zap, AlertTriangle, Upload, FolderDown, FolderGit2, GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -73,6 +73,7 @@ const Profile = () => {
   const { profile, isLoading, updateProfile } = useProfile();
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
+  const [draggedCertification, setDraggedCertification] = useState<number | null>(null);
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
   // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
@@ -339,11 +340,11 @@ const Profile = () => {
     updateLocalField('certifications', [...existing, cert]);
   };
 
-  const moveCertification = (index: number, direction: -1 | 1) => {
+  const moveCertification = (index: number, target: number) => {
     const certs = [...(localProfile.certifications || [])];
-    const target = index + direction;
     if (target < 0 || target >= certs.length) return;
-    [certs[index], certs[target]] = [certs[target], certs[index]];
+    const [moved] = certs.splice(index, 1);
+    certs.splice(target, 0, moved);
     updateLocalField('certifications', certs);
   };
 
@@ -1204,30 +1205,20 @@ const Profile = () => {
                 {(localProfile.certifications || []).map((cert: string, i: number) => (
                   <div
                     key={`${cert}-${i}`}
+                    draggable
+                    onDragStart={() => setDraggedCertification(i)}
+                    onDragEnd={() => setDraggedCertification(null)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedCertification === null || draggedCertification === i) return;
+                      moveCertification(draggedCertification, i);
+                      setDraggedCertification(null);
+                    }}
                     className={`flex items-center gap-2 rounded-md border p-2 ${i >= CERTIFICATIONS_MAX ? 'opacity-50' : ''}`}
                   >
+                    <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground" aria-hidden="true" />
                     <span className="w-6 text-xs text-muted-foreground">{i + 1}.</span>
                     <span className="flex-1 text-sm">{cert}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={`Move ${cert} up`}
-                      disabled={i === 0}
-                      onClick={() => moveCertification(i, -1)}
-                    >
-                      <ArrowUp className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={`Move ${cert} down`}
-                      disabled={i === (localProfile.certifications || []).length - 1}
-                      onClick={() => moveCertification(i, 1)}
-                    >
-                      <ArrowDown className="h-3 w-3" />
-                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -2266,7 +2257,7 @@ const Profile = () => {
         </Card>
 
         {/* Data preview - exactly what the extension reads */}
-        <DataPreviewPanel profile={localProfile} />
+        <DataPreviewPanel profile={profile || localProfile} />
       </div>
     </AppLayout>
   );
