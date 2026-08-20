@@ -1724,19 +1724,43 @@
       // which is handled separately and must not be touched here.
       const next = (lines[i + 1] || '').trim();
       const nextNext = (lines[i + 2] || '').trim();
+
+      // THE COMPANY LINE NOW CARRIES ITS LOCATION.
+      //
+      // This used to require the line to hold no tab at all, which was
+      // true when it was written and stopped being true the day
+      // per-role locations were added: the company line became
+      // "Meta (formerly Facebook Inc)\tDublin, Ireland", the tab test
+      // rejected it, and the rename went straight back into the Company
+      // field -- the exact fault this function exists to prevent,
+      // reintroduced by a feature that never touched it. It only showed
+      // when the profile HAD a location for the role, which is now the
+      // normal case.
+      //
+      // So the line is split at the tab and only the company half is
+      // examined. The tab test earned its place by keeping the title out
+      // of here -- "Software Engineer\tJanuary 2023 - Present" would
+      // otherwise have lost its "(Contract, part-time)" to a rule about
+      // company names -- and that job is done by checking the half after
+      // the tab for a date instead.
+      const lead = line.slice(0, line.length - line.trimStart().length);
+      const tabAt = bare.indexOf('\t');
+      const head = tabAt === -1 ? bare : bare.slice(0, tabAt);
+      const tail = tabAt === -1 ? '' : bare.slice(tabAt);
+
       // company, then TITLE, then date. The title line is also followed
       // by a date, so without excluding that this claimed the title too
       // and took "(Contract, part-time)" off it as though it were a
       // company parenthetical -- undoing the employment-type rule one
       // line down and reporting the wrong fix.
       const isCompany = inExp && bare && !/^\s*[-*•]/.test(line)
-        && !ROLE_DATE_RE.test(bare)
-        && !ROLE_DATE_RE.test(next) && !/\t/.test(bare)
+        && !ROLE_DATE_RE.test(head) && !ROLE_DATE_RE.test(tail)
+        && !ROLE_DATE_RE.test(next)
         && (ROLE_DATE_RE.test(nextNext) || /\t/.test(next));
-      const m = isCompany ? bare.match(_COMPANY_PAREN) : null;
+      const m = isCompany ? head.match(_COMPANY_PAREN) : null;
       if (!m) { out.push(line); continue; }
 
-      out.push(line.replace(_COMPANY_PAREN, ''));
+      out.push(lead + head.replace(_COMPANY_PAREN, '') + tail);
       cleaned++;
     }
     return { text: out.join('\n'), cleaned };

@@ -153,6 +153,46 @@ console.log('\nAND THE COMPANY FIELD IS THE COMPANY\'S NAME');
       /January 2023/.test(lines[c + 2] || ''), JSON.stringify(lines));
   }
 
+  // AND WITH THE ROLE'S LOCATION BESIDE IT, WHICH IS THE NORMAL CASE.
+  //
+  // This shipped broken. The rule above required the company line to
+  // hold no tab, which was true when it was written and stopped being
+  // true the day per-role locations were added: the line became
+  // "Meta (formerly Facebook Inc)\tDublin, Ireland", the tab test
+  // rejected it, and the rename went straight back into the Company
+  // field. Nothing failed, because every case above passes a profile
+  // with no location in it.
+  {
+    const withLoc = (company) => global.RecruiterAudit.runRecruiterAudit({
+      cvText: build(company), jdText: 'x', jdTitle: 'Engineer', jobKeywords: ['python'],
+      experience: [{ company: 'Meta', location: 'Dublin, Ireland' }],
+    }).cvText.split('\n');
+
+    const lines = withLoc('Meta (formerly Facebook Inc)');
+    const co = lines.filter((l) => l.indexOf('Meta') === 0)[0] || '';
+    t('  the parenthetical still goes when a location is attached',
+      co === 'Meta\tDublin, Ireland', JSON.stringify(co));
+    t('    -> and the rename is nowhere in the document',
+      !lines.some((l) => /Facebook/.test(l)),
+      'still present: ' + JSON.stringify(lines.filter((l) => /Facebook/.test(l))));
+
+    // The employment type must still be moved off the TITLE rather than
+    // taken by the company rule, which is what the tab test used to
+    // guarantee on its own.
+    const typed = global.RecruiterAudit.runRecruiterAudit({
+      cvText: ['Max Okafor', '', 'PROFESSIONAL EXPERIENCE',
+        'Meta', 'Senior Software Engineer (Contract, part-time)',
+        'January 2023 - Present', '- Built things.', '',
+        'EDUCATION', 'MSc Artificial Intelligence'].join('\n'),
+      jdText: 'x', jdTitle: 'Engineer', jobKeywords: ['python'],
+      experience: [{ company: 'Meta', location: 'Dublin, Ireland' }],
+    });
+    t('  the title keeps losing its employment type, not the company',
+      /^Senior Software Engineer$/m.test(typed.cvText)
+        && /Contract, part-time/.test(typed.cvText),
+      JSON.stringify(typed.cvText));
+  }
+
   // A company with no parenthetical, and a degree classification, are
   // both left exactly as they are.
   {
