@@ -1106,7 +1106,7 @@ function profileToResumeData(profile: Record<string, unknown>): ResumeData {
     education,
     skills,
     certifications: Array.isArray(profile.certifications)
-      ? (profile.certifications as string[])
+      ? (profile.certifications as string[]).slice(0, 6)
       : [],
   };
 }
