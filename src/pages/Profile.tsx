@@ -297,18 +297,20 @@ const Profile = () => {
       professional_experience: normalizeWorkExperience(localProfile.professional_experience || []),
     });
 
-    const errors = validateProfileForSave(normalized);
-    if (errors.length) {
-      setLocalProfile(normalized);
-      toast.error(errors[0], {
-        description: errors.length > 1 ? `${errors.length - 1} more issue(s) to fix.` : undefined,
-      });
-      return;
-    }
+    const warnings = validateProfileForSave(normalized);
 
     setLocalProfile(normalized);
     await updateProfile(normalized);
     setEditMode(false);
+
+    if (warnings.length) {
+      toast.warning(warnings[0], {
+        description:
+          warnings.length > 1
+            ? `Saved anyway. ${warnings.length - 1} more thing(s) worth tidying.`
+            : 'Saved anyway.',
+      });
+    }
   };
 
   const updateLocalField = (field: keyof Profile, value: any) => {
