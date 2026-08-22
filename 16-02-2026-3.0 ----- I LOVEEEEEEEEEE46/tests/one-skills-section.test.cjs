@@ -110,28 +110,11 @@ t('  the competencies group leads, where a recruiter scans',
 t('  "mlops" is folded into "MLOps" rather than listed beside it',
   items.filter((s) => /^mlops$/i.test(s)).length === 1, JSON.stringify(items));
 
-// WHERE THE ONE SECTION SITS.
-//
-// It sat directly under the summary. On a CV whose skills block runs to
-// six labelled groups, that puts a screen of technology names in front
-// of the reader before a single employer, and a business-analyst
-// application reads as an engineer's and gets skipped.
-//
-// Under the experience, the order answers the questions in the order a
-// recruiter asks them: who has employed you, what do you work with,
-// what else have you built. It also settles what spills to page two --
-// projects, which are the least load-bearing section here, rather than
-// the skills.
-//
-// The merge is what the parser cares about; this is only where a human
-// meets it. Both are asserted so neither can be undone by accident.
-console.log('\nAND IT SITS UNDER THE HISTORY IT BACKS UP');
+console.log('\nAND IT SITS IN THE SCAN ZONE, NOT BELOW THE HISTORY');
 t('  under the summary', paras.indexOf('PROFESSIONAL SUMMARY') < skillsIdx,
   JSON.stringify(headings));
-t('  below the experience', skillsIdx > paras.indexOf('PROFESSIONAL EXPERIENCE'),
+t('  above the experience', skillsIdx < paras.indexOf('PROFESSIONAL EXPERIENCE'),
   JSON.stringify(headings));
-t('  and above the projects', skillsIdx < paras.indexOf('PROJECTS')
-  || paras.indexOf('PROJECTS') === -1, JSON.stringify(headings));
 t('  education is still last', headings[headings.length - 1] === 'EDUCATION',
   JSON.stringify(headings));
 

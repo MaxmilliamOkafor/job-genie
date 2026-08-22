@@ -156,22 +156,11 @@ t('  the fix is named in the report',
 t('  ...and says no wording changed',
   rep.fixes.some((f) => /no wording changed/.test(f)), JSON.stringify(rep.fixes));
 
-console.log('\nA ROLE GETS AS MANY BULLETS AS THE PROFILE RECORDS');
-// There was a cap here: six for the two most recent roles, four for the
-// rest, trimmed from the tail once the ordering had made the tail the
-// least relevant material. It is gone.
-//
-// The reasoning behind it was sound in general -- attention is finite,
-// and a role from eight years ago carrying seven bullets spends the
-// reader's patience. It was still the wrong call: it deleted work its
-// owner had deliberately written down, from code that has never seen the
-// posting being answered, on every CV whether or not space was short.
-// Reported twice, ending in "remove that limit as it might also be
-// preventing the actual tailor of bullet points".
-//
-// What still shapes a role is the ordering above, which costs nothing,
-// and fitToOnePage, which trims only when trimming reaches a page and
-// puts everything back when it cannot.
+console.log('\nA ROLE DOES NOT GET UNLIMITED BULLETS');
+// Attention is finite and front-loaded. Recent roles get up to 6, older
+// roles up to 4. Because this runs AFTER the ordering, what gets cut is
+// the least relevant material -- so a different posting keeps a
+// different subset, which is tailoring rather than loss.
 const manyBullets = (n, prefix) => Array.from({ length: n },
   (_, k) => '- ' + prefix + ' task number ' + (k + 1) + ' delivered.');
 const bigRole = (bullets) => ['Maxmilliam Okafor', '', 'PROFESSIONAL EXPERIENCE',
@@ -182,17 +171,14 @@ const capped = (bullets, kws) => RA.runRecruiterAudit({
   jdTitle: 'Analyst', jobKeywords: kws || null,
 }).cvText.split('\n').filter((l) => /^\s*[-•]/.test(l));
 
-t('  nine bullets stay nine', capped(manyBullets(9, 'Widget'), ['widget']).length === 9,
+t('  the most recent role is capped at 6',
+  capped(manyBullets(9, 'Widget'), ['widget']).length === 6,
   String(capped(manyBullets(9, 'Widget'), ['widget']).length));
-t('  and five stay five', capped(manyBullets(5, 'Widget'), ['widget']).length === 5,
-  'a document that was already fine must not churn');
-t('  no trim is reported, because none happened',
-  !RA.runRecruiterAudit({ cvText: bigRole(manyBullets(9, 'Widget')), jdText: 'widget',
-    jdTitle: 'Analyst', jobKeywords: ['widget'] }).report.fixes
-    .some((f) => /least-relevant bullet/.test(f)),
-  'the cap is still running somewhere');
+t('  a role already within the cap is untouched',
+  capped(manyBullets(5, 'Widget'), ['widget']).length === 5,
+  'do not churn a document that was already fine');
 
-// An older role keeps everything too. It used to be held to four.
+// Older roles are held tighter. Role 3 onwards gets 4.
 const threeRoles = ['Maxmilliam Okafor', '', 'PROFESSIONAL EXPERIENCE',
   'Meta', 'Engineer', 'January 2023 - Present', '- Recent one.', '- Recent two.',
   '', 'Stripe', 'Engineer', 'January 2021 - December 2022', '- Middle one.', '- Middle two.',
@@ -203,35 +189,29 @@ const threeOut = RA.runRecruiterAudit({ cvText: threeRoles, jdText: 'old',
   jdTitle: 'Analyst', jobKeywords: ['old'] }).cvText;
 const oldBullets = threeOut.slice(threeOut.indexOf('Citigroup'))
   .split('\n').filter((l) => /^\s*[-•]/.test(l));
-t('  the oldest role keeps all seven', oldBullets.length === 7, String(oldBullets.length));
-t('  and the recent roles keep theirs',
+t('  the third role is capped at 4', oldBullets.length === 4, String(oldBullets.length));
+t('  the recent roles keep all of theirs',
   /Recent one/.test(threeOut) && /Recent two/.test(threeOut)
     && /Middle one/.test(threeOut) && /Middle two/.test(threeOut), 'a short role lost content');
 
-console.log('\nAND THE ONLY MENTION OF A KEYWORD IS NEVER LOST');
-// With the cap gone nothing here drops a bullet at all, so this is now
-// a guard against anything that might start to: losing the one bullet
-// that carries a posting keyword is the exact opposite of the point.
+console.log('\nBUT IT NEVER DROPS THE ONLY MENTION OF A KEYWORD');
+// Trimming away a keyword match is the exact opposite of the point.
 const soleCarrier = manyBullets(8, 'Routine')
   .concat(['- Ran the Kubernetes migration end to end.']);
 const soleOut = capped(soleCarrier, ['Kubernetes', 'routine']);
-t('  the sole Kubernetes bullet survives',
+t('  the sole Kubernetes bullet survives past the cap',
   soleOut.some((b) => /Kubernetes/.test(b)), JSON.stringify(soleOut));
-t('  ...along with all nine',
-  soleOut.length === 9, String(soleOut.length));
+t('  ...even though that puts the role over 6',
+  soleOut.length === 7, String(soleOut.length) + ' (6 capped + 1 rescued)');
 
-console.log('\nAND NOTHING CLAIMS A TRIM THAT DID NOT HAPPEN');
-// This used to assert the cap announced itself. With the cap gone, the
-// assertion worth keeping is the opposite one: a report that still named
-// a trim would mean something is quietly removing bullets again.
+console.log('\nAND THE TRIM IS REPORTED');
 const capRep = RA.runRecruiterAudit({ cvText: bigRole(manyBullets(9, 'Widget')),
   jdText: 'widget', jdTitle: 'Analyst', jobKeywords: ['widget'] }).report;
-t('  no trim is reported', !capRep.fixes.some((f) => /Trimmed \d+ least-relevant/.test(f)),
+t('  the trim is named', capRep.fixes.some((f) => /Trimmed \d+ least-relevant/.test(f)),
   JSON.stringify(capRep.fixes));
-t('  and the nine bullets are all still there',
-  (RA.runRecruiterAudit({ cvText: bigRole(manyBullets(9, 'Widget')), jdText: 'widget',
-    jdTitle: 'Analyst', jobKeywords: ['widget'] }).cvText.match(/^\s*[-•]/gm) || []).length === 9,
-  'a bullet went missing with no fix reported, which is worse than either');
+t('  ...and says keywords were protected',
+  capRep.fixes.some((f) => /sole mention of a posting keyword/.test(f)),
+  JSON.stringify(capRep.fixes));
 
 console.log('\nA WORD USED TWICE IN ONE BULLET IS FLAGGED, NOT REWRITTEN');
 // The real bullet this came from: "surfacing fraud and risk exposure for

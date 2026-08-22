@@ -124,7 +124,7 @@ chk('links fit one line',(plain.filter(x=>x.indexOf('Live demo')===0)[0]||'').le
 chk('links still URL-shaped',/\S+\.[a-z]+\/\S+/.test(plain.filter(x=>x.indexOf('Live demo')===0)[0]||''),'not extractable as a URL');
 
 console.log('\n=== SECTION ORDER (reading order an ATS consumes) ===');
-const want=['PROFESSIONAL SUMMARY','PROFESSIONAL EXPERIENCE','TECHNICAL SKILLS','PROJECTS','EDUCATION'];
+const want=['PROFESSIONAL SUMMARY','TECHNICAL SKILLS','PROFESSIONAL EXPERIENCE','PROJECTS','EDUCATION'];
 const pos=want.map(w=>[w,flat.indexOf(w)]);
 chk('every section present',pos.every(([,i])=>i>=0),JSON.stringify(pos));
 chk('sections in order',JSON.stringify(pos)===JSON.stringify(pos.slice().sort((a,b)=>a[1]-b[1])),JSON.stringify(pos));

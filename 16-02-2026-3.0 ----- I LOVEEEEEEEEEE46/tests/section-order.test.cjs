@@ -91,7 +91,7 @@ t('  the document generates', !!got, 'generation failed');
 if (got) {
   // Six headings out of seven in: the competencies and the proficiencies
   // arrive as two sections and print as one.
-  const want = ['PROFESSIONAL SUMMARY', 'PROFESSIONAL EXPERIENCE', 'TECHNICAL SKILLS',
+  const want = ['PROFESSIONAL SUMMARY', 'TECHNICAL SKILLS', 'PROFESSIONAL EXPERIENCE',
     'PROJECTS', 'CERTIFICATIONS', 'EDUCATION'];
   t('  ' + got.join(' -> '), seq(got) === seq(want), 'expected ' + seq(want));
   t('  education is last however it arrived',
@@ -178,8 +178,8 @@ t('  the document generates', !!inl, 'generation failed');
 if (inl) {
   t('  it becomes a heading of its own',
     inl.includes('TECHNICAL SKILLS'), inl.join(' -> '));
-  t('  ...and sits below PROFESSIONAL EXPERIENCE',
-    inl.indexOf('TECHNICAL SKILLS') > inl.indexOf('PROFESSIONAL EXPERIENCE'), inl.join(' -> '));
+  t('  ...and sits above PROFESSIONAL EXPERIENCE',
+    inl.indexOf('TECHNICAL SKILLS') < inl.indexOf('PROFESSIONAL EXPERIENCE'), inl.join(' -> '));
   t('  ...with the list no longer welded into the heading',
     !inl.some((h) => /:/.test(h)), inl.join(' -> '));
 }

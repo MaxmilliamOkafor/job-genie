@@ -707,19 +707,6 @@ function _capitalFor(token) {
 /**
  * Try to find a city in the dataset and return { name, countryCode }.
  */
-// ACCENTS ARE NOT A DIFFERENT CITY.
-//
-// The bundled dataset stores city names unaccented, so "Sao Paulo"
-// resolves and "São Paulo" does not -- and the accented spelling is the
-// one job boards actually publish. Every accented city in the world was
-// therefore unresolvable: São Paulo, Zürich, Malmö, Kraków, Düsseldorf,
-// Bogotá, Medellín, Montréal. The failure is silent: an unresolvable
-// city falls back to the profile's location, so the CV simply says
-// somewhere else.
-function _foldAccents(s) {
-  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
 function _findCity(cityName) {
   // Try ATSLocationDB city index first (populated from world-cities-raw.json)
   const db = _getDB();
@@ -732,18 +719,6 @@ function _findCity(cityName) {
   if (dsHit) {
     // dsHit is just a country code string
     return { name: cityName, countryCode: dsHit };
-  }
-
-  // The same name without its diacritics, which is how the datasets
-  // above store it. Tried last so an exact hit always wins.
-  const folded = _foldAccents(cityName);
-  if (folded && folded !== cityName) {
-    const dbFolded = db?.findCity?.(folded);
-    if (dbFolded?.name && dbFolded?.countryCode) return dbFolded;
-    const dsFolded = cityDS?.lookup?.(folded);
-    // Report the name as it was WRITTEN, not as the dataset spells it:
-    // "São Paulo" is what belongs on the CV.
-    if (dsFolded) return { name: cityName, countryCode: dsFolded };
   }
 
   return null;
@@ -1078,43 +1053,6 @@ function normalizeJobLocationForApplication(rawLocation, defaultLocation = 'Dubl
     return fallback;
   }
 
-  // RULE 3b: MORE THAN ONE PLACE. Take the first.
-  //
-  // A live Greenhouse posting listed
-  // "BRASIL, SÃO PAULO; BRASIL,BELO HORIZONTE" -- two offices, semicolon
-  // separated. Parsed whole, the tail of the string is read as the
-  // country and nothing resolves.
-  if (/[;|]/.test(raw)) {
-    const firstPlace = raw.split(/\s*[;|]\s*/)[0].trim();
-    if (firstPlace && firstPlace !== raw) {
-      return normalizeJobLocationForApplication(firstPlace, fallback);
-    }
-  }
-
-  // RULE 3c: COUNTRY FIRST, CITY SECOND. Swap them.
-  //
-  // Every rule below assumes "City, Country", because that is how a CV
-  // writes it. Job boards do not agree: the same Greenhouse posting
-  // wrote "BRASIL, SÃO PAULO", and read in the assumed order that is a
-  // city called Brasil in a country called São Paulo. São Paulo is not a
-  // country code, so the country fell back to the profile's -- and the
-  // CV went out saying the candidate lives in "Brasil, IE", a place that
-  // does not exist, on an application to Brazil.
-  //
-  // Only swapped when the first part really is a country AND the second
-  // really is a city, so "Cork, Ireland" and the ambiguous cases are
-  // left exactly as they are.
-  {
-    const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length === 2) {
-      const firstIsCountry = !!_toISO2(parts[0]);
-      const secondIsCountry = !!_toISO2(parts[1]);
-      if (firstIsCountry && !secondIsCountry && inferCountryFromCity(parts[1])) {
-        return normalizeJobLocationForApplication(parts[1] + ', ' + parts[0], fallback);
-      }
-    }
-  }
-
   // RULE 4: "USA"/"United States" alone (no city) → California default
   if (/^(usa|us|united\s+states)$/i.test(raw)) {
     return 'New York, US';
@@ -1298,10 +1236,8 @@ function inferCountryFromCity(city) {
   if (!city) return null;
   const cityLower = city.toLowerCase().trim();
 
-  // Try inline map first, by the written name and then without its
-  // accents -- the map is keyed unaccented, and job boards publish the
-  // accented spelling.
-  const mapped = CITY_COUNTRY_MAP[cityLower] || CITY_COUNTRY_MAP[_foldAccents(cityLower)];
+  // Try inline map first
+  const mapped = CITY_COUNTRY_MAP[cityLower];
   if (mapped) return mapped;
 
   // Try city dataset

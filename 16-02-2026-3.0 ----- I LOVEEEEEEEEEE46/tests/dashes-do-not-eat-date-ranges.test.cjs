@@ -112,9 +112,10 @@ console.log('\nAND THE DATE FOLD RUNS BEFORE THE PASSES THAT DEPEND ON IT');
   const SRC = fs.readFileSync(path.join(DIR, 'recruiter-audit.js'), 'utf8');
   const clean = SRC.indexOf('cvText = _cleanCorruption(cvText');
   const order = SRC.indexOf('orderBulletsByRelevance(outCV');
+  const cap = SRC.indexOf('capBulletsPerRole(outCV');
   const pivot = SRC.indexOf('rewritePivotSummary(outCV');
-  t('  both passes run after the clean', clean > -1 && clean < order && clean < pivot,
-    'clean=' + clean + ' order=' + order + ' pivot=' + pivot);
+  t('  the three passes all run after the clean', clean > -1 && clean < order && clean < cap && clean < pivot,
+    'clean=' + clean + ' order=' + order + ' cap=' + cap + ' pivot=' + pivot);
   t('  so the date case has to be handled inside the clean itself',
     /Present\|Current\|Ongoing/.test(SRC), 'no date-aware branch in _cleanCorruption');
 }

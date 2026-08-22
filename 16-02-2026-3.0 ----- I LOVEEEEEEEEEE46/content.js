@@ -316,53 +316,6 @@
   // it -- only the extension's own executeScript can.
   window.__jgExtractJobInfoWithContext = (...a) => extractJobInfoWithContext(...a);
 
-  // WHAT THIS PLATFORM DOES WITH THE FILE, IN WORDS.
-  //
-  // Only three of the ten ATS audited on 2026-08-20 parse an uploaded CV
-  // into the form. The other seven attach the file and leave every field
-  // blank, or put the upload behind a sign-in. Treating them alike means
-  // that on most of them the user sees an attached file, an empty form,
-  // and no way to tell whether that is the site or a bug in here.
-  //
-  // Unknown stays unknown. A platform nobody has watched must not be
-  // described as one that autofills.
-  function describeAutofill() {
-    try {
-      const AP = (typeof ATSPlatforms !== 'undefined') ? ATSPlatforms
-        : (typeof window !== 'undefined' ? window.ATSPlatforms : null);
-      if (!AP || typeof AP.autofillCapability !== 'function') return {};
-      const key = AP.detect(window.location.hostname, window.location.href);
-      const cap = AP.autofillCapability(key);
-      const name = (AP.PLATFORMS[key] && AP.PLATFORMS[key].label) || 'This site';
-
-      let note = '';
-      if (cap.mode === 'full' || cap.mode === 'partial') {
-        note = name + ' reads the CV into the form'
-          + (cap.trigger ? ' -- use "' + cap.trigger + '" to start it' : '')
-          + '. Check what it filled in before you submit.';
-      } else if (cap.mode === 'none') {
-        note = name + ' does not read the CV into the form: the file is attached, '
-          + 'and the fields are filled from your profile, not from the parse.'
-          + (cap.phoneCountryDefault
-            ? ' Its phone country box defaults to ' + cap.phoneCountryDefault + '.'
-            : '');
-      } else if (cap.mode === 'gated') {
-        note = name + ' only offers autofill after '
-          + (cap.gate === 'account-creation' ? 'you create an account'
-            : cap.gate === 'email-and-consent' ? 'an email and consent step'
-              : 'signing in')
-          + ', so nothing will populate here until then.';
-      } else if (cap.mode === 'exists-untested') {
-        note = name + ' advertises autofill, but nobody has watched it work from here yet.';
-      }
-      if (note) console.log('[ATS Tailor]', note);
-      return { autofillMode: cap.mode, autofillVerified: cap.verified,
-        autofillNote: note, phoneCountryDefault: cap.phoneCountryDefault };
-    } catch (e) {
-      return {};
-    }
-  }
-
   // THE PLATFORM'S OWN API, ASKED FIRST.
   //
   // A selector describes where the text sits in today's markup, and
@@ -1278,17 +1231,7 @@
           
           if (attached) {
             console.log(`[ATS Tailor] ${type} attached successfully`);
-            // WHAT HAPPENS NEXT DEPENDS ENTIRELY ON THE PLATFORM.
-            //
-            // A live audit of ten ATS found only three that parse an
-            // uploaded CV into the form. Every one was being treated the
-            // same, so on the seven that do not, the user watched an
-            // attached file and a blank form and had no way to know
-            // whether that was the site or us.
-            sendResponse(Object.assign(
-              { success: true, message: `${type} attached successfully` },
-              type === 'cv' ? describeAutofill() : {}
-            ));
+            sendResponse({ success: true, message: `${type} attached successfully` });
           } else {
             console.log(`[ATS Tailor] ${type} attachment failed - no upload field found`);
             sendResponse({ success: false, skipped: true, message: 'No upload field found for ' + type });

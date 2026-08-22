@@ -651,30 +651,11 @@
   // same rank is all it takes -- the merge, the ordering and the
   // case-insensitive de-duplication are what this function already does
   // for a repeated heading.
-  //
-  // ---- and where the merged section sits ------------------------------
-  // It sat directly under the summary, on the six-second-scan argument.
-  // That argument holds for a keyword block a recruiter is hunting; it
-  // does not hold for this candidate's CV, where the block runs to six
-  // labelled groups and is the first thing a human reads. A screen of
-  // technology names before a single employer is how a business-analyst
-  // application gets read as an engineer's and skipped.
-  //
-  // Experience first, then the skills that back it up, then projects.
-  // The order answers the questions in the order they get asked: who
-  // has employed you, what do you work with, what else have you built.
-  // It also decides what survives a spill to page two -- projects are
-  // the least load-bearing section here, so they are the ones that go
-  // over the fold rather than the skills.
-  //
-  // No ATS reads order as meaning; every parser here keys off the
-  // heading. This is a human-reading change only, which is why it is
-  // safe to make at the renderer.
   const SECTION_RANK = [
     [/^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE)$/, 1],
+    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE|TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 2],
     [/^(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE)$/, 3],
-    [/^(CORE COMPETENCIES|AREAS OF EXPERTISE|TECHNICAL PROFICIENCIES|TECHNICAL SKILLS|SKILLS)$/, 4],
-    [/^(SELECTED PROJECTS|PROJECTS)$/, 5],
+    [/^(SELECTED PROJECTS|PROJECTS)$/, 4],
     [/^CERTIFICATIONS$/, 6],
     [/^AWARDS$/, 7],
     [/^EDUCATION$/, 9],          // last, deliberately
@@ -694,8 +675,8 @@
   // does not recognise is left exactly as the writer set it.
   const CANONICAL_HEADER = {
     1: 'PROFESSIONAL SUMMARY',
+    2: 'TECHNICAL SKILLS',
     3: 'PROFESSIONAL EXPERIENCE',
-    4: 'TECHNICAL SKILLS',
     6: 'CERTIFICATIONS',
     9: 'EDUCATION',
   };
