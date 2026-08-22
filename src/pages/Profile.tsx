@@ -1249,52 +1249,76 @@ const Profile = () => {
                 </Button>
               </div>
             )}
-            {editMode && (
-              <p className="text-xs text-muted-foreground mb-3">
-                {CERTIFICATIONS_CAP_MESSAGE} Only the top {CERTIFICATIONS_MAX} are sent to the extension
-                ({(localProfile.certifications || []).length} stored).
-              </p>
-            )}
-            {editMode ? (
-              <div className="space-y-2">
-                {(localProfile.certifications || []).map((cert: string, i: number) => (
-                  <div
-                    key={`${cert}-${i}`}
-                    draggable
-                    onDragStart={() => setDraggedCertification(i)}
-                    onDragEnd={() => setDraggedCertification(null)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      if (draggedCertification === null || draggedCertification === i) return;
-                      moveCertification(draggedCertification, i);
-                      setDraggedCertification(null);
-                    }}
-                    className={`flex items-center gap-2 rounded-md border p-2 ${i >= CERTIFICATIONS_MAX ? 'opacity-50' : ''}`}
-                  >
-                    <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground" aria-hidden="true" />
-                    <span className="w-6 text-xs text-muted-foreground">{i + 1}.</span>
-                    <span className="flex-1 text-sm">{cert}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={`Remove ${cert}`}
-                      onClick={() => removeCertification(i)}
-                    >
-                      <X className="h-3 w-3 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {(localProfile.certifications || []).map((cert: string, i: number) => (
-                  <Badge key={i} variant="outline" className={i >= CERTIFICATIONS_MAX ? 'opacity-50' : ''}>
-                    {cert}
-                  </Badge>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const certs = (localProfile.certifications || []) as string[];
+              const printed = printedCertifications(certs, certExcluded);
+              const below = certificationsBelowLine(certs, certExcluded);
+              const willPrint = (cert: string) => printed.some((p) => p.toLowerCase() === cert.toLowerCase());
+
+              return (
+                <>
+                  {editMode && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {CERTIFICATIONS_CAP_MESSAGE} Only the top {CERTIFICATIONS_MAX} included certifications print
+                      ({certs.length} stored, {printed.length} printing).
+                    </p>
+                  )}
+                  {editMode && below.length > 0 && (
+                    <p className="text-xs text-destructive mb-3">
+                      Below the line and will not print: {below.join(', ')}.
+                    </p>
+                  )}
+                  {editMode ? (
+                    <div className="space-y-2">
+                      {certs.map((cert: string, i: number) => (
+                        <div
+                          key={`${cert}-${i}`}
+                          draggable
+                          onDragStart={() => setDraggedCertification(i)}
+                          onDragEnd={() => setDraggedCertification(null)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => {
+                            if (draggedCertification === null || draggedCertification === i) return;
+                            moveCertification(draggedCertification, i);
+                            setDraggedCertification(null);
+                          }}
+                          className={`flex items-center gap-2 rounded-md border p-2 ${willPrint(cert) ? '' : 'opacity-50'}`}
+                        >
+                          <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground" aria-hidden="true" />
+                          <span className="w-6 text-xs text-muted-foreground">{i + 1}.</span>
+                          <span className="flex-1 text-sm">{cert}</span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={certIsIncluded(cert)}
+                              onCheckedChange={() => toggleCertificationIncluded(cert)}
+                              aria-label={`Include ${cert} on CV`}
+                            />
+                            <span className="text-[11px] text-muted-foreground">Include on CV</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            aria-label={`Remove ${cert}`}
+                            onClick={() => removeCertification(i)}
+                          >
+                            <X className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {certs.map((cert: string, i: number) => (
+                        <Badge key={i} variant="outline" className={willPrint(cert) ? '' : 'opacity-50'}>
+                          {cert}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
 
