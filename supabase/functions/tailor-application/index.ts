@@ -2735,29 +2735,24 @@ Example, for a JD that asks for large-scale rollout experience:
   → how many users, and over what period
 This array is shown to the candidate; it is never part of the CV.
 
-RULE 11 - BULLET REORDERING BY JD RELEVANCE (worth ~8 points)
-Within each work experience role, REORDER the bullets so the most JD-relevant bullets appear FIRST.
-ATS systems and recruiters give the highest weight to the first 1-2 bullets of each role.
-Strategy:
-- For each role, score every bullet by how many JD keywords it contains
-- Place the highest-scoring bullet first
-- The first bullet of the FIRST role is the single most valuable line in the entire CV - pack it with the top JD keywords
-- If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
+RULE 11 - BULLET ORDER IS THE CANDIDATE'S, NOT YOURS (hard ban on reordering)
+The order of bullets within each role is a deliberate authoring decision made
+by the candidate. PRESERVE IT EXACTLY. Bullet 1 of a role in the source stays
+bullet 1 in the output, bullet 2 stays bullet 2, and so on to the end.
+- Do NOT sort, promote, demote, shuffle or "front-load" bullets by JD relevance.
+- Do NOT move a keyword-rich bullet to the top of a role.
+- JD alignment is achieved by REWORDING each bullet in place (Rules 3, 9, 12),
+  never by changing its position.
 
-RULE 11b: HOW MANY BULLETS EACH ROLE GETS (hard limits)
-Attention is finite and front-loaded. A role from eight years ago carrying
-seven bullets spends the reader's patience on the least relevant part of the
-CV and pushes the recent work onto page two.
-- The two most recent roles: 4 to 6 bullets each.
-- Every earlier role: 2 to 4 bullets each.
-Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least
-relevant bullet last, so cutting the tail removes the least relevant material.
-Cut before reordering and you delete whatever the source happened to list last.
-ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the
-whole CV where a posting keyword appears, KEEP it even though the role then
-runs over. A missed keyword costs more than an extra line.
-Never pad a short role UP to the minimum by inventing bullets. If the source
-gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
+RULE 11b: EVERY BULLET IS KEPT (no trimming, no caps)
+Return the SAME NUMBER of bullets for every role as the source CV provides.
+- If the source gives a role seven bullets, the output has seven bullets.
+- Do NOT drop, merge, compress or omit a bullet for length, relevance,
+  page-count or attention reasons. There is no ceiling.
+- Do NOT pad a role UP by inventing bullets. If the source gives a role four
+  bullets, the output has exactly four.
+The bullet count per role and the bullet order per role are both IMMUTABLE.
+
 
 RULE 19: SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
 "Built dashboards" and "built dashboards used by 40 people across three desks"
