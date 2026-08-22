@@ -534,3 +534,148 @@ export const validateProfileForSave = (profile: Record<string, any>): string[] =
   return errors;
 };
 
+
+/* ------------------------------------------------------------------ */
+/* Skill grouping (mirrors the extension's CV grouping)                */
+/* ------------------------------------------------------------------ */
+
+export const SKILL_GROUPS = [
+  'Programming Languages',
+  'Frameworks & Libraries',
+  'Cloud & DevOps',
+  'Data & AI',
+  'Databases',
+  'Security',
+  'Support & Platforms',
+  'Architecture & Systems',
+  'Core Competencies',
+  'Additional',
+] as const;
+
+export type SkillGroup = (typeof SKILL_GROUPS)[number];
+
+export const UNGROUPED_LABEL: SkillGroup = 'Additional';
+
+const GROUP_TERMS: Record<Exclude<SkillGroup, 'Additional' | 'Core Competencies'>, string[]> = {
+  'Programming Languages': [
+    'python', 'java', 'javascript', 'typescript', 'c', 'c++', 'c#', 'go', 'golang', 'rust',
+    'ruby', 'php', 'swift', 'kotlin', 'scala', 'r', 'matlab', 'perl', 'bash', 'shell',
+    'powershell', 'sql', 'html', 'css', 'objective-c', 'dart', 'lua', 'haskell', 'elixir',
+    'vba', 'solidity', 'assembly',
+  ],
+  'Frameworks & Libraries': [
+    'react', 'react native', 'next.js', 'nextjs', 'vue', 'angular', 'svelte', 'node.js', 'nodejs',
+    'express', 'nestjs', 'django', 'flask', 'fastapi', 'spring', 'spring boot', 'rails',
+    'laravel', '.net', 'asp.net', 'graphql', 'rest', 'redux', 'tailwind', 'tailwind css',
+    'bootstrap', 'jquery', 'jest', 'pytest', 'cypress', 'playwright', 'selenium', 'junit',
+    'nltk', 'tensorflow.js', 'streamlit',
+  ],
+  'Cloud & DevOps': [
+    'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'terraform', 'ansible',
+    'jenkins', 'github actions', 'gitlab ci', 'circleci', 'ci/cd', 'helm', 'prometheus',
+    'grafana', 'datadog', 'nginx', 'linux', 'git', 'lambda', 'ec2', 's3', 'cloudformation',
+    'openshift', 'vagrant', 'pulumi', 'argocd', 'sre', 'observability',
+  ],
+  'Data & AI': [
+    'machine learning', 'deep learning', 'artificial intelligence', 'ai', 'ml', 'nlp',
+    'natural language processing', 'computer vision', 'pytorch', 'tensorflow', 'keras',
+    'scikit-learn', 'sklearn', 'pandas', 'numpy', 'scipy', 'spark', 'pyspark', 'hadoop',
+    'presto', 'airflow', 'dbt', 'kafka', 'databricks', 'snowflake', 'power bi', 'tableau',
+    'looker', 'etl', 'data engineering', 'data science', 'llm', 'llms', 'rag', 'langchain',
+    'mlops', 'openai', 'hugging face', 'transformers', 'xgboost', 'statistics', 'forecasting',
+    'feature engineering', 'model evaluation', 'aws transcribe', 'flux kontext',
+  ],
+  Databases: [
+    'postgresql', 'postgres', 'mysql', 'sqlite', 'sql server', 'oracle', 'mongodb', 'redis',
+    'dynamodb', 'cassandra', 'elasticsearch', 'neo4j', 'bigquery', 'redshift', 'supabase',
+    'firebase', 'cosmos db', 'mariadb', 'clickhouse',
+  ],
+  Security: [
+    'cybersecurity', 'information security', 'penetration testing', 'pen testing', 'owasp',
+    'iam', 'oauth', 'oauth2', 'saml', 'sso', 'encryption', 'gdpr', 'hipaa', 'soc 2', 'iso 27001',
+    'siem', 'splunk', 'vulnerability management', 'threat modelling', 'threat modeling',
+    'zero trust', 'rbac', 'nist', 'pci dss', 'incident response',
+  ],
+  'Support & Platforms': [
+    'servicenow', 'jira', 'confluence', 'zendesk', 'freshdesk', 'salesforce', 'sap',
+    'workday', 'greenhouse', 'icims', 'active directory', 'office 365', 'microsoft 365',
+    'sharepoint', 'intune', 'vmware', 'windows server', 'macos', 'itil', 'helpdesk',
+    'service desk', 'remote desktop', 'slack', 'zoom',
+  ],
+  'Architecture & Systems': [
+    'microservices', 'system design', 'distributed systems', 'event driven architecture',
+    'event-driven architecture', 'api design', 'domain driven design', 'domain-driven design',
+    'design patterns', 'scalability', 'high availability', 'caching', 'load balancing',
+    'message queues', 'solution architecture', 'technical architecture', 'monolith',
+    'serverless', 'multi tenancy', 'multi-tenancy', 'performance tuning',
+  ],
+};
+
+const GROUP_LOOKUP: Map<string, SkillGroup> = (() => {
+  const map = new Map<string, SkillGroup>();
+  (Object.keys(GROUP_TERMS) as Array<keyof typeof GROUP_TERMS>).forEach((group) => {
+    GROUP_TERMS[group].forEach((term) => {
+      const k = skillKey(term);
+      if (k && !map.has(k)) map.set(k, group as SkillGroup);
+    });
+  });
+  return map;
+})();
+
+/** Which labelled group a term will land in on the generated CV. */
+export const classifySkill = (name: string, category?: string): SkillGroup => {
+  if ((category || '') === COMPETENCY_CATEGORY) return 'Core Competencies';
+  const k = skillKey(name);
+  if (!k) return UNGROUPED_LABEL;
+  return GROUP_LOOKUP.get(k) || UNGROUPED_LABEL;
+};
+
+export type GroupedSkills = { group: SkillGroup; terms: string[] };
+
+/** The combined TECHNICAL SKILLS preview, tagged with its printed group. */
+export const groupedSkillsPreview = (skills: SkillLike[] = []): GroupedSkills[] => {
+  const seen = new Set<string>();
+  const buckets = new Map<SkillGroup, string[]>();
+
+  const { competencies, technical } = splitSkillLists(skills);
+  [...competencies, ...technical].forEach((s) => {
+    const name = tidyText(s.name);
+    const k = skillKey(name);
+    if (!name || !k || seen.has(k)) return;
+    seen.add(k);
+    const group = classifySkill(name, s.category);
+    const list = buckets.get(group) || [];
+    list.push(name);
+    buckets.set(group, list);
+  });
+
+  return SKILL_GROUPS.filter((g) => (buckets.get(g) || []).length).map((g) => ({
+    group: g,
+    terms: buckets.get(g) as string[],
+  }));
+};
+
+/* ------------------------------------------------------------------ */
+/* Certifications: ranked, printed cap                                 */
+/* ------------------------------------------------------------------ */
+
+/** Certifications toggled on, in the user's saved order. */
+export const includedCertifications = (
+  certifications: string[] = [],
+  excluded: string[] = [],
+): string[] => {
+  const off = new Set(excluded.map((c) => skillKey(c)));
+  return certifications.filter((c) => !off.has(skillKey(c)));
+};
+
+/** Only the top CERTIFICATIONS_MAX included certifications reach the CV. */
+export const printedCertifications = (
+  certifications: string[] = [],
+  excluded: string[] = [],
+): string[] => includedCertifications(certifications, excluded).slice(0, CERTIFICATIONS_MAX);
+
+/** The included certifications that fall below the print line. */
+export const certificationsBelowLine = (
+  certifications: string[] = [],
+  excluded: string[] = [],
+): string[] => includedCertifications(certifications, excluded).slice(CERTIFICATIONS_MAX);
