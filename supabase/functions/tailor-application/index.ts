@@ -2829,7 +2829,7 @@ terms, and pads it when a posting carries six. Spread them instead:
   - Every bullet should carry at least one JD term where the underlying
     work honestly supports it. A bullet with none is not a failure -- it
     is a bullet describing work this posting does not ask about, and it
-    may be the one RULE 11b trims.
+    is still kept, in place, exactly as RULE 11b requires.
 
 WHICH ROLE GETS WHICH TERM. The role where that work actually happened,
 always. Where two roles both support a term, put it in the more recent
