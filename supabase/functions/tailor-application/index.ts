@@ -2742,22 +2742,29 @@ Strategy:
 - For each role, score every bullet by how many JD keywords it contains
 - Place the highest-scoring bullet first
 - The first bullet of the FIRST role is the single most valuable line in the entire CV - pack it with the top JD keywords
-- If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
+- If a bullet has zero JD keyword overlap, move it to the BOTTOM of that role. Do not remove it: ordering is what tailoring means here, and the extension decides what a page holds after it has measured the real document.
 
-RULE 11b: HOW MANY BULLETS EACH ROLE GETS (hard limits)
-Attention is finite and front-loaded. A role from eight years ago carrying
-seven bullets spends the reader's patience on the least relevant part of the
-CV and pushes the recent work onto page two.
-- The two most recent roles: 4 to 6 bullets each.
-- Every earlier role: 2 to 4 bullets each.
-Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least
-relevant bullet last, so cutting the tail removes the least relevant material.
-Cut before reordering and you delete whatever the source happened to list last.
-ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the
-whole CV where a posting keyword appears, KEEP it even though the role then
-runs over. A missed keyword costs more than an extra line.
-Never pad a short role UP to the minimum by inventing bullets. If the source
-gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
+RULE 11b: HOW MANY BULLETS EACH ROLE GETS
+EVERY BULLET THE SOURCE GIVES A ROLE. There is no cap and no range.
+
+There used to be one here: four to six bullets for the two most recent
+roles, two to four for the rest. It was removed after it repeatedly
+deleted work the candidate had deliberately written into their profile.
+A profile carrying eight bullets for a role produced a CV with four, and
+the only way to discover the other four were missing was to count them by
+hand against the profile page.
+
+Do NOT drop a bullet because a role has "too many". Do NOT drop one
+because it seems less relevant -- Rule 11 already handles relevance by
+ORDERING, which costs nothing and loses nothing. The extension measures
+the finished document and fits it to a page itself, and it does that
+knowing the type size, the margins and the real line count, which you do
+not.
+
+The only bullets that should not appear are ones the source never gave
+you. Never invent one to lengthen a role, and never merge two into one to
+shorten it: rewrite each source bullet as its own bullet, in the source's
+own order once Rule 11 has ranked them.
 
 RULE 19: SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
 "Built dashboards" and "built dashboards used by 40 people across three desks"
@@ -2833,8 +2840,8 @@ terms, and pads it when a posting carries six. Spread them instead:
     RULE 14 already bans the ", using X and Y" tail that results.
   - Every bullet should carry at least one JD term where the underlying
     work honestly supports it. A bullet with none is not a failure -- it
-    is a bullet describing work this posting does not ask about, and it
-    may be the one RULE 11b trims.
+    is a bullet describing work this posting does not ask about, and
+    Rule 11 puts it last. It still appears.
 
 WHICH ROLE GETS WHICH TERM. The role where that work actually happened,
 always. Where two roles both support a term, put it in the more recent
@@ -2893,7 +2900,7 @@ After rewriting, run this internal checklist:
 [ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it - that is the tell recruiters read as machine-written.
 [ ] REFORMULATION CHECK - go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting. Fix any bullet that is still in the source's dialect rather than the posting's.
 [ ] Does each posting keyword you placed in TECHNICAL SKILLS or CORE COMPETENCIES also appear, where the history honestly supports it, in an experience bullet? A keyword declared at the top and never evidenced underneath is what a reviewer is scanning for.
-[ ] Does any role exceed its bullet cap (6 for the two most recent, 4 for the rest)? If so, cut from the BOTTOM after reordering, unless the bullet is the CV's only mention of a posting keyword, in which case keep it.
+[ ] Does every role carry EVERY bullet its source gave it? Count them against the source. A role with eight bullets in the profile has eight in the CV, reordered by relevance but never trimmed -- fitting the page is the extension's job, not yours, and it does it after measuring the real document.
 [ ] Did you drop a scope figure (team size, volume, user count, number of systems) that the SOURCE bullet stated? Put it back. Did you add one the source did not state? Remove it.
 [ ] Does any bullet use the same four-letter-or-longer noun or verb twice ("risk ... risk team")? Rewrite it, but never by inventing a team or department name.
 [ ] Is the spelling consistent with the POSTING's country throughout (American for US/Canada/Latin America, British everywhere else), with proper nouns left in their owner's spelling?

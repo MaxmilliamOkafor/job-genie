@@ -12,8 +12,9 @@
 //   1. the tailoring model never returning it -- RULE 11b in the prompt
 //      caps a role at 4-6 bullets recent, 2-4 older, and 4/3/3/3 sits
 //      inside those bands, so this is where the reported ones went
-//   2. capBulletsPerRole here, at 6 recent and 4 older, which reports
-//      its own trim as a fix
+//   2. capBulletsPerRole here, at 6 recent and 4 older -- REMOVED, on
+//      the report that it was "preventing the actual tailor of bullet
+//      points". Nothing in the extension caps a role any more.
 //   3. fitToOnePage, which on that CV cut nothing at all: measured, it
 //      was 145% of a page WITH the thirteen, so the fitter gave up and
 //      reverted rather than gut the history for no gain
@@ -93,8 +94,8 @@ console.log('THE REPORTED CASE: SEVEN IN THE PROFILE, FOUR ON THE CV');
       JSON.stringify(w && w.roles[0].dropped));
   }
   t('  and says where the cap lives', !!w && /RULE 11b/.test(w.note), w && w.note);
-  t('  ...and names the extension\'s own cap separately',
-    !!w && /extension caps too, at 6 recent and 4 older/.test(w.note), w && w.note);
+  t('  ...and says the extension is no longer capping',
+    !!w && /Nothing in the extension caps them any more/.test(w.note), w && w.note);
 }
 
 console.log('\nA REWRITTEN BULLET IS NOT A MISSING ONE');
@@ -123,12 +124,15 @@ console.log('\nAND IT DOES NOT INVENT A LOSS');
   t('  a company the CV does not carry is skipped',
     !run(META_ON_CV, [{ company: 'Google', bullets: META_PROFILE }]),
     'reported bullets for a role that is not on this CV');
-  // Inside the extension's own cap of six, so nothing else can trim and
-  // the only possible cause of a warning would be a false positive.
-  const six = META_PROFILE.slice(0, 6);
   t('  every bullet present means silence',
-    !run(six.map((b) => '- ' + b), [{ company: 'Meta', bullets: six }]),
+    !run(META_PROFILE.map((b) => '- ' + b), [{ company: 'Meta', bullets: META_PROFILE }]),
     'warned when nothing was lost');
+  t('  ...all seven of them, since nothing caps a role now',
+    RA.runRecruiterAudit({ cvText: cvWith(META_PROFILE.map((b) => '- ' + b)),
+      jdText: 'business analyst', jdTitle: 'Senior Business Analyst',
+      jobKeywords: ['Salesforce'], experience: [{ company: 'Meta', bullets: META_PROFILE }] })
+      .cvText.split('\n').filter((l) => /^\s*[-•]/.test(l)).length === 7,
+    'a bullet was trimmed by something');
 }
 
 console.log('\nAND IT READS THE PROFILE SHAPES THE APP ACTUALLY SAVES');

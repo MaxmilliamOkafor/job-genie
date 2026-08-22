@@ -703,86 +703,27 @@
   // ===================================================================
   // HOW MANY BULLETS A ROLE GETS
   // -------------------------------------------------------------------
-  // Attention is front-loaded and finite. A role from eight years ago
-  // carrying seven bullets spends the reader's patience on the least
-  // relevant part of the CV, and pushes the recent work onto page two.
-  // The convention recruiters actually apply: 4-6 bullets for the recent
-  // roles, 2-4 for the older ones.
+  // As many as the profile records.
   //
-  // This MUST run after orderBulletsByRelevance, because it trims from
-  // the END. Once the bullets are ranked against the posting, the tail is
-  // the least relevant material, and trimming it is tailoring rather than
-  // loss -- a different posting keeps a different subset. Run in the
-  // other order it would delete whatever happened to be recorded last.
+  // capBulletsPerRole used to live here, trimming each role to six
+  // bullets for the two most recent and four for the rest, on the
+  // reasoning that attention is finite and a role from eight years ago
+  // spends the reader's patience. That reasoning is sound in general
+  // and was the wrong call here: it deleted work its owner had
+  // deliberately written down, from code that has never seen the
+  // posting being answered, and it did so on every CV whether or not
+  // space was actually short.
   //
-  // Two hard guards, because deleting evidence is the one thing here that
-  // cannot be undone by the reader:
+  // Reported twice, in their words: "why did you limit my professional
+  // experience roles bullets to 2 each? I never asked for that", and
+  // then "remove that limit as it might also be preventing the actual
+  // tailor of bullet points".
   //
-  //   1. A bullet holding the CV's ONLY mention of a posting keyword is
-  //      never dropped. Trimming it would cost a keyword match, which is
-  //      the opposite of the point.
-  //   2. Caps are generous and only bite when a role is genuinely
-  //      overlong, so a normal CV passes through untouched.
-  const RECENT_ROLE_CAP = 6;   // the first two roles
-  const OLDER_ROLE_CAP = 4;    // everything before them
-
-  function capBulletsPerRole(cvText, jobKeywords) {
-    if (!cvText) return { text: cvText || '', trimmed: 0, roles: 0 };
-    const kws = _flatKeywords(jobKeywords)
-      .map((k) => String(k || '').trim().toLowerCase())
-      .filter((k) => k.length > 2);
-
-    const lines = String(cvText).split('\n');
-    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
-
-    // Count, across the whole CV, how many bullets carry each keyword.
-    // A count of one makes that bullet the sole carrier.
-    const counts = Object.create(null);
-    for (const l of lines) {
-      if (!isBullet(l)) continue;
-      const low = l.toLowerCase();
-      for (const k of kws) if (low.includes(k)) counts[k] = (counts[k] || 0) + 1;
-    }
-    const isSoleCarrier = (b) => {
-      const low = b.toLowerCase();
-      for (const k of kws) if (counts[k] === 1 && low.includes(k)) return true;
-      return false;
-    };
-
-    const out = [];
-    let inExperience = false;
-    let roleIndex = 0;
-    let trimmed = 0;
-    let rolesTrimmed = 0;
-    let i = 0;
-    while (i < lines.length) {
-      if (_EXP_HEAD.test(lines[i])) { inExperience = true; roleIndex = 0; out.push(lines[i]); i++; continue; }
-      if (_ANY_HEAD.test(lines[i])) { inExperience = false; out.push(lines[i]); i++; continue; }
-      if (!inExperience || !isBullet(lines[i])) { out.push(lines[i]); i++; continue; }
-
-      let j = i;
-      while (j < lines.length && isBullet(lines[j])) j++;
-      const run = lines.slice(i, j);
-      roleIndex++;
-      const cap = roleIndex <= 2 ? RECENT_ROLE_CAP : OLDER_ROLE_CAP;
-
-      if (run.length <= cap) {
-        out.push.apply(out, run);
-      } else {
-        const kept = run.slice(0, cap);
-        const dropped = run.slice(cap);
-        // Re-admit anything in the tail that is the only place a posting
-        // keyword appears. The role can exceed its cap for that reason;
-        // a missed keyword costs more than an extra line.
-        const rescued = dropped.filter(isSoleCarrier);
-        out.push.apply(out, kept.concat(rescued));
-        const lost = dropped.length - rescued.length;
-        if (lost > 0) { trimmed += lost; rolesTrimmed++; }
-      }
-      i = j;
-    }
-    return { text: out.join('\n'), trimmed, roles: rolesTrimmed };
-  }
+  // Two things still shape a role, and both earn it. orderBulletsByRelevance
+  // puts the bullets that answer THIS posting first, which is tailoring
+  // and costs nothing. fitToOnePage trims only when trimming actually
+  // reaches a page, and puts everything back when it cannot. A page is a
+  // real constraint. Six was an opinion.
 
   // ===================================================================
   // EACH ROLE CARRIES WHERE IT HAPPENED
@@ -1083,7 +1024,7 @@
   //
   // So the last of the fitting is done here, where relevance to the
   // posting is known and the generator's is not. It runs AFTER
-  // orderBulletsByRelevance and capBulletsPerRole, so the tail of each
+  // orderBulletsByRelevance, so the tail of each
   // role is already its least relevant material.
   //
   // What it will not do:
@@ -2016,8 +1957,8 @@
         + '. This is counted before anything here trims, so it is the model choosing '
         + 'what fits the posting -- RULE 11b in the tailoring prompt caps each role at '
         + '4 to 6 bullets for the two most recent and 2 to 4 for the rest. Raising that '
-        + 'cap is what brings them back. Note the extension caps too, at ' + RECENT_ROLE_CAP
-        + ' recent and ' + OLDER_ROLE_CAP + ' older, and reports that separately as a fix.',
+        + 'cap is what brings them back. Nothing in the extension caps them any '
+        + 'more: it prints every bullet the tailoring returns.',
     };
   }
 
@@ -3893,29 +3834,28 @@
 
     // WHAT THE MODEL LEFT OUT, COUNTED BEFORE ANYTHING HERE TRIMS.
     //
-    // Placed above the cap deliberately. Two different things can remove
-    // a bullet -- the tailoring model never returning it, and the cap
-    // below trimming an overlong role -- and reporting them as one
-    // number tells the user nothing about which to change. The cap
-    // announces its own trim as a fix; this counts what never arrived.
+    // NO PER-ROLE CAP. The bullets a role gets are the bullets the
+    // profile records.
+    //
+    // There used to be one here, at six for the recent roles and four
+    // for the rest, on the reasoning that attention is finite. It is,
+    // but that is a judgement about someone else's CV made by code that
+    // has never seen the posting they are answering, and it removed work
+    // its owner had deliberately written down. Twice now that has been
+    // the complaint, in their words: "why did you limit my professional
+    // experience roles bullets to 2 each? I never asked for that", and
+    // then "remove that limit as it might also be preventing the actual
+    // tailor of bullet points".
+    //
+    // What remains is the ORDERING above -- the bullets that answer this
+    // posting lead -- and fitToOnePage, which trims only when trimming
+    // actually achieves a page and puts everything back when it does
+    // not. A page is a real constraint. Six was an opinion.
     if (outCV) {
       try {
         const dropped = reportDroppedBullets(outCV, Array.isArray(experience) ? experience : []);
         if (dropped) report.warnings.push(dropped);
       } catch (e) {}
-    }
-
-    // Then cap the length of each role. Strictly after the ordering above:
-    // this trims from the tail, and only once the tail is the LEAST
-    // relevant material is trimming it tailoring rather than loss.
-    if (outCV) {
-      const capped = capBulletsPerRole(outCV, jobKeywords);
-      if (capped.trimmed) {
-        outCV = capped.text;
-        report.fixes.push('Trimmed ' + capped.trimmed + ' least-relevant bullet(s) from '
-          + capped.roles + ' role(s) to ' + RECENT_ROLE_CAP + ' recent / '
-          + OLDER_ROLE_CAP + ' older (kept every sole mention of a posting keyword)');
-      }
     }
 
     // Company and title on separate lines. Runs early: the role-shape
