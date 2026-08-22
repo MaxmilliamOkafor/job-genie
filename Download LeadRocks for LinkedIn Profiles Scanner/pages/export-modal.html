@@ -1,0 +1,60 @@
+<div class="lrck--export-modal">
+    <div class="lrck--export-settings">
+        <div class="lrck--modal-title">How many profiles would you like to export?</div>
+        <form class="lrck--export-form">
+            <div class="lrck--input-holder">
+                <input name="lrck--pplcount" class="lrck--input lrck--innput-people-export" type="number" />
+                <div class="lrck--max-number">The maximum number is <span class="lrck--max-people"></span></div>
+            </div>
+            <div class="lrck--flex lrck--flex-sb lrck--buttons-pair">
+                <button type="button" class="lrck--button lrck--button-light lrck--button-cancel">Cancel</button>
+                <button type="submit" class="lrck--button lrck--button-start-export">Export CSV</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="lrck--export-inprogress">
+        <div class="lrck--laptop-loading-container"></div>
+        <div class="lrck--export-progress-text"><span class="lrck--export-progress-current">0</span> of <span class="lrck--export-progress-total">1</span> profiles exported</div>
+        <div class="lrck--export-advice">Please don't close this tab.</div>
+        <div class="lrck--flex lrck--flex-c lrck--buttons-pair">
+            <button class="lrck--button lrck--button-light lrck--button-cancel">Cancel</button>
+            <button class="lrck--button lrck--button-save-export">Stop and export</button>
+        </div>
+    </div>
+
+    <div class="lrck--export-prepare">
+        <div class="lrck--laptop-loading-container"></div>
+        <div class="lrck--export-progress-text">Preparig to continue</div>
+    </div>
+
+    <div class="lrck--export-success">
+        <div class="lrck--export-progress-text" style="color: #09bc8a">Success!</div>
+        <div class="lrck--laptop-success-container"></div>
+        <div class="lrck--export-advice">Your CSV is ready.</div>
+        <div class="lrck--flex lrck--flex-c lrck--buttons-pair">
+            <button class="lrck--button lrck--button-light lrck--button-cancel">Close</button>
+            <button class="lrck--button lrck--button-save-export">Save CSV</button>
+        </div>
+    </div>
+
+    <div class="lrck--export-error">
+        <div class="lrck--export-progress-text" style="color: #e53535">Process was interrupted</div>
+        <div class="lrck--laptop-error-container"></div>
+        <div class="lrck--export-advice">You can continue or export profiles that are already processed.</div>
+        <div class="lrck--flex lrck--flex-c lrck--buttons-pair">
+            <button class="lrck--button lrck--button-light lrck--button-continue">Continue<span class="lrck--continue_in"></span></button>
+            <button class="lrck--button lrck--button-save-export">Export anyway</button>
+        </div>
+    </div>
+
+    <div class="lrck--export-interrupted">
+        <div class="lrck--export-progress-text" style="color: #e53535">Process was interrupted on page <span class="lrck--interrupted_on"></span></div>
+        <div class="lrck--laptop-error-container"></div>
+        <div class="lrck--export-advice">You can export <span class="lrck--people_found"></span> profiles we already found.</div>
+        <div class="lrck--flex lrck--flex-c lrck--buttons-pair">
+            <button class="lrck--button lrck--button-light lrck--button-continue">Continue<span class="lrck--continue_in"></span></button>
+            <button class="lrck--button lrck--button-save-export">Export</button>
+        </div>
+    </div>
+</div>

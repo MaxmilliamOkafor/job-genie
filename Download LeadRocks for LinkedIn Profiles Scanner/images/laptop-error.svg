@@ -1,0 +1,250 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="error" viewBox="0 0 136 100">
+    <style>
+        #error-smile_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile_to__to;
+        }
+        #error-smile2_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile2_to__to;
+        }
+        #error-smile3_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile3_to__to;
+        }
+        #error-smile4_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile4_to__to;
+        }
+        #error-smile5_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile5_to__to;
+        }
+        #error-smile6_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile6_to__to;
+        }
+        #error-smile7_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile7_to__to;
+        }
+        #error-smile-on-back_to {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile-on-back_to__to;
+        }
+
+        #error-smile {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile_c_o;
+        }
+        #error-smile2 {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile2_c_o;
+        }
+        #error-smile3 {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile3_c_o;
+        }
+        #error-smile4 {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile4_c_o;
+        }
+        #error-smile5 {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile5_c_o;
+        }
+        #error-smile6 {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile6_c_o;
+        }
+        #error-smile7 {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile7_c_o;
+        }
+        #error-smile-on-back {
+        animation: 3000ms linear 0s infinite normal forwards running error-smile-on-back_c_o;
+        }
+
+        @keyframes error-smile_to__to {
+        0% {
+        transform: translate(127.999999px, 42px);
+        }
+        36.666667% {
+        transform: translate(127.999999px, 42px);
+        animation-timing-function: cubic-bezier(0.47, 0, 0.745, 0.715);
+        }
+        73.333333%,
+        to {
+        transform: translate(127.999999px, 0);
+        }
+        }
+        @keyframes error-smile_c_o {
+        0%,
+        73.333333%,
+        to {
+        opacity: 0;
+        }
+        13.333333%,
+        36.666667% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile2_to__to {
+        0% {
+        transform: translate(15px, 28px);
+        }
+        60% {
+        transform: translate(15px, 28px);
+        animation-timing-function: cubic-bezier(0.47, 0, 0.745, 0.715);
+        }
+        to {
+        transform: translate(15px, -17px);
+        }
+        }
+        @keyframes error-smile2_c_o {
+        0%,
+        26.666667%,
+        to {
+        opacity: 0;
+        }
+        40%,
+        60% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile3_to__to {
+        0% {
+        transform: translate(129.5px, 65.5px);
+        }
+        26.666667% {
+        transform: translate(129.5px, 65.5px);
+        animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+        }
+        63.333333%,
+        to {
+        transform: translate(129.5px, 38.5px);
+        }
+        }
+        @keyframes error-smile3_c_o {
+        0%,
+        3.333333%,
+        63.333333%,
+        to {
+        opacity: 0;
+        }
+        13.333333%,
+        26.666667% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile4_to__to {
+        0% {
+        transform: translate(67.5px, 5.5px);
+        }
+        66.666667% {
+        transform: translate(67.5px, 5.5px);
+        animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+        }
+        to {
+        transform: translate(67.5px, -20.5px);
+        }
+        }
+        @keyframes error-smile4_c_o {
+        0%,
+        40%,
+        to {
+        opacity: 0;
+        }
+        50%,
+        66.666667% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile5_to__to {
+        0% {
+        transform: translate(32.5px, 7.5px);
+        }
+        50% {
+        transform: translate(32.5px, 7.5px);
+        animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+        }
+        83.333333%,
+        to {
+        transform: translate(32.5px, -12.5px);
+        }
+        }
+        @keyframes error-smile5_c_o {
+        0%,
+        23.333333%,
+        83.333333%,
+        to {
+        opacity: 0;
+        }
+        33.333333%,
+        50% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile6_to__to {
+        0% {
+        transform: translate(109.5px, 54.5px);
+        }
+        40% {
+        transform: translate(109.5px, 54.5px);
+        animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+        }
+        76.666667%,
+        to {
+        transform: translate(109.5px, 28.5px);
+        }
+        }
+        @keyframes error-smile6_c_o {
+        0%,
+        6.666667%,
+        76.666667%,
+        to {
+        opacity: 0;
+        }
+        23.333333%,
+        40% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile7_to__to {
+        0% {
+        transform: translate(3.5px, 65.5px);
+        }
+        26.666667% {
+        transform: translate(3.5px, 65.5px);
+        animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+        }
+        60%,
+        to {
+        transform: translate(3.5px, 39.5px);
+        }
+        }
+        @keyframes error-smile7_c_o {
+        0%,
+        60%,
+        to {
+        opacity: 0;
+        }
+        10%,
+        26.666667% {
+        opacity: 1;
+        }
+        }
+        @keyframes error-smile-on-back_to__to {
+        0%,
+        36.666667% {
+        transform: translate(41px, 20px);
+        animation-timing-function: step-end;
+        }
+        33.333333% {
+        transform: translate(41px, 22px);
+        }
+        96.666667% {
+        transform: translate(41px, 18px);
+        }
+        to {
+        transform: translate(41px, 20px);
+        }
+        }
+        @keyframes error-smile-on-back_c_o {
+        0%,
+        50%,
+        to {
+        opacity: 1;
+        }
+        23.333333%,
+        73.333333% {
+        opacity: 0.5;
+        }
+        }
+    </style>
+    <g id="error-g1" transform="translate(0 31)"><g id="error-smile_to" transform="translate(128 42)"><path id="error-smile" fill="#FFB300" stroke="none" stroke-width="1" d="M15 20a8 8 0 110 16 8 8 0 010-16zm0 1.2a6.8 6.8 0 100 13.6 6.8 6.8 0 000-13.6zm0 6.8c1.4 0 3 1 3.8 2 .2.1.2.4.2.6a.6.6 0 01-1 .2c-.8-.8-2-1.5-3-1.5-1.1 0-2.2.5-3 1.4-.1.3-.5.3-.8 0a.6.6 0 010-.8A5 5 0 0115 28zm-2-4a1 1 0 110 2 1 1 0 010-2zm4 0a1 1 0 110 2 1 1 0 010-2z" transform="translate(-15 -28)"></path></g><g id="error-smile2_to" transform="translate(15 28)"><path id="error-smile2" fill="#FFB300" stroke="none" stroke-width="1" d="M15 20a8 8 0 110 16 8 8 0 010-16zm0 1.2a6.8 6.8 0 100 13.6 6.8 6.8 0 000-13.6zm0 6.8c1.4 0 3 1 3.8 2 .2.1.2.4.2.6a.6.6 0 01-1 .2c-.8-.8-2-1.5-3-1.5-1.1 0-2.2.5-3 1.4-.1.3-.5.3-.8 0a.6.6 0 010-.8A5 5 0 0115 28zm-2-4a1 1 0 110 2 1 1 0 010-2zm4 0a1 1 0 110 2 1 1 0 010-2z" transform="translate(-15 -28)"></path></g><g id="error-smile3_to" transform="translate(129.5 65.5)"><path id="error-smile3" fill="#FFB300" stroke="none" stroke-width="1" d="M129.5 62a3.5 3.5 0 110 7 3.5 3.5 0 010-7zm0 .5a3 3 0 100 6 3 3 0 000-6zm0 3c.6 0 1.3.5 1.7.8v.3a.3.3 0 01-.4.1c-.3-.3-.9-.6-1.3-.6-.5 0-1 .2-1.3.6 0 0-.2.1-.4 0a.3.3 0 010-.4c.4-.5 1-.8 1.7-.8zm-.9-1.8a.4.4 0 110 1 .4.4 0 010-1zm1.8 0a.4.4 0 110 1 .4.4 0 010-1z" opacity="0" transform="translate(-129.5 -65.5)"></path></g><g id="error-smile4_to" transform="translate(67.5 5.5)"><path id="error-smile4" fill="#FFB300" stroke="none" stroke-width="1" d="M67.5 0a3.5 3.5 0 110 7 3.5 3.5 0 010-7zm0 .5a3 3 0 100 6 3 3 0 000-6zm0 3c.6 0 1.3.5 1.7.8v.3a.3.3 0 01-.4.1c-.3-.3-.9-.6-1.3-.6-.5 0-1 .2-1.3.6 0 0-.2.1-.4 0a.3.3 0 010-.4c.4-.5 1-.8 1.7-.8zm-.9-1.8a.4.4 0 110 1 .4.4 0 010-1zm1.8 0a.4.4 0 110 1 .4.4 0 010-1z" opacity="0" transform="translate(-67.5 -3.5)"></path></g><g id="error-smile5_to" transform="translate(32.5 7.5)"><path id="error-smile5" fill="#FFB300" stroke="none" stroke-width="1" d="M32.5 4a3.5 3.5 0 110 7 3.5 3.5 0 010-7zm0 .5a3 3 0 100 6 3 3 0 000-6zm0 3c.6 0 1.3.5 1.7.8v.3a.3.3 0 01-.4.1c-.3-.3-.9-.6-1.3-.6-.5 0-1 .2-1.3.6 0 0-.2.1-.4 0a.3.3 0 010-.4c.4-.5 1-.8 1.7-.8zm-.9-1.8a.4.4 0 110 1 .4.4 0 010-1zm1.8 0a.4.4 0 110 1 .4.4 0 010-1z" opacity="0" transform="translate(-32.5 -7.5)"></path></g><g id="error-smile6_to" transform="translate(109.5 54.5)"><path id="error-smile6" fill="#FFB300" stroke="none" stroke-width="1" d="M109.5 51a3.5 3.5 0 110 7 3.5 3.5 0 010-7zm0 .5a3 3 0 100 6 3 3 0 000-6zm0 3c.6 0 1.3.5 1.7.8v.3a.3.3 0 01-.4.1c-.3-.3-.9-.6-1.3-.6-.5 0-1 .2-1.3.6 0 0-.2.1-.4 0a.3.3 0 010-.4c.4-.5 1-.8 1.7-.8zm-.9-1.8a.4.4 0 110 1 .4.4 0 010-1zm1.8 0a.4.4 0 110 1 .4.4 0 010-1z" opacity="0" transform="translate(-109.5 -54.5)"></path></g><g id="error-smile7_to" transform="translate(3.5 65.5)"><path id="error-smile7" fill="#FFB300" stroke="none" stroke-width="1" d="M3.5 64a3.5 3.5 0 110 7 3.5 3.5 0 010-7zm0 .5a3 3 0 100 6 3 3 0 000-6zm0 3c.6 0 1.3.5 1.7.8v.3a.3.3 0 01-.4.1c-.3-.3-.9-.6-1.3-.6-.5 0-1 .2-1.3.6 0 0-.2.1-.4 0a.3.3 0 010-.4c.4-.5 1-.8 1.7-.8zm-.9-1.8a.4.4 0 110 1 .4.4 0 010-1zm1.8 0a.4.4 0 110 1 .4.4 0 010-1z" opacity="0" transform="translate(-3.5 -67.5)"></path></g><g id="error-smile-on-back_to" transform="translate(41 20)"><g id="error-smile-on-back" stroke="none" stroke-width="1"><rect id="error-rectangle" width="48" height="23" fill="#FFB300" rx="3" ry="3"></rect><path id="error-combined-shape" fill="#0B1C4A" d="M23.5 3a8.5 8.5 0 110 17 8.5 8.5 0 010-17zm0 1.3a7.2 7.2 0 100 14.4 7.2 7.2 0 000-14.4zm0 7.8c1.6 0 3.1 1 4 1.9a.6.6 0 11-1 .9c-.7-.8-2-1.6-3-1.6s-2.2.6-2.9 1.5a.6.6 0 01-1-.8c1-1.2 2.5-2 4-2zM21 7.7a1 1 0 110 2 1 1 0 010-2zm5.2 0a1 1 0 110 2 1 1 0 010-2z"></path></g></g></g></svg>

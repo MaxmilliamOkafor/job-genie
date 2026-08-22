@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+    <style>
+        body {
+            width: 250px;
+            padding: 0;
+            margin: 0;
+            color: #222;
+        }
+        #head {
+            padding: 12px 12px 12px 52px;
+            text-align: left;
+            position: relative;
+            line-height: 12px;
+        }
+
+        #head h1 {
+            font-size: 12px;
+            font-weight: normal;
+            margin: 0 0 3px 0;
+            padding: 0;
+            line-height: 12px;
+        }
+
+        #head p {
+            font-size: 12px;
+            color: #666;
+            margin: 0;
+        }
+
+        #head .logo {
+            position: absolute;
+            left: 13px;
+            top: 13px;
+            width: 24px;
+            height: 24px;
+            background-image: url(/icons/icon48.png);
+            background-size: 100%;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        #menu a {
+            display: block;
+            text-decoration: none;
+            color: #333;
+            padding: 12px;
+        }
+
+        #menu a:hover {
+            background: #eee;
+        }
+    </style>
+    <body>
+        <div id="head">
+            <span class="logo"></span>
+            <h1>LeadRocks for Chrome</h1>
+            <p>Linkedin Profiles Scanner</p>
+        </div>
+
+        <div id="menu">
+            <a href="#" id="widget-reset">Reset widget position</a>
+            <a href="https://www.linkedin.com/search/results/people/">Open LinkedIn search</a>
+            <a href="https://leadrocks.io/">Open LeadRocks web page</a>
+        </div>
+        <script src="popup.js"></script>
+    </body>
+</html>

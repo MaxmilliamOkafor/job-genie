@@ -1,0 +1,58 @@
+{
+"update_url": "https://clients2.google.com/service/update2/crx",
+
+  "manifest_version": 3,
+  "name": "LeadRocks for LinkedIn: Profiles Scanner",
+  "description": "LeadRocks for Chrome is a tool to find emails, phone numbers, and to export LinkedIn profiles data",
+  "version": "0.5.2",
+  "author": "Leadrocks Team",
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+
+  "action": {
+    "default_icon": "icons/logo.png",
+    "default_title": "LeadRocks for Chrome: Linkedin Profiles Scanner",
+    "default_popup": "popup.html"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "content_scripts": [{
+    "js": ["linkedin.js"],
+    "css": ["widget.css"],
+    "matches": ["https://www.linkedin.com/*"]
+  },{
+    "js": ["leadrocks.js"],
+    "matches": ["https://leadrocks.io/*"],
+    "all_frames": true
+  }],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "permissions": ["storage", "tabs"],
+
+  "externally_connectable": {
+    "matches": ["https://leadrocks.io/*"]
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "components/*",
+        "images/*",
+        "icons/*",
+        "pages/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
