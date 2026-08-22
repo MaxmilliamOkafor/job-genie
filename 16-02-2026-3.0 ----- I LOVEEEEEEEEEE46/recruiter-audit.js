@@ -1932,6 +1932,32 @@
     for (const w of a) if (b.has(w)) n++;
     return n / a.size;
   };
+  // WHICHEVER FIELD THE PROFILE PUT THEM IN.
+  //
+  // This read src.bullets and src.description and nothing else. The
+  // location field has already turned up missing once for exactly this
+  // reason -- saved under a name the extension did not ask for -- and a
+  // bullet list that arrives as `responsibilities` or `achievements`
+  // fails the same way, silently, because an empty list is
+  // indistinguishable from a role the model kept in full.
+  const _BULLET_FIELDS = ['bullets', 'description', 'descriptions', 'responsibilities',
+    'achievements', 'accomplishments', 'highlights', 'points', 'details', 'duties',
+    'summary', 'text', 'content'];
+  const _profileBullets = (src) => {
+    if (!src || typeof src !== 'object') return [];
+    const out = [];
+    for (const f of _BULLET_FIELDS) {
+      const v = src[f];
+      if (!v) continue;
+      if (Array.isArray(v)) out.push(...v.map((x) => (x && typeof x === 'object')
+        ? String(x.text || x.bullet || x.value || '') : String(x || '')));
+      else if (typeof v === 'string') out.push(...v.split(/\r?\n/));
+      if (out.length) break;                  // the first field that has them wins
+    }
+    return out.map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
+      .filter((b) => b.length > 20);
+  };
+
   const _BULLET_MATCH = 0.45;
   const _bulletsMatch = (profileBullet, cvBullet) => {
     const A = _stems(profileBullet);
@@ -1984,10 +2010,7 @@
       }
       if (!cvBullets) continue;              // the role itself is not on the CV
 
-      const own = Array.isArray(src.bullets) ? src.bullets
-        : (typeof src.description === 'string' ? src.description.split(/\r?\n/) : []);
-      const profileBullets = own.map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
-        .filter((b) => b.length > 20);
+      const profileBullets = _profileBullets(src);
       if (!profileBullets.length) continue;
 
       profileTotal += profileBullets.length;
@@ -2074,7 +2097,8 @@
   function restoreDroppedBullets(cvText, experience) {
     const text = String(cvText || '');
     if (!text || !Array.isArray(experience) || !experience.length) {
-      return { text, restored: 0 };
+      return { text, restored: 0, reordered: 0, matchedRoles: 0, profileBulletsSeen: 0,
+        cvRoles: 0, cvCompanies: [] };
     }
 
     const lines = text.split('\n');
@@ -2099,7 +2123,7 @@
       const head = bare.indexOf('\t') === -1 ? bare : bare.slice(0, bare.indexOf('\t'));
       if (_titleNear(lines, i)) {
         held = _HEADER_RUN;
-        open = { key: _eduNorm(head), start: -1, end: -1, bullets: [] };
+        open = { key: _eduNorm(head), raw: head, start: -1, end: -1, bullets: [] };
         roles.push(open);
       }
     }
@@ -2113,7 +2137,7 @@
       r.marker = m ? m[1] : '- ';
     }
 
-    let restored = 0;
+    let restored = 0, reordered = 0, matchedRoles = 0, profileBulletsSeen = 0;
     const edits = [];
     for (const src of experience) {
       if (!src) continue;
@@ -2124,11 +2148,10 @@
         && (r.key === key || r.key.indexOf(key) !== -1 || key.indexOf(r.key) !== -1));
       if (!role) continue;
 
-      const own = Array.isArray(src.bullets) ? src.bullets
-        : (typeof src.description === 'string' ? src.description.split(/\r?\n/) : []);
-      const profileBullets = own.map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
-        .filter((b) => b.length > 20);
+      matchedRoles++;
+      const profileBullets = _profileBullets(src);
       if (!profileBullets.length) continue;
+      profileBulletsSeen += profileBullets.length;
 
       // Greedy best match, one CV bullet to one profile bullet, so a
       // single rewrite covering two source bullets cannot stand in for
@@ -2149,17 +2172,31 @@
       // Whatever the model wrote that answers to nothing in the profile.
       role.bullets.forEach((cb, idx) => { if (!taken.has(idx)) rebuilt.push(cb); });
 
-      if (!added) continue;
+      // ORDER IS PART OF THE JOB, NOT A SIDE EFFECT OF RESTORING.
+      //
+      // This used to skip a role that was missing nothing, which left
+      // the relevance re-ordering above as the last word on it. The
+      // report was "look at Citigroup, that was not my first bullet in
+      // my layout": a role can come back complete and still be shuffled
+      // out of the order its owner arranged it in. A profile that
+      // records the work also records the order of it.
+      const changed = added > 0
+        || rebuilt.length !== role.bullets.length
+        || rebuilt.some((b, i) => b !== role.bullets[i]);
+      if (!changed) continue;
       restored += added;
+      if (!added) reordered++;
       edits.push({ start: role.start, end: role.end,
         lines: rebuilt.map((b) => role.marker + b) });
     }
 
-    if (!restored) return { text, restored: 0 };
+    const stats = { restored, reordered, matchedRoles, profileBulletsSeen,
+      cvRoles: roles.length, cvCompanies: roles.map((r) => r.raw || r.key).filter(Boolean) };
+    if (!edits.length) return Object.assign({ text }, stats);
     // Bottom up, so earlier line numbers stay valid.
     edits.sort((a, b) => b.start - a.start);
     for (const e of edits) lines.splice(e.start, e.end - e.start + 1, ...e.lines);
-    return { text: lines.join('\n'), restored };
+    return Object.assign({ text: lines.join('\n') }, stats);
   }
 
   function attachEmploymentTypes(cvText, experience) {
@@ -4132,7 +4169,15 @@
 
     // Within each role, lead with the bullets that answer THIS posting.
     // Order only -- no rewriting, no movement between roles.
-    if (jobKeywords) {
+    //
+    // ONLY WHEN THERE IS NO PROFILE TO DEFER TO. The restore below
+    // rebuilds each covered role in the order the profile records, so
+    // running both means this one shuffles the lines and that one puts
+    // them back -- wasted work, and a fix log that contradicts itself.
+    // A profile that records the work records the order of it; without
+    // one, relevance is the best available answer.
+    const _exp = Array.isArray(experience) ? experience : [];
+    if (jobKeywords && !_exp.length) {
       const ordered = orderBulletsByRelevance(outCV, jobKeywords);
       if (ordered.moved) {
         outCV = ordered.text;
@@ -4160,29 +4205,73 @@
     // posting lead -- and fitToOnePage, which trims only when trimming
     // actually achieves a page and puts everything back when it does
     // not. A page is a real constraint. Six was an opinion.
+    // TWO try BLOCKS, NOT ONE.
+    //
+    // They shared one, so a throw anywhere in the counting skipped the
+    // restore as well -- and the catch was empty, so the whole thing
+    // became a silent no-op that looks exactly like the model having
+    // returned everything. The restore is the half that changes the
+    // document and it does not depend on the count.
+    let _dropped = null;
+    if (outCV) {
+      try { _dropped = reportDroppedBullets(outCV, _exp); } catch (e) {}
+    }
     if (outCV) {
       try {
-        const exp = Array.isArray(experience) ? experience : [];
-        const dropped = reportDroppedBullets(outCV, exp);
         // Counted first, restored second, so the report says what the
         // tailoring actually did rather than what the page ended up
         // holding. Then the CV carries the whole history regardless,
         // which is the point: the prompt lives in an edge function
         // deployed separately, so a fix made only there does not reach
         // a single generated document until that deploy happens.
-        const back = restoreDroppedBullets(outCV, exp);
-        if (back.restored) {
+        const back = restoreDroppedBullets(outCV, _exp);
+        if (back.restored || back.reordered) {
           outCV = back.text;
-          report.fixes.push('Restored ' + back.restored + ' bullet(s) the tailoring dropped, '
-            + 'in the order your profile records them, keeping the tailored rewrite '
-            + 'wherever one came back.');
+          const parts = [];
+          if (back.restored) parts.push('restored ' + back.restored + ' bullet(s) the tailoring dropped');
+          if (back.reordered) parts.push('put ' + back.reordered + ' role(s) back into your profile\'s order');
+          report.fixes.push('Work experience: ' + parts.join(' and ')
+            + ', keeping the tailored rewrite wherever one came back.');
         }
-        if (dropped) {
-          dropped.restored = back.restored;
-          if (back.restored >= dropped.count) dropped.kind = 'profile-bullets-restored';
-          report.warnings.push(dropped);
+        if (_dropped) {
+          _dropped.restored = back.restored;
+          if (back.restored >= _dropped.count) _dropped.kind = 'profile-bullets-restored';
+          report.warnings.push(_dropped);
         }
-      } catch (e) {}
+        // A SILENT NO-OP IS THE ONE OUTCOME NOBODY CAN DEBUG.
+        //
+        // If the profile carried roles and not one of them could be
+        // matched to a role on the page, the pass did nothing and the
+        // document looks untouched -- indistinguishable from the model
+        // having returned everything. Say so, with what it was looking
+        // for and what it found, because every version of this bug so
+        // far has been a field arriving under a name nobody expected.
+        if (_exp.length && !back.matchedRoles) {
+          report.warnings.push({
+            kind: 'profile-experience-unmatched',
+            profileRoles: _exp.length,
+            cvRoles: back.cvRoles,
+            note: 'Your profile records ' + _exp.length + ' role(s) and none of them could be '
+              + 'matched to a role on the generated CV, so no bullet was restored and the '
+              + 'order is the tailoring\'s rather than yours. Either the company names '
+              + 'disagree, or the profile is not sending its bullets. Companies on the CV: '
+              + (back.cvCompanies || []).join(', ') + '. Companies in the profile: '
+              + _exp.map((e) => String((e && (e.company || e.employer || e.name)) || '?'))
+                .join(', ') + '.',
+          });
+        } else if (_exp.length && back.matchedRoles && !back.profileBulletsSeen) {
+          report.warnings.push({
+            kind: 'profile-experience-has-no-bullets',
+            profileRoles: _exp.length,
+            note: 'The roles matched, but not one of them carried any bullet text, so there '
+              + 'was nothing to restore. The profile is sending companies and titles '
+              + 'without the work underneath them -- check which field the bullets save '
+              + 'under and whether it is in the payload the extension reads.',
+          });
+        }
+      } catch (e) {
+        report.warnings.push({ kind: 'profile-bullets-restore-failed', note: String(e && e.message || e) });
+      }
     }
 
     // Company and title on separate lines. Runs early: the role-shape

@@ -155,7 +155,7 @@ console.log('\nAND ALL SEVEN REACH THE PAGE');
     !!w && w.kind === 'profile-bullets-restored', JSON.stringify(w && w.kind));
   t('  and it is reported as a fix, not only as a warning',
     audit(META_ON_CV, [{ company: 'Meta', bullets: META_PROFILE }])
-      .report.fixes.some((f) => /Restored 3 bullet/.test(f)),
+      .report.fixes.some((f) => /restored 3 bullet/.test(f)),
     JSON.stringify(audit(META_ON_CV, [{ company: 'Meta', bullets: META_PROFILE }]).report.fixes));
 }
 
