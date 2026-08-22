@@ -2143,8 +2143,8 @@ PHASE 3: REWRITE - EXECUTE ALL 7 RULES
 
 RULE -1 - IMMUTABLE FACTS (HIGHEST PRIORITY, OVERRIDES ALL OTHER RULES)
 The following fields from the candidate's original CV are facts. You may
-reword surrounding prose, reorder bullets, and mirror JD vocabulary, but
-you MUST NOT alter, invent, or omit any of these values:
+reword surrounding prose and mirror JD vocabulary, but you MUST NOT reorder
+bullets, drop bullets, or alter, invent or omit any of these values:
 - Name and contact details (email, phone, links)
 - EMPLOYER NAMES - never replace with a different company
 - JOB TITLES at each employer - never upgrade or change
