@@ -703,86 +703,27 @@
   // ===================================================================
   // HOW MANY BULLETS A ROLE GETS
   // -------------------------------------------------------------------
-  // Attention is front-loaded and finite. A role from eight years ago
-  // carrying seven bullets spends the reader's patience on the least
-  // relevant part of the CV, and pushes the recent work onto page two.
-  // The convention recruiters actually apply: 4-6 bullets for the recent
-  // roles, 2-4 for the older ones.
+  // As many as the profile records.
   //
-  // This MUST run after orderBulletsByRelevance, because it trims from
-  // the END. Once the bullets are ranked against the posting, the tail is
-  // the least relevant material, and trimming it is tailoring rather than
-  // loss -- a different posting keeps a different subset. Run in the
-  // other order it would delete whatever happened to be recorded last.
+  // capBulletsPerRole used to live here, trimming each role to six
+  // bullets for the two most recent and four for the rest, on the
+  // reasoning that attention is finite and a role from eight years ago
+  // spends the reader's patience. That reasoning is sound in general
+  // and was the wrong call here: it deleted work its owner had
+  // deliberately written down, from code that has never seen the
+  // posting being answered, and it did so on every CV whether or not
+  // space was actually short.
   //
-  // Two hard guards, because deleting evidence is the one thing here that
-  // cannot be undone by the reader:
+  // Reported twice, in their words: "why did you limit my professional
+  // experience roles bullets to 2 each? I never asked for that", and
+  // then "remove that limit as it might also be preventing the actual
+  // tailor of bullet points".
   //
-  //   1. A bullet holding the CV's ONLY mention of a posting keyword is
-  //      never dropped. Trimming it would cost a keyword match, which is
-  //      the opposite of the point.
-  //   2. Caps are generous and only bite when a role is genuinely
-  //      overlong, so a normal CV passes through untouched.
-  const RECENT_ROLE_CAP = 6;   // the first two roles
-  const OLDER_ROLE_CAP = 4;    // everything before them
-
-  function capBulletsPerRole(cvText, jobKeywords) {
-    if (!cvText) return { text: cvText || '', trimmed: 0, roles: 0 };
-    const kws = _flatKeywords(jobKeywords)
-      .map((k) => String(k || '').trim().toLowerCase())
-      .filter((k) => k.length > 2);
-
-    const lines = String(cvText).split('\n');
-    const isBullet = (l) => /^\s*[-•*]\s*\S/.test(l);
-
-    // Count, across the whole CV, how many bullets carry each keyword.
-    // A count of one makes that bullet the sole carrier.
-    const counts = Object.create(null);
-    for (const l of lines) {
-      if (!isBullet(l)) continue;
-      const low = l.toLowerCase();
-      for (const k of kws) if (low.includes(k)) counts[k] = (counts[k] || 0) + 1;
-    }
-    const isSoleCarrier = (b) => {
-      const low = b.toLowerCase();
-      for (const k of kws) if (counts[k] === 1 && low.includes(k)) return true;
-      return false;
-    };
-
-    const out = [];
-    let inExperience = false;
-    let roleIndex = 0;
-    let trimmed = 0;
-    let rolesTrimmed = 0;
-    let i = 0;
-    while (i < lines.length) {
-      if (_EXP_HEAD.test(lines[i])) { inExperience = true; roleIndex = 0; out.push(lines[i]); i++; continue; }
-      if (_ANY_HEAD.test(lines[i])) { inExperience = false; out.push(lines[i]); i++; continue; }
-      if (!inExperience || !isBullet(lines[i])) { out.push(lines[i]); i++; continue; }
-
-      let j = i;
-      while (j < lines.length && isBullet(lines[j])) j++;
-      const run = lines.slice(i, j);
-      roleIndex++;
-      const cap = roleIndex <= 2 ? RECENT_ROLE_CAP : OLDER_ROLE_CAP;
-
-      if (run.length <= cap) {
-        out.push.apply(out, run);
-      } else {
-        const kept = run.slice(0, cap);
-        const dropped = run.slice(cap);
-        // Re-admit anything in the tail that is the only place a posting
-        // keyword appears. The role can exceed its cap for that reason;
-        // a missed keyword costs more than an extra line.
-        const rescued = dropped.filter(isSoleCarrier);
-        out.push.apply(out, kept.concat(rescued));
-        const lost = dropped.length - rescued.length;
-        if (lost > 0) { trimmed += lost; rolesTrimmed++; }
-      }
-      i = j;
-    }
-    return { text: out.join('\n'), trimmed, roles: rolesTrimmed };
-  }
+  // Two things still shape a role, and both earn it. orderBulletsByRelevance
+  // puts the bullets that answer THIS posting first, which is tailoring
+  // and costs nothing. fitToOnePage trims only when trimming actually
+  // reaches a page, and puts everything back when it cannot. A page is a
+  // real constraint. Six was an opinion.
 
   // ===================================================================
   // EACH ROLE CARRIES WHERE IT HAPPENED
@@ -1083,7 +1024,7 @@
   //
   // So the last of the fitting is done here, where relevance to the
   // posting is known and the generator's is not. It runs AFTER
-  // orderBulletsByRelevance and capBulletsPerRole, so the tail of each
+  // orderBulletsByRelevance, so the tail of each
   // role is already its least relevant material.
   //
   // What it will not do:
@@ -1898,6 +1839,128 @@
     + '|fixed[\\s-]?term|interim|internship|intern|placement|seasonal'
     + '|maternity cover|parental cover|secondment|consultant|consultancy)'
     + '(?:\\s*,\\s*[a-z\\s-]+)*$', 'i');
+
+  /**
+   * WORK THE PROFILE RECORDS AND THE CV DOES NOT.
+   *
+   * Reported: "I updated my profile section with new bullets but all
+   * bullets aren't generating." Twenty-eight bullets across four roles
+   * went in; thirteen came out. Nothing in the extension had dropped
+   * them -- the tailoring model had, before the text ever arrived here,
+   * under a prompt rule capping each role at four to six bullets.
+   *
+   * That may even be the right call for a given posting. What is not
+   * defensible is that it happened silently. The user wrote those
+   * bullets deliberately, and the only way to discover half were gone
+   * was to count them by hand against the profile page.
+   *
+   * So this counts, per employer, and names what is missing. It does NOT
+   * put the bullets back: the model rewrote the ones it kept to match
+   * the posting, and splicing raw profile text in beside them would
+   * produce a CV in two voices. Restoring is a decision, and it belongs
+   * to whoever is applying for the job.
+   */
+  const _STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into',
+    'across', 'their', 'them', 'they', 'were', 'was', 'are', 'has', 'had', 'have', 'been',
+    'which', 'while', 'after', 'before', 'over', 'under', 'through', 'every', 'each',
+    'more', 'than', 'then', 'when', 'where', 'what', 'who', 'whom', 'its', 'it', 'a', 'an',
+    'of', 'in', 'on', 'to', 'by', 'at', 'as', 'is', 'be', 'or', 'so', 'up', 'out', 'all']);
+
+  const _distinctive = (s) => {
+    const words = String(s || '').toLowerCase().match(/[a-z][a-z0-9.+#-]{2,}/g) || [];
+    return words.filter((w) => !_STOP_WORDS.has(w));
+  };
+
+  function reportDroppedBullets(cvText, experience) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(experience) || !experience.length) return null;
+
+    // The CV's bullets, grouped by the employer they sit under.
+    const byCompany = new Map();
+    const lines = text.split('\n');
+    let inExp = false, current = '';
+    for (let i = 0; i < lines.length; i++) {
+      const bare = lines[i].trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; current = ''; continue; }
+      if (_ANY_HEAD.test(bare)) { inExp = false; continue; }
+      if (!inExp || !bare) continue;
+      if (/^[-•*]\s*\S/.test(bare)) {
+        if (current) byCompany.get(current).push(bare.replace(/^[-•*]\s*/, ''));
+        continue;
+      }
+      // A company line: not a date, and the line after it is the title.
+      if (ROLE_DATE_RE.test(bare)) continue;
+      const head = bare.indexOf('\t') === -1 ? bare : bare.slice(0, bare.indexOf('\t'));
+      const next = (lines[i + 1] || '').trim();
+      if (next && _TITLE_WORD.test(next) && !ROLE_DATE_RE.test(next)) {
+        current = _eduNorm(head);
+        if (!byCompany.has(current)) byCompany.set(current, []);
+      }
+    }
+    if (!byCompany.size) return null;
+
+    const missing = [];
+    let profileTotal = 0, cvTotal = 0;
+    for (const src of experience) {
+      if (!src) continue;
+      const key = _eduNorm(src.company || src.employer || src.organisation
+        || src.organization || src.name);
+      if (!key) continue;
+      let cvBullets = null;
+      for (const [k, v] of byCompany) {
+        if (k === key || k.indexOf(key) !== -1 || key.indexOf(k) !== -1) { cvBullets = v; break; }
+      }
+      if (!cvBullets) continue;              // the role itself is not on the CV
+
+      const own = Array.isArray(src.bullets) ? src.bullets
+        : (typeof src.description === 'string' ? src.description.split(/\r?\n/) : []);
+      const profileBullets = own.map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
+        .filter((b) => b.length > 20);
+      if (!profileBullets.length) continue;
+
+      profileTotal += profileBullets.length;
+      cvTotal += cvBullets.length;
+
+      // The model REWRITES what it keeps, so an exact match finds
+      // nothing. A bullet counts as present when most of the words that
+      // make it distinctive turn up in one of the CV's bullets for that
+      // same employer.
+      const gone = profileBullets.filter((b) => {
+        const words = _distinctive(b);
+        if (words.length < 4) return false;      // too short to judge
+        return !cvBullets.some((c) => {
+          const cl = c.toLowerCase();
+          const hits = words.filter((w) => cl.indexOf(w) !== -1).length;
+          return hits / words.length >= 0.4;
+        });
+      });
+      if (gone.length) {
+        missing.push({
+          company: String(src.company || src.employer || src.name).trim(),
+          profileBullets: profileBullets.length,
+          cvBullets: cvBullets.length,
+          dropped: gone.map((b) => b.slice(0, 90)),
+        });
+      }
+    }
+
+    if (!missing.length) return null;
+    const total = missing.reduce((n, m) => n + m.dropped.length, 0);
+    return {
+      kind: 'profile-bullets-dropped',
+      count: total,
+      profileTotal,
+      cvTotal,
+      roles: missing,
+      note: 'The tailoring never returned ' + total + ' bullet(s) your profile records: '
+        + missing.map((m) => m.company + ' ' + m.cvBullets + ' of ' + m.profileBullets).join(', ')
+        + '. This is counted before anything here trims, so it is the model choosing '
+        + 'what fits the posting -- RULE 11b in the tailoring prompt caps each role at '
+        + '4 to 6 bullets for the two most recent and 2 to 4 for the rest. Raising that '
+        + 'cap is what brings them back. Nothing in the extension caps them any '
+        + 'more: it prints every bullet the tailoring returns.',
+    };
+  }
 
   function attachEmploymentTypes(cvText, experience) {
     const text = String(cvText || '');
@@ -3506,7 +3569,7 @@
     ['Programming Languages', /^(?:python|java|javascript|typescript|c\+\+|c#|c|go|golang|rust|ruby|php|swift|kotlin|scala|r|sql|t-sql|pl\/sql|bash|shell scripting|shell|powershell|matlab|perl|dart|vba|objective-c|solidity|assembly)$/i],
     ['Frameworks & Libraries', /^(?:react(?:\.js)?|angular|vue(?:\.js)?|next\.js|node(?:\.js)?|express(?:\.js)?|django|flask|fastapi|spring(?: boot)?|\.net|asp\.net|rails|laravel|jquery|graphql|rest apis?|restful apis?|html|html5|css|css3|tailwind|bootstrap|hugging face transformers|streamlit)$/i],
     ['Cloud & DevOps', /^(?:aws|amazon web services|azure|microsoft azure|gcp|google cloud(?: platform)?|kubernetes|k8s|docker|terraform|ansible|helm|jenkins|github actions|gitlab ci|ci\/cd|cloudformation|openshift|linux|unix|prometheus|grafana|datadog|elk stack|observability|monitoring|serverless|aws lambda|git|github|gitlab|cloud security|cloud migration)$/i],
-    ['Data & AI', /^(?:machine learning|deep learning|pytorch|tensorflow|keras|scikit-learn|xgboost|nlp|natural language processing|computer vision|llms?|rag|mlops|mlflow|(?:apache )?spark|(?:apache )?airflow|(?:apache )?kafka|snowflake|databricks|dbt|etl|elt|hadoop|pandas|numpy|power bi|tableau|looker|data modell?ing|data warehousing|data engineering|data analysis|data analytics|data pipelines|analytics|statistics|a\/b testing|generative ai|prompt engineering)$/i],
+    ['Data & AI', /^(?:machine learning|deep learning|pytorch|tensorflow|keras|scikit-learn|xgboost|nlp|natural language processing|computer vision|llms?|rag|mlops|mlflow|(?:apache )?spark|(?:apache )?airflow|(?:apache )?kafka|snowflake|databricks|dbt|etl|elt|hadoop|pandas|numpy|power bi|tableau|looker|data modell?ing|data warehousing|data engineering|data analysis|data analytics|data pipelines|analytics|statistics|a\/b testing|generative ai|prompt engineering|excel|microsoft excel|google sheets|pivot tables?|vlookup|forecasting|financial modell?ing|budgeting|variance analysis|kpis?|kpi reporting|business intelligence|bi|dashboards?|data visuali[sz]ation|reporting automation)$/i],
     ['Databases', /^(?:postgresql|postgres|mysql|mongodb|redis|oracle|sql server|dynamodb|elasticsearch|bigquery|cassandra|neo4j|sqlite|nosql)$/i],
     ['Security', /^(?:cyber ?security(?: solutions)?|information security|infosec|siem|soc|penetration testing|pen testing|owasp|incident response|vulnerability management|identity and access management|iam|zero trust|encryption|gdpr|iso 27001|soc 2|hipaa compliance|threat detection|security operations)$/i],
     ['Support & Platforms', /^(?:customer support|technical support|it support|end[- ]user support|help ?desk|service desk|troubleshooting|itil|zendesk|jira|confluence|servicenow|salesforce|freshdesk|intercom|sla management|escalation management|windows(?: and macos support| support)?|macos(?: support)?|ios|android|active directory|office 365|microsoft 365|remote desktop|ticketing systems)$/i],
@@ -3569,13 +3632,38 @@
     }
     items = kept;
 
+    // A QUALIFIED TERM IS STILL THE SAME TERM.
+    //
+    // Every pattern in the taxonomy is anchored, which is what stops
+    // "Customer Support" being read as a programming language. It also
+    // means one adjective is enough to lose a term: "Advanced SQL",
+    // "Power BI Dashboards" and "Python (pandas)" match nothing at all
+    // and drop into "Additional:", so the two skills a business
+    // operations posting actually named ended up on the unlabelled
+    // line while the recognised deep learning frameworks kept theirs.
+    //
+    // The qualifier is stripped for the LOOKUP only. What prints is
+    // what the CV said, because "Advanced SQL" is a stronger claim than
+    // "SQL" and it is not this function's business to weaken it.
+    const _QUAL = new RegExp('^(?:advanced|basic|intermediate|expert|proficient|strong'
+      + '|working knowledge of|hands[- ]on|solid)\\s+'
+      + '|\\s+(?:dashboards?|reporting|development|programming|scripting|queries'
+      + '|querying|administration|fundamentals|essentials)$', 'gi');
+    const _bare = (s) => String(s || '').replace(/\s*\([^)]*\)\s*/g, ' ')
+      .replace(_QUAL, '').replace(/\s{2,}/g, ' ').trim();
+    const _labelOf = (it) => {
+      for (const [name, re] of _SKILL_GROUPS) if (re.test(it)) return name;
+      const bare = _bare(it);
+      if (bare && bare !== it) {
+        for (const [name, re] of _SKILL_GROUPS) if (re.test(bare)) return name;
+      }
+      return '';
+    };
+
     const buckets = new Map();
     let classified = 0;
     for (const it of items) {
-      let label = '';
-      for (const [name, re] of _SKILL_GROUPS) {
-        if (re.test(it)) { label = name; break; }
-      }
+      const label = _labelOf(it);
       if (!label) continue;
       classified++;
       if (!buckets.has(label)) buckets.set(label, []);
@@ -3588,7 +3676,7 @@
     // Terms the taxonomy does not recognise go on their own line, which
     // claims nothing about them, rather than under a label that would be
     // wrong.
-    const unknown = items.filter((it) => !_SKILL_GROUPS.some(([, re]) => re.test(it)));
+    const unknown = items.filter((it) => !_labelOf(it));
     if (unknown.length) buckets.set('Additional', unknown);
 
     // TOO MANY LABELS IS ITS OWN PROBLEM, AND THE FIX IS NOT TO PUT A
@@ -3603,6 +3691,32 @@
     // then move the smallest group's terms down to "Additional". A group
     // holding one term is the first to go -- a whole line to say
     // "Databases: PostgreSQL" is not what the labels are for.
+    // WHAT THE POSTING ASKED FOR, MATCHED ON WORDS AND NOT ON LETTERS.
+    //
+    // The old test was a bare two-way indexOf, which makes a one or two
+    // letter skill match almost anything: "R" is inside "reporting",
+    // "C" is inside "customer support", "Go" is inside "Django". A CV
+    // listing R and C scored a hit against every keyword on the page,
+    // so relevance was noise and the ordering fell through to taxonomy
+    // order every time. Word boundaries, and only where the term
+    // actually starts and ends on a word character, so "C++" and
+    // ".NET" still match.
+    const _esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const _has = (hay, needle) => {
+      if (!hay || !needle) return false;
+      if (hay === needle) return true;
+      const b = /^[a-z0-9]/i.test(needle) ? '\\b' : '';
+      const e = /[a-z0-9]$/i.test(needle) ? '\\b' : '';
+      try { return new RegExp(b + _esc(needle) + e, 'i').test(hay); } catch (e2) { return false; }
+    };
+    const kw = (Array.isArray(jobKeywords) ? jobKeywords : [])
+      .map((k) => String(k || '').toLowerCase().trim()).filter((k) => k.length > 1);
+    const asked = (s) => {
+      const t = String(s || '').toLowerCase();
+      return kw.some((k) => _has(t, k) || _has(k, t));
+    };
+    const relevance = (list) => list.filter(asked).length;
+
     const rankOfGroup = new Map();
     _SKILL_GROUPS.forEach(([name], i) => rankOfGroup.set(name, i));
     rankOfGroup.set('Additional', _SKILL_GROUPS.length + 1);   // always last
@@ -3625,19 +3739,44 @@
         buckets.set(combined, merged);
         continue;
       }
-      const smallest = [...buckets.keys()]
+      // THE GROUP THAT LOSES ITS LABEL IS THE ONE THE POSTING DID NOT
+      // ASK FOR.
+      //
+      // This used to demote the smallest group. On a business
+      // operations posting that read as: SQL and Power BI, the two
+      // things the job actually named, dropped into "Additional:"
+      // because their groups were short, while a long list of deep
+      // learning frameworks kept a labelled line at the top. The
+      // section then opened with PyTorch and Kubernetes on an
+      // application for an analyst role, which is the reading the
+      // grouping exists to prevent.
+      //
+      // Least relevant first, smallest as the tie-break. A group
+      // carrying something the posting named keeps its label until
+      // every group that carries nothing has already gone.
+      const demote = [...buckets.keys()]
         .filter((k) => k !== 'Additional' && k !== 'Core Competencies')
-        .sort((a, b) => buckets.get(a).length - buckets.get(b).length)[0];
-      if (!smallest) break;
-      const spilled = buckets.get(smallest);
-      buckets.delete(smallest);
+        .sort((a, b) => {
+          const d = relevance(buckets.get(a)) - relevance(buckets.get(b));
+          if (d) return d;
+          return buckets.get(a).length - buckets.get(b).length;
+        })[0];
+      if (!demote) break;
+      const spilled = buckets.get(demote);
+      buckets.delete(demote);
       buckets.set('Additional', (buckets.get('Additional') || []).concat(spilled));
     }
 
-    const kw = (Array.isArray(jobKeywords) ? jobKeywords : [])
-      .map((k) => String(k || '').toLowerCase()).filter(Boolean);
-    const relevance = (list) => list.filter((s) =>
-      kw.some((k) => s.toLowerCase().indexOf(k) !== -1 || k.indexOf(s.toLowerCase()) !== -1)).length;
+    // AND INSIDE A LINE, THE ASKED-FOR TERMS COME FIRST.
+    //
+    // A labelled line is read left to right and abandoned early. Eight
+    // terms in, the one the posting named is past the point a scan
+    // reaches. Stable, so everything else holds the order it had.
+    for (const [label, list] of buckets) {
+      if (label === 'Additional' && !kw.length) continue;
+      buckets.set(label, list.slice().sort((a, b) => (asked(b) ? 1 : 0) - (asked(a) ? 1 : 0)));
+    }
+
     // Taxonomy order breaks the ties. Size is not a tie-break worth
     // having: it would rank a long list of frameworks above the
     // languages they are written in.
@@ -3769,17 +3908,30 @@
       }
     }
 
-    // Then cap the length of each role. Strictly after the ordering above:
-    // this trims from the tail, and only once the tail is the LEAST
-    // relevant material is trimming it tailoring rather than loss.
+    // WHAT THE MODEL LEFT OUT, COUNTED BEFORE ANYTHING HERE TRIMS.
+    //
+    // NO PER-ROLE CAP. The bullets a role gets are the bullets the
+    // profile records.
+    //
+    // There used to be one here, at six for the recent roles and four
+    // for the rest, on the reasoning that attention is finite. It is,
+    // but that is a judgement about someone else's CV made by code that
+    // has never seen the posting they are answering, and it removed work
+    // its owner had deliberately written down. Twice now that has been
+    // the complaint, in their words: "why did you limit my professional
+    // experience roles bullets to 2 each? I never asked for that", and
+    // then "remove that limit as it might also be preventing the actual
+    // tailor of bullet points".
+    //
+    // What remains is the ORDERING above -- the bullets that answer this
+    // posting lead -- and fitToOnePage, which trims only when trimming
+    // actually achieves a page and puts everything back when it does
+    // not. A page is a real constraint. Six was an opinion.
     if (outCV) {
-      const capped = capBulletsPerRole(outCV, jobKeywords);
-      if (capped.trimmed) {
-        outCV = capped.text;
-        report.fixes.push('Trimmed ' + capped.trimmed + ' least-relevant bullet(s) from '
-          + capped.roles + ' role(s) to ' + RECENT_ROLE_CAP + ' recent / '
-          + OLDER_ROLE_CAP + ' older (kept every sole mention of a posting keyword)');
-      }
+      try {
+        const dropped = reportDroppedBullets(outCV, Array.isArray(experience) ? experience : []);
+        if (dropped) report.warnings.push(dropped);
+      } catch (e) {}
     }
 
     // Company and title on separate lines. Runs early: the role-shape

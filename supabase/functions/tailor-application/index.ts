@@ -2742,22 +2742,29 @@ Strategy:
 - For each role, score every bullet by how many JD keywords it contains
 - Place the highest-scoring bullet first
 - The first bullet of the FIRST role is the single most valuable line in the entire CV - pack it with the top JD keywords
-- If a bullet has zero JD keyword overlap, move it to the bottom or remove it if space is tight
+- If a bullet has zero JD keyword overlap, move it to the BOTTOM of that role. Do not remove it: ordering is what tailoring means here, and the extension decides what a page holds after it has measured the real document.
 
-RULE 11b: HOW MANY BULLETS EACH ROLE GETS (hard limits)
-Attention is finite and front-loaded. A role from eight years ago carrying
-seven bullets spends the reader's patience on the least relevant part of the
-CV and pushes the recent work onto page two.
-- The two most recent roles: 4 to 6 bullets each.
-- Every earlier role: 2 to 4 bullets each.
-Apply this AFTER the Rule 11 reordering, never before. Rule 11 puts the least
-relevant bullet last, so cutting the tail removes the least relevant material.
-Cut before reordering and you delete whatever the source happened to list last.
-ONE EXCEPTION, and it overrides the cap: if a bullet is the ONLY place in the
-whole CV where a posting keyword appears, KEEP it even though the role then
-runs over. A missed keyword costs more than an extra line.
-Never pad a short role UP to the minimum by inventing bullets. If the source
-gives a role two bullets, it has two bullets. The range is a ceiling, not a quota.
+RULE 11b: HOW MANY BULLETS EACH ROLE GETS
+EVERY BULLET THE SOURCE GIVES A ROLE. There is no cap and no range.
+
+There used to be one here: four to six bullets for the two most recent
+roles, two to four for the rest. It was removed after it repeatedly
+deleted work the candidate had deliberately written into their profile.
+A profile carrying eight bullets for a role produced a CV with four, and
+the only way to discover the other four were missing was to count them by
+hand against the profile page.
+
+Do NOT drop a bullet because a role has "too many". Do NOT drop one
+because it seems less relevant -- Rule 11 already handles relevance by
+ORDERING, which costs nothing and loses nothing. The extension measures
+the finished document and fits it to a page itself, and it does that
+knowing the type size, the margins and the real line count, which you do
+not.
+
+The only bullets that should not appear are ones the source never gave
+you. Never invent one to lengthen a role, and never merge two into one to
+shorten it: rewrite each source bullet as its own bullet, in the source's
+own order once Rule 11 has ranked them.
 
 RULE 19: SCOPE AND SCALE, WHERE THE SOURCE GIVES IT
 "Built dashboards" and "built dashboards used by 40 people across three desks"
@@ -2833,8 +2840,8 @@ terms, and pads it when a posting carries six. Spread them instead:
     RULE 14 already bans the ", using X and Y" tail that results.
   - Every bullet should carry at least one JD term where the underlying
     work honestly supports it. A bullet with none is not a failure -- it
-    is a bullet describing work this posting does not ask about, and it
-    may be the one RULE 11b trims.
+    is a bullet describing work this posting does not ask about, and
+    Rule 11 puts it last. It still appears.
 
 WHICH ROLE GETS WHICH TERM. The role where that work actually happened,
 always. Where two roles both support a term, put it in the more recent
@@ -2893,7 +2900,7 @@ After rewriting, run this internal checklist:
 [ ] Is there any bare percentage that is a multiple of 5 or 10 and NOT in the source? If so, remove it - that is the tell recruiters read as machine-written.
 [ ] REFORMULATION CHECK - go through the experience bullets one at a time and compare each against the source bullet it came from. How many did you actually change the wording of? If the answer is "none" or "only the most recent role", you have not applied Rule 9: returning the source bullets verbatim is the specific failure that rule exists to prevent, and it is what happens when Rule 0 is misread as "change nothing". Every number, technology, employer and date must be identical to the source; the LEAD FACT and the VOCABULARY must reflect this posting. Fix any bullet that is still in the source's dialect rather than the posting's.
 [ ] Does each posting keyword you placed in TECHNICAL SKILLS or CORE COMPETENCIES also appear, where the history honestly supports it, in an experience bullet? A keyword declared at the top and never evidenced underneath is what a reviewer is scanning for.
-[ ] Does any role exceed its bullet cap (6 for the two most recent, 4 for the rest)? If so, cut from the BOTTOM after reordering, unless the bullet is the CV's only mention of a posting keyword, in which case keep it.
+[ ] Does every role carry EVERY bullet its source gave it? Count them against the source. A role with eight bullets in the profile has eight in the CV, reordered by relevance but never trimmed -- fitting the page is the extension's job, not yours, and it does it after measuring the real document.
 [ ] Did you drop a scope figure (team size, volume, user count, number of systems) that the SOURCE bullet stated? Put it back. Did you add one the source did not state? Remove it.
 [ ] Does any bullet use the same four-letter-or-longer noun or verb twice ("risk ... risk team")? Rewrite it, but never by inventing a team or department name.
 [ ] Is the spelling consistent with the POSTING's country throughout (American for US/Canada/Latin America, British everywhere else), with proper nouns left in their owner's spelling?
@@ -3042,7 +3049,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
     - COVER LETTER FIGURES ARE QUOTED, NOT PARAPHRASED: any number that appears in the cover letter MUST be copied from the CV with the SAME noun attached. A real pair went out with the CV saying "cut the manual review QUEUE by 40%" and the letter saying "reducing manual review TIME by 40%" -- a queue and a time are different claims, and a reviewer holding both documents sees an applicant whose own numbers do not agree. If the exact phrasing does not fit the sentence, drop the figure from the letter rather than restate it loosely; the CV already carries it.
     - THE COVER LETTER MUST SAY WHY THIS EMPLOYER: name something specific to THIS company from the posting -- the team, the product, the stated problem, the market -- and connect it to the candidate's own work. "the projects at [Company]" and "your innovative culture" are filler and count for nothing: they read identically for every employer, which is exactly what a reviewer is scanning for. If the posting genuinely says nothing specific, write about the WORK described in it rather than inventing a reason to admire the company.
     - TARGET TITLE LINE: The line immediately after the candidate's name is the job title being applied for, on its own, e.g. "Senior Backend Engineer". No pipes, no skills, no company. This is the first thing a reviewer checks against the req they are filling, and a CV that opens with a name and a phone number makes them do that mapping themselves. It is positioning, not a claim of current employment, so the titles inside WORK EXPERIENCE stay exactly as the candidate held them and nothing here may contradict them. If the posting's title does not truthfully describe the candidate's work, use their real target title instead. The extension also sets this line, so never emit it twice.
-    - CORE COMPETENCIES: 6-9 keyword phrases from the JD, written as a single comma-separated line under this heading (placed between Summary and Work Experience). THESE PHRASES AND THE TECHNICAL SKILLS LIST PRINT AS ONE SECTION. The renderer merges the two under the heading TECHNICAL SKILLS, competencies first, each term once. It does this because a parser finds the skills section by searching headings for the word "skill" and takes the FIRST one that matches: a live parse of a real generated CV returned the competencies EMPTY, and two skills-named sections would have lost the other one instead. Keep writing both lists -- the competencies are the tailored, job-matched phrases and they lead the section a recruiter scans first -- but write them as two lists that read correctly when joined, and never repeat a term across them.
+    - CORE COMPETENCIES: 6-9 keyword phrases from the JD, written as a single comma-separated line under this heading. THESE PHRASES AND THE TECHNICAL SKILLS LIST PRINT AS ONE SECTION. The renderer merges the two under the heading TECHNICAL SKILLS, competencies first, each term once, and places that one section BELOW WORK EXPERIENCE and above SELECTED PROJECTS -- wherever you write the two lists, they are moved there, so do not try to position them yourself. Six labelled groups of technology names ahead of the first employer is how an application for a business role gets read as an engineer's and skipped; experience first, then the skills that back it up, answers a reviewer's questions in the order they ask them. It does this because a parser finds the skills section by searching headings for the word "skill" and takes the FIRST one that matches: a live parse of a real generated CV returned the competencies EMPTY, and two skills-named sections would have lost the other one instead. Keep writing both lists -- the competencies are the tailored, job-matched phrases and they lead the section a recruiter scans first -- but write them as two lists that read correctly when joined, and never repeat a term across them.
     - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. YEARS OF EXPERIENCE - THE DATES ON THE PAGE ARE THE ANSWER: any years figure in the summary MUST be consistent with the employment dates in this same CV. Add up the candidate's actual history and state that, or state no figure at all. NEVER set the figure to the JD's requirement: a CV whose summary says "over 4 years" above a work history running from 2017 to Present contradicts itself in the two places a reader looks first, and many ATS compute total tenure from the dates and compare it to the stated number. Exceeding a stated minimum is not a problem to solve - "5+ years" required and 9 years held is a strong application, whereas understating it filters the candidate out of the senior roles they actually qualify for and reads as junior. If the true total is genuinely below the JD's minimum, say the true total; do not inflate it either. Use VOCABULARY REFORMULATION (Rule 9) - reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully - at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL SKILLS section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting - never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
     - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
     - TECHNICAL SKILLS: A single comma-separated list. Include EVERY JD hard skill, tool and technology the candidate's history evidences -- as many as qualify, with no cap. Classify each JD keyword before writing it: PROVEN (used professionally -> list it), TRANSFERABLE (related experience, different tool -> describe the transferable skill honestly, never rename it as the tool they asked for), UNSUPPORTED (never used, could not explain it in an interview -> leave it out entirely). Never add a keyword merely because it is absent. Where a term has an acronym and a full form the JD uses both, give both ONCE ("Continuous Integration and Continuous Delivery (CI/CD)"); never list variants of the same product ("Azure, Microsoft Azure, Azure Cloud"). Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture".
