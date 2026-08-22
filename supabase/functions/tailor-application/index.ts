@@ -2196,8 +2196,8 @@ NEVER do any of the following - even when injecting "missing keywords":
    Writing AMD into a Meta bullet is a fabrication and a red flag.
 
 2. Do NOT claim job-content the candidate didn't perform. The role's
-   actual duties live in the ORIGINAL CV; you may reword and reorder
-   them, but you may not invent new responsibilities, products
+   actual duties live in the ORIGINAL CV; you may reword them in place,
+   but you may not reorder or drop them, nor invent new responsibilities, products
    supported, platforms used, customers served, sales activities, or
    technical surfaces.
 
