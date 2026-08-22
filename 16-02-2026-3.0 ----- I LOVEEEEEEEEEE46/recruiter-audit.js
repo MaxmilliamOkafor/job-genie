@@ -3569,7 +3569,7 @@
     ['Programming Languages', /^(?:python|java|javascript|typescript|c\+\+|c#|c|go|golang|rust|ruby|php|swift|kotlin|scala|r|sql|t-sql|pl\/sql|bash|shell scripting|shell|powershell|matlab|perl|dart|vba|objective-c|solidity|assembly)$/i],
     ['Frameworks & Libraries', /^(?:react(?:\.js)?|angular|vue(?:\.js)?|next\.js|node(?:\.js)?|express(?:\.js)?|django|flask|fastapi|spring(?: boot)?|\.net|asp\.net|rails|laravel|jquery|graphql|rest apis?|restful apis?|html|html5|css|css3|tailwind|bootstrap|hugging face transformers|streamlit)$/i],
     ['Cloud & DevOps', /^(?:aws|amazon web services|azure|microsoft azure|gcp|google cloud(?: platform)?|kubernetes|k8s|docker|terraform|ansible|helm|jenkins|github actions|gitlab ci|ci\/cd|cloudformation|openshift|linux|unix|prometheus|grafana|datadog|elk stack|observability|monitoring|serverless|aws lambda|git|github|gitlab|cloud security|cloud migration)$/i],
-    ['Data & AI', /^(?:machine learning|deep learning|pytorch|tensorflow|keras|scikit-learn|xgboost|nlp|natural language processing|computer vision|llms?|rag|mlops|mlflow|(?:apache )?spark|(?:apache )?airflow|(?:apache )?kafka|snowflake|databricks|dbt|etl|elt|hadoop|pandas|numpy|power bi|tableau|looker|data modell?ing|data warehousing|data engineering|data analysis|data analytics|data pipelines|analytics|statistics|a\/b testing|generative ai|prompt engineering)$/i],
+    ['Data & AI', /^(?:machine learning|deep learning|pytorch|tensorflow|keras|scikit-learn|xgboost|nlp|natural language processing|computer vision|llms?|rag|mlops|mlflow|(?:apache )?spark|(?:apache )?airflow|(?:apache )?kafka|snowflake|databricks|dbt|etl|elt|hadoop|pandas|numpy|power bi|tableau|looker|data modell?ing|data warehousing|data engineering|data analysis|data analytics|data pipelines|analytics|statistics|a\/b testing|generative ai|prompt engineering|excel|microsoft excel|google sheets|pivot tables?|vlookup|forecasting|financial modell?ing|budgeting|variance analysis|kpis?|kpi reporting|business intelligence|bi|dashboards?|data visuali[sz]ation|reporting automation)$/i],
     ['Databases', /^(?:postgresql|postgres|mysql|mongodb|redis|oracle|sql server|dynamodb|elasticsearch|bigquery|cassandra|neo4j|sqlite|nosql)$/i],
     ['Security', /^(?:cyber ?security(?: solutions)?|information security|infosec|siem|soc|penetration testing|pen testing|owasp|incident response|vulnerability management|identity and access management|iam|zero trust|encryption|gdpr|iso 27001|soc 2|hipaa compliance|threat detection|security operations)$/i],
     ['Support & Platforms', /^(?:customer support|technical support|it support|end[- ]user support|help ?desk|service desk|troubleshooting|itil|zendesk|jira|confluence|servicenow|salesforce|freshdesk|intercom|sla management|escalation management|windows(?: and macos support| support)?|macos(?: support)?|ios|android|active directory|office 365|microsoft 365|remote desktop|ticketing systems)$/i],
@@ -3632,13 +3632,38 @@
     }
     items = kept;
 
+    // A QUALIFIED TERM IS STILL THE SAME TERM.
+    //
+    // Every pattern in the taxonomy is anchored, which is what stops
+    // "Customer Support" being read as a programming language. It also
+    // means one adjective is enough to lose a term: "Advanced SQL",
+    // "Power BI Dashboards" and "Python (pandas)" match nothing at all
+    // and drop into "Additional:", so the two skills a business
+    // operations posting actually named ended up on the unlabelled
+    // line while the recognised deep learning frameworks kept theirs.
+    //
+    // The qualifier is stripped for the LOOKUP only. What prints is
+    // what the CV said, because "Advanced SQL" is a stronger claim than
+    // "SQL" and it is not this function's business to weaken it.
+    const _QUAL = new RegExp('^(?:advanced|basic|intermediate|expert|proficient|strong'
+      + '|working knowledge of|hands[- ]on|solid)\\s+'
+      + '|\\s+(?:dashboards?|reporting|development|programming|scripting|queries'
+      + '|querying|administration|fundamentals|essentials)$', 'gi');
+    const _bare = (s) => String(s || '').replace(/\s*\([^)]*\)\s*/g, ' ')
+      .replace(_QUAL, '').replace(/\s{2,}/g, ' ').trim();
+    const _labelOf = (it) => {
+      for (const [name, re] of _SKILL_GROUPS) if (re.test(it)) return name;
+      const bare = _bare(it);
+      if (bare && bare !== it) {
+        for (const [name, re] of _SKILL_GROUPS) if (re.test(bare)) return name;
+      }
+      return '';
+    };
+
     const buckets = new Map();
     let classified = 0;
     for (const it of items) {
-      let label = '';
-      for (const [name, re] of _SKILL_GROUPS) {
-        if (re.test(it)) { label = name; break; }
-      }
+      const label = _labelOf(it);
       if (!label) continue;
       classified++;
       if (!buckets.has(label)) buckets.set(label, []);
@@ -3651,7 +3676,7 @@
     // Terms the taxonomy does not recognise go on their own line, which
     // claims nothing about them, rather than under a label that would be
     // wrong.
-    const unknown = items.filter((it) => !_SKILL_GROUPS.some(([, re]) => re.test(it)));
+    const unknown = items.filter((it) => !_labelOf(it));
     if (unknown.length) buckets.set('Additional', unknown);
 
     // TOO MANY LABELS IS ITS OWN PROBLEM, AND THE FIX IS NOT TO PUT A
@@ -3666,6 +3691,32 @@
     // then move the smallest group's terms down to "Additional". A group
     // holding one term is the first to go -- a whole line to say
     // "Databases: PostgreSQL" is not what the labels are for.
+    // WHAT THE POSTING ASKED FOR, MATCHED ON WORDS AND NOT ON LETTERS.
+    //
+    // The old test was a bare two-way indexOf, which makes a one or two
+    // letter skill match almost anything: "R" is inside "reporting",
+    // "C" is inside "customer support", "Go" is inside "Django". A CV
+    // listing R and C scored a hit against every keyword on the page,
+    // so relevance was noise and the ordering fell through to taxonomy
+    // order every time. Word boundaries, and only where the term
+    // actually starts and ends on a word character, so "C++" and
+    // ".NET" still match.
+    const _esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const _has = (hay, needle) => {
+      if (!hay || !needle) return false;
+      if (hay === needle) return true;
+      const b = /^[a-z0-9]/i.test(needle) ? '\\b' : '';
+      const e = /[a-z0-9]$/i.test(needle) ? '\\b' : '';
+      try { return new RegExp(b + _esc(needle) + e, 'i').test(hay); } catch (e2) { return false; }
+    };
+    const kw = (Array.isArray(jobKeywords) ? jobKeywords : [])
+      .map((k) => String(k || '').toLowerCase().trim()).filter((k) => k.length > 1);
+    const asked = (s) => {
+      const t = String(s || '').toLowerCase();
+      return kw.some((k) => _has(t, k) || _has(k, t));
+    };
+    const relevance = (list) => list.filter(asked).length;
+
     const rankOfGroup = new Map();
     _SKILL_GROUPS.forEach(([name], i) => rankOfGroup.set(name, i));
     rankOfGroup.set('Additional', _SKILL_GROUPS.length + 1);   // always last
@@ -3688,19 +3739,44 @@
         buckets.set(combined, merged);
         continue;
       }
-      const smallest = [...buckets.keys()]
+      // THE GROUP THAT LOSES ITS LABEL IS THE ONE THE POSTING DID NOT
+      // ASK FOR.
+      //
+      // This used to demote the smallest group. On a business
+      // operations posting that read as: SQL and Power BI, the two
+      // things the job actually named, dropped into "Additional:"
+      // because their groups were short, while a long list of deep
+      // learning frameworks kept a labelled line at the top. The
+      // section then opened with PyTorch and Kubernetes on an
+      // application for an analyst role, which is the reading the
+      // grouping exists to prevent.
+      //
+      // Least relevant first, smallest as the tie-break. A group
+      // carrying something the posting named keeps its label until
+      // every group that carries nothing has already gone.
+      const demote = [...buckets.keys()]
         .filter((k) => k !== 'Additional' && k !== 'Core Competencies')
-        .sort((a, b) => buckets.get(a).length - buckets.get(b).length)[0];
-      if (!smallest) break;
-      const spilled = buckets.get(smallest);
-      buckets.delete(smallest);
+        .sort((a, b) => {
+          const d = relevance(buckets.get(a)) - relevance(buckets.get(b));
+          if (d) return d;
+          return buckets.get(a).length - buckets.get(b).length;
+        })[0];
+      if (!demote) break;
+      const spilled = buckets.get(demote);
+      buckets.delete(demote);
       buckets.set('Additional', (buckets.get('Additional') || []).concat(spilled));
     }
 
-    const kw = (Array.isArray(jobKeywords) ? jobKeywords : [])
-      .map((k) => String(k || '').toLowerCase()).filter(Boolean);
-    const relevance = (list) => list.filter((s) =>
-      kw.some((k) => s.toLowerCase().indexOf(k) !== -1 || k.indexOf(s.toLowerCase()) !== -1)).length;
+    // AND INSIDE A LINE, THE ASKED-FOR TERMS COME FIRST.
+    //
+    // A labelled line is read left to right and abandoned early. Eight
+    // terms in, the one the posting named is past the point a scan
+    // reaches. Stable, so everything else holds the order it had.
+    for (const [label, list] of buckets) {
+      if (label === 'Additional' && !kw.length) continue;
+      buckets.set(label, list.slice().sort((a, b) => (asked(b) ? 1 : 0) - (asked(a) ? 1 : 0)));
+    }
+
     // Taxonomy order breaks the ties. Size is not a tie-break worth
     // having: it would rank a long list of frameworks above the
     // languages they are written in.
