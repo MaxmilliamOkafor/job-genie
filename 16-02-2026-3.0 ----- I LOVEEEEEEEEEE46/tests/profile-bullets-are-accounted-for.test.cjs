@@ -27,9 +27,24 @@
 // defensible is that the only way to find out half your work was missing
 // is to count it by hand against the profile page.
 //
-// This does not put them back. The model rewrites what it keeps, so
-// splicing raw profile text in beside it gives a CV in two voices.
-// Restoring is a decision, and it belongs to the person applying.
+// AND THEN IT PUTS THEM BACK.
+//
+// This file used to end by saying it deliberately did not: the model
+// rewrites what it keeps, so splicing raw profile text in beside it
+// gives a CV in two voices, and restoring was a decision belonging to
+// the person applying. They have now made it, twice, in the same words
+// both times -- the bullets are still capped, and they should be coming
+// from the profile.
+//
+// The two-voices worry did not survive the output. A real run turned
+// "cut response times by running downstream calls in parallel rather
+// than in sequence" into "which improved response times significantly":
+// the same claim with the mechanism removed, which is the half a
+// reviewer discounts. The profile's wording is the stronger one.
+//
+// So: profile order, the tailored rewrite wherever one came back, the
+// profile's verbatim bullet wherever one did not, and anything the
+// model invented kept at the end rather than thrown away.
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -72,10 +87,14 @@ const cvWith = (bullets) => ['Maxmilliam Okafor', 'Dublin | max@x.com', '',
   'Meta', 'Software Engineer', 'January 2023 - Present', ...bullets, '',
   'EDUCATION', 'Imperial College London'].join('\n');
 
-const run = (bullets, experience) => RA.runRecruiterAudit({
+const audit = (bullets, experience) => RA.runRecruiterAudit({
   cvText: cvWith(bullets), jdText: 'business analyst', jdTitle: 'Senior Business Analyst',
   jobKeywords: ['Salesforce'], experience,
-}).report.warnings.find((w) => w.kind === 'profile-bullets-dropped');
+});
+const run = (bullets, experience) => audit(bullets, experience)
+  .report.warnings.find((w) => /^profile-bullets-/.test(w.kind));
+const bulletsOf = (bullets, experience) => audit(bullets, experience).cvText
+  .split('\n').filter((l) => /^\s*[-•]/.test(l)).map((l) => l.replace(/^\s*[-•]\s*/, ''));
 
 console.log('THE REPORTED CASE: SEVEN IN THE PROFILE, FOUR ON THE CV');
 {
@@ -96,6 +115,62 @@ console.log('THE REPORTED CASE: SEVEN IN THE PROFILE, FOUR ON THE CV');
   t('  and says where the cap lives', !!w && /RULE 11b/.test(w.note), w && w.note);
   t('  ...and says the extension is no longer capping',
     !!w && /Nothing in the extension caps them any more/.test(w.note), w && w.note);
+}
+
+console.log('\nAND ALL SEVEN REACH THE PAGE');
+{
+  const out = bulletsOf(META_ON_CV, [{ company: 'Meta', bullets: META_PROFILE }]);
+  t('  seven bullets, not four', out.length === 7, out.length + ': ' + JSON.stringify(out));
+  for (const phrase of ['on call', 'test coverage', 'Mentor two junior']) {
+    t('  the one about "' + phrase + '" is on the CV',
+      out.some((b) => b.indexOf(phrase) !== -1), JSON.stringify(out));
+  }
+
+  // The tailored rewrite is why the model was called. Restoring must not
+  // throw it away and print the source over the top of it.
+  t('  the tailored rewrite is kept where one came back',
+    out.some((b) => b === META_ON_CV[0].replace('- ', '')),
+    JSON.stringify(out[0]));
+  // The restored bullet is the profile's sentence, not a summary of it.
+  // Byte equality is the wrong test: it then runs through the same
+  // punctuation and phrasing passes as every other bullet on the page,
+  // which is what stops it reading as pasted-in.
+  t('  ...and the profile wording is used only where none did',
+    out.some((b) => /Authored the incident response documentation the team now uses/.test(b)
+      && /recurred monthly for over a year/.test(b)), JSON.stringify(out));
+
+  // Profile order, so the CV reads the way its owner arranged it.
+  const at = (needle) => out.findIndex((b) => b.indexOf(needle) !== -1);
+  t('  and they come out in the profile\'s order',
+    at('campaign diagnostics') < at('ranking model')
+      && at('ranking model') < at('PySpark')
+      && at('PySpark') < at('on call')
+      && at('on call') < at('test coverage')
+      && at('test coverage') < at('Mentor two junior'),
+    JSON.stringify(out.map((b) => b.slice(0, 40))));
+
+  const w = run(META_ON_CV, [{ company: 'Meta', bullets: META_PROFILE }]);
+  t('  the report says how many came back', !!w && w.restored === 3, JSON.stringify(w && w.restored));
+  t('  ...and stops calling it a loss once they all have',
+    !!w && w.kind === 'profile-bullets-restored', JSON.stringify(w && w.kind));
+  t('  and it is reported as a fix, not only as a warning',
+    audit(META_ON_CV, [{ company: 'Meta', bullets: META_PROFILE }])
+      .report.fixes.some((f) => /Restored 3 bullet/.test(f)),
+    JSON.stringify(audit(META_ON_CV, [{ company: 'Meta', bullets: META_PROFILE }]).report.fixes));
+}
+
+console.log('\nAND WHAT THE MODEL WROTE FROM NOTHING IS NOT THROWN AWAY');
+{
+  // A bullet the tailoring invented answers to no profile bullet. It is
+  // still content, and deleting it to make room for the source would be
+  // the same fault pointed the other way.
+  const invented = '- Partnered with the sales organisation on quarterly forecasting reviews.';
+  const out = bulletsOf(META_ON_CV.concat([invented]),
+    [{ company: 'Meta', bullets: META_PROFILE }]);
+  t('  it survives the restore',
+    out.some((b) => /quarterly forecasting reviews/.test(b)), JSON.stringify(out));
+  t('  ...and sits after the recorded history', out.length === 8
+    && /quarterly forecasting reviews/.test(out[out.length - 1]), JSON.stringify(out));
 }
 
 console.log('\nA REWRITTEN BULLET IS NOT A MISSING ONE');

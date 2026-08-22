@@ -1866,9 +1866,78 @@
     'more', 'than', 'then', 'when', 'where', 'what', 'who', 'whom', 'its', 'it', 'a', 'an',
     'of', 'in', 'on', 'to', 'by', 'at', 'as', 'is', 'be', 'or', 'so', 'up', 'out', 'all']);
 
+  // THE TITLE IS NOT ALWAYS THE VERY NEXT LINE.
+  //
+  // Both passes below identified a role by "company line, then title
+  // line". On every CV that carries a per-role location -- which is
+  // every one this ships, since the audit adds locations itself -- the
+  // real shape is company, LOCATION, title, dates. So no role was ever
+  // recognised on a real document, and the bullet accounting silently
+  // measured nothing at all. It was written against the fixtures, and
+  // the fixtures had no locations.
+  //
+  // Look ahead a couple of lines for the title instead of demanding it
+  // immediately, and stop at anything that ends the block.
+  //
+  // And the line AFTER the company is a candidate too, which is the
+  // second half of the same bug: "Dublin, Ireland" is followed by
+  // "Software Engineer", so the location line opened a role of its own
+  // and every bullet in the block was filed under a company called
+  // Dublin. A role, once opened, owns the next few header lines --
+  // location, title, dates -- and nothing in them may open another.
+  const _HEADER_RUN = 3;
+  const _titleNear = (lines, i) => {
+    for (let k = i + 1; k <= i + 2 && k < lines.length; k++) {
+      const t = (lines[k] || '').trim();
+      if (!t) return false;
+      if (/^[-•*]\s*\S/.test(t)) return false;
+      if (_ANY_HEAD.test(t)) return false;
+      if (ROLE_DATE_RE.test(t)) continue;          // a date line, keep looking
+      if (_TITLE_WORD.test(t)) return true;
+    }
+    return false;
+  };
+
   const _distinctive = (s) => {
     const words = String(s || '').toLowerCase().match(/[a-z][a-z0-9.+#-]{2,}/g) || [];
     return words.filter((w) => !_STOP_WORDS.has(w));
+  };
+
+  // IS THIS CV BULLET A REWRITE OF THAT PROFILE BULLET?
+  //
+  // The first version asked one question: how many of the profile
+  // bullet's distinctive words survive into the CV's. That is the wrong
+  // direction for what the tailoring actually does, which is COMPRESS.
+  // "Hold primary on call responsibility for two critical services.
+  // Authored the incident response documentation the team now uses, and
+  // led the review that resolved a failure which had recurred monthly
+  // for over a year" came back as "Authored incident response
+  // documentation and led reviews that resolved recurring failures":
+  // seven of the source's twenty-one words, which scores 0.33 and reads
+  // as a different bullet. Restoring then printed BOTH.
+  //
+  // Ask it the other way round as well. Almost every word of a
+  // compression comes from its source, so the short bullet's coverage
+  // of the long one is high exactly when one is a rewrite of the other.
+  // Whichever direction scores higher is the answer.
+  //
+  // Stems, not words, because the rewrite conjugates: review/reviews,
+  // failure/failures, recurred/recurring. Five characters is enough to
+  // keep "reporting" and "regulatory" apart and short enough to fold
+  // those together.
+  const _stems = (s) => new Set(_distinctive(s).map((w) => w.slice(0, 5)));
+  const _cover = (a, b) => {
+    if (!a.size) return 0;
+    let n = 0;
+    for (const w of a) if (b.has(w)) n++;
+    return n / a.size;
+  };
+  const _BULLET_MATCH = 0.45;
+  const _bulletsMatch = (profileBullet, cvBullet) => {
+    const A = _stems(profileBullet);
+    if (A.size < 4) return 0;                  // too short to judge
+    const B = _stems(cvBullet);
+    return Math.max(_cover(A, B), _cover(B, A));
   };
 
   function reportDroppedBullets(cvText, experience) {
@@ -1878,21 +1947,24 @@
     // The CV's bullets, grouped by the employer they sit under.
     const byCompany = new Map();
     const lines = text.split('\n');
-    let inExp = false, current = '';
+    let inExp = false, current = '', held = 0;
     for (let i = 0; i < lines.length; i++) {
       const bare = lines[i].trim();
-      if (_EXP_HEAD.test(bare)) { inExp = true; current = ''; continue; }
+      if (_EXP_HEAD.test(bare)) { inExp = true; current = ''; held = 0; continue; }
       if (_ANY_HEAD.test(bare)) { inExp = false; continue; }
       if (!inExp || !bare) continue;
       if (/^[-•*]\s*\S/.test(bare)) {
+        held = 0;
         if (current) byCompany.get(current).push(bare.replace(/^[-•*]\s*/, ''));
         continue;
       }
-      // A company line: not a date, and the line after it is the title.
+      // A company line: not a date, and a title follows within a line or
+      // two. Not while an open role still holds its own header lines.
       if (ROLE_DATE_RE.test(bare)) continue;
+      if (held > 0) { held--; continue; }
       const head = bare.indexOf('\t') === -1 ? bare : bare.slice(0, bare.indexOf('\t'));
-      const next = (lines[i + 1] || '').trim();
-      if (next && _TITLE_WORD.test(next) && !ROLE_DATE_RE.test(next)) {
+      if (_titleNear(lines, i)) {
+        held = _HEADER_RUN;
         current = _eduNorm(head);
         if (!byCompany.has(current)) byCompany.set(current, []);
       }
@@ -1925,15 +1997,8 @@
       // nothing. A bullet counts as present when most of the words that
       // make it distinctive turn up in one of the CV's bullets for that
       // same employer.
-      const gone = profileBullets.filter((b) => {
-        const words = _distinctive(b);
-        if (words.length < 4) return false;      // too short to judge
-        return !cvBullets.some((c) => {
-          const cl = c.toLowerCase();
-          const hits = words.filter((w) => cl.indexOf(w) !== -1).length;
-          return hits / words.length >= 0.4;
-        });
-      });
+      const gone = profileBullets.filter((b) => _stems(b).size >= 4
+        && !cvBullets.some((c) => _bulletsMatch(b, c) >= _BULLET_MATCH));
       if (gone.length) {
         missing.push({
           company: String(src.company || src.employer || src.name).trim(),
@@ -1960,6 +2025,141 @@
         + 'cap is what brings them back. Nothing in the extension caps them any '
         + 'more: it prints every bullet the tailoring returns.',
     };
+  }
+
+  /**
+   * AND THEN IT PUTS THEM BACK.
+   *
+   * Reporting the loss was the first half. It was written on the view
+   * that restoring is a decision belonging to whoever is applying, and
+   * that splicing raw profile text beside rewritten text gives a CV in
+   * two voices. The decision has since been made, twice, in the same
+   * words both times: the bullets are still capped, and they should be
+   * coming from the profile.
+   *
+   * The two-voices worry did not survive contact with the output. A
+   * real run turned
+   *
+   *   "cut response times by running downstream calls in parallel
+   *    rather than in sequence"
+   *
+   * into
+   *
+   *   "which improved response times significantly"
+   *
+   * The rewrite is not a better voice. It is the same claim with the
+   * mechanism and the specificity removed, which is exactly what a
+   * reviewer discounts. So the profile's own wording is not a foreign
+   * body on this CV; on the evidence it is the stronger half.
+   *
+   * WHAT THIS DOES, PER ROLE: walk the profile's bullets in the order
+   * the profile has them. Where the tailoring returned a rewrite of one
+   * -- same match test as the report, most of the distinctive words
+   * present -- keep the rewrite, because that is the tailored, keyword
+   * bearing version and it is why the model was called at all. Where it
+   * returned nothing, print the profile's bullet verbatim. Anything the
+   * model wrote that answers to no profile bullet is kept too, at the
+   * end, since it is content the CV would otherwise lose.
+   *
+   * The result is every bullet the profile records, in the profile's
+   * order, tailored where tailoring happened.
+   *
+   * THIS WILL OFTEN MAKE THE CV TWO PAGES, and that is the right
+   * outcome rather than a side effect to apologise for: a nine year
+   * history with twenty seven recorded bullets is a two page CV.
+   * fitToOnePage still runs afterwards and still tries, and still puts
+   * everything back when it cannot get there without gutting the
+   * history.
+   */
+  function restoreDroppedBullets(cvText, experience) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(experience) || !experience.length) {
+      return { text, restored: 0 };
+    }
+
+    const lines = text.split('\n');
+
+    // Every role block on the CV: where its bullets start, where they
+    // end, and the marker they are written with.
+    const roles = [];
+    let inExp = false, open = null, held = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const bare = lines[i].trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; open = null; held = 0; continue; }
+      if (_ANY_HEAD.test(bare)) { inExp = false; open = null; held = 0; continue; }
+      if (!inExp) continue;
+      if (/^[-•*]\s*\S/.test(bare)) {
+        held = 0;
+        if (open) { open.bullets.push(bare.replace(/^[-•*]\s*/, '')); open.end = i; }
+        continue;
+      }
+      if (!bare) continue;
+      if (ROLE_DATE_RE.test(bare)) continue;
+      if (held > 0) { held--; continue; }
+      const head = bare.indexOf('\t') === -1 ? bare : bare.slice(0, bare.indexOf('\t'));
+      if (_titleNear(lines, i)) {
+        held = _HEADER_RUN;
+        open = { key: _eduNorm(head), start: -1, end: -1, bullets: [] };
+        roles.push(open);
+      }
+    }
+    // The first bullet line of each block, now that its extent is known.
+    for (const r of roles) {
+      if (r.end === -1) continue;
+      let s = r.end;
+      while (s > 0 && /^\s*[-•*]\s*\S/.test(lines[s - 1])) s--;
+      r.start = s;
+      const m = lines[s].match(/^(\s*[-•*]\s*)/);
+      r.marker = m ? m[1] : '- ';
+    }
+
+    let restored = 0;
+    const edits = [];
+    for (const src of experience) {
+      if (!src) continue;
+      const key = _eduNorm(src.company || src.employer || src.organisation
+        || src.organization || src.name);
+      if (!key) continue;
+      const role = roles.find((r) => r.start !== -1
+        && (r.key === key || r.key.indexOf(key) !== -1 || key.indexOf(r.key) !== -1));
+      if (!role) continue;
+
+      const own = Array.isArray(src.bullets) ? src.bullets
+        : (typeof src.description === 'string' ? src.description.split(/\r?\n/) : []);
+      const profileBullets = own.map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
+        .filter((b) => b.length > 20);
+      if (!profileBullets.length) continue;
+
+      // Greedy best match, one CV bullet to one profile bullet, so a
+      // single rewrite covering two source bullets cannot stand in for
+      // both of them.
+      const taken = new Set();
+      const rebuilt = [];
+      let added = 0;
+      for (const pb of profileBullets) {
+        let best = -1, bestScore = _BULLET_MATCH;
+        role.bullets.forEach((cb, idx) => {
+          if (taken.has(idx)) return;
+          const sc = _bulletsMatch(pb, cb);
+          if (sc >= bestScore) { bestScore = sc; best = idx; }
+        });
+        if (best !== -1) { taken.add(best); rebuilt.push(role.bullets[best]); }
+        else { rebuilt.push(pb); added++; }
+      }
+      // Whatever the model wrote that answers to nothing in the profile.
+      role.bullets.forEach((cb, idx) => { if (!taken.has(idx)) rebuilt.push(cb); });
+
+      if (!added) continue;
+      restored += added;
+      edits.push({ start: role.start, end: role.end,
+        lines: rebuilt.map((b) => role.marker + b) });
+    }
+
+    if (!restored) return { text, restored: 0 };
+    // Bottom up, so earlier line numbers stay valid.
+    edits.sort((a, b) => b.start - a.start);
+    for (const e of edits) lines.splice(e.start, e.end - e.start + 1, ...e.lines);
+    return { text: lines.join('\n'), restored };
   }
 
   function attachEmploymentTypes(cvText, experience) {
@@ -2343,7 +2543,27 @@
   // ===================================================================
 
   const SUMMARY_HEADER_RE = /^(SUMMARY|PROFESSIONAL SUMMARY|PROFILE|ABOUT(?: ME)?)\s*:?\s*$/im;
-  const NEXT_SECTION_RE = /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|PROJECTS|CERTIFICATIONS|CORE COMPETENCIES|AREAS OF EXPERTISE)\s*:?\s*$/im;
+  // THE HEADING THAT WAS NOT ON THIS LIST DELETED THE REST OF THE CV.
+  //
+  // The list was a hand-written set of section names, and the one it
+  // did not name was PROFESSIONAL EXPERIENCE -- which is the heading
+  // the renderer canonicalises everything to, so it is on nearly every
+  // document this ships. TECHNICAL SKILLS, SELECTED PROJECTS,
+  // ACHIEVEMENTS, AWARDS, PUBLICATIONS and REFERENCES were missing too.
+  //
+  // On its own that is harmless, because the scan also stops at a blank
+  // line. Together with a CV that has no blank line between the summary
+  // paragraph and the next heading -- which is what the tailoring model
+  // emits, and what comes back out of a rendered document -- the end of
+  // the summary was never found, so the summary block became THE WHOLE
+  // REST OF THE FILE. Clamping it to 360 characters then deleted the
+  // experience, the skills, the projects and the education, and
+  // reported itself as the fix "summary clamped to 360 chars".
+  //
+  // Any all-caps line is a heading. Matching the shape rather than a
+  // list is what stops this returning the next time a section is named
+  // something nobody wrote down here.
+  const NEXT_SECTION_RE = _ANY_HEAD;
   const LOOKING_SENTENCE_RE = /[^.!?\n]*\b(looking (?:for|to)|seeking|open to (?:new )?(?:opportunit|role|position)|aspir(?:e|ing) to)\b[^.!?\n]*[.!?]?/gi;
 
   function clampSummary(text, { maxChars = 360 } = {}) {
@@ -2363,7 +2583,20 @@
     }
     if (endIdx <= headerIdx + 1) return { text, clamped: false, removedSentences: 0 };
 
+    // AND IF THE BOUNDARY IS STILL WRONG, DO NOTHING.
+    //
+    // The heading list above was wrong for years and the failure was
+    // silent and total. A summary is a short paragraph: a few lines, no
+    // bullets, no role dates. Anything else means the end of the block
+    // was not found, and the right response to that is to leave the
+    // document alone rather than clamp whatever got swept up. This
+    // costs a clamp on a pathological summary and cannot cost the CV.
     const summaryLines = lines.slice(headerIdx + 1, endIdx);
+    const looksLikeMore = summaryLines.length > 6
+      || summaryLines.some((l) => /^\s*[-•*]\s*\S/.test(l))
+      || summaryLines.some((l) => ROLE_DATE_RE.test(l.trim()));
+    if (looksLikeMore) return { text, clamped: false, removedSentences: 0 };
+
     let summary = summaryLines.join(' ').trim();
     let removedSentences = 0;
 
@@ -3929,8 +4162,26 @@
     // not. A page is a real constraint. Six was an opinion.
     if (outCV) {
       try {
-        const dropped = reportDroppedBullets(outCV, Array.isArray(experience) ? experience : []);
-        if (dropped) report.warnings.push(dropped);
+        const exp = Array.isArray(experience) ? experience : [];
+        const dropped = reportDroppedBullets(outCV, exp);
+        // Counted first, restored second, so the report says what the
+        // tailoring actually did rather than what the page ended up
+        // holding. Then the CV carries the whole history regardless,
+        // which is the point: the prompt lives in an edge function
+        // deployed separately, so a fix made only there does not reach
+        // a single generated document until that deploy happens.
+        const back = restoreDroppedBullets(outCV, exp);
+        if (back.restored) {
+          outCV = back.text;
+          report.fixes.push('Restored ' + back.restored + ' bullet(s) the tailoring dropped, '
+            + 'in the order your profile records them, keeping the tailored rewrite '
+            + 'wherever one came back.');
+        }
+        if (dropped) {
+          dropped.restored = back.restored;
+          if (back.restored >= dropped.count) dropped.kind = 'profile-bullets-restored';
+          report.warnings.push(dropped);
+        }
       } catch (e) {}
     }
 
