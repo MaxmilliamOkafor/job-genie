@@ -1206,7 +1206,6 @@ const Profile = () => {
                       </div>
                     );
                   })()}
-                  </div>
                   <p className="text-xs text-muted-foreground">
                     Skills not in your profile will default to 7 years for automation
                   </p>
