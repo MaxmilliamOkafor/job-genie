@@ -345,16 +345,27 @@ const Profile = () => {
     updateLocalField('skills', skills);
   };
 
+  const certExcluded: string[] = ((localProfile as any).certifications_excluded || []) as string[];
+
+  const certIsIncluded = (cert: string) =>
+    !certExcluded.some((c) => c.toLowerCase() === String(cert).toLowerCase());
+
+  const toggleCertificationIncluded = (cert: string) => {
+    const next = certIsIncluded(cert)
+      ? [...certExcluded, cert]
+      : certExcluded.filter((c) => c.toLowerCase() !== String(cert).toLowerCase());
+    updateLocalField('certifications_excluded' as any, next);
+  };
+
   const addCertification = (cert: string) => {
     if (!cert.trim()) return;
     const existing = [...(localProfile.certifications || [])];
-    if (existing.length >= CERTIFICATIONS_MAX) {
-      toast.error(CERTIFICATIONS_CAP_MESSAGE, {
-        description: `Remove one of your ${existing.length} certifications first.`,
-      });
-      return;
-    }
     updateLocalField('certifications', [...existing, cert]);
+    if (includedCertifications([...existing, cert], certExcluded).length > CERTIFICATIONS_MAX) {
+      toast.warning(CERTIFICATIONS_CAP_MESSAGE, {
+        description: `Only the top ${CERTIFICATIONS_MAX} included certifications print on your CV.`,
+      });
+    }
   };
 
   const moveCertification = (index: number, target: number) => {
