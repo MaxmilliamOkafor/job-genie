@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, Copy, Database } from 'lucide-react';
 import { toast } from 'sonner';
-import { CERTIFICATIONS_MAX } from '@/lib/profileValidation';
+import { CERTIFICATIONS_MAX, printedCertifications } from '@/lib/profileValidation';
 
 interface DataPreviewPanelProps {
   profile: Record<string, any>;
@@ -21,7 +21,10 @@ export function DataPreviewPanel({ profile }: DataPreviewPanelProps) {
     relevant_projects: profile?.relevant_projects || [],
     education: profile?.education || [],
     skills: profile?.skills || [],
-    certifications: (profile?.certifications || []).slice(0, CERTIFICATIONS_MAX),
+    certifications: printedCertifications(
+      profile?.certifications || [],
+      profile?.certifications_excluded || [],
+    ),
   };
 
   const json = JSON.stringify(payload, null, 2);
