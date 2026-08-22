@@ -42,6 +42,7 @@ export interface Profile {
   education: any[];
   skills: any[];
   certifications: string[];
+  certifications_excluded: string[];
   languages: any[];
   achievements: any[];
   excluded_companies: string[];
