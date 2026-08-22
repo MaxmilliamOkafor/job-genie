@@ -1899,6 +1899,128 @@
     + '|maternity cover|parental cover|secondment|consultant|consultancy)'
     + '(?:\\s*,\\s*[a-z\\s-]+)*$', 'i');
 
+  /**
+   * WORK THE PROFILE RECORDS AND THE CV DOES NOT.
+   *
+   * Reported: "I updated my profile section with new bullets but all
+   * bullets aren't generating." Twenty-eight bullets across four roles
+   * went in; thirteen came out. Nothing in the extension had dropped
+   * them -- the tailoring model had, before the text ever arrived here,
+   * under a prompt rule capping each role at four to six bullets.
+   *
+   * That may even be the right call for a given posting. What is not
+   * defensible is that it happened silently. The user wrote those
+   * bullets deliberately, and the only way to discover half were gone
+   * was to count them by hand against the profile page.
+   *
+   * So this counts, per employer, and names what is missing. It does NOT
+   * put the bullets back: the model rewrote the ones it kept to match
+   * the posting, and splicing raw profile text in beside them would
+   * produce a CV in two voices. Restoring is a decision, and it belongs
+   * to whoever is applying for the job.
+   */
+  const _STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into',
+    'across', 'their', 'them', 'they', 'were', 'was', 'are', 'has', 'had', 'have', 'been',
+    'which', 'while', 'after', 'before', 'over', 'under', 'through', 'every', 'each',
+    'more', 'than', 'then', 'when', 'where', 'what', 'who', 'whom', 'its', 'it', 'a', 'an',
+    'of', 'in', 'on', 'to', 'by', 'at', 'as', 'is', 'be', 'or', 'so', 'up', 'out', 'all']);
+
+  const _distinctive = (s) => {
+    const words = String(s || '').toLowerCase().match(/[a-z][a-z0-9.+#-]{2,}/g) || [];
+    return words.filter((w) => !_STOP_WORDS.has(w));
+  };
+
+  function reportDroppedBullets(cvText, experience) {
+    const text = String(cvText || '');
+    if (!text || !Array.isArray(experience) || !experience.length) return null;
+
+    // The CV's bullets, grouped by the employer they sit under.
+    const byCompany = new Map();
+    const lines = text.split('\n');
+    let inExp = false, current = '';
+    for (let i = 0; i < lines.length; i++) {
+      const bare = lines[i].trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; current = ''; continue; }
+      if (_ANY_HEAD.test(bare)) { inExp = false; continue; }
+      if (!inExp || !bare) continue;
+      if (/^[-•*]\s*\S/.test(bare)) {
+        if (current) byCompany.get(current).push(bare.replace(/^[-•*]\s*/, ''));
+        continue;
+      }
+      // A company line: not a date, and the line after it is the title.
+      if (ROLE_DATE_RE.test(bare)) continue;
+      const head = bare.indexOf('\t') === -1 ? bare : bare.slice(0, bare.indexOf('\t'));
+      const next = (lines[i + 1] || '').trim();
+      if (next && _TITLE_WORD.test(next) && !ROLE_DATE_RE.test(next)) {
+        current = _eduNorm(head);
+        if (!byCompany.has(current)) byCompany.set(current, []);
+      }
+    }
+    if (!byCompany.size) return null;
+
+    const missing = [];
+    let profileTotal = 0, cvTotal = 0;
+    for (const src of experience) {
+      if (!src) continue;
+      const key = _eduNorm(src.company || src.employer || src.organisation
+        || src.organization || src.name);
+      if (!key) continue;
+      let cvBullets = null;
+      for (const [k, v] of byCompany) {
+        if (k === key || k.indexOf(key) !== -1 || key.indexOf(k) !== -1) { cvBullets = v; break; }
+      }
+      if (!cvBullets) continue;              // the role itself is not on the CV
+
+      const own = Array.isArray(src.bullets) ? src.bullets
+        : (typeof src.description === 'string' ? src.description.split(/\r?\n/) : []);
+      const profileBullets = own.map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
+        .filter((b) => b.length > 20);
+      if (!profileBullets.length) continue;
+
+      profileTotal += profileBullets.length;
+      cvTotal += cvBullets.length;
+
+      // The model REWRITES what it keeps, so an exact match finds
+      // nothing. A bullet counts as present when most of the words that
+      // make it distinctive turn up in one of the CV's bullets for that
+      // same employer.
+      const gone = profileBullets.filter((b) => {
+        const words = _distinctive(b);
+        if (words.length < 4) return false;      // too short to judge
+        return !cvBullets.some((c) => {
+          const cl = c.toLowerCase();
+          const hits = words.filter((w) => cl.indexOf(w) !== -1).length;
+          return hits / words.length >= 0.4;
+        });
+      });
+      if (gone.length) {
+        missing.push({
+          company: String(src.company || src.employer || src.name).trim(),
+          profileBullets: profileBullets.length,
+          cvBullets: cvBullets.length,
+          dropped: gone.map((b) => b.slice(0, 90)),
+        });
+      }
+    }
+
+    if (!missing.length) return null;
+    const total = missing.reduce((n, m) => n + m.dropped.length, 0);
+    return {
+      kind: 'profile-bullets-dropped',
+      count: total,
+      profileTotal,
+      cvTotal,
+      roles: missing,
+      note: 'The tailoring never returned ' + total + ' bullet(s) your profile records: '
+        + missing.map((m) => m.company + ' ' + m.cvBullets + ' of ' + m.profileBullets).join(', ')
+        + '. This is counted before anything here trims, so it is the model choosing '
+        + 'what fits the posting -- RULE 11b in the tailoring prompt caps each role at '
+        + '4 to 6 bullets for the two most recent and 2 to 4 for the rest. Raising that '
+        + 'cap is what brings them back. Note the extension caps too, at ' + RECENT_ROLE_CAP
+        + ' recent and ' + OLDER_ROLE_CAP + ' older, and reports that separately as a fix.',
+    };
+  }
+
   function attachEmploymentTypes(cvText, experience) {
     const text = String(cvText || '');
     if (!text || !Array.isArray(experience) || !experience.length) {
@@ -3767,6 +3889,20 @@
         report.fixes.push('Re-ordered bullets in ' + ordered.moved
           + ' role(s) so the most relevant lead (no wording changed)');
       }
+    }
+
+    // WHAT THE MODEL LEFT OUT, COUNTED BEFORE ANYTHING HERE TRIMS.
+    //
+    // Placed above the cap deliberately. Two different things can remove
+    // a bullet -- the tailoring model never returning it, and the cap
+    // below trimming an overlong role -- and reporting them as one
+    // number tells the user nothing about which to change. The cap
+    // announces its own trim as a fix; this counts what never arrived.
+    if (outCV) {
+      try {
+        const dropped = reportDroppedBullets(outCV, Array.isArray(experience) ? experience : []);
+        if (dropped) report.warnings.push(dropped);
+      } catch (e) {}
     }
 
     // Then cap the length of each role. Strictly after the ordering above:
