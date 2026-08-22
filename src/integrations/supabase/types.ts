@@ -432,6 +432,7 @@ export type Database = {
           ats_strategy: string | null
           authorized_countries: string[] | null
           certifications: string[] | null
+          certifications_excluded: string[]
           citizenship: string | null
           city: string | null
           country: string | null
@@ -485,6 +486,7 @@ export type Database = {
           ats_strategy?: string | null
           authorized_countries?: string[] | null
           certifications?: string[] | null
+          certifications_excluded?: string[]
           citizenship?: string | null
           city?: string | null
           country?: string | null
@@ -538,6 +540,7 @@ export type Database = {
           ats_strategy?: string | null
           authorized_countries?: string[] | null
           certifications?: string[] | null
+          certifications_excluded?: string[]
           citizenship?: string | null
           city?: string | null
           country?: string | null

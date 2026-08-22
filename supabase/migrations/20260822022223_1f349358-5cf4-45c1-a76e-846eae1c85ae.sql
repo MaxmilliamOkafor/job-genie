@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS certifications_excluded text[] NOT NULL DEFAULT '{}'::text[];
