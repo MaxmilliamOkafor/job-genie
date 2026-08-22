@@ -1170,14 +1170,42 @@ const Profile = () => {
                     .map((e) => (
                       <p key={e} className="text-xs text-destructive">{e}</p>
                     ))}
-                  <div className="rounded-md border border-border bg-muted/30 p-3">
-                    <p className="text-xs font-semibold tracking-wide text-foreground">TECHNICAL SKILLS</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {preview.length ? preview.join(' | ') : 'No terms yet.'}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-2">
-                      Prints as one section: {competencies.length} competencies first, then technical terms.
-                    </p>
+                  {(() => {
+                    const grouped = groupedSkillsPreview(skills as any);
+                    const ungrouped = grouped.find((g) => g.group === UNGROUPED_LABEL);
+                    const labelled = grouped.filter((g) => g.group !== UNGROUPED_LABEL);
+                    return (
+                      <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
+                        {ungrouped && (
+                          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2">
+                            <p className="text-xs font-semibold text-destructive">These will not be grouped</p>
+                            <p className="text-xs text-muted-foreground mt-1">{ungrouped.terms.join(', ')}</p>
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              They print on the unlabelled "Additional:" line. Rename or remove them here.
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs font-semibold tracking-wide text-foreground">TECHNICAL SKILLS</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {preview.length ? preview.join(' | ') : 'No terms yet.'}
+                          </p>
+                        </div>
+                        {labelled.length > 0 && (
+                          <div className="space-y-1">
+                            {labelled.map((g) => (
+                              <p key={g.group} className="text-[11px] text-muted-foreground">
+                                <span className="font-medium text-foreground">{g.group}:</span> {g.terms.join(', ')}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-[11px] text-muted-foreground">
+                          Prints as one section: {competencies.length} competencies first, then technical terms.
+                        </p>
+                      </div>
+                    );
+                  })()}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Skills not in your profile will default to 7 years for automation
