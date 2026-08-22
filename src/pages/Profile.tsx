@@ -39,12 +39,17 @@ import {
   splitSkillLists,
   crossListDuplicates,
   combinedSkillsPreview,
+  groupedSkillsPreview,
+  UNGROUPED_LABEL,
   validateSkills,
   projectIssues,
   validateEducationEntry,
   PROJECT_DESCRIPTION_MAX,
   CERTIFICATIONS_MAX,
   CERTIFICATIONS_CAP_MESSAGE,
+  includedCertifications,
+  printedCertifications,
+  certificationsBelowLine,
 } from '@/lib/profileValidation';
 
 
@@ -298,6 +303,16 @@ const Profile = () => {
     });
 
     const warnings = validateProfileForSave(normalized);
+
+    const below = certificationsBelowLine(
+      normalized.certifications || [],
+      (normalized as any).certifications_excluded || [],
+    );
+    if (below.length) {
+      warnings.unshift(
+        `Only the first ${CERTIFICATIONS_MAX} certifications in your order will print. Below the line: ${below.join(', ')}.`,
+      );
+    }
 
     setLocalProfile(normalized);
     await updateProfile(normalized);
