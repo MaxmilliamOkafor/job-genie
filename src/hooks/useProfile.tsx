@@ -104,6 +104,7 @@ export function useProfile() {
           education: Array.isArray(data.education) ? data.education : [],
           skills: Array.isArray(data.skills) ? data.skills : [],
           certifications: (data.certifications as string[]) || [],
+          certifications_excluded: ((data as any).certifications_excluded as string[]) || [],
           languages: Array.isArray(data.languages) ? data.languages : [],
           achievements: Array.isArray(data.achievements) ? data.achievements : [],
           excluded_companies: (data.excluded_companies as string[]) || [],
