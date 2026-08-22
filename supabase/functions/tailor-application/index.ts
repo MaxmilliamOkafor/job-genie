@@ -2878,7 +2878,7 @@ After rewriting, run this internal checklist:
 [ ] Are the JD terms SPREAD across the experience bullets rather than crammed into the first one, with no sentence carrying more than two, and the most recent role carrying the largest share?
 [ ] Does every Tier 1 term in the summary or Core Competencies have a bullet underneath that proves it? If not, move it down or omit it - a declared skill with nothing beneath it is what reads as machine-assembled.
 [ ] Is any single term repeated more than three times across the CV? Presence is what is scored; the rest is padding a human notices.
-[ ] Are bullets reordered so the most relevant appear first?
+[ ] Are the bullets in each role still in the SOURCE order, with none moved to the front for relevance?
 [ ] Does the cover letter address skill gaps with transferable experience?
 [ ] Is "${smartLocation}" present in the header as the candidate's location?
 [ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
