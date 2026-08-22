@@ -313,7 +313,7 @@ const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
                   <p className="font-medium">No Preview Generated</p>
                   <p className="text-sm">Click "Generate Preview" to see your complete CV PDF</p>
                   <p className="text-xs mt-2">
-                    Includes: Professional Experience, Technical Projects, Skills, Education
+                    Section order: Professional Summary, Professional Experience, Technical Skills, Projects, Certifications, Education
                   </p>
                 </div>
               </div>
