@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobRefer.ai</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <img src="../icons/icon32.png" alt="JobRefer" class="logo-icon">
+        <span class="logo-text">JobRefer.ai</span>
+      </div>
+      <div class="header-right">
+        <button id="refreshBtn" class="btn-icon-only" title="Refresh">
+          🔄
+        </button>
+        <div class="user-status" id="userStatus">
+          <span class="status-dot offline"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Login Section -->
+    <div id="loginSection" class="section">
+      <div class="login-card">
+        <div class="login-hero">
+          <div class="hero-icon">🚀</div>
+          <h2>Welcome to JobRefer.ai</h2>
+          <p>Capture LinkedIn jobs & send AI-powered referral emails in seconds</p>
+        </div>
+        
+        <button id="loginViaDashboardBtn" class="btn btn-primary btn-large">
+          <span class="btn-icon">🔐</span>
+          Login via Dashboard
+        </button>
+        
+        <p class="login-hint">
+          Opens JobRefer.ai website to sign in.<br>
+          Extension will sync automatically.
+        </p>
+
+        <!-- Syncing State (shown while waiting for sync) -->
+        <div id="syncingState" class="syncing-state hidden">
+          <div class="syncing-spinner"></div>
+          <p>Waiting for login...</p>
+          <p class="syncing-hint">Complete sign-in on the website</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Section -->
+    <div id="mainSection" class="section hidden">
+      <!-- Countdown Loading Screen -->
+      <div id="countdownScreen" class="countdown-screen hidden">
+        <div class="countdown-content">
+          <div class="countdown-icon">🔍</div>
+          <div class="countdown-number" id="countdownNumber">3</div>
+          <div class="countdown-text" id="countdownText">Detecting job...</div>
+          <div class="countdown-progress">
+            <div class="countdown-bar" id="countdownBar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <span class="stat-value" id="statPending">0</span>
+          <span class="stat-label">Pending</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="statSent">0</span>
+          <span class="stat-label">Sent</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="statToday">0</span>
+          <span class="stat-label">Today</span>
+        </div>
+      </div>
+
+      <!-- Current Page Status -->
+      <div id="pageStatus" class="page-status">
+        <span class="status-icon">🔍</span>
+        <span class="status-text">Checking page...</span>
+      </div>
+
+      <!-- Not on Job Page -->
+      <div id="notJobPage" class="card hidden">
+        <div class="empty-state">
+          <span class="empty-icon">💼</span>
+          <p>Navigate to a LinkedIn job page to capture jobs</p>
+          <a href="https://www.linkedin.com/jobs/" target="_blank" class="btn btn-outline">
+            Browse LinkedIn Jobs
+          </a>
+        </div>
+      </div>
+
+      <!-- Job Capture Section -->
+      <div id="jobCapture" class="card hidden">
+        <div class="card-header">
+          <h3>📋 Job Details</h3>
+          <button id="refreshJobBtn" class="btn-icon-small" title="Refresh">🔄</button>
+        </div>
+        
+        <div class="job-info">
+          <div class="job-title" id="jobTitle">Loading...</div>
+          <div class="job-company">
+            <span>🏢</span>
+            <span id="companyName">-</span>
+          </div>
+        </div>
+
+        <!-- Duplicate Warning -->
+        <div id="duplicateWarning" class="warning-banner hidden">
+          <span class="warning-icon">⚠️</span>
+          <span class="warning-text">This job was already captured</span>
+          <div class="warning-actions">
+            <button id="viewExistingBtn" class="btn btn-sm btn-outline">View Existing</button>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="card-header">
+          <h3>👤 Recruiters</h3>
+          <button id="addRecruiterBtn" class="btn-icon-small" title="Add recruiter">➕</button>
+        </div>
+
+        <!-- Recruiter List -->
+        <div id="recruiterList" class="recruiter-list">
+          <!-- Recruiter items will be added here -->
+        </div>
+
+        <!-- Add Recruiter Form (initially one shown) -->
+        <div id="recruiterInputs" class="recruiter-inputs">
+          <div class="recruiter-input-item" data-index="0">
+            <input type="text" class="input recruiter-linkedin" placeholder="LinkedIn URL (linkedin.com/in/...)" data-index="0">
+            <input type="text" class="input recruiter-name" placeholder="Name (optional)" data-index="0">
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="actions" id="normalActions">
+          <button id="captureBtn" class="btn btn-primary">
+            📥 Capture Job
+          </button>
+          <button id="captureAndSendBtn" class="btn btn-success">
+            📧 Capture & Send
+          </button>
+        </div>
+
+        <!-- Recapture Actions (shown when duplicate) -->
+        <div id="recaptureActions" class="actions hidden">
+          <button id="recaptureBtn" class="btn btn-primary">
+            🔄 Recapture Job
+          </button>
+          <button id="recaptureAndSendBtn" class="btn btn-success">
+            🔄📧 Recapture & Send
+          </button>
+        </div>
+      </div>
+
+      <!-- Already Captured Job Info -->
+      <div id="capturedJobInfo" class="card hidden">
+        <div class="captured-header">
+          <span class="captured-icon">✅</span>
+          <span>Job Captured</span>
+        </div>
+        <div class="captured-details">
+          <div class="detail-row">
+            <span class="label">Status:</span>
+            <span class="value badge" id="capturedStatus">Pending</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Recruiter:</span>
+            <span class="value" id="capturedRecruiter">-</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="sendExistingBtn" class="btn btn-success">
+            📧 Send Outreach
+          </button>
+          <button id="viewDashboardBtn" class="btn btn-outline">
+            🔗 Dashboard
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Jobs -->
+      <div class="card">
+        <div class="card-header">
+          <h3>📂 Recent Jobs</h3>
+          <span class="job-count" id="jobCount">0</span>
+        </div>
+        <div id="recentJobsList" class="jobs-list">
+          <p class="empty-text">No jobs captured yet</p>
+        </div>
+      </div>
+
+      <!-- Usage Bar -->
+      <div class="usage-section">
+        <div class="usage-header">
+          <span class="plan-badge" id="planBadge">Free</span>
+          <span class="usage-text" id="usageText">0/3 emails today</span>
+        </div>
+        <div class="usage-bar">
+          <div class="usage-fill" id="usageBar" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <a href="https://jobrefer.ai/dashboard" target="_blank" id="openDashboard">Dashboard</a>
+      <span class="separator">•</span>
+      <a href="https://jobrefer.ai/privacy-policy" target="_blank">Privacy</a>
+      <span class="separator">•</span>
+      <a href="#" id="logoutBtn" class="hidden">Logout</a>
+    </footer>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden">
+    <span id="toastMessage"></span>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
