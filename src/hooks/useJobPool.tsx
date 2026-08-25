@@ -132,7 +132,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     setTotal(count ?? 0);
     setHasMore((count ?? 0) > rows.length);
     setError(null);
-    setLiveCount(0);
+    setPending([]);
     setLiveIds([]);
     newestSeen.current = rows[0]?.posted_at ?? new Date(0).toISOString();
     setIsLoading(false);
