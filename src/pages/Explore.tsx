@@ -231,16 +231,22 @@ const ExplorePage = () => {
                   <button
                     key={job.id}
                     onClick={() => setSelectedId(job.id)}
-                    className={`w-full px-4 py-3 text-left transition-colors hover:bg-muted/60 ${
+                    className={`w-full animate-in fade-in slide-in-from-top-1 px-4 py-3 text-left transition-colors hover:bg-muted/60 ${
                       selected?.id === job.id ? 'bg-muted' : ''
-                    }`}
+                    } ${liveIdSet.has(job.id) ? 'border-l-2 border-primary bg-primary/5' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-sm font-semibold leading-snug">{job.title}</span>
-                      {isFresh(job.posted_at) && (
-                        <Badge className="shrink-0" variant="default">
-                          New
+                      {liveIdSet.has(job.id) ? (
+                        <Badge className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-600">
+                          Just in
                         </Badge>
+                      ) : (
+                        isFresh(job.posted_at) && (
+                          <Badge className="shrink-0" variant="default">
+                            New
+                          </Badge>
+                        )
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
