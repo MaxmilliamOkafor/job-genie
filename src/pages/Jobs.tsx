@@ -168,16 +168,16 @@ const Jobs = () => {
       '1w': 10080,
     };
     
-    // First apply time filter based on created_at (when added to your queue)
+    // Apply the freshness window against when the role was actually posted
     let jobsToSort = filteredJobs;
     if (postedWithinFilter !== 'all' && filterMinutes[postedWithinFilter]) {
       const cutoffTime = now - (filterMinutes[postedWithinFilter] * 60 * 1000);
       jobsToSort = filteredJobs.filter(job => {
-        // Use created_at (when added to DB) for filtering
-        const jobDate = new Date((job as any).created_at || job.posted_date).getTime();
-        return jobDate >= cutoffTime;
+        const jobDate = new Date(job.posted_date || (job as any).created_at).getTime();
+        return Number.isFinite(jobDate) && jobDate >= cutoffTime;
       });
     }
+
     
     // Then sort
     return [...jobsToSort].sort((a, b) => {
