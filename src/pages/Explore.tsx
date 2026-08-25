@@ -51,6 +51,7 @@ const ExplorePage = () => {
   const [location, setLocation] = useState('');
   const [debouncedLocation, setDebouncedLocation] = useState('');
   const [workplace, setWorkplace] = useState('all');
+  const [dateRange, setDateRange] = useState('7');
   const [sort, setSort] = useState<PoolSort>('newest');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -67,8 +68,13 @@ const ExplorePage = () => {
   }, [location]);
 
   const filters = useMemo(
-    () => ({ search: debouncedSearch, location: debouncedLocation, workplace }),
-    [debouncedSearch, debouncedLocation, workplace],
+    () => ({
+      search: debouncedSearch,
+      location: debouncedLocation,
+      workplace,
+      ageDays: dateRange === 'all' ? null : Number(dateRange),
+    }),
+    [dateRange, debouncedSearch, debouncedLocation, workplace],
   );
 
   const {
@@ -151,7 +157,7 @@ const ExplorePage = () => {
         </div>
 
         {/* Filters */}
-        <div className="mb-4 grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr]">
+        <div className="mb-4 grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -181,6 +187,19 @@ const ExplorePage = () => {
               <SelectItem value="Onsite">Onsite</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={dateRange} onValueChange={setDateRange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Date posted" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Past 24 hours</SelectItem>
+              <SelectItem value="3">Past 3 days</SelectItem>
+              <SelectItem value="7">Past 7 days</SelectItem>
+              <SelectItem value="14">Past 14 days</SelectItem>
+              <SelectItem value="30">Past 30 days</SelectItem>
+              <SelectItem value="all">Any time</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={sort} onValueChange={(v) => setSort(v as PoolSort)}>
             <SelectTrigger>
               <SelectValue placeholder="Sort" />
@@ -201,7 +220,9 @@ const ExplorePage = () => {
             />
             {isLive ? 'Live' : 'Reconnecting'}
           </span>
-          <span>{total.toLocaleString()} roles in the live feed</span>
+          <span>
+            {total.toLocaleString()} {dateRange === 'all' ? 'roles in the live feed' : `roles posted in the past ${dateRange === '1' ? '24 hours' : `${dateRange} days`}`}
+          </span>
           {lastEventAt && (
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
