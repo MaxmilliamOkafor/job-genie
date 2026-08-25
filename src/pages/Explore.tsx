@@ -132,15 +132,15 @@ const ExplorePage = () => {
               Explore live jobs
             </h1>
             <p className="text-sm text-muted-foreground">
-              Freshly posted roles straight from company career boards. New roles appear here on
-              their own - no refresh needed.
+              Freshly posted roles straight from company career boards. New arrivals wait at the top
+              until you ask for them, so the list never moves while you read.
             </p>
           </div>
           <div className="flex items-center gap-2">
             {liveCount > 0 && (
-              <Button size="sm" onClick={acknowledgeLive} className="gap-2 animate-pulse">
+              <Button size="sm" onClick={acknowledgeLive} className="gap-2">
                 <Sparkles className="h-4 w-4" />
-                {liveCount} new {liveCount === 1 ? 'job' : 'jobs'} added
+                Show {liveCount} new {liveCount === 1 ? 'job' : 'jobs'}
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={refresh} className="gap-2">

@@ -63,11 +63,11 @@ function matchesFilters(job: PoolJob, filters: PoolFilters): boolean {
 
 export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
   const [jobs, setJobs] = useState<PoolJob[]>([]);
+  const [pending, setPending] = useState<PoolJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
-  const [liveCount, setLiveCount] = useState(0);
   const [liveIds, setLiveIds] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   const [lastEventAt, setLastEventAt] = useState<Date | null>(null);
@@ -75,10 +75,12 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
 
   const mounted = useRef(true);
   const newestSeen = useRef<string | null>(null);
+  const visibleIds = useRef<Set<string>>(new Set());
   const filtersRef = useRef(filters);
   const sortRef = useRef(sort);
   filtersRef.current = filters;
   sortRef.current = sort;
+  visibleIds.current = useMemo(() => new Set(jobs.map((j) => j.id)), [jobs]);
 
   const filterKey = `${filters.search}|${filters.location}|${filters.workplace}|${sort}`;
 
@@ -95,27 +97,24 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     [filters, sort],
   );
 
-  // Inserts a row into the list in the position the current sort demands.
-  const insertLive = useCallback((job: PoolJob) => {
-    setJobs((prev) => {
-      if (prev.some((j) => j.id === job.id)) return prev;
-      if (sortRef.current === 'newest') {
-        return [job, ...prev];
-      }
-      const next = [...prev, job];
-      next.sort(
-        (a, b) =>
-          a.company.localeCompare(b.company) ||
-          new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
-      );
-      return next;
+  // New rows are held back rather than injected, so the list never moves while reading.
+  const queueLive = useCallback((incoming: PoolJob[]) => {
+    if (!incoming.length) return;
+    let added = 0;
+    setPending((prev) => {
+      const seen = new Set(prev.map((j) => j.id));
+      const fresh = incoming.filter((j) => !seen.has(j.id) && !visibleIds.current.has(j.id));
+      added = fresh.length;
+      if (!fresh.length) return prev;
+      const next = [...fresh, ...prev];
+      next.sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
+      return next.slice(0, 200);
     });
-    setLiveIds((prev) => [job.id, ...prev].slice(0, 100));
-    setLiveCount((c) => c + 1);
-    setTotal((t) => t + 1);
-    setLastEventAt(new Date());
-    if (!newestSeen.current || job.posted_at > newestSeen.current) {
-      newestSeen.current = job.posted_at;
+    if (added) setLastEventAt(new Date());
+    for (const job of incoming) {
+      if (!newestSeen.current || job.posted_at > newestSeen.current) {
+        newestSeen.current = job.posted_at;
+      }
     }
   }, []);
 
@@ -133,7 +132,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     setTotal(count ?? 0);
     setHasMore((count ?? 0) > rows.length);
     setError(null);
-    setLiveCount(0);
+    setPending([]);
     setLiveIds([]);
     newestSeen.current = rows[0]?.posted_at ?? new Date(0).toISOString();
     setIsLoading(false);
@@ -165,7 +164,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     setIsFetchingMore(false);
   }, [buildQuery, hasMore, isFetchingMore, isLoading, jobs.length]);
 
-  // Realtime: new rows land in the list the moment the ingest job writes them.
+  // Realtime: new rows are queued, not injected, so nothing shifts under the cursor.
   useEffect(() => {
     const channel = supabase
       .channel('job-pool-live')
@@ -176,16 +175,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
           if (!mounted.current) return;
           const job = payload.new as PoolJob;
           if (!matchesFilters(job, filtersRef.current)) return;
-          insertLive(job);
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'job_pool' },
-        (payload) => {
-          if (!mounted.current) return;
-          const job = payload.new as PoolJob;
-          setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, ...job } : j)));
+          queueLive([job]);
         },
       )
       .subscribe((status) => {
@@ -195,9 +185,9 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [insertLive]);
+  }, [queueLive]);
 
-  // Backstop poll: pulls anything newer than what we hold, in case the socket dropped.
+  // Backstop poll: catches anything the socket missed. Also queued, never injected.
   useEffect(() => {
     const tick = async () => {
       if (!mounted.current || !newestSeen.current) return;
@@ -208,21 +198,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
         .order('posted_at', { ascending: false })
         .limit(50);
       if (!mounted.current || !data?.length) return;
-      // Oldest first so the newest ends up on top after each prepend.
-      [...(data as PoolJob[])].reverse().forEach((job) => {
-        setJobs((prev) => {
-          if (prev.some((j) => j.id === job.id)) return prev;
-          return sortRef.current === 'newest' ? [job, ...prev] : prev;
-        });
-      });
-      const unseen = (data as PoolJob[]).filter((j) => j.posted_at > (newestSeen.current ?? ''));
-      if (unseen.length) {
-        setLiveIds((prev) => [...unseen.map((j) => j.id), ...prev].slice(0, 100));
-        setLiveCount((c) => c + unseen.length);
-        setTotal((t) => t + unseen.length);
-        setLastEventAt(new Date());
-        newestSeen.current = unseen[0].posted_at;
-      }
+      queueLive(data as PoolJob[]);
     };
     const timer = setInterval(tick, POLL_MS);
     return () => clearInterval(timer);
@@ -231,8 +207,27 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
 
   const liveIdSet = useMemo(() => new Set(liveIds), [liveIds]);
 
+  // The only thing that moves the list: an explicit click on "N new jobs".
   const acknowledgeLive = useCallback(() => {
-    setLiveCount(0);
+    setPending((queued) => {
+      if (!queued.length) return queued;
+      setJobs((prev) => {
+        const seen = new Set(prev.map((j) => j.id));
+        const fresh = queued.filter((j) => !seen.has(j.id));
+        if (!fresh.length) return prev;
+        if (sortRef.current === 'newest') return [...fresh, ...prev];
+        const next = [...prev, ...fresh];
+        next.sort(
+          (a, b) =>
+            a.company.localeCompare(b.company) ||
+            new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
+        );
+        return next;
+      });
+      setLiveIds((prev) => [...queued.map((j) => j.id), ...prev].slice(0, 100));
+      setTotal((t) => t + queued.length);
+      return [];
+    });
   }, []);
 
   return {
@@ -241,7 +236,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     isFetchingMore,
     hasMore,
     total,
-    liveCount,
+    liveCount: pending.length,
     liveIdSet,
     isLive,
     lastEventAt,
