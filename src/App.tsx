@@ -8,6 +8,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useGlobalErrorHandler } from "./hooks/useGlobalErrorHandler";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
+import Explore from "./pages/Explore";
 import Applications from "./pages/Applications";
 import JobQueue from "./pages/JobQueue";
 import Profile from "./pages/Profile";
