@@ -269,6 +269,140 @@ export type Database = {
         }
         Relationships: []
       }
+      ingest_state: {
+        Row: {
+          job_name: string
+          last_error: string | null
+          last_run_at: string | null
+          lease_until: string | null
+          stats: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          job_name: string
+          last_error?: string | null
+          last_run_at?: string | null
+          lease_until?: string | null
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          job_name?: string
+          last_error?: string | null
+          last_run_at?: string | null
+          lease_until?: string | null
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      job_pool: {
+        Row: {
+          company: string
+          department: string | null
+          description: string | null
+          employment_type: string | null
+          external_id: string
+          first_seen_at: string
+          id: string
+          location: string | null
+          posted_at: string
+          provider: string
+          salary: string | null
+          source_id: string | null
+          title: string
+          updated_at: string
+          url: string
+          workplace_type: string | null
+        }
+        Insert: {
+          company: string
+          department?: string | null
+          description?: string | null
+          employment_type?: string | null
+          external_id: string
+          first_seen_at?: string
+          id?: string
+          location?: string | null
+          posted_at?: string
+          provider: string
+          salary?: string | null
+          source_id?: string | null
+          title: string
+          updated_at?: string
+          url: string
+          workplace_type?: string | null
+        }
+        Update: {
+          company?: string
+          department?: string | null
+          description?: string | null
+          employment_type?: string | null
+          external_id?: string
+          first_seen_at?: string
+          id?: string
+          location?: string | null
+          posted_at?: string
+          provider?: string
+          salary?: string | null
+          source_id?: string | null
+          title?: string
+          updated_at?: string
+          url?: string
+          workplace_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_pool_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "job_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_sources: {
+        Row: {
+          board_token: string
+          company_name: string
+          consecutive_failures: number
+          created_at: string
+          enabled: boolean
+          id: string
+          last_error: string | null
+          last_fetched_at: string | null
+          last_success_at: string | null
+          provider: string
+        }
+        Insert: {
+          board_token: string
+          company_name: string
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_error?: string | null
+          last_fetched_at?: string | null
+          last_success_at?: string | null
+          provider: string
+        }
+        Update: {
+          board_token?: string
+          company_name?: string
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_error?: string | null
+          last_fetched_at?: string | null
+          last_success_at?: string | null
+          provider?: string
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           ai_extracted: boolean | null
