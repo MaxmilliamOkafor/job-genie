@@ -192,12 +192,20 @@ const ExplorePage = () => {
           </Select>
         </div>
 
-        <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                isLive ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'
+              }`}
+            />
+            {isLive ? 'Live' : 'Reconnecting'}
+          </span>
           <span>{total.toLocaleString()} roles in the live feed</span>
-          {lastChecked && (
+          {lastEventAt && (
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              checked {relativeTime(lastChecked.toISOString())}
+              last new role {relativeTime(lastEventAt.toISOString())}
             </span>
           )}
         </div>
