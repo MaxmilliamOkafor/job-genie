@@ -24,6 +24,7 @@ export interface PoolFilters {
   search: string;
   location: string;
   workplace: string;
+  ageDays: number | null;
 }
 
 const PAGE_SIZE = 30;
@@ -43,6 +44,10 @@ function applyFilters<T>(query: any, filters: PoolFilters) {
   if (filters.workplace && filters.workplace !== 'all') {
     q = q.eq('workplace_type', filters.workplace);
   }
+  if (filters.ageDays !== null) {
+    const cutoff = new Date(Date.now() - filters.ageDays * 24 * 60 * 60 * 1000).toISOString();
+    q = q.gte('posted_at', cutoff);
+  }
   return q as T;
 }
 
@@ -56,6 +61,12 @@ function matchesFilters(job: PoolJob, filters: PoolFilters): boolean {
   const loc = filters.location.trim().toLowerCase();
   if (loc && !(job.location ?? '').toLowerCase().includes(loc)) return false;
   if (filters.workplace && filters.workplace !== 'all' && job.workplace_type !== filters.workplace) {
+    return false;
+  }
+  if (
+    filters.ageDays !== null &&
+    new Date(job.posted_at).getTime() < Date.now() - filters.ageDays * 24 * 60 * 60 * 1000
+  ) {
     return false;
   }
   return true;
@@ -82,7 +93,7 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
   sortRef.current = sort;
   visibleIds.current = useMemo(() => new Set(jobs.map((j) => j.id)), [jobs]);
 
-  const filterKey = `${filters.search}|${filters.location}|${filters.workplace}|${sort}`;
+  const filterKey = `${filters.search}|${filters.location}|${filters.workplace}|${filters.ageDays ?? 'all'}|${sort}`;
 
   const buildQuery = useCallback(
     (from: number, to: number) => {
