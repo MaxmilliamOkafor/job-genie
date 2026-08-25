@@ -63,11 +63,11 @@ function matchesFilters(job: PoolJob, filters: PoolFilters): boolean {
 
 export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
   const [jobs, setJobs] = useState<PoolJob[]>([]);
+  const [pending, setPending] = useState<PoolJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
-  const [liveCount, setLiveCount] = useState(0);
   const [liveIds, setLiveIds] = useState<string[]>([]);
   const [isLive, setIsLive] = useState(false);
   const [lastEventAt, setLastEventAt] = useState<Date | null>(null);
@@ -75,10 +75,12 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
 
   const mounted = useRef(true);
   const newestSeen = useRef<string | null>(null);
+  const visibleIds = useRef<Set<string>>(new Set());
   const filtersRef = useRef(filters);
   const sortRef = useRef(sort);
   filtersRef.current = filters;
   sortRef.current = sort;
+  visibleIds.current = useMemo(() => new Set(jobs.map((j) => j.id)), [jobs]);
 
   const filterKey = `${filters.search}|${filters.location}|${filters.workplace}|${sort}`;
 
