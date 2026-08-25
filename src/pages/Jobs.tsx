@@ -88,13 +88,14 @@ const Jobs = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('uploaded');
+  const [sortBy, setSortBy] = useState<'uploaded' | 'posted'>('posted');
   const [searchInput, setSearchInput] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [activeSearchQuery, setActiveSearchQuery] = useState<string>('');
   const [lastSearchResultCount, setLastSearchResultCount] = useState<number | null>(null);
-  const [postedWithinFilter, setPostedWithinFilter] = useState<string>('all');
-  const postedWithinFilterRef = useRef<string>('all');
+  const [postedWithinFilter, setPostedWithinFilter] = useState<string>('1w');
+  const postedWithinFilterRef = useRef<string>('1w');
+
   const [isFetchingNew, setIsFetchingNew] = useState(false);
 
   // Bulk selection state
