@@ -77,10 +77,13 @@ const ExplorePage = () => {
     isFetchingMore,
     hasMore,
     total,
-    freshCount,
-    lastChecked,
+    liveCount,
+    liveIdSet,
+    isLive,
+    lastEventAt,
     loadMore,
     refresh,
+    acknowledgeLive,
   } = useJobPool(filters, sort);
 
   useEffect(() => {
