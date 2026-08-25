@@ -95,27 +95,24 @@ export function useJobPool(filters: PoolFilters, sort: PoolSort = 'newest') {
     [filters, sort],
   );
 
-  // Inserts a row into the list in the position the current sort demands.
-  const insertLive = useCallback((job: PoolJob) => {
-    setJobs((prev) => {
-      if (prev.some((j) => j.id === job.id)) return prev;
-      if (sortRef.current === 'newest') {
-        return [job, ...prev];
-      }
-      const next = [...prev, job];
-      next.sort(
-        (a, b) =>
-          a.company.localeCompare(b.company) ||
-          new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime(),
-      );
-      return next;
+  // New rows are held back rather than injected, so the list never moves while reading.
+  const queueLive = useCallback((incoming: PoolJob[]) => {
+    if (!incoming.length) return;
+    let added = 0;
+    setPending((prev) => {
+      const seen = new Set(prev.map((j) => j.id));
+      const fresh = incoming.filter((j) => !seen.has(j.id) && !visibleIds.current.has(j.id));
+      added = fresh.length;
+      if (!fresh.length) return prev;
+      const next = [...fresh, ...prev];
+      next.sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime());
+      return next.slice(0, 200);
     });
-    setLiveIds((prev) => [job.id, ...prev].slice(0, 100));
-    setLiveCount((c) => c + 1);
-    setTotal((t) => t + 1);
-    setLastEventAt(new Date());
-    if (!newestSeen.current || job.posted_at > newestSeen.current) {
-      newestSeen.current = job.posted_at;
+    if (added) setLastEventAt(new Date());
+    for (const job of incoming) {
+      if (!newestSeen.current || job.posted_at > newestSeen.current) {
+        newestSeen.current = job.posted_at;
+      }
     }
   }, []);
 
