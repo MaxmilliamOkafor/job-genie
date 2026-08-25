@@ -7,6 +7,7 @@ import {
   Settings, 
   FileText,
   ListChecks,
+  Compass,
   Menu,
   X
 } from 'lucide-react';
