@@ -16,6 +16,7 @@ import quantumHireIcon from '@/assets/quantumhire-icon.png';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/explore', label: 'Explore', icon: Compass },
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
   { path: '/applications', label: 'Applications', icon: FileText },
   { path: '/queue', label: 'Job Queue', icon: ListChecks },
