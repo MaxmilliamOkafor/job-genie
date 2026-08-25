@@ -221,7 +221,7 @@ async function fetchRecruitee(s: SourceRow): Promise<PoolJob[]> {
   );
   const jobs: any[] = Array.isArray(data?.offers) ? data.offers : [];
   return jobs.slice(0, JOBS_PER_SOURCE).map((j) => {
-    const location = j?.location ?? [j?.city, j?.country].filter(Boolean).join(', ') || null;
+    const location = j?.location || [j?.city, j?.country].filter(Boolean).join(', ') || null;
     const posted = j?.published_at ?? j?.created_at ?? new Date().toISOString();
     return {
       provider: 'recruitee',
