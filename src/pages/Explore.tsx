@@ -77,10 +77,13 @@ const ExplorePage = () => {
     isFetchingMore,
     hasMore,
     total,
-    freshCount,
-    lastChecked,
+    liveCount,
+    liveIdSet,
+    isLive,
+    lastEventAt,
     loadMore,
     refresh,
+    acknowledgeLive,
   } = useJobPool(filters, sort);
 
   useEffect(() => {
@@ -129,19 +132,20 @@ const ExplorePage = () => {
               Explore live jobs
             </h1>
             <p className="text-sm text-muted-foreground">
-              Freshly posted roles pulled straight from company career boards, refreshed every 15 minutes.
+              Freshly posted roles straight from company career boards. New roles appear here on
+              their own - no refresh needed.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {freshCount > 0 && (
-              <Button size="sm" onClick={refresh} className="gap-2">
+            {liveCount > 0 && (
+              <Button size="sm" onClick={acknowledgeLive} className="gap-2 animate-pulse">
                 <Sparkles className="h-4 w-4" />
-                {freshCount} new {freshCount === 1 ? 'job' : 'jobs'}
+                {liveCount} new {liveCount === 1 ? 'job' : 'jobs'} added
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={refresh} className="gap-2">
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
+              Reload
             </Button>
           </div>
         </div>
@@ -188,12 +192,20 @@ const ExplorePage = () => {
           </Select>
         </div>
 
-        <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                isLive ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'
+              }`}
+            />
+            {isLive ? 'Live' : 'Reconnecting'}
+          </span>
           <span>{total.toLocaleString()} roles in the live feed</span>
-          {lastChecked && (
+          {lastEventAt && (
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              checked {relativeTime(lastChecked.toISOString())}
+              last new role {relativeTime(lastEventAt.toISOString())}
             </span>
           )}
         </div>
@@ -219,16 +231,22 @@ const ExplorePage = () => {
                   <button
                     key={job.id}
                     onClick={() => setSelectedId(job.id)}
-                    className={`w-full px-4 py-3 text-left transition-colors hover:bg-muted/60 ${
+                    className={`w-full animate-in fade-in slide-in-from-top-1 px-4 py-3 text-left transition-colors hover:bg-muted/60 ${
                       selected?.id === job.id ? 'bg-muted' : ''
-                    }`}
+                    } ${liveIdSet.has(job.id) ? 'border-l-2 border-primary bg-primary/5' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-sm font-semibold leading-snug">{job.title}</span>
-                      {isFresh(job.posted_at) && (
-                        <Badge className="shrink-0" variant="default">
-                          New
+                      {liveIdSet.has(job.id) ? (
+                        <Badge className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-600">
+                          Just in
                         </Badge>
+                      ) : (
+                        isFresh(job.posted_at) && (
+                          <Badge className="shrink-0" variant="default">
+                            New
+                          </Badge>
+                        )
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
