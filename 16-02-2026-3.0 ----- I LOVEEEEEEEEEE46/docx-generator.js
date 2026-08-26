@@ -27,11 +27,42 @@
 
   // ---- Design system: "Deep Navy, premium corporate" (matches the PDF) --
   // Colours are OOXML hex (no leading #).
+  //
+  // ---- ON COLOUR, AND HOW MUCH OF IT ----------------------------------
+  // Asked whether an accent colour helps a recruiter who has read a
+  // thousand black-and-white CVs today. It does, but only if it marks
+  // something. Two failures are possible and both were present.
+  //
+  // TOO DARK TO BE AN ACCENT. NAVY was 16243F, about 15:1 on white,
+  // which the eye reads as black. Every heading was "accented" and the
+  // page had no accent at all: the cost of a colour with none of the
+  // benefit.
+  //
+  // TOO MUCH OF IT. A CV rendered elsewhere came back with the name,
+  // every job title, every project title, every degree and every
+  // certification title in a bright link blue -- about twenty items.
+  // Colour works by contrast, so accenting a fifth of the page
+  // emphasises nothing and simply changes the palette.
+  //
+  // So: the accent marks the LANDMARKS a scan jumps between, which is
+  // the name and the section headings, and nothing else. Company names
+  // moved to bold black beside the titles that were already bold black.
+  // Bold outranks colour at 10pt anyway.
+  //
+  // 1F4E79 is about 8.6:1 on white -- unmistakably blue on screen, and
+  // it prints as a solid dark grey rather than the pale smudge a link
+  // blue leaves in greyscale.
+  //
+  // None of this touches parsing. Text extraction reads the text
+  // stream; colour is a separate graphics instruction that every
+  // extractor discards. No ATS scores it, and no keyword match depends
+  // on it. The parsing risks are columns, tables, text boxes and
+  // header/footer content, none of which this renderer emits.
   const C = {
-    NAVY: '16243F',   // name, section headers, company names
-    BODY: '21232A',   // near-black body text
+    NAVY: '1F4E79',   // THE accent: the name and the section headings
+    BODY: '21232A',   // near-black body text, and the company/title lines
     MUTED: '66707A',  // dates, secondary meta
-    LINK: '0066CC',   // hyperlinks
+    LINK: '1F4E79',   // hyperlinks, same accent -- the underline marks them
     RULE: 'BDC7D9',   // thin hairline under section headers
   };
   // Single clean professional sans (Calibri is the universal Word default;
@@ -1012,9 +1043,15 @@
       // True for the first content line after a section heading, so the
       // heading's trailing space is not added to a full role gap.
       let afterHeading = false;
-      // A helper to emit a single navy-bullet item paragraph.
+      // A helper to emit a single bullet item paragraph.
+      //
+      // The glyph is grey, not the accent. It was NAVY, which was
+      // invisible while NAVY was near-black and would have become
+      // thirty-odd blue dots the moment the accent became a real
+      // colour. A marker on every line is the dilution the accent
+      // exists to avoid; grey reads as typography rather than emphasis.
       const emitBullet = (item) => out.push(paragraph(
-        run('•  ', { color: C.NAVY, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
+        run('•  ', { color: C.MUTED, sz: SZ.heading }) + run(item, { color: C.BODY, sz: SZ.body }),
         { indent: 360, hanging: 240, spacingAfter: SPACE.bullet, line: 288, lineRule: 'auto' }
       ));
       for (; i < lines.length; i++) {
@@ -1138,7 +1175,7 @@
               const loc = t.slice(tabAt + 1).trim();
               if (co && loc) {
                 out.push(paragraph(
-                  run(co + ' ', { bold: true, color: C.NAVY, sz: SZ.company })
+                  run(co + ' ', { bold: true, color: C.BODY, sz: SZ.company })
                     + '<w:r><w:tab/></w:r>'
                     + run(loc, { italic: true, color: C.MUTED, sz: SZ.date }),
                   { tabs: [{ pos: 10106, val: 'right' }],
@@ -1149,7 +1186,7 @@
                 continue;
               }
             }
-            out.push(paragraph(run(t, { bold: true, color: C.NAVY, sz: SZ.company }),
+            out.push(paragraph(run(t, { bold: true, color: C.BODY, sz: SZ.company }),
               { spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
                 spacingAfter: 20, keepNext: true, keepLines: true }));
             roleState = 'expectTitle';
