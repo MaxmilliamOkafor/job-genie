@@ -631,11 +631,12 @@
           // read for a job and less welcome to receive it there.
           const emails = []
             .concat(pick(ci.work_emails), pick(ci.work_email))
+            .concat(pick(ci.workEmails), pick(ci.workEmail))
             .concat(pick(ci.emails), pick(ci.email))
             .filter(Boolean);
           return {
-            name: _clean(p.full_name || p.name),
-            title: _clean(p.title || p.job_title || p.headline),
+            name: _clean(p.full_name || p.fullName || p.name),
+            title: _clean(p.title || p.job_title || p.jobTitle || p.headline),
             company: _clean(typeof p.company === 'string' ? p.company : (p.company && p.company.name))
               || _clean(p.company_name),
             location: _clean(p.location),
@@ -644,7 +645,7 @@
             // through the profile endpoint, which returns a VERIFIED work
             // address. See _resolveProfiles.
             profile: _clean(p.li_vanity || p.linkedin_vanity)
-              || _profileSlugFromUrl(p.linkedin_url || p.li_url || p.url),
+              || _profileSlugFromUrl(p.linkedin_url || p.linkedinUrl || p.li_url || p.url),
           };
         });
       },
@@ -667,21 +668,43 @@
       parseProfile: (json) => {
         const p = (json && (json.profile || json.data || json)) || {};
         const ci = p.contact_info || p.contactInfo || p;
+        // BOTH SPELLINGS OF EVERY FIELD.
+        //
+        // This read work_email, work_emails, full_name. The documented
+        // profile response uses workEmail, workEmailStatus, fullName,
+        // linkedinUrl -- camelCase throughout -- so a real body parsed
+        // to an empty list and the lookup reported "no address found"
+        // for a profile that had returned one. The two spellings cost
+        // nothing to accept and there is no way to tell from here which
+        // an account is on.
+        //
         // _emailStrings rather than a bare pick(): ContactOut returns
         // work_email as a plain string on some plans and as
         // {email,type} objects on others, and _clean() on an object
         // yields "[object Object]" -- a non-empty string that survives
         // as far as the send step.
-        const emails = _emailStrings(ci.work_email).concat(_emailStrings(ci.work_emails))
-          .concat(_emailStrings(ci.email)).concat(_emailStrings(ci.emails));
+        //
+        // Work addresses lead. A personal Gmail is both less likely to
+        // be read for a job and less welcome to receive it there.
+        const work = _emailStrings(ci.work_email).concat(_emailStrings(ci.workEmail))
+          .concat(_emailStrings(ci.work_emails)).concat(_emailStrings(ci.workEmails));
+        const personal = _emailStrings(ci.email).concat(_emailStrings(ci.emails))
+          .concat(_emailStrings(ci.personal_email)).concat(_emailStrings(ci.personalEmail));
+        const emails = work.concat(personal);
         const company = typeof p.company === 'string'
           ? p.company : _clean(p.company && p.company.name);
+        // "Verified | Unverified" is the documented field. It applies to
+        // the WORK address, so it may not be claimed for a personal one.
+        const status = String(p.workEmailStatus || p.work_email_status
+          || ci.workEmailStatus || ci.work_email_status || '');
+        const isVerified = /(^|[^a-z])verified/i.test(status) && !/unverified/i.test(status);
         return emails.map((em) => ({
-          name: _clean(p.full_name || p.name),
+          name: _clean(p.full_name || p.fullName || p.name),
           title: _clean(p.title || p.headline),
           company,
           location: _clean(p.location),
           email: _clean(em),
+          verified: isVerified && work.indexOf(em) !== -1,
         }));
       },
       test: (cred) => ({
