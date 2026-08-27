@@ -4305,18 +4305,20 @@ class ATSTailor {
   //
   // Filtered here, at the boundary, because it is the one place every
   // producer of this list flows through.
-  static get _KEYWORD_JUNK() {
-    return new Set(['est', 'based', 'strong', 'ability', 'able', 'working', 'work',
+  cleanKeywordList(list) {
+    // Held inside the method rather than as a static on the class. A
+    // static referenced by class name resolves through the enclosing
+    // scope, which makes a display helper fail with "ATSTailor is not
+    // defined" the moment it is called from anywhere that scope does
+    // not reach -- and this helper runs on the tailoring path, where a
+    // ReferenceError costs the whole run.
+    const junk = new Set(['est', 'based', 'strong', 'ability', 'able', 'working', 'work',
       'related', 'relevant', 'experience', 'experienced', 'skills', 'skill',
       'opportunity', 'role', 'position', 'job', 'candidate', 'candidates', 'team',
       'teams', 'company', 'business', 'good', 'great', 'excellent', 'strongly',
       'preferred', 'required', 'requirements', 'responsibilities', 'plus', 'etc',
       'years', 'year', 'new', 'well', 'high', 'must', 'ideal', 'ideally', 'you',
       'your', 'our', 'we', 'they', 'this', 'that', 'with', 'and', 'for', 'the']);
-  }
-
-  cleanKeywordList(list) {
-    const junk = ATSTailor._KEYWORD_JUNK;
     const seen = new Set();
     return (Array.isArray(list) ? list : []).filter((raw) => {
       const k = String(raw == null ? '' : raw).trim();
@@ -4338,12 +4340,58 @@ class ATSTailor {
     });
   }
 
+  // ██ THREE STATES, NOT TWO ██
+  //
+  // This panel is rendered at two very different moments and could only
+  // describe one of them.
+  //
+  //   BEFORE TAILORING. Keyword extraction finishes and the panel is
+  //   drawn immediately to show what was found: matchedKeywords is [],
+  //   missingKeywords is everything, and no CV exists yet. That is not
+  //   a bad result, it is the normal state of a job that has not been
+  //   tailored yet.
+  //
+  //   AFTER TAILORING. A CV exists and the numbers mean something.
+  //
+  //   AFTER A FAILED RUN. Keywords but no CV, and the run is over.
+  //
+  // The gauge used to hard-code 100% and "Perfect profile match!",
+  // which was wrong in all three. Replacing that with a real percentage
+  // made the FIRST state render as a red 0% reading "Nothing matched",
+  // which is wrong in a new way and reads as a broken extension --
+  // reported as exactly that. A panel drawn before the work starts must
+  // say the work has not started.
+  // A PANEL THAT CANNOT STOP THE WORK.
+  //
+  // This is called from inside the tailoring flow, before and after the
+  // run, on an unguarded line. Anything that throws while DRAWING the
+  // analysis therefore aborts the tailoring itself -- no CV, no cover
+  // letter, no error the user can see, and a panel frozen in whatever
+  // state it reached. Reported as "it wasn't finding or tailoring
+  // anything or generating the files", with a panel showing keywords
+  // and stale documents from a previous run.
+  //
+  // Rendering is not load-bearing. It gets its own boundary.
   updateMatchAnalysisUI() {
+    try {
+      this._renderMatchAnalysis();
+    } catch (e) {
+      console.error('[ATS Tailor] match panel render failed, tailoring continues:',
+        e && (e.stack || e.message || e));
+    }
+  }
+
+  _renderMatchAnalysis() {
     const matchScore = this.generatedDocuments.matchScore || 0;
     const matchedKeywords = this.cleanKeywordList(this.generatedDocuments.matchedKeywords);
     const missingKeywords = this.cleanKeywordList(this.generatedDocuments.missingKeywords);
     const keywords = this.generatedDocuments.keywords || null;
     const totalKeywords = matchedKeywords.length + missingKeywords.length;
+    const cvReady = String(this.generatedDocuments.cv || '').length > 80;
+    // Not "has a CV" but "has a CV FOR THIS RUN". A restored document
+    // from the previous posting is not evidence about this one.
+    const phase = cvReady && this._tailoringRanThisJob ? 'done'
+      : (this._tailoringRanThisJob ? 'failed' : 'pending');
     
     // ALWAYS show the AI Match Analysis panel when we have any match data
     const documentsCard = document.getElementById('documentsCard');
@@ -4355,7 +4403,7 @@ class ATSTailor {
     }
     
     // Update gauge
-    this.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords);
+    this.updateMatchGauge(matchScore, matchedKeywords.length, totalKeywords, phase);
     
     // Build keywords object if not present
     const cvText = this.generatedDocuments.cv || '';
@@ -4377,7 +4425,7 @@ class ATSTailor {
     
     // BATCH DOM update for keyword chips
     if (keywordsObj && (keywordsObj.highPriority || keywordsObj.all)) {
-      this.batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords);
+      this.batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords, phase);
     } else if (totalKeywords > 0) {
       // Fallback: manual chip rendering with batch update
       const highCount = Math.ceil(totalKeywords * 0.4);
@@ -4389,7 +4437,7 @@ class ATSTailor {
         mediumPriority: allKeywords.slice(highCount, highCount + medCount),
         lowPriority: allKeywords.slice(highCount + medCount)
       };
-      this.batchUpdateKeywordChips(fallbackObj, cvText, matchedKeywords);
+      this.batchUpdateKeywordChips(fallbackObj, cvText, matchedKeywords, phase);
     }
 
     // NEW: Keyword coverage debug panel (injected locations)
@@ -4415,7 +4463,31 @@ class ATSTailor {
   // A status display that cannot report a failure is worse than no
   // status display, because it is trusted. It now shows the real
   // number, and it says plainly when there is nothing to measure.
-  updateMatchGauge(score, matched, total) {
+  updateMatchGauge(score, matched, total, phase) {
+    // Before the tailoring has run there is nothing to score, and a 0%
+    // there reads as a failure rather than as "not started".
+    if (phase === 'pending') {
+      const ring = document.getElementById('matchGaugeCircle');
+      if (ring) {
+        const circumference = 2 * Math.PI * 45;
+        ring.setAttribute('stroke-dashoffset', circumference.toString());
+        ring.setAttribute('stroke', '#5a6472');
+      }
+      const el = document.getElementById('matchPercentage');
+      if (el) el.textContent = String(total || 0);
+      const sub = document.getElementById('matchSubtitle');
+      if (sub) {
+        sub.textContent = total
+          ? 'keywords found in this posting. Run Tailor to match them.'
+          : 'No keywords found in this posting yet.';
+      }
+      const badge = document.getElementById('keywordCountBadge');
+      if (badge) badge.textContent = 'Not tailored yet';
+      const prov = document.getElementById('matchPanelProvider');
+      if (prov) prov.textContent = this.aiProvider === 'kimi' ? 'Kimi K2' : 'OpenAI';
+      return;
+    }
+
     const pct = total > 0 ? Math.round((matched / total) * 100) : null;
 
     const gaugeCircle = document.getElementById('matchGaugeCircle');
@@ -4436,7 +4508,8 @@ class ATSTailor {
     if (matchSubtitle) {
       matchSubtitle.textContent = pct == null
         ? 'No keywords were extracted from this posting'
-        : (pct === 0 ? 'Nothing matched -- the CV text was not available to compare'
+        : (phase === 'failed'
+          ? 'The tailoring did not return a CV -- run it again'
           : (pct >= 70 ? 'Strong match' : (pct >= 40 ? 'Partial match' : 'Weak match')));
     }
 
@@ -4464,9 +4537,29 @@ class ATSTailor {
   // damning verdict on a CV nobody looked at. "data", "analysis",
   // "process" and "management" cannot all be absent from a real CV; a
   // zero that total is a missing input, not a result.
-  batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords) {
+  batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords, phase) {
     const cvTextLower = String(cvText || '').toLowerCase();
     const matchedSet = new Set((matchedKeywords || []).map(k => String(k).toLowerCase()));
+    // Before tailoring, every keyword is legitimately unmatched. Show
+    // them as neutral terms rather than as thirty red crosses passing
+    // judgement on a document that does not exist yet.
+    if (phase === 'pending') {
+      const sections = [
+        ['highPriorityChips', 'highPriorityCount', keywordsObj.highPriority || []],
+        ['mediumPriorityChips', 'mediumPriorityCount', keywordsObj.mediumPriority || []],
+        ['lowPriorityChips', 'lowPriorityCount', keywordsObj.lowPriority || []],
+      ];
+      for (const [containerId, countId, list] of sections) {
+        const c = document.getElementById(containerId);
+        if (c) {
+          c.innerHTML = list.map((kw) => '<span class="keyword-chip"><span class="chip-text">'
+            + this.escapeHtml(kw) + '</span></span>').join('');
+        }
+        const el = document.getElementById(countId);
+        if (el) el.textContent = String(list.length);
+      }
+      return;
+    }
     const canCompare = cvTextLower.length > 80 || matchedSet.size > 0;
     if (!canCompare) {
       for (const id of ['highPriorityChips', 'mediumPriorityChips', 'lowPriorityChips']) {
@@ -5080,6 +5173,9 @@ class ATSTailor {
       this.generatedDocuments.missingKeywords = keywords.all;
       this.generatedDocuments.matchedKeywords = [];
       this.generatedDocuments.matchScore = 0;
+      // A new posting: whatever CV is still in memory belongs to the
+      // last one, so the panel must not score against it.
+      this._tailoringRanThisJob = false;
       
       // Update UI to show extracted keywords
       this.updateMatchAnalysisUI();
@@ -5194,6 +5290,7 @@ class ATSTailor {
       this.generatedDocuments.missingKeywords = keywords.all;
       this.generatedDocuments.matchedKeywords = [];
       this.generatedDocuments.matchScore = 0;
+      this._tailoringRanThisJob = false;
       
       // Update UI to show extracted keywords
       this.updateMatchAnalysisUI();
@@ -5595,7 +5692,20 @@ class ATSTailor {
     // With no profile to check against, nothing is added. That is the
     // safe direction: a keyword left off a CV costs a match, a keyword
     // invented onto one costs the application and the reputation.
-    const evidence = this._profileEvidenceBlob();
+    const evidence = (() => {
+      // Same rule as the render: a helper on the tailoring path gets a
+      // boundary. An empty blob means "add nothing", which is the safe
+      // direction, so a failure here costs a few keywords and never the
+      // run itself.
+      try {
+        return typeof this._profileEvidenceBlob === 'function'
+          ? this._profileEvidenceBlob() : '';
+      } catch (e) {
+        console.warn('[ATS Tailor] profile evidence unavailable, adding no keywords:',
+          e && e.message);
+        return '';
+      }
+    })();
     const unevidenced = [];
     let remaining = cleanMissing.filter((kw) => {
       const k = String(kw || '').toLowerCase().trim();
@@ -6307,6 +6417,15 @@ class ATSTailor {
       };
 
       const sanitisedCv = sanitise(this.normalizeDocumentText(result.tailoredResume, 'cv'));
+      // The run happened. Whether it produced usable text is a separate
+      // question the panel answers from the text itself.
+      this._tailoringRanThisJob = true;
+      if (!sanitisedCv || sanitisedCv.length < 80) {
+        console.error('[ATS Tailor] tailoring returned no usable CV text. '
+          + 'result.tailoredResume length was '
+          + String((result.tailoredResume || '').length)
+          + '. Keys on the response: ' + Object.keys(result || {}).join(', '));
+      }
       const sanitisedCover = sanitise(this.normalizeDocumentText(result.tailoredCoverLetter || result.coverLetter, 'cover'));
 
       this.generatedDocuments = {
