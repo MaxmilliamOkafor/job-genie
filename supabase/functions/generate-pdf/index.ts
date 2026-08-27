@@ -735,11 +735,6 @@ function renderResume(
     r.drawSummary(data.summary);
   }
 
-  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
-    r.drawSectionHeader("Core Competencies");
-    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
-  }
-
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -753,21 +748,25 @@ function renderResume(
     );
   }
 
+  // ONE skills section only: parsers take the first heading containing "skill"
+  // and stop, so Core Competencies is folded in here rather than standing alone.
+  const skillGroups: Array<{ label: string; items: string[] }> = [];
+  if (data.coreCompetencies?.length)
+    skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skills?.primary?.length)
+    skillGroups.push({ label: "Technical", items: data.skills.primary });
+  if (data.skills?.secondary?.length)
+    skillGroups.push({ label: "Additional", items: data.skills.secondary });
+  if (skillGroups.length > 0) {
+    r.drawSectionHeader("Technical Skills");
+    r.drawSkillsBlock(skillGroups);
+  }
+
   if (data.projects && data.projects.length > 0) {
-    r.drawSectionHeader("Selected Projects");
+    r.drawSectionHeader("Projects");
     data.projects.forEach((p, i) =>
       r.drawProjectEntry(p, i === data.projects.length - 1),
     );
-  }
-
-  if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
-    r.drawSectionHeader("Skills");
-    const groups: Array<{ label: string; items: string[] }> = [];
-    if (data.skills.primary?.length)
-      groups.push({ label: "Technical", items: data.skills.primary });
-    if (data.skills.secondary?.length)
-      groups.push({ label: "Additional", items: data.skills.secondary });
-    r.drawSkillsBlock(groups);
   }
 
   if (data.certifications && data.certifications.length > 0) {
