@@ -148,7 +148,8 @@ const PAGE_H = 841.89;
 const MARGIN = 45; // ~0.62 inch
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-const NAVY = rgb(0.086, 0.137, 0.247);
+// Accent #1F4E79 - name and section headings only.
+const NAVY = rgb(0.122, 0.306, 0.475);
 const BODY = rgb(0.13, 0.14, 0.16);
 const MUTED = rgb(0.40, 0.43, 0.48);
 const LINK = rgb(0.0, 0.40, 0.80);
@@ -197,6 +198,17 @@ const displayUrl = (url: string): string =>
 
 const ensureUrl = (url: string): string =>
   /^https?:\/\//i.test(url) ? url : `https://${url}`;
+
+// Tech stacks, certification names and bare Code/Live link lines never render
+// as bullet list items - they are metadata, not achievements.
+const isMetadataLine = (raw: string): boolean => {
+  const t = (raw || "").trim();
+  if (!t) return true;
+  if (/^(tech|tech stack|stack|technologies|tools|skills)\s*:/i.test(t)) return true;
+  if (/^(code|live|demo|repo|repository|source|url|link)\s*:\s*https?:\/\//i.test(t)) return true;
+  if (/^https?:\/\/\S+$/i.test(t)) return true;
+  return false;
+};
 
 function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   const pages: PDFPage[] = [];
@@ -380,7 +392,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const lines = wrap(text, fonts.regular, size, textMaxW);
     if (lines.length === 0) return;
     ensureSpace(lh);
-    page.drawText("\u2022", { x: bulletX, y, size, font: fonts.regular, color: NAVY });
+    page.drawText("\u2022", { x: bulletX, y, size, font: fonts.regular, color: MUTED });
     page.drawText(lines[0], { x: textX, y, size, font: fonts.regular, color: BODY });
     y -= lh;
     for (let i = 1; i < lines.length; i++) {
@@ -402,7 +414,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     let lx = MARGIN;
     if (company) {
-      page.drawText(company, { x: lx, y, size, font: fonts.bold, color: NAVY });
+      page.drawText(company, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(company, size);
     }
     if (title) {
@@ -434,7 +446,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     y -= 2;
     for (const b of entry.bullets || []) {
-      if (!b || !b.trim()) continue;
+      if (!b || !b.trim() || isMetadataLine(b)) continue;
       drawBullet(b);
     }
     if (!isLast) y -= 7;
@@ -449,7 +461,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     let lx = MARGIN;
     if (name) {
-      page.drawText(name, { x: lx, y, size, font: fonts.bold, color: NAVY });
+      page.drawText(name, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(name, size);
     }
     if (role) {
@@ -486,7 +498,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     y -= 2;
     for (const b of p.bullets || []) {
-      if (!b || !b.trim()) continue;
+      if (!b || !b.trim() || isMetadataLine(b)) continue;
       drawBullet(b);
     }
     if (!isLast) y -= 7;
@@ -507,7 +519,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const headLine = gpaSuffix ? `${degree} | ${gpaSuffix}` : degree;
     let lx = MARGIN;
     if (degree) {
-      page.drawText(degree, { x: lx, y, size, font: fonts.bold, color: NAVY });
+      page.drawText(degree, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(degree, size);
     }
     if (gpaSuffix) {
@@ -579,10 +591,12 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     }
   };
 
+  // Certification names are plain lines, never bullet list items.
   const drawCertifications = (items: string[]) => {
     for (const c of items) {
       if (!c || !c.trim()) continue;
-      drawBullet(c, 10);
+      drawWrapped(c, MARGIN, 10, fonts.regular, BODY, CONTENT_W, 1.35);
+      y -= 2;
     }
   };
 
@@ -721,11 +735,6 @@ function renderResume(
     r.drawSummary(data.summary);
   }
 
-  if (data.coreCompetencies && data.coreCompetencies.length > 0) {
-    r.drawSectionHeader("Core Competencies");
-    r.drawSkillsBlock([{ label: "Areas", items: data.coreCompetencies }]);
-  }
-
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -739,21 +748,25 @@ function renderResume(
     );
   }
 
+  // ONE skills section only: parsers take the first heading containing "skill"
+  // and stop, so Core Competencies is folded in here rather than standing alone.
+  const skillGroups: Array<{ label: string; items: string[] }> = [];
+  if (data.coreCompetencies?.length)
+    skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skills?.primary?.length)
+    skillGroups.push({ label: "Technical", items: data.skills.primary });
+  if (data.skills?.secondary?.length)
+    skillGroups.push({ label: "Additional", items: data.skills.secondary });
+  if (skillGroups.length > 0) {
+    r.drawSectionHeader("Technical Skills");
+    r.drawSkillsBlock(skillGroups);
+  }
+
   if (data.projects && data.projects.length > 0) {
-    r.drawSectionHeader("Selected Projects");
+    r.drawSectionHeader("Projects");
     data.projects.forEach((p, i) =>
       r.drawProjectEntry(p, i === data.projects.length - 1),
     );
-  }
-
-  if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
-    r.drawSectionHeader("Skills");
-    const groups: Array<{ label: string; items: string[] }> = [];
-    if (data.skills.primary?.length)
-      groups.push({ label: "Technical", items: data.skills.primary });
-    if (data.skills.secondary?.length)
-      groups.push({ label: "Additional", items: data.skills.secondary });
-    r.drawSkillsBlock(groups);
   }
 
   if (data.certifications && data.certifications.length > 0) {
@@ -1725,7 +1738,7 @@ async function handleRawContentRequest(body: {
 // DOCX BUILDER — premium navy design, ATS-safe single column
 // ============================================================
 
-const DOCX_NAVY = "16243F";
+const DOCX_NAVY = "1F4E79";
 const DOCX_BODY = "21232A";
 const DOCX_MUTED = "66707A";
 const DOCX_LINK = "0066CC";
@@ -1858,16 +1871,24 @@ function docxBullet(text: string): Paragraph {
     spacing: { after: 60, line: 290 },
     indent: { left: 360, hanging: 220 },
     children: [
-      TR({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      TR({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }),
       TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
     ],
+  });
+}
+
+// Plain (non-bullet) line, used for certification names and other metadata.
+function docxPlainLine(text: string): Paragraph {
+  return new Paragraph({
+    spacing: { after: 60, line: 290 },
+    children: [TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   });
 }
 
 function docxExperience(e: ExperienceEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [];
-  if (e.company) header.push(TR({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
+  if (e.company) header.push(TR({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   if (e.title) {
     if (header.length) header.push(TR({ text: " | ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
     header.push(TR({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
@@ -1878,14 +1899,14 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
     children: header,
   }));
-  for (const b of (e.bullets || [])) out.push(docxBullet(b));
+  for (const b of (e.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
   return out;
 }
 
 function docxProject(p: ProjectEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [
-    TR({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+    TR({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
   ];
   if (p.role) header.push(TR({ text: " | " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   if (p.dates) header.push(TR({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
@@ -1903,7 +1924,7 @@ function docxProject(p: ProjectEntry): Paragraph[] {
       ],
     }));
   }
-  for (const b of (p.bullets || [])) out.push(docxBullet(b));
+  for (const b of (p.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
   return out;
 }
 
@@ -1953,11 +1974,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     }));
   }
 
-  if (data.coreCompetencies?.length) {
-    children.push(...docxSectionHeader("Core Competencies"));
-    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
-  }
-
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -1968,23 +1984,26 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     for (const e of filteredExp) children.push(...docxExperience(e));
   }
 
-  if (data.projects?.length) {
-    children.push(...docxSectionHeader("Selected Projects"));
-    for (const p of data.projects) children.push(...docxProject(p));
+  // ONE skills section only, headed TECHNICAL SKILLS. Core competencies are
+  // folded in as a labelled line so no second "skill" heading can steal it.
+  const skillGroups: Array<{ label: string; items: string[] }> = [];
+  if (data.coreCompetencies?.length) skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skills?.primary?.length) skillGroups.push({ label: "Technical", items: data.skills.primary });
+  if (data.skills?.secondary?.length) skillGroups.push({ label: "Additional", items: data.skills.secondary });
+  if (skillGroups.length) {
+    children.push(...docxSectionHeader("Technical Skills"));
+    children.push(...docxSkills(skillGroups));
   }
 
-  if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
-    children.push(...docxSectionHeader("Skills"));
-    const groups: Array<{ label: string; items: string[] }> = [];
-    if (data.skills.primary?.length) groups.push({ label: "Technical", items: data.skills.primary });
-    if (data.skills.secondary?.length) groups.push({ label: "Additional", items: data.skills.secondary });
-    children.push(...docxSkills(groups));
+  if (data.projects?.length) {
+    children.push(...docxSectionHeader("Projects"));
+    for (const p of data.projects) children.push(...docxProject(p));
   }
 
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
-    for (const c of expandCertifications(data.certifications)) children.push(docxBullet(c));
+    for (const c of expandCertifications(data.certifications)) children.push(docxPlainLine(c));
   }
 
   if (data.achievements?.length) {

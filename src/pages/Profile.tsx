@@ -79,6 +79,7 @@ const Profile = () => {
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [draggedCertification, setDraggedCertification] = useState<number | null>(null);
+  const [draggedBullet, setDraggedBullet] = useState<{ exp: number; index: number } | null>(null);
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
   // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
@@ -1636,9 +1637,42 @@ const Profile = () => {
                             </Button>
                           </div>
                           <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Drag to reorder. Bullets print in exactly this order - nothing is re-sorted or removed on save.
+                            </p>
                             {(exp.bullets || []).map((bullet: string, bulletIndex: number) => (
-                              <div key={bulletIndex} className="flex gap-2 items-start">
-                                <span className="text-muted-foreground mt-2 text-sm">•</span>
+                              <div
+                                key={bulletIndex}
+                                className="flex gap-2 items-start"
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={() => {
+                                  if (
+                                    !draggedBullet ||
+                                    draggedBullet.exp !== expIndex ||
+                                    draggedBullet.index === bulletIndex
+                                  ) {
+                                    setDraggedBullet(null);
+                                    return;
+                                  }
+                                  const exps = [...(localProfile.professional_experience || [])];
+                                  const bullets = [...(exps[expIndex].bullets || [])];
+                                  const [moved] = bullets.splice(draggedBullet.index, 1);
+                                  bullets.splice(bulletIndex, 0, moved);
+                                  exps[expIndex] = { ...exps[expIndex], bullets };
+                                  updateLocalField('professional_experience', exps);
+                                  setDraggedBullet(null);
+                                }}
+                              >
+                                <span
+                                  draggable
+                                  onDragStart={() => setDraggedBullet({ exp: expIndex, index: bulletIndex })}
+                                  onDragEnd={() => setDraggedBullet(null)}
+                                  className="mt-2 shrink-0 cursor-grab"
+                                  aria-label={`Reorder bullet ${bulletIndex + 1}`}
+                                >
+                                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                </span>
+                                <span className="text-muted-foreground mt-2 text-sm">{bulletIndex + 1}.</span>
                                 <Textarea
                                   value={bullet}
                                   onChange={(e) => {
