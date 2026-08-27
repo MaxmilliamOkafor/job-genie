@@ -1974,11 +1974,6 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     }));
   }
 
-  if (data.coreCompetencies?.length) {
-    children.push(...docxSectionHeader("Core Competencies"));
-    children.push(...docxSkills([{ label: "Areas", items: data.coreCompetencies }]));
-  }
-
   const filteredExp = (data.experience || []).filter((e) => {
     if (isHeaderName(e.company)) return false;
     if (!e.company || e.company.trim().length < 2) return false;
@@ -1989,17 +1984,20 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
     for (const e of filteredExp) children.push(...docxExperience(e));
   }
 
-  if (data.projects?.length) {
-    children.push(...docxSectionHeader("Selected Projects"));
-    for (const p of data.projects) children.push(...docxProject(p));
+  // ONE skills section only, headed TECHNICAL SKILLS. Core competencies are
+  // folded in as a labelled line so no second "skill" heading can steal it.
+  const skillGroups: Array<{ label: string; items: string[] }> = [];
+  if (data.coreCompetencies?.length) skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skills?.primary?.length) skillGroups.push({ label: "Technical", items: data.skills.primary });
+  if (data.skills?.secondary?.length) skillGroups.push({ label: "Additional", items: data.skills.secondary });
+  if (skillGroups.length) {
+    children.push(...docxSectionHeader("Technical Skills"));
+    children.push(...docxSkills(skillGroups));
   }
 
-  if (data.skills && (data.skills.primary?.length || data.skills.secondary?.length)) {
-    children.push(...docxSectionHeader("Skills"));
-    const groups: Array<{ label: string; items: string[] }> = [];
-    if (data.skills.primary?.length) groups.push({ label: "Technical", items: data.skills.primary });
-    if (data.skills.secondary?.length) groups.push({ label: "Additional", items: data.skills.secondary });
-    children.push(...docxSkills(groups));
+  if (data.projects?.length) {
+    children.push(...docxSectionHeader("Projects"));
+    for (const p of data.projects) children.push(...docxProject(p));
   }
 
 
