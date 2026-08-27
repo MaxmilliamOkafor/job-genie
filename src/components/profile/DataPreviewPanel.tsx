@@ -25,6 +25,7 @@ export function DataPreviewPanel({ profile }: DataPreviewPanelProps) {
       profile?.certifications || [],
       profile?.certifications_excluded || [],
     ),
+    work_authorized_countries: profile?.work_authorized_countries || [],
   };
 
   const json = JSON.stringify(payload, null, 2);
