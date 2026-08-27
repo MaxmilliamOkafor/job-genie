@@ -148,7 +148,8 @@ const PAGE_H = 841.89;
 const MARGIN = 45; // ~0.62 inch
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-const NAVY = rgb(0.086, 0.137, 0.247);
+// Accent #1F4E79 - name and section headings only.
+const NAVY = rgb(0.122, 0.306, 0.475);
 const BODY = rgb(0.13, 0.14, 0.16);
 const MUTED = rgb(0.40, 0.43, 0.48);
 const LINK = rgb(0.0, 0.40, 0.80);
