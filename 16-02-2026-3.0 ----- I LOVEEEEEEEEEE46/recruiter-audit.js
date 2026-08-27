@@ -928,7 +928,41 @@
     if (next && next.toLowerCase() === headline.toLowerCase()) return { text, added: false };
     if (next && _TITLE_WORD.test(next) && next.indexOf('|') === -1
       && next.indexOf('@') === -1 && next.split(/\s+/).length <= 8) {
-      return { text, added: false };          // some headline is already there
+      // A HEADLINE THIS CODE DID NOT WRITE IS NOT AUTOMATICALLY TRUE.
+      //
+      // This returned here, unconditionally, on the reasoning that a
+      // headline already existed so there was nothing to add. The check
+      // above -- only ever a title the history contains -- was therefore
+      // applied to headlines this function WROTE and to no others.
+      //
+      // The tailoring prompt tells the model to put the posting's title
+      // on exactly this line ("TARGET TITLE LINE: the line immediately
+      // after the candidate's name is the job title being applied for").
+      // So the model writes it, this pass sees a headline and steps
+      // aside, and the document goes out claiming a title the candidate
+      // has never held -- "Business Operations Sr Analyst" above an
+      // employment block whose top entry reads "Software Engineer,
+      // Meta, January 2023 - Present". Verified on a real generated
+      // file: "Director of Business Operations" survives this pass with
+      // no warning.
+      //
+      // The prompt calls that positioning rather than a claim. A parser
+      // cannot read intent. EVERY resume parser takes the line under the
+      // name as the title held now, so the stored candidate record says
+      // one thing and the employment history says another, and the
+      // recruiter reading both sees a person misrepresenting their job.
+      // On an ATS that merges candidates by email address, the stored
+      // headline also changes on every application to the same employer.
+      //
+      // So the truthfulness rule applies to the line however it got
+      // there. A held title stays. An unheld one is replaced by the real
+      // most recent title, which is the same value this function would
+      // have written into an empty slot.
+      if (blob.indexOf(next.toLowerCase()) !== -1) return { text, added: false };
+      if (next.toLowerCase() === headline.toLowerCase()) return { text, added: false };
+      lines[nameAt + 1] = headline;
+      return { text: lines.join('\n'), added: false, replaced: true,
+        headline, was: next };
     }
 
     lines.splice(nameAt + 1, 0, headline);
@@ -4344,6 +4378,24 @@
           report.fixes.push('Added the role headline under your name ("' + hl.headline
             + '") -- the first line a recruiter\'s eye lands on, and only ever a '
             + 'title your history actually contains');
+        } else if (hl.replaced) {
+          outCV = hl.text;
+          report.fixes.push('Replaced the headline under your name: "' + hl.was
+            + '" is a title your history does not contain, so it now reads "'
+            + hl.headline + '". Every resume parser stores the line under the name '
+            + 'as the job you hold NOW, so the posting\'s title there contradicts '
+            + 'the employment block directly underneath it.');
+          report.warnings.push({
+            kind: 'headline-claimed-an-unheld-title',
+            was: hl.was,
+            now: hl.headline,
+            note: 'The tailoring wrote "' + hl.was + '" under your name. Your '
+              + 'employment history does not contain it, and a parser reads that '
+              + 'line as your current job title -- so the stored record said you '
+              + 'hold a role you have never held, above a history that says '
+              + 'otherwise. Corrected on this CV. The prompt rule that writes it '
+              + '(TARGET TITLE LINE) still needs changing at the source.',
+          });
         }
       } catch (e) {}
     }
