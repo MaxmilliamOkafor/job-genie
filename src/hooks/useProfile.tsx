@@ -30,6 +30,7 @@ export interface Profile {
   driving_license: boolean;
   visa_required: boolean;
   authorized_countries: string[];
+  work_authorized_countries: string[];
   veteran_status: boolean;
   disability: boolean;
   race_ethnicity: string | null;
@@ -99,6 +100,7 @@ export function useProfile() {
         setProfile({
           ...data,
           authorized_countries: (data.authorized_countries as string[]) || [],
+          work_authorized_countries: ((data as any).work_authorized_countries as string[]) || ['IE'],
           professional_experience: normalizedWorkExp,
           relevant_projects: Array.isArray((data as any).relevant_projects) ? (data as any).relevant_projects : [],
           education: Array.isArray(data.education) ? data.education : [],

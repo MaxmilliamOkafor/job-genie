@@ -612,6 +612,7 @@ export type Database = {
           veteran_status: boolean | null
           visa_required: boolean | null
           willing_to_relocate: boolean | null
+          work_authorized_countries: string[]
           zip_code: string | null
         }
         Insert: {
@@ -666,6 +667,7 @@ export type Database = {
           veteran_status?: boolean | null
           visa_required?: boolean | null
           willing_to_relocate?: boolean | null
+          work_authorized_countries?: string[]
           zip_code?: string | null
         }
         Update: {
@@ -720,6 +722,7 @@ export type Database = {
           veteran_status?: boolean | null
           visa_required?: boolean | null
           willing_to_relocate?: boolean | null
+          work_authorized_countries?: string[]
           zip_code?: string | null
         }
         Relationships: []

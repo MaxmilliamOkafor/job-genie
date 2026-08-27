@@ -54,6 +54,22 @@ import {
 
 
 
+// Countries offered for work authorisation (ISO 3166-1 alpha-2): Ireland plus the EEA.
+const WORK_AUTH_OPTIONS: { code: string; name: string }[] = [
+  { code: 'IE', name: 'Ireland' }, { code: 'AT', name: 'Austria' }, { code: 'BE', name: 'Belgium' },
+  { code: 'BG', name: 'Bulgaria' }, { code: 'HR', name: 'Croatia' }, { code: 'CY', name: 'Cyprus' },
+  { code: 'CZ', name: 'Czechia' }, { code: 'DK', name: 'Denmark' }, { code: 'EE', name: 'Estonia' },
+  { code: 'FI', name: 'Finland' }, { code: 'FR', name: 'France' }, { code: 'DE', name: 'Germany' },
+  { code: 'GR', name: 'Greece' }, { code: 'HU', name: 'Hungary' }, { code: 'IS', name: 'Iceland' },
+  { code: 'IT', name: 'Italy' }, { code: 'LV', name: 'Latvia' }, { code: 'LI', name: 'Liechtenstein' },
+  { code: 'LT', name: 'Lithuania' }, { code: 'LU', name: 'Luxembourg' }, { code: 'MT', name: 'Malta' },
+  { code: 'NL', name: 'Netherlands' }, { code: 'NO', name: 'Norway' }, { code: 'PL', name: 'Poland' },
+  { code: 'PT', name: 'Portugal' }, { code: 'RO', name: 'Romania' }, { code: 'SK', name: 'Slovakia' },
+  { code: 'SI', name: 'Slovenia' }, { code: 'ES', name: 'Spain' }, { code: 'SE', name: 'Sweden' },
+  { code: 'GB', name: 'United Kingdom' }, { code: 'US', name: 'United States' },
+  { code: 'CA', name: 'Canada' }, { code: 'CH', name: 'Switzerland' },
+];
+
 // Default ATS answers that pass knockout questions
 const DEFAULT_ATS_ANSWERS = {
   willing_to_relocate: true,
@@ -989,6 +1005,40 @@ const Profile = () => {
                 <Badge variant="secondary">Yes</Badge>
               </div>
             </div>
+
+            {/* Work authorisation */}
+            <div className="mt-6 p-3 border rounded-lg">
+              <Label>Work authorisation (no sponsorship required)</Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                ISO country codes where you can work without sponsorship. This answers every "are you legally
+                authorised to work in X" question on an application form, so a missing code is a knockout answer.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {WORK_AUTH_OPTIONS.map((c) => {
+                  const list: string[] = ((localProfile as any).work_authorized_countries || []) as string[];
+                  const on = list.includes(c.code);
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      disabled={!editMode}
+                      onClick={() => {
+                        const next = on ? list.filter((x) => x !== c.code) : [...list, c.code];
+                        updateLocalField('work_authorized_countries' as any, next);
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        on ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground'
+                      } ${editMode ? 'hover:border-primary' : 'opacity-70 cursor-default'}`}
+                      title={c.name}
+                    >
+                      {c.code}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+
             
             {/* Gender */}
             <div className="mt-4">
