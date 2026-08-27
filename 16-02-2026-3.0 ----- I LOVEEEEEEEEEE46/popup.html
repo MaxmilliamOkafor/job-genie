@@ -1170,6 +1170,14 @@
   </div>
 
   <!-- Debug Panel Scripts (MUST load before popup.js) -->
+  <!-- The debug export the user sends back is written by DebugLogger,
+       which persists to chrome.storage. It was loaded only as a content
+       script, so an export could contain the page-side "extension_loaded"
+       lines and NOTHING from the popup, where all the tailoring happens.
+       Every export therefore read "4 entries, 0 errors, 0 successes" no
+       matter what had gone wrong. Loaded first so it is available to the
+       scripts below. -->
+  <script src="debug-logger.js"></script>
   <script src="cache-manager.js"></script>
   <script src="strategic-keyword-integration.js"></script>
   <script src="qualification-threshold-engine.js"></script>

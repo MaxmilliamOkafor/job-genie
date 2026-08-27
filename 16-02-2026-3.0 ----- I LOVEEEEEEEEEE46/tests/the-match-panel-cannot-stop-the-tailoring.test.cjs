@@ -91,11 +91,34 @@ console.log('\nAND THE RENDERER RUNS WITH NO DOM AT ALL');
   }
 }
 
-console.log('\nAND A RUN THAT RETURNS NOTHING SAYS SO');
+console.log('\nAND A FAILURE REACHES THE LOG THE USER CAN EXPORT');
 {
-  t('  an empty CV from the tailoring is logged with the response keys',
-    /tailoring returned no usable CV text/.test(src) && /Keys on the response/.test(src),
+  // The console is gone the moment the popup closes, and the debug
+  // export is the artefact the user is actually asked to send back.
+  // DebugLogger persists to chrome.storage; popup.js's own _debugLogs
+  // array does not, and popup.html did not even load DebugLogger -- so
+  // every export read "4 entries, 0 errors, 0 successes" whatever had
+  // gone wrong, and three rounds were spent guessing from screenshots.
+  const html = fs.readFileSync(path.join(DIR, 'popup.html'), 'utf8');
+  t('  popup.html loads debug-logger.js', /src="debug-logger\.js"/.test(html),
+    'the export cannot see anything the popup does');
+  // Comments mention popup.js by name, so compare the script TAGS.
+  t('  ...before the scripts that use it',
+    html.indexOf('src="debug-logger.js"') < html.indexOf('src="popup.js"'),
+    'loaded too late to be available');
+  t('  the tailoring path logs through a wrapper that cannot throw',
+    /function jgLog\(level, event, message, data\) \{[\s\S]*?catch \(e\) \{ \/\* logging must never break the run \*\/ \}/.test(src),
+    'logging can itself kill the run it is reporting on');
+  t('  an empty CV is logged as an error with the response keys',
+    /jgLog\('error', 'tailor_empty_cv'/.test(src) && /responseKeys/.test(src),
     'a silent empty result again');
+  t('  a successful run is logged too, so silence means "never ran"',
+    /jgLog\('success', 'tailor_ok'/.test(src),
+    'a missing success entry is indistinguishable from a missing logger');
+  t('  and the top-level failure carries its stack and context',
+    /jgLog\('error', 'extract_and_apply_failed'/.test(src)
+      && /stack: error && error\.stack/.test(src) && /hasSession/.test(src),
+    'the one failure the user is asked to export is console-only');
 }
 
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');

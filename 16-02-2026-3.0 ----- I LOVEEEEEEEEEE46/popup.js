@@ -1320,6 +1320,18 @@ class ATSTailor {
       
     } catch (error) {
       console.error('[ATS Tailor Popup] Error:', error);
+      // Into the persisted log as well, because the console is gone the
+      // moment the popup closes and this is the failure the user is
+      // asked to send back.
+      jgLog('error', 'extract_and_apply_failed',
+        (error && error.message) || String(error), {
+          stack: error && error.stack,
+          step: 'Extract & Apply Keywords to CV',
+          jobUrl: this.currentJob && this.currentJob.url,
+          jobTitle: this.currentJob && this.currentJob.title,
+          hasSession: !!(this.session && this.session.access_token),
+          aiProvider: this.aiProvider,
+        });
       
       // Error - INSTANT RESET to BLUE READY state (show toast for error)
       btn.style.background = '';
@@ -6334,10 +6346,20 @@ class ATSTailor {
       // question the panel answers from the text itself.
       this._tailoringRanThisJob = true;
       if (!sanitisedCv || sanitisedCv.length < 80) {
-        console.error('[ATS Tailor] tailoring returned no usable CV text. '
-          + 'result.tailoredResume length was '
-          + String((result.tailoredResume || '').length)
-          + '. Keys on the response: ' + Object.keys(result || {}).join(', '));
+        jgLog('error', 'tailor_empty_cv',
+          'The tailoring returned no usable CV text', {
+            tailoredResumeLength: (result && result.tailoredResume || '').length,
+            sanitisedLength: (sanitisedCv || '').length,
+            responseKeys: Object.keys(result || {}),
+            coverLetterLength: (result && result.tailoredCoverLetter || '').length,
+            jobUrl: this.currentJob && this.currentJob.url,
+            jobTitle: this.currentJob && this.currentJob.title,
+          });
+      } else {
+        jgLog('success', 'tailor_ok', 'Tailored CV produced', {
+          cvLength: sanitisedCv.length,
+          jobTitle: this.currentJob && this.currentJob.title,
+        });
       }
       const sanitisedCover = sanitise(this.normalizeDocumentText(result.tailoredCoverLetter || result.coverLetter, 'cover'));
 
@@ -9814,6 +9836,32 @@ ATSTailor.prototype.testAPIKeyConnection = async function() {
 };
 
 // Debug report data collection
+// ██ THE EXPORT HAS TO SEE THE TAILORING ██
+//
+// popup.js keeps its own in-memory _debugLogs array, capped at 50 and
+// lost when the popup closes. The debug EXPORT is written by a
+// different thing: window.DebugLogger, which persists to
+// chrome.storage. That was loaded only as a content script, so the file
+// the user sends back could contain the page's "extension_loaded"
+// lines and nothing whatever from the popup, where the entire tailoring
+// pipeline runs.
+//
+// Every export therefore read "total 4, errors 0, successes 0" no
+// matter what had failed, and three rounds of debugging were spent
+// guessing from screenshots because the one diagnostic we asked for
+// was structurally blind.
+//
+// debug-logger.js is now loaded by popup.html. This wrapper is what the
+// tailoring path calls: it never throws, and it does nothing when the
+// logger is absent, so it cannot itself become the reason a run dies.
+function jgLog(level, event, message, data) {
+  try {
+    const L = (typeof window !== 'undefined') && window.DebugLogger;
+    if (L && typeof L[level] === 'function') L[level](event, message, data);
+    else console.log('[ATS Tailor] ' + event + ':', message, data || '');
+  } catch (e) { /* logging must never break the run */ }
+}
+
 ATSTailor.prototype._debugLogs = [];
 
 ATSTailor.prototype.addDebugLog = function(stage, data) {
