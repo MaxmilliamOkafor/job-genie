@@ -13,14 +13,10 @@
 //
 // Rendering is not load-bearing and now has its own boundary.
 //
-// The second fault in the same place: the panel could describe only one
-// moment. Drawn BEFORE tailoring, matchedKeywords is [] and there is no
-// CV, which is the normal state of a job nobody has tailored yet. The
-// gauge used to hard-code "100%" and "Perfect profile match!", which
-// was wrong there and everywhere else; replacing it with a real
-// percentage made that state render as a red 0% reading "Nothing
-// matched", which is wrong in a new way and reads as a broken tool.
-// Three states now: pending, done, failed.
+// The three-state redesign that first accompanied this fix has been
+// REVERTED. It changed how the panel looks, which was never asked for
+// and made a working screen look broken. What is kept here is only the
+// part that cannot be seen: the render can no longer take the run down.
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -57,8 +53,8 @@ console.log('\nAND THE RENDERER RUNS WITH NO DOM AT ALL');
     return new Function('return (' + body + ')')();
   };
   const render = lift('  _renderMatchAnalysis() {', 'render');
-  const gauge = lift('  updateMatchGauge(score, matched, total, phase) {', 'gauge');
-  const chips = lift('  batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords, phase) {', 'chips');
+  const gauge = lift('  updateMatchGauge(score, matched, total) {', 'gauge');
+  const chips = lift('  batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords) {', 'chips');
   const clean = lift('  cleanKeywordList(list) {', 'clean');
   t('  all four methods lift out of popup.js',
     !!(render && gauge && chips && clean),
@@ -95,23 +91,9 @@ console.log('\nAND THE RENDERER RUNS WITH NO DOM AT ALL');
   }
 }
 
-console.log('\nTHE THREE STATES ARE DISTINGUISHED');
+console.log('\nAND A RUN THAT RETURNS NOTHING SAYS SO');
 {
-  t('  a phase is computed from whether a run happened',
-    /_tailoringRanThisJob \? 'done'/.test(src) && /'failed' : 'pending'/.test(src),
-    'the panel cannot tell "not started" from "failed"');
-  t('  the pending gauge does not show a percentage',
-    /if \(phase === 'pending'\)/.test(src) && /Not tailored yet/.test(src),
-    'a job nobody has tailored still renders as a score');
-  t('  ...and its chips are neutral, not crosses',
-    /Before tailoring, every keyword is legitimately unmatched/.test(src),
-    'unrun keywords still render as failures');
-  t('  the flag is cleared when a new posting is read',
-    (src.match(/_tailoringRanThisJob = false/g) || []).length >= 2,
-    'a CV from the previous job would be scored against this one');
-  t('  and set when the tailoring returns',
-    /_tailoringRanThisJob = true/.test(src), 'nothing ever leaves the pending state');
-  t('  a run that returns no CV text is logged with the response keys',
+  t('  an empty CV from the tailoring is logged with the response keys',
     /tailoring returned no usable CV text/.test(src) && /Keys on the response/.test(src),
     'a silent empty result again');
 }
