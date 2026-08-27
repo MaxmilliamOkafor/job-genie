@@ -1739,7 +1739,7 @@ async function handleRawContentRequest(body: {
 // DOCX BUILDER — premium navy design, ATS-safe single column
 // ============================================================
 
-const DOCX_NAVY = "16243F";
+const DOCX_NAVY = "1F4E79";
 const DOCX_BODY = "21232A";
 const DOCX_MUTED = "66707A";
 const DOCX_LINK = "0066CC";
@@ -1889,7 +1889,7 @@ function docxPlainLine(text: string): Paragraph {
 function docxExperience(e: ExperienceEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [];
-  if (e.company) header.push(TR({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }));
+  if (e.company) header.push(TR({ text: e.company, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   if (e.title) {
     if (header.length) header.push(TR({ text: " | ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }));
     header.push(TR({ text: e.title, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
@@ -1900,14 +1900,14 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
     children: header,
   }));
-  for (const b of (e.bullets || [])) out.push(docxBullet(b));
+  for (const b of (e.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
   return out;
 }
 
 function docxProject(p: ProjectEntry): Paragraph[] {
   const out: Paragraph[] = [];
   const header: TextRun[] = [
-    TR({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_NAVY }),
+    TR({ text: p.name || "", font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }),
   ];
   if (p.role) header.push(TR({ text: " | " + p.role, font: DOCX_FONT, size: 21, bold: true, color: DOCX_BODY }));
   if (p.dates) header.push(TR({ text: "\t" + p.dates, font: DOCX_FONT, size: 19, italics: true, color: DOCX_MUTED }));
@@ -1925,7 +1925,7 @@ function docxProject(p: ProjectEntry): Paragraph[] {
       ],
     }));
   }
-  for (const b of (p.bullets || [])) out.push(docxBullet(b));
+  for (const b of (p.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
   return out;
 }
 
@@ -2006,7 +2006,7 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
 
   if (data.certifications?.length) {
     children.push(...docxSectionHeader("Certifications"));
-    for (const c of expandCertifications(data.certifications)) children.push(docxBullet(c));
+    for (const c of expandCertifications(data.certifications)) children.push(docxPlainLine(c));
   }
 
   if (data.achievements?.length) {
