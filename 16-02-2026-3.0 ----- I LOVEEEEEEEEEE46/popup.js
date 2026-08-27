@@ -6684,6 +6684,11 @@ class ATSTailor {
             experience: Array.isArray(profile.professional_experience)
               ? profile.professional_experience
               : (Array.isArray(profile.professionalExperience) ? profile.professionalExperience : []),
+            // Where the candidate ACTUALLY lives, so the header stops
+            // claiming the posting's location. See ensureTruthfulLocation.
+            profileLocation: [profile.city, profile.country].filter(Boolean).join(', ')
+              || profile.location || this._defaultLocation || '',
+            jdLocation: this.currentJob?.location || '',
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;
@@ -7817,6 +7822,51 @@ class ATSTailor {
    * Uses structuredCv from tailoring step - NO re-parsing
    */
   async downloadDocument(type) {
+    // ██ THE DOWNLOAD IS THE SAME FILE AS THE ATTACHMENT ██
+    //
+    // This reached for cvPdf first and fell through to a server-side PDF
+    // build. Attachments have been DOCX for months, so the two buttons
+    // handed out DIFFERENT DOCUMENTS from the same generation -- and the
+    // PDF came from professional-pdf-engine.js, which none of the
+    // renderer work touches. That file emits
+    //
+    //   PROFESSIONAL SUMMARY, WORK EXPERIENCE, EDUCATION,
+    //   CORE COMPETENCIES, TECHNICAL SKILLS, CERTIFICATIONS
+    //
+    // Education third, and TWO headings containing the word "skill" --
+    // the exact parse bug fixed in the DOCX, where a parser takes the
+    // first match and stops, so the competencies came back EMPTY on a
+    // live parse. Anyone downloading and emailing that file was sending
+    // the broken document while believing it was the good one.
+    //
+    // So: hand back the DOCX that was attached. The PDF path below stays
+    // reachable only when no DOCX exists at all.
+    const docx = type === 'cv' ? this.generatedDocuments.cvDocx : this.generatedDocuments.coverDocx;
+    if (docx) {
+      const docxName = (type === 'cv'
+        ? this.generatedDocuments.cvDocxFileName : this.generatedDocuments.coverDocxFileName)
+        || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_`
+          .replace(/_+/g, '_') + (type === 'cv' ? 'CV.docx' : 'Cover_Letter.docx');
+      try {
+        const bytes = Uint8Array.from(atob(docx), (c) => c.charCodeAt(0));
+        const blob = new Blob([bytes], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = docxName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.showToast('✅ Downloaded!', 'success');
+        return;
+      } catch (e) {
+        console.warn('[ATS Tailor] DOCX download failed, falling back:', e && e.message);
+      }
+    }
+
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const rawTextDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
 

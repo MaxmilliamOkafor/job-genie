@@ -970,6 +970,82 @@
   }
 
   // ===================================================================
+  // THE HEADER SAYS WHERE YOU LIVE, NOT WHERE THE JOB IS
+  // -------------------------------------------------------------------
+  // A CV generated for a Sao Paulo posting went out reading
+  //
+  //   Sao Paulo, BR  |  +353 087 426 1508  |  maxokafordev@gmail.com
+  //
+  // A Brazilian address and an Irish phone number, on one line. The
+  // location is rewritten to the POSTING's location on the theory that
+  // it matches what the recruiter is filtering for. It does, and that
+  // is the problem: it wins the filter by asserting a fact that is not
+  // true, and the contradiction is visible in the next eight characters
+  // of the same line, on a document sitting beside a LinkedIn profile
+  // that says Dublin.
+  //
+  // Two things follow and both are worse than not matching the filter.
+  // A screening question about work authorisation is now answered
+  // against a country the candidate does not live in. And a recruiter
+  // who notices reads it as a false statement on an application rather
+  // than as aggressive targeting, which ends that application and any
+  // future one at the same employer.
+  //
+  // Relocation is a real and sayable thing. "Dublin, Ireland (open to
+  // relocation)" claims nothing untrue, keeps the candidate in the
+  // running for a role elsewhere, and reads as intent rather than as a
+  // residence. So the real location goes back on the page, and the
+  // willingness is stated in words.
+  //
+  // Only ever the profile's own value. With no profile location to put
+  // back this does nothing at all, because guessing is what produced
+  // the problem.
+  const _CONTACT_LINE = /[|·•]/;
+  function ensureTruthfulLocation(cvText, profileLocation, jobLocation) {
+    const text = String(cvText || '');
+    const real = String(profileLocation || '').replace(/\s+/g, ' ').trim();
+    if (!text || !real) return { text, changed: false };
+
+    const lines = text.split('\n');
+    // The contact line: the first line with a pipe, an email or a phone,
+    // inside the first handful of lines.
+    let at = -1;
+    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+      const l = lines[i];
+      if (!l.trim()) continue;
+      if (_CONTACT_LINE.test(l) && (/@/.test(l) || /\+?\d[\d\s().-]{6,}/.test(l))) { at = i; break; }
+    }
+    if (at === -1) return { text, changed: false };
+
+    const parts = lines[at].split(/\s*[|·•]\s*/).map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) return { text, changed: false };
+
+    // The location segment is the one that is not an email, a phone or a
+    // URL. Conventionally the first, but not assumed to be.
+    let seg = -1;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (/@/.test(p) || /https?:|www\.|\.com|\.io|\.dev|\.app/i.test(p)) continue;
+      if (/\+?\d[\d\s().-]{6,}/.test(p)) continue;
+      if (!/[A-Za-z]/.test(p)) continue;
+      seg = i; break;
+    }
+    if (seg === -1) return { text, changed: false };
+
+    const shown = parts[seg];
+    // Already the truth? A city match is enough: "Dublin, IE" and
+    // "Dublin, Ireland" are the same claim.
+    const city = (s) => String(s).split(',')[0].trim().toLowerCase();
+    if (city(shown) === city(real)) return { text, changed: false };
+
+    const job = String(jobLocation || '').replace(/\s+/g, ' ').trim();
+    const elsewhere = job && city(job) !== city(real);
+    parts[seg] = elsewhere ? real + ' (open to relocation)' : real;
+    lines[at] = parts.join('  |  ');
+    return { text: lines.join('\n'), changed: true, was: shown, now: parts[seg] };
+  }
+
+  // ===================================================================
   // A COMPANY LINE IS THE COMPANY, ON ITS OWN
   // -------------------------------------------------------------------
   // A generated CV opened its experience section with:
@@ -4151,12 +4227,19 @@
     relevantProjects = null,
     education = null,
     experience = null,
+    // The candidate's ACTUAL location, from their profile. Not the
+    // posting's. See ensureTruthfulLocation.
+    profileLocation = '',
+    // The posting's location, used only to decide whether the relocation
+    // note is worth adding. Never printed as the candidate's own.
+    jdLocation = '',
     flags = {},
   } = {}) {
     const t0 = Date.now();
     cvText = _cleanCorruption(cvText, 'cv');
     coverLetterText = _cleanCorruption(coverLetterText, 'cover');
     const f = {
+      truthfulLocation: flags.truthfulLocation !== false,
       buzzwords: flags.buzzwords !== false,
       quantification: flags.quantification !== false,
       vocabulary: flags.vocabulary !== false,
@@ -4413,6 +4496,42 @@
               + 'hold a role you have never held, above a history that says '
               + 'otherwise. Corrected on this CV. The prompt rule that writes it '
               + '(TARGET TITLE LINE) still needs changing at the source.',
+          });
+        }
+      } catch (e) {}
+    }
+
+    // The header states where the candidate lives, not where the job is.
+    // Runs beside the headline fix because it is the same fault on the
+    // next line down: a field a parser reads as fact, filled with the
+    // posting's value instead of the candidate's.
+    // ONE FLAG TURNS IT OFF: flags.truthfulLocation === false.
+    //
+    // Asked to leave the header alone "if it is not causing serious
+    // issue". My reading is that it is, and the reason is not taste: a
+    // residence is a FACT a form asks about separately, so the page
+    // asserting Sao Paulo while the phone number says +353 is not
+    // aggressive targeting, it is an application that contradicts
+    // itself in one line. It also makes every work-authorisation answer
+    // on the same form refer to the wrong country. So this defaults on,
+    // and it is one flag to disable rather than a code change.
+    if (outCV && profileLocation && f.truthfulLocation) {
+      try {
+        const loc = ensureTruthfulLocation(outCV, profileLocation, jdLocation);
+        if (loc.changed) {
+          outCV = loc.text;
+          report.fixes.push('Header location corrected from "' + loc.was + '" to "'
+            + loc.now + '" -- it is read as where you live, and it sat beside '
+            + 'your own phone number saying otherwise.');
+          report.warnings.push({
+            kind: 'header-claimed-the-jobs-location',
+            was: loc.was,
+            now: loc.now,
+            note: 'The CV header said "' + loc.was + '", which is the posting\'s '
+              + 'location rather than yours. It matches what a recruiter filters '
+              + 'on by asserting something untrue, on the same line as a phone '
+              + 'number from another country, and it makes every work '
+              + 'authorisation answer on the form refer to the wrong place.',
           });
         }
       } catch (e) {}

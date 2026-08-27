@@ -146,6 +146,93 @@
   };
 
   // ===================================================================
+  // WORK AUTHORISATION IS A COUNTRY-BY-COUNTRY FACT
+  // -------------------------------------------------------------------
+  // DEFAULTS.authorized was 'Yes' and DEFAULTS.sponsorship was 'No', and
+  // both were returned for every posting on earth. For an applicant in
+  // Ireland that is true of Ireland, the EEA and the UK -- the Common
+  // Travel Area -- and false of the United States, Brazil, Canada and
+  // everywhere else.
+  //
+  // It fails in the direction that LOOKS like success. A blanket "Yes,
+  // authorised" and "No, no sponsorship needed" clears the knockout
+  // filter, so the application progresses to a human, and the first
+  // screening call establishes that the form said something untrue.
+  // That does not read as a form-filling bug. It ends the conversation,
+  // and at that employer it ends the next one too.
+  //
+  // The question almost always names the country -- "Are you legally
+  // authorised to work in the United States?" -- so no extra plumbing
+  // is needed to know which country is being asked about. When it names
+  // one, answer for THAT country. When it does not, the posting is
+  // usually local and the old default is right.
+  //
+  // Nothing here guesses in the applicant's favour. A country the
+  // profile does not claim is answered honestly, which may cost the
+  // application, which is the correct outcome for a job the applicant
+  // cannot lawfully take without sponsorship.
+  const _EEA = ['IE', 'DE', 'FR', 'NL', 'ES', 'IT', 'PT', 'BE', 'AT', 'SE', 'NO',
+    'DK', 'FI', 'PL', 'GR', 'CZ', 'HU', 'RO', 'BG', 'HR', 'SK', 'SI', 'LT', 'LV',
+    'EE', 'LU', 'MT', 'CY', 'IS', 'LI'];
+
+  // Which countries this applicant can work in with no sponsorship.
+  // An explicit profile list always wins; otherwise it is derived from
+  // where they live, using only relationships that are matters of law.
+  function authorisedCountries(p) {
+    const P = p || {};
+    const explicit = P.work_authorized_countries || P.workAuthorizedCountries
+      || P.authorised_countries || P.authorized_countries;
+    if (Array.isArray(explicit) && explicit.length) {
+      return explicit.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean);
+    }
+    const home = String(P.country || P.location || P.city || '').toUpperCase();
+    const iso = Object.keys(ISO2_NAMES).find((k) => home === k
+      || home.indexOf(ISO2_NAMES[k].toUpperCase()) !== -1) || '';
+    if (!iso) return [];
+    // An EEA citizenship carries the whole EEA, and Ireland and the UK
+    // carry each other under the Common Travel Area.
+    if (_EEA.indexOf(iso) !== -1) {
+      return _EEA.concat(iso === 'IE' ? ['GB', 'UK'] : []);
+    }
+    if (iso === 'GB' || iso === 'UK') return ['GB', 'UK', 'IE'];
+    return [iso];
+  }
+
+  // The country a question is asking about, if it names one.
+  function countryInQuestion(question) {
+    // Punctuation stripped to spaces first. Matching on " australia "
+    // against "...to work in Australia?" fails on the question mark,
+    // and a country that is not detected falls through to the local
+    // default -- which is the exact wrong answer this function exists
+    // to prevent.
+    const l = ' ' + String(question || '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+    for (const iso of Object.keys(ISO2_NAMES)) {
+      const name = ISO2_NAMES[iso].toLowerCase();
+      if (l.indexOf(' ' + name + ' ') !== -1) return iso;
+    }
+    for (const [re, iso] of [[/\b(the )?u\.?s\.?a?\b/, 'US'], [/\bunited states\b/, 'US'],
+      [/\bu\.?k\.?\b/, 'GB'], [/\bbrazil|brasil\b/, 'BR'], [/\bcanada\b/, 'CA'],
+      [/\bmexico\b/, 'MX'], [/\bjapan\b/, 'JP'], [/\bchina\b/, 'CN'],
+      [/\buae|emirates\b/, 'AE'], [/\bsouth africa\b/, 'ZA'],
+      [/\beuropean union|\bthe eu\b|\beea\b/, 'EU']]) {
+      if (re.test(l)) return iso;
+    }
+    return '';
+  }
+
+  // '' when the question names no country, so the caller keeps its own
+  // default and nothing changes for an ordinary local application.
+  function authorisedForQuestion(question, p) {
+    const iso = countryInQuestion(question);
+    if (!iso) return '';
+    const allowed = authorisedCountries(p);
+    if (!allowed.length) return '';          // nothing known: do not guess
+    if (iso === 'EU') return allowed.some((c) => _EEA.indexOf(c) !== -1) ? 'Yes' : 'No';
+    return allowed.indexOf(iso) !== -1 ? 'Yes' : 'No';
+  }
+
+  // ===================================================================
   // YEARS OF EXPERIENCE
   // -------------------------------------------------------------------
   // Every "years of X" question used to get the same constant back: the
@@ -347,8 +434,16 @@
       // grounds for withdrawing an offer later.
       return P.years ? String(P.years) : '';
     }
-    if (/authoriz|authoris|legally .*(work|entitled)|eligible to work|right to work|work .*(right|permit).*(yes|no)?/.test(l)) return P.work_authorized || DEFAULTS.authorized;
-    if (/sponsor|visa|immigration|work.?permit/.test(l)) return P.sponsorship || DEFAULTS.sponsorship;
+    if (/authoriz|authoris|legally .*(work|entitled)|eligible to work|right to work|work .*(right|permit).*(yes|no)?/.test(l)) {
+      const byCountry = authorisedForQuestion(label, P);
+      return byCountry || P.work_authorized || DEFAULTS.authorized;
+    }
+    if (/sponsor|visa|immigration|work.?permit/.test(l)) {
+      // Sponsorship is the same fact asked the other way round.
+      const byCountry = authorisedForQuestion(label, P);
+      if (byCountry) return byCountry === 'Yes' ? 'No' : 'Yes';
+      return P.sponsorship || DEFAULTS.sponsorship;
+    }
     if (/relocat|willing to move/.test(l)) return DEFAULTS.relocation;
     if (/remote|work from home|hybrid|on.?site/.test(l)) return DEFAULTS.remote;
     if (/notice.?period|how soon|when can you start|available .*start|start.?date|availab/.test(l)) {
@@ -470,16 +565,23 @@
       // "without sponsorship", "without requiring visa sponsorship",
       // "without the need for employer sponsorship" -- all the same
       // inversion, so match across the words between the two.
+      // The country the question names outranks any stored preference:
+      // "do you require sponsorship to work in the United States" is a
+      // question about the United States, not about the applicant's
+      // usual answer.
+      const byCountry = authorisedForQuestion(question, P);
+      const needsSponsor = byCountry ? (byCountry === 'Yes' ? 'No' : 'Yes')
+        : _pref(P.sponsorship_required, 'No');
       if (/without[a-z ]{0,30}sponsor|not require|dont require|do not need|no sponsor/.test(l)) {
-        // Inverted phrasing, so invert the SAME default (no sponsorship
-        // needed) rather than defaulting separately -- defaulting to the
-        // opposite here made the two phrasings contradict each other.
-        return _pref(P.sponsorship_required, 'No') === 'Yes' ? 'No' : 'Yes';
+        // Inverted phrasing, so invert the SAME answer rather than
+        // defaulting separately -- defaulting to the opposite here made
+        // the two phrasings contradict each other.
+        return needsSponsor === 'Yes' ? 'No' : 'Yes';
       }
-      return _pref(P.sponsorship_required, 'No');
+      return needsSponsor;
     }
     if (/authoriz|authoris|legally (?:able|entitled|permitted|allowed)|right to work|eligible to work|permission to work|permitted to work/.test(l)) {
-      return _pref(P.work_authorized, 'Yes');
+      return authorisedForQuestion(question, P) || _pref(P.work_authorized, 'Yes');
     }
 
     // --- location / working pattern ----------------------------------
@@ -913,6 +1015,7 @@
   global.AutofillCore = {
     __jg: true,
     labelFor, questionFor, answerFor, yesNoFor, isYesNoOptions, fillContainer, loadProfile, isToggleOn, DEFAULT_ON,
+    authorisedCountries, countryInQuestion, authorisedForQuestion,
     setValue, fillSelect, fillRadioGroup, fillCustomDropdown,
     isVisible, optionMatches, escapeSelector, DEFAULTS,
     // Exported so the boundary between "motivation" and "claim", and the
