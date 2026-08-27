@@ -580,10 +580,12 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     }
   };
 
+  // Certification names are plain lines, never bullet list items.
   const drawCertifications = (items: string[]) => {
     for (const c of items) {
       if (!c || !c.trim()) continue;
-      drawBullet(c, 10);
+      drawWrapped(c, MARGIN, 10, fonts.regular, BODY, CONTENT_W, 1.35);
+      y -= 2;
     }
   };
 
