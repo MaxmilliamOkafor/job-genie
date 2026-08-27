@@ -1872,9 +1872,17 @@ function docxBullet(text: string): Paragraph {
     spacing: { after: 60, line: 290 },
     indent: { left: 360, hanging: 220 },
     children: [
-      TR({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_NAVY }),
+      TR({ text: "\u2022  ", font: DOCX_FONT, size: 21, color: DOCX_MUTED }),
       TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY }),
     ],
+  });
+}
+
+// Plain (non-bullet) line, used for certification names and other metadata.
+function docxPlainLine(text: string): Paragraph {
+  return new Paragraph({
+    spacing: { after: 60, line: 290 },
+    children: [TR({ text, font: DOCX_FONT, size: 21, color: DOCX_BODY })],
   });
 }
 
