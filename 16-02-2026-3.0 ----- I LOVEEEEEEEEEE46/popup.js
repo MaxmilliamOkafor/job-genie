@@ -4282,10 +4282,61 @@ class ATSTailor {
     }
   }
 
+  // ██ "est", "based", "strong", "ability", "working", "related" ██
+  //
+  // A live posting produced this keyword set: business, operational,
+  // support, experience, incident, management, data, technology,
+  // service, ntt, analysis, stakeholders, process, analyst, manager,
+  // working, solutions, application, teams, opportunity, enterprise,
+  // technical, strong, skills, ability, incidents, requests, processes,
+  // improvement, related, communication, remote, latam, est, based.
+  //
+  // Single tokens, several of them pure grammar. That is the frequency
+  // fallback, not the AI extractor -- and it matters beyond the panel,
+  // because this same list is passed to the audit as jobKeywords, where
+  // it decides which skill groups lead the TECHNICAL SKILLS section and
+  // which bullets are judged relevant. "strong" and "based" ranking a
+  // skills section is noise steering the whole document.
+  //
+  // Filtered here, at the boundary, because it is the one place every
+  // producer of this list flows through.
+  static get _KEYWORD_JUNK() {
+    return new Set(['est', 'based', 'strong', 'ability', 'able', 'working', 'work',
+      'related', 'relevant', 'experience', 'experienced', 'skills', 'skill',
+      'opportunity', 'role', 'position', 'job', 'candidate', 'candidates', 'team',
+      'teams', 'company', 'business', 'good', 'great', 'excellent', 'strongly',
+      'preferred', 'required', 'requirements', 'responsibilities', 'plus', 'etc',
+      'years', 'year', 'new', 'well', 'high', 'must', 'ideal', 'ideally', 'you',
+      'your', 'our', 'we', 'they', 'this', 'that', 'with', 'and', 'for', 'the']);
+  }
+
+  cleanKeywordList(list) {
+    const junk = ATSTailor._KEYWORD_JUNK;
+    const seen = new Set();
+    return (Array.isArray(list) ? list : []).filter((raw) => {
+      const k = String(raw == null ? '' : raw).trim();
+      if (!k) return false;
+      const lc = k.toLowerCase();
+      if (seen.has(lc)) return false;
+      // A single short word that is grammar rather than a skill.
+      if (lc.indexOf(' ') === -1) {
+        if (junk.has(lc)) return false;
+        if (lc.length < 3) return false;           // "ai" and "ml" are real; guarded below
+      }
+      seen.add(lc);
+      return true;
+    }).filter((k) => {
+      // Two-letter terms that ARE skills survive the length rule above.
+      const lc = String(k).toLowerCase();
+      return lc.indexOf(' ') !== -1 || lc.length >= 3
+        || ['ai', 'ml', 'bi', 'qa', 'ux', 'ui', 'go', 'r', 'c'].indexOf(lc) !== -1;
+    });
+  }
+
   updateMatchAnalysisUI() {
     const matchScore = this.generatedDocuments.matchScore || 0;
-    const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
-    const missingKeywords = this.generatedDocuments.missingKeywords || [];
+    const matchedKeywords = this.cleanKeywordList(this.generatedDocuments.matchedKeywords);
+    const missingKeywords = this.cleanKeywordList(this.generatedDocuments.missingKeywords);
     const keywords = this.generatedDocuments.keywords || null;
     const totalKeywords = matchedKeywords.length + missingKeywords.length;
     
@@ -4343,30 +4394,47 @@ class ATSTailor {
   /**
    * OPTIMIZED: Update match gauge with animation
    */
+  // ██ THE GAUGE READ 100% WHILE NOTHING HAD MATCHED ██
+  //
+  // Reported as "tailoring not working anymore", with a screenshot of a
+  // full green ring reading 100% and "Perfect profile match!" directly
+  // above "0 of 35 keywords matched" and thirty-five red crosses.
+  //
+  // Both of those were hard-coded. The `score` argument was computed,
+  // passed in, and thrown away: the ring was forced to a full circle,
+  // the number to the literal string '100%', and the subtitle to
+  // "Perfect profile match!" on every render. So the one indicator that
+  // exists to say whether the run worked could only ever say yes, and a
+  // complete failure of the keyword pipeline displayed as success.
+  //
+  // A status display that cannot report a failure is worse than no
+  // status display, because it is trusted. It now shows the real
+  // number, and it says plainly when there is nothing to measure.
   updateMatchGauge(score, matched, total) {
+    const pct = total > 0 ? Math.round((matched / total) * 100) : null;
+
     const gaugeCircle = document.getElementById('matchGaugeCircle');
     if (gaugeCircle) {
       const circumference = 2 * Math.PI * 45;
-      const dashOffset = circumference - (score / 100) * circumference;
-      gaugeCircle.setAttribute('stroke-dashoffset', dashOffset.toString());
-      
-      // Profile Match is always 100% - always show green
-      let strokeColor = '#2ed573';
-      gaugeCircle.setAttribute('stroke', strokeColor);
-      // Force gauge to full circle for 100%
-      const fullDashOffset = circumference - (100 / 100) * circumference;
-      gaugeCircle.setAttribute('stroke-dashoffset', fullDashOffset.toString());
+      const shown = pct == null ? 0 : pct;
+      gaugeCircle.setAttribute('stroke-dashoffset',
+        (circumference - (shown / 100) * circumference).toString());
+      // Green only when it is earned.
+      gaugeCircle.setAttribute('stroke',
+        pct == null ? '#5a6472' : (pct >= 70 ? '#2ed573' : (pct >= 40 ? '#ffa502' : '#ff4757')));
     }
-    
+
     const matchPercentage = document.getElementById('matchPercentage');
-    // CRITICAL: Profile Match is ALWAYS 100% - matching YOUR profile to job requirements
-    if (matchPercentage) matchPercentage.textContent = '100%';
-    
+    if (matchPercentage) matchPercentage.textContent = pct == null ? '--' : pct + '%';
+
     const matchSubtitle = document.getElementById('matchSubtitle');
     if (matchSubtitle) {
-      matchSubtitle.textContent = 'Perfect profile match!';
+      matchSubtitle.textContent = pct == null
+        ? 'No keywords were extracted from this posting'
+        : (pct === 0 ? 'Nothing matched -- the CV text was not available to compare'
+          : (pct >= 70 ? 'Strong match' : (pct >= 40 ? 'Partial match' : 'Weak match')));
     }
-    
+
     const keywordCountBadge = document.getElementById('keywordCountBadge');
     if (keywordCountBadge) {
       keywordCountBadge.textContent = `${matched} of ${total} keywords matched`;
@@ -4382,9 +4450,38 @@ class ATSTailor {
   /**
    * OPTIMIZED: Batch update all keyword chips in one DOM operation
    */
+  // A CROSS MEANS "NOT IN YOUR CV", NOT "I HAD NO CV TO LOOK IN".
+  //
+  // The match is a plain substring test against generatedDocuments.cv.
+  // With that empty -- a popup reopened after the text was dropped from
+  // storage, a generation that failed halfway -- every keyword on earth
+  // fails the test, so thirty-five red crosses appear and read as a
+  // damning verdict on a CV nobody looked at. "data", "analysis",
+  // "process" and "management" cannot all be absent from a real CV; a
+  // zero that total is a missing input, not a result.
   batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords) {
-    const cvTextLower = cvText.toLowerCase();
-    const matchedSet = new Set(matchedKeywords.map(k => k.toLowerCase()));
+    const cvTextLower = String(cvText || '').toLowerCase();
+    const matchedSet = new Set((matchedKeywords || []).map(k => String(k).toLowerCase()));
+    const canCompare = cvTextLower.length > 80 || matchedSet.size > 0;
+    if (!canCompare) {
+      for (const id of ['highPriorityChips', 'mediumPriorityChips', 'lowPriorityChips']) {
+        const c = document.getElementById(id);
+        if (c) c.innerHTML = '';
+      }
+      const first = document.getElementById('highPriorityChips');
+      if (first) {
+        first.innerHTML = '<span class="keyword-chip missing"><span class="chip-text">'
+          + 'CV text unavailable, so nothing could be compared. Re-run the tailoring.'
+          + '</span></span>';
+      }
+      for (const id of ['highPriorityCount', 'mediumPriorityCount', 'lowPriorityCount']) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '--';
+      }
+      console.warn('[ATS Tailor] keyword panel: no CV text to match against '
+        + '(generatedDocuments.cv is empty). Chips suppressed rather than shown as misses.');
+      return;
+    }
     
     const sections = [
       { containerId: 'highPriorityChips', countId: 'highPriorityCount', keywords: keywordsObj.highPriority || [] },
