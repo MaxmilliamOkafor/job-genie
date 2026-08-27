@@ -1,0 +1,2 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS work_authorized_countries text[] NOT NULL DEFAULT ARRAY['IE','AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IS','IT','LV','LI','LT','LU','MT','NL','NO','PL','PT','RO','SK','SI','ES','SE']::text[];
+UPDATE public.profiles SET work_authorized_countries = ARRAY['IE','AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IS','IT','LV','LI','LT','LU','MT','NL','NO','PL','PT','RO','SK','SI','ES','SE']::text[] WHERE work_authorized_countries IS NULL OR cardinality(work_authorized_countries) = 0;
