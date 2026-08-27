@@ -79,6 +79,7 @@ const Profile = () => {
   const [editMode, setEditMode] = useState(false);
   const [localProfile, setLocalProfile] = useState<Partial<Profile>>({});
   const [draggedCertification, setDraggedCertification] = useState<number | null>(null);
+  const [draggedBullet, setDraggedBullet] = useState<{ exp: number; index: number } | null>(null);
   const [newSkill, setNewSkill] = useState({ name: '', years: 7, category: 'technical' as const });
   // API key is always hidden for security - no toggle
   const [isTestingKey, setIsTestingKey] = useState(false);
