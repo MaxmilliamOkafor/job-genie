@@ -199,6 +199,17 @@ const displayUrl = (url: string): string =>
 const ensureUrl = (url: string): string =>
   /^https?:\/\//i.test(url) ? url : `https://${url}`;
 
+// Tech stacks, certification names and bare Code/Live link lines never render
+// as bullet list items - they are metadata, not achievements.
+const isMetadataLine = (raw: string): boolean => {
+  const t = (raw || "").trim();
+  if (!t) return true;
+  if (/^(tech|tech stack|stack|technologies|tools|skills)\s*:/i.test(t)) return true;
+  if (/^(code|live|demo|repo|repository|source|url|link)\s*:\s*https?:\/\//i.test(t)) return true;
+  if (/^https?:\/\/\S+$/i.test(t)) return true;
+  return false;
+};
+
 function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
   const pages: PDFPage[] = [];
   let page: PDFPage = pdfDoc.addPage([PAGE_W, PAGE_H]);
