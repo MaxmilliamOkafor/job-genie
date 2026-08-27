@@ -2753,8 +2753,26 @@
     return { consistent: found.length <= 1, formats: found };
   }
 
+  // THE CHECK DID NOT RECOGNISE THE HEADING THE RENDERER WRITES.
+  //
+  // The experience pattern was /^(WORK\s+)?EXPERIENCE$/, which does not
+  // match PROFESSIONAL EXPERIENCE -- the heading every document this
+  // extension produces uses, because the renderer canonicalises to it
+  // on purpose. So every generated CV reported "Missing/non-standard:
+  // Experience" about a section that was present, correctly named, and
+  // parsing fine.
+  //
+  // The same fault as the summary clamp: a hand-written list of section
+  // names that did not contain the one this code itself standardises
+  // on. _EXP_HEAD is the shared pattern the rest of the file already
+  // uses for exactly this question, and it covers PROFESSIONAL, WORK
+  // and RELEVANT EXPERIENCE, EMPLOYMENT HISTORY and CAREER HISTORY.
+  // _EXP_HEAD is tested line by line elsewhere, so it carries no `m`
+  // flag; here the whole document is tested at once. Same pattern, one
+  // flag added, rather than a second copy that can drift from it.
+  const _EXP_HEAD_MULTILINE = new RegExp(_EXP_HEAD.source, 'im');
   const STANDARD_SECTION_HEADERS = [
-    /^(WORK\s+)?EXPERIENCE\s*:?\s*$/im,
+    _EXP_HEAD_MULTILINE,
     /^(PROFESSIONAL\s+)?SUMMARY\s*:?\s*$|^PROFILE\s*:?\s*$/im,
     /^EDUCATION\s*:?\s*$/im,
     /^(TECHNICAL\s+)?SKILLS\s*:?\s*$|^TECHNICAL PROFICIENCIES\s*:?\s*$|^CORE COMPETENCIES\s*:?\s*$/im,
