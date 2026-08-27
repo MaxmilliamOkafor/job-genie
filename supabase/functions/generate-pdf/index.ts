@@ -446,7 +446,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     y -= 2;
     for (const b of entry.bullets || []) {
-      if (!b || !b.trim()) continue;
+      if (!b || !b.trim() || isMetadataLine(b)) continue;
       drawBullet(b);
     }
     if (!isLast) y -= 7;
@@ -498,7 +498,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     y -= 2;
     for (const b of p.bullets || []) {
-      if (!b || !b.trim()) continue;
+      if (!b || !b.trim() || isMetadataLine(b)) continue;
       drawBullet(b);
     }
     if (!isLast) y -= 7;
