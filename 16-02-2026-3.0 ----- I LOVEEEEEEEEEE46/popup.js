@@ -520,6 +520,9 @@ class ATSTailor {
           this.baseCVContent = cached;
           this.baseCVSource = 'uploaded';
           await chrome.storage.local.set({ ats_profile: cached });
+          // Kept on the instance too: _profileEvidenceBlob runs on a
+          // synchronous path and cannot await storage.
+          this._cachedProfile = cached;
           
           // Update debug panel if available
           if (window.PDFDebugPanel && cached.professional_experience) {
@@ -586,6 +589,7 @@ class ATSTailor {
             
             // Store in chrome.storage for debug panel access
             await chrome.storage.local.set({ ats_profile: parsedData[0] });
+            this._cachedProfile = parsedData[0];
             
             // WIRE UP Parse CV Debug panel
             if (window.PDFDebugPanel) {
@@ -2089,6 +2093,7 @@ class ATSTailor {
       chrome.storage.local.get(['ats_profile', 'ats_lastJob'], (r) => resolve(r || {}))
     );
     const profile = stored.ats_profile || {};
+    if (profile && Object.keys(profile).length) this._cachedProfile = profile;
     // Job detection nulls currentJob whenever it fails, and it fails on
     // plenty of pages the user has open when they send the note (Gmail, a
     // LinkedIn search-results URL, a reloaded popup). That wiped the
@@ -5484,6 +5489,37 @@ class ATSTailor {
    * 3. Skills: Remaining keywords grouped by category
    * 4. Catch-all: Any remaining keywords as Technical Proficiencies
    */
+  // A lowercased blob of everything the candidate's own profile
+  // records: skills, certifications, and the text of every role and
+  // project. This is the only source of truth for "has this person
+  // actually done X", and it is what gates every keyword this file
+  // would otherwise add to a CV.
+  _profileEvidenceBlob() {
+    try {
+      const p = this._cachedProfile || this.profileData || this.profileInfo || null;
+      if (!p) return '';
+      const parts = [];
+      const push = (v) => {
+        if (!v) return;
+        if (typeof v === 'string') { parts.push(v); return; }
+        if (Array.isArray(v)) { v.forEach(push); return; }
+        if (typeof v === 'object') {
+          for (const k of ['title', 'name', 'company', 'description', 'text', 'bullet',
+            'summary', 'value', 'technologies', 'tech_stack', 'skills', 'bullets']) {
+            if (v[k]) push(v[k]);
+          }
+        }
+      };
+      push(p.skills); push(p.certifications); push(p.achievements);
+      push(p.professional_experience || p.professionalExperience);
+      push(p.relevant_projects || p.relevantProjects);
+      push(p.education); push(p.ats_strategy); push(p.cover_letter);
+      return parts.join(' \n ').toLowerCase();
+    } catch (e) {
+      return '';
+    }
+  }
+
   fastKeywordInjection(cvText, keywords, missingKeywords) {
     if (!missingKeywords || missingKeywords.length === 0) {
       return { tailoredCV: cvText, injectedKeywords: [] };
@@ -5539,58 +5575,79 @@ class ATSTailor {
 
     let tailoredCV = cvText;
     let injectedKeywords = [];
-    let remaining = [...cleanMissing];
 
-    // STEP 1: PRIMARY - Inject into Work Experience (25+ keywords naturally across bullets)
-    if (remaining.length > 0) {
-      const experienceMatch = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
-      if (experienceMatch) {
-        const expStart = experienceMatch.index;
-        const expEnd = expStart + experienceMatch[0].length;
-        let experienceText = experienceMatch[0];
-        
-        // Find all bullet points
-        const bullets = experienceText.match(/^[•\-\*]\s*.+$/gm) || [];
-
-        // TONED DOWN: appending keywords to every bullet reads as spam and
-        // trips believability checks. Inject at most ONE keyword per bullet,
-        // into at most half the bullets, and only keywords that fit a
-        // natural "using X" frame (short noun phrases). Everything else
-        // falls through to the Summary / Skills steps below - a cleaner and
-        // equally strong ATS signal than stuffed bullets.
-        const fitsUsingFrame = (kw) => {
-          const k = (kw || '').trim();
-          if (!k || k.length > 24) return false;
-          if (k.split(/\s+/).length > 2) return false;            // multi-word JD fragments read as nonsense
-          if (/\b(licensure|licen[sc]e|diploma|degree|certif\w*|experience|years?|ability|knowledge|background|education)\b/i.test(k)) return false;
-          return true;
-        };
-        const naturalConnectors = ['using', 'with'];
-        const fitting = remaining.filter(fitsUsingFrame);
-        const maxBullets = Math.max(1, Math.floor(bullets.length / 2));
-        const toInject = fitting.slice(0, Math.min(maxBullets, fitting.length));
-        // Keep everything we did NOT inject (non-fitting + overflow) so the
-        // Summary / Skills steps still capture them.
-        const injectedSet = new Set(toInject.map((k) => k.toLowerCase()));
-        remaining = remaining.filter((k) => !injectedSet.has(k.toLowerCase()));
-
-        let keywordIdx = 0;
-        bullets.forEach((bullet, idx) => {
-          if (keywordIdx >= toInject.length) return;
-          if (idx % 2 === 1) return;                              // skip alternate bullets so not every line carries a tail
-          const kw = toInject[keywordIdx];
-          if (bullet.toLowerCase().includes(kw.toLowerCase())) { keywordIdx++; return; }
-          const connector = naturalConnectors[keywordIdx % naturalConnectors.length];
-          const enhanced = bullet.replace(/\.?\s*$/, `, ${connector} ${kw}.`);
-          experienceText = experienceText.replace(bullet, enhanced);
-          injectedKeywords.push(kw);
-          keywordIdx++;
-        });
-
-        tailoredCV = tailoredCV.substring(0, expStart) + experienceText + tailoredCV.substring(expEnd);
-      }
+    // ██ ONLY WHAT THE PROFILE ACTUALLY EVIDENCES ██
+    //
+    // "Missing" here means "the posting asked for it and the generated
+    // CV does not contain it". That is two different situations wearing
+    // one label:
+    //
+    //   a) the candidate HAS it and the tailoring dropped it -- true,
+    //      worth restoring, and the whole point of this pass
+    //   b) the candidate has never touched it -- and adding it is a
+    //      lie that a single interview question exposes
+    //
+    // Nothing here could tell them apart, so it added both. The profile
+    // is what tells them apart: it is the candidate's own record of
+    // what they have done, so a term that appears in it is theirs to
+    // claim and a term that does not is not.
+    //
+    // With no profile to check against, nothing is added. That is the
+    // safe direction: a keyword left off a CV costs a match, a keyword
+    // invented onto one costs the application and the reputation.
+    const evidence = this._profileEvidenceBlob();
+    const unevidenced = [];
+    let remaining = cleanMissing.filter((kw) => {
+      const k = String(kw || '').toLowerCase().trim();
+      if (!k) return false;
+      if (!evidence) { unevidenced.push(kw); return false; }
+      const ok = evidence.indexOf(k) !== -1;
+      if (!ok) unevidenced.push(kw);
+      return ok;
+    });
+    if (unevidenced.length) {
+      console.warn('[ATS Tailor] ' + unevidenced.length + ' posting keyword(s) left OFF the CV '
+        + 'because your profile does not evidence them: ' + unevidenced.join(', ')
+        + '. If you do have any of these, add them to your profile and re-run.');
+      this._unevidencedKeywords = unevidenced;
     }
-    
+
+    // ██ NOTHING IS EVER APPENDED TO A BULLET ██
+    //
+    // This step used to walk the experience bullets and bolt a missing
+    // keyword onto the end of every other one with "using X" or
+    // "with X". Run on real Citigroup bullets it produced:
+    //
+    //   "Rebuilt the credit risk reporting suite in SQL and Python for
+    //    a GBP 2.6bn portfolio ... exposure figures, USING SALESFORCE."
+    //   "Redesigned the grouping and scoring of anti money laundering
+    //    alerts in Python ... genuine cases, WITH WORKDAY."
+    //   "Led the analysis behind the IFRS 9 staging criteria review ...
+    //    loan performance data, USING SNOWFLAKE."
+    //
+    // The candidate has never used any of the three. A bullet is a
+    // claim about a specific piece of work, so a tool appended to it is
+    // a claim that the tool was used FOR THAT WORK. This was not
+    // keyword optimisation, it was writing fiction onto true
+    // accomplishments -- and it survives into the interview, where
+    // "tell me about the Salesforce side of the credit risk rebuild"
+    // has no answer.
+    //
+    // It also reads as machine output. Three bullets on one page ending
+    // in ", using X." is a recognised stuffing pattern, and the
+    // tailoring prompt already forbids exactly this ("never append a
+    // keyword with connectors like 'via X' or 'built with X' where the
+    // result is not a grammatical, truthful sentence"). The model was
+    // obeying that rule and this code was undoing it afterwards.
+    //
+    // Weaving a keyword into a bullet truthfully requires the source
+    // material and judgement about what the work actually involved.
+    // That is the tailoring model's job, with the profile in hand. A
+    // regex at the end of the pipeline cannot do it and must not try.
+    //
+    // What remains below places a keyword only where it is a statement
+    // about the CANDIDATE rather than about a piece of work, and only
+    // when their own profile evidences it.
     // STEP 2: Inject 5-8 keywords into Summary as expertise
     if (remaining.length > 0) {
       const summaryMatch = tailoredCV.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
@@ -6751,6 +6808,7 @@ class ATSTailor {
             chrome.storage.local.get(['ats_profile'], (r) => resolve(r || {}))
           );
           const profile = stored.ats_profile || {};
+          if (profile && Object.keys(profile).length) this._cachedProfile = profile;
           const candidateName = [profile.first_name || profile.firstName, profile.last_name || profile.lastName]
             .filter(Boolean).join(' ').trim();
           const audited = RecruiterAudit.runRecruiterAudit({
