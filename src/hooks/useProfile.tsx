@@ -30,6 +30,7 @@ export interface Profile {
   driving_license: boolean;
   visa_required: boolean;
   authorized_countries: string[];
+  work_authorized_countries: string[];
   veteran_status: boolean;
   disability: boolean;
   race_ethnicity: string | null;
