@@ -2422,7 +2422,7 @@ Rewrite the professional summary to:
 
 RULE 8 - CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
 Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the JD's most critical requirements.
-These go between Professional Summary and Work Experience for maximum ATS + recruiter impact.
+These phrases do NOT print as their own section. The renderer merges them into the single TECHNICAL SKILLS section (competencies first, each term once), which sits underneath Professional Experience.
 Format: short 2-4 word phrases (e.g. "Cloud Architecture", "CI/CD Pipelines", "Stakeholder Management").
 Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that appear more than once.
 EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL SKILLS section instead, as recruiters find them off-putting at the top of a CV.
