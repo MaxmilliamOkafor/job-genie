@@ -381,7 +381,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const lines = wrap(text, fonts.regular, size, textMaxW);
     if (lines.length === 0) return;
     ensureSpace(lh);
-    page.drawText("\u2022", { x: bulletX, y, size, font: fonts.regular, color: NAVY });
+    page.drawText("\u2022", { x: bulletX, y, size, font: fonts.regular, color: MUTED });
     page.drawText(lines[0], { x: textX, y, size, font: fonts.regular, color: BODY });
     y -= lh;
     for (let i = 1; i < lines.length; i++) {
@@ -403,7 +403,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     let lx = MARGIN;
     if (company) {
-      page.drawText(company, { x: lx, y, size, font: fonts.bold, color: NAVY });
+      page.drawText(company, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(company, size);
     }
     if (title) {
@@ -450,7 +450,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
 
     let lx = MARGIN;
     if (name) {
-      page.drawText(name, { x: lx, y, size, font: fonts.bold, color: NAVY });
+      page.drawText(name, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(name, size);
     }
     if (role) {
@@ -508,7 +508,7 @@ function makeRenderer(pdfDoc: PDFDocument, fonts: Fonts) {
     const headLine = gpaSuffix ? `${degree} | ${gpaSuffix}` : degree;
     let lx = MARGIN;
     if (degree) {
-      page.drawText(degree, { x: lx, y, size, font: fonts.bold, color: NAVY });
+      page.drawText(degree, { x: lx, y, size, font: fonts.bold, color: BODY });
       lx += fonts.bold.widthOfTextAtSize(degree, size);
     }
     if (gpaSuffix) {
