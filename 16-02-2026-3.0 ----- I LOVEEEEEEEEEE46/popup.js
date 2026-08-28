@@ -723,7 +723,13 @@ class ATSTailor {
   bindEvents() {
     document.getElementById('loginBtn')?.addEventListener('click', () => this.login());
     document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
-    document.getElementById('tailorBtn')?.addEventListener('click', () => this.tailorDocuments({ force: true }));
+    // tailorDocuments now rethrows so its caller learns of a failure.
+    // This one is fire-and-forget: the error UI is already raised inside
+    // the catch there, so all that is needed here is to stop the
+    // rejection escaping as an unhandled one.
+    document.getElementById('tailorBtn')?.addEventListener('click', () => {
+      this.tailorDocuments({ force: true }).catch(() => {});
+    });
     document.getElementById('refreshJob')?.addEventListener('click', () => this.detectCurrentJob());
     document.getElementById('editJobTitle')?.addEventListener('click', () => this.toggleJobTitleEdit());
     document.getElementById('jobTitleInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.saveJobTitleEdit(); });
@@ -1268,8 +1274,20 @@ class ATSTailor {
       this.updateStepUI(2, 'working');
       if (progressText) progressText.textContent = 'Step 2/3: Boosting CV to 95-100% match...';
       
-      // Call tailorDocuments directly - this is the reliable path
+      // Call tailorDocuments directly - this is the reliable path.
+      // It rethrows now, so a failure reaches the catch below instead of
+      // falling through to "Complete! Tailored CV and Cover Letter
+      // ready." on a run that produced nothing.
       await this.tailorDocuments({ force: true });
+
+      // AND SUCCESS IS CHECKED, NOT ASSUMED. A resolved promise means
+      // the pipeline finished; it does not by itself mean a document
+      // came out of it. The one thing the user is here for is the file.
+      if (!(this.generatedDocuments && this.generatedDocuments.cv
+            && this.generatedDocuments.cv.length > 80)) {
+        throw new Error('The tailoring finished but produced no CV text. '
+          + 'Export the debug log and send it.');
+      }
       
       // Step 2 complete, Step 3 working
       this.updateStepUI(2, 'complete');
@@ -4719,7 +4737,7 @@ class ATSTailor {
       
       const found = await this.detectCurrentJob();
       if (found && this.currentJob) {
-        this.tailorDocuments();
+        this.tailorDocuments().catch(() => {});   // see tailorBtn above
       }
       
     } catch (error) {
@@ -7016,33 +7034,58 @@ class ATSTailor {
       });
 
     } catch (error) {
+      // ██ THIS CATCH USED TO END THE STORY ██
+      //
+      // Reported as "still crashes when Processing tailored Document",
+      // and before that as a run that produced no files while claiming
+      // to have worked. The mechanism is here.
+      //
+      // tailorDocuments caught its own failure and RETURNED NORMALLY.
+      // Its caller, runExtractAndApply, awaits it and then marks step 2
+      // complete, step 3 working, and finally prints "Complete!
+      // Tailored CV and Cover Letter ready." with a success toast. So a
+      // failed run reported success, and the only trace was the finally
+      // block below stamping the step icons with a cross that the
+      // caller immediately overwrote for steps 2 and 3 -- which is why
+      // the screenshot showed a cross on step 1, a tick on step 2 and a
+      // spinner on step 3 that never resolved.
+      //
+      // The other half was in this block itself: signalAutomationComplete
+      // was called TWICE, the second time unguarded, directly below a
+      // guarded copy whose comment says "guarded to prevent
+      // double-crash". A throw from that second call escapes the catch
+      // and becomes an unhandled rejection during error handling, which
+      // is the worst possible moment to lose the original error.
       console.error('Tailoring error:', error);
-      const errMsg = error.message || 'Unknown error';
+      const errMsg = (error && error.message) || 'Unknown error';
+      jgLog('error', 'tailor_failed', errMsg, {
+        stack: error && error.stack,
+        jobUrl: this.currentJob && this.currentJob.url,
+        jobTitle: this.currentJob && this.currentJob.title,
+        hasSession: !!(this.session && this.session.access_token),
+        aiProvider: this.aiProvider,
+        cvSoFar: (this.generatedDocuments && this.generatedDocuments.cv || '').length,
+      });
       this.showToast(`Tailoring failed: ${errMsg}`, 'error');
       this.setStatus('Error', 'error');
       // Show error in progress text so it persists visually
       if (progressText) progressText.textContent = `Error: ${errMsg}`;
       if (progressContainer) progressContainer.classList.remove('hidden');
 
-      // Signal failure to external automation (guarded to prevent double-crash)
+      // Signal failure to external automation. Once, and guarded.
       try {
         await this.signalAutomationComplete({
           success: false,
-          error: error.message,
+          error: errMsg,
           jobUrl: this.currentJob?.url || window.location?.href
         });
       } catch (signalError) {
         console.warn('[ATS Tailor] signalAutomationComplete failed:', signalError);
       }
-      this.showToast(error.message || 'Failed', 'error');
-      this.setStatus('Error', 'error');
-      
-      // Signal failure to external automation
-      await this.signalAutomationComplete({
-        success: false,
-        error: error.message,
-        jobUrl: this.currentJob?.url || window.location?.href
-      });
+
+      // AND THE CALLER IS TOLD. Without this the run "succeeds" with no
+      // documents, which is the reported bug.
+      throw error;
     } finally {
       // Release the atomic guard and record the URL we just tailored so
       // duplicate triggers for the same job become no-ops until the user
@@ -9966,6 +10009,36 @@ ATSTailor.prototype.copyDebugReport = function() {
     .then(() => this.showToast('Debug report copied to clipboard', 'success'))
     .catch(() => this.showToast('Failed to copy', 'error'));
 };
+
+// ██ EVERY CRASH LANDS IN THE EXPORT, WHEREVER IT HAPPENS ██
+//
+// Reported as "still crashes when Processing tailored Document". That
+// message is shown at 70% and stays up across the whole post-response
+// stage: JSON repair, work-experience immutability, sanitisation,
+// keyword injection, the recruiter audit, DOCX generation. A throw in
+// any of them looks identical from outside, and three rounds have now
+// been spent narrowing it by inference from screenshots.
+//
+// These two handlers catch what no local try/catch did: an uncaught
+// error anywhere in the popup, and a rejected promise nobody awaited.
+// Both go to the persisted log with a stack, so the next export names
+// the file and line instead of me guessing at the stage.
+//
+// Registered at the top level rather than inside the constructor: a
+// failure DURING construction is exactly the kind that leaves no trace.
+window.addEventListener('error', (ev) => {
+  jgLog('error', 'popup_uncaught', (ev && ev.message) || 'uncaught error', {
+    source: ev && ev.filename,
+    line: ev && ev.lineno,
+    column: ev && ev.colno,
+    stack: ev && ev.error && ev.error.stack,
+  });
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  const r = ev && ev.reason;
+  jgLog('error', 'popup_unhandled_rejection',
+    (r && r.message) || String(r), { stack: r && r.stack });
+});
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
