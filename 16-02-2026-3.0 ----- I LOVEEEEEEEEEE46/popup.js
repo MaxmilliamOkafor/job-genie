@@ -1142,6 +1142,52 @@ class ATSTailor {
    * forms when the user's attach_format preference is "docx".
    * Pure text -> docx; cannot regress the PDF path.
    */
+  // Write to chrome.storage without letting a full quota end the run.
+  //
+  // The attached document is the DOCX. The PDF blobs are kept only for
+  // backward compatibility and preview, and they are the largest thing
+  // being written -- so when the quota is hit they are the first thing
+  // to drop, and the DOCX still reaches the content script that
+  // attaches it. If even that fails, stale keys from previous runs are
+  // cleared and it is tried once more. Only if all three fail does the
+  // caller hear about it, and by then the failure is real rather than
+  // an accounting problem.
+  async _setStorageOrTrim(items) {
+    const isQuota = (e) => /quota/i.test((e && e.message) || String(e || ''));
+    try {
+      await chrome.storage.local.set(items);
+      return true;
+    } catch (e) {
+      if (!isQuota(e)) { jgLog('error', 'storage_write_failed', (e && e.message) || String(e)); throw e; }
+      jgLog('error', 'storage_quota', 'chrome.storage.local is full; dropping PDF blobs', {
+        keys: Object.keys(items),
+      });
+    }
+    const lean = Object.assign({}, items);
+    delete lean.cvPDF; delete lean.coverPDF;
+    try {
+      await chrome.storage.local.set(lean);
+      jgLog('info', 'storage_quota_recovered', 'Stored without the PDF blobs');
+      return true;
+    } catch (e2) {
+      if (!isQuota(e2)) throw e2;
+    }
+    try {
+      // Everything here is rebuilt on the next run.
+      await chrome.storage.local.remove([
+        'ats_lastGeneratedDocuments', 'ats_keywordHistory',
+        'perfection_debug_logs', 'perfection_debug_sessions',
+      ]);
+      await chrome.storage.local.set(lean);
+      jgLog('info', 'storage_quota_recovered',
+        'Cleared previous run data and stored the DOCX');
+      return true;
+    } catch (e3) {
+      jgLog('error', 'storage_quota_fatal', (e3 && e3.message) || String(e3));
+      throw e3;
+    }
+  }
+
   buildDocxArtifact() {
     if (typeof DocxGenerator === 'undefined') {
       console.warn('[ATS Tailor] DOCX generator not loaded');
@@ -6957,8 +7003,27 @@ class ATSTailor {
       // most recruiters actually open from the portal.
       this.buildDocxArtifact();
 
-      // CRITICAL: Store files in chrome.storage for content.js attach loop
-      await chrome.storage.local.set({
+      // ██ THE STAGE THAT WAS KILLING THE RUN ██
+      //
+      // chrome.storage.local is capped at 10 MB without the
+      // unlimitedStorage permission, which this manifest did not have.
+      // A single tailoring writes the CV and cover letter as base64
+      // TWICE -- once as the four keys below, and again inside
+      // ats_lastGeneratedDocuments, which holds the whole
+      // generatedDocuments object including both PDFs. Add the keyword
+      // history and the debug log and a few runs fill the quota.
+      //
+      // At that point set() REJECTS with "QUOTA_BYTES quota exceeded",
+      // on an unguarded await, at exactly this point in the pipeline --
+      // right after "Processing tailored documents...". The rejection
+      // reached tailorDocuments' catch, which used to swallow it, so
+      // the caller printed "Complete! Tailored CV and Cover Letter
+      // ready." and no file existed. That is the reported crash.
+      //
+      // Three changes: the permission is now declared, the write is
+      // guarded, and a quota failure drops the PDF blobs (which are not
+      // the attached format) and retries rather than losing the run.
+      await this._setStorageOrTrim({
         // CV (DOCX is the attached file; PDF kept for backward compat /
         // preview only -- never the attached document).
         cvPDF: this.generatedDocuments.cvPdf,
@@ -6988,7 +7053,14 @@ class ATSTailor {
 
       updateProgress(100, 'Complete! 100% keyword match achieved.');
 
-      await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
+      // WITHOUT THE BLOBS. This key exists so the popup can redisplay the
+      // last run after it is reopened; it does not need the base64,
+      // which is already stored under cvDocx/coverDocx above and is by
+      // far the largest thing in the object. Storing the whole
+      // generatedDocuments here wrote every document a second time and
+      // is what filled the 10 MB quota in the first place.
+      const { cvPdf, coverPdf, cvDocx, coverDocx, ...lastRun } = this.generatedDocuments;
+      await this._setStorageOrTrim({ ats_lastGeneratedDocuments: lastRun });
 
       // Documents exist and are stored: the note can now carry them.
       // Same rule as detection -- the follow-up is an extra, and it must
