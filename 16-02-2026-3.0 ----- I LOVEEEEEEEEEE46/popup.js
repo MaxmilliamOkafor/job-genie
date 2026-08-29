@@ -520,9 +520,6 @@ class ATSTailor {
           this.baseCVContent = cached;
           this.baseCVSource = 'uploaded';
           await chrome.storage.local.set({ ats_profile: cached });
-          // Kept on the instance too: _profileEvidenceBlob runs on a
-          // synchronous path and cannot await storage.
-          this._cachedProfile = cached;
           
           // Update debug panel if available
           if (window.PDFDebugPanel && cached.professional_experience) {
@@ -589,7 +586,6 @@ class ATSTailor {
             
             // Store in chrome.storage for debug panel access
             await chrome.storage.local.set({ ats_profile: parsedData[0] });
-            this._cachedProfile = parsedData[0];
             
             // WIRE UP Parse CV Debug panel
             if (window.PDFDebugPanel) {
@@ -723,13 +719,7 @@ class ATSTailor {
   bindEvents() {
     document.getElementById('loginBtn')?.addEventListener('click', () => this.login());
     document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
-    // tailorDocuments now rethrows so its caller learns of a failure.
-    // This one is fire-and-forget: the error UI is already raised inside
-    // the catch there, so all that is needed here is to stop the
-    // rejection escaping as an unhandled one.
-    document.getElementById('tailorBtn')?.addEventListener('click', () => {
-      this.tailorDocuments({ force: true }).catch(() => {});
-    });
+    document.getElementById('tailorBtn')?.addEventListener('click', () => this.tailorDocuments({ force: true }));
     document.getElementById('refreshJob')?.addEventListener('click', () => this.detectCurrentJob());
     document.getElementById('editJobTitle')?.addEventListener('click', () => this.toggleJobTitleEdit());
     document.getElementById('jobTitleInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.saveJobTitleEdit(); });
@@ -1142,52 +1132,6 @@ class ATSTailor {
    * forms when the user's attach_format preference is "docx".
    * Pure text -> docx; cannot regress the PDF path.
    */
-  // Write to chrome.storage without letting a full quota end the run.
-  //
-  // The attached document is the DOCX. The PDF blobs are kept only for
-  // backward compatibility and preview, and they are the largest thing
-  // being written -- so when the quota is hit they are the first thing
-  // to drop, and the DOCX still reaches the content script that
-  // attaches it. If even that fails, stale keys from previous runs are
-  // cleared and it is tried once more. Only if all three fail does the
-  // caller hear about it, and by then the failure is real rather than
-  // an accounting problem.
-  async _setStorageOrTrim(items) {
-    const isQuota = (e) => /quota/i.test((e && e.message) || String(e || ''));
-    try {
-      await chrome.storage.local.set(items);
-      return true;
-    } catch (e) {
-      if (!isQuota(e)) { jgLog('error', 'storage_write_failed', (e && e.message) || String(e)); throw e; }
-      jgLog('error', 'storage_quota', 'chrome.storage.local is full; dropping PDF blobs', {
-        keys: Object.keys(items),
-      });
-    }
-    const lean = Object.assign({}, items);
-    delete lean.cvPDF; delete lean.coverPDF;
-    try {
-      await chrome.storage.local.set(lean);
-      jgLog('info', 'storage_quota_recovered', 'Stored without the PDF blobs');
-      return true;
-    } catch (e2) {
-      if (!isQuota(e2)) throw e2;
-    }
-    try {
-      // Everything here is rebuilt on the next run.
-      await chrome.storage.local.remove([
-        'ats_lastGeneratedDocuments', 'ats_keywordHistory',
-        'perfection_debug_logs', 'perfection_debug_sessions',
-      ]);
-      await chrome.storage.local.set(lean);
-      jgLog('info', 'storage_quota_recovered',
-        'Cleared previous run data and stored the DOCX');
-      return true;
-    } catch (e3) {
-      jgLog('error', 'storage_quota_fatal', (e3 && e3.message) || String(e3));
-      throw e3;
-    }
-  }
-
   buildDocxArtifact() {
     if (typeof DocxGenerator === 'undefined') {
       console.warn('[ATS Tailor] DOCX generator not loaded');
@@ -1320,20 +1264,8 @@ class ATSTailor {
       this.updateStepUI(2, 'working');
       if (progressText) progressText.textContent = 'Step 2/3: Boosting CV to 95-100% match...';
       
-      // Call tailorDocuments directly - this is the reliable path.
-      // It rethrows now, so a failure reaches the catch below instead of
-      // falling through to "Complete! Tailored CV and Cover Letter
-      // ready." on a run that produced nothing.
+      // Call tailorDocuments directly - this is the reliable path
       await this.tailorDocuments({ force: true });
-
-      // AND SUCCESS IS CHECKED, NOT ASSUMED. A resolved promise means
-      // the pipeline finished; it does not by itself mean a document
-      // came out of it. The one thing the user is here for is the file.
-      if (!(this.generatedDocuments && this.generatedDocuments.cv
-            && this.generatedDocuments.cv.length > 80)) {
-        throw new Error('The tailoring finished but produced no CV text. '
-          + 'Export the debug log and send it.');
-      }
       
       // Step 2 complete, Step 3 working
       this.updateStepUI(2, 'complete');
@@ -1384,18 +1316,6 @@ class ATSTailor {
       
     } catch (error) {
       console.error('[ATS Tailor Popup] Error:', error);
-      // Into the persisted log as well, because the console is gone the
-      // moment the popup closes and this is the failure the user is
-      // asked to send back.
-      jgLog('error', 'extract_and_apply_failed',
-        (error && error.message) || String(error), {
-          stack: error && error.stack,
-          step: 'Extract & Apply Keywords to CV',
-          jobUrl: this.currentJob && this.currentJob.url,
-          jobTitle: this.currentJob && this.currentJob.title,
-          hasSession: !!(this.session && this.session.access_token),
-          aiProvider: this.aiProvider,
-        });
       
       // Error - INSTANT RESET to BLUE READY state (show toast for error)
       btn.style.background = '';
@@ -2169,7 +2089,6 @@ class ATSTailor {
       chrome.storage.local.get(['ats_profile', 'ats_lastJob'], (r) => resolve(r || {}))
     );
     const profile = stored.ats_profile || {};
-    if (profile && Object.keys(profile).length) this._cachedProfile = profile;
     // Job detection nulls currentJob whenever it fails, and it fails on
     // plenty of pages the user has open when they send the note (Gmail, a
     // LinkedIn search-results URL, a reloaded popup). That wiped the
@@ -4363,83 +4282,10 @@ class ATSTailor {
     }
   }
 
-  // ██ "est", "based", "strong", "ability", "working", "related" ██
-  //
-  // A live posting produced this keyword set: business, operational,
-  // support, experience, incident, management, data, technology,
-  // service, ntt, analysis, stakeholders, process, analyst, manager,
-  // working, solutions, application, teams, opportunity, enterprise,
-  // technical, strong, skills, ability, incidents, requests, processes,
-  // improvement, related, communication, remote, latam, est, based.
-  //
-  // Single tokens, several of them pure grammar. That is the frequency
-  // fallback, not the AI extractor -- and it matters beyond the panel,
-  // because this same list is passed to the audit as jobKeywords, where
-  // it decides which skill groups lead the TECHNICAL SKILLS section and
-  // which bullets are judged relevant. "strong" and "based" ranking a
-  // skills section is noise steering the whole document.
-  //
-  // Filtered here, at the boundary, because it is the one place every
-  // producer of this list flows through.
-  cleanKeywordList(list) {
-    // Held inside the method rather than as a static on the class. A
-    // static referenced by class name resolves through the enclosing
-    // scope, which makes a display helper fail with "ATSTailor is not
-    // defined" the moment it is called from anywhere that scope does
-    // not reach -- and this helper runs on the tailoring path, where a
-    // ReferenceError costs the whole run.
-    const junk = new Set(['est', 'based', 'strong', 'ability', 'able', 'working', 'work',
-      'related', 'relevant', 'experience', 'experienced', 'skills', 'skill',
-      'opportunity', 'role', 'position', 'job', 'candidate', 'candidates', 'team',
-      'teams', 'company', 'business', 'good', 'great', 'excellent', 'strongly',
-      'preferred', 'required', 'requirements', 'responsibilities', 'plus', 'etc',
-      'years', 'year', 'new', 'well', 'high', 'must', 'ideal', 'ideally', 'you',
-      'your', 'our', 'we', 'they', 'this', 'that', 'with', 'and', 'for', 'the']);
-    const seen = new Set();
-    return (Array.isArray(list) ? list : []).filter((raw) => {
-      const k = String(raw == null ? '' : raw).trim();
-      if (!k) return false;
-      const lc = k.toLowerCase();
-      if (seen.has(lc)) return false;
-      // A single short word that is grammar rather than a skill.
-      if (lc.indexOf(' ') === -1) {
-        if (junk.has(lc)) return false;
-        if (lc.length < 3) return false;           // "ai" and "ml" are real; guarded below
-      }
-      seen.add(lc);
-      return true;
-    }).filter((k) => {
-      // Two-letter terms that ARE skills survive the length rule above.
-      const lc = String(k).toLowerCase();
-      return lc.indexOf(' ') !== -1 || lc.length >= 3
-        || ['ai', 'ml', 'bi', 'qa', 'ux', 'ui', 'go', 'r', 'c'].indexOf(lc) !== -1;
-    });
-  }
-
-  // A PANEL THAT CANNOT STOP THE WORK.
-  //
-  // This is called from inside the tailoring flow, before and after the
-  // run, on an unguarded line. Anything that throws while DRAWING the
-  // analysis therefore aborts the tailoring itself -- no CV, no cover
-  // letter, no error the user can see, and a panel frozen in whatever
-  // state it reached. Reported as "it wasn't finding or tailoring
-  // anything or generating the files", with a panel showing keywords
-  // and stale documents from a previous run.
-  //
-  // Rendering is not load-bearing. It gets its own boundary.
   updateMatchAnalysisUI() {
-    try {
-      this._renderMatchAnalysis();
-    } catch (e) {
-      console.error('[ATS Tailor] match panel render failed, tailoring continues:',
-        e && (e.stack || e.message || e));
-    }
-  }
-
-  _renderMatchAnalysis() {
     const matchScore = this.generatedDocuments.matchScore || 0;
-    const matchedKeywords = this.cleanKeywordList(this.generatedDocuments.matchedKeywords);
-    const missingKeywords = this.cleanKeywordList(this.generatedDocuments.missingKeywords);
+    const matchedKeywords = this.generatedDocuments.matchedKeywords || [];
+    const missingKeywords = this.generatedDocuments.missingKeywords || [];
     const keywords = this.generatedDocuments.keywords || null;
     const totalKeywords = matchedKeywords.length + missingKeywords.length;
     
@@ -4497,22 +4343,6 @@ class ATSTailor {
   /**
    * OPTIMIZED: Update match gauge with animation
    */
-  // ██ THE GAUGE READ 100% WHILE NOTHING HAD MATCHED ██
-  //
-  // Reported as "tailoring not working anymore", with a screenshot of a
-  // full green ring reading 100% and "Perfect profile match!" directly
-  // above "0 of 35 keywords matched" and thirty-five red crosses.
-  //
-  // Both of those were hard-coded. The `score` argument was computed,
-  // passed in, and thrown away: the ring was forced to a full circle,
-  // the number to the literal string '100%', and the subtitle to
-  // "Perfect profile match!" on every render. So the one indicator that
-  // exists to say whether the run worked could only ever say yes, and a
-  // complete failure of the keyword pipeline displayed as success.
-  //
-  // A status display that cannot report a failure is worse than no
-  // status display, because it is trusted. It now shows the real
-  // number, and it says plainly when there is nothing to measure.
   updateMatchGauge(score, matched, total) {
     const gaugeCircle = document.getElementById('matchGaugeCircle');
     if (gaugeCircle) {
@@ -4552,23 +4382,9 @@ class ATSTailor {
   /**
    * OPTIMIZED: Batch update all keyword chips in one DOM operation
    */
-  // A CROSS MEANS "NOT IN YOUR CV", NOT "I HAD NO CV TO LOOK IN".
-  //
-  // The match is a plain substring test against generatedDocuments.cv.
-  // With that empty -- a popup reopened after the text was dropped from
-  // storage, a generation that failed halfway -- every keyword on earth
-  // fails the test, so thirty-five red crosses appear and read as a
-  // damning verdict on a CV nobody looked at. "data", "analysis",
-  // "process" and "management" cannot all be absent from a real CV; a
-  // zero that total is a missing input, not a result.
   batchUpdateKeywordChips(keywordsObj, cvText, matchedKeywords) {
-    // Coerced rather than assumed. Both arguments arrive from
-    // generatedDocuments, which is restored from storage and can hold
-    // whatever an older build wrote there; `cvText.toLowerCase is not a
-    // function` thrown here used to abort the tailoring run above it.
-    const cvTextLower = String(cvText == null ? '' : cvText).toLowerCase();
-    const matchedSet = new Set((Array.isArray(matchedKeywords) ? matchedKeywords : [])
-      .map(k => String(k == null ? '' : k).toLowerCase()));
+    const cvTextLower = cvText.toLowerCase();
+    const matchedSet = new Set(matchedKeywords.map(k => k.toLowerCase()));
     
     const sections = [
       { containerId: 'highPriorityChips', countId: 'highPriorityCount', keywords: keywordsObj.highPriority || [] },
@@ -4783,7 +4599,7 @@ class ATSTailor {
       
       const found = await this.detectCurrentJob();
       if (found && this.currentJob) {
-        this.tailorDocuments().catch(() => {});   // see tailorBtn above
+        this.tailorDocuments();
       }
       
     } catch (error) {
@@ -5162,9 +4978,6 @@ class ATSTailor {
       this.generatedDocuments.missingKeywords = keywords.all;
       this.generatedDocuments.matchedKeywords = [];
       this.generatedDocuments.matchScore = 0;
-      // A new posting: whatever CV is still in memory belongs to the
-      // last one, so the panel must not score against it.
-      this._tailoringRanThisJob = false;
       
       // Update UI to show extracted keywords
       this.updateMatchAnalysisUI();
@@ -5279,7 +5092,6 @@ class ATSTailor {
       this.generatedDocuments.missingKeywords = keywords.all;
       this.generatedDocuments.matchedKeywords = [];
       this.generatedDocuments.matchScore = 0;
-      this._tailoringRanThisJob = false;
       
       // Update UI to show extracted keywords
       this.updateMatchAnalysisUI();
@@ -5575,37 +5387,6 @@ class ATSTailor {
    * 3. Skills: Remaining keywords grouped by category
    * 4. Catch-all: Any remaining keywords as Technical Proficiencies
    */
-  // A lowercased blob of everything the candidate's own profile
-  // records: skills, certifications, and the text of every role and
-  // project. This is the only source of truth for "has this person
-  // actually done X", and it is what gates every keyword this file
-  // would otherwise add to a CV.
-  _profileEvidenceBlob() {
-    try {
-      const p = this._cachedProfile || this.profileData || this.profileInfo || null;
-      if (!p) return '';
-      const parts = [];
-      const push = (v) => {
-        if (!v) return;
-        if (typeof v === 'string') { parts.push(v); return; }
-        if (Array.isArray(v)) { v.forEach(push); return; }
-        if (typeof v === 'object') {
-          for (const k of ['title', 'name', 'company', 'description', 'text', 'bullet',
-            'summary', 'value', 'technologies', 'tech_stack', 'skills', 'bullets']) {
-            if (v[k]) push(v[k]);
-          }
-        }
-      };
-      push(p.skills); push(p.certifications); push(p.achievements);
-      push(p.professional_experience || p.professionalExperience);
-      push(p.relevant_projects || p.relevantProjects);
-      push(p.education); push(p.ats_strategy); push(p.cover_letter);
-      return parts.join(' \n ').toLowerCase();
-    } catch (e) {
-      return '';
-    }
-  }
-
   fastKeywordInjection(cvText, keywords, missingKeywords) {
     if (!missingKeywords || missingKeywords.length === 0) {
       return { tailoredCV: cvText, injectedKeywords: [] };
@@ -5661,92 +5442,58 @@ class ATSTailor {
 
     let tailoredCV = cvText;
     let injectedKeywords = [];
+    let remaining = [...cleanMissing];
 
-    // ██ ONLY WHAT THE PROFILE ACTUALLY EVIDENCES ██
-    //
-    // "Missing" here means "the posting asked for it and the generated
-    // CV does not contain it". That is two different situations wearing
-    // one label:
-    //
-    //   a) the candidate HAS it and the tailoring dropped it -- true,
-    //      worth restoring, and the whole point of this pass
-    //   b) the candidate has never touched it -- and adding it is a
-    //      lie that a single interview question exposes
-    //
-    // Nothing here could tell them apart, so it added both. The profile
-    // is what tells them apart: it is the candidate's own record of
-    // what they have done, so a term that appears in it is theirs to
-    // claim and a term that does not is not.
-    //
-    // With no profile to check against, nothing is added. That is the
-    // safe direction: a keyword left off a CV costs a match, a keyword
-    // invented onto one costs the application and the reputation.
-    const evidence = (() => {
-      // Same rule as the render: a helper on the tailoring path gets a
-      // boundary. An empty blob means "add nothing", which is the safe
-      // direction, so a failure here costs a few keywords and never the
-      // run itself.
-      try {
-        return typeof this._profileEvidenceBlob === 'function'
-          ? this._profileEvidenceBlob() : '';
-      } catch (e) {
-        console.warn('[ATS Tailor] profile evidence unavailable, adding no keywords:',
-          e && e.message);
-        return '';
+    // STEP 1: PRIMARY - Inject into Work Experience (25+ keywords naturally across bullets)
+    if (remaining.length > 0) {
+      const experienceMatch = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
+      if (experienceMatch) {
+        const expStart = experienceMatch.index;
+        const expEnd = expStart + experienceMatch[0].length;
+        let experienceText = experienceMatch[0];
+        
+        // Find all bullet points
+        const bullets = experienceText.match(/^[•\-\*]\s*.+$/gm) || [];
+
+        // TONED DOWN: appending keywords to every bullet reads as spam and
+        // trips believability checks. Inject at most ONE keyword per bullet,
+        // into at most half the bullets, and only keywords that fit a
+        // natural "using X" frame (short noun phrases). Everything else
+        // falls through to the Summary / Skills steps below - a cleaner and
+        // equally strong ATS signal than stuffed bullets.
+        const fitsUsingFrame = (kw) => {
+          const k = (kw || '').trim();
+          if (!k || k.length > 24) return false;
+          if (k.split(/\s+/).length > 2) return false;            // multi-word JD fragments read as nonsense
+          if (/\b(licensure|licen[sc]e|diploma|degree|certif\w*|experience|years?|ability|knowledge|background|education)\b/i.test(k)) return false;
+          return true;
+        };
+        const naturalConnectors = ['using', 'with'];
+        const fitting = remaining.filter(fitsUsingFrame);
+        const maxBullets = Math.max(1, Math.floor(bullets.length / 2));
+        const toInject = fitting.slice(0, Math.min(maxBullets, fitting.length));
+        // Keep everything we did NOT inject (non-fitting + overflow) so the
+        // Summary / Skills steps still capture them.
+        const injectedSet = new Set(toInject.map((k) => k.toLowerCase()));
+        remaining = remaining.filter((k) => !injectedSet.has(k.toLowerCase()));
+
+        let keywordIdx = 0;
+        bullets.forEach((bullet, idx) => {
+          if (keywordIdx >= toInject.length) return;
+          if (idx % 2 === 1) return;                              // skip alternate bullets so not every line carries a tail
+          const kw = toInject[keywordIdx];
+          if (bullet.toLowerCase().includes(kw.toLowerCase())) { keywordIdx++; return; }
+          const connector = naturalConnectors[keywordIdx % naturalConnectors.length];
+          const enhanced = bullet.replace(/\.?\s*$/, `, ${connector} ${kw}.`);
+          experienceText = experienceText.replace(bullet, enhanced);
+          injectedKeywords.push(kw);
+          keywordIdx++;
+        });
+
+        tailoredCV = tailoredCV.substring(0, expStart) + experienceText + tailoredCV.substring(expEnd);
       }
-    })();
-    const unevidenced = [];
-    let remaining = cleanMissing.filter((kw) => {
-      const k = String(kw || '').toLowerCase().trim();
-      if (!k) return false;
-      if (!evidence) { unevidenced.push(kw); return false; }
-      const ok = evidence.indexOf(k) !== -1;
-      if (!ok) unevidenced.push(kw);
-      return ok;
-    });
-    if (unevidenced.length) {
-      console.warn('[ATS Tailor] ' + unevidenced.length + ' posting keyword(s) left OFF the CV '
-        + 'because your profile does not evidence them: ' + unevidenced.join(', ')
-        + '. If you do have any of these, add them to your profile and re-run.');
-      this._unevidencedKeywords = unevidenced;
     }
-
-    // ██ NOTHING IS EVER APPENDED TO A BULLET ██
-    //
-    // This step used to walk the experience bullets and bolt a missing
-    // keyword onto the end of every other one with "using X" or
-    // "with X". Run on real Citigroup bullets it produced:
-    //
-    //   "Rebuilt the credit risk reporting suite in SQL and Python for
-    //    a GBP 2.6bn portfolio ... exposure figures, USING SALESFORCE."
-    //   "Redesigned the grouping and scoring of anti money laundering
-    //    alerts in Python ... genuine cases, WITH WORKDAY."
-    //   "Led the analysis behind the IFRS 9 staging criteria review ...
-    //    loan performance data, USING SNOWFLAKE."
-    //
-    // The candidate has never used any of the three. A bullet is a
-    // claim about a specific piece of work, so a tool appended to it is
-    // a claim that the tool was used FOR THAT WORK. This was not
-    // keyword optimisation, it was writing fiction onto true
-    // accomplishments -- and it survives into the interview, where
-    // "tell me about the Salesforce side of the credit risk rebuild"
-    // has no answer.
-    //
-    // It also reads as machine output. Three bullets on one page ending
-    // in ", using X." is a recognised stuffing pattern, and the
-    // tailoring prompt already forbids exactly this ("never append a
-    // keyword with connectors like 'via X' or 'built with X' where the
-    // result is not a grammatical, truthful sentence"). The model was
-    // obeying that rule and this code was undoing it afterwards.
-    //
-    // Weaving a keyword into a bullet truthfully requires the source
-    // material and judgement about what the work actually involved.
-    // That is the tailoring model's job, with the profile in hand. A
-    // regex at the end of the pipeline cannot do it and must not try.
-    //
-    // What remains below places a keyword only where it is a statement
-    // about the CANDIDATE rather than about a piece of work, and only
-    // when their own profile evidences it.
+    
     // STEP 2: Inject 5-8 keywords into Summary as expertise
     if (remaining.length > 0) {
       const summaryMatch = tailoredCV.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
@@ -6406,25 +6153,6 @@ class ATSTailor {
       };
 
       const sanitisedCv = sanitise(this.normalizeDocumentText(result.tailoredResume, 'cv'));
-      // The run happened. Whether it produced usable text is a separate
-      // question the panel answers from the text itself.
-      this._tailoringRanThisJob = true;
-      if (!sanitisedCv || sanitisedCv.length < 80) {
-        jgLog('error', 'tailor_empty_cv',
-          'The tailoring returned no usable CV text', {
-            tailoredResumeLength: (result && result.tailoredResume || '').length,
-            sanitisedLength: (sanitisedCv || '').length,
-            responseKeys: Object.keys(result || {}),
-            coverLetterLength: (result && result.tailoredCoverLetter || '').length,
-            jobUrl: this.currentJob && this.currentJob.url,
-            jobTitle: this.currentJob && this.currentJob.title,
-          });
-      } else {
-        jgLog('success', 'tailor_ok', 'Tailored CV produced', {
-          cvLength: sanitisedCv.length,
-          jobTitle: this.currentJob && this.currentJob.title,
-        });
-      }
       const sanitisedCover = sanitise(this.normalizeDocumentText(result.tailoredCoverLetter || result.coverLetter, 'cover'));
 
       this.generatedDocuments = {
@@ -6926,7 +6654,6 @@ class ATSTailor {
             chrome.storage.local.get(['ats_profile'], (r) => resolve(r || {}))
           );
           const profile = stored.ats_profile || {};
-          if (profile && Object.keys(profile).length) this._cachedProfile = profile;
           const candidateName = [profile.first_name || profile.firstName, profile.last_name || profile.lastName]
             .filter(Boolean).join(' ').trim();
           const audited = RecruiterAudit.runRecruiterAudit({
@@ -6957,11 +6684,6 @@ class ATSTailor {
             experience: Array.isArray(profile.professional_experience)
               ? profile.professional_experience
               : (Array.isArray(profile.professionalExperience) ? profile.professionalExperience : []),
-            // Where the candidate ACTUALLY lives, so the header stops
-            // claiming the posting's location. See ensureTruthfulLocation.
-            profileLocation: [profile.city, profile.country].filter(Boolean).join(', ')
-              || profile.location || this._defaultLocation || '',
-            jdLocation: this.currentJob?.location || '',
           });
           this.generatedDocuments.cv = audited.cvText;
           if (audited.coverLetterText) this.generatedDocuments.coverLetter = audited.coverLetterText;
@@ -7003,27 +6725,8 @@ class ATSTailor {
       // most recruiters actually open from the portal.
       this.buildDocxArtifact();
 
-      // ██ THE STAGE THAT WAS KILLING THE RUN ██
-      //
-      // chrome.storage.local is capped at 10 MB without the
-      // unlimitedStorage permission, which this manifest did not have.
-      // A single tailoring writes the CV and cover letter as base64
-      // TWICE -- once as the four keys below, and again inside
-      // ats_lastGeneratedDocuments, which holds the whole
-      // generatedDocuments object including both PDFs. Add the keyword
-      // history and the debug log and a few runs fill the quota.
-      //
-      // At that point set() REJECTS with "QUOTA_BYTES quota exceeded",
-      // on an unguarded await, at exactly this point in the pipeline --
-      // right after "Processing tailored documents...". The rejection
-      // reached tailorDocuments' catch, which used to swallow it, so
-      // the caller printed "Complete! Tailored CV and Cover Letter
-      // ready." and no file existed. That is the reported crash.
-      //
-      // Three changes: the permission is now declared, the write is
-      // guarded, and a quota failure drops the PDF blobs (which are not
-      // the attached format) and retries rather than losing the run.
-      await this._setStorageOrTrim({
+      // CRITICAL: Store files in chrome.storage for content.js attach loop
+      await chrome.storage.local.set({
         // CV (DOCX is the attached file; PDF kept for backward compat /
         // preview only -- never the attached document).
         cvPDF: this.generatedDocuments.cvPdf,
@@ -7053,14 +6756,7 @@ class ATSTailor {
 
       updateProgress(100, 'Complete! 100% keyword match achieved.');
 
-      // WITHOUT THE BLOBS. This key exists so the popup can redisplay the
-      // last run after it is reopened; it does not need the base64,
-      // which is already stored under cvDocx/coverDocx above and is by
-      // far the largest thing in the object. Storing the whole
-      // generatedDocuments here wrote every document a second time and
-      // is what filled the 10 MB quota in the first place.
-      const { cvPdf, coverPdf, cvDocx, coverDocx, ...lastRun } = this.generatedDocuments;
-      await this._setStorageOrTrim({ ats_lastGeneratedDocuments: lastRun });
+      await chrome.storage.local.set({ ats_lastGeneratedDocuments: this.generatedDocuments });
 
       // Documents exist and are stored: the note can now carry them.
       // Same rule as detection -- the follow-up is an extra, and it must
@@ -7106,58 +6802,33 @@ class ATSTailor {
       });
 
     } catch (error) {
-      // ██ THIS CATCH USED TO END THE STORY ██
-      //
-      // Reported as "still crashes when Processing tailored Document",
-      // and before that as a run that produced no files while claiming
-      // to have worked. The mechanism is here.
-      //
-      // tailorDocuments caught its own failure and RETURNED NORMALLY.
-      // Its caller, runExtractAndApply, awaits it and then marks step 2
-      // complete, step 3 working, and finally prints "Complete!
-      // Tailored CV and Cover Letter ready." with a success toast. So a
-      // failed run reported success, and the only trace was the finally
-      // block below stamping the step icons with a cross that the
-      // caller immediately overwrote for steps 2 and 3 -- which is why
-      // the screenshot showed a cross on step 1, a tick on step 2 and a
-      // spinner on step 3 that never resolved.
-      //
-      // The other half was in this block itself: signalAutomationComplete
-      // was called TWICE, the second time unguarded, directly below a
-      // guarded copy whose comment says "guarded to prevent
-      // double-crash". A throw from that second call escapes the catch
-      // and becomes an unhandled rejection during error handling, which
-      // is the worst possible moment to lose the original error.
       console.error('Tailoring error:', error);
-      const errMsg = (error && error.message) || 'Unknown error';
-      jgLog('error', 'tailor_failed', errMsg, {
-        stack: error && error.stack,
-        jobUrl: this.currentJob && this.currentJob.url,
-        jobTitle: this.currentJob && this.currentJob.title,
-        hasSession: !!(this.session && this.session.access_token),
-        aiProvider: this.aiProvider,
-        cvSoFar: (this.generatedDocuments && this.generatedDocuments.cv || '').length,
-      });
+      const errMsg = error.message || 'Unknown error';
       this.showToast(`Tailoring failed: ${errMsg}`, 'error');
       this.setStatus('Error', 'error');
       // Show error in progress text so it persists visually
       if (progressText) progressText.textContent = `Error: ${errMsg}`;
       if (progressContainer) progressContainer.classList.remove('hidden');
 
-      // Signal failure to external automation. Once, and guarded.
+      // Signal failure to external automation (guarded to prevent double-crash)
       try {
         await this.signalAutomationComplete({
           success: false,
-          error: errMsg,
+          error: error.message,
           jobUrl: this.currentJob?.url || window.location?.href
         });
       } catch (signalError) {
         console.warn('[ATS Tailor] signalAutomationComplete failed:', signalError);
       }
-
-      // AND THE CALLER IS TOLD. Without this the run "succeeds" with no
-      // documents, which is the reported bug.
-      throw error;
+      this.showToast(error.message || 'Failed', 'error');
+      this.setStatus('Error', 'error');
+      
+      // Signal failure to external automation
+      await this.signalAutomationComplete({
+        success: false,
+        error: error.message,
+        jobUrl: this.currentJob?.url || window.location?.href
+      });
     } finally {
       // Release the atomic guard and record the URL we just tailored so
       // duplicate triggers for the same job become no-ops until the user
@@ -8146,51 +7817,6 @@ class ATSTailor {
    * Uses structuredCv from tailoring step - NO re-parsing
    */
   async downloadDocument(type) {
-    // ██ THE DOWNLOAD IS THE SAME FILE AS THE ATTACHMENT ██
-    //
-    // This reached for cvPdf first and fell through to a server-side PDF
-    // build. Attachments have been DOCX for months, so the two buttons
-    // handed out DIFFERENT DOCUMENTS from the same generation -- and the
-    // PDF came from professional-pdf-engine.js, which none of the
-    // renderer work touches. That file emits
-    //
-    //   PROFESSIONAL SUMMARY, WORK EXPERIENCE, EDUCATION,
-    //   CORE COMPETENCIES, TECHNICAL SKILLS, CERTIFICATIONS
-    //
-    // Education third, and TWO headings containing the word "skill" --
-    // the exact parse bug fixed in the DOCX, where a parser takes the
-    // first match and stops, so the competencies came back EMPTY on a
-    // live parse. Anyone downloading and emailing that file was sending
-    // the broken document while believing it was the good one.
-    //
-    // So: hand back the DOCX that was attached. The PDF path below stays
-    // reachable only when no DOCX exists at all.
-    const docx = type === 'cv' ? this.generatedDocuments.cvDocx : this.generatedDocuments.coverDocx;
-    if (docx) {
-      const docxName = (type === 'cv'
-        ? this.generatedDocuments.cvDocxFileName : this.generatedDocuments.coverDocxFileName)
-        || `${this.profileInfo?.firstName || 'Applicant'}_${this.profileInfo?.lastName || ''}_`
-          .replace(/_+/g, '_') + (type === 'cv' ? 'CV.docx' : 'Cover_Letter.docx');
-      try {
-        const bytes = Uint8Array.from(atob(docx), (c) => c.charCodeAt(0));
-        const blob = new Blob([bytes], {
-          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = docxName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this.showToast('✅ Downloaded!', 'success');
-        return;
-      } catch (e) {
-        console.warn('[ATS Tailor] DOCX download failed, falling back:', e && e.message);
-      }
-    }
-
     const doc = type === 'cv' ? this.generatedDocuments.cvPdf : this.generatedDocuments.coverPdf;
     const rawTextDoc = type === 'cv' ? this.generatedDocuments.cv : this.generatedDocuments.coverLetter;
 
@@ -9951,32 +9577,6 @@ ATSTailor.prototype.testAPIKeyConnection = async function() {
 };
 
 // Debug report data collection
-// ██ THE EXPORT HAS TO SEE THE TAILORING ██
-//
-// popup.js keeps its own in-memory _debugLogs array, capped at 50 and
-// lost when the popup closes. The debug EXPORT is written by a
-// different thing: window.DebugLogger, which persists to
-// chrome.storage. That was loaded only as a content script, so the file
-// the user sends back could contain the page's "extension_loaded"
-// lines and nothing whatever from the popup, where the entire tailoring
-// pipeline runs.
-//
-// Every export therefore read "total 4, errors 0, successes 0" no
-// matter what had failed, and three rounds of debugging were spent
-// guessing from screenshots because the one diagnostic we asked for
-// was structurally blind.
-//
-// debug-logger.js is now loaded by popup.html. This wrapper is what the
-// tailoring path calls: it never throws, and it does nothing when the
-// logger is absent, so it cannot itself become the reason a run dies.
-function jgLog(level, event, message, data) {
-  try {
-    const L = (typeof window !== 'undefined') && window.DebugLogger;
-    if (L && typeof L[level] === 'function') L[level](event, message, data);
-    else console.log('[ATS Tailor] ' + event + ':', message, data || '');
-  } catch (e) { /* logging must never break the run */ }
-}
-
 ATSTailor.prototype._debugLogs = [];
 
 ATSTailor.prototype.addDebugLog = function(stage, data) {
@@ -10081,36 +9681,6 @@ ATSTailor.prototype.copyDebugReport = function() {
     .then(() => this.showToast('Debug report copied to clipboard', 'success'))
     .catch(() => this.showToast('Failed to copy', 'error'));
 };
-
-// ██ EVERY CRASH LANDS IN THE EXPORT, WHEREVER IT HAPPENS ██
-//
-// Reported as "still crashes when Processing tailored Document". That
-// message is shown at 70% and stays up across the whole post-response
-// stage: JSON repair, work-experience immutability, sanitisation,
-// keyword injection, the recruiter audit, DOCX generation. A throw in
-// any of them looks identical from outside, and three rounds have now
-// been spent narrowing it by inference from screenshots.
-//
-// These two handlers catch what no local try/catch did: an uncaught
-// error anywhere in the popup, and a rejected promise nobody awaited.
-// Both go to the persisted log with a stack, so the next export names
-// the file and line instead of me guessing at the stage.
-//
-// Registered at the top level rather than inside the constructor: a
-// failure DURING construction is exactly the kind that leaves no trace.
-window.addEventListener('error', (ev) => {
-  jgLog('error', 'popup_uncaught', (ev && ev.message) || 'uncaught error', {
-    source: ev && ev.filename,
-    line: ev && ev.lineno,
-    column: ev && ev.colno,
-    stack: ev && ev.error && ev.error.stack,
-  });
-});
-window.addEventListener('unhandledrejection', (ev) => {
-  const r = ev && ev.reason;
-  jgLog('error', 'popup_unhandled_rejection',
-    (r && r.message) || String(r), { stack: r && r.stack });
-});
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

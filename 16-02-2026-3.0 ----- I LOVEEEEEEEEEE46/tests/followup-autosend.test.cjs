@@ -3,9 +3,7 @@ const src=require('fs').readFileSync(require('path').join(__dirname,'..','popup.
 
 // --- ordering: documents must exist before the note is sent
 const iDocx=src.indexOf('this.buildDocxArtifact();');
-// See followup-actually-sends: the key no longer carries the base64,
-// only the ordering matters here.
-const iStore=src.indexOf('ats_lastGeneratedDocuments: lastRun');
+const iStore=src.indexOf('ats_lastGeneratedDocuments: this.generatedDocuments');
 const iSend=src.indexOf('await this.autoSendFollowup();');
 t('DOCX artifacts built before send', iDocx>0 && iDocx<iSend, 'docx@'+iDocx+' send@'+iSend);
 t('documents persisted before send', iStore>0 && iStore<iSend, 'store@'+iStore+' send@'+iSend);

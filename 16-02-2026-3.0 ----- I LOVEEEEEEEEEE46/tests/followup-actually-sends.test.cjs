@@ -125,11 +125,7 @@ console.log('\nTHE NOTE GOES OUT AFTER THE DOCUMENTS EXIST, NEVER BEFORE');
 // empty-handed follow-up is worse than none.
 {
   const attachIdx = SRC.indexOf('await this.attachBothDocuments()');
-  // The blobs were stripped out of this key to stop the documents
-  // being written to chrome.storage twice, which is what filled the
-  // 10 MB quota and made the write reject mid-run. The ORDER this
-  // suite cares about is unchanged.
-  const storeIdx = SRC.indexOf('ats_lastGeneratedDocuments: lastRun');
+  const storeIdx = SRC.indexOf('ats_lastGeneratedDocuments: this.generatedDocuments');
   const sendIdx = SRC.indexOf('await this.autoSendFollowup()');
   t('  documents are generated and attached first',
     attachIdx > -1 && attachIdx < sendIdx, 'attach=' + attachIdx + ' send=' + sendIdx);
