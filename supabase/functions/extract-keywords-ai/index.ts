@@ -1,6 +1,12 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  aiErrorResponse,
+  classifyProviderStatus,
+  lookupAiKeyRow,
+  type AiErrorCode,
+} from "../_shared/aiErrors.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,19 +73,32 @@ async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any
   return { userId: user.id, supabase };
 }
 
-async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('openai_api_key')
-    .eq('user_id', userId)
-    .single();
-  
-  if (error || !data) {
-    return null;
+/**
+ * Returns the caller's OpenAI key, or a specific reason it is unavailable.
+ * The four situations (empty column, RLS denial, zero rows, multiple rows) are
+ * reported separately and the Postgres error is logged, never discarded.
+ */
+async function getUserOpenAIKey(
+  supabase: any,
+  userId: string,
+): Promise<{ ok: true; key: string } | { ok: false; code: AiErrorCode; userMessage: string; detail: string }> {
+  const lookup = await lookupAiKeyRow(supabase, userId, "openai_api_key");
+  if (!lookup.ok) return lookup;
+
+  const key = (lookup.row.openai_api_key as string | null) || "";
+  if (!key.trim()) {
+    console.error("[ai-key-lookup] openai_api_key column is empty", { userId });
+    return {
+      ok: false,
+      code: "ai_key_missing",
+      userMessage: "No OpenAI API key is saved on your profile. Add one in Profile settings.",
+      detail: "openai_api_key column empty",
+    };
   }
-  
-  return data.openai_api_key;
+
+  return { ok: true, key };
 }
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -100,16 +119,26 @@ serve(async (req) => {
     }
 
     // Get user's OpenAI API key
-    const openAIKey = await getUserOpenAIKey(supabase, userId);
-    
-    if (!openAIKey) {
-      return new Response(JSON.stringify({ 
-        error: "OpenAI API key not configured. Please add your API key in Profile settings." 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const keyResult = await getUserOpenAIKey(supabase, userId);
+
+    if (!keyResult.ok) {
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        'extract-keywords-ai',
+        {
+          error: keyResult.userMessage,
+          errorCode: keyResult.code,
+          userMessage: keyResult.userMessage,
+          provider: 'OpenAI',
+          retryable: false,
+        },
+        corsHeaders,
+        keyResult.detail,
+        400,
+      );
     }
+    const openAIKey = keyResult.key;
 
     console.log(`[User ${userId}] Extracting keywords from JD for ${jobTitle || 'Unknown'} at ${company || 'Unknown'}`);
 
@@ -147,22 +176,19 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenAI API error:', response.status, errorText);
-      
-      if (response.status === 401) {
-        return new Response(JSON.stringify({ 
-          error: "Invalid OpenAI API key. Please check your API key in Profile settings." 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      return new Response(JSON.stringify({ 
-        error: "Failed to extract keywords. Please try again." 
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+
+      // 401 / 402 / 403 / 429 are reported verbatim so a billing refusal is
+      // never mistaken for a keyword-extraction problem.
+      const payload = classifyProviderStatus('OpenAI', response.status, errorText);
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        'extract-keywords-ai',
+        payload,
+        corsHeaders,
+        errorText.slice(0, 1000),
+        response.status,
+      );
     }
 
     const data = await response.json();

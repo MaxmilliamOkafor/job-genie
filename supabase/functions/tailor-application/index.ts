@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  aiErrorResponse,
+  classifyProviderStatus,
+  lookupAiKeyRow,
+  type AiErrorCode,
+} from "../_shared/aiErrors.ts";
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
 // This function calls generate-pdf server-side and returns base64 PDFs alongside the tailored text.
@@ -100,16 +106,23 @@ interface AIProviderConfig {
   kimiEnabled: boolean;
 }
 
-async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled")
-    .eq("user_id", userId)
-    .single();
+type AIConfigResult =
+  | { ok: true; config: AIProviderConfig }
+  | { ok: false; code: AiErrorCode; userMessage: string; detail: string };
 
-  if (error || !data) {
-    return null;
-  }
+/**
+ * Resolves the caller's AI provider config, reporting exactly WHY it is
+ * unavailable: empty columns, RLS denial, zero rows, multiple rows, or another
+ * Postgres error (which is logged, not discarded).
+ */
+async function getUserAIConfigResult(supabase: any, userId: string): Promise<AIConfigResult> {
+  const lookup = await lookupAiKeyRow(
+    supabase,
+    userId,
+    "openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled",
+  );
+  if (!lookup.ok) return lookup;
+  const data = lookup.row as any;
 
   const preferredProvider = data.preferred_ai_provider || "openai";
   const openaiEnabled = data.openai_enabled ?? true;
@@ -136,15 +149,37 @@ async function getUserAIConfig(supabase: any, userId: string): Promise<AIProvide
   }
 
   if (!activeKey) {
-    return null;
+    console.error("[ai-key-lookup] no enabled provider has a key saved", {
+      userId,
+      hasOpenai: !!data.openai_api_key,
+      hasKimi: !!data.kimi_api_key,
+      openaiEnabled,
+      kimiEnabled,
+    });
+    return {
+      ok: false,
+      code: "ai_key_missing",
+      userMessage:
+        "No AI API key is saved and enabled on your profile, so nothing can be generated. Add or enable a key in Profile settings.",
+      detail: "openai_api_key / kimi_api_key empty or provider disabled",
+    };
   }
 
   return {
-    provider: activeProvider,
-    apiKey: activeKey,
-    openaiEnabled,
-    kimiEnabled,
+    ok: true,
+    config: {
+      provider: activeProvider,
+      apiKey: activeKey,
+      openaiEnabled,
+      kimiEnabled,
+    },
   };
+}
+
+// Legacy wrapper: returns null on any failure. Prefer getUserAIConfigResult.
+async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
+  const result = await getUserAIConfigResult(supabase, userId);
+  return result.ok ? result.config : null;
 }
 
 // Legacy function for backward compatibility
@@ -2017,21 +2052,26 @@ serve(async (req) => {
     }
 
     // Get user's AI provider configuration
-    const aiConfig = await getUserAIConfig(supabase, userId);
+    const aiConfigResult = await getUserAIConfigResult(supabase, userId);
 
-    if (!aiConfig) {
-      return new Response(
-        JSON.stringify({
-          error: "No AI provider configured. Please add an API key (OpenAI or Kimi K2) in Profile settings.",
-        }),
+    if (!aiConfigResult.ok) {
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        "tailor-application",
         {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          error: aiConfigResult.userMessage,
+          errorCode: aiConfigResult.code,
+          userMessage: aiConfigResult.userMessage,
+          retryable: false,
         },
+        corsHeaders,
+        aiConfigResult.detail,
+        400,
       );
     }
 
-    const { provider: aiProvider, apiKey: userApiKey } = aiConfig;
+    const { provider: aiProvider, apiKey: userApiKey } = aiConfigResult.config;
     console.log(`[User ${userId}] Using AI provider: ${aiProvider}`);
 
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
@@ -3168,6 +3208,8 @@ ${
     // Retry logic with exponential backoff for rate limits
     const maxRetries = 3;
     let lastError: Error | null = null;
+    let lastRateLimitBody = "";
+
     let response: Response | null = null;
 
     // Determine API endpoint and model based on provider
@@ -3241,6 +3283,7 @@ ${
           // Rate limit - will retry
           const errorText = await response.text();
           console.warn(`${apiConfig.providerName} rate limit (attempt ${attempt + 1}):`, errorText);
+          lastRateLimitBody = errorText;
           lastError = new Error("Rate limit exceeded");
 
           // Check for Retry-After header
@@ -3257,24 +3300,18 @@ ${
         const errorText = await response.text();
         console.error(`${apiConfig.providerName} API error:`, response.status, errorText);
 
-        if (response.status === 401) {
-          return new Response(
-            JSON.stringify({
-              error: `Invalid ${apiConfig.providerName} API key. Please check your API key in Profile settings.`,
-            }),
-            {
-              status: 401,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
-          );
-        }
-        if (response.status === 402 || response.status === 403) {
-          return new Response(
-            JSON.stringify({ error: `${apiConfig.providerName} API billing issue. Please check your account.` }),
-            {
-              status: 402,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
+        // 401 / 402 / 403 are terminal and are reported verbatim, so a refused
+        // request never surfaces as a generic 500 or a silently empty CV.
+        if (response.status === 401 || response.status === 402 || response.status === 403) {
+          const payload = classifyProviderStatus(apiConfig.providerName, response.status, errorText);
+          return await aiErrorResponse(
+            supabase,
+            userId,
+            "tailor-application",
+            payload,
+            corsHeaders,
+            errorText.slice(0, 1000),
+            response.status === 401 ? 401 : 402,
           );
         }
 
@@ -3290,15 +3327,19 @@ ${
 
     // If all retries exhausted due to rate limit
     if (!response || !response.ok) {
-      return new Response(
-        JSON.stringify({
-          error: `${apiConfig.providerName} API temporarily unavailable. Your quota may be exceeded. Please check your billing and try again later.`,
-          retryable: true,
-        }),
-        {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+      const payload = classifyProviderStatus(
+        apiConfig.providerName,
+        response?.status ?? 429,
+        lastRateLimitBody || lastError?.message || "",
+      );
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        "tailor-application",
+        payload,
+        corsHeaders,
+        lastRateLimitBody?.slice(0, 1000),
+        429,
       );
     }
 
