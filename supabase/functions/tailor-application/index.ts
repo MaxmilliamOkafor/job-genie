@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  aiErrorResponse,
+  classifyProviderStatus,
+  lookupAiKeyRow,
+  type AiErrorCode,
+} from "../_shared/aiErrors.ts";
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
 // This function calls generate-pdf server-side and returns base64 PDFs alongside the tailored text.
@@ -100,16 +106,23 @@ interface AIProviderConfig {
   kimiEnabled: boolean;
 }
 
-async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled")
-    .eq("user_id", userId)
-    .single();
+type AIConfigResult =
+  | { ok: true; config: AIProviderConfig }
+  | { ok: false; code: AiErrorCode; userMessage: string; detail: string };
 
-  if (error || !data) {
-    return null;
-  }
+/**
+ * Resolves the caller's AI provider config, reporting exactly WHY it is
+ * unavailable: empty columns, RLS denial, zero rows, multiple rows, or another
+ * Postgres error (which is logged, not discarded).
+ */
+async function getUserAIConfigResult(supabase: any, userId: string): Promise<AIConfigResult> {
+  const lookup = await lookupAiKeyRow(
+    supabase,
+    userId,
+    "openai_api_key, kimi_api_key, preferred_ai_provider, openai_enabled, kimi_enabled",
+  );
+  if (!lookup.ok) return lookup;
+  const data = lookup.row as any;
 
   const preferredProvider = data.preferred_ai_provider || "openai";
   const openaiEnabled = data.openai_enabled ?? true;
@@ -136,15 +149,37 @@ async function getUserAIConfig(supabase: any, userId: string): Promise<AIProvide
   }
 
   if (!activeKey) {
-    return null;
+    console.error("[ai-key-lookup] no enabled provider has a key saved", {
+      userId,
+      hasOpenai: !!data.openai_api_key,
+      hasKimi: !!data.kimi_api_key,
+      openaiEnabled,
+      kimiEnabled,
+    });
+    return {
+      ok: false,
+      code: "ai_key_missing",
+      userMessage:
+        "No AI API key is saved and enabled on your profile, so nothing can be generated. Add or enable a key in Profile settings.",
+      detail: "openai_api_key / kimi_api_key empty or provider disabled",
+    };
   }
 
   return {
-    provider: activeProvider,
-    apiKey: activeKey,
-    openaiEnabled,
-    kimiEnabled,
+    ok: true,
+    config: {
+      provider: activeProvider,
+      apiKey: activeKey,
+      openaiEnabled,
+      kimiEnabled,
+    },
   };
+}
+
+// Legacy wrapper: returns null on any failure. Prefer getUserAIConfigResult.
+async function getUserAIConfig(supabase: any, userId: string): Promise<AIProviderConfig | null> {
+  const result = await getUserAIConfigResult(supabase, userId);
+  return result.ok ? result.config : null;
 }
 
 // Legacy function for backward compatibility
