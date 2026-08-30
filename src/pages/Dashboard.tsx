@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { AIProviderStatus } from '@/components/dashboard/AIProviderStatus';
+import { AIProviderHealth } from '@/components/dashboard/AIProviderHealth';
 import { ResumeStrengthAnalyzer } from '@/components/dashboard/ResumeStrengthAnalyzer';
 import { GenerationHistory } from '@/components/dashboard/GenerationHistory';
 import { InterviewPrepTips } from '@/components/dashboard/InterviewPrepTips';
@@ -86,6 +87,9 @@ const Dashboard = () => {
 
         {/* AI Provider Status */}
         <AIProviderStatus />
+
+        {/* Last AI refusal (billing / key / rate limit) shown verbatim */}
+        <AIProviderHealth />
 
         {/* Quick Actions */}
         {!profile?.first_name && (

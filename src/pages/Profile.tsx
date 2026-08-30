@@ -1690,6 +1690,17 @@ const Profile = () => {
                             <p className="text-xs text-muted-foreground">
                               Drag to reorder. Bullets print in exactly this order - nothing is re-sorted or removed on save.
                             </p>
+                            {/* Quiet scale prompt: the CV check flags a role whose bullets carry no
+                                team size, budget, headcount or count of systems / stakeholders.
+                                Nothing is generated automatically. */}
+                            {(exp.bullets || []).length > 0 &&
+                              !(exp.bullets || []).some((b: string) => /\d/.test(b || '')) && (
+                                <p className="text-xs rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-amber-700 dark:text-amber-400">
+                                  No bullet here carries a number. Add scale where it is true - team size, budget,
+                                  headcount, or a count of systems or stakeholders.
+                                </p>
+                              )}
+
                             {(exp.bullets || []).map((bullet: string, bulletIndex: number) => (
                               <div
                                 key={bulletIndex}
