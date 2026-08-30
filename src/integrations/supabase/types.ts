@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_error_log: {
+        Row: {
+          created_at: string
+          detail: string | null
+          error_code: string
+          function_name: string
+          id: string
+          provider: string | null
+          provider_status: number | null
+          user_id: string
+          user_message: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: string | null
+          error_code: string
+          function_name: string
+          id?: string
+          provider?: string | null
+          provider_status?: number | null
+          user_id: string
+          user_message: string
+        }
+        Update: {
+          created_at?: string
+          detail?: string | null
+          error_code?: string
+          function_name?: string
+          id?: string
+          provider?: string | null
+          provider_status?: number | null
+          user_id?: string
+          user_message?: string
+        }
+        Relationships: []
+      }
       api_usage: {
         Row: {
           created_at: string
