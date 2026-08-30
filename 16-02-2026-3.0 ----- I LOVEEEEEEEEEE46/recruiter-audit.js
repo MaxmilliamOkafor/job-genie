@@ -1038,9 +1038,43 @@
     const city = (s) => String(s).split(',')[0].trim().toLowerCase();
     if (city(shown) === city(real)) return { text, changed: false };
 
+    // ── WHEN "(open to relocation)" IS WORTH SAYING ──────────────────
+    //
+    // It was appended whenever the posting's city differed from the
+    // candidate's, which fired on two cases where it says nothing and
+    // costs a line of the six seconds a header gets:
+    //
+    //   REMOTE. "Remote", "Remote (EMEA)", "Anywhere" -- there is
+    //   nothing to relocate to, and offering to move for a remote job
+    //   reads as not having understood the posting.
+    //
+    //   THE SAME COUNTRY. Dublin to Cork is a commute or a move nobody
+    //   needs reassuring about, and no filter is screening it out.
+    //
+    // Reported exactly that way: fine for remote and Irish roles, but
+    // not something that was asked for. It earns its place only on a
+    // posting in ANOTHER COUNTRY, where a recruiter's first question
+    // about a foreign address is whether the candidate would actually
+    // move, and where staying silent invites the assumption that they
+    // would not.
     const job = String(jobLocation || '').replace(/\s+/g, ' ').trim();
-    const elsewhere = job && city(job) !== city(real);
-    parts[seg] = elsewhere ? real + ' (open to relocation)' : real;
+    const REMOTE = /\b(remote|anywhere|work from home|wfh|distributed|virtual)\b/i;
+    const countryOf = (v) => {
+      const bits = String(v).split(',').map((x) => x.trim()).filter(Boolean);
+      return (bits.length > 1 ? bits[bits.length - 1] : '').toLowerCase();
+    };
+    const ISO = { ie: 'ireland', gb: 'united kingdom', uk: 'united kingdom',
+      us: 'united states', usa: 'united states', de: 'germany', fr: 'france',
+      nl: 'netherlands', es: 'spain', it: 'italy', pt: 'portugal', br: 'brazil',
+      ca: 'canada', au: 'australia', in: 'india', sg: 'singapore', ch: 'switzerland' };
+    const norm = (c) => ISO[c] || c;
+    const jobCountry = norm(countryOf(job));
+    const realCountry = norm(countryOf(real));
+    // Abroad only when BOTH countries are known and they differ. An
+    // unknown country is not evidence of anything, so it says nothing.
+    const abroad = !!job && !REMOTE.test(job)
+      && !!jobCountry && !!realCountry && jobCountry !== realCountry;
+    parts[seg] = abroad ? real + ' (open to relocation)' : real;
     lines[at] = parts.join('  |  ');
     return { text: lines.join('\n'), changed: true, was: shown, now: parts[seg] };
   }
