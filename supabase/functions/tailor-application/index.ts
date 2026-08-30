@@ -3208,6 +3208,8 @@ ${
     // Retry logic with exponential backoff for rate limits
     const maxRetries = 3;
     let lastError: Error | null = null;
+    let lastRateLimitBody = "";
+
     let response: Response | null = null;
 
     // Determine API endpoint and model based on provider
