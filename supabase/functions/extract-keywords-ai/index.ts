@@ -67,19 +67,32 @@ async function verifyAuth(req: Request): Promise<{ userId: string; supabase: any
   return { userId: user.id, supabase };
 }
 
-async function getUserOpenAIKey(supabase: any, userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('openai_api_key')
-    .eq('user_id', userId)
-    .single();
-  
-  if (error || !data) {
-    return null;
+/**
+ * Returns the caller's OpenAI key, or a specific reason it is unavailable.
+ * The four situations (empty column, RLS denial, zero rows, multiple rows) are
+ * reported separately and the Postgres error is logged, never discarded.
+ */
+async function getUserOpenAIKey(
+  supabase: any,
+  userId: string,
+): Promise<{ ok: true; key: string } | { ok: false; code: AiErrorCode; userMessage: string; detail: string }> {
+  const lookup = await lookupAiKeyRow(supabase, userId, "openai_api_key");
+  if (!lookup.ok) return lookup;
+
+  const key = (lookup.row.openai_api_key as string | null) || "";
+  if (!key.trim()) {
+    console.error("[ai-key-lookup] openai_api_key column is empty", { userId });
+    return {
+      ok: false,
+      code: "ai_key_missing",
+      userMessage: "No OpenAI API key is saved on your profile. Add one in Profile settings.",
+      detail: "openai_api_key column empty",
+    };
   }
-  
-  return data.openai_api_key;
+
+  return { ok: true, key };
 }
+
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
