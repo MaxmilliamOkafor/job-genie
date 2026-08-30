@@ -2052,21 +2052,26 @@ serve(async (req) => {
     }
 
     // Get user's AI provider configuration
-    const aiConfig = await getUserAIConfig(supabase, userId);
+    const aiConfigResult = await getUserAIConfigResult(supabase, userId);
 
-    if (!aiConfig) {
-      return new Response(
-        JSON.stringify({
-          error: "No AI provider configured. Please add an API key (OpenAI or Kimi K2) in Profile settings.",
-        }),
+    if (!aiConfigResult.ok) {
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        "tailor-application",
         {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          error: aiConfigResult.userMessage,
+          errorCode: aiConfigResult.code,
+          userMessage: aiConfigResult.userMessage,
+          retryable: false,
         },
+        corsHeaders,
+        aiConfigResult.detail,
+        400,
       );
     }
 
-    const { provider: aiProvider, apiKey: userApiKey } = aiConfig;
+    const { provider: aiProvider, apiKey: userApiKey } = aiConfigResult.config;
     console.log(`[User ${userId}] Using AI provider: ${aiProvider}`);
 
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
@@ -3276,6 +3281,7 @@ ${
           // Rate limit - will retry
           const errorText = await response.text();
           console.warn(`${apiConfig.providerName} rate limit (attempt ${attempt + 1}):`, errorText);
+          lastRateLimitBody = errorText;
           lastError = new Error("Rate limit exceeded");
 
           // Check for Retry-After header
@@ -3292,24 +3298,18 @@ ${
         const errorText = await response.text();
         console.error(`${apiConfig.providerName} API error:`, response.status, errorText);
 
-        if (response.status === 401) {
-          return new Response(
-            JSON.stringify({
-              error: `Invalid ${apiConfig.providerName} API key. Please check your API key in Profile settings.`,
-            }),
-            {
-              status: 401,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
-          );
-        }
-        if (response.status === 402 || response.status === 403) {
-          return new Response(
-            JSON.stringify({ error: `${apiConfig.providerName} API billing issue. Please check your account.` }),
-            {
-              status: 402,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
+        // 401 / 402 / 403 are terminal and are reported verbatim, so a refused
+        // request never surfaces as a generic 500 or a silently empty CV.
+        if (response.status === 401 || response.status === 402 || response.status === 403) {
+          const payload = classifyProviderStatus(apiConfig.providerName, response.status, errorText);
+          return await aiErrorResponse(
+            supabase,
+            userId,
+            "tailor-application",
+            payload,
+            corsHeaders,
+            errorText.slice(0, 1000),
+            response.status === 401 ? 401 : 402,
           );
         }
 
@@ -3325,15 +3325,19 @@ ${
 
     // If all retries exhausted due to rate limit
     if (!response || !response.ok) {
-      return new Response(
-        JSON.stringify({
-          error: `${apiConfig.providerName} API temporarily unavailable. Your quota may be exceeded. Please check your billing and try again later.`,
-          retryable: true,
-        }),
-        {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
+      const payload = classifyProviderStatus(
+        apiConfig.providerName,
+        response?.status ?? 429,
+        lastRateLimitBody || lastError?.message || "",
+      );
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        "tailor-application",
+        payload,
+        corsHeaders,
+        lastRateLimitBody?.slice(0, 1000),
+        429,
       );
     }
 
