@@ -2835,6 +2835,169 @@
   }
 
   // ===================================================================
+  // WHAT THE SCORING TOOLS CHECK AND THIS DID NOT
+  // -------------------------------------------------------------------
+  // Enhancv, Resume Worded, Jobscan and Rezi were read against the
+  // thirty checks already here. Most of their rubric was covered, and
+  // several things they do not check at all were covered better --
+  // fabricated keywords, an inflated years figure, a headline claiming
+  // an unheld title. Four real gaps remained, and all four are things a
+  // HUMAN discounts rather than scoring conventions.
+  //
+  // Deliberately not copied: an overall 0-100 score. A number invites
+  // optimising for the number, and the checks below name a specific
+  // defect and where it is, which is more useful.
+  // ===================================================================
+
+  // ── 1. TENSE ────────────────────────────────────────────────────────
+  // A finished job described in the present tense is the most common
+  // thing a reader notices and the writer does not. "Build and own
+  // backend services" under a role that ended in 2021 reads as
+  // carelessness on the one document that is supposed to be careful.
+  //
+  // Only the unambiguous direction is flagged: a PAST role opening a
+  // bullet with a base-form verb. The reverse -- past tense inside a
+  // current role -- is legitimate for work that is finished, so it is
+  // left alone. Irregular pasts are listed because "led", "built" and
+  // "held" are not "-ed" and a naive rule calls them present tense.
+  const _BASE_VERBS = new Set(['build', 'lead', 'manage', 'own', 'drive', 'deliver',
+    'develop', 'design', 'create', 'maintain', 'support', 'run', 'oversee', 'handle',
+    'coordinate', 'collaborate', 'partner', 'work', 'write', 'author', 'review',
+    'analyse', 'analyze', 'report', 'monitor', 'track', 'test', 'deploy', 'automate',
+    'optimise', 'optimize', 'improve', 'reduce', 'increase', 'ensure', 'provide',
+    'produce', 'present', 'train', 'mentor', 'hold', 'serve', 'act', 'help',
+    'contribute', 'participate', 'facilitate', 'administer', 'implement', 'integrate',
+    'configure', 'troubleshoot', 'resolve', 'investigate', 'define', 'plan', 'set']);
+  // Past forms that do not end in -ed, so they are not mistaken for base forms.
+  const _IRREGULAR_PAST = new Set(['led', 'built', 'held', 'ran', 'wrote', 'drove',
+    'grew', 'made', 'kept', 'set', 'cut', 'put', 'spent', 'taught', 'brought', 'won',
+    'took', 'gave', 'began', 'chose', 'found', 'met', 'sent', 'sold', 'spoke',
+    'rebuilt', 'oversaw', 'drew', 'rose', 'became', 'left', 'dealt', 'brought']);
+
+  function tenseAudit(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { violations: [] };
+    const lines = text.split('\n');
+    const violations = [];
+    let inExp = false, roleIsCurrent = null, roleLabel = '';
+    for (let i = 0; i < lines.length; i++) {
+      const bare = lines[i].trim();
+      if (_EXP_HEAD.test(bare)) { inExp = true; roleIsCurrent = null; continue; }
+      if (_ANY_HEAD.test(bare)) { inExp = false; roleIsCurrent = null; continue; }
+      if (!inExp || !bare) continue;
+
+      // A date line decides the tense for the bullets beneath it.
+      if (ROLE_DATE_RE.test(bare)) {
+        roleIsCurrent = /\b(present|current|now|to date|ongoing)\b/i.test(bare);
+        continue;
+      }
+      if (!/^[-•*]\s*\S/.test(bare)) {
+        if (!ROLE_DATE_RE.test(bare) && bare.length < 80) roleLabel = bare.split('\t')[0].trim();
+        continue;
+      }
+      if (roleIsCurrent !== false) continue;         // unknown or current: leave it
+
+      const opener = bare.replace(/^[-•*]\s*/, '').split(/\s+/)[0] || '';
+      const w = opener.toLowerCase().replace(/[^a-z]/g, '');
+      if (!w || _IRREGULAR_PAST.has(w) || /ed$/.test(w)) continue;
+      if (!_BASE_VERBS.has(w)) continue;
+      violations.push({ role: roleLabel, verb: opener,
+        sample: bare.replace(/^[-•*]\s*/, '').slice(0, 90) });
+      if (violations.length >= 6) break;
+    }
+    return { violations };
+  }
+
+  // ── 2. PRONOUNS ─────────────────────────────────────────────────────
+  // The cover letter was already checked for being "I"-heavy. The CV
+  // was not checked at all, and a bullet reading "I managed a team of
+  // six" is marked down by every scoring tool and reads as a first
+  // draft. A CV is written in the implied first person; the pronoun is
+  // the one word that never needs to be there.
+  const _PRONOUN_RE = /(^|[^A-Za-z])(I|I'm|I've|my|me|mine|we|our|ours|us)([^A-Za-z]|$)/;
+  function pronounAudit(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { violations: [] };
+    const violations = [];
+    for (const raw of text.split('\n')) {
+      const bare = raw.trim();
+      if (!/^[-•*]\s*\S/.test(bare)) continue;
+      const body = bare.replace(/^[-•*]\s*/, '');
+      // Case matters for "I"; the rest are matched case-insensitively
+      // but only as whole words, so "us" inside "customers" is safe.
+      const hit = _PRONOUN_RE.exec(body) || /(^|[^A-Za-z])(my|me|mine|we|our|ours|us)([^A-Za-z]|$)/i.exec(body);
+      if (!hit) continue;
+      violations.push({ word: hit[2], sample: body.slice(0, 90) });
+      if (violations.length >= 6) break;
+    }
+    return { violations };
+  }
+
+  // ── 3. PASSIVE AND DUTY LANGUAGE ────────────────────────────────────
+  // "Was responsible for the migration" and "Migrated 47 services" can
+  // describe the same work, and only one of them says the candidate did
+  // it. This is the single most-flagged category across every tool
+  // read, and it is flagged because it is right: passive voice hides
+  // agency, which is the only thing a bullet exists to establish.
+  const _PASSIVE_RES = [
+    [/\b(?:was|were|been|being)\s+(?:[a-z]+ly\s+)?[a-z]+(?:ed|en)\b/i, 'passive voice'],
+    [/\bresponsible\s+for\b/i, '"responsible for"'],
+    [/\btasked\s+with\b/i, '"tasked with"'],
+    [/\bduties\s+(?:included|involved)\b/i, '"duties included"'],
+    [/\bin\s+charge\s+of\b/i, '"in charge of"'],
+    [/\binvolved\s+in\b/i, '"involved in"'],
+    [/\bhelped\s+(?:to\s+)?[a-z]+/i, '"helped"'],
+    [/\bassisted\s+(?:with|in)\b/i, '"assisted with"'],
+  ];
+  function passiveVoiceAudit(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { violations: [] };
+    const violations = [];
+    for (const raw of text.split('\n')) {
+      const bare = raw.trim();
+      if (!/^[-•*]\s*\S/.test(bare)) continue;
+      const body = bare.replace(/^[-•*]\s*/, '');
+      for (const [re, label] of _PASSIVE_RES) {
+        if (!re.test(body)) continue;
+        violations.push({ pattern: label, sample: body.slice(0, 90) });
+        break;
+      }
+      if (violations.length >= 6) break;
+    }
+    return { violations };
+  }
+
+  // ── 4. SCOPE ────────────────────────────────────────────────────────
+  // Resume Worded scores explicitly for evidence of scale: team size,
+  // budget, headcount, the number of stakeholders or systems. It is the
+  // difference between "led the migration" and "led the migration of 47
+  // services for a GBP 2.6bn portfolio", and it is what separates a
+  // senior CV from a competent one.
+  //
+  // This is the one check here that reports an ABSENCE. A CV with no
+  // scope signal anywhere is not necessarily wrong, but on a senior
+  // application it is nearly always a CV whose owner left the numbers
+  // out of their profile rather than one who never had them.
+  const _SCOPE_RES = [
+    /\bteam of \d+|\b\d+\s+(?:engineers|analysts|developers|people|reports|consultants|staff)\b/i,
+    /[£$€]\s?\d[\d,.]*\s?(?:k|m|bn|b|million|billion)?\b/i,
+    /\b\d+\s+(?:stakeholder|client|customer|country|countries|office|market|team|service|system|application)s?\b/i,
+    /\b(?:managed|led|mentored|trained|supervised)\s+\d+/i,
+  ];
+  function scopeAudit(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { bullets: 0, withScope: 0 };
+    let bullets = 0, withScope = 0;
+    for (const raw of text.split('\n')) {
+      const bare = raw.trim();
+      if (!/^[-•*]\s*\S/.test(bare)) continue;
+      bullets++;
+      if (_SCOPE_RES.some((re) => re.test(bare))) withScope++;
+    }
+    return { bullets, withScope };
+  }
+
+  // ===================================================================
   // v4 — ATS PARSE-SAFETY CHECKS
   // -------------------------------------------------------------------
   // The two most common reasons an ATS parser garbles an otherwise-good
@@ -4821,6 +4984,75 @@
       if (w.weak.length > 0) {
         report.warnings.push({ kind: 'weak-bullet-openers', count: w.weak.length, samples: w.weak.slice(0, 3) });
       }
+    }
+
+    // The four gaps found by reading what Enhancv, Resume Worded,
+    // Jobscan and Rezi score. Warnings only: every one of them needs a
+    // judgement about the work that this code does not have, and a
+    // rewrite it guessed at would be worse than the sentence it
+    // replaced.
+    if (outCV) {
+      try {
+        const tn = tenseAudit(outCV);
+        if (tn.violations.length) {
+          report.warnings.push({
+            kind: 'tense-mismatch',
+            count: tn.violations.length,
+            samples: tn.violations.slice(0, 3),
+            note: 'A role that has ended is described in the present tense. '
+              + tn.violations.map((v) => '"' + v.verb + '"').slice(0, 3).join(', ')
+              + ' should be past tense. It is the most common thing a reader '
+              + 'notices and the writer does not.',
+          });
+        }
+      } catch (e) {}
+
+      try {
+        const pr = pronounAudit(outCV);
+        if (pr.violations.length) {
+          report.warnings.push({
+            kind: 'pronouns-in-bullets',
+            count: pr.violations.length,
+            samples: pr.violations.slice(0, 3),
+            note: 'A CV is written in the implied first person, so "I", "we" and '
+              + '"my" never need to be there. Every scoring tool marks them down '
+              + 'and they read as a first draft.',
+          });
+        }
+      } catch (e) {}
+
+      try {
+        const pv = passiveVoiceAudit(outCV);
+        if (pv.violations.length) {
+          report.warnings.push({
+            kind: 'passive-or-duty-language',
+            count: pv.violations.length,
+            samples: pv.violations.slice(0, 3),
+            note: '"Was responsible for the migration" and "Migrated 47 services" '
+              + 'describe the same work, and only one says you did it. Passive '
+              + 'voice hides agency, which is the only thing a bullet exists to '
+              + 'establish.',
+          });
+        }
+      } catch (e) {}
+
+      try {
+        const sc = scopeAudit(outCV);
+        // Only worth saying on a CV with enough bullets for the absence
+        // to mean something.
+        if (sc.bullets >= 6 && sc.withScope === 0) {
+          report.warnings.push({
+            kind: 'no-scope-signals',
+            count: sc.bullets,
+            note: 'Not one bullet carries a number for scale: team size, budget, '
+              + 'headcount, how many systems or stakeholders. That is the '
+              + 'difference between "led the migration" and "led the migration of '
+              + '47 services for a GBP 2.6bn portfolio", and on a senior '
+              + 'application it is usually a profile with the numbers left out '
+              + 'rather than a career without them.',
+          });
+        }
+      } catch (e) {}
     }
 
     // v2: action-verb opener check (warning)
