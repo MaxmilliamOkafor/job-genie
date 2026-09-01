@@ -1127,9 +1127,9 @@ function profileToResumeData(profile: Record<string, unknown>): ResumeData {
     projects,
     education,
     skills,
-    certifications: Array.isArray(profile.certifications)
-      ? (profile.certifications as string[]).slice(0, 6)
-      : [],
+    certifications: profile.certifications_hidden || !Array.isArray(profile.certifications)
+      ? []
+      : (profile.certifications as string[]).slice(0, 6),
   };
 }
 

@@ -97,7 +97,7 @@ const CVPreviewModalContent = ({ profile }: CVPreviewModalProps) => {
         relevant_projects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects : [],
         education: Array.isArray(profile.education) ? profile.education : [],
         skills: profile.skills || { technical: [], soft: [] },
-        certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
+        certifications: profile.certifications_hidden || !Array.isArray(profile.certifications) ? [] : profile.certifications,
       };
 
       // Count sections for preview info
