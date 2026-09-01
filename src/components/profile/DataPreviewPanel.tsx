@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight, Copy, Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { CERTIFICATIONS_MAX, printedCertifications } from '@/lib/profileValidation';
+import { workAuthCountryNames } from '@/lib/workAuthCountries';
 
 interface DataPreviewPanelProps {
   profile: Record<string, any>;
