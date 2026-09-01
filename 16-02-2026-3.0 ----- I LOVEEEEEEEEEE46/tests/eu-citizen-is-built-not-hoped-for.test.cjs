@@ -111,6 +111,32 @@ console.log('\nAND IT NEVER DOUBLES UP');
     JSON.stringify(line));
 }
 
+console.log('\nA THIN GENUINE LINE IS UPGRADED TO THE FULL SET');
+{
+  // Shipped for real: "English (native) - EU Citizen" while the
+  // profile lists four languages. A genuine line with the claim used
+  // to be left alone however few languages it carried.
+  const o = run(['Languages & Citizenship: English (native) - EU Citizen',
+    'Programming: Python, SQL']);
+  const line = o.cvText.split('\n').find((l) => /^Languages & Citizenship:/.test(l)) || '';
+  t('  all four languages arrive',
+    /French \(native\)/.test(line) && /Spanish \(advanced\)/.test(line)
+      && /German \(advanced\)/.test(line), JSON.stringify(line));
+  t('  the claim survives the upgrade', / - EU Citizen$/.test(line), JSON.stringify(line));
+  t('  and there is still exactly one line',
+    o.cvText.split('\n').filter((l) => /Languages & Citizenship:/.test(l)).length === 1, 'doubled');
+}
+
+console.log('\nAND A REGEX SOURCE NEVER RENDERS AS A SKILL');
+{
+  // The server keyword list carries pattern strings ("node\\.?js") and
+  // one reached a generated CV as the literal skill "Node.?js".
+  const o = run(['Programming: Python, Node.?js, React', 'Soft Skills: Communication']);
+  t('  "Node.?js" is scrubbed to "Node.js"',
+    o.cvText.indexOf('Node.?js') === -1 && o.cvText.indexOf('Node.js') !== -1,
+    o.cvText.split('\n').find((l) => /Node/.test(l)));
+}
+
 console.log('\nAND THE RENDERED DOCX CARRIES IT BOLD');
 {
   const o = run(['Languages & Citizenship: Python, SQL, Java', 'Cloud & DevOps: AWS, Docker']);

@@ -1146,20 +1146,37 @@
     if (title && blob.indexOf(title.toLowerCase()) !== -1) {
       headline = title;                       // true AND the best keyword match
     } else {
-      // The candidate's own most recent title: the line after a company
-      // that is not itself a date.
+      // ALL the held titles, then the one CLOSEST to the posting's
+      // title. This used to take the first title on the page -- the
+      // most recent role -- so a Business Analyst application went out
+      // headlined "Software Engineer" while "Data Analyst" sat three
+      // roles down sharing a word with the posting. The headline is
+      // the one line a screener reads for relevance; among the titles
+      // the history genuinely contains, the most relevant one leads.
+      // No word overlap at all -> most recent, as before.
+      const held = [];
       for (let i = 0; i < roleLines.length; i++) {
         const l = roleLines[i];
         if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)) continue;
         if (_TITLE_WORD.test(l) && l.split(/\s+/).length <= 7) {
-          // Without the employment-type parenthetical. The role line still
-          // carries "(Contract, part-time)" at this point -- a later pass
-          // moves it into the first bullet -- and a headline reading
-          // "Data Analyst (Internship)" under the name sells the job
-          // short in the one line that gets read first.
-          headline = l.replace(/\s*\([^)]*\)\s*$/, '').trim();
-          if (headline) break;
+          // Without the employment-type parenthetical. The role line
+          // still carries "(Contract, part-time)" at this point -- a
+          // later pass moves it into the first bullet -- and a headline
+          // reading "Data Analyst (Internship)" under the name sells
+          // the job short in the one line that gets read first.
+          const clean = l.replace(/\s*\([^)]*\)\s*$/, '').trim();
+          if (clean && held.indexOf(clean) === -1) held.push(clean);
         }
+      }
+      if (held.length) {
+        const want = title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+        let best = held[0], bestScore = 0;
+        for (const h of held) {
+          const hw = h.toLowerCase().split(/[^a-z0-9]+/);
+          const score = want.filter((w) => hw.indexOf(w) !== -1).length;
+          if (score > bestScore) { best = h; bestScore = score; }
+        }
+        headline = best;
       }
     }
     if (!headline) return { text, added: false };
@@ -2906,6 +2923,12 @@
     out = out.replace(/^\s*\{?\s*"tailoredResume"\s*:\s*"/, '');
     out = out.replace(/^\s*\{?\s*"tailoredCoverLetter"\s*:\s*"/, '');
 
+    // (b2) Regex SOURCES leaked as keywords. The server's keyword list
+    // carries pattern strings ("node\\.?js"), and one reached a
+    // generated CV as the literal skill "Node.?js". Whatever upstream
+    // does, ".?" between two word characters is never prose.
+    out = out.replace(/(\w)\\?\.\?(\w)/g, '$1.$2');
+
     // (c) Em and en dashes to neutral punctuation.
     //
     // In PROSE a comma is right: it keeps the sentence whole without the
@@ -4044,6 +4067,24 @@
           lines[i] = 'Programming: ' + items.join(', ');
         }
         relabelled = true;
+        break;
+      }
+    }
+
+    // 1b. A GENUINE LINE WITH FEWER LANGUAGES THAN THE PROFILE RECORDS
+    //     IS UPGRADED TO THE FULL SET. A generated CV shipped
+    //     "Languages & Citizenship: English (native) - EU Citizen" while
+    //     the profile lists four languages; the model wrote one and the
+    //     old pass, seeing a genuine line with the claim, left it.
+    if (langs.length >= 2) {
+      for (let i = head + 1; i < end; i++) {
+        if (!/^\s*Languages\s*(?:&|and)\s*Citizenship\s*:/i.test(lines[i])) continue;
+        const lower = lines[i].toLowerCase();
+        const missing = langs.filter((l) => lower.indexOf(l.split(' ')[0].toLowerCase()) === -1);
+        if (missing.length) {
+          lines[i] = 'Languages & Citizenship: ' + langs.join(', ') + (claim ? ' - ' + claim : '');
+          return { text: lines.join('\n'), added: true, relabelled, claim };
+        }
         break;
       }
     }

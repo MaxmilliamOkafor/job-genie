@@ -37,6 +37,17 @@
     'levels.fyi', 'teamblind.com', 'otta.com', 'welcometothejungle.com',
     'angel.co', 'wellfound.com', 'jobright.ai',
     'chat.openai.com', 'chatgpt.com', 'claude.ai',
+    // Never-ATS hosts, added after autofill fired on a GitHub settings
+    // page. These sites have forms and file inputs everywhere and are
+    // never where an application is filled in; the extension must be
+    // fully dormant on them regardless of any other heuristic.
+    'github.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com',
+    'stackexchange.com', 'reddit.com', 'youtube.com', 'x.com', 'twitter.com',
+    'facebook.com', 'instagram.com', 'wikipedia.org', 'medium.com',
+    'notion.so', 'figma.com', 'openai.com',
+    'docs.google.com', 'drive.google.com', 'mail.google.com',
+    'console.cloud.google.com', 'console.aws.amazon.com', 'portal.azure.com',
+    'localhost',
   ];
 
   function _isDeniedHost() {

@@ -74,8 +74,10 @@ console.log('THE REPORTED DOCUMENT');
   const o = run('Business Operations Sr Analyst');
   t('  the unheld title does not survive',
     lineTwo(o) !== 'Business Operations Sr Analyst', lineTwo(o));
-  t('  it becomes a title he has actually held',
-    lineTwo(o) === 'Software Engineer', lineTwo(o));
+  // Held AND the closest to the posting: an analyst posting leads
+  // with his analyst title, not with the most recent role.
+  t('  it becomes the held title closest to the posting',
+    lineTwo(o) === 'Data Analyst', lineTwo(o));
   t('  and it is reported, not swapped in silence', !!warned(o),
     JSON.stringify(o.report.warnings.map((w) => w.kind)));
   t('  ...naming what it replaced', !!warned(o) && warned(o).was === 'Business Operations Sr Analyst',
@@ -86,10 +88,17 @@ console.log('THE REPORTED DOCUMENT');
 }
 
 console.log('\nSENIORITY CANNOT BE INVENTED EITHER');
-for (const claim of ['Director of Business Operations', 'Head of Data',
-  'Senior Solutions Architect', 'VP Engineering', 'Chief Data Officer']) {
+// The replacement is always a HELD title; among the held titles the
+// one sharing a word with the posting wins, else the most recent.
+for (const [claim, expect] of [
+  ['Director of Business Operations', 'Software Engineer'],
+  ['Head of Data', 'Data Analyst'],
+  ['Senior Solutions Architect', 'Software Engineer'],
+  ['VP Engineering', 'Software Engineer'],
+  ['Chief Data Officer', 'Data Analyst'],
+]) {
   const o = run(claim, claim);
-  t('  "' + claim + '" is replaced', lineTwo(o) === 'Software Engineer',
+  t('  "' + claim + '" is replaced by ' + expect, lineTwo(o) === expect,
     lineTwo(o));
 }
 
@@ -110,8 +119,10 @@ for (const held of ['Software Engineer', 'Data Analyst']) {
 console.log('\nTHE EMPTY SLOT STILL GETS FILLED');
 {
   const o = run('');
+  // The default posting here is an analyst role, so the empty slot
+  // gets his analyst title -- held and relevant.
   t('  a CV with no headline gets his real one',
-    lineTwo(o) === 'Software Engineer', lineTwo(o));
+    lineTwo(o) === 'Data Analyst', lineTwo(o));
   t('  reported as an addition, not a replacement',
     o.report.fixes.some((f) => /Added the role headline/.test(f)) && !warned(o),
     JSON.stringify(o.report.fixes.filter((f) => /headline/i.test(f))));
