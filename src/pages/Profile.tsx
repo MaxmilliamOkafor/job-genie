@@ -1027,9 +1027,6 @@ const Profile = () => {
                     </button>
                   );
                 })}
-                    </button>
-                  );
-                })}
               </div>
             </div>
 
