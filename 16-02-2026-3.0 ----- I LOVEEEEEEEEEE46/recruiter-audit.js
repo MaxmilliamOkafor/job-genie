@@ -3997,6 +3997,54 @@
     'swift', 'r', 'matlab', 'perl', 'bash', 'powershell', 'spark', 'kafka']);
   const _EU_COUNTRY_RE = /\b(austria|belgium|bulgaria|croatia|cyprus|czechia|czech republic|denmark|estonia|finland|france|germany|greece|hungary|ireland|italy|latvia|lithuania|luxembourg|malta|netherlands|poland|portugal|romania|slovakia|slovenia|spain|sweden)\s*$/i;
 
+  // A GROUP LABEL IS TITLE CASE, WHATEVER THE MODEL SHOUTED.
+  //
+  // A generated CV carried "Soft SKILLS: Communication, Collaboration"
+  // beside "Programming:" and "Cloud & DevOps:" -- the model half
+  // shouted a label, and nothing normalised it, so one line on the page
+  // read as a mistake. Only the LABEL is touched; the items after the
+  // colon are the skills themselves and keep the casing the acronym
+  // pass gives them.
+  // Keyed by the UPPERCASE form, valued by the casing to print -- a Set
+  // of mixed-case strings looked up with toUpperCase() never hits, so
+  // "devops" came out "Devops".
+  const _KEEP_UPPER = {
+    IT: 'IT', AI: 'AI', ML: 'ML', BI: 'BI', QA: 'QA', UX: 'UX', UI: 'UI',
+    API: 'API', APIS: 'APIs', ETL: 'ETL', ELT: 'ELT', CRM: 'CRM', ERP: 'ERP',
+    SQL: 'SQL', AWS: 'AWS', GCP: 'GCP', NLP: 'NLP', HR: 'HR', SRE: 'SRE',
+    'CI/CD': 'CI/CD', DEVOPS: 'DevOps', MLOPS: 'MLOps', DEVSECOPS: 'DevSecOps',
+  };
+  const _SMALL_WORDS = new Set(['and', 'or', 'of', 'the', 'in', 'for', 'to', 'with']);
+
+  function normaliseSkillLabels(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { text, fixed: 0 };
+    const lines = text.split('\n');
+    let fixed = 0, inSkills = false;
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i].trim();
+      if (_SKILLS_HEAD_RE.test(s)) { inSkills = true; continue; }
+      if (!s) { inSkills = false; continue; }
+      if (s === s.toUpperCase() && /^[A-Z][A-Z &/]{2,}$/.test(s)) { inSkills = false; continue; }
+      if (!inSkills) continue;
+      const m = lines[i].match(/^(\s*)([A-Za-z][A-Za-z &/+.]{1,40}?)(\s*:\s*)(\S.*)$/);
+      if (!m) continue;
+      const label = m[2];
+      const proper = label.split(/\s+/).map((w, idx) => {
+        const bare = w.replace(/[^A-Za-z/+.]/g, '');
+        const keep = _KEEP_UPPER[bare.toUpperCase()];
+        if (keep) return w.replace(bare, keep);
+        if (idx > 0 && _SMALL_WORDS.has(bare.toLowerCase())) return w.toLowerCase();
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }).join(' ');
+      if (proper !== label) {
+        lines[i] = m[1] + proper + m[3] + m[4];
+        fixed++;
+      }
+    }
+    return { text: lines.join('\n'), fixed };
+  }
+
   function _normaliseLanguages(languages) {
     let list = [];
     if (Array.isArray(languages)) list = languages;
@@ -5537,6 +5585,16 @@
           report.fixes.push('Languages & Citizenship: ' + parts.join(' and '));
         }
       } catch (e) {}
+      // After the citizenship line is in place, so its own label is
+      // normalised alongside the model's.
+      try {
+        const nl = normaliseSkillLabels(outCV);
+        if (nl.fixed) {
+          outCV = nl.text;
+          report.fixes.push('Title-cased ' + nl.fixed + ' skills group label(s) '
+            + '(a shouted "Soft SKILLS:" beside "Programming:" reads as a mistake)');
+        }
+      } catch (e) {}
     }
 
     // Education dates back from the structured profile. Workday and the
@@ -6126,6 +6184,7 @@
     repairRoleHeaders,
     stripCertificationsSection,
     ensureCitizenshipLine,
+    normaliseSkillLabels,
     echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2

@@ -143,6 +143,23 @@
     ES: 'Spain', IT: 'Italy', PT: 'Portugal', CH: 'Switzerland', BE: 'Belgium',
     AT: 'Austria', SE: 'Sweden', NO: 'Norway', DK: 'Denmark', FI: 'Finland',
     PL: 'Poland', NZ: 'New Zealand', IN: 'India', SG: 'Singapore',
+    // The rest of the EEA. Every code in _EEA needs a name here: the
+    // name is how a question is matched ("...authorised to work in
+    // Croatia?") AND how a country NAME from the profile resolves back
+    // to its code. A code in _EEA with no name here is authorisation
+    // the candidate holds and cannot prove on a form.
+    BG: 'Bulgaria', HR: 'Croatia', CY: 'Cyprus', CZ: 'Czechia',
+    EE: 'Estonia', GR: 'Greece', HU: 'Hungary', IS: 'Iceland',
+    LV: 'Latvia', LI: 'Liechtenstein', LT: 'Lithuania', LU: 'Luxembourg',
+    MT: 'Malta', RO: 'Romania', SK: 'Slovakia', SI: 'Slovenia',
+  };
+  // Spellings a form may use that are not the canonical name above.
+  const _NAME_ALIASES = {
+    'CZECH REPUBLIC': 'CZ', 'USA': 'US', 'U.S.': 'US', 'U.S.A.': 'US',
+    'UNITED STATES OF AMERICA': 'US', 'AMERICA': 'US', 'GREAT BRITAIN': 'GB',
+    'ENGLAND': 'GB', 'SCOTLAND': 'GB', 'WALES': 'GB', 'BRITAIN': 'GB',
+    'HOLLAND': 'NL', 'THE NETHERLANDS': 'NL', 'EIRE': 'IE',
+    'REPUBLIC OF IRELAND': 'IE', 'DEUTSCHLAND': 'DE',
   };
 
   // ===================================================================
@@ -178,12 +195,30 @@
   // Which countries this applicant can work in with no sponsorship.
   // An explicit profile list always wins; otherwise it is derived from
   // where they live, using only relationships that are matters of law.
+  // "IE", "ie", "Ireland" and "IRELAND" are the same claim. The profile
+  // app sends ISO codes today and added a parallel country-NAMES array;
+  // whichever arrives, the answer must be the ISO code the matcher
+  // below compares against. An unrecognised name upper-cased to
+  // "IRELAND" would never match "IE", and the miss answers a work
+  // authorisation question "No" -- a knockout answer, in the one place
+  // that is worse than saying nothing.
+  function _toIso(value) {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    const upper = v.toUpperCase();
+    if (ISO2_NAMES[upper]) return upper;
+    if (_NAME_ALIASES[upper]) return _NAME_ALIASES[upper];
+    const hit = Object.keys(ISO2_NAMES).find((k) => ISO2_NAMES[k].toUpperCase() === upper);
+    return hit || upper;
+  }
+
   function authorisedCountries(p) {
     const P = p || {};
     const explicit = P.work_authorized_countries || P.workAuthorizedCountries
-      || P.authorised_countries || P.authorized_countries;
+      || P.authorised_countries || P.authorized_countries
+      || P.work_authorized_country_names || P.workAuthorizedCountryNames;
     if (Array.isArray(explicit) && explicit.length) {
-      return explicit.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean);
+      return explicit.map(_toIso).filter(Boolean);
     }
     const home = String(P.country || P.location || P.city || '').toUpperCase();
     const iso = Object.keys(ISO2_NAMES).find((k) => home === k
