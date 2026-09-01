@@ -603,6 +603,7 @@ export type Database = {
           authorized_countries: string[] | null
           certifications: string[] | null
           certifications_excluded: string[]
+          certifications_hidden: boolean
           citizenship: string | null
           city: string | null
           country: string | null
@@ -658,6 +659,7 @@ export type Database = {
           authorized_countries?: string[] | null
           certifications?: string[] | null
           certifications_excluded?: string[]
+          certifications_hidden?: boolean
           citizenship?: string | null
           city?: string | null
           country?: string | null
@@ -713,6 +715,7 @@ export type Database = {
           authorized_countries?: string[] | null
           certifications?: string[] | null
           certifications_excluded?: string[]
+          certifications_hidden?: boolean
           citizenship?: string | null
           city?: string | null
           country?: string | null

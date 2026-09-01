@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS certifications_hidden boolean NOT NULL DEFAULT false;
