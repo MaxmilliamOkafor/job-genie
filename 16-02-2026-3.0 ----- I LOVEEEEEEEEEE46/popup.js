@@ -6928,8 +6928,15 @@ class ATSTailor {
             // v8: guarantee the SELECTED PROJECTS section from the profile's
             // structured projects (with verbatim live/code links) so it
             // renders on every generated CV, fully ATS-parseable.
-            relevantProjects: Array.isArray(profile.relevant_projects) ? profile.relevant_projects
-              : (Array.isArray(profile.relevantProjects) ? profile.relevantProjects : []),
+            // KEY NAME, DEFENSIVELY -- same rule as the locations: the
+            // profile is edited in a separate app, so accept the names
+            // this field plausibly arrives under. A CV went out with no
+            // PROJECTS section because the array was empty under the
+            // one key read here.
+            relevantProjects: [profile.relevant_projects, profile.relevantProjects,
+              profile.selected_projects, profile.selectedProjects,
+              profile.projects, profile.portfolio_projects, profile.portfolioProjects]
+              .find((v) => Array.isArray(v) && v.length) || [],
             // Graduation years, which the tailored text reliably drops and
             // Workday's education block requires. Restored from the profile
             // rather than asked for again in the prompt.
