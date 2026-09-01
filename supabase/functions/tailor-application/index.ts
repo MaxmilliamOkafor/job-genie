@@ -1589,25 +1589,48 @@ function extractJobscanKeywords(
     "resolved",
   ];
 
+  // Display names for patterns whose regex source is not a valid skill string.
+  const PATTERN_DISPLAY_NAMES: Record<string, string> = {
+    "node.js": "Node.js", "react.js": "React", "vue.js": "Vue.js", "next.js": "Next.js",
+    "express.js": "Express.js", "nest.js": "NestJS", "asp.net": "ASP.NET",
+    "draw.io": "draw.io", "incident.io": "incident.io",
+    "c++": "C++", "c#": "C#", "sql": "SQL", "plsql": "PL/SQL", "tsql": "T-SQL",
+    "vba": "VBA", "aws": "AWS", "gcp": "GCP", "ci/cd": "CI/CD", "devops": "DevOps",
+  };
+
+  // Turn a regex pattern source into a human display name. Strips escapes and
+  // regex metacharacters so nothing like "Node.?js" can ever reach the CV.
+  const patternToDisplayName = (pattern: string): string => {
+    let cleaned = pattern
+      .replace(/\\([.+#/()\-&'])/g, "$1") // unescape literal characters
+      .replace(/\\\\/g, "\\")
+      .replace(/\\[sSwWdDbB]\+?/g, " ") // character classes -> space
+      .replace(/[?*+^$|\[\]{}()]/g, "") // drop remaining regex metacharacters
+      .replace(/\s+/g, " ")
+      .trim();
+    const known = PATTERN_DISPLAY_NAMES[cleaned.toLowerCase()];
+    if (known) return known;
+    return cleaned
+      .split(" ")
+      .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+      .join(" ");
+  };
+
   const extractMatches = (patterns: string[]): string[] => {
     const matches: string[] = [];
     for (const pattern of patterns) {
       const regex = new RegExp(`\\b${pattern}\\b`, "gi");
       if (regex.test(text)) {
-        // Capitalize properly and clean up escaped characters
-        const cleaned = pattern.replace(/\\\./g, ".").replace(/\\+/g, "+").replace(/\\?/g, "");
-        if (!matches.some((m) => m.toLowerCase() === cleaned.toLowerCase())) {
-          // Smart capitalization
-          const capitalized = cleaned
-            .split(" ")
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ");
-          matches.push(capitalized);
+        const display = patternToDisplayName(pattern);
+        if (!display) continue;
+        if (!matches.some((m) => m.toLowerCase() === display.toLowerCase())) {
+          matches.push(display);
         }
       }
     }
     return matches;
   };
+
 
   // Extract with higher limits for better ATS coverage
   const hardSkills = extractMatches(hardSkillPatterns).slice(0, 30);
