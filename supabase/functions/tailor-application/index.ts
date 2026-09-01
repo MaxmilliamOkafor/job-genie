@@ -2437,9 +2437,13 @@ ACRONYM RULE (new): When the job description uses both a long form and its acron
 
 TECHNICAL SKILLS FORMAT: Labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. If the profile records citizenship or right-to-work (for example EU Citizen), the first group is "Languages & Citizenship" and ends with that claim. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
 
+PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's projects taken from the profile's relevant_projects array. For each project give the project name, its tech stack, one description line, and the live/code links VERBATIM as recorded in the profile - links are never rewritten, shortened or dropped. If the profile records no projects, omit the PROJECTS section entirely rather than inventing one.
+
 EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
 
 OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen.
+
+RESPONSE CONTRACT: Return ONLY a single JSON object. All newlines inside string values MUST be escaped as \\n. No code fences, no text outside the JSON object.
 
 RULE 9 - VOCABULARY REFORMULATION (worth ~5 points)
 Do NOT just insert keywords - REFORMULATE existing experience using the JD's exact vocabulary:
