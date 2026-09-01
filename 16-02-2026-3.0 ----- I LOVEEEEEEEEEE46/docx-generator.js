@@ -1165,39 +1165,75 @@
             continue;
           }
           if (roleState === 'expectCompany') {
-            // COMPANY AND LOCATION SHARE A LINE, LIKE TITLE AND DATE.
+            // THE ROLE HEADER IS A TWO-LINE GRID, PAIRED THE WAY THE
+            // REFERENCE TEMPLATE PAIRS IT:
             //
-            // Workday's "Apply with Resume" has a Location field on every
-            // work-experience block, and it is not the only ATS that maps
-            // one. Giving it its own line would cost a line per role; put
-            // right-aligned against the company it belongs to, it costs
-            // nothing and the whole role header is two lines instead of
-            // the three it takes now:
+            //   Meta                       January 2023 - Present
+            //   Software Engineer                 Dublin, Ireland
             //
-            //   Meta                              Dublin, Ireland
-            //   Software Engineer          January 2023 - Present
+            // Company bold with the DATES flush right; title italic
+            // with the LOCATION flush right. Adopted on request from
+            // the user's reference CV -- and it is also the pairing
+            // most parsers were built against. Parsing does not move:
+            // all four fields stay adjacent inside the same block, the
+            // tab keeps each pair as two separate text items, and the
+            // extraction order (company, dates, title, location) binds
+            // to one role exactly as before.
             //
-            // The location arrives tab-separated from the audit rather
-            // than being guessed at here. A heuristic that decides "is
-            // this line a location?" would eventually mistake a company
-            // for one and file an employer under Location, and a wrong
-            // employer is worse than a missing city.
+            // The location arrives tab-separated on the company line
+            // from the audit rather than being guessed at here. A
+            // heuristic that decides "is this line a location?" would
+            // eventually mistake a company for one and file an
+            // employer under Location, and a wrong employer is worse
+            // than a missing city.
             const tabAt = t.indexOf('\t');
-            if (tabAt > 0) {
-              const co = t.slice(0, tabAt).trim();
-              const loc = t.slice(tabAt + 1).trim();
-              if (co && loc) {
-                out.push(paragraph(
-                  run(co + ' ', { bold: true, color: C.BODY, sz: SZ.company })
-                    + '<w:r><w:tab/></w:r>'
-                    + run(loc, { italic: true, color: C.MUTED, sz: SZ.date }),
-                  { tabs: [{ pos: 10106, val: 'right' }],
-                    spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
-                    spacingAfter: 20, keepNext: true, keepLines: true }
-                ));
-                roleState = 'expectTitle';
-                continue;
-              }
+            const co = (tabAt > 0 ? t.slice(0, tabAt) : t).trim();
+            const loc = tabAt > 0 ? t.slice(tabAt + 1).trim() : '';
+            // Lookahead through blanks: the title line, then its date.
+            let j = i + 1; while (j < lines.length && !lines[j].trim()) j++;
+            let k = j + 1; while (k < lines.length && !lines[k].trim()) k++;
+            const title = j < lines.length ? lines[j].trim() : '';
+            const dateLn = k < lines.length ? lines[k].trim() : '';
+            const gridReady = !!co && !!title && !isDateLine(title)
+              && !/^([\-*•]|\d+\.)\s+/.test(title) && title.indexOf('\t') === -1
+              && isDateLine(dateLn);
+            if (gridReady) {
+              // Trailing spaces before both tabs: a parser that drops
+              // <w:tab/> must not read "MetaJanuary 2023".
+              out.push(paragraph(
+                run(co + ' ', { bold: true, color: C.BODY, sz: SZ.company })
+                  + '<w:r><w:tab/></w:r>'
+                  + run(prettyDateRange(dateLn), { bold: true, color: C.BODY, sz: SZ.date }),
+                { tabs: [{ pos: 10106, val: 'right' }],
+                  spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
+                  spacingAfter: 20, keepNext: true, keepLines: true }
+              ));
+              out.push(paragraph(
+                run(title + (loc ? ' ' : ''), { italic: true, color: C.BODY, sz: SZ.title })
+                  + (loc
+                    ? '<w:r><w:tab/></w:r>' + run(loc, { italic: true, color: C.MUTED, sz: SZ.date })
+                    : ''),
+                { tabs: loc ? [{ pos: 10106, val: 'right' }] : undefined,
+                  spacingAfter: 30, keepNext: true, keepLines: true }
+              ));
+              i = k;                     // title and date lines consumed
+              roleState = 'inRole';
+              continue;
+            }
+            // No title/date pair behind the company: fall back to the
+            // company line as it arrives, location kept beside it so
+            // the field is not dropped.
+            if (co && loc) {
+              out.push(paragraph(
+                run(co + ' ', { bold: true, color: C.BODY, sz: SZ.company })
+                  + '<w:r><w:tab/></w:r>'
+                  + run(loc, { italic: true, color: C.MUTED, sz: SZ.date }),
+                { tabs: [{ pos: 10106, val: 'right' }],
+                  spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
+                  spacingAfter: 20, keepNext: true, keepLines: true }
+              ));
+              roleState = 'expectTitle';
+              continue;
             }
             out.push(paragraph(run(t, { bold: true, color: C.BODY, sz: SZ.company }),
               { spacingBefore: isFirstAfterHeading ? SPACE.firstAfterHeading : SPACE.role,
@@ -1206,11 +1242,11 @@
             continue;
           }
           if (roleState === 'expectTitle') {
-            // Put the dates on the SAME line as the job title, right
-            // aligned. Three stacked lines per role (company / title /
-            // dates) wasted a line each and left the date orphaned from the
-            // role it belongs to; parsers bind a date to the nearest
-            // title far more reliably when they share a line.
+            // Fallback only: the grid above already consumed the usual
+            // company/title/date run. This fires when the company line
+            // had no parsable date two lines down -- keep the title
+            // with its date joined if one follows, so the date still
+            // binds to the role rather than floating alone.
             //
             // The trailing space before the tab is the same guard the
             // competencies grid needs: parsers that drop <w:tab/> would
@@ -1218,7 +1254,7 @@
             const next = (lines[i + 1] || '').trim();
             if (isDateLine(next)) {
               out.push(paragraph(
-                run(t + ' ', { bold: true, color: C.BODY, sz: SZ.title })
+                run(t + ' ', { italic: true, color: C.BODY, sz: SZ.title })
                   + '<w:r><w:tab/></w:r>'
                   + run(prettyDateRange(next), { italic: true, color: C.MUTED, sz: SZ.date }),
                 { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 30 }
@@ -1227,7 +1263,7 @@
               roleState = 'inRole';
               continue;
             }
-            out.push(paragraph(run(t, { bold: true, color: C.BODY, sz: SZ.title }), { spacingAfter: 20 }));
+            out.push(paragraph(run(t, { italic: true, color: C.BODY, sz: SZ.title }), { spacingAfter: 20 }));
             roleState = 'inRole';
             continue;
           }

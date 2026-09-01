@@ -6,15 +6,17 @@
 // hand, once per role, on every application.
 //
 // The obvious fix -- give the location its own line -- costs a line per
-// role. Right-aligned against the company it belongs to, it costs
-// nothing, and the role header drops from three lines to two:
+// role. Right-aligned inside the role header, it costs nothing, and the
+// header is two lines. The RENDERED pairing follows the user's
+// reference template (company + dates right, title + location right):
 //
-//   Meta                              Dublin, Ireland
-//   Software Engineer          January 2023 - Present
+//   Meta                       January 2023 - Present
+//   Software Engineer                 Dublin, Ireland
 //
-// That is the same shape as the title/date line, which the parse report
-// confirmed works: the two stay separate text items and land in separate
-// fields rather than welding into one string.
+// In the CV TEXT the audit still attaches the location to the company
+// line, tab-separated -- the renderer is what moves it beside the
+// title. Both pairs stay separate text items on a right tab stop and
+// land in separate fields rather than welding into one string.
 //
 // Nothing is invented. A location is attached only when the profile
 // records one for a company the CV already names.
@@ -171,15 +173,21 @@ console.log('\nAND THE ROLE HEADER IS TWO LINES, NOT THREE');
   const textOf = (p) => (p.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
     .map((x) => x.replace(/<[^>]+>/g, '')).join('');
 
-  const coPara = paras.filter((p) => /Meta/.test(textOf(p)) && /Dublin/.test(textOf(p)))[0];
-  t('  company and location are ONE paragraph', !!coPara,
+  const coPara = paras.filter((p) => /Meta/.test(textOf(p)) && /January 2023/.test(textOf(p)))[0];
+  t('  company and dates are ONE paragraph', !!coPara,
     'they were emitted as two lines, which is the cost this avoids');
   t('  separated by a tab, so they stay two text items',
     !!coPara && /<w:tab\/>/.test(coPara), 'welded into one string');
   t('  with a right tab stop',
     !!coPara && /w:val="right"/.test(coPara), 'not right-aligned');
+  const titlePara = paras.filter((p) => /Software Engineer/.test(textOf(p)) && /Dublin/.test(textOf(p)))[0];
+  t('  title and location are ONE paragraph too', !!titlePara,
+    'the location did not move down beside the title');
+  t('  ...tab-separated on a right stop',
+    !!titlePara && /<w:tab\/>/.test(titlePara) && /w:val="right"/.test(titlePara),
+    'welded or not right-aligned');
 
-  // The whole header: company+location, then title+date. Two paragraphs.
+  // The whole header: company+dates, then title+location. Two paragraphs.
   const header = paras.filter((p) => {
     const x = textOf(p);
     return /Meta|Software Engineer/.test(x) && !/PROFESSIONAL/.test(x);

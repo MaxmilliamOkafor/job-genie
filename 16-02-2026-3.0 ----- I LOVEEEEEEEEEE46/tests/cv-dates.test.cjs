@@ -28,13 +28,17 @@ t('abbreviations expanded for consistency', !/\b(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep
 // employment record.
 t('plain hyphen separator, not an en dash', /January 2023 - Present/.test(extract('\t')) && !/\u2013/.test(extract('\t')), 'separator wrong');
 t('right-aligned tab stop used', /w:val="right"/.test(xml));
+// The date shares the COMPANY's line now (the reference-template grid:
+// company + dates right, title + location right), so the binding under
+// a dropped tab is company-to-date rather than title-to-date.
 for (const [label,mode] of [['dropped',''],['as \\t','\t'],['as space',' ']]) {
-  const line=extract(mode).split('\n').find(l=>/Software Engineer/.test(l))||'';
-  t('title and date share a line when tab is '+label, /Software Engineer/.test(line) && /January 2023/.test(line), JSON.stringify(line));
-  t('  title never glues to the date ('+label+')', !/Engineer(January|\d)/.test(line), JSON.stringify(line));
+  const line=extract(mode).split('\n').find(l=>/Meta/.test(l))||'';
+  t('company and date share a line when tab is '+label, /Meta/.test(line) && /January 2023/.test(line), JSON.stringify(line));
+  t('  company never glues to the date ('+label+')', !/Meta(January|\d)/.test(line), JSON.stringify(line));
 }
 const flat=extract('\t');
-t('each role keeps its own date', /Software Engineer[\s\S]{0,40}January 2023/.test(flat) && /part-time\)[\s\S]{0,40}February 2024/.test(flat));
+t('each role keeps its own date', /Meta[\s\S]{0,40}January 2023/.test(flat) && /SolimHealth[\s\S]{0,40}February 2024/.test(flat));
+t('and the title still sits directly under its date', /January 2023 - Present\s*\n\s*Software Engineer/.test(flat), JSON.stringify(flat.split('\n').slice(0,8)));
 t('no orphaned date-only line remains', !/^\s*January 2023 - Present\s*$/m.test(flat), 'date still on its own line');
 console.log('\n'+PASS+' passed, '+FAIL+' failed');
 process.exit(FAIL?1:0);

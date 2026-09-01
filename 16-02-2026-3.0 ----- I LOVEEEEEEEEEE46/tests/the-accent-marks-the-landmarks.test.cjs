@@ -112,9 +112,11 @@ console.log('\nAND NOWHERE ELSE');
   const co = find('Meta');
   t('  the company is bold black, not accented',
     !!co && co.col === BODY && co.bold, JSON.stringify(co));
+  // The job title follows the reference template the user adopted:
+  // italic black, not bold -- the company above it carries the weight.
   const title = find('Software Engineer');
-  t('  the job title is bold black too',
-    !!title && title.col === BODY && title.bold, JSON.stringify(title));
+  t('  the job title is italic black, not accented',
+    !!title && title.col === BODY && !title.bold, JSON.stringify(title));
   const bullet = runs.find((r) => r.txt === '•');
   t('  the bullet glyph is grey', !bullet || bullet.col === MUTED, JSON.stringify(bullet));
   t('  ...and there is not one accented bullet glyph',
@@ -122,8 +124,11 @@ console.log('\nAND NOWHERE ELSE');
     JSON.stringify(runs.filter((r) => r.txt === '•').map((r) => r.col)));
   const body = find('Built backend services');
   t('  bullet text is body black', !!body && body.col === BODY, JSON.stringify(body));
+  // Role dates sit bold black beside the company, per the same
+  // template; bold is still not the accent, so the rule holds.
   const date = find('January 2023');
-  t('  dates stay muted', !!date && date.col === MUTED, JSON.stringify(date));
+  t('  the role date is bold black, not accented',
+    !!date && date.col === BODY && date.bold, JSON.stringify(date));
 }
 
 console.log('\nAND IT IS ACTUALLY A COLOUR, NOT A DARKER BLACK');

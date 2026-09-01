@@ -102,8 +102,12 @@ for(const co of ['Meta','SolimHealth','Citigroup']){
   const line=plain.filter(x=>x.indexOf(co)===0)[0]||'';
   chk('"'+co+'" is a bare company name',line.indexOf(co)===0&&!/,\s*(Dublin|Dallas|London)/.test(line),JSON.stringify(line));
 }
-chk('company and location are one tabbed paragraph',
-  paras.filter(p=>/Meta/.test(textOf(p))&&/Dublin/.test(textOf(p))&&/<w:tab\/>/.test(p)).length===1,'not tab-delimited');
+// The reference-template grid: dates beside the company, location
+// beside the title. Both tab-separated so they stay two text items.
+chk('company and dates are one tabbed paragraph',
+  paras.filter(p=>/Meta/.test(textOf(p))&&/January 2023/.test(textOf(p))&&/<w:tab\/>/.test(p)).length===1,'not tab-delimited');
+chk('title and location are one tabbed paragraph',
+  paras.filter(p=>/Software Engineer/.test(textOf(p))&&/Dublin/.test(textOf(p))&&/<w:tab\/>/.test(p)).length===1,'not tab-delimited');
 chk('titles are separate from companies',plain.includes('Software Engineer'),'title welded to company');
 chk('dates use a plain hyphen',/January 2023 - Present/.test(flat),(flat.match(/January 2023[^\n]*/)||[''])[0]);
 
