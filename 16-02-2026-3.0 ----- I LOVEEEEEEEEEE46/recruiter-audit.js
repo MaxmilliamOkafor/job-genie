@@ -2724,7 +2724,13 @@
   // v3 — SUMMARY CLAMP
   // -------------------------------------------------------------------
   // Locates the Professional Summary block and enforces:
-  //   * <= 360 characters (truncated at sentence boundary, never mid-word)
+  //   * <= 220 characters -- TWO RENDERED LINES at body size. The
+  //     summary earns its place as the keyword landing zone, but a
+  //     recruiter gives the top of the page seconds: two lines get
+  //     read on the way to the experience, five get skipped. Was 360
+  //     (three-plus lines); tightened on the decision to keep the
+  //     section rather than remove it.
+  //     (truncated at sentence boundary, never mid-word)
   //   * No "looking for X" / "open to X" / "seeking X" sentence (techtalk
   //     skill: "do not include a line about what they're looking to do
   //     next — this adds no value and wastes character space").
@@ -2757,7 +2763,7 @@
   const NEXT_SECTION_RE = _ANY_HEAD;
   const LOOKING_SENTENCE_RE = /[^.!?\n]*\b(looking (?:for|to)|seeking|open to (?:new )?(?:opportunit|role|position)|aspir(?:e|ing) to)\b[^.!?\n]*[.!?]?/gi;
 
-  function clampSummary(text, { maxChars = 360 } = {}) {
+  function clampSummary(text, { maxChars = 220 } = {}) {
     if (!text) return { text: text || '', clamped: false, removedSentences: 0 };
     const lines = text.split('\n');
     let headerIdx = -1;
@@ -2797,22 +2803,44 @@
     if (summary !== before) removedSentences = 1;
 
     // Truncate at sentence boundary if still too long.
+    //
+    // A sentence ends at punctuation FOLLOWED BY WHITESPACE (or the
+    // end of the text). The old split ([^.!?]+[.!?]+) ended one at any
+    // full stop, so "a GBP 2.6bn portfolio" contained a "sentence"
+    // ending "GBP 2." -- and since that fragment fit the cap, the
+    // clamp published it as the whole summary. Invisible at 360 chars,
+    // guaranteed at a cap the first sentence usually exceeds.
     let clamped = false;
     if (summary.length > maxChars) {
-      const sentences = summary.match(/[^.!?]+[.!?]+\s*/g) || [summary];
+      const matched = summary.match(/[\s\S]*?[.!?]+(?=\s|$)\s*/g) || [];
+      const consumed = matched.join('');
+      if (consumed.length < summary.length) matched.push(summary.slice(consumed.length));
+      const sentences = matched.length ? matched : [summary];
       let acc = '';
       for (const s of sentences) {
         if ((acc + s).length > maxChars) break;
         acc += s;
       }
-      const usedSentenceBoundary = !!acc;
+      // A model-written summary is often ONE long sentence, so at a
+      // two-line cap no whole sentence may fit. Cut at the last clause
+      // boundary inside the cap before resorting to a mid-phrase
+      // slice: ", delivering X" lost whole reads better than "and
+      // proc." Only a clause long enough to stand alone (>= 100 chars)
+      // is kept, otherwise the hard slice below still applies.
+      let usedBoundary = !!acc;
+      if (!acc) {
+        const head = summary.slice(0, maxChars);
+        const clauseAt = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '));
+        if (clauseAt >= 100) { acc = head.slice(0, clauseAt); usedBoundary = true; }
+      }
       summary = (acc || summary.slice(0, maxChars)).trim();
-      // Don't end mid-word -- but ONLY when we hard-sliced. A sentence-
-      // boundary cut already ends cleanly; stripping its last word
-      // produced truncated phrases like "ensuring exceptional."
-      if (!usedSentenceBoundary) {
+      // Don't end mid-word -- but ONLY when we hard-sliced. A boundary
+      // cut already ends cleanly; stripping its last word produced
+      // truncated phrases like "ensuring exceptional."
+      if (!usedBoundary) {
         summary = summary.replace(/\s+\S*$/, m => m.length < 25 ? '' : m).trim();
       }
+      summary = summary.replace(/[,;]$/, '');
       if (!/[.!?]$/.test(summary)) summary += '.';
       clamped = true;
     }
@@ -5142,15 +5170,16 @@
       }
     }
 
-    // v3: summary clamp (auto-fix: <= 360 chars + strip "looking to..." sentences)
+    // v3: summary clamp (auto-fix: two rendered lines max + strip
+    // "looking to..." sentences)
     if (f.summaryClamp && outCV) {
       try {
-        const c = clampSummary(outCV, { maxChars: 360 });
+        const c = clampSummary(outCV, { maxChars: 220 });
         if (c.clamped || c.removedSentences > 0) {
           outCV = c.text;
           const parts = [];
           if (c.removedSentences > 0) parts.push(`${c.removedSentences} "looking-to" sentence(s) stripped`);
-          if (c.clamped) parts.push('summary clamped to 360 chars');
+          if (c.clamped) parts.push('summary tightened to two lines (recruiters read two on the way to the experience; they skip five)');
           report.fixes.push(`summary: ${parts.join(', ')}`);
         }
       } catch (e) {}
