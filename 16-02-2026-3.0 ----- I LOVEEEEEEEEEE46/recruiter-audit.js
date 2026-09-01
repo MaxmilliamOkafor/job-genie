@@ -483,6 +483,87 @@
   }
 
   // ===================================================================
+  // ACRONYM PAIRING -- both forms on the page when the posting uses both
+  // -------------------------------------------------------------------
+  // An ATS dictionary matches one exact string; the human who searches
+  // the pile afterwards types whichever form they think in. When the
+  // posting writes "Anti-Money Laundering (AML)", one candidate's CV
+  // says "AML" and another's says "anti money laundering" -- and each
+  // is invisible to half the searches. The vocabulary mirror above
+  // makes it worse, not better: it swaps the CV to the JD's canonical
+  // form, so exactly one form survives.
+  //
+  // THE POSTING DEFINES ITS OWN PAIRS. There is no curated list here
+  // to go stale or to pair "SQL" with an expansion nobody writes: a
+  // pair exists only where the JD itself prints the long form with the
+  // acronym in parentheses. And nothing is claimed the CV does not
+  // already claim -- a CV carrying NEITHER form is left alone; one
+  // carrying either form gains the other beside it, once, at the first
+  // occurrence.
+  const _ACRO_DEF_RE = /\b([A-Z][A-Za-z&-]*(?:[ -][A-Za-z&-]+){0,5})\s*\(\s*([A-Z]{2,7})\s*\)/g;
+
+  function _initialsOf(phrase) {
+    return phrase.split(/[ \-/]+/).filter(Boolean).map((w) => w[0].toUpperCase()).join('');
+  }
+  // "Know Your Customer" -> KYC exactly; "Continuous Integration and
+  // Delivery" -> CIAD contains CID in order. Subsequence tolerates the
+  // minor words a phrase carries and an acronym skips.
+  function _isSubsequence(short, initials) {
+    let i = 0;
+    for (const ch of initials) if (ch === short[i]) i++;
+    return i === short.length;
+  }
+
+  function pairJdAcronyms(cvText, jdText) {
+    if (!cvText || !jdText) return { text: cvText || '', paired: [] };
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let out = cvText;
+    const paired = [];
+    const done = new Set();
+    let m;
+    _ACRO_DEF_RE.lastIndex = 0;
+    while ((m = _ACRO_DEF_RE.exec(jdText)) !== null) {
+      const rawLong = m[1].trim();
+      const short = m[2].trim();
+      if (done.has(short)) continue;
+      // The capture reaches greedily leftwards ("We need experience
+      // with Anti-Money Laundering"), so shrink to the SHORTEST
+      // trailing phrase whose first word starts with the acronym's
+      // first letter and whose initials still produce the acronym.
+      // That is also what rejects junk: "modern tools (SQL)" and
+      // "Data (AI)" leave no trailing phrase that qualifies, and a
+      // one-word phrase is not a long form at all.
+      const tokens = rawLong.split(/[ -]+/).filter(Boolean);
+      let long = null;
+      for (let s = tokens.length - 2; s >= 0; s--) {
+        const cand = tokens.slice(s);
+        if (cand[0][0].toUpperCase() !== short[0]) continue;
+        if (!_isSubsequence(short, _initialsOf(cand.join(' ')))) continue;
+        // Recover the phrase with its ORIGINAL separators -- the JD
+        // hyphenates where the CV uses spaces, or the reverse.
+        const tail = new RegExp('(?:^|[ -])(' + cand.map(esc).join('[ -]+') + ')$').exec(rawLong);
+        long = (tail ? tail[1] : cand.join(' ')).trim();
+        break;
+      }
+      if (!long) continue;
+      const longRe = new RegExp(
+        '\\b' + long.split(/[ -]+/).map(esc).join('[ -]+') + '\\b', 'i');
+      const shortRe = new RegExp('\\b' + esc(short) + '\\b');
+      const hasLong = longRe.test(out);
+      const hasShort = shortRe.test(out);
+      if (hasLong === hasShort) continue;   // both there, or neither claimed
+      if (hasLong) {
+        out = out.replace(longRe, (hit) => hit + ' (' + short + ')');
+      } else {
+        out = out.replace(shortRe, long + ' (' + short + ')');
+      }
+      done.add(short);
+      paired.push(long + ' (' + short + ')');
+    }
+    return { text: out, paired };
+  }
+
+  // ===================================================================
   // 4. JOB TITLE ECHO
   // -------------------------------------------------------------------
   // The exact JD job title MUST appear in (a) the CV summary line and
@@ -4510,6 +4591,9 @@
       yearsGuard: flags.yearsGuard !== false,
       // v12
       redFlagScrub: flags.redFlagScrub !== false,
+      // v14: where the posting prints "Long Form (ACRO)", a CV claiming
+      // either form carries both.
+      acronymPairing: flags.acronymPairing !== false,
       // v13 -- ON by default. This was briefly opt-in on the belief that
       // sorting could demote a current role beneath a concurrent
       // part-time contract. It can, but only when concurrency exists, and
@@ -4983,6 +5067,22 @@
       if (cv.swaps + cl.swaps > 0) {
         report.fixes.push(`jd-vocabulary: ${cv.swaps + cl.swaps} synonyms swapped to exact JD terms`);
       }
+    }
+
+    // After the mirror, which deliberately leaves one form standing:
+    // where the posting itself prints both forms ("Anti-Money
+    // Laundering (AML)"), a CV that claims either carries both, so a
+    // search for either finds it.
+    if (f.acronymPairing && jdText && outCV) {
+      try {
+        const p = pairJdAcronyms(outCV, jdText);
+        if (p.paired.length) {
+          outCV = p.text;
+          report.fixes.push('Paired ' + p.paired.length + ' acronym(s) with the full term the '
+            + 'posting itself uses (' + p.paired.slice(0, 3).join(', ')
+            + ') so both the ATS dictionary and a human search match');
+        }
+      } catch (e) {}
     }
 
     if (f.titleEcho && jdTitle) {
@@ -5511,6 +5611,7 @@
     purgeBuzzwords,
     quantificationAudit,
     mirrorJdVocabulary,
+    pairJdAcronyms,
     echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2

@@ -1331,8 +1331,15 @@ class ATSTailor {
       // came out of it. The one thing the user is here for is the file.
       if (!(this.generatedDocuments && this.generatedDocuments.cv
             && this.generatedDocuments.cv.length > 80)) {
+        // Name the most likely cause. A multi-day outage was diagnosed
+        // from screenshots while the actual fault was the AI provider's
+        // credit balance at -$0.01 with auto-reload off -- the model
+        // returned nothing, the extension degraded silently, and
+        // nothing on screen said why.
         throw new Error('The tailoring finished but produced no CV text. '
-          + 'Export the debug log and send it.');
+          + 'The most common cause is the AI provider being out of credit: '
+          + 'check the OpenAI billing page (and turn on auto-reload). '
+          + 'If the balance is fine, export the debug log and send it.');
       }
       
       // Step 2 complete, Step 3 working
@@ -5747,115 +5754,90 @@ class ATSTailor {
     // What remains below places a keyword only where it is a statement
     // about the CANDIDATE rather than about a piece of work, and only
     // when their own profile evidences it.
-    // STEP 2: Inject 5-8 keywords into Summary as expertise
+    // STEP 2: EVERY KEYWORD LANDS IN THE SKILLS SECTION, AND ONLY THERE.
+    //
+    // Two other landing sites existed and both are now closed:
+    //
+    //   THE SUMMARY. "Expertise includes X, Y, Z." was appended there --
+    //   but the audit clamps the summary to two lines moments later, so
+    //   the sentence was written and then deleted in the same run and
+    //   the keywords silently went nowhere. Even when it survived, a
+    //   bolted-on expertise sentence is the pattern reviewers read as
+    //   stuffing.
+    //
+    //   BULLET TAILS. Soft skills were appended to real bullets as
+    //   ", demonstrating stakeholder management." -- the same
+    //   fabrication shape as the ", using Salesforce." tails removed
+    //   earlier: a claim about a specific piece of work that the work
+    //   never made. A bullet is the writer's sentence; nothing is
+    //   appended to one, ever.
+    //
+    // The skills section is the one place a keyword is a statement
+    // about the candidate rather than about a piece of work, and every
+    // keyword that reaches here is already profile-evidenced.
+    //
+    // THE GROUPED FORMAT SURVIVES. The old merge split the section on
+    // commas and rejoined it as one flat line, which welded the group
+    // labels into their first items ("Programming: Python") and threw
+    // the grouping away. A grouped section now keeps every existing
+    // line byte-identical and gains ONE new labelled line; only a flat
+    // single-line section is extended in place.
     if (remaining.length > 0) {
-      const summaryMatch = tailoredCV.match(/(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
-      if (summaryMatch) {
-        const summaryStart = summaryMatch.index;
-        const summaryEnd = summaryStart + summaryMatch[0].length;
-        const summaryText = summaryMatch[2];
-        
-        const toInject = remaining.slice(0, Math.min(8, remaining.length));
-        remaining = remaining.slice(toInject.length);
-        
-        // Build natural expertise sentence
-        let injectionPhrase = '';
-        if (toInject.length <= 3) {
-          injectionPhrase = ` Expertise includes ${toInject.join(', ')}.`;
-        } else if (toInject.length <= 5) {
-          injectionPhrase = ` Strong background in ${toInject.slice(0, 3).join(', ')}, with additional skills in ${toInject.slice(3).join(' and ')}.`;
-        } else {
-          injectionPhrase = ` Core skills include ${toInject.slice(0, 4).join(', ')}. Proficiency in ${toInject.slice(4).join(', ')}.`;
-        }
-        
-        const newSummary = summaryText.trim() + injectionPhrase;
-        tailoredCV = tailoredCV.substring(0, summaryStart) + 
-                     summaryMatch[1] + '\n' + newSummary + 
-                     tailoredCV.substring(summaryEnd);
-        injectedKeywords.push(...toInject);
+      // Line-based section detection. The regex this replaces ended the
+      // body at (?=\n[A-Z]{3,}) UNDER /i -- which matches any three
+      // letters -- so it "ended" the section at its own second line and
+      // a grouped section was never seen whole.
+      const cvLines = tailoredCV.split('\n');
+      const SKILLS_HEAD = /^(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES):?$/i;
+      let head = -1;
+      for (let li = 0; li < cvLines.length; li++) {
+        if (SKILLS_HEAD.test(cvLines[li].trim())) { head = li; break; }
       }
-    }
-    
-    // STEP 3: Inject ALL remaining into EXISTING Skills section ONLY
-    // CRITICAL FIX v4.0: NEVER create a second SKILLS section - only merge into existing one
-    // Filter soft skills OUT of skills section (they belong in experience bullets only)
-    if (remaining.length > 0) {
-      // Filter: only inject technical/hard keywords into skills section, NOT soft skills
-      // Fluff phrases ("good judgment" in a SKILLS list reads as stuffing
-      // to any human) are kept OUT of the skills section along with the
-      // classic soft skills; they surface in experience bullets instead.
-      const softSkillFilter = /^(communication|collaboration|teamwork|leadership|mentoring|mentorship|problem.?solving|critical.?thinking|adaptability|flexibility|empathy|prioriti|time.?management|conflict|creative.?thinking|decision.?making|initiative|negotiation|coaching|facilitation|delegation|accountability|strategic.?thinking|relationship|change.?management|continuous.?improvement|knowledge.?sharing|stakeholder|cross.?functional|presentation|active.?listening|emotional.?intelligence|customer.?focus|client.?management|vendor.?management|resource.?management|budget.?management|incident.?management|quality.?assurance|process.?improvement|requirements.?gathering|design.?thinking|data.?driven|attention.?to.?detail|analytical.?thinking|roadmap.?planning|pair.?programming|code.?review|technical.?writing|(good\s+)?judg?ement|good\s+judgment|resourcefulness|influence|curiosity|ownership|integrity|work\s+ethic|growth\s+mindset|engineering\s+excellence|humility|grit|drive|self.?starter|team\s+player|bias\s+for\s+action|customer\s+obsession)$/i;
-
-      const technicalRemaining = remaining.filter(kw => !softSkillFilter.test(kw.trim()));
-      const softRemaining = remaining.filter(kw => softSkillFilter.test(kw.trim()));
-
-      // Try to inject soft skills into experience bullets first
-      if (softRemaining.length > 0) {
-        const expMatch2 = tailoredCV.match(/(WORK EXPERIENCE|EXPERIENCE|EMPLOYMENT HISTORY|PROFESSIONAL EXPERIENCE)\s*\n([\s\S]*?)(?=\n(EDUCATION|SKILLS|TECHNICAL SKILLS|CERTIFICATIONS|ACHIEVEMENTS|PROJECTS)|\n\n\n|$)/i);
-        if (expMatch2) {
-          const eStart = expMatch2.index;
-          const eEnd = eStart + expMatch2[0].length;
-          let eText = expMatch2[0];
-          const eBullets = eText.match(/^[•\-\*]\s*.+$/gm) || [];
-          // TONED DOWN: cap soft-skill tails at 2 bullets (was unbounded), and
-          // only on bullets that don't already carry an appended ", X." tail,
-          // so we never stack two tails on one line.
-          const MAX_SOFT_TAILS = 2;
-          let sIdx = 0;
-          for (let i = 0; i < eBullets.length && sIdx < Math.min(softRemaining.length, MAX_SOFT_TAILS); i++) {
-            const kw = softRemaining[sIdx];
-            const alreadyTailed = /,\s+(using|with|demonstrating)\s+[^.]+\.$/i.test(eBullets[i].trim());
-            if (!alreadyTailed && !eBullets[i].toLowerCase().includes(kw.toLowerCase())) {
-              const enhanced = eBullets[i].replace(/\.?\s*$/, `, demonstrating ${kw}.`);
-              eText = eText.replace(eBullets[i], enhanced);
-              injectedKeywords.push(kw);
-              sIdx++;
-            }
+      if (head !== -1) {
+        // The section runs to the first blank line or the next ALL-CAPS
+        // heading, checked case-sensitively.
+        let end = cvLines.length;
+        for (let li = head + 1; li < cvLines.length; li++) {
+          const s = cvLines[li].trim();
+          if (!s) { end = li; break; }
+          if (s === s.toUpperCase() && /^[A-Z][A-Z &/]{2,}$/.test(s)) { end = li; break; }
+        }
+        const body = cvLines.slice(head + 1, end).join('\n');
+        // Word-bounded dedupe against the WHOLE section, so "SQL"
+        // already sitting inside "Programming: Python, SQL" is not
+        // added a second time.
+        const hasAlready = (kw) => new RegExp(
+          '\\b' + kw.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(body);
+        const fresh = [];
+        const seen = new Set();
+        for (const kw of remaining) {
+          const key = String(kw || '').toLowerCase().trim();
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          if (!hasAlready(kw)) fresh.push(String(kw).trim());
+        }
+        if (fresh.length > 0) {
+          const grouped = body.indexOf('\n') !== -1
+            || /^[A-Z][A-Za-z &/]{1,28}:\s/.test(body.trim());
+          if (!body.trim()) {
+            cvLines.splice(head + 1, 0, fresh.join(', '));
+          } else if (grouped) {
+            // Mixed-case label, so neither the audit's all-caps heading
+            // detector nor the renderer's section list reads it as a
+            // new section -- it renders as one more bold-labelled
+            // group line, and every existing line stays byte-identical.
+            cvLines.splice(end, 0, 'Additional Skills: ' + fresh.join(', '));
+          } else {
+            cvLines[head + 1] = body.trim() + ', ' + fresh.join(', ');
           }
-          tailoredCV = tailoredCV.substring(0, eStart) + eText + tailoredCV.substring(eEnd);
+          tailoredCV = cvLines.join('\n');
+          injectedKeywords.push(...fresh);
         }
+        remaining = [];
       }
-
-      // Merge ONLY technical keywords into the FIRST existing skills section
-      if (technicalRemaining.length > 0) {
-        const skillsMatch = tailoredCV.match(/(SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES)\s*\n([\s\S]*?)(?=\n[A-Z]{3,}|\n\n|$)/i);
-        if (skillsMatch) {
-          const skillsStart = skillsMatch.index;
-          const skillsEnd = skillsStart + skillsMatch[0].length;
-          const skillsHeader = skillsMatch[1];
-          const skillsText = skillsMatch[2].trim();
-
-          // Clean up existing skills (remove bullets, normalize)
-          const existingSkills = skillsText
-            .replace(/^[•\-\*]\s*/gm, '')
-            .split(/[,\n]+/)
-            .map(s => s.trim())
-            .filter(Boolean);
-
-          // Merge with remaining TECHNICAL keywords (deduplicated)
-          const existingSet = new Set(existingSkills.map(s => s.toLowerCase()));
-          const newSkills = [...existingSkills];
-          for (const kw of technicalRemaining) {
-            if (!existingSet.has(kw.toLowerCase())) {
-              newSkills.push(kw);
-              existingSet.add(kw.toLowerCase());
-            }
-          }
-
-          // Format as clean comma-separated list - use SAME header as before (no rename)
-          tailoredCV = tailoredCV.substring(0, skillsStart) +
-                       skillsHeader + '\n' + newSkills.join(', ') +
-                       tailoredCV.substring(skillsEnd);
-          injectedKeywords.push(...technicalRemaining);
-          remaining = [];
-        }
-        // If NO skills section found, DO NOT create one. Remaining keywords are dropped.
-        // This prevents the duplicate SKILLS section bug.
-      }
+      // No skills section -> nothing is created and nothing is added:
+      // inventing a section here is how the duplicate-SKILLS bug began.
     }
-    
-    // STEP 4: REMOVED - No separate "TECHNICAL PROFICIENCIES" section
-    // All keywords are now merged into the single SKILLS section above
     
     return { tailoredCV, injectedKeywords };
   }

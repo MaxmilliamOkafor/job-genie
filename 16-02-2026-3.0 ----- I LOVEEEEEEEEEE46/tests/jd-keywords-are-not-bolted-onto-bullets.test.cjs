@@ -115,7 +115,7 @@ console.log('NOTHING IS APPENDED TO A BULLET, EVER');
   t('  every bullet survives', got.length === BULLETS.length, got.length + ' of ' + BULLETS.length);
   t('  and not one is altered', got.every((b, i) => b === BULLETS[i]),
     JSON.stringify(got.filter((b, i) => b !== BULLETS[i])));
-  for (const tail of [/, using /i, /, with [A-Z]/, / via /i, / built with /i]) {
+  for (const tail of [/, using /i, /, with [A-Z]/, / via /i, / built with /i, /,\s*demonstrating /i]) {
     t('  no "' + String(tail) + '" tail appears', !got.some((b) => tail.test(b)),
       JSON.stringify(got.filter((b) => tail.test(b))));
   }
@@ -146,6 +146,48 @@ for (const kw of REAL) {
 t('  and it is reported as injected',
   REAL.every((k) => out.injectedKeywords.some((x) => String(x).toLowerCase() === k)),
   JSON.stringify(out.injectedKeywords));
+
+console.log('\nAND THE SUMMARY IS NOT A LANDING SITE');
+{
+  // "Expertise includes X, Y." used to be appended here -- and the
+  // audit clamps the summary to two lines moments later, so the
+  // sentence was written and then deleted in the same run. Injection
+  // must not touch the summary at all.
+  const summaryLine = 'Analyst with five years in data analysis and process improvement.';
+  t('  the summary line is byte-identical',
+    out.tailoredCV.indexOf(summaryLine) !== -1, 'the summary was rewritten');
+  for (const stuffing of [/Expertise includes/i, /Strong background in/i, /Core skills include/i]) {
+    t('  no "' + String(stuffing) + '" sentence appears', !stuffing.test(out.tailoredCV),
+      (out.tailoredCV.match(stuffing) || [''])[0]);
+  }
+}
+
+console.log('\nA GROUPED SKILLS SECTION KEEPS ITS GROUPS');
+{
+  // The old merge split the whole section on commas and rejoined it as
+  // ONE flat line -- "Programming: Python" welded, every label lost.
+  const GROUPS = [
+    'Languages & Citizenship: English (native), French (native) - EU Citizen',
+    'Programming: Python, SQL',
+    'Data & ML: Pandas, NumPy',
+  ];
+  const GCV = CV.replace('SQL, Python, Power BI, Tableau, Airflow, Excel', GROUPS.join('\n'));
+  // "SQL" rides along evidenced AND already present inside a group, so
+  // the dedupe has something real to catch.
+  const o = inject.call(ctx, GCV, { all: REAL.concat(['SQL']) }, REAL.concat(['SQL']));
+  for (const g of GROUPS) {
+    t('  "' + g.slice(0, 28) + '..." survives byte-identical',
+      o.tailoredCV.indexOf(g) !== -1, 'a group line was rewritten or flattened');
+  }
+  t('  the new keywords arrive on ONE new labelled line',
+    /\nAdditional Skills: /.test(o.tailoredCV), 'no Additional Skills line');
+  const aline = (o.tailoredCV.match(/^Additional Skills: (.*)$/m) || [])[1] || '';
+  t('  ...carrying the evidenced keywords',
+    REAL.every((k) => aline.toLowerCase().indexOf(k) !== -1), aline);
+  t('  and a keyword already in a group is not added again',
+    !/Additional Skills: .*\bSQL\b/i.test(o.tailoredCV)
+      && !/Additional Skills: .*Python/i.test(o.tailoredCV), aline);
+}
 
 console.log('\nWITH NO PROFILE TO CHECK AGAINST, NOTHING IS ADDED');
 {
