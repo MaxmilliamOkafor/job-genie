@@ -26,6 +26,8 @@ export function DataPreviewPanel({ profile }: DataPreviewPanelProps) {
       profile?.certifications_excluded || [],
     ),
     work_authorized_countries: profile?.work_authorized_countries || [],
+    // Full names too: some ATS forms reject a bare ISO code such as "IE".
+    work_authorized_country_names: workAuthCountryNames(profile?.work_authorized_countries),
     languages: profile?.languages || [],
     citizenship: profile?.citizenship || '',
   };
