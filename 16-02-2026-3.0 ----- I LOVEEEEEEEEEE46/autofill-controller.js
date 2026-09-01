@@ -20,6 +20,13 @@
 
   if (window.AutofillController && window.AutofillController.__jgBridge) return;
 
+  // FIRST STATEMENT IN THE FILE, BEFORE ANY await. Everything the
+  // vendor does is gated on this flag failing closed, so it must be
+  // true from the instant any Job Genie code runs on the page --
+  // including the denied-host early return below and the async
+  // storage read in init().
+  if (window.__JG_AUTOFILL_DISABLED__ === undefined) window.__JG_AUTOFILL_DISABLED__ = true;
+
   const STORAGE_KEY = 'autofill_enabled';
   const TAG = '[JG-Autofill]';
   const log = (...a) => console.log(TAG, ...a);
@@ -152,6 +159,25 @@
     return _isAtsDomain() || _isCareerSubdomain();
   }
 
+  // A TOGGLE FLIPPED IN THE POPUP MUST REACH EVERY OPEN TAB.
+  //
+  // The popup writes autofill_enabled to storage; tabs already open
+  // kept whatever they read at load, so turning the feature OFF left
+  // every open application page still armed until it was reloaded.
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes[STORAGE_KEY]) return;
+      const on = changes[STORAGE_KEY].newValue === true;
+      if (!on) {
+        window.__JG_AUTOFILL_DISABLED__ = true;
+        try { window.AutofillController && window.AutofillController._teardownVendor(); } catch (e) {}
+        log('Toggle turned OFF elsewhere -- gate closed on this tab');
+      } else if (window.AutofillController) {
+        window.AutofillController.enabled = true;
+      }
+    });
+  } catch (e) {}
+
   if (_isDeniedHost()) {
     log('On denied host (' + window.location.hostname + ') -- autofill controller fully disabled');
     // Install a NO-OP controller so any code that references
@@ -188,8 +214,16 @@
     },
 
     async init() {
+      // CLOSED BEFORE THE READ, NOT AFTER IT. The storage read is async
+      // and the vendor bundle loads at document_idle; leaving the flag
+      // unset until the read returned is what let the vendor write
+      // fields while the toggle was off.
+      window.__JG_AUTOFILL_DISABLED__ = true;
       this.enabled = await this._readEnabled();
-      window.__JG_AUTOFILL_DISABLED__ = !this.enabled;
+      // The flag stays CLOSED here even when the toggle is on: being
+      // enabled is permission to fill an application form, not
+      // permission to fill whatever page happens to be open.
+      // _requestInject opens it, once eligibility has been decided.
       log('Init, enabled =', this.enabled);
       if (!this.enabled) return;
 
@@ -246,7 +280,9 @@
 
     async setEnabled(value) {
       this.enabled = !!value;
-      window.__JG_AUTOFILL_DISABLED__ = !this.enabled;
+      // OFF closes the gate immediately. ON does NOT open it -- only
+      // _requestInject does, after eligibility.
+      if (!this.enabled) window.__JG_AUTOFILL_DISABLED__ = true;
       try {
         await new Promise((resolve) =>
           chrome.storage.local.set({ [STORAGE_KEY]: this.enabled }, resolve)
@@ -336,6 +372,16 @@
     async _requestInject({ reason, force = false } = {}) {
       if (!force && this.vendorInjected) return { ok: true, cached: true };
       if (this.vendorInjecting) return { ok: true, pending: true };
+      // THE ONLY PLACE THE GATE OPENS. Reaching here means: the toggle
+      // is on, the host is not denied, and this page carries a real
+      // application form. Anywhere else -- an ineligible page with the
+      // toggle on, a denied host, a failed read -- the flag stays true
+      // and the vendor cannot write a single field.
+      if (!this.enabled || _isDeniedHost()) {
+        window.__JG_AUTOFILL_DISABLED__ = true;
+        return { ok: false, blocked: true };
+      }
+      window.__JG_AUTOFILL_DISABLED__ = false;
       this.vendorInjecting = true;
       try {
         const resp = await new Promise((resolve) => {

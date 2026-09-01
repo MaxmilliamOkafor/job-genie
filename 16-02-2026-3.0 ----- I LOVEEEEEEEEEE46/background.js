@@ -887,6 +887,24 @@ async function injectAutofillEngine(tabId) {
     return { injected: false, reason: 'denied-host', url: tabUrl };
   }
 
+  // THE TOGGLE IS CHECKED HERE TOO, NOT ONLY IN THE PAGE.
+  //
+  // Every caller of this function is supposed to have checked already,
+  // which is exactly why it was never checked here -- and a stale
+  // message, a race, or one caller forgetting is then enough to inject
+  // a 7.5 MB filler into a page the user switched off. The service
+  // worker owns the stored value; it can afford one read.
+  try {
+    const r = await new Promise((resolve) =>
+      chrome.storage.local.get(['autofill_enabled'], resolve));
+    if (!r || r.autofill_enabled !== true) {
+      console.warn('[JG-Autofill] Skipping inject: master toggle is OFF');
+      return { injected: false, reason: 'autofill-disabled' };
+    }
+  } catch (e) {
+    return { injected: false, reason: 'toggle-unreadable' };
+  }
+
   try {
     await chrome.scripting.insertCSS({
       target: { tabId, allFrames: true },

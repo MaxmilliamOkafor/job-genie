@@ -760,7 +760,10 @@
 
   // ============ AUTOFILL CONTROLLER ============
   const AutofillController = {
-    enabled: true,
+    // OFF until storage says otherwise. This defaulted to true, so a
+    // runAutofill() call before init() (or after a failed storage read)
+    // filled the form with the master toggle off.
+    enabled: false,
     autoEnabled: false,
     
     async init() {
@@ -783,7 +786,18 @@
     },
     
     async runAutofill() {
-      if (!this.enabled) {
+      // RE-READ, EVERY TIME. this.enabled is a snapshot from init(); the
+      // user may have toggled off since, and a cached yes is exactly the
+      // failure this whole gate exists to prevent. The stored value is
+      // the single source of truth, and an unreadable store means no.
+      try {
+        const r = await new Promise((resolve) =>
+          chrome.storage.local.get(['autofill_enabled'], resolve));
+        this.enabled = !!(r && r.autofill_enabled === true);
+      } catch (e) {
+        this.enabled = false;
+      }
+      if (!this.enabled || window.__JG_AUTOFILL_DISABLED__ === true) {
         console.log('[AutofillController] Autofill is disabled');
         return { success: false, reason: 'disabled' };
       }

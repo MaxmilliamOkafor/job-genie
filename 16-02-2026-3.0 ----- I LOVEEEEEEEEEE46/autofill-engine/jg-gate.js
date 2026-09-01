@@ -14,11 +14,37 @@
 
   const TAG = '[JG-Gate]';
 
-  // When the controller decides to allow autofill it sets this to false.
-  // Default to whatever controller already set; otherwise allow (so manual Run Now works).
+  // THE KILL SWITCH FAILS CLOSED.
+  //
+  // This read `=== true`, so an UNSET flag meant "allowed". The flag is
+  // set by autofill-controller.js after an ASYNC storage read, and the
+  // vendor bundle is registered at document_idle -- so on every page
+  // load there was a window in which the flag was undefined and all 220+
+  // vendor value writes were permitted, whatever the toggle said. That
+  // is the "it randomly autofills" report: not random, just the race.
+  //
+  // Only an EXPLICIT false -- written by the controller after it has
+  // confirmed the toggle is on, the host is allowed and the page is a
+  // real application form -- permits a write. Unset, unknown, or a
+  // failed storage read all block.
   function disabled() {
-    return window.__JG_AUTOFILL_DISABLED__ === true;
+    return window.__JG_AUTOFILL_DISABLED__ !== false;
   }
+
+  // The controller may never run on this page (injected directly via
+  // executeScript, or a frame it does not cover). Read the toggle here
+  // too, so the gate can open on its own when the user really did
+  // enable autofill -- and stays shut when it cannot confirm.
+  try {
+    if (window.__JG_AUTOFILL_DISABLED__ === undefined) {
+      window.__JG_AUTOFILL_DISABLED__ = true;          // closed until proven open
+      chrome.storage.local.get(['autofill_enabled'], (r) => {
+        if (r && r.autofill_enabled === true && window.__JG_AUTOFILL_DISABLED__ !== false) {
+          window.__JG_AUTOFILL_DISABLED__ = false;
+        }
+      });
+    }
+  } catch (e) { window.__JG_AUTOFILL_DISABLED__ = true; }
 
   // ==== Text/select VALUE-write guard (the real "toggle-off" fix) ====
   // The vendor engine has 220+ `.value=` writes for text inputs, textareas
