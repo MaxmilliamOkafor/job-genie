@@ -1261,12 +1261,29 @@ const Profile = () => {
         {/* Certifications */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Certifications
+            <CardTitle className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Certifications
+              </span>
+              <span className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                <Switch
+                  checked={Boolean((localProfile as any).certifications_hidden)}
+                  onCheckedChange={(checked) => updateLocalField('certifications_hidden' as any, checked)}
+                  disabled={!editMode}
+                  aria-label="Hide certifications from the generated CV"
+                />
+                Hide from CV
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {Boolean((localProfile as any).certifications_hidden) && (
+              <p className="mb-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                Certifications are hidden: this section is left out of the generated CV and the
+                extension payload. Your saved certifications are kept.
+              </p>
+            )}
             {editMode && (
               <div className="flex gap-2 mb-4">
                 <Input 

@@ -296,7 +296,7 @@ function validateRequest(data: any): TailorRequest {
     education: Array.isArray(profile.education) ? profile.education.slice(0, 10) : [],
     skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 100) : [],
     certifications: validateStringArray(
-      (profile.certifications || []).slice(0, 6),
+      ((profile.certificationsHidden || profile.certifications_hidden) ? [] : profile.certifications || []).slice(0, 6),
       MAX_ARRAY_SIZE,
       MAX_STRING_MEDIUM,
       "certifications",
@@ -2036,7 +2036,8 @@ serve(async (req) => {
         professionalExperience: dbExperience,
         education: profileData.education || [],
         skills: profileData.skills || [],
-        certifications: profileData.certifications || [],
+        certificationsHidden: Boolean(profileData.certifications_hidden),
+        certifications: profileData.certifications_hidden ? [] : profileData.certifications || [],
         achievements: profileData.achievements || [],
         atsStrategy: profileData.ats_strategy || "",
         city: profileData.city || "",

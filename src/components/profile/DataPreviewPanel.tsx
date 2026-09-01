@@ -22,10 +22,12 @@ export function DataPreviewPanel({ profile }: DataPreviewPanelProps) {
     relevant_projects: profile?.relevant_projects || [],
     education: profile?.education || [],
     skills: profile?.skills || [],
-    certifications: printedCertifications(
-      profile?.certifications || [],
-      profile?.certifications_excluded || [],
-    ),
+    certifications: profile?.certifications_hidden
+      ? []
+      : printedCertifications(
+          profile?.certifications || [],
+          profile?.certifications_excluded || [],
+        ),
     work_authorized_countries: profile?.work_authorized_countries || [],
     // Full names too: some ATS forms reject a bare ISO code such as "IE".
     work_authorized_country_names: workAuthCountryNames(profile?.work_authorized_countries),

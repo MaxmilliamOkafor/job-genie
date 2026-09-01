@@ -44,6 +44,7 @@ export interface Profile {
   skills: any[];
   certifications: string[];
   certifications_excluded: string[];
+  certifications_hidden: boolean;
   languages: any[];
   achievements: any[];
   excluded_companies: string[];
@@ -107,6 +108,7 @@ export function useProfile() {
           skills: Array.isArray(data.skills) ? data.skills : [],
           certifications: (data.certifications as string[]) || [],
           certifications_excluded: ((data as any).certifications_excluded as string[]) || [],
+          certifications_hidden: Boolean((data as any).certifications_hidden),
           languages: Array.isArray(data.languages) ? data.languages : [],
           achievements: Array.isArray(data.achievements) ? data.achievements : [],
           excluded_companies: (data.excluded_companies as string[]) || [],
