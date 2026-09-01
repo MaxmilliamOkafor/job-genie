@@ -310,6 +310,8 @@ function validateRequest(data: any): TailorRequest {
     zipCode: profile.zipCode ? validateString(profile.zipCode, MAX_STRING_SHORT, "zipCode") : undefined,
     relevantProjects: Array.isArray(profile.relevantProjects) ? profile.relevantProjects.slice(0, 10) :
                       Array.isArray(profile.relevant_projects) ? profile.relevant_projects.slice(0, 10) : [],
+    languages: Array.isArray(profile.languages) ? profile.languages.slice(0, 20) : [],
+    citizenship: profile.citizenship ? validateString(profile.citizenship, MAX_STRING_SHORT, "citizenship") : "",
   };
 
   // Cover letter tone selection
@@ -2020,6 +2022,8 @@ serve(async (req) => {
         state: profileData.state || "",
         zipCode: profileData.zip_code || "",
         relevantProjects: Array.isArray(profileData.relevant_projects) ? profileData.relevant_projects : [],
+        languages: Array.isArray(profileData.languages) ? profileData.languages : [],
+        citizenship: profileData.citizenship || "",
       };
 
       console.log(`[User ${userId}] Profile loaded: ${rawData.userProfile.firstName} ${rawData.userProfile.lastName}`);
@@ -2435,8 +2439,11 @@ KEYWORD PRESERVATION IN REWRITES: When rewriting a bullet from the candidate's p
 
 ACRONYM RULE (new): When the job description uses both a long form and its acronym (for example "Anti-Money Laundering (AML)" or "Know Your Customer (KYC)"), and the candidate's history genuinely evidences that skill, write it with BOTH forms at its first mention on the CV: the long form followed by the acronym in parentheses. After the first mention, either form alone is fine. Never do this for a skill the profile does not evidence.
 
-TECHNICAL SKILLS FORMAT: Labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. If the profile records citizenship or right-to-work (for example EU Citizen), the first group is "Languages & Citizenship" and ends with that claim. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
+TECHNICAL SKILLS FORMAT: Labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
 
+LANGUAGES & CITIZENSHIP RULE (replaces any earlier guidance about that group): The FIRST line of TECHNICAL SKILLS is exactly "Languages & Citizenship:" followed by the candidate's SPOKEN languages from the profile, each with proficiency in parentheses, ending with the citizenship claim after a plain hyphen - for example "Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen". Never place programming languages under this label: Python, SQL, Java, JavaScript and similar belong under a "Programming:" label. If the profile records no spoken languages, that line is instead "Citizenship: EU Citizen" (or the recorded claim). If the profile records neither spoken languages nor citizenship, omit the line.
+
+CERTIFICATIONS RULE: Include a CERTIFICATIONS section ONLY when the job description mentions certification in some form (for example "AWS Certified", "certifications a plus", "certified", "certification required"). When the posting never mentions certification, omit the CERTIFICATIONS section entirely - that space goes to the work experience instead. When it is included, list only certifications the profile actually records; never invent one.
 PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's projects taken from the profile's relevant_projects array. For each project give the project name, its tech stack, one description line, and the live/code links VERBATIM as recorded in the profile - links are never rewritten, shortened or dropped. If the profile records no projects, omit the PROJECTS section entirely rather than inventing one.
 
 EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
@@ -2948,7 +2955,9 @@ ABSOLUTE RULES:
 3. ROLE BLOCK SHAPE: company alone on one line, title alone on the next, date range alone on the next ("January 2023 - Present", plain hyphen, full month names), then bullets. Never "Meta, Dublin". Never join company and title.
 4. BULLETS: past-tense verb for ended roles, present tense only for current role. Forbidden: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", passive voice. Keep every number from the source. Never append a tool unless the source bullet already names it.
 5. ACRONYM RULE: when the JD uses both long form and acronym and the candidate evidences the skill, first mention is long form followed by acronym in parentheses. Never for unsupported skills.
-6. TECHNICAL SKILLS FORMAT: labelled groups, one per line, "Group Name: item, item, item" - commas only, no pipes. Most relevant first. If profile records citizenship/right-to-work, first group is "Languages & Citizenship" ending with that claim. No skill in two groups.
+6. TECHNICAL SKILLS FORMAT: labelled groups, one per line, "Group Name: item, item, item" - commas only, no pipes. Most relevant first. No skill in two groups.
+6b. LANGUAGES & CITIZENSHIP RULE (replaces any earlier guidance about that group): The FIRST line of TECHNICAL SKILLS is exactly "Languages & Citizenship:" followed by the candidate's SPOKEN languages from the profile, each with proficiency in parentheses, ending with the citizenship claim after a plain hyphen - for example "Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen". Never place programming languages under this label: Python, SQL, Java, JavaScript and similar belong under a "Programming:" label. If the profile records no spoken languages, that line is instead "Citizenship: EU Citizen" (or the recorded claim). If the profile records neither spoken languages nor citizenship, omit the line.
+6c. CERTIFICATIONS RULE: Include a CERTIFICATIONS section ONLY when the job description mentions certification in some form (for example "AWS Certified", "certifications a plus", "certified", "certification required"). When the posting never mentions certification, omit the CERTIFICATIONS section entirely - that space goes to the work experience instead. When it is included, list only certifications the profile actually records; never invent one.
 7. EDUCATION FORMAT: degree plus grade on one line, institution on the next, graduation year on the next. Keep grades and years from the profile.
 8. OUTPUT HYGIENE: plain text only, no markdown, no asterisks, no bullet symbols other than "- " at bullet starts. No em dashes; use a plain hyphen.
 9. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
@@ -3018,6 +3027,12 @@ ${userProfile.skills?.map((s: any) => (typeof s === "string" ? s : s.name)).join
 CERTIFICATIONS:
 ${userProfile.certifications?.join(", ") || "None listed"}
 
+SPOKEN LANGUAGES (never treat as programming languages):
+${(userProfile.languages || []).map((l: any) => (typeof l === "string" ? l : `${l.name}${l.proficiency ? ` (${String(l.proficiency).toLowerCase()})` : ""}`)).join(", ") || "None recorded"}
+
+CITIZENSHIP / RIGHT TO WORK:
+${userProfile.citizenship || "Not recorded"}
+
 ACHIEVEMENTS:
 ${JSON.stringify(userProfile.achievements, null, 2)}
 
@@ -3034,9 +3049,11 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - PROFESSIONAL SUMMARY: at most TWO sentences and at most 220 characters total. Sentence one: the held job title, years of experience, and the strongest domain match to this posting. Sentence two: the top 3-4 exact tools or skills from the job description that the candidate's history genuinely evidences, plus one quantified scale (portfolio size, team size, or user count) taken from the profile. Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV. The summary must never repeat name, email, phone, LinkedIn, GitHub, portfolio, or location - those live in the header above.
    - TARGET TITLE LINE: The line immediately after the candidate's name MUST be a job title the candidate's own WORK EXPERIENCE contains, spelled as they held it (e.g. "Software Engineer" when the history reads "Software Engineer, Meta, January 2023 - Present"). Every resume parser reads that line as the title held NOW, so it must never be the posting's title when the history does not contain it. Use the candidate's current (most recent) title, or an earlier title from the same history if that one matches the posting more closely. Never invent a title, never blend two titles, never borrow the posting's wording. No pipes, no skills, no company. The extension also sets this line, so never emit it twice.
    - PROFESSIONAL EXPERIENCE: roles in this shape: company name alone on one line, job title alone on the next line, date range alone on the next line ("January 2023 - Present" format, plain hyphen, full month names), then the bullets. Never join company and city with a comma ("Meta, Dublin" is forbidden - the extension attaches locations from the profile itself). Never join company and title on one line. Keep every bullet from the source role, in source order, reworded in place. Every bullet starts with a strong past-tense verb for ended roles and present tense only for the current role. Forbidden anywhere in bullets: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", and passive voice. Keep every number from the profile's bullets. Never append a tool or technology to a bullet unless that profile bullet already names it.
-   - TECHNICAL SKILLS: labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. If the profile records citizenship or right-to-work (for example EU Citizen), the first group is "Languages & Citizenship" and ends with that claim. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
+   - TECHNICAL SKILLS: labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
    - PROJECTS: Do NOT output a PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
-   - CERTIFICATIONS
+   - LANGUAGES & CITIZENSHIP RULE (replaces any earlier guidance about that group): The FIRST line of TECHNICAL SKILLS is exactly "Languages & Citizenship:" followed by the candidate's SPOKEN languages from the profile, each with proficiency in parentheses, ending with the citizenship claim after a plain hyphen - for example "Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen". Never place programming languages under this label: Python, SQL, Java, JavaScript and similar belong under a "Programming:" label. If the profile records no spoken languages, that line is instead "Citizenship: EU Citizen" (or the recorded claim). If the profile records neither spoken languages nor citizenship, omit the line.
+   - CERTIFICATIONS (only per the CERTIFICATIONS RULE below)
+   - CERTIFICATIONS RULE: Include a CERTIFICATIONS section ONLY when the job description mentions certification in some form (for example "AWS Certified", "certifications a plus", "certified", "certification required"). When the posting never mentions certification, omit the CERTIFICATIONS section entirely - that space goes to the work experience instead. When it is included, list only certifications the profile actually records; never invent one.
    - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile.
 
    OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
