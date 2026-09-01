@@ -2423,10 +2423,12 @@ RULE 6 - SEARCHABILITY FIXES (worth ~10 points)
 - Do NOT use tables, columns, graphics, or text boxes
 
 RULE 7 - PROFESSIONAL SUMMARY (replaces any existing summary length guidance)
-The PROFESSIONAL SUMMARY is at most TWO sentences and at most 220 characters total.
-Sentence one: the held job title, years of experience, and the strongest domain match to this posting.
-Sentence two: the top 3-4 exact tools or skills from the job description that the candidate's history genuinely evidences, plus one quantified scale (portfolio size, team size, or user count) taken from the profile.
+The PROFESSIONAL SUMMARY is positioning only, at most TWO sentences and at most 220 characters total.
+It states the held job title or level, the domain, and the value the candidate delivers. Nothing else.
+NO KEYWORD STUFFING IN THE SUMMARY: the summary must NOT list tools, technologies, platforms, frameworks or certifications, and must not contain a comma-separated run of skills. Posting keywords belong in TECHNICAL SKILLS and, above all, in PROFESSIONAL EXPERIENCE bullets - never in the summary.
+Acceptable style: "Senior data engineer with a record of delivering reliable, scalable regulatory reporting platforms and leading small delivery teams in regulated environments."
 Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV.
+
 
 RULE 8 - SECTION ORDER, HEADINGS, ROLE BLOCKS, BULLETS, ACRONYMS, SKILLS, EDUCATION AND OUTPUT HYGIENE
 SECTION ORDER AND HEADINGS: Output sections in exactly this order with these exact uppercase headings, each on its own line: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content (no "TECHNICAL SKILLS: Python, SQL" on one line). Never emit the same section twice.
