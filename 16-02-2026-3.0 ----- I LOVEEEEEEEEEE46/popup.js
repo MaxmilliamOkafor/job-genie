@@ -6946,6 +6946,17 @@ class ATSTailor {
             experience: Array.isArray(profile.professional_experience)
               ? profile.professional_experience
               : (Array.isArray(profile.professionalExperience) ? profile.professionalExperience : []),
+            // Spoken languages and the citizenship claim, for the
+            // Languages & Citizenship guarantee. Defensive key names as
+            // ever; the fallback languages are the ones the user's own
+            // reference CV states, used only when the profile carries
+            // none at all.
+            languages: [profile.languages, profile.spoken_languages, profile.spokenLanguages,
+              profile.languages_spoken, profile.languagesSpoken]
+              .find((v) => (Array.isArray(v) && v.length) || (typeof v === 'string' && v.trim()))
+              || 'English (native), French (native), Spanish (advanced), German (advanced)',
+            citizenship: profile.citizenship || profile.citizenship_status
+              || profile.citizenshipStatus || profile.right_to_work || profile.rightToWork || '',
             // Where the candidate ACTUALLY lives, so the header stops
             // claiming the posting's location. See ensureTruthfulLocation.
             profileLocation: [profile.city, profile.country].filter(Boolean).join(', ')

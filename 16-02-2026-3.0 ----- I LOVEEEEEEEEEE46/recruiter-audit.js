@@ -3938,6 +3938,173 @@
     return `PROJECTS\n\n${blocks.join('\n\n')}`;
   }
 
+  // ===================================================================
+  // CERTIFICATIONS EARN THEIR SPACE, OR THEY GO
+  // -------------------------------------------------------------------
+  // Removed on request, to buy the page back -- six certification lines
+  // is most of an inch. But not blindly: when the POSTING mentions
+  // certification at all ("AWS Certified preferred", "relevant
+  // certifications a plus"), the section is a live matching criterion
+  // and stays. The posting decides, the same way it decides the
+  // acronym pairs and the mirrored vocabulary.
+  // ===================================================================
+  const _CERTS_HEAD_RE = /^\s*(CERTIFICATIONS?|PROFESSIONAL CERTIFICATIONS?|LICENSES?\s*(?:&|AND)\s*CERTIFICATIONS?|CERTIFICATIONS?\s*(?:&|AND)\s*LICENSES?|CERTIFICATES?)\s*:?\s*$/i;
+
+  // ===================================================================
+  // THE LANGUAGES & CITIZENSHIP LINE IS BUILT, NOT HOPED FOR
+  // -------------------------------------------------------------------
+  // A generated CV shipped "Languages & Citizenship: Python, SQL, Java,
+  // TypeScript" -- the model borrowed the label for its programming
+  // list, and the one claim the label exists to carry, EU CITIZEN, the
+  // claim a screener is actively hunting for, appeared nowhere. The
+  // renderer bolds "EU Citizen" wherever it occurs, but a rendering
+  // rule cannot bold text that was never written.
+  //
+  // So the line is a GUARANTEE now, like the projects and the education
+  // dates: a mislabelled line is relabelled to what it actually holds,
+  // and the real line -- spoken languages plus the citizenship claim --
+  // is built from the profile and placed FIRST in the skills section.
+  // Citizenship falls back to the profile's own country: an EU country
+  // means "EU Citizen" is a fact, not an embellishment.
+  // ===================================================================
+  const _SKILLS_HEAD_RE = /^\s*(TECHNICAL SKILLS|SKILLS|CORE COMPETENCIES|KEY SKILLS|TECHNICAL PROFICIENCIES)\s*:?\s*$/i;
+  const _PROG_TERMS = new Set(['python', 'sql', 'java', 'typescript', 'javascript', 'c',
+    'c++', 'c#', 'go', 'golang', 'scala', 'hadoop', 'react', 'react.js', 'reactjs',
+    'node', 'node.js', 'nodejs', 'html', 'css', 'php', 'ruby', 'rust', 'kotlin',
+    'swift', 'r', 'matlab', 'perl', 'bash', 'powershell', 'spark', 'kafka']);
+  const _EU_COUNTRY_RE = /\b(austria|belgium|bulgaria|croatia|cyprus|czechia|czech republic|denmark|estonia|finland|france|germany|greece|hungary|ireland|italy|latvia|lithuania|luxembourg|malta|netherlands|poland|portugal|romania|slovakia|slovenia|spain|sweden)\s*$/i;
+
+  function _normaliseLanguages(languages) {
+    let list = [];
+    if (Array.isArray(languages)) list = languages;
+    else if (typeof languages === 'string' && languages.trim()) list = languages.split(/[,;]+/);
+    return list.map((l) => {
+      if (l && typeof l === 'object') {
+        const name = String(l.language || l.name || '').trim();
+        const level = String(l.proficiency || l.level || '').trim();
+        return name ? (level ? name + ' (' + level.toLowerCase() + ')' : name) : '';
+      }
+      return String(l || '').trim();
+    }).filter(Boolean).slice(0, 6);
+  }
+
+  function ensureCitizenshipLine(cvText, { languages, citizenship, profileLocation } = {}) {
+    const text = String(cvText || '');
+    if (!text) return { text, added: false, relabelled: false };
+    let claim = String(citizenship || '').trim();
+    const homeLoc = String(profileLocation || '').trim();
+    // "Dublin, Ireland" or "Dublin, IE" -- the name or the ISO code,
+    // case-sensitive for the code so prose cannot false-match.
+    if (!claim && (_EU_COUNTRY_RE.test(homeLoc)
+      || /\b(IE|FR|DE|ES|IT|NL|BE|LU|AT|PT|FI|SE|DK|PL|CZ|SK|SI|HR|HU|RO|BG|EE|LV|LT|MT|CY|GR)$/.test(homeLoc))) {
+      claim = 'EU Citizen';
+    }
+    const langs = _normaliseLanguages(languages);
+    const lines = text.split('\n');
+
+    // The skills section's extent, line-based (see the injector: a
+    // regex lookahead under /i cannot find the end of a section).
+    let head = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (_SKILLS_HEAD_RE.test(lines[i].trim())) { head = i; break; }
+    }
+    if (head === -1) return { text, added: false, relabelled: false };
+    let end = lines.length;
+    for (let i = head + 1; i < lines.length; i++) {
+      const s = lines[i].trim();
+      if (!s) { end = i; break; }
+      if (s === s.toUpperCase() && /^[A-Z][A-Z &/]{2,}$/.test(s)) { end = i; break; }
+    }
+
+    let relabelled = false, added = false;
+    const isProg = (item) => _PROG_TERMS.has(
+      String(item || '').toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim());
+
+    // 1. THE MISLABEL. "Languages & Citizenship: Python, SQL..." is a
+    //    programming list wearing the wrong label; relabel it to what
+    //    it holds. Merged into an existing Programming line when there
+    //    is one, so the label never appears twice.
+    for (let i = head + 1; i < end; i++) {
+      const m = lines[i].match(/^\s*(Languages(?:\s*(?:&|and)\s*Citizenship)?)\s*:\s*(.+)$/i);
+      if (!m) continue;
+      const items = m[2].split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+      const progCount = items.filter(isProg).length;
+      if (items.length && progCount >= Math.ceil(items.length / 2)) {
+        let progAt = -1;
+        for (let j = head + 1; j < end; j++) {
+          if (j !== i && /^\s*Programming\s*:/i.test(lines[j])) { progAt = j; break; }
+        }
+        if (progAt !== -1) {
+          const have = lines[progAt].toLowerCase();
+          const fresh = items.filter((it) => have.indexOf(it.toLowerCase()) === -1);
+          if (fresh.length) lines[progAt] = lines[progAt].replace(/\s*$/, '') + ', ' + fresh.join(', ');
+          lines.splice(i, 1);
+          end--;
+        } else {
+          lines[i] = 'Programming: ' + items.join(', ');
+        }
+        relabelled = true;
+        break;
+      }
+    }
+
+    // 2. THE REAL LINE, FIRST IN THE SECTION. Only from what the
+    //    profile supports: the languages it records, the citizenship it
+    //    states or its country makes a fact. Neither -> nothing.
+    const already = lines.slice(head + 1, end).some((l) =>
+      /^\s*(Languages\s*(?:&|and)\s*Citizenship|Citizenship)\s*:/i.test(l)
+      && (!claim || l.toLowerCase().indexOf(claim.toLowerCase()) !== -1));
+    if (!already && (langs.length || claim)) {
+      // An existing genuine line missing only the claim gains it.
+      let patched = false;
+      for (let i = head + 1; i < end; i++) {
+        if (/^\s*Languages\s*(?:&|and)\s*Citizenship\s*:/i.test(lines[i]) && claim
+          && lines[i].toLowerCase().indexOf(claim.toLowerCase()) === -1) {
+          lines[i] = lines[i].replace(/\s*$/, '') + ' - ' + claim;
+          patched = true; added = true;
+          break;
+        }
+      }
+      if (!patched) {
+        const line = langs.length
+          ? 'Languages & Citizenship: ' + langs.join(', ') + (claim ? ' - ' + claim : '')
+          : 'Citizenship: ' + claim;
+        lines.splice(head + 1, 0, line);
+        added = true;
+      }
+    }
+    return { text: lines.join('\n'), added, relabelled, claim };
+  }
+
+  function stripCertificationsSection(cvText, jdText) {
+    const text = String(cvText || '');
+    if (!text) return { text, removed: false, kept: false };
+    if (/certif/i.test(String(jdText || ''))) {
+      // The posting asked; the section stays.
+      const has = text.split('\n').some((l) => _CERTS_HEAD_RE.test(l.trim()));
+      return { text, removed: false, kept: has };
+    }
+    const lines = text.split('\n');
+    let start = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (_CERTS_HEAD_RE.test(lines[i].trim())) { start = i; break; }
+    }
+    if (start === -1) return { text, removed: false, kept: false };
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i++) {
+      const s = lines[i].trim();
+      if (s && _ANY_HEAD.test(s) && !_CERTS_HEAD_RE.test(s)) { end = i; break; }
+    }
+    // Take the blank run above the heading with it, so the neighbours
+    // meet with ONE gap rather than the section's old two.
+    while (start > 0 && !lines[start - 1].trim()) start--;
+    const kept = lines.slice(0, start).concat([''], lines.slice(end));
+    return {
+      text: kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, ''),
+      removed: true, kept: false,
+    };
+  }
+
   function ensureProjectsSection(cvText, projects) {
     const section = buildProjectsSectionText(projects, _dominantGithubHandle(cvText || ''));
     if (!section || !cvText) return { text: cvText || '', injected: false };
@@ -4738,6 +4905,10 @@
     relevantProjects = null,
     education = null,
     experience = null,
+    // Spoken languages and the citizenship/right-to-work claim, for
+    // the Languages & Citizenship guarantee.
+    languages = null,
+    citizenship = '',
     // The candidate's ACTUAL location, from their profile. Not the
     // posting's. See ensureTruthfulLocation.
     profileLocation = '',
@@ -4794,6 +4965,12 @@
       // reads (company, title, date -- not shouted, not inverted).
       envelope: flags.envelope !== false,
       roleShape: flags.roleShape !== false,
+      // v16: certifications render only when the posting mentions
+      // certification; otherwise the section is removed for the space.
+      certsOnlyWhenAsked: flags.certsOnlyWhenAsked !== false,
+      // v16: the Languages & Citizenship line is a guarantee -- built
+      // from the profile, mislabels repaired, EU Citizen on the page.
+      citizenshipLine: flags.citizenshipLine !== false,
       // v13 -- ON by default. This was briefly opt-in on the belief that
       // sorting could demote a current role beneath a concurrent
       // part-time contract. It can, but only when concurrency exists, and
@@ -5283,6 +5460,40 @@
           report.fixes.push('Projects made concise: ' + parts.join('; ')
             + ' -- three descriptions at three lines each is nine lines of a page '
             + 'spent on side projects');
+        }
+      } catch (e) {}
+    }
+
+    // v16: certifications only when the posting asks for them.
+    if (f.certsOnlyWhenAsked && outCV) {
+      try {
+        const cs = stripCertificationsSection(outCV, jdText);
+        if (cs.removed) {
+          outCV = cs.text;
+          report.fixes.push('Removed the CERTIFICATIONS section -- this posting never '
+            + 'mentions certification, and the lines buy back space for the work; '
+            + 'it returns automatically on any posting that asks');
+        } else if (cs.kept) {
+          report.fixes.push('Kept the CERTIFICATIONS section: this posting mentions '
+            + 'certification, so the section is a live matching criterion here');
+        }
+      } catch (e) {}
+    }
+
+    // v16: the Languages & Citizenship line -- mislabels repaired, the
+    // real line built from the profile, EU Citizen on the page where a
+    // screener actually looks for it.
+    if (f.citizenshipLine && outCV) {
+      try {
+        const cz = ensureCitizenshipLine(outCV, { languages, citizenship, profileLocation });
+        if (cz.relabelled || cz.added) {
+          outCV = cz.text;
+          const parts = [];
+          if (cz.relabelled) parts.push('relabelled a programming list that was wearing the '
+            + '"Languages & Citizenship" label');
+          if (cz.added) parts.push('put the real line on the page'
+            + (cz.claim ? ' with "' + cz.claim + '"' : ''));
+          report.fixes.push('Languages & Citizenship: ' + parts.join(' and '));
         }
       } catch (e) {}
     }
@@ -5872,6 +6083,8 @@
     stripJsonEnvelope,
     ensureExperienceHeading,
     repairRoleHeaders,
+    stripCertificationsSection,
+    ensureCitizenshipLine,
     echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2

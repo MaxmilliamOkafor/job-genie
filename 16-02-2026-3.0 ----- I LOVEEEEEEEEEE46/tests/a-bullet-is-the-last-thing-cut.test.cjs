@@ -69,8 +69,13 @@ const build = ({ bullets = 3, projects = 3, roles = 4, summary = 'Engineer.', he
   ].join('\n');
 };
 
+// The heavy fixture uses CERTIFICATIONS as page weight, and v16 now
+// removes that section when the posting never mentions certs -- which
+// would quietly change this file's physics. The flag pins the fixture;
+// the certs behaviour has its own suite.
 const audit = (cv) => RA.runRecruiterAudit({
   cvText: cv, jdText: 'python kafka', jdTitle: 'Software Engineer', jobKeywords: ['Kafka'],
+  flags: { certsOnlyWhenAsked: false },
 });
 const bulletsPerRole = (cvText) => {
   const lines = cvText.split('\n');
