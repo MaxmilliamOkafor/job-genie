@@ -3322,20 +3322,63 @@ ${
       console.error("Failed to parse AI response:", parseError);
       console.error("Raw content:", content?.substring(0, 1000));
 
-      // Fallback with pre-calculated values
+      // Tolerant recovery: pull the string values out even when the model left
+      // literal newlines inside them (which breaks JSON.parse).
+      const recoverStringField = (raw: string, key: string): string | null => {
+        if (!raw) return null;
+        const re = new RegExp(
+          `"${key}"\\s*:\\s*"([\\s\\S]*?)"\\s*(?=,\\s*"[A-Za-z0-9_]+"\\s*:|\\}\\s*$|\\}\\s*[^\\s])`,
+        );
+        const m = raw.match(re);
+        if (!m) return null;
+        return m[1]
+          .replace(/\\r\\n/g, "\n")
+          .replace(/\\n/g, "\n")
+          .replace(/\\r/g, "\n")
+          .replace(/\\t/g, "  ")
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, "\\")
+          .replace(/\r\n/g, "\n")
+          .trim();
+      };
+
+      const recoveredResume = recoverStringField(content || "", "tailoredResume");
+      const recoveredCoverLetter = recoverStringField(content || "", "tailoredCoverLetter");
+
+      if (recoveredResume) {
+        console.log("Recovered tailoredResume from malformed JSON envelope");
+      }
+
       result = {
-        tailoredResume: content || "Unable to generate tailored resume. Please try again.",
-        tailoredCoverLetter: userProfile.coverLetter || "Unable to generate cover letter. Please try again.",
+        tailoredResume: recoveredResume || "Unable to generate tailored resume. Please try again.",
+        tailoredCoverLetter:
+          recoveredCoverLetter || userProfile.coverLetter || "Unable to generate cover letter. Please try again.",
         matchScore: matchResult.score,
         keywordsMatched: matchResult.matched,
         keywordsMissing: matchResult.missing,
         smartLocation: smartLocation,
-        suggestedImprovements: ["Please retry for better results"],
+        suggestedImprovements: recoveredResume ? [] : ["Please retry for better results"],
         candidateName: candidateNameForFile,
         cvFileName: `${candidateNameForFile}_CV.pdf`,
         coverLetterFileName: `${candidateNameForFile}_Cover_Letter.pdf`,
       };
     }
+
+    // Never let a raw JSON envelope reach the document: if the resume text still
+    // looks like JSON, recover the inner value.
+    const stripEnvelope = (text: unknown): string => {
+      if (typeof text !== "string") return "";
+      const t = text.trim();
+      if (!t.startsWith("{") && !t.startsWith("```")) return text as string;
+      const m = t.match(/"tailoredResume"\s*:\s*"([\s\S]*?)"\s*(?=,\s*"[A-Za-z0-9_]+"\s*:|\}\s*$)/);
+      if (!m) return text as string;
+      return m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim();
+    };
+    result.tailoredResume = stripEnvelope(result.tailoredResume);
+    if (typeof result.tailoredCoverLetter === "string") {
+      result.tailoredCoverLetter = result.tailoredCoverLetter.trim();
+    }
+
 
     // Apply content quality engine - remove banned buzzwords and improve natural language
     if (result.tailoredResume) {
