@@ -492,7 +492,9 @@
   // one-page fitter absorbs the extra height by choosing a tighter
   // spacing profile when it needs to.
   const SZ_BASE = {
-    name: 44,       // 22pt
+    name: 52,       // 26pt -- the name is the largest thing on the page
+    headline: 26,   // 13pt -- the role line under the name: clearly above
+                    //         the contact line, clearly below the name
     heading: 23,    // 11.5pt
     company: 23,    // 11.5pt
     title: 22,      // 11pt
@@ -944,27 +946,47 @@
     }
 
     if (firstNonEmpty >= 0) {
-      // NAME -- navy, bold, 22pt, CENTRED, with the headline and contact
-      // lines centred beneath it. Alignment is a paragraph property the
-      // text stream never carries, so an extractor reads the centred
-      // header exactly as it read the left-aligned one; what changes is
-      // only where a human's eye lands first. The body stays
-      // left-aligned -- a centred header over a left body is the
-      // convention; a centred body would be unreadable.
+      // THE HEADER IS A THREE-STEP HIERARCHY, CENTRED.
+      //
+      //   name      26pt navy bold, letterspaced -- the largest thing
+      //             on the page, seen before anything is read
+      //   headline  13pt bold black -- the role, bigger than the
+      //             contact line because it is a claim, not a detail
+      //   contact   10pt muted -- reference data, present but quiet
+      //
+      // Every part of this is a run or paragraph property (size, bold,
+      // colour, alignment, letterspacing) that the text stream never
+      // carries, so an extractor reads this header character-for-
+      // character as it read the plain one. The body stays left-aligned
+      // -- a centred header over a left body is the convention; a
+      // centred body would be unreadable.
       out.push(paragraph(
-        run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: SZ.name, spacing: 4 }),
-        { align: 'center', spacingAfter: 40 }
+        run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: SZ.name, spacing: 8 }),
+        { align: 'center', spacingAfter: 60 }
       ));
 
-      // Contact + links lines until first section header (hyperlinked)
+      // Headline + contact lines until first section header. A header
+      // line that carries no contact material (no pipes, no @, no URL,
+      // no phone-length digit run) is the HEADLINE -- the role under
+      // the name -- and takes the middle step of the hierarchy. The
+      // detection is by content, not position, so a profile that puts
+      // the contact line first still gets its role line emphasised.
       let i = firstNonEmpty + 1;
       let headerLineCount = 0;
+      const looksLikeContact = (s) => /[|@]|https?:\/\/|www\.|\d[\d\s().-]{6,}/.test(s);
       for (; i < lines.length; i++) {
         const t = lines[i].trim();
         if (!t) continue;
         const upper = t.toUpperCase().replace(/:$/, '');
         if (SECTION_HEADERS.includes(upper)) break;
-        out.push(contactParagraph(t, rels, { align: 'center', sz: SZ.date, spacingAfter: 40 }));
+        if (!looksLikeContact(t)) {
+          out.push(paragraph(
+            run(t, { bold: true, color: C.BODY, sz: SZ.headline, spacing: 2 }),
+            { align: 'center', spacingAfter: 50 }
+          ));
+        } else {
+          out.push(contactParagraph(t, rels, { align: 'center', sz: SZ.date, spacingAfter: 40 }));
+        }
         headerLineCount++;
       }
 
@@ -1433,9 +1455,23 @@
         // Non-experience body. "Label: items" (skills) -> bold label.
         const labelMatch = t.match(/^([A-Z][A-Za-z &/]{1,28}):\s*(.+)$/);
         if (labelMatch) {
+          // A RIGHT-TO-WORK CLAIM IS THE ONE ITEM A SCREENER HUNTS FOR.
+          //
+          // "EU Citizen" buried mid-line answers the knockout question
+          // (visa? sponsorship?) before it is asked, but only if it is
+          // seen. Bold it inside the plain items run. Bold is a run
+          // property the text stream never carries, so extraction is
+          // character-for-character unchanged.
+          const RTW = /\b(?:EU|EEA|US|U\.S\.|UK|Irish|British)\s+Citizen(?:ship)?\b|\bGreen Card(?:\s+holder)?\b|\bStamp\s*4\b|\b[Rr]ight to [Ww]ork\b(?:\s+in\s+(?:the\s+)?[A-Z][A-Za-z ]{1,24})?/g;
+          let items = '', last = 0, rtw;
+          while ((rtw = RTW.exec(labelMatch[2])) !== null) {
+            if (rtw.index > last) items += run(labelMatch[2].slice(last, rtw.index), { color: C.BODY, sz: SZ.body });
+            items += run(rtw[0], { bold: true, color: C.BODY, sz: SZ.body });
+            last = rtw.index + rtw[0].length;
+          }
+          if (last < labelMatch[2].length) items += run(labelMatch[2].slice(last), { color: C.BODY, sz: SZ.body });
           out.push(paragraph(
-            run(labelMatch[1] + ': ', { bold: true, color: C.BODY, sz: SZ.body }) +
-            run(labelMatch[2], { color: C.BODY, sz: SZ.body }),
+            run(labelMatch[1] + ': ', { bold: true, color: C.BODY, sz: SZ.body }) + items,
             { spacingAfter: 40 }
           ));
           continue;

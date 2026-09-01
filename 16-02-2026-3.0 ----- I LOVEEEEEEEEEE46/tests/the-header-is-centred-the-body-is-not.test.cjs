@@ -67,6 +67,54 @@ for (const line of ['PROFESSIONAL SUMMARY', 'Citigroup', 'Rebuilt the reporting 
     JSON.stringify(p && { text: p.text.slice(0, 60), centred: p.centred }));
 }
 
+console.log('\nTHE HEADER IS A THREE-STEP HIERARCHY');
+{
+  // Name above headline above contact, by SIZE -- the makeover's whole
+  // point. Sizes are run properties (<w:sz>), invisible to extraction.
+  const szOf = (needle) => {
+    const p = holding(needle);
+    const m = p && p.xml.match(/<w:sz w:val="(\d+)"\/>/);
+    return m ? +m[1] : 0;
+  };
+  const name = szOf('Maxmilliam Okafor');
+  const headline = szOf('Data Analyst');
+  const contact = szOf('maxokafordev@gmail.com');
+  t('  the name is the largest thing in the header', name > headline,
+    JSON.stringify({ name, headline }));
+  t('  the role line is bigger than the contact line', headline > contact,
+    JSON.stringify({ headline, contact }));
+  const hp = holding('Data Analyst');
+  t('  and the role line is bold', !!hp && /<w:b\/>/.test(hp.xml), hp && hp.xml.slice(0, 200));
+}
+
+console.log('\n"EU CITIZEN" IS BOLD INSIDE THE SKILLS LINE');
+{
+  // Rebuild with the real Languages & Citizenship line: the claim a
+  // screener hunts for must be visible at first glance, and must still
+  // extract as the same characters in the same order.
+  const CV2 = CV.replace('Programming: Python, SQL',
+    'Languages & Citizenship: English (native), French (native) - EU Citizen\nProgramming: Python, SQL');
+  const b2 = G.fromCvText(CV2, {});
+  const tmp2 = path.join(os.tmpdir(), 'jg-centre2-' + Date.now() + '.docx');
+  fs.writeFileSync(tmp2, Buffer.from(b2.base64, 'base64'));
+  const xml2 = cp.execSync('python3 -c ' + JSON.stringify(
+    'import zipfile,sys;sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read("word/document.xml").decode("utf8"))'
+  ) + ' ' + JSON.stringify(tmp2)).toString();
+  fs.unlinkSync(tmp2);
+  const runs2 = [...xml2.matchAll(/<w:r>(?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g)].map((m) => ({
+    txt: [...m[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map((x) => x[1]).join(''),
+    bold: /<w:b\/>/.test(m[0]),
+  }));
+  const eu = runs2.find((r) => r.txt === 'EU Citizen');
+  t('  "EU Citizen" is its own bold run', !!eu && eu.bold, JSON.stringify(eu));
+  const french = runs2.find((r) => r.txt.indexOf('French (native)') !== -1);
+  t('  the items around it stay plain', !!french && !french.bold, JSON.stringify(french));
+  const stream = [...xml2.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]).join('');
+  t('  and the line extracts character-for-character',
+    stream.indexOf('English (native), French (native) - EU Citizen') !== -1,
+    'the bolding split changed the extracted text');
+}
+
 console.log('\nAND NO ICON GLYPH SNUCK IN BESIDE THE CONTACT TOKENS');
 {
   // FontAwesome extracts from U+E000-F8FF; the header must be plain text.
