@@ -54,21 +54,10 @@ import {
 
 
 
-// Countries offered for work authorisation (ISO 3166-1 alpha-2): Ireland plus the EEA.
-const WORK_AUTH_OPTIONS: { code: string; name: string }[] = [
-  { code: 'IE', name: 'Ireland' }, { code: 'AT', name: 'Austria' }, { code: 'BE', name: 'Belgium' },
-  { code: 'BG', name: 'Bulgaria' }, { code: 'HR', name: 'Croatia' }, { code: 'CY', name: 'Cyprus' },
-  { code: 'CZ', name: 'Czechia' }, { code: 'DK', name: 'Denmark' }, { code: 'EE', name: 'Estonia' },
-  { code: 'FI', name: 'Finland' }, { code: 'FR', name: 'France' }, { code: 'DE', name: 'Germany' },
-  { code: 'GR', name: 'Greece' }, { code: 'HU', name: 'Hungary' }, { code: 'IS', name: 'Iceland' },
-  { code: 'IT', name: 'Italy' }, { code: 'LV', name: 'Latvia' }, { code: 'LI', name: 'Liechtenstein' },
-  { code: 'LT', name: 'Lithuania' }, { code: 'LU', name: 'Luxembourg' }, { code: 'MT', name: 'Malta' },
-  { code: 'NL', name: 'Netherlands' }, { code: 'NO', name: 'Norway' }, { code: 'PL', name: 'Poland' },
-  { code: 'PT', name: 'Portugal' }, { code: 'RO', name: 'Romania' }, { code: 'SK', name: 'Slovakia' },
-  { code: 'SI', name: 'Slovenia' }, { code: 'ES', name: 'Spain' }, { code: 'SE', name: 'Sweden' },
-  { code: 'GB', name: 'United Kingdom' }, { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' }, { code: 'CH', name: 'Switzerland' },
-];
+// Countries offered for work authorisation live in a shared module so the
+// extension payload and the chips below stay in sync.
+import { WORK_AUTH_OPTIONS } from '@/lib/workAuthCountries';
+
 
 // Default ATS answers that pass knockout questions
 const DEFAULT_ATS_ANSWERS = {
@@ -1010,8 +999,10 @@ const Profile = () => {
             <div className="mt-6 p-3 border rounded-lg">
               <Label>Work authorisation (no sponsorship required)</Label>
               <p className="text-xs text-muted-foreground mt-1 mb-3">
-                ISO country codes where you can work without sponsorship. This answers every "are you legally
-                authorised to work in X" question on an application form, so a missing code is a knockout answer.
+                Countries where you can work without sponsorship. This answers every "are you legally
+                authorised to work in X" question on an application form, so a missing country is a knockout
+                answer. Saved as ISO codes, sent to the extension with full country names as well, because some
+                ATS forms reject a bare code such as "IE".
               </p>
               <div className="flex flex-wrap gap-2">
                 {WORK_AUTH_OPTIONS.map((c) => {
@@ -1029,9 +1020,10 @@ const Profile = () => {
                       className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                         on ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground'
                       } ${editMode ? 'hover:border-primary' : 'opacity-70 cursor-default'}`}
-                      title={c.name}
+                      title={`${c.name} (${c.code})`}
                     >
-                      {c.code}
+                      {c.name}
+                      <span className="ml-1.5 opacity-60">{c.code}</span>
                     </button>
                   );
                 })}
