@@ -2437,9 +2437,13 @@ ACRONYM RULE (new): When the job description uses both a long form and its acron
 
 TECHNICAL SKILLS FORMAT: Labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. If the profile records citizenship or right-to-work (for example EU Citizen), the first group is "Languages & Citizenship" and ends with that claim. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
 
+PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's projects taken from the profile's relevant_projects array. For each project give the project name, its tech stack, one description line, and the live/code links VERBATIM as recorded in the profile - links are never rewritten, shortened or dropped. If the profile records no projects, omit the PROJECTS section entirely rather than inventing one.
+
 EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
 
 OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen.
+
+RESPONSE CONTRACT: Return ONLY a single JSON object. All newlines inside string values MUST be escaped as \\n. No code fences, no text outside the JSON object.
 
 RULE 9 - VOCABULARY REFORMULATION (worth ~5 points)
 Do NOT just insert keywords - REFORMULATE existing experience using the JD's exact vocabulary:
@@ -2981,7 +2985,7 @@ Certifications: ${jdKeywords.certifications.join(", ")}
 ADD THESE WHERE THE CANDIDATE'S HISTORY EVIDENCES THEM (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
 Any of these the candidate has genuinely never done is OMITTED and listed under KEYWORDS OMITTED. See RULE 0 and RULE 2. Do not invent a background to host a keyword.
 
-Return ONLY valid JSON - no markdown code blocks, no extra text.`;
+Return ONLY a single JSON object. All newlines inside string values MUST be escaped as \\n. No code fences, no text outside the JSON object.`;
 
     const userPrompt = `TASK: Create an ATS-optimized, HUMANIZED application package.
 
@@ -3322,20 +3326,63 @@ ${
       console.error("Failed to parse AI response:", parseError);
       console.error("Raw content:", content?.substring(0, 1000));
 
-      // Fallback with pre-calculated values
+      // Tolerant recovery: pull the string values out even when the model left
+      // literal newlines inside them (which breaks JSON.parse).
+      const recoverStringField = (raw: string, key: string): string | null => {
+        if (!raw) return null;
+        const re = new RegExp(
+          `"${key}"\\s*:\\s*"([\\s\\S]*?)"\\s*(?=,\\s*"[A-Za-z0-9_]+"\\s*:|\\}\\s*$|\\}\\s*[^\\s])`,
+        );
+        const m = raw.match(re);
+        if (!m) return null;
+        return m[1]
+          .replace(/\\r\\n/g, "\n")
+          .replace(/\\n/g, "\n")
+          .replace(/\\r/g, "\n")
+          .replace(/\\t/g, "  ")
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, "\\")
+          .replace(/\r\n/g, "\n")
+          .trim();
+      };
+
+      const recoveredResume = recoverStringField(content || "", "tailoredResume");
+      const recoveredCoverLetter = recoverStringField(content || "", "tailoredCoverLetter");
+
+      if (recoveredResume) {
+        console.log("Recovered tailoredResume from malformed JSON envelope");
+      }
+
       result = {
-        tailoredResume: content || "Unable to generate tailored resume. Please try again.",
-        tailoredCoverLetter: userProfile.coverLetter || "Unable to generate cover letter. Please try again.",
+        tailoredResume: recoveredResume || "Unable to generate tailored resume. Please try again.",
+        tailoredCoverLetter:
+          recoveredCoverLetter || userProfile.coverLetter || "Unable to generate cover letter. Please try again.",
         matchScore: matchResult.score,
         keywordsMatched: matchResult.matched,
         keywordsMissing: matchResult.missing,
         smartLocation: smartLocation,
-        suggestedImprovements: ["Please retry for better results"],
+        suggestedImprovements: recoveredResume ? [] : ["Please retry for better results"],
         candidateName: candidateNameForFile,
         cvFileName: `${candidateNameForFile}_CV.pdf`,
         coverLetterFileName: `${candidateNameForFile}_Cover_Letter.pdf`,
       };
     }
+
+    // Never let a raw JSON envelope reach the document: if the resume text still
+    // looks like JSON, recover the inner value.
+    const stripEnvelope = (text: unknown): string => {
+      if (typeof text !== "string") return "";
+      const t = text.trim();
+      if (!t.startsWith("{") && !t.startsWith("```")) return text as string;
+      const m = t.match(/"tailoredResume"\s*:\s*"([\s\S]*?)"\s*(?=,\s*"[A-Za-z0-9_]+"\s*:|\}\s*$)/);
+      if (!m) return text as string;
+      return m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim();
+    };
+    result.tailoredResume = stripEnvelope(result.tailoredResume);
+    if (typeof result.tailoredCoverLetter === "string") {
+      result.tailoredCoverLetter = result.tailoredCoverLetter.trim();
+    }
+
 
     // Apply content quality engine - remove banned buzzwords and improve natural language
     if (result.tailoredResume) {
@@ -3360,7 +3407,9 @@ ${
             ? p.techStack.filter(Boolean).join(", ")
             : (p.techStack || "").toString().trim();
           if (techStack) lines.push(techStack);
-          const bullets = Array.isArray(p.bullets) ? p.bullets : [];
+          const bullets = Array.isArray(p.bullets) && p.bullets.filter(Boolean).length > 0
+            ? p.bullets
+            : [(p.description || "").toString()];
           for (const b of bullets) {
             const t = (b || "").toString().trim();
             if (t) lines.push(`• ${t}`);
