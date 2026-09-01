@@ -2985,7 +2985,7 @@ Certifications: ${jdKeywords.certifications.join(", ")}
 ADD THESE WHERE THE CANDIDATE'S HISTORY EVIDENCES THEM (${matchResult.missing.length} keywords): ${matchResult.missing.join(", ")}
 Any of these the candidate has genuinely never done is OMITTED and listed under KEYWORDS OMITTED. See RULE 0 and RULE 2. Do not invent a background to host a keyword.
 
-Return ONLY valid JSON - no markdown code blocks, no extra text.`;
+Return ONLY a single JSON object. All newlines inside string values MUST be escaped as \\n. No code fences, no text outside the JSON object.`;
 
     const userPrompt = `TASK: Create an ATS-optimized, HUMANIZED application package.
 
