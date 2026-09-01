@@ -2329,12 +2329,33 @@
    * everything back when it cannot get there without gutting the
    * history.
    */
-  function restoreDroppedBullets(cvText, experience) {
+  function restoreDroppedBullets(cvText, experience, jobKeywords) {
     const text = String(cvText || '');
     if (!text || !Array.isArray(experience) || !experience.length) {
-      return { text, restored: 0, reordered: 0, matchedRoles: 0, profileBulletsSeen: 0,
-        cvRoles: 0, cvCompanies: [] };
+      return { text, restored: 0, reordered: 0, reclaimed: 0, reclaimedKeywords: [],
+        matchedRoles: 0, profileBulletsSeen: 0, cvRoles: 0, cvCompanies: [] };
     }
+
+    // THE REWRITE MUST NOT COST A KEYWORD THE ORIGINAL CARRIED.
+    //
+    // A rewrite that matches a profile bullet stands in for it -- but a
+    // rewrite of "Automated the daily regulatory feed using Airflow"
+    // that comes back without "Airflow" has quietly traded a posting
+    // keyword for nicer prose, in the one place a keyword counts most:
+    // inside the work that proves it. Where that happens, the
+    // candidate's own original sentence is restored instead. That is
+    // not injection -- it is their bullet, word for word.
+    //
+    // Scoped to keywords the role does not still show in ANOTHER of
+    // its bullets, so a term merely moved between bullets is left as
+    // the model arranged it.
+    const _kwRes = _flatKeywords(jobKeywords)
+      .map((k) => String(k || '').trim())
+      .filter((k) => k.length > 2)
+      .map((k) => ({
+        name: k,
+        re: new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i'),
+      }));
 
     const lines = text.split('\n');
 
@@ -2373,6 +2394,8 @@
     }
 
     let restored = 0, reordered = 0, matchedRoles = 0, profileBulletsSeen = 0;
+    let reclaimed = 0;
+    const reclaimedKeywords = [];
     const edits = [];
     for (const src of experience) {
       if (!src) continue;
@@ -2394,6 +2417,7 @@
       const taken = new Set();
       const rebuilt = [];
       let added = 0;
+      let roleReclaimed = 0;
       for (const pb of profileBullets) {
         let best = -1, bestScore = _BULLET_MATCH;
         role.bullets.forEach((cb, idx) => {
@@ -2401,7 +2425,21 @@
           const sc = _bulletsMatch(pb, cb);
           if (sc >= bestScore) { bestScore = sc; best = idx; }
         });
-        if (best !== -1) { taken.add(best); rebuilt.push(role.bullets[best]); }
+        if (best !== -1) {
+          taken.add(best);
+          const cb = role.bullets[best];
+          const lost = _kwRes.filter((k) => k.re.test(pb) && !k.re.test(cb)
+            && !role.bullets.some((other, oi) => oi !== best && k.re.test(other)));
+          if (lost.length) {
+            rebuilt.push(pb);            // the candidate's own sentence, keyword intact
+            roleReclaimed++;
+            for (const k of lost) {
+              if (reclaimedKeywords.indexOf(k.name) === -1) reclaimedKeywords.push(k.name);
+            }
+          } else {
+            rebuilt.push(cb);
+          }
+        }
         else { rebuilt.push(pb); added++; }
       }
       // Whatever the model wrote that answers to nothing in the profile.
@@ -2416,16 +2454,19 @@
       // out of the order its owner arranged it in. A profile that
       // records the work also records the order of it.
       const changed = added > 0
+        || roleReclaimed > 0
         || rebuilt.length !== role.bullets.length
         || rebuilt.some((b, i) => b !== role.bullets[i]);
       if (!changed) continue;
       restored += added;
-      if (!added) reordered++;
+      reclaimed += roleReclaimed;
+      if (!added && !roleReclaimed) reordered++;
       edits.push({ start: role.start, end: role.end,
         lines: rebuilt.map((b) => role.marker + b) });
     }
 
-    const stats = { restored, reordered, matchedRoles, profileBulletsSeen,
+    const stats = { restored, reordered, reclaimed, reclaimedKeywords,
+      matchedRoles, profileBulletsSeen,
       cvRoles: roles.length, cvCompanies: roles.map((r) => r.raw || r.key).filter(Boolean) };
     if (!edits.length) return Object.assign({ text }, stats);
     // Bottom up, so earlier line numbers stay valid.
@@ -4678,11 +4719,14 @@
         // which is the point: the prompt lives in an edge function
         // deployed separately, so a fix made only there does not reach
         // a single generated document until that deploy happens.
-        const back = restoreDroppedBullets(outCV, _exp);
-        if (back.restored || back.reordered) {
+        const back = restoreDroppedBullets(outCV, _exp, jobKeywords);
+        if (back.restored || back.reordered || back.reclaimed) {
           outCV = back.text;
           const parts = [];
           if (back.restored) parts.push('restored ' + back.restored + ' bullet(s) the tailoring dropped');
+          if (back.reclaimed) parts.push('put back ' + back.reclaimed
+            + ' original bullet(s) whose rewrite had lost a posting keyword ('
+            + back.reclaimedKeywords.slice(0, 4).join(', ') + ')');
           if (back.reordered) parts.push('put ' + back.reordered + ' role(s) back into your profile\'s order');
           report.fixes.push('Work experience: ' + parts.join(' and ')
             + ', keeping the tailored rewrite wherever one came back.');
