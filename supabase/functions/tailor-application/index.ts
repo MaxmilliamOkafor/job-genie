@@ -2418,54 +2418,26 @@ RULE 6 - SEARCHABILITY FIXES (worth ~10 points)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
 
-RULE 7 - SUMMARY REWRITE (worth ~8 points)
-Rewrite the professional summary to:
-1. Open with what the candidate demonstrably IS, per RULE 1. Use the JD's
-   title wording only if an equivalent title exists in their work history;
-   on a pivot, use their real discipline plus JD domain vocabulary. Never
-   lead with a bare title claim as the opening words.
-2. Reference 2-3 of the most-repeated hard skill keywords from the JD
-3. Mirror the company's value language (e.g. "gaming communities", "data-driven decisions", "petabyte-scale systems")
-4. Keep to 3-4 sentences maximum
-5. WRITE IT SO PASSING WOULD FEEL LIKE A MISTAKE.
-   The hiring manager is reading 200 CVs looking for reasons to say no.
-   A summary that lists attributes ("motivated professional with strong
-   communication skills") gives them one, because it describes a category
-   of person rather than this person.
-   - Lead with the single most specific, verifiable thing in the whole CV
-     -- the biggest number, the largest scale, the most relevant employer,
-     the outcome closest to what this JD is asking for. Concrete beats
-     enthusiastic every time.
-   - Name what only this candidate can claim: the exact combination of
-     domain, tools and scale that would be expensive for the employer to
-     find elsewhere.
-   - Every sentence must survive the question "could an average applicant
-     for this role write this same sentence?" If yes, it is filler --
-     replace it with something from the CV that they could not write.
-   - The global BANNED WORDS list at the end of this prompt already covers
-     most filler. Add "team player" and "hard-working" to it: both
-     describe a temperament every applicant claims, so neither
-     distinguishes anyone.
-   - No hedging. "Contributed to", "involved in", "exposure to" and
-     "familiar with" all read as an admission of thin experience.
-   SUBJECT TO RULES -1 AND 0: every claim here is drawn from the CV. The
-   goal is a sharper reading of true facts, never a louder one. An
-   inflated summary is the fastest way into the "no" pile, because the
-   interview exposes it.
-6. CRITICAL - YEARS OF EXPERIENCE ARE CAPPED BY EVIDENCE, NOT BY THE JD:
-   - DERIVE the number of years from the candidate's ACTUAL employment
-     dates in the CV.
-   - NEVER state a number higher than that, even if the JD asks for more.
-   - If the evidenced number is LOWER than the JD's requirement, state the
-     real number or omit years entirely. NEVER inflate to match the JD.
-   - If neither the JD nor the CV supports a clear number, omit years.
+RULE 7 - PROFESSIONAL SUMMARY (replaces any existing summary length guidance)
+The PROFESSIONAL SUMMARY is at most TWO sentences and at most 220 characters total.
+Sentence one: the held job title, years of experience, and the strongest domain match to this posting.
+Sentence two: the top 3-4 exact tools or skills from the job description that the candidate's history genuinely evidences, plus one quantified scale (portfolio size, team size, or user count) taken from the profile.
+Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV.
 
-RULE 8 - CORE COMPETENCIES GRID (worth ~8 points, "6-second recruiter scan")
-Generate a "Core Competencies" section with 6-9 keyword phrases drawn from the JD's most critical requirements.
-These phrases do NOT print as their own section. The renderer merges them into the single TECHNICAL SKILLS section (competencies first, each term once), which sits underneath Professional Experience.
-Format: short 2-4 word phrases (e.g. "Cloud Architecture", "CI/CD Pipelines", "Stakeholder Management").
-Pick ONLY terms the candidate can legitimately claim. Prioritise JD terms that appear more than once.
-EXCEPTION: Do NOT place soft-skill phrases containing the word "skills" in Core Competencies (e.g. "collaboration skills", "communication skills", "problem-solving skills"). These MUST go in the TECHNICAL SKILLS section instead, as recruiters find them off-putting at the top of a CV.
+RULE 8 - SECTION ORDER, HEADINGS, ROLE BLOCKS, BULLETS, ACRONYMS, SKILLS, EDUCATION AND OUTPUT HYGIENE
+SECTION ORDER AND HEADINGS: Output sections in exactly this order with these exact uppercase headings, each on its own line: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content (no "TECHNICAL SKILLS: Python, SQL" on one line). Never emit the same section twice.
+
+ROLE BLOCK SHAPE: Every role is exactly: company name alone on one line, job title alone on the next line, date range alone on the next line ("January 2023 - Present" format, plain hyphen, full month names), then the bullets. Never join company and city with a comma ("Meta, Dublin" is forbidden - the extension attaches locations from the profile itself). Never join company and title on one line.
+
+BULLET STYLE: Every bullet starts with a strong past-tense verb for ended roles and present tense only for the current role. Forbidden anywhere in bullets: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", and passive voice ("was replaced by"). Keep every number from the profile's bullets (money, percentages, counts, timelines) exactly as written. Where the profile gives scope (team size, budget, users served), include it. Never append a tool or technology to a bullet unless that profile bullet already names it.
+
+ACRONYM RULE (new): When the job description uses both a long form and its acronym (for example "Anti-Money Laundering (AML)" or "Know Your Customer (KYC)"), and the candidate's history genuinely evidences that skill, write it with BOTH forms at its first mention on the CV: the long form followed by the acronym in parentheses. After the first mention, either form alone is fine. Never do this for a skill the profile does not evidence.
+
+TECHNICAL SKILLS FORMAT: Labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. If the profile records citizenship or right-to-work (for example EU Citizen), the first group is "Languages & Citizenship" and ends with that claim. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
+
+EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
+
+OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen.
 
 RULE 9 - VOCABULARY REFORMULATION (worth ~5 points)
 Do NOT just insert keywords - REFORMULATE existing experience using the JD's exact vocabulary:
@@ -2604,17 +2576,15 @@ Banned before a noun: significant, substantial, considerable, several-fold,
 measurably, markedly, dramatically, drastically, materially, notably,
 meaningfully. Plain description beats a vague intensifier every time.
 
-RULE 15c - CORE COMPETENCIES AND SKILLS DO NOT OVERLAP
-A term appears in ONE section. Real output listed "Communication Skills"
-and "Presentation Skills" in Core Competencies AND again in Technical
-Proficiencies, which reads as padding to a human and doubles nothing for
-the ATS.
-- Any phrase containing the word "skills" belongs in the Skills section,
-  never in Core Competencies. This rule already exists in RULE 8 and was
-  ignored; it is repeated here because the duplication is what a recruiter
-  notices first.
-- Before output, compare the two lists and remove from Skills anything
-  already in Core Competencies.
+RULE 15c - ONE SKILLS SECTION ONLY
+There is exactly one skills section, headed TECHNICAL SKILLS. Do not write
+a separate "Core Competencies" or "Key Skills" section. A term appears
+once across the whole CV. Real output listed "Communication Skills" and
+"Presentation Skills" twice, which reads as padding and doubles nothing
+for the ATS.
+- Any phrase containing the word "skills" belongs in the Technical Skills
+  section, never in a separate Core Competencies section.
+- Before output, ensure no skill appears in two groups or sections.
 
 RULE 15a - NO EM DASHES OR EN DASHES IN ANY OUTPUT (hard ban)
 An em dash is one of the strongest machine-written tells a recruiter
@@ -2967,14 +2937,18 @@ VIOLATION = INSTANT REJECTION. The summary describes qualifications ONLY.
 === END CRITICAL RULE ===
 
 ABSOLUTE RULES:
-1. PRESERVE ALL COMPANY NAMES AND EXACT DATES (full month name + year format) - Only tailor the bullet points
-2. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
-2. Location in CV header MUST be the job-derived location: "${smartLocation}" (NO "open to relocation" suffix, NO hardcoded Dublin)
-3. NO typos, grammatical errors, or formatting issues
-4. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
-5. 100% of ALL keywords from the JD MUST appear at least once in the tailored resume - CHECK EVERY KEYWORD
-6. The TECHNICAL SKILLS section must list ALL JD keywords not already covered in experience bullets
-7. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
+1. PROFESSIONAL SUMMARY is at most TWO sentences and 220 characters total. Sentence one: held job title, years of experience, strongest domain match. Sentence two: top 3-4 exact JD tools/skills the candidate evidences, plus one quantified scale from the profile. Never "seeking", "looking for", "open to opportunities". No first-person pronouns anywhere in the CV.
+2. SECTION ORDER AND HEADINGS: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Each heading on its own line, never inline with content, never duplicated.
+3. ROLE BLOCK SHAPE: company alone on one line, title alone on the next, date range alone on the next ("January 2023 - Present", plain hyphen, full month names), then bullets. Never "Meta, Dublin". Never join company and title.
+4. BULLETS: past-tense verb for ended roles, present tense only for current role. Forbidden: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", passive voice. Keep every number from the source. Never append a tool unless the source bullet already names it.
+5. ACRONYM RULE: when the JD uses both long form and acronym and the candidate evidences the skill, first mention is long form followed by acronym in parentheses. Never for unsupported skills.
+6. TECHNICAL SKILLS FORMAT: labelled groups, one per line, "Group Name: item, item, item" - commas only, no pipes. Most relevant first. If profile records citizenship/right-to-work, first group is "Languages & Citizenship" ending with that claim. No skill in two groups.
+7. EDUCATION FORMAT: degree plus grade on one line, institution on the next, graduation year on the next. Keep grades and years from the profile.
+8. OUTPUT HYGIENE: plain text only, no markdown, no asterisks, no bullet symbols other than "- " at bullet starts. No em dashes; use a plain hyphen.
+9. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
+10. Dates MUST use full month names with a plain hyphen separator, e.g. "January 2023 - Present", "April 2021 - July 2022" (never MM/YYYY, never an en dash)
+11. PRESERVE ALL COMPANY NAMES AND EXACT DATES - Only tailor the bullet points
+12. File naming: ${candidateNameForFile}_CV.pdf and ${candidateNameForFile}_Cover_Letter.pdf
 
 HUMANIZED TONE RULES:
 - Active voice only
@@ -3047,48 +3021,22 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
 === INSTRUCTIONS ===
 
-1) CREATE RESUME with these exact sections:
+1) CREATE RESUME with these exact sections and no others:
    - Header: ${candidateName}
    - Contact Line: ${smartLocation} | ${userProfile.phone} | ${userProfile.email}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ""} | ${userProfile.portfolio || ""}
-   - PROFESSIONAL SUMMARY: 4-6 lines of PURE QUALIFICATIONS ONLY.
-      
-      ███ CRITICAL DUPLICATION BAN ███
-      The header ALREADY contains name/email/phone/links.
-      The PROFESSIONAL SUMMARY text must contain ZERO of these:
-      • Name: "${candidateName}" → FORBIDDEN in summary
-      • Email: "${userProfile.email}" → FORBIDDEN in summary  
-      • Phone: "${userProfile.phone}" → FORBIDDEN in summary
-      • LinkedIn URL → FORBIDDEN in summary
-      • GitHub URL → FORBIDDEN in summary
-      • Portfolio URL → FORBIDDEN in summary
-      • Location/city → FORBIDDEN in summary
-      
-      CORRECT FIRST WORDS: "Experienced", "Senior", "Accomplished", "Strategic", "Innovative"
-      WRONG FIRST WORD: "${candidateName.split(" ")[0]}" (this is the name - BANNED)
-      
-      EXAMPLE OF CORRECT SUMMARY:
-      "Experienced Principal Cloud Architect with 8+ years of expertise in cloud computing, data analytics, and machine learning. Designs scalable solutions that reduced infrastructure costs by 40% and improved system uptime to 99.9%."
-      
-      EXAMPLE OF WRONG SUMMARY (DO NOT DO THIS):
-      "${candidateName} ${userProfile.phone} | ${userProfile.email}..." ← THIS IS WRONG
-    ███ END DUPLICATION BAN ███
-       TITLE REDUNDANCY: If the job title contains a parenthetical qualifier - e.g. 'Sr. Software Engineer (Data Science/Data Engineering)' - do not restate the qualifier's words verbatim in the first sentence; vary the phrasing instead.
-    - COVER LETTER FIGURES ARE QUOTED, NOT PARAPHRASED: any number that appears in the cover letter MUST be copied from the CV with the SAME noun attached. A real pair went out with the CV saying "cut the manual review QUEUE by 40%" and the letter saying "reducing manual review TIME by 40%" -- a queue and a time are different claims, and a reviewer holding both documents sees an applicant whose own numbers do not agree. If the exact phrasing does not fit the sentence, drop the figure from the letter rather than restate it loosely; the CV already carries it.
-    - THE COVER LETTER MUST SAY WHY THIS EMPLOYER: name something specific to THIS company from the posting -- the team, the product, the stated problem, the market -- and connect it to the candidate's own work. "the projects at [Company]" and "your innovative culture" are filler and count for nothing: they read identically for every employer, which is exactly what a reviewer is scanning for. If the posting genuinely says nothing specific, write about the WORK described in it rather than inventing a reason to admire the company.
-    - TARGET TITLE LINE: The line immediately after the candidate's name MUST be a job title the candidate's own WORK EXPERIENCE contains, spelled as they held it (e.g. "Software Engineer" when the history reads "Software Engineer, Meta, January 2023 - Present"). Every resume parser reads that line as the title held NOW, so it must never be the posting's title when the history does not contain it: a line reading "Business Operations Sr Analyst" above an employment block reading "Software Engineer, Meta, January 2023 to Present" makes the parsed record contradict the page. Use the candidate's current (most recent) title, or an earlier title from the same history if that one matches the posting more closely. Never invent a title, never blend two titles, never borrow the posting's wording. No pipes, no skills, no company. The extension also sets this line, so never emit it twice.
-    - CORE COMPETENCIES: 6-9 keyword phrases from the JD, written as a single comma-separated line under this heading (they print merged into TECHNICAL SKILLS, which sits underneath PROFESSIONAL EXPERIENCE). THESE PHRASES AND THE TECHNICAL SKILLS LIST PRINT AS ONE SECTION. The renderer merges the two under the heading TECHNICAL SKILLS, competencies first, each term once. It does this because a parser finds the skills section by searching headings for the word "skill" and takes the FIRST one that matches: a live parse of a real generated CV returned the competencies EMPTY, and two skills-named sections would have lost the other one instead. Keep writing both lists -- the competencies are the tailored, job-matched phrases and they lead the section a recruiter scans first -- but write them as two lists that read correctly when joined, and never repeat a term across them.
-    - WORK EXPERIENCE: Keep company/dates (full month name + year, plain hyphen, e.g. "January 2023 - Present"), rewrite bullets with JD keywords + metrics. YEARS OF EXPERIENCE - THE DATES ON THE PAGE ARE THE ANSWER: any years figure in the summary MUST be consistent with the employment dates in this same CV. Add up the candidate's actual history and state that, or state no figure at all. NEVER set the figure to the JD's requirement: a CV whose summary says "over 4 years" above a work history running from 2017 to Present contradicts itself in the two places a reader looks first, and many ATS compute total tenure from the dates and compare it to the stated number. Exceeding a stated minimum is not a problem to solve - "5+ years" required and 9 years held is a strong application, whereas understating it filters the candidate out of the senior roles they actually qualify for and reads as junior. If the true total is genuinely below the JD's minimum, say the true total; do not inflate it either. Use VOCABULARY REFORMULATION (Rule 9) - reformulate existing bullets using the JD's exact vocabulary, not just insert keywords. Weave JD keywords into bullets ONLY where they fit naturally and truthfully - at most one added keyword per bullet, and never a credential/qualification noun (e.g. 'texas licensure', 'high school diploma') bolted onto a sentence. Any keyword that does not fit a bullet naturally goes into the TECHNICAL SKILLS section instead. A bullet must always read as plain English written by a human; never append a keyword with connectors like 'via X' or 'built with X' where the result is not a grammatical, truthful sentence. PRESERVE every number, percentage, and metric from the source bullets when rewriting - never drop a quantified outcome. Keep EVERY quantified result the source bullet already has. There is no target number of metrics per role: a role whose source records one number gets one, and a role that records none stays unquantified. Never manufacture a figure to reach a count. If a source bullet has a metric, the rewritten bullet MUST keep that exact metric. Never invent numbers that are not in the source data.
-    - SELECTED PROJECTS: Do NOT output a SELECTED PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
-    - TECHNICAL SKILLS: A single comma-separated list. Include EVERY JD hard skill, tool and technology the candidate's history evidences -- as many as qualify, with no cap. Classify each JD keyword before writing it: PROVEN (used professionally -> list it), TRANSFERABLE (related experience, different tool -> describe the transferable skill honestly, never rename it as the tool they asked for), UNSUPPORTED (never used, could not explain it in an interview -> leave it out entirely). Never add a keyword merely because it is absent. Where a term has an acronym and a full form the JD uses both, give both ONCE ("Continuous Integration and Continuous Delivery (CI/CD)"); never list variants of the same product ("Azure, Microsoft Azure, Azure Cloud"). Format: "Python, AWS, Terraform, Kubernetes, Docker, CI/CD, Cloud Security, Cloud Architecture".
-    - CERTIFICATIONS
-    - EDUCATION (LAST). Skills and certifications sit ABOVE education:
-      a recruiter scanning top-down should reach what proves the candidate
-      can do THIS job before reaching their degrees. Education first is the
-      graduate convention and reads as early-career on a CV with years of
-      history behind it. It also keeps the skills together rather than split
-      by education: Core Competencies at the top for the scan, Technical
-      Proficiencies and Certifications lower down as the detail block.
+   - PROFESSIONAL SUMMARY: at most TWO sentences and at most 220 characters total. Sentence one: the held job title, years of experience, and the strongest domain match to this posting. Sentence two: the top 3-4 exact tools or skills from the job description that the candidate's history genuinely evidences, plus one quantified scale (portfolio size, team size, or user count) taken from the profile. Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV. The summary must never repeat name, email, phone, LinkedIn, GitHub, portfolio, or location - those live in the header above.
+   - TARGET TITLE LINE: The line immediately after the candidate's name MUST be a job title the candidate's own WORK EXPERIENCE contains, spelled as they held it (e.g. "Software Engineer" when the history reads "Software Engineer, Meta, January 2023 - Present"). Every resume parser reads that line as the title held NOW, so it must never be the posting's title when the history does not contain it. Use the candidate's current (most recent) title, or an earlier title from the same history if that one matches the posting more closely. Never invent a title, never blend two titles, never borrow the posting's wording. No pipes, no skills, no company. The extension also sets this line, so never emit it twice.
+   - PROFESSIONAL EXPERIENCE: roles in this shape: company name alone on one line, job title alone on the next line, date range alone on the next line ("January 2023 - Present" format, plain hyphen, full month names), then the bullets. Never join company and city with a comma ("Meta, Dublin" is forbidden - the extension attaches locations from the profile itself). Never join company and title on one line. Keep every bullet from the source role, in source order, reworded in place. Every bullet starts with a strong past-tense verb for ended roles and present tense only for the current role. Forbidden anywhere in bullets: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", and passive voice. Keep every number from the profile's bullets. Never append a tool or technology to a bullet unless that profile bullet already names it.
+   - TECHNICAL SKILLS: labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. If the profile records citizenship or right-to-work (for example EU Citizen), the first group is "Languages & Citizenship" and ends with that claim. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
+   - PROJECTS: Do NOT output a PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
+   - CERTIFICATIONS
+   - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile.
+
+   OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
+
+   COVER LETTER FIGURES ARE QUOTED, NOT PARAPHRASED: any number that appears in the cover letter MUST be copied from the CV with the SAME noun attached. A real pair went out with the CV saying "cut the manual review QUEUE by 40%" and the letter saying "reducing manual review TIME by 40%" -- a queue and a time are different claims, and a reviewer holding both documents sees an applicant whose own numbers do not agree. If the exact phrasing does not fit the sentence, drop the figure from the letter rather than restate it loosely; the CV already carries it.
+   THE COVER LETTER MUST SAY WHY THIS EMPLOYER: name something specific to THIS company from the posting -- the team, the product, the stated problem, the market -- and connect it to the candidate's own work. "the projects at [Company]" and "your innovative culture" are filler and count for nothing: they read identically for every employer, which is exactly what a reviewer is scanning for. If the posting genuinely says nothing specific, write about the WORK described in it rather than inventing a reason to admire the company.
 
 2) CREATE COVER LETTER:
    ${candidateName}
