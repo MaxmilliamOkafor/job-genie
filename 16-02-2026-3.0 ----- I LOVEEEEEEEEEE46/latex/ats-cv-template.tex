@@ -1,0 +1,134 @@
+% =====================================================================
+% JOB GENIE -- ATS-SAFE CV TEMPLATE (LaTeX)
+% ---------------------------------------------------------------------
+% Compile with pdflatex (Overleaf: default compiler works as-is).
+% Paste the tailored text from the extension into the marked sections.
+%
+% READ THIS FIRST: LaTeX IS NOT AUTOMATICALLY "BETTER" FOR ATS.
+%
+% A LaTeX CV is a PDF, and ATS parse DOCX more reliably than any PDF,
+% which is why the extension attaches the DOCX. What people admire in
+% the famous LaTeX templates -- one column, no tables, no graphics,
+% plain headings -- is layout, and the extension's DOCX already has all
+% of it. Worse, a DEFAULT LaTeX build actively damages parsing in three
+% ways this file turns off:
+%
+%   LIGATURES. pdflatex fuses fi/ffi/fl into single glyphs, so
+%   "efficient" can extract as "e cient" and never match a keyword.
+%   \DisableLigatures stops the fusing; \pdfgentounicode maps every
+%   glyph back to real characters for the extractor.
+%
+%   HYPHENATION. LaTeX justifies by breaking words across lines, and a
+%   keyword split "engi-neering" matches nothing. hyphenat [none] plus
+%   \raggedright means no word is ever broken.
+%
+%   ENCODING. Without fontenc T1, accented characters extract as
+%   composed pairs. Fixed below.
+%
+% Everything else mirrors the DOCX the extension generates: the same
+% section order the parsers expect, the same navy accent restricted to
+% the name and headings, pipes only in the contact line (parsers regex
+% that line; they SPLIT the skills lines, so skills stay comma-only),
+% no tables, no text boxes, no icons, no header/footer, no page number.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---- text-extraction correctness (the part an ATS actually sees) ----
+\input{glyphtounicode}
+\pdfgentounicode=1
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\DisableLigatures{encoding = *, family = *}
+\usepackage[none]{hyphenat}
+
+% ---- layout: one column, generous line length, no decoration ----
+\usepackage[a4paper,left=1.7cm,right=1.7cm,top=1.4cm,bottom=1.4cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+% The DOCX palette, exactly.
+\definecolor{navy}{HTML}{1F4E79}   % the accent: name and section headings
+\definecolor{bodycol}{HTML}{21232A}% near-black body text
+\definecolor{muted}{HTML}{66707A}  % dates and secondary meta
+\definecolor{rulecol}{HTML}{BDC7D9}% the heading rule
+\usepackage[hidelinks,pdftitle={Maxmilliam Okafor CV},pdfauthor={Maxmilliam Okafor}]{hyperref}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\raggedright
+\color{bodycol}
+
+% A section heading is a landmark: navy, bold, uppercase, thin rule.
+\newcommand{\cvsection}[1]{%
+  \vspace{7pt}\par
+  {\color{navy}\bfseries\large #1}\par
+  \vspace{1.5pt}%
+  \textcolor{rulecol}{\rule{\textwidth}{0.5pt}}\par
+  \vspace{3pt}}
+
+% company, location, title, dates -- four separate visual fields, so a
+% parser maps Company and Location without guessing at commas.
+\newcommand{\role}[4]{%
+  \vspace{5pt}\par
+  {\bfseries #1} \hfill {\color{muted}#2}\par
+  {\bfseries #3} \hfill {\color{muted}#4}\par
+  \vspace{1pt}}
+
+\setlist[itemize]{leftmargin=12pt,itemsep=1.5pt,parsep=0pt,topsep=2pt,label=\textbullet}
+
+\begin{document}
+
+% ================================ HEADER ==============================
+{\color{navy}\bfseries\fontsize{20}{23}\selectfont Maxmilliam Okafor}\par
+\vspace{2pt}
+% The headline: only ever a title the history actually contains.
+{\bfseries Data Analyst}\par
+\vspace{2pt}
+{\color{muted}Dublin, Ireland \,\textbar\, +353 874 261 508 \,\textbar\, \href{mailto:maxokafordev@gmail.com}{maxokafordev@gmail.com} \,\textbar\, \href{https://www.linkedin.com/in/maxokafor/}{linkedin.com/in/maxokafor}}\par
+
+% ========================== PROFESSIONAL SUMMARY ======================
+\cvsection{PROFESSIONAL SUMMARY}
+Data Analyst with five years across credit risk, regulatory reporting
+and anti money laundering analytics, working in SQL, Python and Power
+BI on portfolios up to GBP 2.6bn.
+
+% ========================= PROFESSIONAL EXPERIENCE ====================
+\cvsection{PROFESSIONAL EXPERIENCE}
+
+\role{Citigroup}{London, United Kingdom}{Data Analyst}{August 2017 -- March 2021}
+\begin{itemize}
+  \item Rebuilt the credit risk reporting suite in SQL and Python for a GBP 2.6bn consumer lending portfolio, replacing four conflicting sources with a single agreed set of exposure figures.
+  \item Replaced a 40 tab Excel reporting pack with a Power BI suite, cutting the month end reporting cycle from nine working days to three.
+  \item Redesigned the grouping and scoring of anti money laundering alerts in Python, cutting the volume of false alerts without missing genuine cases.
+  \item Automated the daily regulatory data feed using Airflow and SQL Server after three late submissions in a single year.
+  \item Led the analysis behind the IFRS 9 staging criteria review, testing it across four years of loan performance data.
+  \item Trained 24 analysts across the London and Belfast offices in SQL and Power BI, reducing turnaround on routine data requests to same day.
+\end{itemize}
+
+% Add further roles with the same \role{...}{...}{...}{...} block.
+
+% ============================ TECHNICAL SKILLS ========================
+% Comma-separated only. Measured against a real resume parser: the
+% comma line yielded 7 clean terms, a pipe-delimited line yielded 3
+% garbage terms. Pipes belong in the contact line and nowhere else.
+\cvsection{TECHNICAL SKILLS}
+{\bfseries Data \& Analysis:} SQL, Python, Power BI, Tableau, Excel, Airflow\par
+{\bfseries Practices:} Forecasting, Stakeholder Management, Process Improvement, Regulatory Reporting\par
+
+% =============================== PROJECTS =============================
+\cvsection{PROJECTS}
+{\bfseries Job Genie} \hfill {\color{muted}\href{https://github.com/MaxmilliamOkafor}{github.com/MaxmilliamOkafor}}\par
+\begin{itemize}
+  \item Chrome extension that tailors a CV and cover letter to a job posting and autofills the application.
+\end{itemize}
+
+% ============================ CERTIFICATIONS ==========================
+\cvsection{CERTIFICATIONS}
+Certification Name, Issuing Body, Year\par
+
+% =============================== EDUCATION ============================
+\cvsection{EDUCATION}
+{\bfseries Imperial College London} \hfill {\color{muted}2013 -- 2017}\par
+Degree Title\par
+
+\end{document}

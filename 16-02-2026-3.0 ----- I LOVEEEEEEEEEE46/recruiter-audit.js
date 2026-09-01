@@ -775,6 +775,43 @@
     return null;
   }
 
+  // THE LOCATION IS TYPED BY A HUMAN INTO A FREE-TEXT BOX.
+  //
+  // Company and location are joined with a TAB, so a tab inside the
+  // location makes three fields where the renderer expects two, and a
+  // newline truncates it: "Dublin\nIreland" arrived as "Meta\tDublin"
+  // with the country silently dropped. Neither is visible until an ATS
+  // reads it back wrong.
+  //
+  // Everything collapses to single spaces, and the field is capped -- a
+  // location long enough to wrap would push the right-aligned text off
+  // its tab stop and back onto the company name.
+  //
+  // KEY NAME AND SHAPE, DEFENSIVELY.
+  //
+  // The profile is edited in a separate app, so neither the exact key
+  // this lands under nor its shape is under this code's control. Reading
+  // only "location" means a near-miss like "role_location" does nothing
+  // at all AND says nothing; and a form that saves {city, country} as an
+  // object would put "[object Object]" on the page through String().
+  // Accept the names the same field plausibly gets, in either shape.
+  function _roleLocationOf(src) {
+    const raw = (src && (src.location || src.city || src.role_location
+      || src.roleLocation || src.job_location || src.jobLocation
+      || src.work_location || src.workLocation || src.based_in
+      || src.basedIn || src.locationName)) || '';
+    const s = (raw && typeof raw === 'object')
+      ? [raw.city || raw.town, raw.state || raw.region || raw.county, raw.country]
+        .filter(Boolean).map(String).join(', ')
+      : String(raw);
+    return s
+      .replace(/[\t\r\n\v\f]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 60)
+      .trim();
+  }
+
   function attachRoleLocations(cvText, experience) {
     const text = String(cvText || '');
     if (!text) return { text, attached: 0 };
@@ -813,34 +850,7 @@
         const co = _eduNorm(src.company || src.employer || src.organisation
           || src.organization || src.name);
         if (!co || (co.indexOf(key) === -1 && key.indexOf(co) === -1)) continue;
-        // THE LOCATION IS TYPED BY A HUMAN INTO A FREE-TEXT BOX.
-        //
-        // Company and location are joined with a TAB, so a tab inside the
-        // location makes three fields where the renderer expects two, and
-        // a newline truncates it: "Dublin\nIreland" arrived as
-        // "Meta\tDublin" with the country silently dropped. Neither is
-        // visible until an ATS reads it back wrong.
-        //
-        // Everything collapses to single spaces, and the field is capped
-        // -- a location long enough to wrap would push the right-aligned
-        // text off its tab stop and back onto the company name.
-        // KEY NAME, DEFENSIVELY.
-        //
-        // The profile is edited in a separate app, so the exact key this
-        // lands under is not under this code's control. Reading only
-        // "location" means a near-miss like "role_location" does nothing
-        // at all AND says nothing -- the CV just quietly comes out
-        // without the field, which is indistinguishable from not having
-        // filled it in. Accept the names the same field plausibly gets.
-        const loc = String(src.location || src.city || src.role_location
-          || src.roleLocation || src.job_location || src.jobLocation
-          || src.work_location || src.workLocation || src.based_in
-          || src.basedIn || src.locationName || '')
-          .replace(/[\t\r\n\v\f]+/g, ' ')
-          .replace(/\s{2,}/g, ' ')
-          .trim()
-          .slice(0, 60)
-          .trim();
+        const loc = _roleLocationOf(src);
         if (!loc) { claimed.add(e); break; }
         lines[i] = lines[i].replace(/\s+$/, '') + '\t' + loc;
         claimed.add(e);
@@ -4645,12 +4655,49 @@
         // symptom is an absence, which is invisible until an employer's
         // form asks for it and it has to be typed by hand again. Say
         // which roles, by name.
+        //
+        // BUT THE VERDICT IS READ OFF THE PAGE, NOT OFF THE PROFILE.
+        // This fired "4 role(s) have no location" on a profile whose
+        // roles all HAD one -- the tailored text already carried each
+        // city, the attach above had nothing to do, and the profile
+        // object reaching this code was shaped differently from the
+        // table row it came from. The claim in the note is that the CV
+        // GOES OUT without a location; the CV is right here, so check
+        // the CV. Only a role whose block on the finished page carries
+        // no location is worth a warning.
+        const _cvLines = outCV.split('\n');
+        const _pageCarriesLocation = (companyName) => {
+          const key = _eduNorm(companyName);
+          if (key.length < 2) return false;
+          let inExp = false;
+          for (let i = 0; i < _cvLines.length; i++) {
+            if (_EXP_HEAD.test(_cvLines[i])) { inExp = true; continue; }
+            if (_ANY_HEAD.test(_cvLines[i])) { inExp = false; continue; }
+            if (!inExp) continue;
+            const l = _cvLines[i].trim();
+            if (!l || /^\s*[-•*]/.test(l)) continue;
+            const norm = _eduNorm(l.split('\t')[0]);
+            if (!norm || (norm.indexOf(key) === -1 && key.indexOf(norm) === -1)) continue;
+            // Company \t City, Country -- the attach above, or the
+            // generator, already put it on the company line.
+            if (l.indexOf('\t') !== -1) return true;
+            // Company / City, Country / Title -- the tailored text's own
+            // layout, a location line between company and title. A date
+            // line is not a location, and neither is a bullet. The
+            // re-delimiting pass above may already have turned the comma
+            // into a tab; fold it back before judging the shape.
+            const next = (_cvLines[i + 1] || '').trim().replace(/\t+/g, ', ');
+            return /^[A-Za-z][^,\t]*,\s*[A-Za-z][^\t]*$/.test(next)
+              && !ROLE_DATE_RE.test(next) && !/\b(?:19|20)\d{2}\b/.test(next)
+              && !/^\s*[-•*]/.test(next);
+          }
+          return false;
+        };
         const placeless = roles
           .filter((r) => r && (r.company || r.employer || r.name))
-          .filter((r) => !String(r.location || r.city || r.role_location || r.roleLocation
-            || r.job_location || r.jobLocation || r.work_location || r.workLocation
-            || r.based_in || r.basedIn || r.locationName || '').trim())
-          .map((r) => String(r.company || r.employer || r.name).trim());
+          .filter((r) => !_roleLocationOf(r))
+          .map((r) => String(r.company || r.employer || r.name).trim())
+          .filter((name) => name && !_pageCarriesLocation(name));
         if (placeless.length) {
           report.warnings.push({
             kind: 'roles-without-location',
