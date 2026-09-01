@@ -3891,7 +3891,10 @@
       name = name.replace(/\s*[—–]\s*/g, ', ');               // ATS-safe: no em/en dash
       const tech = String(p.techStack || p.tech || p.technologies || '').trim().replace(/\s*[—–]\s*/g, ', ');
 
-      let bullets = Array.isArray(p.bullets) ? p.bullets
+      // bullets first, description as fallback -- and an EMPTY bullets
+      // array falls through too, so whichever field the profile app
+      // filled is the one that renders.
+      let bullets = (Array.isArray(p.bullets) && p.bullets.length) ? p.bullets
         : (typeof p.description === 'string' ? p.description.split(/\r?\n/) : []);
       bullets = bullets
         .map((b) => String(b || '').replace(/^[\s\-•*]+/, '').trim())
