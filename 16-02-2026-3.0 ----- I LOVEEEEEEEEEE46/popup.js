@@ -6952,6 +6952,14 @@ class ATSTailor {
             audited.report.warnings.length, 'warnings,', audited.report.timingMs + 'ms');
           this.renderAuditWarnings(audited.report);
         } catch (e) {
+          // A skipped audit means EVERY guarantee is off for this
+          // document -- envelope strip, role repairs, headline, projects
+          // -- and the CV ships as raw model output. That must reach the
+          // debug export, not just a console that closes with the popup.
+          jgLog('error', 'recruiter_audit_skipped',
+            'Recruiter audit failed; the CV shipped without any guarantee', {
+              message: e && e.message, stack: e && e.stack,
+            });
           console.warn('[ATS Tailor] Recruiter audit skipped:', e.message);
         }
       }
@@ -8100,6 +8108,20 @@ class ATSTailor {
       }
     }
 
+    // THE PARSE ABOVE FAILS ON THE "JSON" A MODEL ACTUALLY WRITES: a
+    // quoted value holding LITERAL newlines, which JSON forbids. That
+    // shipped a document whose name line was "{" and whose headline was
+    // '"tailoredResume": "Maxmilliam Okafor'. The tail of the envelope
+    // was already stripped below; the HEAD never was. Strip it by hand:
+    // the opening brace and this document's own key.
+    const ownKey = type === 'cv' ? 'tailoredResume' : 'tailoredCoverLetter';
+    const headRe = new RegExp('^[\\s{]*\\\\?"?' + ownKey + '\\\\?"?\\s*:\\s*\\\\?"?', 'i');
+    let envelope = false;
+    if (headRe.test(trimmed)) {
+      trimmed = trimmed.replace(headRe, '').trim();
+      envelope = true;
+    }
+
     // Defensive: malformed LLM output sometimes leaks the OTHER document
     // field's JSON syntax into this one (e.g. CV ends with `",
     // "tailoredCoverLetter":"..."}` ).  Strip any such trailing fragment.
@@ -8119,6 +8141,10 @@ class ATSTailor {
         .replace(/\\"/g, '"')
         .replace(/\\\\/g, '\\');
     }
+
+    // Only after a head-strip: the closing quote/brace of the envelope
+    // is still hanging off the end of the document.
+    if (envelope) trimmed = trimmed.replace(/[",\s}]+$/, '').trim();
 
     return trimmed;
   }

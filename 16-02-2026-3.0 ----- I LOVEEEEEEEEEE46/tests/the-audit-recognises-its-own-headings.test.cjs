@@ -90,9 +90,21 @@ console.log('\nAND IT STILL DOES ITS JOB');
     'WHERE I STUDIED', 'Imperial College London'].join('\n');
   const m = missingOf(bad);
   t('  invented headings are reported', m.length >= 3, JSON.stringify(m));
-  for (const name of ['Experience', 'Summary/Profile', 'Education', 'Skills']) {
+  for (const name of ['Summary/Profile', 'Education', 'Skills']) {
     t('  ...including ' + name, m.indexOf(name) !== -1, JSON.stringify(m));
   }
+  // Experience is no longer WARNED about here, because it is REPAIRED:
+  // the role block under "WHERE I HAVE WORKED" is recognisable (title,
+  // company, date), so ensureExperienceHeading inserts the canonical
+  // heading and the roles actually parse. A fix beats a warning.
+  const RA2 = global.RecruiterAudit;
+  const o2 = RA2.runRecruiterAudit({ cvText: bad, jdText: 'x', jdTitle: 'Software Engineer',
+    jobKeywords: [], experience: [] });
+  t('  ...and Experience is repaired instead of reported',
+    m.indexOf('Experience') === -1
+      && /^PROFESSIONAL EXPERIENCE$/m.test(o2.cvText)
+      && o2.report.fixes.some((f) => /PROFESSIONAL EXPERIENCE heading/.test(f)),
+    JSON.stringify({ missing: m, fixes: o2.report.fixes.filter((f) => /heading/i.test(f)) }));
 }
 {
   // One missing section, three present: the report must name only the

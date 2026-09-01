@@ -564,6 +564,157 @@
   }
 
   // ===================================================================
+  // THE MODEL'S ENVELOPE, AND A ROLE HEADER THE RENDERER CANNOT READ
+  // -------------------------------------------------------------------
+  // A generated document went out with "{" as the candidate's name and
+  // '"tailoredResume": "Maxmilliam Okafor' as the headline. The model
+  // had wrapped its answer in the JSON the server asked for, the parse
+  // upstream failed (the string held LITERAL newlines, which JSON
+  // forbids), and the raw envelope reached the renderer as if it were
+  // a CV. Everything downstream then failed quietly -- the text had no
+  // PROFESSIONAL EXPERIENCE heading and listed each title ABOVE its
+  // company in shouted caps, so not one role was recognised: no bold
+  // companies, no header grid, no held-title headline, and every
+  // guarantee that walks the roles found nothing to walk.
+  //
+  // These run FIRST, because until they have run, nothing else in this
+  // file is looking at a CV.
+  function stripJsonEnvelope(text, keys) {
+    const t = String(text || '');
+    const KEYS = keys && keys.length ? keys
+      : ['tailoredResume', 'tailored_resume', 'tailoredCV', 'cv', 'resume'];
+    const looksWrapped = /^\s*(```|\{)/.test(t)
+      || KEYS.some((k) => t.indexOf('"' + k + '"') !== -1);
+    if (!looksWrapped) return { text: t, stripped: false };
+    const unfence = t.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    // 1. It might actually be valid JSON.
+    try {
+      const o = JSON.parse(unfence);
+      if (o && typeof o === 'object') {
+        for (const k of KEYS) {
+          if (typeof o[k] === 'string' && o[k].trim()) {
+            return { text: o[k].trim(), stripped: true };
+          }
+        }
+      }
+    } catch (e) {}
+    // 2. The usual failure: a quoted value holding literal newlines.
+    //    Take from the key's opening quote to the closing quote before
+    //    the next key or the closing brace, then unescape.
+    for (const k of KEYS) {
+      const m = unfence.match(new RegExp('"' + k + '"\\s*:\\s*"([\\s\\S]*?)"\\s*(?:,\\s*"|\\})'));
+      if (m && m[1].trim()) {
+        const v = m[1].replace(/\\r/g, '').replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        return { text: v.trim(), stripped: true };
+      }
+    }
+    // 3. Truncated output: everything after the key's opening quote.
+    for (const k of KEYS) {
+      const at = unfence.indexOf('"' + k + '"');
+      if (at === -1) continue;
+      const q = unfence.indexOf('"', unfence.indexOf(':', at) + 1);
+      if (q === -1) continue;
+      const v = unfence.slice(q + 1).replace(/"\s*\}?\s*$/, '')
+        .replace(/\\r/g, '').replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      if (v.trim()) return { text: v.trim(), stripped: true };
+    }
+    return { text: t, stripped: false };
+  }
+
+  // Headings the pipeline genuinely honours -- NOT _ANY_HEAD, because a
+  // shouted job title ("SOFTWARE ENGINEER") is all-caps too and must
+  // not read as a section here.
+  const _KNOWN_HEAD_RE = /^(PROFESSIONAL SUMMARY|SUMMARY|PROFILE|CAREER SUMMARY|PROFESSIONAL EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT HISTORY|EXPERIENCE|TECHNICAL SKILLS|CORE COMPETENCIES|KEY SKILLS|SKILLS|TECHNICAL PROFICIENCIES|SELECTED PROJECTS|PROJECTS|CERTIFICATIONS|ACHIEVEMENTS|AWARDS|EDUCATION|ACADEMIC BACKGROUND|QUALIFICATIONS)\b:?\s*$/;
+
+  function ensureExperienceHeading(cvText) {
+    const text = String(cvText || '');
+    if (!text || _EXP_HEAD_MULTILINE.test(text)) return { text, added: false };
+    const lines = text.split('\n');
+    let section = '';
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i].trim();
+      if (_KNOWN_HEAD_RE.test(s.toUpperCase())) { section = s.toUpperCase(); continue; }
+      if (!ROLE_DATE_RE.test(s)) continue;
+      // Only a date in the preamble or under the summary starts an
+      // unlabelled experience block; a date under EDUCATION or
+      // CERTIFICATIONS belongs to that section.
+      if (section && !/SUMMARY|PROFILE|OBJECTIVE/.test(section)) continue;
+      // The block starts above the date: up to three non-empty,
+      // non-bullet header lines (title, company, perhaps a location).
+      let s0 = i, back = 0;
+      for (let j = i - 1; j >= 0 && back < 3; j--) {
+        const u = lines[j].trim();
+        // A role header line is a short name -- a title, a company, a
+        // city. Prose (the summary paragraph sitting right above the
+        // first unlabelled role) is where the walk stops.
+        if (!u || u.length > 60 || /^[-•*]/.test(u) || ROLE_DATE_RE.test(u)
+          || _KNOWN_HEAD_RE.test(u.toUpperCase())) break;
+        s0 = j; back++;
+      }
+      if (!back) continue;              // a date with nothing above it is not a role
+      lines.splice(s0, 0, 'PROFESSIONAL EXPERIENCE');
+      return { text: lines.join('\n'), added: true };
+    }
+    return { text, added: false };
+  }
+
+  // Title-first role headers, and shouted titles, repaired against the
+  // PROFILE's own company names -- never a guess. "SOFTWARE ENGINEER /
+  // Meta / January 2023" becomes "Meta / Software Engineer / January
+  // 2023", which is the one shape everything downstream reads.
+  const _TITLE_CASE_ACRONYMS = new Set(['AI', 'ML', 'QA', 'BI', 'IT', 'EBS', 'ERP',
+    'CRM', 'API', 'AWS', 'GCP', 'SAP', 'HR', 'PMO', 'UX', 'UI', 'SRE', 'NLP', 'SQL',
+    'ETL', 'II', 'III', 'IV', 'VP', 'SVP', 'CTO', 'CIO', 'HRIS', 'SDET']);
+  function repairRoleHeaders(cvText, experience) {
+    const roles = Array.isArray(experience) ? experience : [];
+    const comps = [];
+    for (const r of roles) {
+      const k = _eduNorm(r && (r.company || r.employer || r.organisation
+        || r.organization || r.name) || '');
+      if (k.length >= 2) comps.push(k);
+    }
+    const text = String(cvText || '');
+    if (!comps.length || !text) return { text, swapped: 0, deshouted: 0 };
+    const lines = text.split('\n');
+    const isCompany = (line) => {
+      const n = _eduNorm(String(line || '').split('\t')[0]);
+      if (n.length < 2) return false;
+      return comps.some((c) => c === n
+        || (n.length >= 3 && c.indexOf(n) !== -1) || n.indexOf(c) !== -1);
+    };
+    let swapped = 0, deshouted = 0;
+    for (let i = 2; i < lines.length; i++) {
+      if (!ROLE_DATE_RE.test(lines[i].trim())) continue;
+      const above = (lines[i - 1] || '').trim();
+      const above2 = (lines[i - 2] || '').trim();
+      if (!above || !above2 || /^[-•*]/.test(above) || /^[-•*]/.test(above2)) continue;
+      if (isCompany(above) && !isCompany(above2)
+        && !_KNOWN_HEAD_RE.test(above2.toUpperCase())) {
+        const t0 = lines[i - 2]; lines[i - 2] = lines[i - 1]; lines[i - 1] = t0;
+        swapped++;
+      }
+      // After any swap the title sits directly above the date. A title
+      // in full caps reads as a heading to every all-caps detector in
+      // the pipeline AND on the page; fold it to title case, keeping
+      // real acronyms.
+      const title = (lines[i - 1] || '').trim();
+      if (title && title === title.toUpperCase() && /[A-Z]{2}/.test(title)
+        && isCompany((lines[i - 2] || '').trim()) && !isCompany(title)
+        && !_KNOWN_HEAD_RE.test(title)) {
+        lines[i - 1] = lines[i - 1].replace(title, title.split(/\s+/).map((w) => {
+          const bare = w.replace(/[^A-Za-z&]/g, '');
+          if (_TITLE_CASE_ACRONYMS.has(bare.toUpperCase())) return w.toUpperCase();
+          return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        }).join(' '));
+        deshouted++;
+      }
+    }
+    return { text: lines.join('\n'), swapped, deshouted };
+  }
+
+  // ===================================================================
   // 4. JOB TITLE ECHO
   // -------------------------------------------------------------------
   // The exact JD job title MUST appear in (a) the CV summary line and
@@ -4635,6 +4786,11 @@
       // v14: where the posting prints "Long Form (ACRO)", a CV claiming
       // either form carries both.
       acronymPairing: flags.acronymPairing !== false,
+      // v15: the model's raw JSON envelope must never render as a CV,
+      // and a role header must arrive in the one shape the renderer
+      // reads (company, title, date -- not shouted, not inverted).
+      envelope: flags.envelope !== false,
+      roleShape: flags.roleShape !== false,
       // v13 -- ON by default. This was briefly opt-in on the belief that
       // sorting could demote a current role beneath a concurrent
       // part-time contract. It can, but only when concurrency exists, and
@@ -4649,6 +4805,47 @@
     let outCV = cvText;
     let outCL = coverLetterText;
     const report = { fixes: [], warnings: [], timingMs: 0 };
+
+    // v15: FIRST, because until these run nothing else here is looking
+    // at a CV. The envelope strip undoes a failed upstream JSON parse;
+    // the heading and header repairs give the renderer the one role
+    // shape it reads.
+    if (f.envelope && outCV) {
+      try {
+        const env = stripJsonEnvelope(outCV);
+        if (env.stripped) {
+          outCV = env.text;
+          report.fixes.push('Stripped the model\'s JSON envelope from the CV -- the raw '
+            + '{"tailoredResume": ...} wrapper was about to render as the document itself');
+        }
+        if (outCL) {
+          const ecl = stripJsonEnvelope(outCL,
+            ['tailoredCoverLetter', 'tailored_cover_letter', 'coverLetter', 'cover_letter']);
+          if (ecl.stripped) {
+            outCL = ecl.text;
+            report.fixes.push('Stripped the model\'s JSON envelope from the cover letter');
+          }
+        }
+      } catch (e) {}
+    }
+    if (f.roleShape && outCV) {
+      try {
+        const eh = ensureExperienceHeading(outCV);
+        if (eh.added) {
+          outCV = eh.text;
+          report.fixes.push('Inserted the missing PROFESSIONAL EXPERIENCE heading '
+            + '(without it, not one role was recognised anywhere downstream)');
+        }
+        const rh = repairRoleHeaders(outCV, Array.isArray(experience) ? experience : []);
+        if (rh.swapped || rh.deshouted) {
+          outCV = rh.text;
+          const parts = [];
+          if (rh.swapped) parts.push('put the company above the title in ' + rh.swapped + ' role(s)');
+          if (rh.deshouted) parts.push('title-cased ' + rh.deshouted + ' shouted job title(s)');
+          report.fixes.push('Role headers: ' + parts.join(' and '));
+        }
+      } catch (e) {}
+    }
 
     // v13: strict reverse-chronological order. Runs before every other
     // pass so the rest of the audit sees the final role order. Changes
@@ -5047,6 +5244,19 @@
     // v8: guarantee the SELECTED PROJECTS section from structured profile
     // data (auto-fix). Runs first so every later audit sees the projects
     // text (e.g. the v7 link check then passes instead of false-flagging).
+    // A missing PROJECTS section has exactly two causes, and only one
+    // is fixable here: either the profile sent projects and the
+    // injection below restores them, or the profile sent NONE and
+    // silence would read as a bug. Say which it is.
+    if (f.projectsInject && outCV && (!relevantProjects || !relevantProjects.length)
+        && !/^\s*(SELECTED PROJECTS|PROJECTS)\b/im.test(outCV)) {
+      report.warnings.push({
+        kind: 'no-projects-anywhere',
+        note: 'No PROJECTS section: the tailored text has none and your profile sent no '
+          + 'projects to restore. If your profile does have projects, check they are saved '
+          + 'under relevant_projects and reach the extension\'s payload.',
+      });
+    }
     if (f.projectsInject && relevantProjects && relevantProjects.length && outCV) {
       try {
         const r = ensureProjectsSection(outCV, relevantProjects);
@@ -5656,6 +5866,9 @@
     quantificationAudit,
     mirrorJdVocabulary,
     pairJdAcronyms,
+    stripJsonEnvelope,
+    ensureExperienceHeading,
+    repairRoleHeaders,
     echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2
