@@ -3407,7 +3407,9 @@ ${
             ? p.techStack.filter(Boolean).join(", ")
             : (p.techStack || "").toString().trim();
           if (techStack) lines.push(techStack);
-          const bullets = Array.isArray(p.bullets) ? p.bullets : [];
+          const bullets = Array.isArray(p.bullets) && p.bullets.filter(Boolean).length > 0
+            ? p.bullets
+            : [(p.description || "").toString()];
           for (const b of bullets) {
             const t = (b || "").toString().trim();
             if (t) lines.push(`• ${t}`);
