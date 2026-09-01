@@ -38,7 +38,13 @@
 \pdfgentounicode=1
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{lmodern}
+% Times, same look as the \usepackage{times} template this mirrors. The
+% font CHOICE costs nothing with an ATS -- parsers read the extracted
+% text, not the typeface -- but the obsolete times package on OT1
+% encoding builds accented characters as composed pairs that extract
+% wrong. newtxtext is the maintained Times with proper T1 metrics; the
+% fontenc line above is the part the original preamble was missing.
+\usepackage{newtxtext}
 \usepackage{microtype}
 \DisableLigatures{encoding = *, family = *}
 \usepackage[none]{hyphenat}
@@ -79,12 +85,19 @@
 \begin{document}
 
 % ================================ HEADER ==============================
-{\color{navy}\bfseries\fontsize{20}{23}\selectfont Maxmilliam Okafor}\par
-\vspace{2pt}
-% The headline: only ever a title the history actually contains.
-{\bfseries Data Analyst}\par
-\vspace{2pt}
-{\color{muted}Dublin, Ireland \,\textbar\, +353 874 261 508 \,\textbar\, \href{mailto:maxokafordev@gmail.com}{maxokafordev@gmail.com} \,\textbar\, \href{https://www.linkedin.com/in/maxokafor/}{linkedin.com/in/maxokafor}}\par
+% Centred, on request: alignment is invisible to text extraction, so
+% the centred header parses identically to a left one. Deliberately NO
+% envelope/phone/LinkedIn icons -- FontAwesome glyphs extract as
+% private-use characters right next to the email and phone tokens, and
+% some parsers glue them into the token they sit against. Plain text
+% and pipes carry the same information with zero risk.
+\begin{center}
+  {\color{navy}\bfseries\fontsize{20}{23}\selectfont Maxmilliam Okafor}\\[4pt]
+  % The headline: only ever a title the history actually contains.
+  {\bfseries Data Analyst}\\[3pt]
+  {\color{muted}Dublin, Ireland \,\textbar\, +353 874 261 508 \,\textbar\, \href{mailto:maxokafordev@gmail.com}{maxokafordev@gmail.com} \,\textbar\, \href{https://www.linkedin.com/in/maxokafor/}{linkedin.com/in/maxokafor}}
+\end{center}
+\vspace{-6pt}
 
 % ========================== PROFESSIONAL SUMMARY ======================
 \cvsection{PROFESSIONAL SUMMARY}
@@ -108,12 +121,18 @@ BI on portfolios up to GBP 2.6bn.
 % Add further roles with the same \role{...}{...}{...}{...} block.
 
 % ============================ TECHNICAL SKILLS ========================
-% Comma-separated only. Measured against a real resume parser: the
-% comma line yielded 7 clean terms, a pipe-delimited line yielded 3
-% garbage terms. Pipes belong in the contact line and nowhere else.
+% Bold category label, then comma-separated items only. Measured
+% against a real resume parser: the comma line yielded 7 clean terms, a
+% pipe-delimited line yielded 3 garbage terms. Pipes belong in the
+% contact line and nowhere else.
 \cvsection{TECHNICAL SKILLS}
-{\bfseries Data \& Analysis:} SQL, Python, Power BI, Tableau, Excel, Airflow\par
-{\bfseries Practices:} Forecasting, Stakeholder Management, Process Improvement, Regulatory Reporting\par
+{\bfseries Languages \& Citizenship:} English (native), French (native), Spanish (advanced), German (advanced) - {\bfseries EU Citizen}\par
+{\bfseries Programming:} Python, SQL, Go, Java, Scala, Hadoop, React.js, Node.js (Code Review)\par
+{\bfseries Data \& ML:} Pandas, NumPy, Scikit-learn, TensorFlow, PyTorch, Jupyter Notebooks, Snowflake, Databricks\par
+{\bfseries Cloud \& DevOps:} AWS, Azure, GCP, Docker, CI/CD, Git, Systems Design, Data Infrastructure\par
+{\bfseries Business Tools:} JIRA, SharePoint, Trello, Confluence, Microsoft Teams, Microsoft Office Suite\par
+{\bfseries CRM \& Analytics:} Salesforce, Dynamics 365, Power BI, SOAP APIs, Forecasting, Statistics, Data-driven Insights\par
+{\bfseries Project Management:} Agile Ceremonies, RAID Analysis, BRD/FRD Creation, Wireframes, UAT, Software Development Life Cycle\par
 
 % =============================== PROJECTS =============================
 \cvsection{PROJECTS}
@@ -127,8 +146,15 @@ BI on portfolios up to GBP 2.6bn.
 Certification Name, Issuing Body, Year\par
 
 % =============================== EDUCATION ============================
+% Degree bold with the grade flush right, institution plain with its
+% place flush right. Same rendered geometry as the tabular* version of
+% this block, but \hfill extracts identically, needs no table, and is
+% the one mechanism this file already uses for every right edge.
 \cvsection{EDUCATION}
-{\bfseries Imperial College London} \hfill {\color{muted}2013 -- 2017}\par
-Degree Title\par
+{\bfseries MSc in Artificial Intelligence and Machine Learning} \hfill {\bfseries Distinction}\par
+Imperial College London \hfill {\color{muted}London, UK}\par
+\vspace{3pt}
+{\bfseries BSc in Computer Science} \hfill {\bfseries First Class Honours}\par
+University of Derby \hfill {\color{muted}Derbyshire, UK}\par
 
 \end{document}

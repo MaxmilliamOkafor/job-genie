@@ -944,10 +944,16 @@
     }
 
     if (firstNonEmpty >= 0) {
-      // NAME -- navy, bold, 22pt, left-aligned (matches the PDF header)
+      // NAME -- navy, bold, 22pt, CENTRED, with the headline and contact
+      // lines centred beneath it. Alignment is a paragraph property the
+      // text stream never carries, so an extractor reads the centred
+      // header exactly as it read the left-aligned one; what changes is
+      // only where a human's eye lands first. The body stays
+      // left-aligned -- a centred header over a left body is the
+      // convention; a centred body would be unreadable.
       out.push(paragraph(
         run(normalizeNameForParsing(lines[firstNonEmpty].trim()), { bold: true, color: C.NAVY, sz: SZ.name, spacing: 4 }),
-        { align: 'left', spacingAfter: 40 }
+        { align: 'center', spacingAfter: 40 }
       ));
 
       // Contact + links lines until first section header (hyperlinked)
@@ -958,7 +964,7 @@
         if (!t) continue;
         const upper = t.toUpperCase().replace(/:$/, '');
         if (SECTION_HEADERS.includes(upper)) break;
-        out.push(contactParagraph(t, rels, { align: 'left', sz: SZ.date, spacingAfter: 40 }));
+        out.push(contactParagraph(t, rels, { align: 'center', sz: SZ.date, spacingAfter: 40 }));
         headerLineCount++;
       }
 
@@ -1039,6 +1045,13 @@
       // so a line this recognises is a line the parser will treat as the
       // start of an education entry.
       const _DEGREE_RE = /\b(?:bachelor|master|magister|doctor|doctorate|ph\.?d|m\.?b\.?a|associate|diploma|certificate|b\.?sc|m\.?sc|b\.?a\b|m\.?a\b|b\.?eng|m\.?eng|llb|llm|hnd|foundation degree)\b/i;
+      // The grade at the end of a degree line ("MSc in AI, Distinction")
+      // moves to the right edge, bold, on the same tab stop every other
+      // right-aligned field uses. Reading order in the text stream is
+      // unchanged -- "MSc in AI<tab>Distinction" extracts in the same
+      // order the comma version did -- so a parser sees the same entry
+      // while a human sees the grade without hunting for it.
+      const _HONOURS_RE = /^(.*?\S)[,;]\s*((?:First[- ]Class(?: Honou?rs)?|Upper Second(?: Class)?(?: Honou?rs)?|Second[- ]Class(?: Honou?rs)?|2:1|2:2|Distinction|Merit|Pass|Magna Cum Laude|Summa Cum Laude|Cum Laude|GPA\s*[\d.]+(?:\s*\/\s*[\d.]+)?)\.?)$/i;
       let sawDegree = false;
       // True for the first content line after a section heading, so the
       // heading's trailing space is not added to a full role gap.
@@ -1243,12 +1256,26 @@
           // A degree line that is not the first in the section gets real
           // space above it. This is the same signal a human reads as "new
           // entry", which is why the parser looks for it.
-          if (_DEGREE_RE.test(t) && sawDegree) {
-            out.push(paragraph(run(t, { color: C.BODY, sz: SZ.body }),
-              { spacingBefore: 200, spacingAfter: 20, keepNext: true, keepLines: true }));
+          // The degree line is bold, the way the company line is: it is
+          // the field the reader scans for. The institution stays plain
+          // beneath it -- bolding both would emphasise neither.
+          const isDeg = _DEGREE_RE.test(t);
+          const hon = isDeg ? t.match(_HONOURS_RE) : null;
+          const degreeRuns = () => hon
+            // Trailing space before the tab, same guard as the role
+            // line: a parser that drops <w:tab/> would otherwise glue
+            // "MachineLearningDistinction".
+            ? run(hon[1].replace(/[,;\s]+$/, '') + ' ', { bold: true, color: C.BODY, sz: SZ.body })
+              + '<w:r><w:tab/></w:r>'
+              + run(hon[2], { bold: true, color: C.BODY, sz: SZ.body })
+            : run(t, { bold: true, color: C.BODY, sz: SZ.body });
+          if (isDeg && sawDegree) {
+            out.push(paragraph(degreeRuns(),
+              { spacingBefore: 200, spacingAfter: 20, keepNext: true, keepLines: true,
+                tabs: hon ? [{ pos: 10106, val: 'right' }] : undefined }));
             continue;
           }
-          if (_DEGREE_RE.test(t)) sawDegree = true;
+          if (isDeg) sawDegree = true;
           if (isEduDateLine(t)) {
             out.push(paragraph(run(prettyDateRange(t), { italic: true, color: C.MUTED, sz: SZ.date }),
               { spacingAfter: 40 }));
@@ -1256,16 +1283,25 @@
           }
           const nextEdu = (lines[i + 1] || '').trim();
           if (nextEdu && isEduDateLine(nextEdu)) {
+            // The date owns the right edge on this line, so a grade
+            // stays inline in the text; the line is still bold when it
+            // is a degree.
             // Trailing space before the tab, same guard the role line
             // needs: a parser that drops <w:tab/> would otherwise glue
             // "Imperial College London2021".
             out.push(paragraph(
-              run(t + ' ', { color: C.BODY, sz: SZ.body })
+              run(t + ' ', { bold: isDeg, color: C.BODY, sz: SZ.body })
                 + '<w:r><w:tab/></w:r>'
                 + run(prettyDateRange(nextEdu), { italic: true, color: C.MUTED, sz: SZ.date }),
               { tabs: [{ pos: 10106, val: 'right' }], spacingAfter: 40 }
             ));
             i++;                         // the date line is consumed
+            continue;
+          }
+          if (isDeg) {
+            out.push(paragraph(degreeRuns(),
+              { spacingAfter: 20, keepNext: true, keepLines: true,
+                tabs: hon ? [{ pos: 10106, val: 'right' }] : undefined }));
             continue;
           }
         }
