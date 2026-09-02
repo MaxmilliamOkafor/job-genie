@@ -1336,12 +1336,17 @@ class ATSTailor {
         // credit balance at -$0.01 with auto-reload off -- the model
         // returned nothing, the extension degraded silently, and
         // nothing on screen said why.
+        this._revealDocuments();
         throw new Error('The tailoring finished but produced no CV text. '
           + 'The most common cause is the AI provider being out of credit: '
           + 'check the OpenAI billing page (and turn on auto-reload). '
           + 'If the balance is fine, export the debug log and send it.');
       }
       
+      // The documents exist -- show them here, on the automation path,
+      // rather than only at the end of tailorDocuments.
+      this._revealDocuments();
+
       // Step 2 complete, Step 3 working
       this.updateStepUI(2, 'complete');
       this.updateStepUI(3, 'working');
@@ -2125,6 +2130,30 @@ class ATSTailor {
       this.updateDocumentDisplay();
       this.updatePreviewContent();
     }
+  }
+
+  // THE DOCUMENTS EXIST; THE PANEL MUST SAY SO.
+  //
+  // "Generated Documents wasn't showing" on a run that finished and
+  // attached both files to the form. The reveal lived at the very end
+  // of ONE path (tailorDocuments), after the stats block -- so the
+  // automation path, which returns earlier, never reached it, and a
+  // throw anywhere in between skipped it on the path that did.
+  //
+  // The card is revealed the moment a document exists, from every path,
+  // and drawing it cannot prevent the reveal: the class comes off
+  // first, and the two renderers are each isolated. A panel that
+  // exists but is hidden is indistinguishable from a run that failed.
+  _revealDocuments() {
+    try {
+      document.getElementById('documentsCard')?.classList.remove('hidden');
+    } catch (e) {}
+    try { this.updateDocumentDisplay(); } catch (e) {
+      jgLog('error', 'documents_render_failed', 'Document list render failed', {
+        message: e && e.message,
+      });
+    }
+    try { this.updatePreviewContent(); } catch (e) {}
   }
 
   updateDocumentDisplay() {
@@ -7098,10 +7127,8 @@ class ATSTailor {
       this.updateUI();
 
       // Show documents card and preview
-      document.getElementById('documentsCard')?.classList.remove('hidden');
-      this.updateDocumentDisplay();
-      this.updatePreviewContent();
-      
+      this._revealDocuments();
+
       const finalScore = this.generatedDocuments.matchScore;
       this.showToast(
         `Done in ${elapsed.toFixed(1)}s! ${finalScore}% keyword match.`, 

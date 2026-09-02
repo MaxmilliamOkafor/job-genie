@@ -728,8 +728,36 @@
   // Dynamics 365 Project Manager with..." -- the req number leaked, and
   // because the raw string never matched the summary's own wording, the
   // title was ALSO prepended, so it appeared twice.
+  // Site furniture that is never part of a job title.
+  const _TITLE_NOISE_RE = /^(careers?|jobs?|job|vacanc(?:y|ies)|openings?|apply|application|hiring|we are hiring|join us|home|current openings|job details?|job description|job posting|greenhouse|workday|lever|smartrecruiters|linkedin|indeed|glassdoor)\b/i;
+
   function normaliseJobTitle(raw) {
     let t = String(raw || '').trim().replace(/\s+/g, ' ');
+    // A SCRAPED PAGE TITLE IS NOT A JOB TITLE.
+    //
+    // The headline read "GTM Strategy/Operations Associate | Datadog
+    // Careers" -- the browser tab's title, pipes and all, printed under
+    // the candidate's name. Page titles are "<role> | <company>
+    // Careers" or "<role> at <company>" almost universally, and the
+    // role is the FIRST segment.
+    //
+    // Only the leading segment is kept, and only when the trailing
+    // segments look like site furniture rather than part of the title:
+    // "Analyst, Risk | Markets" is one title with a comma, and cutting
+    // a real title in half is worse than a tidy one left long.
+    const segs = t.split(/\s*[|·•‧–—]\s*|\s+[-]\s+/).map((s) => s.trim()).filter(Boolean);
+    if (segs.length > 1) {
+      const tail = segs.slice(1).join(' ');
+      const furniture = _TITLE_NOISE_RE.test(tail)
+        || /\b(careers?|jobs?|hiring|apply|openings?)\b/i.test(tail)
+        || segs.length > 2;
+      if (furniture && segs[0].length >= 3) t = segs[0];
+    }
+    // "Software Engineer at Datadog" / "... - Datadog Careers"
+    t = t.replace(/\s+(?:at|@|with|для)\s+[A-Z][\w&.,' -]{1,40}$/i, '');
+    t = t.replace(/[\s,-]+(?:careers?|jobs?|job board|openings?)\s*$/i, '');
+    // A segment that is ONLY furniture leaves nothing behind.
+    if (_TITLE_NOISE_RE.test(t.trim())) return '';
     t = t.replace(/^[\s\-|,]*\(?\s*(?:req(?:uisition)?\.?\s*(?:id|no\.?|#)?\s*)?[#]?\d{3,10}\s*\)?[\s\-|,:]*/i, '');
     t = t.replace(/^[\s\-|,]*\b(?:JR|R|REQ|JOB)[-_]?\d{3,10}\b[\s\-|,:]*/i, '');
     t = t.replace(/[\s\-|,(]*\b(?:req(?:uisition)?\.?\s*(?:id|no\.?|#)?\s*)?[#]?\d{4,10}\)?\s*$/i, '');
@@ -1139,7 +1167,11 @@
     }
     if (!roleLines.length) return { text, added: false };
 
-    const title = String(jdTitle == null ? '' : jdTitle).replace(/\s+/g, ' ').trim();
+    // Through the cleaner, not raw. This line prints under the name, so
+    // a scraped page title arrived here as "GTM Strategy/Operations
+    // Associate | Datadog Careers" and printed exactly that.
+    // echoJobTitle already normalised its copy; this did not.
+    const title = normaliseJobTitle(jdTitle);
     const blob = roleLines.join(' | ').toLowerCase();
 
     let headline = '';
