@@ -141,9 +141,9 @@ console.log('\nAND THE FULL AUDIT TURNS THE UPLOADED MESS INTO A CV');
   t('  companies sit above their titles',
     exp.indexOf('Meta') !== -1 && exp.indexOf('Meta') < exp.indexOf('Software Engineer'),
     exp.split('\n').slice(0, 6).join(' / '));
-  t('  the unheld posting title is replaced by a held one under the name',
-    o.report.fixes.some((f) => /headline/i.test(f) && /Oracle EBS/.test(f)),
-    JSON.stringify(o.report.fixes.filter((f) => /headline/i.test(f))));
+  t('  the line under the name is the role being applied for',
+    o.cvText.split('\n').filter((l) => l.trim())[1] === 'Oracle EBS Business Analyst',
+    o.cvText.split('\n').filter((l) => l.trim())[1]);
   t('  no JSON syntax reaches the page',
     o.cvText.indexOf('tailoredResume') === -1 && !/^\s*[{}]\s*$/m.test(o.cvText),
     o.cvText.split('\n').filter((l) => /tailoredResume|^[{}]$/.test(l.trim())).join(' / '));

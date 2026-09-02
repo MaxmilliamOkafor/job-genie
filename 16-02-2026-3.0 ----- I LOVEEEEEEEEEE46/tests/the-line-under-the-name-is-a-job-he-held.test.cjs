@@ -1,40 +1,22 @@
-// EVERY CV WENT OUT CLAIMING A JOB TITLE HE HAS NEVER HELD.
+// THE LINE UNDER THE NAME IS THE ROLE BEING APPLIED FOR.
 //
-// Asked to find why applications were being auto-rejected or ignored.
-// The document was clean: checked against a real generated .docx, the
-// package validates, no tables or text boxes or headers, one safe font,
-// the email and phone extract, four role/date lines parse, one skills
-// heading. The culprit was not formatting. It was line 2.
+// This file used to assert the opposite: that a posting title the
+// history did not contain was replaced by the closest title it did.
+// The reasoning was that every resume parser stores the line under the
+// name as the job held NOW, so an unheld title there contradicts the
+// employment block beneath it.
 //
-//   Maxmilliam Okafor
-//   Business Operations Sr Analyst      <-- line 2
-//   São Paulo, BR | +353 087 426 1508
-//   ...
-//   PROFESSIONAL EXPERIENCE
-//   Meta            Dublin, Ireland
-//   Software Engineer   January 2023 - Present
+// The owner of this CV has overruled that, twice and explicitly: the
+// line is the target role. It is positioning, the employment block
+// directly underneath states every real title with its dates, and the
+// posting's own words in the first line a screener reads are worth
+// more than the distinction. His call, his CV, and the reasoning is
+// defensible -- this is what the file pins now.
 //
-// EVERY RESUME PARSER READS THE LINE UNDER THE NAME AS THE TITLE HELD
-// NOW. So the stored candidate record says "Business Operations Sr
-// Analyst" while the employment block says "Software Engineer at Meta,
-// January 2023 to Present". The record contradicts itself, and a
-// recruiter holding both sees someone misrepresenting their job. On an
-// ATS that merges candidates by email, the stored headline also changes
-// on every application to the same employer.
-//
-// THE PASS THAT WAS SUPPOSED TO PREVENT THIS ONLY CHECKED ITS OWN WORK.
-// ensureHeadline refuses to invent a title: it uses the posting's title
-// only when the history contains it, and otherwise the candidate's real
-// most recent one. But when a headline was ALREADY on the page it
-// returned immediately, on the reasoning that there was nothing to add.
-// The tailoring prompt tells the model to write the posting's title on
-// exactly that line, so the model wrote it, this pass stepped aside, and
-// the check applied to headlines it wrote and to no others.
-//
-// Measured before the fix: "Director of Business Operations" survived
-// with no warning at all.
-//
-// The truthfulness rule now applies to the line however it got there.
+// What survives from the old rule: with NO posting title in hand, the
+// line still falls back to a title the history genuinely contains,
+// because inventing one from nothing would be a different thing
+// entirely.
 let PASS = 0, FAIL = 0;
 const t = (n, c, x) => { c ? PASS++ : FAIL++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c ? '' : '\n           >> ' + x)); };
 
@@ -72,34 +54,21 @@ const warned = (o) => o.report.warnings.find((w) => w.kind === 'headline-claimed
 console.log('THE REPORTED DOCUMENT');
 {
   const o = run('Business Operations Sr Analyst');
-  t('  the unheld title does not survive',
-    lineTwo(o) !== 'Business Operations Sr Analyst', lineTwo(o));
-  // Held AND the closest to the posting: an analyst posting leads
-  // with his analyst title, not with the most recent role.
-  t('  it becomes the held title closest to the posting',
-    lineTwo(o) === 'Data Analyst', lineTwo(o));
-  t('  and it is reported, not swapped in silence', !!warned(o),
-    JSON.stringify(o.report.warnings.map((w) => w.kind)));
-  t('  ...naming what it replaced', !!warned(o) && warned(o).was === 'Business Operations Sr Analyst',
-    JSON.stringify(warned(o)));
-  t('  the fix says why the line matters', o.report.fixes.some((f) =>
-    /parser|current|hold/i.test(f) && /headline/i.test(f)),
-    JSON.stringify(o.report.fixes.filter((f) => /headline/i.test(f))));
+  t('  the posting title is what the line reads',
+    lineTwo(o) === 'Business Operations Sr Analyst', lineTwo(o));
+  t('  ...verbatim, not a held substitute',
+    lineTwo(o).indexOf('Data Analyst') === -1
+      && lineTwo(o).indexOf('Software Engineer') === -1, lineTwo(o));
+  t('  and the employment block still states every real title',
+    /Software Engineer/.test(o.cvText) && /Data Analyst/.test(o.cvText),
+    'a real title was lost from the history');
 }
 
-console.log('\nSENIORITY CANNOT BE INVENTED EITHER');
-// The replacement is always a HELD title; among the held titles the
-// one sharing a word with the posting wins, else the most recent.
-for (const [claim, expect] of [
-  ['Director of Business Operations', 'Software Engineer'],
-  ['Head of Data', 'Data Analyst'],
-  ['Senior Solutions Architect', 'Software Engineer'],
-  ['VP Engineering', 'Software Engineer'],
-  ['Chief Data Officer', 'Data Analyst'],
-]) {
+console.log('\nWHATEVER THE POSTING IS CALLED, THE LINE SAYS IT');
+for (const claim of ['Director of Business Operations', 'Head of Data',
+  'Senior Solutions Architect', 'VP Engineering', 'Chief Data Officer']) {
   const o = run(claim, claim);
-  t('  "' + claim + '" is replaced by ' + expect, lineTwo(o) === expect,
-    lineTwo(o));
+  t('  "' + claim + '" reaches the line', lineTwo(o) === claim, lineTwo(o));
 }
 
 console.log('\nAND A TITLE HE HAS HELD IS LEFT ALONE');
@@ -109,20 +78,18 @@ for (const held of ['Software Engineer', 'Data Analyst']) {
   t('  ...with no warning', !warned(o), JSON.stringify(warned(o)));
 }
 {
-  // A narrower form of a held title is still true: he held "Data
-  // Analyst", so "Analyst" claims nothing he has not done.
+  // The posting's exact wording wins over the CV's existing line, even
+  // when that line is a held title one word away.
   const o = run('Data Analyst', 'Senior Data Analyst');
-  t('  and the posting asking for a senior version changes nothing',
-    lineTwo(o) === 'Data Analyst', lineTwo(o));
+  t('  and a posting asking for the senior version says so',
+    lineTwo(o) === 'Senior Data Analyst', lineTwo(o));
 }
 
 console.log('\nTHE EMPTY SLOT STILL GETS FILLED');
 {
   const o = run('');
-  // The default posting here is an analyst role, so the empty slot
-  // gets his analyst title -- held and relevant.
-  t('  a CV with no headline gets his real one',
-    lineTwo(o) === 'Data Analyst', lineTwo(o));
+  t('  a CV with no headline gets the posting title',
+    lineTwo(o) === 'Business Operations Sr Analyst', lineTwo(o));
   t('  reported as an addition, not a replacement',
     o.report.fixes.some((f) => /Added the role headline/.test(f)) && !warned(o),
     JSON.stringify(o.report.fixes.filter((f) => /headline/i.test(f))));

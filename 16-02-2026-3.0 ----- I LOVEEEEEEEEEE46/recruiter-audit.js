@@ -1143,8 +1143,20 @@
     const blob = roleLines.join(' | ').toLowerCase();
 
     let headline = '';
-    if (title && blob.indexOf(title.toLowerCase()) !== -1) {
-      headline = title;                       // true AND the best keyword match
+    // THE LINE UNDER THE NAME IS THE ROLE BEING APPLIED FOR.
+    //
+    // This used to replace a posting title the history did not contain
+    // with the closest held title, on the reasoning that a parser reads
+    // the line as the job held NOW. The owner of this CV has decided
+    // otherwise, twice and explicitly: the line is the target role. It
+    // is positioning, it sits above an employment block that states
+    // every real title with its dates, and the posting's own words in
+    // the first line the screener reads is worth more than the
+    // distinction.
+    if (title) {
+      headline = title;
+    } else if (title && blob.indexOf(title.toLowerCase()) !== -1) {
+      headline = title;
     } else {
       // ALL the held titles, then the one CLOSEST to the posting's
       // title. This used to take the first title on the page -- the
@@ -1217,8 +1229,10 @@
       // there. A held title stays. An unheld one is replaced by the real
       // most recent title, which is the same value this function would
       // have written into an empty slot.
-      if (blob.indexOf(next.toLowerCase()) !== -1) return { text, added: false };
       if (next.toLowerCase() === headline.toLowerCase()) return { text, added: false };
+      // With a posting title in hand the line becomes that title; with
+      // none, an existing line the history contains is left alone.
+      if (!title && blob.indexOf(next.toLowerCase()) !== -1) return { text, added: false };
       lines[nameAt + 1] = headline;
       return { text: lines.join('\n'), added: false, replaced: true,
         headline, was: next };
@@ -4045,6 +4059,207 @@
     return { text: lines.join('\n'), fixed };
   }
 
+  // ===================================================================
+  // A SKILLS LINE IS A LIST OF SKILLS, NOT A KEYWORD DUMP
+  // -------------------------------------------------------------------
+  // A generated CV shipped:
+  //
+  //   Soft Skills: Communication, Problem-solving, Collaboration,
+  //   Training, Communication Skills, oracle e-business suite (EBS),
+  //   requirements gathering, solution design, functional testing,
+  //   configuration, iprocurement, purchasing, contract lifecycle
+  //   management, 10+ years experience, oracle certifications, oracle
+  //   cloud, oracle apex, business analysis, process improvement,
+  //   oracle cloud development, project costing, federal financials,
+  //   myoraclesupport
+  //
+  // Twenty-three items under "Soft Skills", most of them not soft
+  // skills, several not skills at all: a duration ("10+ years
+  // experience"), a credential class ("oracle certifications"), a
+  // support portal ("myoraclesupport"), and a duplicate of an item
+  // three places to its left ("Communication Skills" after
+  // "Communication"). Every one is a posting phrase that reached the
+  // page unread. A recruiter reading that line learns one thing, and it
+  // is not about the candidate.
+  //
+  // Four rules, applied to every group line in the section:
+  //   NOT A SKILL      -- durations, credential classes, portals,
+  //                       requirement phrasing: dropped.
+  //   ALREADY SAID     -- a near-duplicate of an item already on the
+  //                       page ("Communication Skills" vs
+  //                       "Communication"): dropped.
+  //   WRONG GROUP      -- a hard tool sitting under a soft-skills
+  //                       label: dropped there if it appears in a
+  //                       technical group, else the label is not the
+  //                       place to fix it and it stays.
+  //   TOO MANY         -- a group is capped; a list nobody finishes
+  //                       reading is a list that says nothing.
+  // ===================================================================
+  const _NOT_A_SKILL = [
+    /\b\d+\s*\+?\s*(?:years?|yrs?)\b/i,           // "10+ years experience"
+    /\byears?\s+(?:of\s+)?experience\b/i,
+    /^(?:oracle\s+|aws\s+|azure\s+|google\s+)?certifications?$/i,  // a class, not one held
+    /^my[a-z]+support$/i,                          // myoraclesupport
+    /\b(?:must[- ]have|nice[- ]to[- ]have|preferred|required|desirable|a plus|bonus)\b/i,
+    /\b(?:degree|bachelor|master|bsc|msc|phd)\b/i,
+    /\b(?:full[- ]?time|part[- ]?time|permanent|contract|hybrid|remote|on[- ]?site)\b/i,
+    /\b(?:salary|benefits|equal opportunity|visa|sponsorship)\b/i,
+    /^(?:strong|excellent|good|proven|demonstrated|solid|deep)\b/i,   // "strong communication"
+    /^(?:ability|experience|knowledge|understanding|familiarity)\b/i,
+    /^\W*$/,
+  ];
+  // "Core Competencies" is NOT policed here: it is a legitimate group
+  // in this system, holding exactly the blend of process and people
+  // skills the relocation below would tear apart.
+  const _SOFT_LABEL_RE = /^(soft skills?|interpersonal|personal skills?)$/i;
+  const _MAX_PER_GROUP = 10;
+  // What a soft skill actually is. Anything else under a soft-skills
+  // label is a tool, a process or a domain -- real keywords that belong
+  // on the page, just not there. They are RELOCATED rather than
+  // dropped: losing "requirements gathering" from a business-analyst CV
+  // to fix a label would trade one fault for a worse one.
+  const _SOFT_VOCAB = /^(communication|collaboration|teamwork|leadership|mentoring|mentorship|coaching|training|problem[- ]?solving|critical thinking|analytical thinking|adaptability|flexibility|resilience|empathy|initiative|ownership|accountability|attention to detail|time management|prioriti[sz]ation|organisation|organization|negotiation|influencing|facilitation|presentation|public speaking|stakeholder management|relationship building|cross[- ]functional collaboration|conflict resolution|decision[- ]?making|creativity|curiosity|work ethic|self[- ]?starter|team player|interpersonal)/i;
+  const _RELOCATED_LABEL = 'Domain Expertise';
+
+  // "oracle e-business suite (EBS)" beside "Python, Java" is the other
+  // half of the same tell. An item that arrives entirely lower case is
+  // title-cased; anything already carrying capitals is left exactly as
+  // written, because that is where the real acronyms live.
+  // Products whose own casing is not title case.
+  const _PRODUCT_CASE = {
+    IPROCUREMENT: 'iProcurement', IEXPENSES: 'iExpenses', ISUPPLIER: 'iSupplier',
+    ISTORE: 'iStore', IRECRUITMENT: 'iRecruitment', EBUSINESS: 'eBusiness',
+    ECOMMERCE: 'eCommerce', IOS: 'iOS', NPM: 'npm', JQUERY: 'jQuery',
+    PGVECTOR: 'pgvector', GRPC: 'gRPC', VLLM: 'vLLM',
+  };
+  function _titleCaseItem(s) {
+    const item = String(s || '');
+    if (!/[a-z]/.test(item)) return item;
+    // Only an item whose FIRST word is lower case was written by the
+    // keyword extractor. "Problem-solving" is a person's own casing and
+    // must not become "Problem-Solving"; "oracle e-business suite
+    // (EBS)" starts lower and is fair game despite the acronym in it.
+    const firstWord = (item.match(/[A-Za-z][A-Za-z'’]*/) || [''])[0];
+    if (!firstWord || /^[A-Z]/.test(firstWord)) return item;
+    // Word by word, so "oracle e-business suite (EBS)" keeps its
+    // acronym and still gets its words capitalised.
+    let seenWord = false;
+    return item.replace(/[A-Za-z][A-Za-z'’]*/g, (w) => {
+      const first = !seenWord; seenWord = true;
+      const prod = _PRODUCT_CASE[w.toUpperCase()];
+      if (prod) return prod;
+      const keep = _KEEP_UPPER[w.toUpperCase()];
+      if (keep) return keep;
+      if (/[A-Z]/.test(w)) return w;             // already cased by a human
+      if (!first && _SMALL_WORDS.has(w.toLowerCase())) return w.toLowerCase();
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    });
+  }
+
+  // "Communication Skills" is "Communication"; "Problem-solving" is
+  // "problem solving". Compare on the bare stem.
+  function _skillKey(s) {
+    return String(s || '').toLowerCase()
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\bskills?\b|\bexperience\b|\babilities\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  function sanitiseSkillsSection(cvText) {
+    const text = String(cvText || '');
+    if (!text) return { text, dropped: 0, moved: 0, samples: [] };
+    const lines = text.split('\n');
+    let head = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (_SKILLS_HEAD_RE.test(lines[i].trim())) { head = i; break; }
+    }
+    if (head === -1) return { text, dropped: 0, moved: 0, samples: [] };
+    let end = lines.length;
+    for (let i = head + 1; i < lines.length; i++) {
+      const s = lines[i].trim();
+      if (!s) { end = i; break; }
+      if (s === s.toUpperCase() && /^[A-Z][A-Z &/]{2,}$/.test(s)) { end = i; break; }
+    }
+
+    // Every item on every OTHER group line, so a hard tool under a soft
+    // label can be recognised as already stated where it belongs.
+    const groups = [];
+    for (let i = head + 1; i < end; i++) {
+      const m = lines[i].match(/^(\s*)([A-Za-z][A-Za-z &/+.]{1,40}?)(\s*:\s*)(\S.*)$/);
+      if (m) groups.push({ at: i, indent: m[1], label: m[2], sep: m[3], items: m[4] });
+    }
+    if (!groups.length) return { text, dropped: 0, moved: 0, samples: [] };
+
+    const seen = new Set();
+    let dropped = 0, moved = 0, lastAt = -1;
+    const relocated = [];
+    const samples = [];
+    for (const g of groups) {
+      // The citizenship line is a sentence, not a skill list.
+      if (/^Languages\s*(?:&|and)\s*Citizenship$/i.test(g.label)
+        || /^Citizenship$/i.test(g.label)) {
+        for (const it of g.items.split(/,\s*/)) seen.add(_skillKey(it));
+        continue;
+      }
+      const isSoft = _SOFT_LABEL_RE.test(g.label.trim());
+      const elsewhere = new Set();
+      if (isSoft) {
+        for (const other of groups) {
+          if (other === g || _SOFT_LABEL_RE.test(other.label.trim())) continue;
+          for (const it of other.items.split(/,\s*/)) elsewhere.add(_skillKey(it));
+        }
+      }
+      const kept = [];
+      for (const raw of g.items.split(/,\s*/)) {
+        const item0 = raw.trim().replace(/[.;]+$/, '');
+        if (!item0) continue;
+        const item = _titleCaseItem(item0);
+        const key = _skillKey(item);
+        if (!key) { dropped++; samples.push(item0); continue; }
+        if (_NOT_A_SKILL.some((re) => re.test(item))) { dropped++; samples.push(item0); continue; }
+        if (seen.has(key)) { dropped++; samples.push(item0); continue; }
+        if (isSoft && elsewhere.has(key)) { dropped++; samples.push(item0); continue; }
+        if (isSoft && !_SOFT_VOCAB.test(item.trim())) {
+          // A real skill under the wrong label. Keep the keyword, move
+          // the item.
+          if (!relocated.some((r) => _skillKey(r) === key)) relocated.push(item);
+          seen.add(key);
+          moved++;
+          continue;
+        }
+        if (kept.length >= _MAX_PER_GROUP) { dropped++; samples.push(item0); continue; }
+        seen.add(key);
+        kept.push(item);
+      }
+      if (!kept.length) {
+        lines[g.at] = null;                       // an empty group is not a line
+        lastAt = Math.max(lastAt, g.at);
+        continue;
+      }
+      lines[g.at] = g.indent + g.label + g.sep + kept.join(', ');
+      lastAt = Math.max(lastAt, g.at);
+    }
+
+    // The relocated items get one line of their own, under the group
+    // lines they were pulled out of.
+    if (relocated.length) {
+      const indent = groups[0].indent || '';
+      const own = groups.find((g) => _RELOCATED_LABEL.toLowerCase() === g.label.trim().toLowerCase());
+      if (own && lines[own.at]) {
+        lines[own.at] = lines[own.at].replace(/\s*$/, '') + ', '
+          + relocated.slice(0, _MAX_PER_GROUP).join(', ');
+      } else {
+        lines[lastAt] = (lines[lastAt] === null ? '' : lines[lastAt] + '\n')
+          + indent + _RELOCATED_LABEL + ': ' + relocated.slice(0, _MAX_PER_GROUP).join(', ');
+      }
+    }
+    return {
+      text: lines.filter((l) => l !== null).join('\n'),
+      dropped, moved, samples: samples.slice(0, 6),
+    };
+  }
+
   function _normaliseLanguages(languages) {
     let list = [];
     if (Array.isArray(languages)) list = languages;
@@ -4165,10 +4380,12 @@
     return { text: lines.join('\n'), added, relabelled, claim };
   }
 
-  function stripCertificationsSection(cvText, jdText) {
+  function stripCertificationsSection(cvText, jdText, hidden) {
     const text = String(cvText || '');
     if (!text) return { text, removed: false, kept: false };
-    if (/certif/i.test(String(jdText || ''))) {
+    // The profile's own switch wins over everything: hidden means
+    // hidden, even on a posting that asks for certifications.
+    if (!hidden && /certif/i.test(String(jdText || ''))) {
       // The posting asked; the section stays.
       const has = text.split('\n').some((l) => _CERTS_HEAD_RE.test(l.trim()));
       return { text, removed: false, kept: has };
@@ -4998,6 +5215,8 @@
     // the Languages & Citizenship guarantee.
     languages = null,
     citizenship = '',
+    // The profile's own "hide certifications" switch.
+    certificationsHidden = false,
     // The candidate's ACTUAL location, from their profile. Not the
     // posting's. See ensureTruthfulLocation.
     profileLocation = '',
@@ -5556,12 +5775,14 @@
     // v16: certifications only when the posting asks for them.
     if (f.certsOnlyWhenAsked && outCV) {
       try {
-        const cs = stripCertificationsSection(outCV, jdText);
+        const cs = stripCertificationsSection(outCV, jdText, certificationsHidden);
         if (cs.removed) {
           outCV = cs.text;
-          report.fixes.push('Removed the CERTIFICATIONS section -- this posting never '
-            + 'mentions certification, and the lines buy back space for the work; '
-            + 'it returns automatically on any posting that asks');
+          report.fixes.push(certificationsHidden
+            ? 'Removed the CERTIFICATIONS section -- it is switched off in your profile'
+            : 'Removed the CERTIFICATIONS section -- this posting never '
+              + 'mentions certification, and the lines buy back space for the work; '
+              + 'it returns automatically on any posting that asks');
         } else if (cs.kept) {
           report.fixes.push('Kept the CERTIFICATIONS section: this posting mentions '
             + 'certification, so the section is a live matching criterion here');
@@ -5593,6 +5814,21 @@
           outCV = nl.text;
           report.fixes.push('Title-cased ' + nl.fixed + ' skills group label(s) '
             + '(a shouted "Soft SKILLS:" beside "Programming:" reads as a mistake)');
+        }
+      } catch (e) {}
+      // Last in the section: the labels are settled, so a group can be
+      // judged by the label it will actually print with.
+      try {
+        const ss = sanitiseSkillsSection(outCV);
+        if (ss.dropped || ss.moved) {
+          outCV = ss.text;
+          const parts = [];
+          if (ss.dropped) parts.push('removed ' + ss.dropped + ' item(s) that were posting '
+            + 'phrases rather than skills, duplicates, or past the point anyone reads ('
+            + ss.samples.slice(0, 4).join(', ') + ')');
+          if (ss.moved) parts.push('moved ' + ss.moved + ' real skill(s) out of "Soft Skills", '
+            + 'where a tool or a process is not a soft skill, into their own group');
+          report.fixes.push('Skills section: ' + parts.join('; '));
         }
       } catch (e) {}
     }
@@ -6185,6 +6421,7 @@
     stripCertificationsSection,
     ensureCitizenshipLine,
     normaliseSkillLabels,
+    sanitiseSkillsSection,
     echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2
