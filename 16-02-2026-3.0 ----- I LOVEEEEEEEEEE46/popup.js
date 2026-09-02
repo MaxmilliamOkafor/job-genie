@@ -6986,13 +6986,18 @@ class ATSTailor {
               || 'English (native), French (native), Spanish (advanced), German (advanced)',
             citizenship: profile.citizenship || profile.citizenship_status
               || profile.citizenshipStatus || profile.right_to_work || profile.rightToWork || '',
-            // The profile's "hide certifications" switch. Defensive key
-            // names, and a `show_*` flag is honoured inverted so either
-            // spelling of the same switch works.
-            certificationsHidden: profile.certifications_hidden === true
-              || profile.certificationsHidden === true
-              || profile.hide_certifications === true || profile.hideCertifications === true
-              || profile.show_certifications === false || profile.showCertifications === false,
+            // The profile's certifications switch. OFF by default -- the
+            // section comes out unless the profile EXPLICITLY asks for
+            // it, so the outcome never depends on the posting and never
+            // changes between runs. Either spelling of the switch works.
+            certificationsVisible: profile.show_certifications === true
+              || profile.showCertifications === true
+              || profile.certifications_visible === true
+              || profile.certificationsVisible === true
+              || profile.certifications_hidden === false
+              || profile.certificationsHidden === false
+              || profile.hide_certifications === false
+              || profile.hideCertifications === false,
             // Where the candidate ACTUALLY lives, so the header stops
             // claiming the posting's location. See ensureTruthfulLocation.
             profileLocation: [profile.city, profile.country].filter(Boolean).join(', ')

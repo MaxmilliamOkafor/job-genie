@@ -4008,14 +4008,21 @@
   }
 
   // ===================================================================
-  // CERTIFICATIONS EARN THEIR SPACE, OR THEY GO
+  // CERTIFICATIONS COME OUT, UNLESS THE PROFILE SAYS OTHERWISE
   // -------------------------------------------------------------------
   // Removed on request, to buy the page back -- six certification lines
-  // is most of an inch. But not blindly: when the POSTING mentions
-  // certification at all ("AWS Certified preferred", "relevant
-  // certifications a plus"), the section is a live matching criterion
-  // and stays. The posting decides, the same way it decides the
-  // acronym pairs and the mirrored vocabulary.
+  // is most of an inch.
+  //
+  // IT WAS BRIEFLY CONDITIONAL AND THAT WAS WRONG. A first version kept
+  // the section whenever the POSTING mentioned certification, on the
+  // reasoning that it is a live matching criterion there. Nobody asked
+  // for that, and from the outside it looked like the section appearing
+  // and vanishing at random between runs -- because it did, on a
+  // condition invisible to the person reading the output. A rule the
+  // user cannot see is not a feature.
+  //
+  // ONE switch decides now, and it is theirs: the section is removed
+  // unless the profile explicitly asks to keep it.
   // ===================================================================
   const _CERTS_HEAD_RE = /^\s*(CERTIFICATIONS?|PROFESSIONAL CERTIFICATIONS?|LICENSES?\s*(?:&|AND)\s*CERTIFICATIONS?|CERTIFICATIONS?\s*(?:&|AND)\s*LICENSES?|CERTIFICATES?)\s*:?\s*$/i;
 
@@ -4412,26 +4419,20 @@
     return { text: lines.join('\n'), added, relabelled, claim };
   }
 
-  function stripCertificationsSection(cvText, jdText, hidden) {
+  function stripCertificationsSection(cvText, show) {
     const text = String(cvText || '');
     if (!text) return { text, removed: false, kept: false };
-    // The profile's own switch wins over everything: hidden means
-    // hidden, even on a posting that asks for certifications.
-    if (!hidden && /certif/i.test(String(jdText || ''))) {
-      // The posting asked; the section stays.
-      const has = text.split('\n').some((l) => _CERTS_HEAD_RE.test(l.trim()));
-      return { text, removed: false, kept: has };
-    }
     const lines = text.split('\n');
     let start = -1;
     for (let i = 0; i < lines.length; i++) {
       if (_CERTS_HEAD_RE.test(lines[i].trim())) { start = i; break; }
     }
     if (start === -1) return { text, removed: false, kept: false };
+    if (show) return { text, removed: false, kept: true };
     let end = lines.length;
     for (let i = start + 1; i < lines.length; i++) {
-      const s = lines[i].trim();
-      if (s && _ANY_HEAD.test(s) && !_CERTS_HEAD_RE.test(s)) { end = i; break; }
+      const s2 = lines[i].trim();
+      if (s2 && _ANY_HEAD.test(s2) && !_CERTS_HEAD_RE.test(s2)) { end = i; break; }
     }
     // Take the blank run above the heading with it, so the neighbours
     // meet with ONE gap rather than the section's old two.
@@ -5247,8 +5248,9 @@
     // the Languages & Citizenship guarantee.
     languages = null,
     citizenship = '',
-    // The profile's own "hide certifications" switch.
-    certificationsHidden = false,
+    // The profile's own certifications switch. OFF by default: the
+    // section comes out unless the profile explicitly asks for it.
+    certificationsVisible = false,
     // The candidate's ACTUAL location, from their profile. Not the
     // posting's. See ensureTruthfulLocation.
     profileLocation = '',
@@ -5305,8 +5307,7 @@
       // reads (company, title, date -- not shouted, not inverted).
       envelope: flags.envelope !== false,
       roleShape: flags.roleShape !== false,
-      // v16: certifications render only when the posting mentions
-      // certification; otherwise the section is removed for the space.
+      // v16: certifications render only when the profile asks for them.
       certsOnlyWhenAsked: flags.certsOnlyWhenAsked !== false,
       // v16: the Languages & Citizenship line is a guarantee -- built
       // from the profile, mislabels repaired, EU Citizen on the page.
@@ -5807,17 +5808,11 @@
     // v16: certifications only when the posting asks for them.
     if (f.certsOnlyWhenAsked && outCV) {
       try {
-        const cs = stripCertificationsSection(outCV, jdText, certificationsHidden);
+        const cs = stripCertificationsSection(outCV, certificationsVisible);
         if (cs.removed) {
           outCV = cs.text;
-          report.fixes.push(certificationsHidden
-            ? 'Removed the CERTIFICATIONS section -- it is switched off in your profile'
-            : 'Removed the CERTIFICATIONS section -- this posting never '
-              + 'mentions certification, and the lines buy back space for the work; '
-              + 'it returns automatically on any posting that asks');
-        } else if (cs.kept) {
-          report.fixes.push('Kept the CERTIFICATIONS section: this posting mentions '
-            + 'certification, so the section is a live matching criterion here');
+          report.fixes.push('Removed the CERTIFICATIONS section -- the lines buy back '
+            + 'space for the work. Switch certifications on in your profile to keep it.');
         }
       } catch (e) {}
     }
