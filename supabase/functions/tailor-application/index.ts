@@ -230,7 +230,7 @@ function formatDateRangeATS(start?: string, end?: string, fallbackEnd = ""): str
   return `${s} - ${e}`;
 }
 
-function normaliseJobTitle(raw: string): string {
+function normaliseJobTitle(raw: string, company?: string): string {
   let t = String(raw || "").trim();
 
   // Leading "(1526) ", "[1526] ", "1526 - ", "#88213 " style prefixes
@@ -257,6 +257,40 @@ function normaliseJobTitle(raw: string): string {
   // Trailing bare requisition-ish number ("Senior Engineer 104882")
   t = t.replace(/\s+\d{4,}$/g, "");
 
+  // ---- Browser page-title furniture ----
+  // "GTM Strategy/Operations Associate | Datadog Careers" -> "GTM Strategy/Operations Associate"
+  // Only ever strips segments after a page-title separator, and only when every
+  // following segment is site furniture (company name, "Careers", "Jobs", a location).
+  const TITLE_WORDS = /\b(engineer|developer|manager|analyst|associate|specialist|director|lead|consultant|officer|intern|scientist|designer|architect|administrator|coordinator|advisor|adviser|technician|accountant|nurse|assistant|executive|partner|president|head|chief|supervisor|representative|agent|strategist|recruiter|controller|auditor|planner|operator|programmer|researcher|trainee|graduate|apprentice|clerk|counsel|attorney|paralegal|therapist|teacher|professor|writer|editor|marketer|buyer|salesperson)\b/i;
+  const FURNITURE = /\b(careers?|jobs?|job\s*board|job\s*openings?|vacanc(?:y|ies)|hiring|we\s+are\s+hiring|apply(?:\s+now)?|opportunit(?:y|ies)|join\s+us|work\s+with\s+us|workday|myworkdayjobs|greenhouse|lever|smartrecruiters|taleo|icims|successfactors|linkedin|indeed|glassdoor|ziprecruiter|monster|totaljobs|irishjobs)\b/i;
+  const companyLower = String(company || "").toLowerCase().replace(/\b(inc|llc|ltd|limited|plc|gmbh|corp|corporation|co)\b\.?/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+  const looksLikeFurniture = (seg: string): boolean => {
+    const s = seg.trim();
+    if (!s) return true;
+    if (FURNITURE.test(s)) return true;
+    if (companyLower && s.toLowerCase().includes(companyLower)) return true;
+    // A short capitalised phrase with no job-title word: a company name or a place
+    if (!TITLE_WORDS.test(s) && /^[A-Z0-9][^,]*$/.test(s) && s.split(/\s+/).length <= 4) return true;
+    return false;
+  };
+
+  const segments = t.split(/\s*[|·•»‹›─]\s*|\s+[–—]\s+|\s+-\s+/).map((x) => x.trim()).filter(Boolean);
+  if (segments.length > 1) {
+    const tail = segments.slice(1);
+    if (tail.every(looksLikeFurniture) && segments[0].length >= 3) {
+      t = segments[0];
+    }
+  }
+
+  // Trailing "at <Company>"
+  t = t.replace(/\s+at\s+([A-Z][\w.&'()\-]*(?:\s+[\w.&'()\-]+){0,3})\s*$/, (m, tailName: string) => {
+    const name = String(tailName).trim();
+    if (companyLower && name.toLowerCase().includes(companyLower)) return "";
+    if (!companyLower && !TITLE_WORDS.test(name) && FURNITURE.test(name)) return "";
+    return m;
+  });
+
   // Tidy separators / whitespace
   t = t.replace(/\s{2,}/g, " ").replace(/\s*[-–—|,\/:]+\s*$/g, "").replace(/^\s*[-–—|,\/:]+\s*/g, "").trim();
 
@@ -264,8 +298,9 @@ function normaliseJobTitle(raw: string): string {
 }
 
 function validateRequest(data: any): TailorRequest {
-  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"));
   const company = validateString(data.company, MAX_STRING_SHORT, "company");
+  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"), company);
+
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
   const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, "requirements");
   const location = data.location ? validateString(data.location, MAX_STRING_SHORT, "location") : undefined;
@@ -1656,14 +1691,29 @@ function extractJobscanKeywords(
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
   ]);
 
+  // Final safety net: no regex-pattern source may ever leave this function as a
+  // keyword. Anything still carrying regex metacharacters is repaired via the
+  // display-name mapper, and dropped if it cannot be repaired.
+  const scrubKeyword = (k: string): string => {
+    const raw = String(k || "").trim();
+    if (!raw) return "";
+    if (!/[\\?*+^$|\[\]{}()]/.test(raw)) return raw;
+    const fixed = patternToDisplayName(raw);
+    return /[\\?*^$|\[\]{}]/.test(fixed) ? "" : fixed;
+  };
+
   const filterBlacklisted = (keywords: string[]): string[] =>
-    keywords.filter(k => !SKILL_BLACKLIST.has(k.toLowerCase().trim()));
+    keywords
+      .map(scrubKeyword)
+      .filter(Boolean)
+      .filter(k => !SKILL_BLACKLIST.has(k.toLowerCase().trim()));
 
   const cleanHardSkills = filterBlacklisted(hardSkills);
   const cleanSoftSkills = filterBlacklisted(softSkills);
   const cleanTools = filterBlacklisted(tools);
   const cleanTitles = filterBlacklisted(titles);
   const cleanCertifications = filterBlacklisted(certifications);
+  const cleanResponsibilities = filterBlacklisted(responsibilities);
 
   // Combined keywords prioritised for ATS scoring - increased cap for full coverage
   const allKeywords = [
@@ -1674,7 +1724,8 @@ function extractJobscanKeywords(
     ...cleanSoftSkills,
   ].slice(0, 50);
 
-  return { hardSkills: cleanHardSkills, softSkills: cleanSoftSkills, tools: cleanTools, titles: cleanTitles, certifications: cleanCertifications, responsibilities, allKeywords };
+  return { hardSkills: cleanHardSkills, softSkills: cleanSoftSkills, tools: cleanTools, titles: cleanTitles, certifications: cleanCertifications, responsibilities: cleanResponsibilities, allKeywords };
+
 }
 
 // Calculate accurate match score with fuzzy matching and synonym detection
@@ -2486,8 +2537,11 @@ TECHNICAL SKILLS FORMAT: Labelled groups, one per line, in the form "Group Name:
 LANGUAGES & CITIZENSHIP RULE (replaces any earlier guidance about that group): The FIRST line of TECHNICAL SKILLS is exactly "Languages & Citizenship:" followed by the candidate's SPOKEN languages from the profile, each with proficiency in parentheses, ending with the citizenship claim after a plain hyphen - for example "Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen". Never place programming languages under this label: Python, SQL, Java, JavaScript and similar belong under a "Programming:" label. If the profile records no spoken languages, that line is instead "Citizenship: EU Citizen" (or the recorded claim). If the profile records neither spoken languages nor citizenship, omit the line.
 
 SKILLS GROUP LABELS: Every group label in TECHNICAL SKILLS is written in Title Case, exactly like "Programming:", "Cloud & DevOps:", "Data Engineering:", "Soft Skills:". Never write a label in full capitals or in lower case ("Soft SKILLS:", "cloud and devops:" are both forbidden). Real acronyms inside a label keep their capitals (CRM, AI, BI, CI/CD, DevOps).
+SKILLS GROUPS CARRY ONLY SKILLS: Never place a tool, product, process, or domain under a soft-skills label - those belong under a technical or domain group. Never place a duration ("10+ years experience"), a credential class ("certifications"), a support portal, or a requirement phrase in any skills group. Maximum ten items per group. Each item appears in exactly one group.
+TARGET TITLE FIDELITY: Use the target job title EXACTLY as supplied. Never append the company name, "Careers", a location, or any text from the page title to it. Scraped page titles such as "GTM Strategy/Operations Associate | Datadog Careers" are cleaned before they reach you, so the supplied title is already the whole title - never add to it and never quote page furniture in the CV headline or in the cover letter's Re: line.
+THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
 
-CERTIFICATIONS RULE: Include a CERTIFICATIONS section ONLY when the job description mentions certification in some form (for example "AWS Certified", "certifications a plus", "certified", "certification required"). When the posting never mentions certification, omit the CERTIFICATIONS section entirely - that space goes to the work experience instead. When it is included, list only certifications the profile actually records; never invent one.
+CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
 PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's projects taken from the profile's relevant_projects array. For each project give the project name, its tech stack, one description line, and the live/code links VERBATIM as recorded in the profile - links are never rewritten, shortened or dropped. If the profile records no projects, omit the PROJECTS section entirely rather than inventing one.
 
 EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
@@ -3003,7 +3057,10 @@ ABSOLUTE RULES:
 6. TECHNICAL SKILLS FORMAT: labelled groups, one per line, "Group Name: item, item, item" - commas only, no pipes. Most relevant first. No skill in two groups.
 6b. LANGUAGES & CITIZENSHIP RULE (replaces any earlier guidance about that group): The FIRST line of TECHNICAL SKILLS is exactly "Languages & Citizenship:" followed by the candidate's SPOKEN languages from the profile, each with proficiency in parentheses, ending with the citizenship claim after a plain hyphen - for example "Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen". Never place programming languages under this label: Python, SQL, Java, JavaScript and similar belong under a "Programming:" label. If the profile records no spoken languages, that line is instead "Citizenship: EU Citizen" (or the recorded claim). If the profile records neither spoken languages nor citizenship, omit the line.
 6c. SKILLS GROUP LABELS: Every group label in TECHNICAL SKILLS is written in Title Case, exactly like "Programming:", "Cloud & DevOps:", "Data Engineering:", "Soft Skills:". Never write a label in full capitals or in lower case ("Soft SKILLS:", "cloud and devops:" are both forbidden). Real acronyms inside a label keep their capitals (CRM, AI, BI, CI/CD, DevOps).
-6c. CERTIFICATIONS RULE: Include a CERTIFICATIONS section ONLY when the job description mentions certification in some form (for example "AWS Certified", "certifications a plus", "certified", "certification required"). When the posting never mentions certification, omit the CERTIFICATIONS section entirely - that space goes to the work experience instead. When it is included, list only certifications the profile actually records; never invent one.
+6c. SKILLS GROUPS CARRY ONLY SKILLS: Never place a tool, product, process, or domain under a soft-skills label - those belong under a technical or domain group. Never place a duration ("10+ years experience"), a credential class ("certifications"), a support portal, or a requirement phrase in any skills group. Maximum ten items per group. Each item appears in exactly one group.
+6c. TARGET TITLE FIDELITY: Use the target job title EXACTLY as supplied. Never append the company name, "Careers", a location, or any text from the page title to it. Scraped page titles such as "GTM Strategy/Operations Associate | Datadog Careers" are cleaned before they reach you, so the supplied title is already the whole title - never add to it and never quote page furniture in the CV headline or in the cover letter's Re: line.
+6c. THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
+6c. CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
 7. EDUCATION FORMAT: degree plus grade on one line, institution on the next, graduation year on the next. Keep grades and years from the profile.
 8. OUTPUT HYGIENE: plain text only, no markdown, no asterisks, no bullet symbols other than "- " at bullet starts. No em dashes; use a plain hyphen.
 9. Location in CV header MUST be: "${smartLocation}" as the candidate location (NO "open to relocation" suffix, NO second location)
@@ -3100,8 +3157,11 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - PROJECTS: Do NOT output a PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
    - LANGUAGES & CITIZENSHIP RULE (replaces any earlier guidance about that group): The FIRST line of TECHNICAL SKILLS is exactly "Languages & Citizenship:" followed by the candidate's SPOKEN languages from the profile, each with proficiency in parentheses, ending with the citizenship claim after a plain hyphen - for example "Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen". Never place programming languages under this label: Python, SQL, Java, JavaScript and similar belong under a "Programming:" label. If the profile records no spoken languages, that line is instead "Citizenship: EU Citizen" (or the recorded claim). If the profile records neither spoken languages nor citizenship, omit the line.
    - SKILLS GROUP LABELS: Every group label in TECHNICAL SKILLS is written in Title Case, exactly like "Programming:", "Cloud & DevOps:", "Data Engineering:", "Soft Skills:". Never write a label in full capitals or in lower case ("Soft SKILLS:", "cloud and devops:" are both forbidden). Real acronyms inside a label keep their capitals (CRM, AI, BI, CI/CD, DevOps).
+   - SKILLS GROUPS CARRY ONLY SKILLS: Never place a tool, product, process, or domain under a soft-skills label - those belong under a technical or domain group. Never place a duration ("10+ years experience"), a credential class ("certifications"), a support portal, or a requirement phrase in any skills group. Maximum ten items per group. Each item appears in exactly one group.
+   - TARGET TITLE FIDELITY: Use the target job title EXACTLY as supplied. Never append the company name, "Careers", a location, or any text from the page title to it. Scraped page titles such as "GTM Strategy/Operations Associate | Datadog Careers" are cleaned before they reach you, so the supplied title is already the whole title - never add to it and never quote page furniture in the CV headline or in the cover letter's Re: line.
+   - THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
    - CERTIFICATIONS (only per the CERTIFICATIONS RULE below)
-   - CERTIFICATIONS RULE: Include a CERTIFICATIONS section ONLY when the job description mentions certification in some form (for example "AWS Certified", "certifications a plus", "certified", "certification required"). When the posting never mentions certification, omit the CERTIFICATIONS section entirely - that space goes to the work experience instead. When it is included, list only certifications the profile actually records; never invent one.
+   - CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
    - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile.
 
    OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
