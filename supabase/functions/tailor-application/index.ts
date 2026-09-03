@@ -257,6 +257,40 @@ function normaliseJobTitle(raw: string): string {
   // Trailing bare requisition-ish number ("Senior Engineer 104882")
   t = t.replace(/\s+\d{4,}$/g, "");
 
+  // ---- Browser page-title furniture ----
+  // "GTM Strategy/Operations Associate | Datadog Careers" -> "GTM Strategy/Operations Associate"
+  // Only ever strips segments after a page-title separator, and only when every
+  // following segment is site furniture (company name, "Careers", "Jobs", a location).
+  const TITLE_WORDS = /\b(engineer|developer|manager|analyst|associate|specialist|director|lead|consultant|officer|intern|scientist|designer|architect|administrator|coordinator|advisor|adviser|technician|accountant|nurse|assistant|executive|partner|president|head|chief|supervisor|representative|agent|strategist|recruiter|controller|auditor|planner|operator|programmer|researcher|trainee|graduate|apprentice|clerk|counsel|attorney|paralegal|therapist|teacher|professor|writer|editor|marketer|buyer|salesperson)\b/i;
+  const FURNITURE = /\b(careers?|jobs?|job\s*board|job\s*openings?|vacanc(?:y|ies)|hiring|we\s+are\s+hiring|apply(?:\s+now)?|opportunit(?:y|ies)|join\s+us|work\s+with\s+us|workday|myworkdayjobs|greenhouse|lever|smartrecruiters|taleo|icims|successfactors|linkedin|indeed|glassdoor|ziprecruiter|monster|totaljobs|irishjobs)\b/i;
+  const companyLower = String(company || "").toLowerCase().replace(/\b(inc|llc|ltd|limited|plc|gmbh|corp|corporation|co)\b\.?/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+  const looksLikeFurniture = (seg: string): boolean => {
+    const s = seg.trim();
+    if (!s) return true;
+    if (FURNITURE.test(s)) return true;
+    if (companyLower && s.toLowerCase().includes(companyLower)) return true;
+    // A short capitalised phrase with no job-title word: a company name or a place
+    if (!TITLE_WORDS.test(s) && /^[A-Z0-9][^,]*$/.test(s) && s.split(/\s+/).length <= 4) return true;
+    return false;
+  };
+
+  const segments = t.split(/\s*[|·•»‹›─]\s*|\s+[–—]\s+|\s+-\s+/).map((x) => x.trim()).filter(Boolean);
+  if (segments.length > 1) {
+    const tail = segments.slice(1);
+    if (tail.every(looksLikeFurniture) && segments[0].length >= 3) {
+      t = segments[0];
+    }
+  }
+
+  // Trailing "at <Company>"
+  t = t.replace(/\s+at\s+([A-Z][\w.&'()\-]*(?:\s+[\w.&'()\-]+){0,3})\s*$/, (m, tailName: string) => {
+    const name = String(tailName).trim();
+    if (companyLower && name.toLowerCase().includes(companyLower)) return "";
+    if (!companyLower && !TITLE_WORDS.test(name) && FURNITURE.test(name)) return "";
+    return m;
+  });
+
   // Tidy separators / whitespace
   t = t.replace(/\s{2,}/g, " ").replace(/\s*[-–—|,\/:]+\s*$/g, "").replace(/^\s*[-–—|,\/:]+\s*/g, "").trim();
 
@@ -264,8 +298,9 @@ function normaliseJobTitle(raw: string): string {
 }
 
 function validateRequest(data: any): TailorRequest {
-  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"));
   const company = validateString(data.company, MAX_STRING_SHORT, "company");
+  const jobTitle = normaliseJobTitle(validateString(data.jobTitle, MAX_STRING_SHORT, "jobTitle"), company);
+
   const description = validateString(data.description || "", MAX_STRING_LONG, "description");
   const requirements = validateStringArray(data.requirements || [], MAX_ARRAY_SIZE, MAX_STRING_MEDIUM, "requirements");
   const location = data.location ? validateString(data.location, MAX_STRING_SHORT, "location") : undefined;
