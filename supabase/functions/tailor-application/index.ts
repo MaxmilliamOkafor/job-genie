@@ -230,7 +230,7 @@ function formatDateRangeATS(start?: string, end?: string, fallbackEnd = ""): str
   return `${s} - ${e}`;
 }
 
-function normaliseJobTitle(raw: string): string {
+function normaliseJobTitle(raw: string, company?: string): string {
   let t = String(raw || "").trim();
 
   // Leading "(1526) ", "[1526] ", "1526 - ", "#88213 " style prefixes
