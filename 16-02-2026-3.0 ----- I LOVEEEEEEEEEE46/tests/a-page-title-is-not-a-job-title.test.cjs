@@ -78,6 +78,52 @@ console.log('\nAND THE HEADLINE ON THE PAGE IS THE CLEAN TITLE');
     line === 'GTM Strategy/Operations Associate', line);
 }
 
+console.log('\nAND THE MODEL\'S OWN COPY OF THE DIRTY TITLE IS SCRUBBED');
+{
+  // Cleaning the title where THIS code writes it is not enough: the
+  // model is handed the same raw string and pastes it into its own
+  // headline and its own "Re:" line. Every presence check then passes,
+  // because the dirty string CONTAINS the clean one -- so the CV
+  // carried the headline twice and the letter opened with the
+  // furniture still attached.
+  const RAW = 'GTM Strategy/Operations Associate  |  Datadog Careers';
+  const cv = ['Maxmilliam Okafor', RAW,
+    'Dublin, IE | +353 087 426 1508 | maxokafordev@gmail.com', '',
+    'PROFESSIONAL SUMMARY', 'Analyst.',
+    'PROFESSIONAL EXPERIENCE', 'Citigroup', 'Data Analyst', 'August 2017 - March 2021',
+    '- Rebuilt the reporting suite in SQL.',
+    'TECHNICAL SKILLS', 'Programming: Python, SQL',
+    'EDUCATION', 'Imperial College London'].join('\n');
+  const cl = ['Maxmilliam Okafor', 'Dublin, IE', '',
+    'Re: Application for ' + RAW, '', 'Dear Hiring Manager,', '', 'I am applying.'].join('\n');
+  const o = RA.runRecruiterAudit({
+    cvText: cv, coverLetterText: cl, jdText: 'GTM strategy role',
+    jdTitle: RAW, jobKeywords: ['SQL'], experience: [],
+  });
+  const head = o.cvText.split('\n').filter((l) => l.trim());
+  t('  the headline appears exactly once',
+    head.filter((l) => /GTM Strategy\/Operations Associate/.test(l)).length === 1,
+    JSON.stringify(head.slice(0, 4)));
+  t('  ...clean', head[1] === 'GTM Strategy/Operations Associate', JSON.stringify(head[1]));
+  t('  the contact line still follows it',
+    /maxokafordev@gmail\.com/.test(head[2]), JSON.stringify(head[2]));
+  t('  the letter\'s Re: line is cleaned in place',
+    /^Re: Application for GTM Strategy\/Operations Associate$/m.test(o.coverLetterText),
+    o.coverLetterText.split('\n').find((l) => /Re:/.test(l)));
+  t('  and "Datadog Careers" is nowhere in either document',
+    !/Datadog Careers/.test(o.cvText + o.coverLetterText),
+    (o.cvText + o.coverLetterText).split('\n').filter((l) => /Datadog/.test(l)).join(' / '));
+  t('  ...reported as a fix',
+    o.report.fixes.some((f) => /Cleaned the job title/.test(f)),
+    JSON.stringify(o.report.fixes.filter((f) => /title/i.test(f))));
+}
+{
+  // A title that needs no cleaning must not be touched at all.
+  const clean = RA.scrubRawTitle('Re: Oracle EBS Business Analyst', 'Oracle EBS Business Analyst');
+  t('  a clean title scrubs nothing',
+    clean.scrubbed === 0 && clean.text === 'Re: Oracle EBS Business Analyst', JSON.stringify(clean));
+}
+
 console.log('\nTHE DOCUMENTS PANEL IS REVEALED FROM EVERY PATH');
 {
   const src = fs.readFileSync(path.join(DIR, 'popup.js'), 'utf8');

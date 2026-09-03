@@ -767,6 +767,38 @@
     return t.replace(/\s+/g, ' ').trim();
   }
 
+  // THE RAW TITLE IS SCRUBBED WHEREVER THE MODEL PUT IT.
+  //
+  // Cleaning the title at the point where THIS code writes it is not
+  // enough: the model is handed the same raw string and pastes it into
+  // its own headline and its own "Re:" line, and every presence check
+  // downstream then passes -- the dirty string CONTAINS the clean one,
+  // so nothing looks missing and nothing gets fixed. The result was a
+  // CV headed
+  //
+  //     GTM Strategy/Operations Associate
+  //     GTM Strategy/Operations Associate  |  Datadog Careers
+  //
+  // and a letter opening "Re: Application for GTM Strategy/Operations
+  // Associate | Datadog Careers".
+  //
+  // So the dirty form is replaced with the clean one across the whole
+  // document, once, before anything else reads either. Nothing else
+  // needs to know the title was ever dirty.
+  function scrubRawTitle(text, rawTitle) {
+    const raw = String(rawTitle || '').replace(/\s+/g, ' ').trim();
+    if (!raw || !text) return { text: String(text || ''), scrubbed: 0 };
+    const clean = normaliseJobTitle(raw);
+    if (!clean || clean === raw) return { text, scrubbed: 0 };
+    // Whitespace in the document may differ from the scraped string
+    // ("Associate  |  Datadog" vs "Associate | Datadog").
+    const pattern = raw.split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+    const re = new RegExp(pattern, 'gi');
+    let scrubbed = 0;
+    const out = String(text).replace(re, () => { scrubbed++; return clean; });
+    return { text: out, scrubbed };
+  }
+
   function echoJobTitle(text, jdTitle, { kind = 'cv' } = {}) {
     if (!text || !jdTitle) return { text: text || '', injected: false };
     const cleanedTitle = normaliseJobTitle(jdTitle);
@@ -1229,6 +1261,15 @@
     // stutter directly under the name.
     const next = (lines[nameAt + 1] || '').trim();
     if (next && next.toLowerCase() === headline.toLowerCase()) return { text, added: false };
+    // A DIRTY COPY OF THE SAME HEADLINE IS A HEADLINE, NOT A CONTACT
+    // LINE. The model writes the raw scraped title ("... | Datadog
+    // Careers"); the branch below rejects any line containing a pipe as
+    // contact details, so the clean headline was INSERTED above the
+    // dirty one and the CV carried both. Same role, so replace.
+    if (next && headline && next.toLowerCase().indexOf(headline.toLowerCase()) === 0) {
+      lines[nameAt + 1] = headline;
+      return { text: lines.join('\n'), added: false, replaced: true, headline, was: next };
+    }
     if (next && _TITLE_WORD.test(next) && next.indexOf('|') === -1
       && next.indexOf('@') === -1 && next.split(/\s+/).length <= 8) {
       // A HEADLINE THIS CODE DID NOT WRITE IS NOT AUTOMATICALLY TRUE.
@@ -5349,6 +5390,20 @@
         }
       } catch (e) {}
     }
+    // Before anything reads the title: the model was handed the raw
+    // scraped string and pastes it into its own lines.
+    if (jdTitle) {
+      try {
+        const sc = scrubRawTitle(outCV, jdTitle);
+        const sl = scrubRawTitle(outCL, jdTitle);
+        outCV = sc.text; outCL = sl.text;
+        if (sc.scrubbed + sl.scrubbed > 0) {
+          report.fixes.push('Cleaned the job title in ' + (sc.scrubbed + sl.scrubbed)
+            + ' place(s): the posting was scraped as "' + String(jdTitle).trim()
+            + '", and the site furniture after it is not part of the role');
+        }
+      } catch (e) {}
+    }
     if (f.roleShape && outCV) {
       try {
         const eh = ensureExperienceHeading(outCV);
@@ -6449,7 +6504,7 @@
     ensureCitizenshipLine,
     normaliseSkillLabels,
     sanitiseSkillsSection,
-    echoJobTitle, normaliseJobTitle, sortExperienceByStartDate,
+    echoJobTitle, normaliseJobTitle, scrubRawTitle, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2
     stripFillers,
