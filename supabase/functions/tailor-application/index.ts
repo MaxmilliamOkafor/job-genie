@@ -1691,14 +1691,29 @@ function extractJobscanKeywords(
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
   ]);
 
+  // Final safety net: no regex-pattern source may ever leave this function as a
+  // keyword. Anything still carrying regex metacharacters is repaired via the
+  // display-name mapper, and dropped if it cannot be repaired.
+  const scrubKeyword = (k: string): string => {
+    const raw = String(k || "").trim();
+    if (!raw) return "";
+    if (!/[\\?*+^$|\[\]{}()]/.test(raw)) return raw;
+    const fixed = patternToDisplayName(raw);
+    return /[\\?*^$|\[\]{}]/.test(fixed) ? "" : fixed;
+  };
+
   const filterBlacklisted = (keywords: string[]): string[] =>
-    keywords.filter(k => !SKILL_BLACKLIST.has(k.toLowerCase().trim()));
+    keywords
+      .map(scrubKeyword)
+      .filter(Boolean)
+      .filter(k => !SKILL_BLACKLIST.has(k.toLowerCase().trim()));
 
   const cleanHardSkills = filterBlacklisted(hardSkills);
   const cleanSoftSkills = filterBlacklisted(softSkills);
   const cleanTools = filterBlacklisted(tools);
   const cleanTitles = filterBlacklisted(titles);
   const cleanCertifications = filterBlacklisted(certifications);
+  const cleanResponsibilities = filterBlacklisted(responsibilities);
 
   // Combined keywords prioritised for ATS scoring - increased cap for full coverage
   const allKeywords = [
@@ -1709,7 +1724,8 @@ function extractJobscanKeywords(
     ...cleanSoftSkills,
   ].slice(0, 50);
 
-  return { hardSkills: cleanHardSkills, softSkills: cleanSoftSkills, tools: cleanTools, titles: cleanTitles, certifications: cleanCertifications, responsibilities, allKeywords };
+  return { hardSkills: cleanHardSkills, softSkills: cleanSoftSkills, tools: cleanTools, titles: cleanTitles, certifications: cleanCertifications, responsibilities: cleanResponsibilities, allKeywords };
+
 }
 
 // Calculate accurate match score with fuzzy matching and synonym detection
