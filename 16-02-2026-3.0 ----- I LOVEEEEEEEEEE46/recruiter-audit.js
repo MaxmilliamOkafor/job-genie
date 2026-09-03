@@ -2970,6 +2970,133 @@
   }
 
   // ===================================================================
+  // THE SEVEN FILTERS -- A SCORECARD, NOT A SCORE
+  // -------------------------------------------------------------------
+  // Everything below is already measured somewhere in this file: the
+  // parse guarantees, the keyword coverage, the quantification audit,
+  // the six-second check. What was missing is the READOUT -- which of
+  // the seven gates a rejection actually came from. Thirty-four warning
+  // kinds in a list tell you what is wrong; they do not tell you which
+  // wall you hit.
+  //
+  //   1 ATS PARSING            can the software read it at all
+  //   2 HARD QUALIFICATIONS    does it satisfy the stated requirements
+  //   3 KEYWORD MATCH          coverage of the posting's own terms
+  //   4 SEMANTIC EVIDENCE      is the claim PROVEN in the work history,
+  //                            not just listed under skills
+  //   5 DISCOVERABILITY        does it surface in a recruiter search
+  //   6 RECRUITER SKIM         does it survive ten seconds of a human
+  //   7 MANAGER EVIDENCE       ownership, results, measurable impact
+  //
+  // DELIBERATELY NO OVERALL NUMBER. Jobscan says 71 and Resume Worded
+  // says 55 for the same CV against the same posting, and neither is
+  // what Workday computes -- an aggregate invites optimising for the
+  // aggregate. A named gate with the reason it failed is actionable; a
+  // number is a target.
+  //
+  // AND NOTHING HERE IS COVERT. No white text, no hidden keyword
+  // blocks, no font tricks. Every one of those is detected by the same
+  // parsers they are meant to fool, and a candidate caught doing it is
+  // not screened out, they are blacklisted. The whole point is to make
+  // true things legible, which beats making false things invisible.
+  // ===================================================================
+  function scoreSevenFilters({ cvText, jdText, jdTitle, jobKeywords, warnings }) {
+    const cv = String(cvText || '');
+    const warned = (kind) => (warnings || []).find((w) => w && w.kind === kind);
+    const filters = [];
+    const add = (id, name, issues, note) => {
+      const fails = issues.filter((i) => i && i.fatal).length;
+      const weaks = issues.filter((i) => i && !i.fatal).length;
+      filters.push({
+        id, name,
+        status: fails ? 'fail' : (weaks ? 'weak' : 'pass'),
+        reasons: issues.filter(Boolean).map((i) => i.why),
+        note: note || '',
+      });
+    };
+    const iss = (cond, why, fatal) => (cond ? { why, fatal: !!fatal } : null);
+
+    // 1. ATS PARSING
+    add('ats-parsing', 'ATS parsing', [
+      iss(!_EXP_HEAD_MULTILINE.test(cv), 'no recognisable experience heading', true),
+      iss(!!warned('missing-standard-headers'),
+        'non-standard section headings: ' + ((warned('missing-standard-headers') || {}).missing || []).join(', ')),
+      iss(!!warned('mixed-date-formats'), 'date formats are inconsistent between roles'),
+      iss(/\t.*\t/.test(cv), 'a line carries more than one tab, which reads as extra columns'),
+    ]);
+
+    // 2. HARD QUALIFICATIONS
+    const yearsW = warned('years-inflated');
+    add('hard-qualifications', 'Hard qualifications', [
+      iss(!!yearsW, 'the years figure is not supported by the dates on the page', true),
+      iss(!/^EDUCATION$/im.test(cv), 'no education section for a requirement check to read'),
+      // A degree named in the posting that the page never states.
+      iss(/\b(bachelor|master|degree|bsc|msc|phd)\b/i.test(String(jdText || ''))
+        && !/\b(bachelor|master|bsc|msc|phd|b\.?a\b|m\.?a\b|b\.?eng|m\.?eng)\b/i.test(cv),
+        'the posting asks for a degree and the page never names one', true),
+    ]);
+
+    // 3. KEYWORD MATCH
+    const kws = _flatKeywords(jobKeywords).map((k) => String(k || '').trim()).filter((k) => k.length > 2);
+    const lower = cv.toLowerCase();
+    const hit = kws.filter((k) => lower.indexOf(k.toLowerCase()) !== -1);
+    const cover = kws.length ? Math.round((hit.length / kws.length) * 100) : null;
+    add('keyword-match', 'Keyword match', [
+      iss(cover !== null && cover < 60, 'only ' + cover + '% of the posting\'s terms appear', true),
+      iss(cover !== null && cover >= 60 && cover < 80, cover + '% coverage; under 80 loses ranking'),
+      iss(!!warned('potentially-fabricated-keywords'),
+        'a term appears that your own history does not evidence', true),
+    ], cover === null ? '' : hit.length + ' of ' + kws.length + ' posting terms present');
+
+    // 4. SEMANTIC EVIDENCE -- the one most tools miss. A keyword listed
+    //    under skills and never demonstrated in a bullet is a claim
+    //    without proof, and a human reads it that way too.
+    const expStart = cv.search(_EXP_HEAD_MULTILINE);
+    const expBlock = expStart === -1 ? '' : cv.slice(expStart).split(/\n(?=[A-Z][A-Z &/]{3,}\s*$)/m)[0];
+    const inBullets = hit.filter((k) => expBlock.toLowerCase().indexOf(k.toLowerCase()) !== -1);
+    const proven = hit.length ? Math.round((inBullets.length / hit.length) * 100) : null;
+    add('semantic-evidence', 'Semantic evidence', [
+      iss(proven !== null && proven < 40,
+        'most matched terms appear only in the skills list, never in the work', true),
+      iss(proven !== null && proven >= 40 && proven < 65,
+        'only ' + proven + '% of your matched terms are demonstrated in a bullet'),
+    ], proven === null ? '' : inBullets.length + ' of ' + hit.length + ' matched terms proven in the experience');
+
+    // 5. RECRUITER DISCOVERABILITY
+    const firstLines = cv.split('\n').filter((l) => l.trim()).slice(0, 4).join(' ');
+    add('discoverability', 'Recruiter discoverability', [
+      iss(!!jdTitle && firstLines.toLowerCase().indexOf(normaliseJobTitle(jdTitle).toLowerCase()) === -1,
+        'the target role is not in the header, where search indexes read it', true),
+      iss(!/@/.test(firstLines), 'no email address in the header'),
+      iss(!/\d{6,}|\d[\d\s().-]{7,}/.test(firstLines), 'no phone number in the header'),
+      iss(!!warned('roles-without-location'), 'a role has no location, so location filters skip it'),
+      iss(!/linkedin/i.test(cv), 'no LinkedIn URL for the recruiter to open'),
+    ]);
+
+    // 6. RECRUITER SKIM
+    add('recruiter-skim', 'Recruiter skim (10 seconds)', [
+      iss(!!warned('first-six-seconds'), 'the top of the page does not answer "who is this"', true),
+      iss(!!warned('two-pages'), 'runs to a second page'),
+      iss(!!warned('over-long-bullets'), 'bullets long enough to be skipped'),
+      iss(!!warned('weak-bullet-openers') || !!warned('non-action-verb-openers'),
+        'bullets that open on something other than a strong verb'),
+      iss(!!warned('passive-or-duty-language'), 'duty language instead of achievement'),
+    ]);
+
+    // 7. HIRING MANAGER EVIDENCE
+    const uq = warned('unquantified-bullets');
+    add('manager-evidence', 'Hiring manager evidence', [
+      iss(!!uq && uq.severity === 'critical', 'no bullet on the page carries a number', true),
+      iss(!!uq && uq.severity !== 'critical',
+        (uq ? uq.count : 0) + ' bullet(s) with no measurable outcome'),
+      iss(!!warned('no-scope-signals'), 'no team size, budget or headcount anywhere'),
+      iss(!!warned('pronouns-in-bullets'), 'first-person pronouns in the work history'),
+    ]);
+
+    return filters;
+  }
+
+  // ===================================================================
   // ORCHESTRATOR
   // ===================================================================
 
@@ -6484,6 +6611,24 @@
       }
     } catch (e) {}
 
+    // The seven-gate readout, computed LAST so it scores the document
+    // that actually ships rather than the one that arrived.
+    try {
+      report.filters = scoreSevenFilters({
+        cvText: outCV, jdText, jdTitle, jobKeywords, warnings: report.warnings,
+      });
+      const blocked = report.filters.filter((f) => f.status === 'fail');
+      if (blocked.length) {
+        report.warnings.push({
+          kind: 'filters-blocking',
+          count: blocked.length,
+          samples: blocked.map((f) => f.name),
+          note: blocked.length + ' of the 7 screening gates would stop this application: '
+            + blocked.map((f) => f.name + ' (' + f.reasons[0] + ')').join('; '),
+        });
+      }
+    } catch (e) {}
+
     report.timingMs = Date.now() - t0;
     return { cvText: outCV, coverLetterText: outCL, report };
   }
@@ -6504,7 +6649,7 @@
     ensureCitizenshipLine,
     normaliseSkillLabels,
     sanitiseSkillsSection,
-    echoJobTitle, normaliseJobTitle, scrubRawTitle, sortExperienceByStartDate,
+    echoJobTitle, normaliseJobTitle, scrubRawTitle, scoreSevenFilters, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2
     stripFillers,
