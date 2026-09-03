@@ -824,20 +824,62 @@
       text = text.replace(/Target role:\s*/gi, '');
       text = text.replace(/\n{3,}/g, '\n\n');
     }
+    // Two subject lines are a fault whether or not the title is
+    // present, so the dedupe runs BEFORE the presence check below can
+    // return early.
+    if (kind === 'coverLetter') {
+      const l0 = text.split('\n');
+      const first = l0.findIndex((l) => /^\s*(re|subject)\s*:/i.test(l));
+      if (first !== -1) {
+        let dropped = 0;
+        for (let i = l0.length - 1; i > first; i--) {
+          if (/^\s*(re|subject)\s*:/i.test(l0[i])) { l0.splice(i, 1); dropped++; }
+        }
+        if (dropped) text = l0.join('\n').replace(/\n{3,}/g, '\n\n');
+      }
+    }
     if (text.toLowerCase().includes(cleanedTitle.toLowerCase())) {
       return { text, injected: hadLabel };
     }
 
     if (kind === 'coverLetter') {
-      // Insert into the salutation/opening paragraph.  We look for the
-      // first paragraph after "Dear" and prepend a target-role line.
       const lines = text.split('\n');
+      // A LETTER HAS ONE SUBJECT LINE.
+      //
+      // The presence check above compares the WHOLE cleaned title, so a
+      // letter already opening "Re: Application for Project Manager"
+      // failed it when the posting was "Project Manager - Enterprise
+      // Solutions" -- the shorter form is not the longer string. A
+      // second subject line was then inserted below the salutation, and
+      // the letter went out reading
+      //
+      //     Re: Application for Project Manager
+      //     Dear Hiring Manager,
+      //     Re: Project Manager - Enterprise Solutions
+      //
+      // An existing subject line is UPGRADED in place instead: it keeps
+      // whatever wording the model chose and gains the full title.
+      const subjectAt = lines.findIndex((l) => /^\s*(re|subject)\s*:/i.test(l));
+      if (subjectAt !== -1) {
+        const existing = lines[subjectAt];
+        // "Re: Application for X" keeps its lead-in; a bare "Re: X"
+        // just takes the fuller title.
+        const lead = (existing.match(/^\s*(?:re|subject)\s*:\s*(.*?)$/i) || [])[1] || '';
+        const prefix = (lead.match(/^(application for|applying for|role of|position of)\s+/i) || [])[1];
+        lines[subjectAt] = 'Re: ' + (prefix ? prefix + ' ' : '') + cleanedTitle;
+        // And no OTHER subject line survives.
+        let removed = 0;
+        for (let i = lines.length - 1; i > subjectAt; i--) {
+          if (/^\s*(re|subject)\s*:/i.test(lines[i])) { lines.splice(i, 1); removed++; }
+        }
+        return { text: lines.join('\n').replace(/\n{3,}/g, '\n\n'),
+          injected: true, upgraded: true, removedDuplicates: removed };
+      }
+      // No subject line at all: insert one, above the salutation where a
+      // letter's subject belongs, not below it.
       const dearIdx = lines.findIndex((l) => /^dear/i.test(l.trim()));
-      if (dearIdx >= 0 && dearIdx < lines.length - 2) {
-        // Insert a target-line just below the salutation block.
-        const insertAt = dearIdx + 2;
-        lines.splice(insertAt, 0, `Re: ${cleanedTitle}`);
-        lines.splice(insertAt + 1, 0, '');
+      if (dearIdx > 0) {
+        lines.splice(dearIdx, 0, `Re: ${cleanedTitle}`, '');
         return { text: lines.join('\n'), injected: true };
       }
       return { text: `Re: ${cleanedTitle}\n\n${text}`, injected: true };

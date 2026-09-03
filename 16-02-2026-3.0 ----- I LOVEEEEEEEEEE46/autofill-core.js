@@ -722,7 +722,53 @@
 
   // Frameworks track value via the native setter; assigning .value
   // directly leaves their internal state stale and the value reverts.
+  // A VALUE THAT CANNOT BE RIGHT FOR THIS FIELD IS NOT WRITTEN.
+  //
+  // A Greenhouse form came back with "Maxmilliam" in the Email box and
+  // the form's own validator saying "Please enter a valid email
+  // address". Whatever mismatched the label -- and on a form that
+  // stacks "Preferred First Name" directly above "Email" there are
+  // several ways to -- the write itself was checkable and was not
+  // checked. The field states its own type, in three places, and an
+  // email field can only hold an email.
+  //
+  // A blocked write leaves the box EMPTY, which the form then flags for
+  // the user to fill. That is strictly better than a wrong value the
+  // form accepts, or a wrong value the user has to notice and clear.
+  function _fieldKind(el) {
+    try {
+      const hay = ((el.type || '') + ' ' + (el.name || '') + ' ' + (el.id || '') + ' '
+        + (el.getAttribute && (el.getAttribute('autocomplete') || '') || '') + ' '
+        + (el.getAttribute && (el.getAttribute('inputmode') || '') || '')).toLowerCase();
+      if (/\bemail\b/.test(hay)) return 'email';
+      if (/\b(tel|phone|mobile)\b/.test(hay)) return 'phone';
+      if (/\burl\b/.test(hay) || /linkedin|website|portfolio/.test(hay)) return 'url';
+      return '';
+    } catch (e) { return ''; }
+  }
+
+  function valueFitsField(el, value) {
+    const v = String(value == null ? '' : value).trim();
+    if (!v) return true;                       // clearing is always allowed
+    switch (_fieldKind(el)) {
+      case 'email': return /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(v);
+      // Enough digits to be a phone number. "+353 087 426 1508" and
+      // "0874261508" pass; a name or a single digit does not.
+      case 'phone': return (v.replace(/\D/g, '').length >= 7);
+      case 'url': return /^(https?:\/\/|www\.)|\.[a-z]{2,}(\/|$)/i.test(v);
+      default: return true;
+    }
+  }
+
   function setValue(el, value) {
+    if (!valueFitsField(el, value)) {
+      try {
+        console.warn('[JG-Autofill] Refused to write "' + String(value).slice(0, 40)
+          + '" into a ' + _fieldKind(el) + ' field -- it is not a valid '
+          + _fieldKind(el) + ', so the box is left for you to fill.');
+      } catch (e) {}
+      return;
+    }
     const clamped = _clampToMaxLength(el, value);
     try {
       const proto = el.tagName === 'TEXTAREA'
@@ -1051,7 +1097,7 @@
     __jg: true,
     labelFor, questionFor, answerFor, yesNoFor, isYesNoOptions, fillContainer, loadProfile, isToggleOn, DEFAULT_ON,
     authorisedCountries, countryInQuestion, authorisedForQuestion,
-    setValue, fillSelect, fillRadioGroup, fillCustomDropdown,
+    setValue, valueFitsField, fillSelect, fillRadioGroup, fillCustomDropdown,
     isVisible, optionMatches, escapeSelector, DEFAULTS,
     // Exported so the boundary between "motivation" and "claim", and the
     // length clamp, can be asserted directly rather than through a DOM.
