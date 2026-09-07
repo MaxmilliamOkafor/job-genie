@@ -91,7 +91,7 @@ console.log('\nTHE EMPTY SLOT STILL GETS FILLED');
   t('  a CV with no headline gets the posting title',
     lineTwo(o) === 'Business Operations Sr Analyst', lineTwo(o));
   t('  reported as an addition, not a replacement',
-    o.report.fixes.some((f) => /Added the role headline/.test(f)) && !warned(o),
+    o.report.fixes.some((f) => /Added the headline under your name/.test(f)) && !warned(o),
     JSON.stringify(o.report.fixes.filter((f) => /headline/i.test(f))));
 }
 

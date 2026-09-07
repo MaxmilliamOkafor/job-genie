@@ -3042,6 +3042,81 @@
   // not screened out, they are blacklisted. The whole point is to make
   // true things legible, which beats making false things invisible.
   // ===================================================================
+  // ===================================================================
+  // THE SUMMARY IS ABOUT THE ROLE BEING APPLIED FOR
+  // -------------------------------------------------------------------
+  // A Reinsurance Analyst CV opened "Accomplished Software Engineer
+  // with over 10 years of experience" -- under a headline reading
+  // Reinsurance Analyst, above an employment block full of analytics.
+  // The first line a human reads announced a different profession.
+  //
+  // summaryPersonaDrift already catches this, but only when the
+  // ORIGINAL CV text is available to compare against; when the profile
+  // arrives as a structured object rather than text -- which has
+  // happened before and degrades silently -- the check never runs.
+  // This one needs nothing but the page: the posting's own title, and
+  // the first dozen words of the summary.
+  //
+  // It only fires on a NAMED profession that the target title does not
+  // share a word with, so "Analyst with five years..." against
+  // "Reinsurance Analyst" is silent, and a summary opening with
+  // anything other than a job title is left alone entirely.
+  const _PROFESSIONS = /\b(software engineer|data (?:analyst|engineer|scientist)|product manager|project manager|business analyst|solutions? architect|accountant|nurse|teacher|lawyer|designer|marketer|recruiter|consultant|developer|actuary|underwriter|reinsurance analyst|financial analyst|sales manager|operations manager)\b/i;
+
+  // THE SUMMARY LEADS WITH THE WRONG TRUE TITLE.
+  //
+  // The summary is deliberately held to titles the history contains --
+  // a separate guarantee from the headline, which carries the target
+  // role. So the fault is never "that title is false"; it is that the
+  // summary led with the LEAST relevant of the candidate's real
+  // titles. On a Reinsurance Analyst application the page opened
+  // "Accomplished Software Engineer" while "Data Analyst" sat in the
+  // same history, one word from the posting.
+  //
+  // So this warns only when BOTH hold: the opening profession shares
+  // no word with the target role, AND another title the candidate
+  // genuinely holds is closer to it. Nothing is rewritten -- choosing
+  // how to position yourself is a judgement, and the suggestion names
+  // the better title rather than guessing at the sentence.
+  function summaryNamesAnotherProfession(cvText, jdTitle) {
+    const title = normaliseJobTitle(jdTitle);
+    if (!title || !cvText) return null;
+    const lines = String(cvText).split('\n');
+    const at = lines.findIndex((l) => SUMMARY_HEADER_RE.test(l.trim()));
+    if (at === -1) return null;
+    const opening = String(lines[at + 1] || '').split(/\s+/).slice(0, 14).join(' ');
+    if (!opening) return null;
+    const m = opening.match(_PROFESSIONS);
+    if (!m) return null;
+    const claimed = m[0];
+    const words = (s) => String(s).toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
+    const titleWords = words(title);
+    const overlap = (s) => words(s).filter((w) => titleWords.indexOf(w) !== -1).length;
+    if (overlap(claimed) > 0) return null;      // already the right family
+
+    // The titles the history actually contains: the line after each
+    // company, inside the experience block.
+    let inExp = false;
+    const held = [];
+    for (const raw of lines) {
+      const l = raw.trim();
+      if (_EXP_HEAD.test(l)) { inExp = true; continue; }
+      if (_ANY_HEAD.test(l)) { inExp = false; continue; }
+      if (!inExp || !l || /^[-•*]/.test(l)) continue;
+      if (ROLE_DATE_RE.test(l) || /\b(?:19|20)\d{2}\b/.test(l)) continue;
+      if (_TITLE_WORD.test(l) && l.split(/\s+/).length <= 7 && l.indexOf('\t') === -1) {
+        const clean = l.replace(/\s*\([^)]*\)\s*$/, '').trim();
+        if (clean && held.indexOf(clean) === -1) held.push(clean);
+      }
+    }
+    let better = null;
+    for (const h of held) {
+      if (overlap(h) > 0 && h.toLowerCase() !== claimed.toLowerCase()) { better = h; break; }
+    }
+    if (!better) return null;                   // nothing closer to suggest
+    return { claimed, title, better };
+  }
+
   function scoreSevenFilters({ cvText, jdText, jdTitle, jobKeywords, warnings }) {
     const cv = String(cvText || '');
     const warned = (kind) => (warnings || []).find((w) => w && w.kind === kind);
@@ -5832,27 +5907,31 @@
         const hl = ensureHeadline(outCV, jdTitle);
         if (hl.added) {
           outCV = hl.text;
-          report.fixes.push('Added the role headline under your name ("' + hl.headline
-            + '") -- the first line a recruiter\'s eye lands on, and only ever a '
-            + 'title your history actually contains');
+          // Same correction as the replace path below: this line is the
+          // role being APPLIED for, so a message promising "only ever a
+          // title your history contains" describes the old rule.
+          report.fixes.push('Added the headline under your name to the role you are '
+            + 'applying for ("' + hl.headline + '") -- the first line a screener '
+            + 'reads, and the one a search indexes. Every real title stays stated '
+            + 'with its dates in the employment block below.');
         } else if (hl.replaced) {
           outCV = hl.text;
-          report.fixes.push('Replaced the headline under your name: "' + hl.was
-            + '" is a title your history does not contain, so it now reads "'
-            + hl.headline + '". Every resume parser stores the line under the name '
-            + 'as the job you hold NOW, so the posting\'s title there contradicts '
-            + 'the employment block directly underneath it.');
-          report.warnings.push({
-            kind: 'headline-claimed-an-unheld-title',
-            was: hl.was,
-            now: hl.headline,
-            note: 'The tailoring wrote "' + hl.was + '" under your name. Your '
-              + 'employment history does not contain it, and a parser reads that '
-              + 'line as your current job title -- so the stored record said you '
-              + 'hold a role you have never held, above a history that says '
-              + 'otherwise. Corrected on this CV. The prompt rule that writes it '
-              + '(TARGET TITLE LINE) still needs changing at the source.',
-          });
+          // THE MESSAGE HAS TO MATCH WHAT THE CODE DOES.
+          //
+          // This said the opposite: "X is a title your history does not
+          // contain, so it now reads Y", plus a warning telling the
+          // reader to go and change the prompt rule. Both described the
+          // OLD behaviour, where an unheld posting title was swapped
+          // for a held one. That was deliberately reversed -- the line
+          // under the name is the role being applied for -- so the
+          // warning fired on almost every application, telling the user
+          // to undo the thing they had asked for. A note that
+          // contradicts the shipped behaviour is worse than no note.
+          report.fixes.push('Set the headline under your name to the role you are '
+            + 'applying for ("' + hl.headline + '", replacing "' + hl.was
+            + '") -- the first line a screener reads, and the one a search '
+            + 'indexes. Every real title stays stated with its dates in the '
+            + 'employment block below.');
         }
       } catch (e) {}
     }
@@ -6667,6 +6746,31 @@
       }
     } catch (e) {}
 
+    // The summary's opening profession, against the role applied for.
+    // Needs only the finished page, so it still runs when the original
+    // CV arrived as a structured object and the drift check above
+    // could not.
+    if (outCV && jdTitle) {
+      try {
+        const drift = summaryNamesAnotherProfession(outCV, jdTitle);
+        if (drift) {
+          report.warnings.push({
+            kind: 'summary-names-another-profession',
+            severity: 'critical',
+            claimed: drift.claimed,
+            target: drift.title,
+            better: drift.better,
+            note: 'Your summary opens by calling you a "' + drift.claimed
+              + '" on an application for "' + drift.title + '" -- the first line a '
+              + 'screener reads, announcing a different profession than the one '
+              + 'they are hiring for. You also held "' + drift.better + '", which is '
+              + 'the same family as this role. Lead with that instead; the work '
+              + 'underneath does not change and nothing here is untrue either way.',
+          });
+        }
+      } catch (e) {}
+    }
+
     // The seven-gate readout, computed LAST so it scores the document
     // that actually ships rather than the one that arrived.
     try {
@@ -6705,7 +6809,7 @@
     ensureCitizenshipLine,
     normaliseSkillLabels,
     sanitiseSkillsSection,
-    echoJobTitle, normaliseJobTitle, scrubRawTitle, scoreSevenFilters, sortExperienceByStartDate,
+    echoJobTitle, normaliseJobTitle, scrubRawTitle, scoreSevenFilters, summaryNamesAnotherProfession, sortExperienceByStartDate,
     firstSixSecondsCheck,
     // v2
     stripFillers,
