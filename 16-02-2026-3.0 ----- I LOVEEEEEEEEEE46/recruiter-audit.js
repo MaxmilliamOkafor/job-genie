@@ -3379,11 +3379,25 @@
       // slice: ", delivering X" lost whole reads better than "and
       // proc." Only a clause long enough to stand alone (>= 100 chars)
       // is kept, otherwise the hard slice below still applies.
+      //
+      // AND A SHORT FIRST SENTENCE IS NOT AN ANSWER EITHER.
+      //
+      // This ran only when NOTHING accumulated, so a summary opening
+      // "Experienced Software Engineer." followed by a long sentence
+      // published those thirty characters and threw the rest away --
+      // shipped on a Reinsurance Analyst CV, 14% of the budget, with
+      // everything the candidate brings to the role deleted. The cap is
+      // a LIMIT, not a target: when whole sentences leave the summary
+      // far short of it, the clause cut runs too and the longer result
+      // wins.
       let usedBoundary = !!acc;
-      if (!acc) {
+      if (!acc || acc.trim().length < maxChars * 0.65) {
         const head = summary.slice(0, maxChars);
         const clauseAt = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '));
-        if (clauseAt >= 100) { acc = head.slice(0, clauseAt); usedBoundary = true; }
+        if (clauseAt >= 100 && clauseAt > acc.trim().length) {
+          acc = head.slice(0, clauseAt);
+          usedBoundary = true;
+        }
       }
       summary = (acc || summary.slice(0, maxChars)).trim();
       // Don't end mid-word -- but ONLY when we hard-sliced. A boundary
