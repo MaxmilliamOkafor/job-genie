@@ -2503,6 +2503,9 @@ It states the held job title or level, the domain, and the value the candidate d
 NO KEYWORD STUFFING IN THE SUMMARY: the summary must NOT list tools, technologies, platforms, frameworks or certifications, and must not contain a comma-separated run of skills. Posting keywords belong in TECHNICAL SKILLS and, above all, in PROFESSIONAL EXPERIENCE bullets - never in the summary.
 Acceptable style: "Senior data engineer with a record of delivering reliable, scalable regulatory reporting platforms and leading small delivery teams in regulated environments."
 Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV.
+SUMMARY OPENS ON THE TARGET ROLE: The first sentence of PROFESSIONAL SUMMARY must position the candidate for the role being applied for, in that role's own domain language. Where the candidate holds several titles, lead with the one closest to the target role, not the most senior and not the most recent. Never open with a generic descriptor of a different discipline ("Experienced Software Engineer", "Seasoned Marketing Manager") on an application for another field. The sentence must still be true: it may only name a title, discipline or domain the employment history actually contains. If no held title is close to the target, open on the transferable capability instead of a title (for example "Five years building risk and reporting analytics across regulated financial portfolios") rather than borrowing the target title.
+SUMMARY LENGTH: The whole summary must be at most 220 characters, which is two rendered lines. Write it to land near that limit, not far under it. A one-clause summary is not a summary.
+NO SENTENCE FRAGMENTS: The summary must be complete sentences. "Experienced Software Engineer." on its own is a stub, not a summary.
 
 
 RULE 8 - SECTION ORDER, HEADINGS, ROLE BLOCKS, BULLETS, ACRONYMS, SKILLS, EDUCATION AND OUTPUT HYGIENE
