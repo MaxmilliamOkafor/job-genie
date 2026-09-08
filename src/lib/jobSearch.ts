@@ -391,3 +391,100 @@ export function skillOverlap(
   }
   return { matched, missing, measurable: true };
 }
+
+// ---------------------------------------------------------------- relevance
+
+export interface RelevanceReason {
+  label: string;
+  detail: string;
+}
+
+/**
+ * Plain-language reasons a vacancy is shown, each traceable to something the
+ * candidate actually saved. No score, no probability, nothing inferred.
+ */
+export function relevanceReasons(
+  job: { title: string; location: string | null; workplace_type: string | null; seniority: string | null; description: string | null },
+  filters: JobSearchFilters,
+  confirmedSkills: string[],
+): RelevanceReason[] {
+  const reasons: RelevanceReason[] = [];
+  const title = job.title.toLowerCase();
+
+  const target = filters.query.trim().toLowerCase();
+  if (target && title.includes(target)) {
+    reasons.push({ label: 'Job title', detail: `The title contains your target role "${filters.query.trim()}".` });
+  } else if (target) {
+    const syn = synonymsUsed(filters.query).find((s) => title.includes(s));
+    if (syn) reasons.push({ label: 'Job title', detail: `The title matches "${syn}", a common wording for your target role.` });
+  }
+
+  const loc = (job.location ?? '').toLowerCase();
+  const wanted = locationTerms(filters.location, filters.includeNearby).find((t) => loc.includes(t));
+  if (wanted) {
+    reasons.push({
+      label: 'Location',
+      detail: `Listed in ${tidyLocation(job.location)}, which matches your saved location.`,
+    });
+  }
+
+  if (job.workplace_type && filters.workplace.includes(job.workplace_type)) {
+    reasons.push({ label: 'Work arrangement', detail: `${job.workplace_type} matches your saved preference.` });
+  }
+  if (job.seniority && filters.seniority.includes(job.seniority)) {
+    const label = SENIORITY_OPTIONS.find((o) => o.value === job.seniority)?.label ?? job.seniority;
+    reasons.push({ label: 'Seniority', detail: `${label} matches your saved preference.` });
+  }
+
+  const overlap = skillOverlap(job.description, job.title, confirmedSkills);
+  if (overlap.measurable && overlap.matched.length > 0) {
+    reasons.push({
+      label: 'Skills you confirmed',
+      detail: `This listing names ${overlap.matched.slice(0, 6).join(', ')} from your profile.`,
+    });
+  }
+
+  return reasons;
+}
+
+// ---------------------------------------------------------------- source mix
+
+/** How much of a result set one employer accounts for. */
+export function employerConcentration<T extends { company: string }>(
+  jobs: T[],
+): { company: string; count: number; share: number } | null {
+  if (!jobs.length) return null;
+  const counts = new Map<string, number>();
+  for (const j of jobs) counts.set(j.company, (counts.get(j.company) ?? 0) + 1);
+  let top = { company: '', count: 0 };
+  for (const [company, count] of counts) if (count > top.count) top = { company, count };
+  return { ...top, share: top.count / jobs.length };
+}
+
+/**
+ * Round-robin the page by employer so a single high-volume career board does not
+ * fill the top of the list. Nothing is removed; only the order changes.
+ */
+export function spreadByEmployer<T extends { company: string }>(jobs: T[]): T[] {
+  const buckets = new Map<string, T[]>();
+  for (const job of jobs) {
+    const key = job.company.toLowerCase();
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(job);
+    else buckets.set(key, [job]);
+  }
+  const queues = Array.from(buckets.values());
+  const out: T[] = [];
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (const q of queues) {
+      const next = q.shift();
+      if (next) {
+        out.push(next);
+        moved = true;
+      }
+    }
+  }
+  return out;
+}

@@ -56,7 +56,7 @@ export interface RefreshState {
   stats: Record<string, unknown> | null;
 }
 
-const PAGE_SIZE = 25;
+export const PAGE_SIZE = 20;
 
 export function useJobSearch(filters: JobSearchFilters) {
   const [jobs, setJobs] = useState<SearchedJob[]>([]);
@@ -165,6 +165,19 @@ export function useJobSearch(filters: JobSearchFilters) {
     runQuery(page + 1, true);
   }, [isFetchingMore, isLoading, jobs.length, page, runQuery, total]);
 
+  /** Jump to a page of results (0-indexed). Replaces the list, never appends. */
+  const goToPage = useCallback(
+    (target: number) => {
+      if (isLoading || isFetchingMore) return;
+      const max = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
+      const next = Math.min(Math.max(0, target), max);
+      if (next === page) return;
+      runQuery(next, false);
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [isFetchingMore, isLoading, page, runQuery, total],
+  );
+
   const loadHealth = useCallback(async () => {
     const [healthRes, stateRes] = await Promise.all([
       supabase
@@ -227,6 +240,10 @@ export function useJobSearch(filters: JobSearchFilters) {
   return {
     jobs,
     total,
+    page,
+    pageSize: PAGE_SIZE,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    goToPage,
     isLoading,
     isFetchingMore,
     hasMore: jobs.length < total,
