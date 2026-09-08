@@ -564,10 +564,14 @@ const ExplorePage = () => {
         {/* Result summary and honest caveats */}
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span>
-            {isLoading ? 'Searching' : `${total.toLocaleString()} ${total === 1 ? 'vacancy' : 'vacancies'}`}
+            {isLoading
+              ? 'Searching'
+              : error
+                ? 'Results unavailable'
+                : `${total.toLocaleString()} ${total === 1 ? 'vacancy' : 'vacancies'}`}
           </span>
-          {synonyms.length > 0 && <span>Also searched: {synonyms.slice(0, 5).join(', ')}</span>}
-          {isStrictWindow(filters.posted) && (
+          {!error && synonyms.length > 0 && <span>Also searched: {synonyms.slice(0, 5).join(', ')}</span>}
+          {!error && isStrictWindow(filters.posted) && (
             <span>Vacancies without a genuine posting date are left out of this date range.</span>
           )}
         </div>
@@ -575,15 +579,16 @@ const ExplorePage = () => {
         {error && (
           <Alert variant="destructive" className="mb-4">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Search failed</AlertTitle>
+            <AlertTitle>Couldn't load jobs</AlertTitle>
             <AlertDescription className="text-sm">
-              {error}
+              Something went wrong on our side, so no vacancies could be loaded. This is not an empty result.
               <Button variant="outline" size="sm" className="ml-3" onClick={reload}>
                 Try again
               </Button>
             </AlertDescription>
           </Alert>
         )}
+
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           {/* Results */}
