@@ -2169,9 +2169,23 @@ serve(async (req) => {
       `Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ""}`,
     );
 
+    // The extension may send a structured strategy in atsStrategy: the
+    // posting's requirements, a coverage target and a keyword -> profile
+    // evidence map. Requirements it names are merged into the keyword pool
+    // so coverage is measured against what the posting actually asks for.
+    const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
+    const mergedRequirements = Array.from(
+      new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
+    );
+    console.log(
+      `[ATS strategy] requirements: ${atsStrategy.requirements.length}, evidence entries: ${Object.keys(atsStrategy.evidence).length}, target: ${atsStrategy.keywordCoverageTarget ?? "none"}`,
+    );
+
     // Jobscan keyword extraction
-    const jdKeywords = extractJobscanKeywords(description, requirements);
+    const jdKeywords = extractJobscanKeywords(description, mergedRequirements);
     console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
+
+    const strategyBlock = buildStrategyBlock(atsStrategy);
 
     // Calculate accurate match score with enhanced matching
     const matchResult = calculateMatchScore(
