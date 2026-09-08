@@ -159,7 +159,10 @@ export default function Documents() {
                             jobTitle: open?.job?.title,
                             company: open?.job?.company,
                             fileName: `${base}.docx`,
+                            firstName: profile?.first_name ?? '',
+                            lastName: profile?.last_name ?? '',
                           });
+
                           downloadBase64Docx(out.base64, out.fileName);
                           setExported((prev) => ({ ...prev, [`${open?.id}:${kind}`]: out.version }));
                           toast.success('Word file downloaded');
