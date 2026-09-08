@@ -1772,10 +1772,25 @@ async function handleRawContentRequest(body: {
     if (type === "cv") {
       docxBytes = await buildResumeDocxBytes(norm);
     } else {
+      // The builder prints the letterhead, date, subject line, salutation and
+      // sign-off itself. Any of those repeated inside the drafted text printed
+      // twice, so the exported letter opened "Dear Hiring Manager" twice and
+      // closed "Sincerely" twice.
+      const isFurniture = (p: string): boolean => {
+        const t = p.replace(/\s+/g, " ").trim();
+        if (!t) return true;
+        if (/^(date\s*:|re\s*:|subject\s*:)/i.test(t)) return true;
+        if (/^dear\b/i.test(t) && t.length < 60) return true;
+        if (/^(sincerely|yours sincerely|yours faithfully|kind regards|best regards|regards)\b/i.test(t)) return true;
+        if (t.includes("@") && t.length < 200) return true;
+        if (/^[A-Za-z]+\s+\d{1,2},?\s+\d{4}$/.test(t) || /^\d{1,2}\s+[A-Za-z]+\s+\d{4}$/.test(t)) return true;
+        return false;
+      };
       const paragraphs = content
         .split(/\n\s*\n/)
         .map((p) => p.trim())
-        .filter(Boolean);
+        .filter((p) => p && !isFurniture(p));
+
       docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: norm.personalInfo,
         jobTitle: jobTitle || "",
