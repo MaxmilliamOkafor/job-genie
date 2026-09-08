@@ -3780,12 +3780,36 @@ ${
       result.forceInjectedCount = finalMatched.length - (jdKeywords.allKeywords.length - actualMissing.length - finalMissing.length);
     }
 
-    // Use actual calculated score
-    result.matchScore = result.matchScore || actualScore;
-    result.keywordsMatched = actualMatched;
-    result.keywordsMissing = actualMissing;
-    result.matchedKeywords = actualMatched; // Alias for extension compatibility
-    result.missingKeywords = actualMissing; // Alias for extension compatibility
+    // MEASURED COVERAGE, NOT A PROMISE.
+    // The number reported is counted off the final document text with
+    // whole-term matching, so Java is never satisfied by JavaScript and
+    // C++, C#, .NET and CI/CD survive intact. It is keyword coverage --
+    // not an ATS pass probability, not a recruiter verdict.
+    const measured = measureCoverage(
+      `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`,
+      jdKeywords.allKeywords,
+    );
+    const unsupportedRequirements = measured.missing.filter((kw) => !atsStrategy.evidence[kw.toLowerCase()]);
+
+    result.matchScore = measured.percent;
+    result.keywordCoverage = {
+      matched: measured.matched.length,
+      total: jdKeywords.allKeywords.length,
+      percent: measured.percent,
+      label:
+        jdKeywords.allKeywords.length === 0
+          ? "Not measured - no keywords found in this posting"
+          : `${measured.matched.length} of ${jdKeywords.allKeywords.length} keywords (${measured.percent}%)`,
+      target: atsStrategy.keywordCoverageTarget,
+      matchedTerms: measured.matched,
+      missingTerms: measured.missing,
+      unsupportedRequirements,
+      meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
+    };
+    result.keywordsMatched = measured.matched;
+    result.keywordsMissing = measured.missing;
+    result.matchedKeywords = measured.matched; // Alias for extension compatibility
+    result.missingKeywords = measured.missing; // Alias for extension compatibility
     result.keywordAnalysis = result.keywordAnalysis || {
       hardSkills: jdKeywords.hardSkills,
       softSkills: jdKeywords.softSkills,
