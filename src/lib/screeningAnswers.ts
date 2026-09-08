@@ -234,8 +234,8 @@ const SENSITIVE_PATTERNS = [
   /\bprivacy (policy|notice)\b/,
   /\bbackground check\b/,
   /\bdrug (test|screen)/,
-  /\bauthorise|authorize\b.*\b(check|verify)\b/,
-  /\btruthful|accurate and complete\b/,
+  /\b(authorise|authorize)\b.*\b(check|verify)\b/,
+  /\b(truthful|accurate and complete)\b/,
   /\bsignature\b/,
   /\bgdpr\b/,
 ];
