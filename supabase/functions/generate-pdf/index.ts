@@ -1654,16 +1654,25 @@ async function handleRawContentRequest(body: {
           } else if (isBulletLine) {
             if (currentJob) currentJob.bullets.push(line.trimStart().replace(/^[-•*\u2022]\s*/, ""));
 
-          } else if (currentJob && line.length < 80 && !line.includes("@") && !isLocation(line)) {
+          } else if (line.length < 80 && !line.includes("@") && !isLocation(line)) {
             const cleanedLine = stripDates(line);
             if (!cleanedLine) continue;
+            // A plain line arriving after a role's bullets is the next
+            // employer, so it opens a new role instead of overwriting the
+            // previous one.
+            if (currentJob && currentJob.bullets.length > 0) {
+              jobs.push(currentJob);
+              currentJob = null;
+            }
+            if (!currentJob) currentJob = { company: "", title: "", dates: "", bullets: [] };
             const lineIsTitle = isJobTitle(cleanedLine);
             const lineIsCompany = isCompanyName(cleanedLine);
             if (!currentJob.company && lineIsCompany) currentJob.company = cleanedLine;
             else if (!currentJob.title && lineIsTitle) currentJob.title = cleanedLine;
-            else if (!currentJob.company && !lineIsTitle) currentJob.company = cleanedLine;
+            else if (!currentJob.company) currentJob.company = cleanedLine;
             else if (!currentJob.title) currentJob.title = cleanedLine;
           }
+
         }
         if (currentJob) jobs.push(currentJob);
         norm.experience = jobs.map((j) => ({
