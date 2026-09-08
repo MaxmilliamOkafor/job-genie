@@ -182,7 +182,7 @@ export function useJobSearch(filters: JobSearchFilters) {
         lastRunAt: ing.last_run_at,
         status: ing.status,
         lastError: ing.last_error,
-        stats: ing.stats,
+        stats: (ing.stats ?? null) as Record<string, unknown> | null,
       });
     }
     if (ver) {
@@ -190,7 +190,7 @@ export function useJobSearch(filters: JobSearchFilters) {
         lastRunAt: ver.last_run_at,
         status: ver.status,
         lastError: ver.last_error,
-        stats: ver.stats,
+        stats: (ver.stats ?? null) as Record<string, unknown> | null,
       });
     }
   }, []);
