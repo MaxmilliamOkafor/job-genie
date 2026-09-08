@@ -6,13 +6,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useGlobalErrorHandler } from "./hooks/useGlobalErrorHandler";
-import Dashboard from "./pages/Dashboard";
-import Jobs from "./pages/Jobs";
-import Explore from "./pages/Explore";
-import Applications from "./pages/Applications";
-import JobQueue from "./pages/JobQueue";
-import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
+import Apply from "./pages/Apply";
+import Documents from "./pages/Documents";
+import FollowUp from "./pages/FollowUp";
+import SettingsHub from "./pages/SettingsHub";
 import Auth from "./pages/Auth";
 import LandingPage from "./pages/LandingPage";
 import NotFound from "./pages/NotFound";
@@ -70,14 +67,24 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
-      <Route path="/" element={user ? <ProtectedRoute><Dashboard /></ProtectedRoute> : <LandingPage />} />
-      <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
-      <Route path="/explore" element={<ProtectedRoute><Explore /></ProtectedRoute>} />
-      <Route path="/applications" element={<ProtectedRoute><Applications /></ProtectedRoute>} />
-      <Route path="/queue" element={<ProtectedRoute><JobQueue /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/auth" element={user ? <Navigate to="/apply" replace /> : <Auth />} />
+      <Route path="/" element={user ? <Navigate to="/apply" replace /> : <LandingPage />} />
+
+      {/* Four top-level views */}
+      <Route path="/apply" element={<ProtectedRoute><Apply /></ProtectedRoute>} />
+      <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+      <Route path="/follow-up" element={<ProtectedRoute><FollowUp /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><SettingsHub /></ProtectedRoute>} />
+
+      {/* Legacy links keep working */}
+      <Route path="/dashboard" element={<Navigate to="/apply" replace />} />
+      <Route path="/jobs" element={<Navigate to="/apply?tab=jobs" replace />} />
+      <Route path="/explore" element={<Navigate to="/apply?tab=live" replace />} />
+      <Route path="/applications" element={<Navigate to="/apply?tab=applications" replace />} />
+      <Route path="/queue" element={<Navigate to="/apply?tab=queue" replace />} />
+      <Route path="/profile" element={<Navigate to="/settings" replace />} />
+      <Route path="/screening-answers" element={<Navigate to="/settings?tab=answers" replace />} />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
