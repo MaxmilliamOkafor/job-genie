@@ -1315,17 +1315,27 @@ async function handleRawContentRequest(body: {
       if (!trimmed) continue;
       const upperTrimmed = trimmed.toUpperCase().replace(/[:\s]+$/, "");
 
+      // The name is only taken from a line that actually looks like a person's
+      // name: two to five words of letters, no digits, no colon, no comma.
+      // The old test accepted any capitalised line, so a CV whose name was in
+      // mixed case ended up headed "GPA: 3.9".
+      const looksLikeAName =
+        /^[A-Za-z][A-Za-z'’.\-]*(\s+[A-Za-z][A-Za-z'’.\-]*){1,4}$/.test(trimmed) &&
+        !/\d/.test(trimmed) &&
+        !/[:,]/.test(trimmed);
+
       if (
         !nameExtracted &&
         !trimmed.includes("|") &&
         !trimmed.includes("@") &&
         trimmed.length < 50 &&
-        trimmed === trimmed.toUpperCase() &&
+        looksLikeAName &&
         !sectionHeaders.includes(upperTrimmed)
       ) {
         nameExtracted = trimmed;
         continue;
       }
+
 
       if (!contactLine && trimmed.includes("|") && trimmed.includes("@")) {
         contactLine = trimmed;
