@@ -186,8 +186,11 @@ interface ProjectEntry {
   role?: string;
   dates?: string;
   technologies?: string[];
+  /** Code / live links, printed once under the project. */
+  links?: string[];
   bullets: string[];
 }
+
 
 interface EducationEntry {
   degree: string;
