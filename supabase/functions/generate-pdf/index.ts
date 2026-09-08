@@ -759,10 +759,12 @@ function renderResume(
   const skillGroups: Array<{ label: string; items: string[] }> = [];
   if (data.coreCompetencies?.length)
     skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skillGroups?.length) skillGroups.push(...data.skillGroups);
   if (data.skills?.primary?.length)
     skillGroups.push({ label: "Technical", items: data.skills.primary });
   if (data.skills?.secondary?.length)
     skillGroups.push({ label: "Additional", items: data.skills.secondary });
+
   if (skillGroups.length > 0) {
     r.drawSectionHeader("Technical Skills");
     r.drawSkillsBlock(skillGroups);
