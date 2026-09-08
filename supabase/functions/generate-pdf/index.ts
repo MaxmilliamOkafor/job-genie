@@ -1535,11 +1535,14 @@ async function handleRawContentRequest(body: {
 
         for (const line of section.content) {
           if (isLocation(line)) continue;
+          // A bullet is a bullet whatever glyph it uses. Without "*" here, any
+          // starred bullet containing a hyphen ("post-launch") was read as a
+          // new job header and printed as a bold heading with no dates.
+          const isBulletLine = /^[-•*\u2022]/.test(line.trimStart());
           const hasPipe = line.includes("|");
-          const hasDash =
-            /\s*[–—-]\s*/.test(line) && !line.startsWith("-") && !line.startsWith("•");
-          const isJobHeader =
-            (hasPipe || hasDash) && !line.startsWith("-") && !line.startsWith("•");
+          const hasDash = /\s*[–—-]\s*/.test(line) && !isBulletLine;
+          const isJobHeader = (hasPipe || hasDash) && !isBulletLine;
+
 
           if (isJobHeader) {
             if (currentJob) jobs.push(currentJob);
