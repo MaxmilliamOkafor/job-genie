@@ -2095,14 +2095,36 @@ function parseAtsStrategy(raw: unknown): AtsStrategy {
   };
 }
 
-/** Extra prompt block carrying the extension's requirements and evidence map. */
+/**
+ * How the writing must read, plus the extension's requirements and evidence
+ * map when it supplied one. The writing rules go out on every request.
+ */
+const NATURAL_WRITING_RULES = `HOW THIS MUST READ.
+
+Plain, specific professional English. Each bullet says what the candidate did, how they did it, and the result their own record supports. A reader who knows the field should recognise real work.
+
+Posting keywords are woven into achievements the candidate already has. A keyword sitting in a sentence that exists only to hold it is a keyword dump, and a reviewer spots one instantly.
+
+DO NOT WRITE:
+- Stock phrases: "results-driven professional", "proven track record", "dynamic self-starter", "passionate about", "seasoned", "leverage synergies", "wearing many hats".
+- Exaggerated adjectives on the candidate's own work: world-class, cutting-edge, unparalleled, exceptional, outstanding.
+- Generic praise of the employer ("industry leader", "innovative company", "exciting opportunity"). Where the letter says why this employer, it names something concrete from the posting.
+- The same sentence opening twice in a row, and no more than two bullets in the whole CV starting with the same verb.
+- Synonym substitution for its own sake. If the candidate wrote "customer support", it does not become "client success". Contractions are not introduced.
+
+PRESERVE EXACTLY: approximate figures ("roughly 40%", "around 50 clients") keep their qualifier; responsibilities keep their scope and scale; names, dates, employers, titles and personal details are reproduced as recorded. Never invent experience, a tool, a metric, a qualification or an eligibility to close a gap.`;
+
 function buildStrategyBlock(strategy: AtsStrategy): string {
   const evidenceEntries = Object.entries(strategy.evidence).slice(0, 40);
-  if (strategy.requirements.length === 0 && evidenceEntries.length === 0 && !strategy.notes) return "";
 
-  const parts: string[] = [
-    "EXTENSION-SUPPLIED STRATEGY. Everything below comes from the posting and from this candidate's saved profile. It adds nothing you may invent.",
-  ];
+  const parts: string[] = [NATURAL_WRITING_RULES];
+
+  if (strategy.requirements.length || evidenceEntries.length || strategy.notes) {
+    parts.push(
+      "EXTENSION-SUPPLIED STRATEGY. Everything below comes from the posting and from this candidate's saved profile. It adds nothing you may invent.",
+    );
+  }
+
 
   if (strategy.requirements.length) {
     parts.push(
