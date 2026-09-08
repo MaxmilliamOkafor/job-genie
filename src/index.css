@@ -137,6 +137,25 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.9375rem; /* 15px minimum body text */
+    line-height: 1.6;
+  }
+
+  /* Accessible control sizing: 44px minimum touch target */
+  button,
+  [role='tab'],
+  [role='combobox'],
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  .control-44 {
+    min-height: 44px;
+  }
+
+  button[data-slot='dialog-close'],
+  button.h-4,
+  button.h-6,
+  button.h-7 {
+    min-height: 0;
   }
 
   h1, h2, h3, h4, h5, h6 {
