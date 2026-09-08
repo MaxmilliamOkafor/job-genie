@@ -421,6 +421,25 @@ const ExplorePage = () => {
     saveFilters(filters);
   }, [filters]);
 
+  // Vacancies saved on earlier visits show as saved straight away.
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    supabase
+      .from('jobs')
+      .select('url')
+      .eq('user_id', user.id)
+      .not('url', 'is', null)
+      .limit(1000)
+      .then(({ data }) => {
+        if (!live || !data) return;
+        setSavedUrls(new Set(data.map((r: { url: string | null }) => r.url).filter((u): u is string => Boolean(u))));
+      });
+    return () => {
+      live = false;
+    };
+  }, [user]);
+
   // Open on the candidate's saved targets, once, unless they chose to browse all.
   useEffect(() => {
     if (prefsLoading || prefsApplied) return;
