@@ -22,6 +22,16 @@ export default function Documents() {
   const { applications, isLoading } = useApplications();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Application | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  /** Fingerprint of the text behind each downloaded file, so stale saves are flagged. */
+  const [exported, setExported] = useState<Record<string, string>>({});
+
+  // A different application means different documents: clear the export state
+  // so one document's freshness never speaks for another's.
+  useEffect(() => {
+    setExported({});
+    setExporting(null);
+  }, [open?.id]);
 
   const docs = useMemo(() => {
     const q = query.trim().toLowerCase();
