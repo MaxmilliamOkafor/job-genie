@@ -50,11 +50,19 @@ type Draft = {
   question: string;
   answer: string;
   optionLabels: string;
+  availableOptions: string;
   fieldType: ScreeningFieldType;
   scope: string;
 };
 
-const EMPTY: Draft = { question: '', answer: '', optionLabels: '', fieldType: 'text', scope: '' };
+const EMPTY: Draft = {
+  question: '',
+  answer: '',
+  optionLabels: '',
+  availableOptions: '',
+  fieldType: 'text',
+  scope: '',
+};
 
 const CHOICE_TYPES: ScreeningFieldType[] = ['select', 'custom-select', 'radio', 'checkbox', 'multi-checkbox'];
 
@@ -63,6 +71,7 @@ function toDraft(a: ScreeningAnswer): Draft {
     question: a.question,
     answer: a.answer,
     optionLabels: (a.optionLabels ?? []).join(', '),
+    availableOptions: (a.availableOptions ?? []).join(', '),
     fieldType: a.fieldType ?? 'text',
     scope: a.scope ?? '',
   };
@@ -73,12 +82,17 @@ function fromDraft(d: Draft, previous?: ScreeningAnswer): ScreeningAnswer {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  const available = d.availableOptions
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const isChoice = CHOICE_TYPES.includes(d.fieldType);
   return {
     ...previous,
     question: d.question.trim(),
     answer: (isChoice && labels.length ? answerFromOptions(labels) : d.answer.trim()) || d.answer.trim(),
     optionLabels: isChoice && labels.length ? labels : undefined,
+    availableOptions: isChoice && available.length ? available : undefined,
     fieldType: d.fieldType,
     scope: d.scope.trim() || undefined,
     confirmed_at: new Date().toISOString(),
