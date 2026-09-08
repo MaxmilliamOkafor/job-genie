@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppLayout, ViewHeader } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,17 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useApplications, type Application } from '@/hooks/useApplications';
 import { Copy, Download, Eye, FileText, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
-
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-const slug = (s: string) => s.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+import {
+  documentSlug as slug,
+  documentVersion,
+  downloadBase64Docx,
+  downloadText,
+  generateDocx,
+  type DocKind,
+} from '@/lib/documentExport';
 
 export default function Documents() {
   const { applications, isLoading } = useApplications();
