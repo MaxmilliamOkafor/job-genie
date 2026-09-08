@@ -114,6 +114,15 @@ function postingAge(job: SearchedJob): string {
   return job.posted_at_known ? `Posted ${relativeTime(job.posted_at)}` : 'Posting date not published';
 }
 
+/** The saved-jobs table records link state in its own vocabulary. */
+const SAVED_URL_STATUS: Record<string, string> = {
+  active: 'valid',
+  unverified: 'unknown',
+  redirected: 'unknown',
+  closed: 'expired',
+  removed: 'expired',
+};
+
 /** One status label per listing, stated plainly. Never "verified" or "scam-free". */
 function StatusLabel({ job }: { job: SearchedJob }) {
   if (job.link_status === 'active') {
