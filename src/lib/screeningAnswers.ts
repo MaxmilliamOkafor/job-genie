@@ -27,6 +27,12 @@ export interface ScreeningAnswer {
   answer: string;
   /** Selected option labels, for dropdowns, radios and checkboxes. */
   optionLabels?: string[];
+  /**
+   * Every option the employer offered for this question. Kept so the
+   * extension can tell whether a saved answer is still one of the choices on
+   * a form, rather than typing it into a list that no longer contains it.
+   */
+  availableOptions?: string[];
   fieldType?: ScreeningFieldType;
   /** Country or employer this answer applies to. Empty means every application. */
   scope?: string;
