@@ -3917,6 +3917,130 @@ ${
       }
     }
 
+    // THE CONTACT LINE AND THE SKILLS LIST ARE THE CANDIDATE'S, NOT THE MODEL'S.
+    // A live run produced the phone as "+353 08 742 61508" (digits reordered)
+    // and listed "Dagster, dbt" -- neither is recorded in this profile, and both
+    // were then counted as keyword coverage. Both are rebuilt from saved data
+    // here so a rewrite cannot alter a contact detail or invent a skill.
+    const profileSkillTerms = new Set<string>();
+    const addSkillTerm = (v: unknown) => {
+      if (typeof v === "string") {
+        for (const part of v.split(/[,;/]/)) {
+          const t = part.trim().toLowerCase();
+          if (t) profileSkillTerms.add(t);
+        }
+      }
+    };
+    const collectSkillTerms = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(collectSkillTerms);
+      else if (v && typeof v === "object") Object.values(v as Record<string, unknown>).forEach(collectSkillTerms);
+      else addSkillTerm(v);
+    };
+    collectSkillTerms(userProfile.skills);
+    collectSkillTerms(userProfile.languages);
+    collectSkillTerms(userProfile.certifications);
+    collectSkillTerms(userProfile.relevantProjects);
+    if (userProfile.citizenship) addSkillTerm(userProfile.citizenship);
+    for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
+      const bullets = Array.isArray((role as any)?.bullets) ? (role as any).bullets : [];
+      for (const b of bullets) if (typeof b === "string") for (const w of b.split(/[^A-Za-z0-9+#.]+/)) if (w) profileSkillTerms.add(w.toLowerCase());
+    }
+
+    const invented: string[] = [];
+    const hardenResume = (text: string): string => {
+      if (!text) return text;
+      const lines = text.split("\n");
+      let inSkills = false;
+      let inSummary = false;
+      const out: string[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const upper = line.trim().toUpperCase();
+        // The contact line sits directly under the name.
+        if (i === 1 && line.includes("|")) {
+          const contactBits = [
+            smartLocation,
+            userProfile.phone,
+            userProfile.email,
+          ].filter(Boolean);
+          out.push(contactBits.join(" | "));
+          continue;
+        }
+        if (/^[A-Z][A-Z &]+$/.test(upper) && upper.length > 3) {
+          inSkills = upper.includes("SKILL");
+          inSummary = upper.includes("SUMMARY");
+          out.push(line);
+          continue;
+        }
+        if (inSummary && line.trim()) {
+          // Removing a banned opener ("Proven ability...") left the following
+          // sentence starting in lower case, so sentence starts are restored.
+          out.push(
+            line.replace(/(^|[.!?]\s+)([a-z])/g, (_m, p, c) => p + c.toUpperCase()),
+          );
+          continue;
+        }
+
+        if (inSkills && line.includes(":")) {
+          const idx = line.indexOf(":");
+          const label = line.slice(0, idx + 1);
+          // The languages / citizenship line is built from saved fields and
+          // carries a trailing citizenship clause, so it is never item-scrubbed.
+          if (/language|citizen/i.test(label)) {
+            const spoken = (Array.isArray(userProfile.languages) ? userProfile.languages : [])
+              .map((l: any) => (l?.name ? `${l.name}${l?.proficiency ? ` (${String(l.proficiency).toLowerCase()})` : ""}` : ""))
+              .filter(Boolean);
+            const citizen = userProfile.citizenship ? ` - ${userProfile.citizenship}` : "";
+            if (spoken.length) out.push(`Languages & Citizenship: ${spoken.join(", ")}${citizen}`);
+            else if (citizen) out.push(`Citizenship: ${userProfile.citizenship}`);
+            continue;
+          }
+
+          const kept: string[] = [];
+          for (const raw of line.slice(idx + 1).split(",")) {
+            const item = raw.trim();
+            if (!item) continue;
+            const key = item.toLowerCase().replace(/\s*\(.*\)$/, "").trim();
+            const recorded =
+              profileSkillTerms.has(key) ||
+              key.split(/\s+/).every((w) => profileSkillTerms.has(w));
+            if (recorded) kept.push(item);
+            else invented.push(item);
+          }
+          if (kept.length) out.push(`${label} ${kept.join(", ")}`);
+          continue;
+        }
+        out.push(line);
+      }
+      return out.join("\n");
+    };
+
+    if (result.tailoredResume) result.tailoredResume = hardenResume(result.tailoredResume);
+    if (invented.length) {
+      console.warn(`[FIDELITY] Removed skills not recorded in the profile: ${invented.join(", ")}`);
+    }
+    // A tool the profile does not record must not survive in the letter either,
+    // where it would still be read as a claim and still count as coverage.
+    if (result.tailoredCoverLetter && invented.length) {
+      let letter: string = result.tailoredCoverLetter;
+      for (const term of invented) {
+        if (!/^[A-Za-z][A-Za-z0-9+#.\- ]{1,24}$/.test(term)) continue;
+        const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        letter = letter
+          .replace(new RegExp(`\\b${esc}\\b\\s+and\\s+`, "gi"), "")
+          .replace(new RegExp(`(,\\s*|\\s+and\\s+)\\b${esc}\\b`, "gi"), "")
+          .replace(new RegExp(`\\s*\\b${esc}\\b`, "gi"), "");
+      }
+      result.tailoredCoverLetter = letter
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\s+,/g, ",")
+        .replace(/,\s*\./g, ".")
+        .replace(/\(\s*\)/g, "")
+        .trim();
+    }
+    result.removedUnrecordedSkills = invented;
+
+
 
 
     // Ensure all required fields with our pre-calculated values

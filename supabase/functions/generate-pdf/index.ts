@@ -1577,9 +1577,25 @@ async function handleRawContentRequest(body: {
           // starred bullet containing a hyphen ("post-launch") was read as a
           // new job header and printed as a bold heading with no dates.
           const isBulletLine = /^[-•*\u2022]/.test(line.trimStart());
+
+          // A role written on three lines (company / title / date range) put its
+          // date line through the job-header split, so the exported CV showed
+          // "January 2023 | Present" as the employer and title and lost both.
+          const isDateOnlyLine =
+            !isBulletLine &&
+            /^(?:[A-Za-z]{3,9}\.?\s+)?\d{4}\s*[-–—]\s*(?:present|current|(?:[A-Za-z]{3,9}\.?\s+)?\d{4})$/i.test(
+              line.trim(),
+            );
+          if (isDateOnlyLine) {
+            if (!currentJob) currentJob = { company: "", title: "", dates: "", bullets: [] };
+            currentJob.dates = normaliseDateRange(line.trim());
+            continue;
+          }
+
           const hasPipe = line.includes("|");
           const hasDash = /\s*[–—-]\s*/.test(line) && !isBulletLine;
           const isJobHeader = (hasPipe || hasDash) && !isBulletLine;
+
 
 
           if (isJobHeader) {
@@ -1638,16 +1654,25 @@ async function handleRawContentRequest(body: {
           } else if (isBulletLine) {
             if (currentJob) currentJob.bullets.push(line.trimStart().replace(/^[-•*\u2022]\s*/, ""));
 
-          } else if (currentJob && line.length < 80 && !line.includes("@") && !isLocation(line)) {
+          } else if (line.length < 80 && !line.includes("@") && !isLocation(line)) {
             const cleanedLine = stripDates(line);
             if (!cleanedLine) continue;
+            // A plain line arriving after a role's bullets is the next
+            // employer, so it opens a new role instead of overwriting the
+            // previous one.
+            if (currentJob && currentJob.bullets.length > 0) {
+              jobs.push(currentJob);
+              currentJob = null;
+            }
+            if (!currentJob) currentJob = { company: "", title: "", dates: "", bullets: [] };
             const lineIsTitle = isJobTitle(cleanedLine);
             const lineIsCompany = isCompanyName(cleanedLine);
             if (!currentJob.company && lineIsCompany) currentJob.company = cleanedLine;
             else if (!currentJob.title && lineIsTitle) currentJob.title = cleanedLine;
-            else if (!currentJob.company && !lineIsTitle) currentJob.company = cleanedLine;
+            else if (!currentJob.company) currentJob.company = cleanedLine;
             else if (!currentJob.title) currentJob.title = cleanedLine;
           }
+
         }
         if (currentJob) jobs.push(currentJob);
         norm.experience = jobs.map((j) => ({
@@ -1747,10 +1772,25 @@ async function handleRawContentRequest(body: {
     if (type === "cv") {
       docxBytes = await buildResumeDocxBytes(norm);
     } else {
+      // The builder prints the letterhead, date, subject line, salutation and
+      // sign-off itself. Any of those repeated inside the drafted text printed
+      // twice, so the exported letter opened "Dear Hiring Manager" twice and
+      // closed "Sincerely" twice.
+      const isFurniture = (p: string): boolean => {
+        const t = p.replace(/\s+/g, " ").trim();
+        if (!t) return true;
+        if (/^(date\s*:|re\s*:|subject\s*:)/i.test(t)) return true;
+        if (/^dear\b/i.test(t) && t.length < 60) return true;
+        if (/^(sincerely|yours sincerely|yours faithfully|kind regards|best regards|regards)\b/i.test(t)) return true;
+        if (t.includes("@") && t.length < 200) return true;
+        if (/^[A-Za-z]+\s+\d{1,2},?\s+\d{4}$/.test(t) || /^\d{1,2}\s+[A-Za-z]+\s+\d{4}$/.test(t)) return true;
+        return false;
+      };
       const paragraphs = content
         .split(/\n\s*\n/)
         .map((p) => p.trim())
-        .filter(Boolean);
+        .filter((p) => p && !isFurniture(p));
+
       docxBytes = await buildCoverLetterDocxBytes({
         personalInfo: norm.personalInfo,
         jobTitle: jobTitle || "",
