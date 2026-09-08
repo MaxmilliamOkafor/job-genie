@@ -2049,9 +2049,11 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
   // folded in as a labelled line so no second "skill" heading can steal it.
   const skillGroups: Array<{ label: string; items: string[] }> = [];
   if (data.coreCompetencies?.length) skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skillGroups?.length) skillGroups.push(...data.skillGroups);
   if (data.skills?.primary?.length) skillGroups.push({ label: "Technical", items: data.skills.primary });
   if (data.skills?.secondary?.length) skillGroups.push({ label: "Additional", items: data.skills.secondary });
   if (skillGroups.length) {
+
     children.push(...docxSectionHeader("Technical Skills"));
     children.push(...docxSkills(skillGroups));
   }
