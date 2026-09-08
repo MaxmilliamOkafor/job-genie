@@ -51,14 +51,15 @@ describe('location handling', () => {
 });
 
 describe('freshness windows', () => {
-  it('maps ranges to hours and any time to no limit', () => {
-    expect(postedHours('24h')).toBe(24);
-    expect(postedHours('7d')).toBe(168);
+  it('maps ranges to hours and any date to no limit', () => {
+    expect(postedHours('24')).toBe(24);
+    expect(postedHours('168')).toBe(168);
     expect(postedHours('any')).toBeNull();
   });
 
   it('treats short windows as strict about real posting dates', () => {
-    expect(isStrictWindow('24h')).toBe(true);
+    expect(isStrictWindow('24')).toBe(true);
+    expect(isStrictWindow('720')).toBe(false);
     expect(isStrictWindow('any')).toBe(false);
   });
 });
@@ -76,9 +77,10 @@ describe('filter counting', () => {
         skills: ['Python', 'SQL'],
         workplace: ['Remote'],
       }),
-    ).toBe(4);
+    ).toBe(3);
   });
 });
+
 
 describe('eligibility notes', () => {
   it('reports stated requirements and leaves the rest unknown', () => {
