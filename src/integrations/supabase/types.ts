@@ -338,16 +338,31 @@ export type Database = {
       job_pool: {
         Row: {
           company: string
+          dedupe_key: string | null
           department: string | null
           description: string | null
+          duplicate_of: string | null
+          employer_direct: boolean
           employment_type: string | null
           external_id: string
           first_seen_at: string
           id: string
+          is_canonical: boolean
+          last_seen_in_feed_at: string | null
+          link_checked_at: string | null
+          link_http_status: number | null
+          link_note: string | null
+          link_status: string
           location: string | null
           posted_at: string
+          posted_at_known: boolean
           provider: string
+          requisition_id: string | null
+          resolved_url: string | null
+          risk_flags: string[]
           salary: string | null
+          search_tsv: unknown
+          seniority: string | null
           source_id: string | null
           title: string
           updated_at: string
@@ -356,16 +371,31 @@ export type Database = {
         }
         Insert: {
           company: string
+          dedupe_key?: string | null
           department?: string | null
           description?: string | null
+          duplicate_of?: string | null
+          employer_direct?: boolean
           employment_type?: string | null
           external_id: string
           first_seen_at?: string
           id?: string
+          is_canonical?: boolean
+          last_seen_in_feed_at?: string | null
+          link_checked_at?: string | null
+          link_http_status?: number | null
+          link_note?: string | null
+          link_status?: string
           location?: string | null
           posted_at?: string
+          posted_at_known?: boolean
           provider: string
+          requisition_id?: string | null
+          resolved_url?: string | null
+          risk_flags?: string[]
           salary?: string | null
+          search_tsv?: unknown
+          seniority?: string | null
           source_id?: string | null
           title: string
           updated_at?: string
@@ -374,16 +404,31 @@ export type Database = {
         }
         Update: {
           company?: string
+          dedupe_key?: string | null
           department?: string | null
           description?: string | null
+          duplicate_of?: string | null
+          employer_direct?: boolean
           employment_type?: string | null
           external_id?: string
           first_seen_at?: string
           id?: string
+          is_canonical?: boolean
+          last_seen_in_feed_at?: string | null
+          link_checked_at?: string | null
+          link_http_status?: number | null
+          link_note?: string | null
+          link_status?: string
           location?: string | null
           posted_at?: string
+          posted_at_known?: boolean
           provider?: string
+          requisition_id?: string | null
+          resolved_url?: string | null
+          risk_flags?: string[]
           salary?: string | null
+          search_tsv?: unknown
+          seniority?: string | null
           source_id?: string | null
           title?: string
           updated_at?: string
@@ -391,6 +436,20 @@ export type Database = {
           workplace_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "job_pool_duplicate_of_fkey"
+            columns: ["duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "job_pool"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_pool_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "job_source_health"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "job_pool_source_id_fkey"
             columns: ["source_id"]
@@ -890,10 +949,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      job_source_health: {
+        Row: {
+          company_name: string | null
+          consecutive_failures: number | null
+          enabled: boolean | null
+          id: string | null
+          last_error: string | null
+          last_fetched_at: string | null
+          last_success_at: string | null
+          live_jobs: number | null
+          provider: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      job_pool_mark_canonical: { Args: never; Returns: number }
+      jp_norm_location: { Args: { v: string }; Returns: string }
+      jp_norm_text: { Args: { v: string }; Returns: string }
+      jp_norm_title: { Args: { v: string }; Returns: string }
+      jp_requisition_id: {
+        Args: { p_external_id: string; p_url: string }
+        Returns: string
+      }
+      jp_seniority: { Args: { v: string }; Returns: string }
     }
     Enums: {
       application_status:
