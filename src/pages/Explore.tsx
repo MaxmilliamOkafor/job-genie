@@ -514,7 +514,8 @@ const ExplorePage = () => {
         employment_type: job.employment_type ?? null,
         workplace_type: job.workplace_type ?? null,
         source_name: providerLabel(job.provider),
-        url_status: job.link_status,
+        // The saved-jobs table records link state in its own vocabulary.
+        url_status: SAVED_URL_STATUS[job.link_status] ?? 'unknown',
         url_last_checked: job.link_checked_at,
       });
       if (saveError) throw saveError;
