@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppLayout, ViewHeader } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,22 +9,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useApplications, type Application } from '@/hooks/useApplications';
 import { Copy, Download, Eye, FileText, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
-
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-const slug = (s: string) => s.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+import {
+  documentSlug as slug,
+  documentVersion,
+  downloadBase64Docx,
+  downloadText,
+  generateDocx,
+  type DocKind,
+} from '@/lib/documentExport';
 
 export default function Documents() {
   const { applications, isLoading } = useApplications();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Application | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  /** Fingerprint of the text behind each downloaded file, so stale saves are flagged. */
+  const [exported, setExported] = useState<Record<string, string>>({});
+
+  // A different application means different documents: clear the export state
+  // so one document's freshness never speaks for another's.
+  useEffect(() => {
+    setExported({});
+    setExporting(null);
+  }, [open?.id]);
 
   const docs = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -118,12 +125,19 @@ export default function Documents() {
             {(['cv', 'letter'] as const).map((kind) => {
               const text =
                 (kind === 'cv' ? open?.tailored_resume : open?.tailored_cover_letter) ?? '';
-              const filename = `${slug(open?.job?.company ?? 'company')}-${
+              const base = `${slug(open?.job?.company ?? 'company')}-${
                 kind === 'cv' ? 'CV' : 'Cover-Letter'
-              }.txt`;
+              }`;
+              const docKind: DocKind = kind === 'cv' ? 'cv' : 'coverletter';
+              const version = documentVersion(
+                text,
+                open?.job?.title ?? '',
+                open?.job?.company ?? '',
+              );
+              const busy = exporting === `${open?.id}:${kind}`;
               return (
                 <TabsContent key={kind} value={kind} className="space-y-3">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
                       disabled={!text}
@@ -134,10 +148,59 @@ export default function Documents() {
                     >
                       <Copy className="mr-2 h-4 w-4" /> Copy
                     </Button>
-                    <Button disabled={!text} onClick={() => download(filename, text)}>
-                      <Download className="mr-2 h-4 w-4" /> Download
+                    <Button
+                      disabled={!text || busy}
+                      onClick={async () => {
+                        setExporting(`${open?.id}:${kind}`);
+                        try {
+                          const out = await generateDocx({
+                            text,
+                            kind: docKind,
+                            jobTitle: open?.job?.title,
+                            company: open?.job?.company,
+                            fileName: `${base}.docx`,
+                          });
+                          downloadBase64Docx(out.base64, out.fileName);
+                          setExported((prev) => ({ ...prev, [`${open?.id}:${kind}`]: out.version }));
+                          toast.success('Word file downloaded');
+                        } catch (e) {
+                          setExported((prev) => {
+                            const next = { ...prev };
+                            delete next[`${open?.id}:${kind}`];
+                            return next;
+                          });
+                          toast.error(
+                            e instanceof Error
+                              ? e.message
+                              : 'The Word file could not be created. Nothing was downloaded.',
+                          );
+                        } finally {
+                          setExporting(null);
+                        }
+                      }}
+                    >
+                      {busy ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      Download Word
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={!text}
+                      onClick={() => downloadText(`${base}.txt`, text)}
+                    >
+                      Download text
                     </Button>
                   </div>
+                  {exported[`${open?.id}:${kind}`] &&
+                    exported[`${open?.id}:${kind}`] !== version && (
+                      <p className="text-sm text-amber-300">
+                        This text changed after your last download. The file you saved is out of
+                        date - download it again.
+                      </p>
+                    )}
                   <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-4 text-sm">
                     {text || 'Not generated yet.'}
                   </pre>

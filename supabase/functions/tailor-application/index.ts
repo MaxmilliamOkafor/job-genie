@@ -2027,6 +2027,195 @@ function categoriseKeywordsByPriority(
   };
 }
 
+// ============================================================
+// ATS STRATEGY FROM THE EXTENSION
+//
+// atsStrategy arrives as a string. When the extension fills it with JSON
+// it carries the posting's requirements, a coverage target and a map of
+// keyword -> the evidence in this candidate's own profile that supports
+// it. The evidence map is what keeps coverage work honest: a keyword with
+// no evidence is reported as unsupported, never written in.
+// ============================================================
+interface AtsStrategy {
+  requirements: string[];
+  keywordCoverageTarget: number | null;
+  /** lowercased keyword -> supporting evidence sentence from the profile */
+  evidence: Record<string, string>;
+  notes: string;
+}
+
+function parseAtsStrategy(raw: unknown): AtsStrategy {
+  const empty: AtsStrategy = { requirements: [], keywordCoverageTarget: null, evidence: {}, notes: "" };
+  if (typeof raw !== "string" || !raw.trim()) return empty;
+  const text = raw.trim();
+  if (!text.startsWith("{")) return { ...empty, notes: text.slice(0, 2000) };
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ...empty, notes: text.slice(0, 2000) };
+  }
+
+  const requirements = Array.isArray(parsed?.requirements)
+    ? parsed.requirements
+        .map((r: unknown) => (typeof r === "string" ? r : typeof (r as any)?.text === "string" ? (r as any).text : ""))
+        .filter((r: string) => r && r.trim())
+        .slice(0, 80)
+    : [];
+
+  const rawTarget = parsed?.keywordCoverageTarget;
+  let target: number | null = null;
+  if (typeof rawTarget === "number" && Number.isFinite(rawTarget)) {
+    target = rawTarget <= 1 ? Math.round(rawTarget * 100) : Math.round(rawTarget);
+    target = Math.max(0, Math.min(100, target));
+  }
+
+  const evidence: Record<string, string> = {};
+  const source =
+    parsed?.keywordEvidence ?? parsed?.evidence ?? parsed?.evidenceMap ?? parsed?.keyword_evidence ?? null;
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    for (const [k, v] of Object.entries(source)) {
+      const value = typeof v === "string" ? v : Array.isArray(v) ? v.filter((x) => typeof x === "string").join("; ") : "";
+      if (k.trim() && value.trim()) evidence[k.trim().toLowerCase()] = value.trim().slice(0, 400);
+    }
+  } else if (Array.isArray(source)) {
+    for (const item of source) {
+      const k = typeof item?.keyword === "string" ? item.keyword : typeof item?.term === "string" ? item.term : "";
+      const v = typeof item?.evidence === "string" ? item.evidence : typeof item?.source === "string" ? item.source : "";
+      if (k.trim() && v.trim()) evidence[k.trim().toLowerCase()] = v.trim().slice(0, 400);
+    }
+  }
+
+  return {
+    requirements,
+    keywordCoverageTarget: target,
+    evidence,
+    notes: typeof parsed?.notes === "string" ? parsed.notes.slice(0, 2000) : "",
+  };
+}
+
+/**
+ * How the writing must read, plus the extension's requirements and evidence
+ * map when it supplied one. The writing rules go out on every request.
+ */
+const NATURAL_WRITING_RULES = `HOW THIS MUST READ.
+
+Plain, specific professional English. Each bullet says what the candidate did, how they did it, and the result their own record supports. A reader who knows the field should recognise real work.
+
+Posting keywords are woven into achievements the candidate already has. A keyword sitting in a sentence that exists only to hold it is a keyword dump, and a reviewer spots one instantly.
+
+DO NOT WRITE:
+- Stock phrases: "results-driven professional", "proven track record", "dynamic self-starter", "passionate about", "seasoned", "leverage synergies", "wearing many hats".
+- Exaggerated adjectives on the candidate's own work: world-class, cutting-edge, unparalleled, exceptional, outstanding.
+- Generic praise of the employer ("industry leader", "innovative company", "exciting opportunity"). Where the letter says why this employer, it names something concrete from the posting.
+- The same sentence opening twice in a row, and no more than two bullets in the whole CV starting with the same verb.
+- Synonym substitution for its own sake. If the candidate wrote "customer support", it does not become "client success". Contractions are not introduced.
+
+PRESERVE EXACTLY: approximate figures ("roughly 40%", "around 50 clients") keep their qualifier; responsibilities keep their scope and scale; names, dates, employers, titles and personal details are reproduced as recorded. Never invent experience, a tool, a metric, a qualification or an eligibility to close a gap.`;
+
+function buildStrategyBlock(strategy: AtsStrategy): string {
+  const evidenceEntries = Object.entries(strategy.evidence).slice(0, 40);
+
+  const parts: string[] = [NATURAL_WRITING_RULES];
+
+  if (strategy.requirements.length || evidenceEntries.length || strategy.notes) {
+    parts.push(
+      "EXTENSION-SUPPLIED STRATEGY. Everything below comes from the posting and from this candidate's saved profile. It adds nothing you may invent.",
+    );
+  }
+
+
+  if (strategy.requirements.length) {
+    parts.push(
+      `REQUIREMENTS FROM THE POSTING, HIGHEST PRIORITY FIRST. Cover the ones the evidence below supports, and cover them inside real achievements:\n${strategy.requirements
+        .map((r, i) => `${i + 1}. ${r}`)
+        .join("\n")}`,
+    );
+  }
+
+  if (evidenceEntries.length) {
+    parts.push(
+      `KEYWORD -> EVIDENCE IN THIS PROFILE. A keyword may only appear in the CV where this evidence, or the profile itself, supports it. Write the keyword into the achievement the evidence names, not into a new one:\n${evidenceEntries
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join("\n")}`,
+    );
+    parts.push(
+      "ANY POSTING TERM WITH NO EVIDENCE LINE AND NO BASIS IN THE PROFILE IS LEFT OUT. It is reported back to the candidate as unsupported. Never close a coverage gap by inventing experience, a tool, a metric, a qualification or an eligibility.",
+    );
+  }
+
+  if (strategy.keywordCoverageTarget !== null) {
+    parts.push(
+      `COVERAGE TARGET: ${strategy.keywordCoverageTarget}% of the posting's relevant keywords, reached only through evidenced material. Falling short honestly is correct; padding to hit the number is a failure.`,
+    );
+  }
+
+  if (strategy.notes) parts.push(`NOTES FROM THE CANDIDATE'S STRATEGY FIELD:\n${strategy.notes}`);
+
+  return parts.join("\n\n");
+}
+
+// ============================================================
+// WHOLE-TERM KEYWORD MATCHING
+//
+// Substring matching inflates coverage and lies about skills: "java"
+// matches "javascript", "react" matches "reactive". Matching on term
+// boundaries fixes that while preserving C++, C#, .NET, CI/CD and Node.js.
+// ============================================================
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildTermPattern(term: string): RegExp | null {
+  const t = term.trim();
+  if (!t) return null;
+  // Internal spaces, hyphens and slashes are interchangeable separators.
+  const core = escapeRegex(t)
+    .replace(/\\?\s+/g, "[\\s\\-]+")
+    .replace(/\//g, "[\\/\\-]");
+  const startsAlnum = /^[A-Za-z0-9]/.test(t);
+  const endsAlnum = /[A-Za-z0-9]$/.test(t);
+  // Trailing +, # and . are part of the term (C++, C#, .NET) and must not
+  // be followed by more word characters.
+  const prefix = startsAlnum ? "(?<![A-Za-z0-9+#])" : "";
+  const suffix = endsAlnum ? "(?![A-Za-z0-9+#])" : "(?![A-Za-z0-9])";
+  try {
+    return new RegExp(prefix + core + suffix, "i");
+  } catch {
+    return null;
+  }
+}
+
+function termAppearsIn(text: string, term: string): boolean {
+  const pattern = buildTermPattern(term);
+  if (!pattern) return false;
+  return pattern.test(text);
+}
+
+interface CoverageResult {
+  matched: string[];
+  missing: string[];
+  percent: number;
+}
+
+/** Coverage counted off real document text: matched unique terms / total unique terms. */
+function measureCoverage(text: string, terms: string[]): CoverageResult {
+  const unique = Array.from(new Set(terms.map((t) => t.trim()).filter(Boolean)));
+  const matched: string[] = [];
+  const missing: string[] = [];
+  for (const term of unique) {
+    if (termAppearsIn(text, term)) matched.push(term);
+    else missing.push(term);
+  }
+  return {
+    matched,
+    missing,
+    percent: unique.length === 0 ? 0 : Math.round((matched.length / unique.length) * 100),
+  };
+}
+
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -2169,9 +2358,23 @@ serve(async (req) => {
       `Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ""}`,
     );
 
+    // The extension may send a structured strategy in atsStrategy: the
+    // posting's requirements, a coverage target and a keyword -> profile
+    // evidence map. Requirements it names are merged into the keyword pool
+    // so coverage is measured against what the posting actually asks for.
+    const atsStrategy = parseAtsStrategy(userProfile.atsStrategy);
+    const mergedRequirements = Array.from(
+      new Set([...requirements, ...atsStrategy.requirements].map((r) => r.trim()).filter(Boolean)),
+    );
+    console.log(
+      `[ATS strategy] requirements: ${atsStrategy.requirements.length}, evidence entries: ${Object.keys(atsStrategy.evidence).length}, target: ${atsStrategy.keywordCoverageTarget ?? "none"}`,
+    );
+
     // Jobscan keyword extraction
-    const jdKeywords = extractJobscanKeywords(description, requirements);
+    const jdKeywords = extractJobscanKeywords(description, mergedRequirements);
     console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
+
+    const strategyBlock = buildStrategyBlock(atsStrategy);
 
     // Calculate accurate match score with enhanced matching
     const matchResult = calculateMatchScore(
@@ -3335,6 +3538,7 @@ ${
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
+            ...(strategyBlock ? [{ role: "user", content: strategyBlock }] : []),
           ],
           max_tokens: apiConfig.maxTokens,
           temperature: apiConfig.temperature,
@@ -3594,23 +3798,12 @@ ${
     const generatedCoverText = (result.tailoredCoverLetter || "").toLowerCase();
     const combinedGeneratedText = `${generatedResumeText} ${generatedCoverText}`;
 
-    // Count how many JD keywords appear in the generated content
-    const actualMatched: string[] = [];
-    const actualMissing: string[] = [];
+    // Count how many JD keywords appear in the generated content, on whole
+    // terms only: "java" is not satisfied by "javascript".
+    const firstPass = measureCoverage(combinedGeneratedText, jdKeywords.allKeywords);
+    const actualMatched: string[] = [...firstPass.matched];
+    const actualMissing: string[] = [...firstPass.missing];
 
-    for (const keyword of jdKeywords.allKeywords) {
-      const keywordLower = keyword.toLowerCase();
-      // Check for exact or partial match
-      if (
-        combinedGeneratedText.includes(keywordLower) ||
-        combinedGeneratedText.includes(keywordLower.replace(/[.\-\/]/g, " ")) ||
-        combinedGeneratedText.includes(keywordLower.replace(/\s+/g, ""))
-      ) {
-        actualMatched.push(keyword);
-      } else {
-        actualMissing.push(keyword);
-      }
-    }
 
     // Calculate actual score from generated content
     const actualScore =
@@ -3660,7 +3853,28 @@ ${
       // now routes to the skills list, which captures the same terms
       // honestly, and RULE 2's evidence gate governs what may be woven
       // into a real bullet.
-      const singleWordMissing = actualMissing.slice();
+      // A KEYWORD IS ONLY WRITTEN IN WHERE THE PROFILE SUPPORTS IT.
+      // The candidate's saved skills, experience, projects and
+      // certifications, plus any evidence line the extension supplied, are
+      // the whole permitted source. Anything else stays missing and is
+      // reported back as an unsupported requirement, because a skill the
+      // candidate cannot defend in an interview is worse than a gap.
+      const profileEvidenceText = [
+        JSON.stringify(userProfile.skills || []),
+        JSON.stringify(userProfile.professionalExperience || []),
+        JSON.stringify(userProfile.relevantProjects || []),
+        JSON.stringify(userProfile.certifications || []),
+        JSON.stringify(userProfile.education || []),
+        userProfile.coverLetter || "",
+      ].join(" \n ");
+
+      const singleWordMissing = actualMissing.filter(
+        (kw) => atsStrategy.evidence[kw.toLowerCase()] || termAppearsIn(profileEvidenceText, kw),
+      );
+      const unevidencedSkipped = actualMissing.length - singleWordMissing.length;
+      if (unevidencedSkipped > 0) {
+        console.log(`[FORCE-INJECT] Skipped ${unevidencedSkipped} keywords with no evidence in the profile`);
+      }
 
       // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
       const toInjectSingles = singleWordMissing;
@@ -3740,28 +3954,17 @@ ${
       if (result.resumeStructured?.skills) {
         const existingPrimary = Array.isArray(result.resumeStructured.skills.primary) ? result.resumeStructured.skills.primary : [];
         const existingPrimaryLower = existingPrimary.map((s: string) => s.toLowerCase());
-        const newSkills = actualMissing.filter(kw => !existingPrimaryLower.includes(kw.toLowerCase()));
+        const newSkills = singleWordMissing.filter(kw => !existingPrimaryLower.includes(kw.toLowerCase()));
         result.resumeStructured.skills.primary = [...existingPrimary, ...newSkills];
         console.log(`[FORCE-INJECT] Added ${newSkills.length} keywords to structured skills`);
       }
 
-      // Recalculate match score after injection
-      const postInjectText = `${result.tailoredResume.toLowerCase()} ${(result.tailoredCoverLetter || "").toLowerCase()}`;
-      const finalMatched: string[] = [];
-      const finalMissing: string[] = [];
+      // Recalculate coverage after injection, whole terms only.
+      const postInjectText = `${result.tailoredResume} ${result.tailoredCoverLetter || ""}`;
+      const secondPass = measureCoverage(postInjectText, jdKeywords.allKeywords);
+      const finalMatched: string[] = [...secondPass.matched];
+      const finalMissing: string[] = [...secondPass.missing];
 
-      for (const keyword of jdKeywords.allKeywords) {
-        const keywordLower = keyword.toLowerCase();
-        if (
-          postInjectText.includes(keywordLower) ||
-          postInjectText.includes(keywordLower.replace(/[.\-\/]/g, " ")) ||
-          postInjectText.includes(keywordLower.replace(/\s+/g, ""))
-        ) {
-          finalMatched.push(keyword);
-        } else {
-          finalMissing.push(keyword);
-        }
-      }
 
       const finalScore = jdKeywords.allKeywords.length > 0
         ? Math.round((finalMatched.length / jdKeywords.allKeywords.length) * 100)
@@ -3780,12 +3983,36 @@ ${
       result.forceInjectedCount = finalMatched.length - (jdKeywords.allKeywords.length - actualMissing.length - finalMissing.length);
     }
 
-    // Use actual calculated score
-    result.matchScore = result.matchScore || actualScore;
-    result.keywordsMatched = actualMatched;
-    result.keywordsMissing = actualMissing;
-    result.matchedKeywords = actualMatched; // Alias for extension compatibility
-    result.missingKeywords = actualMissing; // Alias for extension compatibility
+    // MEASURED COVERAGE, NOT A PROMISE.
+    // The number reported is counted off the final document text with
+    // whole-term matching, so Java is never satisfied by JavaScript and
+    // C++, C#, .NET and CI/CD survive intact. It is keyword coverage --
+    // not an ATS pass probability, not a recruiter verdict.
+    const measured = measureCoverage(
+      `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`,
+      jdKeywords.allKeywords,
+    );
+    const unsupportedRequirements = measured.missing.filter((kw) => !atsStrategy.evidence[kw.toLowerCase()]);
+
+    result.matchScore = measured.percent;
+    result.keywordCoverage = {
+      matched: measured.matched.length,
+      total: jdKeywords.allKeywords.length,
+      percent: measured.percent,
+      label:
+        jdKeywords.allKeywords.length === 0
+          ? "Not measured - no keywords found in this posting"
+          : `${measured.matched.length} of ${jdKeywords.allKeywords.length} keywords (${measured.percent}%)`,
+      target: atsStrategy.keywordCoverageTarget,
+      matchedTerms: measured.matched,
+      missingTerms: measured.missing,
+      unsupportedRequirements,
+      meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
+    };
+    result.keywordsMatched = measured.matched;
+    result.keywordsMissing = measured.missing;
+    result.matchedKeywords = measured.matched; // Alias for extension compatibility
+    result.missingKeywords = measured.missing; // Alias for extension compatibility
     result.keywordAnalysis = result.keywordAnalysis || {
       hardSkills: jdKeywords.hardSkills,
       softSkills: jdKeywords.softSkills,
