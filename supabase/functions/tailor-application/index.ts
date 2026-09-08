@@ -3335,6 +3335,7 @@ ${
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
+            ...(strategyBlock ? [{ role: "user", content: strategyBlock }] : []),
           ],
           max_tokens: apiConfig.maxTokens,
           temperature: apiConfig.temperature,
