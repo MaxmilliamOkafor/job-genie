@@ -8,7 +8,7 @@ import {
   normaliseQuestion,
   selectionCommitted,
   type ScreeningAnswer,
-} from './screeningAnswers';
+} from '../src/lib/screeningAnswers';
 
 const NOW = new Date('2026-09-08T00:00:00Z');
 const fresh = (over: Partial<ScreeningAnswer> = {}): ScreeningAnswer => ({
