@@ -3932,7 +3932,7 @@ ${
       if (result.resumeStructured?.skills) {
         const existingPrimary = Array.isArray(result.resumeStructured.skills.primary) ? result.resumeStructured.skills.primary : [];
         const existingPrimaryLower = existingPrimary.map((s: string) => s.toLowerCase());
-        const newSkills = actualMissing.filter(kw => !existingPrimaryLower.includes(kw.toLowerCase()));
+        const newSkills = singleWordMissing.filter(kw => !existingPrimaryLower.includes(kw.toLowerCase()));
         result.resumeStructured.skills.primary = [...existingPrimary, ...newSkills];
         console.log(`[FORCE-INJECT] Added ${newSkills.length} keywords to structured skills`);
       }
