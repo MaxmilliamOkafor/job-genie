@@ -1597,8 +1597,9 @@ async function handleRawContentRequest(body: {
             }
 
             currentJob = { company, title, dates: toYearOnly(dates), bullets: [] };
-          } else if (line.startsWith("-") || line.startsWith("•") || line.startsWith("*")) {
-            if (currentJob) currentJob.bullets.push(line.replace(/^[-•*]\s*/, ""));
+          } else if (isBulletLine) {
+            if (currentJob) currentJob.bullets.push(line.trimStart().replace(/^[-•*\u2022]\s*/, ""));
+
           } else if (currentJob && line.length < 80 && !line.includes("@") && !isLocation(line)) {
             const cleanedLine = stripDates(line);
             if (!cleanedLine) continue;
