@@ -93,7 +93,7 @@ function relativeTime(iso: string | null): string {
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hours ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
   const days = Math.round(hours / 24);
   if (days < 31) return `${days} day${days === 1 ? '' : 's'} ago`;
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -180,7 +180,10 @@ function JobRow({
       <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
         {job.workplace_type && <span className="text-foreground">{job.workplace_type === 'Onsite' ? 'On site' : job.workplace_type}</span>}
         <span>{postingAge(job)}</span>
-        <StatusLabel job={job} />
+        {/* On narrow screens the status keeps its own line so it is never clipped. */}
+        <span className="basis-full sm:basis-auto">
+          <StatusLabel job={job} />
+        </span>
       </p>
     </button>
   );
