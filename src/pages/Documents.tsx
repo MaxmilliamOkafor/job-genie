@@ -20,6 +20,8 @@ import {
 
 export default function Documents() {
   const { applications, isLoading } = useApplications();
+  const { profile } = useProfile();
+
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Application | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
