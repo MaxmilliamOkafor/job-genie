@@ -1496,15 +1496,24 @@ async function handleRawContentRequest(body: {
       }
       return "";
     };
-    const toYearOnly = (dateStr: string): string => {
-      if (!dateStr) return "";
-      const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present/i.test(dateStr);
-      if (hasPresent && years && years.length >= 1) return `${years[0]} - Present`;
-      if (years && years.length >= 2) return `${years[0]} - ${years[1]}`;
-      if (years && years.length === 1) return years[0];
-      return dateStr;
+    // Employment dates are printed as written, with full month names. The old
+    // helper reduced "January 2023 - Present" to "2023 - Present", which lost
+    // the month from every role on the CV.
+    const MONTHS: Record<string, string> = {
+      jan: "January", feb: "February", mar: "March", apr: "April", may: "May", jun: "June",
+      jul: "July", aug: "August", sep: "September", sept: "September", oct: "October",
+      nov: "November", dec: "December",
     };
+    const normaliseDateRange = (dateStr: string): string => {
+      if (!dateStr) return "";
+      return dateStr
+        .replace(/[\u2012-\u2015\u2212]/g, "-")
+        .replace(/\b([A-Za-z]{3,5})\.?\b/g, (m, w: string) => MONTHS[w.toLowerCase()] ?? m)
+        .replace(/\s*-\s*/g, " - ")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
     const locationPatterns = [
       /^[A-Z][a-z]+,\s*[A-Z]{2}$/,
       /^[A-Z][a-z]+,\s*[A-Z][a-z]+$/,
