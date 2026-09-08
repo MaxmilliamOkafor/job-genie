@@ -106,23 +106,33 @@ export function buildProjectsSection(projects: unknown): string {
 /** Replaces any existing projects section with the canonical block, before EDUCATION. */
 export function applyProjectsSection(resumeText: string, projectsBlock: string): string {
   if (!resumeText || !projectsBlock) return resumeText;
-  let resume = resumeText;
-  // The end-of-document alternative must be the real end of the text, not the
-  // end of a line: with the /m flag a bare $ matched straight after the heading
-  // and left the whole project body orphaned in the document.
-  const sectionRegex =
-    /^(SELECTED PROJECTS|RELEVANT PROJECTS|KEY PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$(?![\s\S]))/gim;
 
-  while (sectionRegex.test(resume)) {
-    resume = resume.replace(sectionRegex, "");
-    sectionRegex.lastIndex = 0;
+  // Scanned line by line rather than with one regex: a case-insensitive
+  // regex also made the "next heading" test case-insensitive, so removal
+  // stopped at the first project name and orphaned the whole block.
+  const PROJECT_HEADINGS = ["selected projects", "relevant projects", "key projects", "projects"];
+  const isProjectHeading = (line: string) => PROJECT_HEADINGS.includes(line.trim().toLowerCase());
+  const isSectionHeading = (line: string) => /^[A-Z][A-Z0-9 &\/\-]{2,}$/.test(line.trim());
+
+  const kept: string[] = [];
+  const lines = resumeText.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!isProjectHeading(lines[i])) {
+      kept.push(lines[i]);
+      continue;
+    }
+    i++; // skip the heading, then skip its body up to the next section heading
+    while (i < lines.length && !(isSectionHeading(lines[i]) && !isProjectHeading(lines[i]))) i++;
+    i--;
   }
-  resume = resume.replace(/\n{3,}/g, "\n\n").trim();
+
+  let resume = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 
   const eduRegex = /^EDUCATION\b/m;
   if (eduRegex.test(resume)) {
     return resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
   }
+
   return resume.trimEnd() + "\n\n" + projectsBlock + "\n";
 }
 
