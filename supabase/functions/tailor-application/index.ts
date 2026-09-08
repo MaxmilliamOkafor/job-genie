@@ -4008,7 +4008,27 @@ ${
     if (invented.length) {
       console.warn(`[FIDELITY] Removed skills not recorded in the profile: ${invented.join(", ")}`);
     }
+    // A tool the profile does not record must not survive in the letter either,
+    // where it would still be read as a claim and still count as coverage.
+    if (result.tailoredCoverLetter && invented.length) {
+      let letter: string = result.tailoredCoverLetter;
+      for (const term of invented) {
+        if (!/^[A-Za-z][A-Za-z0-9+#.\- ]{1,24}$/.test(term)) continue;
+        const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        letter = letter
+          .replace(new RegExp(`\\b${esc}\\b\\s+and\\s+`, "gi"), "")
+          .replace(new RegExp(`(,\\s*|\\s+and\\s+)\\b${esc}\\b`, "gi"), "")
+          .replace(new RegExp(`\\s*\\b${esc}\\b`, "gi"), "");
+      }
+      result.tailoredCoverLetter = letter
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/\s+,/g, ",")
+        .replace(/,\s*\./g, ".")
+        .replace(/\(\s*\)/g, "")
+        .trim();
+    }
     result.removedUnrecordedSkills = invented;
+
 
 
 
