@@ -2002,6 +2002,13 @@ function docxProject(p: ProjectEntry): Paragraph[] {
     }));
   }
   for (const b of (p.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
+  if (p.links?.length) {
+    out.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [TR({ text: p.links.join("  |  "), font: DOCX_FONT, size: 19, color: DOCX_MUTED })],
+    }));
+  }
+
   return out;
 }
 
