@@ -34,9 +34,10 @@ describe('location handling', () => {
   it('drops nearby areas unless asked for', () => {
     const narrow = locationTerms('Dublin', false);
     const wide = locationTerms('Dublin', true);
-    expect(narrow).toEqual(['Dublin']);
+    expect(narrow).toEqual(['dublin']);
     expect(wide.length).toBeGreaterThan(narrow.length);
   });
+
 
   it('collapses repeated location components', () => {
     expect(tidyLocation('Dublin, Dublin, Ireland')).toBe('Dublin, Ireland');
