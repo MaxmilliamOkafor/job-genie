@@ -107,8 +107,12 @@ export function buildProjectsSection(projects: unknown): string {
 export function applyProjectsSection(resumeText: string, projectsBlock: string): string {
   if (!resumeText || !projectsBlock) return resumeText;
   let resume = resumeText;
+  // The end-of-document alternative must be the real end of the text, not the
+  // end of a line: with the /m flag a bare $ matched straight after the heading
+  // and left the whole project body orphaned in the document.
   const sectionRegex =
-    /^(SELECTED PROJECTS|RELEVANT PROJECTS|KEY PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
+    /^(SELECTED PROJECTS|RELEVANT PROJECTS|KEY PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$(?![\s\S]))/gim;
+
   while (sectionRegex.test(resume)) {
     resume = resume.replace(sectionRegex, "");
     sectionRegex.lastIndex = 0;
