@@ -1556,7 +1556,13 @@ async function handleRawContentRequest(body: {
         const jobs: Job[] = [];
 
         for (const line of section.content) {
-          if (isLocation(line)) continue;
+          // A location line belongs to the role above it, so it is kept rather
+          // than discarded.
+          if (isLocation(line)) {
+            if (currentJob && !currentJob.location) currentJob.location = line.trim();
+            continue;
+          }
+
           // A bullet is a bullet whatever glyph it uses. Without "*" here, any
           // starred bullet containing a hyphen ("post-launch") was read as a
           // new job header and printed as a bold heading with no dates.
