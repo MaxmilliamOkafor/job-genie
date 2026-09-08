@@ -340,18 +340,33 @@ export function ScreeningAnswersEditor() {
             </div>
           </div>
           {CHOICE_TYPES.includes(draft.fieldType) ? (
-            <div>
-              <Label htmlFor="sa-options">Selected option labels (comma separated)</Label>
-              <Input
-                id="sa-options"
-                className="min-h-11"
-                value={draft.optionLabels}
-                onChange={(e) => setDraft({ ...draft, optionLabels: e.target.value })}
-                placeholder="Yes"
-              />
-              <p className="pt-1 text-xs text-muted-foreground">
-                Copy the labels as shown on the form, so the exact option can be selected and checked.
-              </p>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="sa-options">Selected option labels (comma separated)</Label>
+                <Input
+                  id="sa-options"
+                  className="min-h-11"
+                  value={draft.optionLabels}
+                  onChange={(e) => setDraft({ ...draft, optionLabels: e.target.value })}
+                  placeholder="Yes"
+                />
+                <p className="pt-1 text-xs text-muted-foreground">
+                  Copy the labels as shown on the form, so the exact option can be selected and checked.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="sa-available">All options the form offered (optional)</Label>
+                <Input
+                  id="sa-available"
+                  className="min-h-11"
+                  value={draft.availableOptions}
+                  onChange={(e) => setDraft({ ...draft, availableOptions: e.target.value })}
+                  placeholder="Yes, No, Prefer not to say"
+                />
+                <p className="pt-1 text-xs text-muted-foreground">
+                  Saved so a form offering different choices is left for you to answer instead of guessed.
+                </p>
+              </div>
             </div>
           ) : (
             <div>
