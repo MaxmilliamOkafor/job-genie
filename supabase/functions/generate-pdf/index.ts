@@ -1550,8 +1550,10 @@ async function handleRawContentRequest(body: {
           company: string;
           title: string;
           dates: string;
+          location?: string;
           bullets: string[];
         }
+
         let currentJob: Job | null = null;
         const jobs: Job[] = [];
 
