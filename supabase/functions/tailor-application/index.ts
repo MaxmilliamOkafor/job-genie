@@ -3937,23 +3937,12 @@ ${
         console.log(`[FORCE-INJECT] Added ${newSkills.length} keywords to structured skills`);
       }
 
-      // Recalculate match score after injection
-      const postInjectText = `${result.tailoredResume.toLowerCase()} ${(result.tailoredCoverLetter || "").toLowerCase()}`;
-      const finalMatched: string[] = [];
-      const finalMissing: string[] = [];
+      // Recalculate coverage after injection, whole terms only.
+      const postInjectText = `${result.tailoredResume} ${result.tailoredCoverLetter || ""}`;
+      const secondPass = measureCoverage(postInjectText, jdKeywords.allKeywords);
+      const finalMatched: string[] = [...secondPass.matched];
+      const finalMissing: string[] = [...secondPass.missing];
 
-      for (const keyword of jdKeywords.allKeywords) {
-        const keywordLower = keyword.toLowerCase();
-        if (
-          postInjectText.includes(keywordLower) ||
-          postInjectText.includes(keywordLower.replace(/[.\-\/]/g, " ")) ||
-          postInjectText.includes(keywordLower.replace(/\s+/g, ""))
-        ) {
-          finalMatched.push(keyword);
-        } else {
-          finalMissing.push(keyword);
-        }
-      }
 
       const finalScore = jdKeywords.allKeywords.length > 0
         ? Math.round((finalMatched.length / jdKeywords.allKeywords.length) * 100)
