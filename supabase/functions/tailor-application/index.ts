@@ -2027,6 +2027,173 @@ function categoriseKeywordsByPriority(
   };
 }
 
+// ============================================================
+// ATS STRATEGY FROM THE EXTENSION
+//
+// atsStrategy arrives as a string. When the extension fills it with JSON
+// it carries the posting's requirements, a coverage target and a map of
+// keyword -> the evidence in this candidate's own profile that supports
+// it. The evidence map is what keeps coverage work honest: a keyword with
+// no evidence is reported as unsupported, never written in.
+// ============================================================
+interface AtsStrategy {
+  requirements: string[];
+  keywordCoverageTarget: number | null;
+  /** lowercased keyword -> supporting evidence sentence from the profile */
+  evidence: Record<string, string>;
+  notes: string;
+}
+
+function parseAtsStrategy(raw: unknown): AtsStrategy {
+  const empty: AtsStrategy = { requirements: [], keywordCoverageTarget: null, evidence: {}, notes: "" };
+  if (typeof raw !== "string" || !raw.trim()) return empty;
+  const text = raw.trim();
+  if (!text.startsWith("{")) return { ...empty, notes: text.slice(0, 2000) };
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ...empty, notes: text.slice(0, 2000) };
+  }
+
+  const requirements = Array.isArray(parsed?.requirements)
+    ? parsed.requirements
+        .map((r: unknown) => (typeof r === "string" ? r : typeof (r as any)?.text === "string" ? (r as any).text : ""))
+        .filter((r: string) => r && r.trim())
+        .slice(0, 80)
+    : [];
+
+  const rawTarget = parsed?.keywordCoverageTarget;
+  let target: number | null = null;
+  if (typeof rawTarget === "number" && Number.isFinite(rawTarget)) {
+    target = rawTarget <= 1 ? Math.round(rawTarget * 100) : Math.round(rawTarget);
+    target = Math.max(0, Math.min(100, target));
+  }
+
+  const evidence: Record<string, string> = {};
+  const source =
+    parsed?.keywordEvidence ?? parsed?.evidence ?? parsed?.evidenceMap ?? parsed?.keyword_evidence ?? null;
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    for (const [k, v] of Object.entries(source)) {
+      const value = typeof v === "string" ? v : Array.isArray(v) ? v.filter((x) => typeof x === "string").join("; ") : "";
+      if (k.trim() && value.trim()) evidence[k.trim().toLowerCase()] = value.trim().slice(0, 400);
+    }
+  } else if (Array.isArray(source)) {
+    for (const item of source) {
+      const k = typeof item?.keyword === "string" ? item.keyword : typeof item?.term === "string" ? item.term : "";
+      const v = typeof item?.evidence === "string" ? item.evidence : typeof item?.source === "string" ? item.source : "";
+      if (k.trim() && v.trim()) evidence[k.trim().toLowerCase()] = v.trim().slice(0, 400);
+    }
+  }
+
+  return {
+    requirements,
+    keywordCoverageTarget: target,
+    evidence,
+    notes: typeof parsed?.notes === "string" ? parsed.notes.slice(0, 2000) : "",
+  };
+}
+
+/** Extra prompt block carrying the extension's requirements and evidence map. */
+function buildStrategyBlock(strategy: AtsStrategy): string {
+  const evidenceEntries = Object.entries(strategy.evidence).slice(0, 40);
+  if (strategy.requirements.length === 0 && evidenceEntries.length === 0 && !strategy.notes) return "";
+
+  const parts: string[] = [
+    "EXTENSION-SUPPLIED STRATEGY. Everything below comes from the posting and from this candidate's saved profile. It adds nothing you may invent.",
+  ];
+
+  if (strategy.requirements.length) {
+    parts.push(
+      `REQUIREMENTS FROM THE POSTING, HIGHEST PRIORITY FIRST. Cover the ones the evidence below supports, and cover them inside real achievements:\n${strategy.requirements
+        .map((r, i) => `${i + 1}. ${r}`)
+        .join("\n")}`,
+    );
+  }
+
+  if (evidenceEntries.length) {
+    parts.push(
+      `KEYWORD -> EVIDENCE IN THIS PROFILE. A keyword may only appear in the CV where this evidence, or the profile itself, supports it. Write the keyword into the achievement the evidence names, not into a new one:\n${evidenceEntries
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join("\n")}`,
+    );
+    parts.push(
+      "ANY POSTING TERM WITH NO EVIDENCE LINE AND NO BASIS IN THE PROFILE IS LEFT OUT. It is reported back to the candidate as unsupported. Never close a coverage gap by inventing experience, a tool, a metric, a qualification or an eligibility.",
+    );
+  }
+
+  if (strategy.keywordCoverageTarget !== null) {
+    parts.push(
+      `COVERAGE TARGET: ${strategy.keywordCoverageTarget}% of the posting's relevant keywords, reached only through evidenced material. Falling short honestly is correct; padding to hit the number is a failure.`,
+    );
+  }
+
+  if (strategy.notes) parts.push(`NOTES FROM THE CANDIDATE'S STRATEGY FIELD:\n${strategy.notes}`);
+
+  return parts.join("\n\n");
+}
+
+// ============================================================
+// WHOLE-TERM KEYWORD MATCHING
+//
+// Substring matching inflates coverage and lies about skills: "java"
+// matches "javascript", "react" matches "reactive". Matching on term
+// boundaries fixes that while preserving C++, C#, .NET, CI/CD and Node.js.
+// ============================================================
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildTermPattern(term: string): RegExp | null {
+  const t = term.trim();
+  if (!t) return null;
+  // Internal spaces, hyphens and slashes are interchangeable separators.
+  const core = escapeRegex(t)
+    .replace(/\\?\s+/g, "[\\s\\-]+")
+    .replace(/\\\//g, "[\\/\\-]");
+  const startsAlnum = /^[A-Za-z0-9]/.test(t);
+  const endsAlnum = /[A-Za-z0-9]$/.test(t);
+  // Trailing +, # and . are part of the term (C++, C#, .NET) and must not
+  // be followed by more word characters.
+  const prefix = startsAlnum ? "(?<![A-Za-z0-9+#])" : "";
+  const suffix = endsAlnum ? "(?![A-Za-z0-9+#])" : "(?![A-Za-z0-9])";
+  try {
+    return new RegExp(prefix + core + suffix, "i");
+  } catch {
+    return null;
+  }
+}
+
+function termAppearsIn(text: string, term: string): boolean {
+  const pattern = buildTermPattern(term);
+  if (!pattern) return false;
+  return pattern.test(text);
+}
+
+interface CoverageResult {
+  matched: string[];
+  missing: string[];
+  percent: number;
+}
+
+/** Coverage counted off real document text: matched unique terms / total unique terms. */
+function measureCoverage(text: string, terms: string[]): CoverageResult {
+  const unique = Array.from(new Set(terms.map((t) => t.trim()).filter(Boolean)));
+  const matched: string[] = [];
+  const missing: string[] = [];
+  for (const term of unique) {
+    if (termAppearsIn(text, term)) matched.push(term);
+    else missing.push(term);
+  }
+  return {
+    matched,
+    missing,
+    percent: unique.length === 0 ? 0 : Math.round((matched.length / unique.length) * 100),
+  };
+}
+
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
