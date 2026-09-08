@@ -28,7 +28,7 @@ export function buildTermPattern(term: string): RegExp | null {
   if (!t) return null;
   const core = escapeRegex(t)
     .replace(/\\?\s+/g, '[\\s\\-]+')
-    .replace(/\\\//g, '[\\/\\-]');
+    .replace(/\//g, '[\\/\\-]');
   const startsAlnum = /^[A-Za-z0-9]/.test(t);
   const endsAlnum = /[A-Za-z0-9]$/.test(t);
   const prefix = startsAlnum ? '(?<![A-Za-z0-9+#])' : '';

@@ -2173,7 +2173,7 @@ function buildTermPattern(term: string): RegExp | null {
   // Internal spaces, hyphens and slashes are interchangeable separators.
   const core = escapeRegex(t)
     .replace(/\\?\s+/g, "[\\s\\-]+")
-    .replace(/\\\//g, "[\\/\\-]");
+    .replace(/\//g, "[\\/\\-]");
   const startsAlnum = /^[A-Za-z0-9]/.test(t);
   const endsAlnum = /[A-Za-z0-9]$/.test(t);
   // Trailing +, # and . are part of the term (C++, C#, .NET) and must not
