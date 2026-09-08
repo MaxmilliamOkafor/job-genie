@@ -3967,9 +3967,19 @@ ${
         }
         if (/^[A-Z][A-Z &]+$/.test(upper) && upper.length > 3) {
           inSkills = upper.includes("SKILL");
+          inSummary = upper.includes("SUMMARY");
           out.push(line);
           continue;
         }
+        if (inSummary && line.trim()) {
+          // Removing a banned opener ("Proven ability...") left the following
+          // sentence starting in lower case, so sentence starts are restored.
+          out.push(
+            line.replace(/(^|[.!?]\s+)([a-z])/g, (_m, p, c) => p + c.toUpperCase()),
+          );
+          continue;
+        }
+
         if (inSkills && line.includes(":")) {
           const idx = line.indexOf(":");
           const label = line.slice(0, idx + 1);
