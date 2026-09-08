@@ -3951,6 +3951,7 @@ ${
       if (!text) return text;
       const lines = text.split("\n");
       let inSkills = false;
+      let inSummary = false;
       const out: string[] = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
