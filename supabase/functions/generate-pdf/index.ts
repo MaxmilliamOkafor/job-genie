@@ -1933,7 +1933,16 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
     children: header,
   }));
+  // The role's own location, printed under the header so it is never confused
+  // with the company name.
+  if (e.location) {
+    out.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [TR({ text: e.location, font: DOCX_FONT, size: 19, color: DOCX_MUTED })],
+    }));
+  }
   for (const b of (e.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
+
   return out;
 }
 
