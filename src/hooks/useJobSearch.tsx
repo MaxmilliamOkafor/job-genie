@@ -124,6 +124,8 @@ export function useJobSearch(filters: JobSearchFilters) {
 
       if (err) {
         // A failed search must say so, never quietly show stale or sample results.
+        // Technical detail stays in the developer console; the UI shows a plain message.
+        console.error('[job search] search_job_pool failed', err);
         setError(err.message);
         if (!append) {
           setJobs([]);
