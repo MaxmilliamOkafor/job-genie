@@ -411,7 +411,11 @@ const ExplorePage = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileDetail, setMobileDetail] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  // Saved vacancies are tracked by their link, which is what the saved-jobs
+  // table treats as unique, so a vacancy saved on an earlier visit still reads
+  // as saved here.
+  const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
+  const isSaved = (job: SearchedJob) => savedUrls.has(job.resolved_url ?? job.url);
 
   useEffect(() => {
     saveFilters(filters);
