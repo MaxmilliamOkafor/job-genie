@@ -124,8 +124,9 @@ const sanitizeText = (text: string | null | undefined): string => {
       .replace(/\u00A9/g, "(c)")
       .replace(/\u00AE/g, "(R)")
       .replace(/\u2122/g, "(TM)")
-      .replace(/\u20AC/g, "EUR")
-      .replace(/\u00A3/g, "GBP")
+      // Currency symbols are kept: "GBP2.6bn" misreads as a code, and both
+      // symbols exist in the document font and in ATS text extraction.
+
       .replace(/\u00A5/g, "JPY")
       .replace(/\u00B0/g, " deg")
       .replace(/\u00B1/g, "+/-")
