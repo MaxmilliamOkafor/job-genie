@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useApplications, type Application } from '@/hooks/useApplications';
+import { useProfile } from '@/hooks/useProfile';
+
 import { Copy, Download, Eye, FileText, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import {
