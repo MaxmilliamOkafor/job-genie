@@ -974,6 +974,51 @@ export type Database = {
         Returns: string
       }
       jp_seniority: { Args: { v: string }; Returns: string }
+      search_job_pool: {
+        Args: {
+          p_company?: string
+          p_employment?: string[]
+          p_include_unverified?: boolean
+          p_limit?: number
+          p_location_terms?: string[]
+          p_max_age_hours?: number
+          p_offset?: number
+          p_require_known_date?: boolean
+          p_seniority?: string[]
+          p_skills?: string[]
+          p_sort?: string
+          p_terms?: string[]
+          p_workplace?: string[]
+        }
+        Returns: {
+          company: string
+          department: string
+          description: string
+          duplicate_count: number
+          employer_direct: boolean
+          employment_type: string
+          first_seen_at: string
+          id: string
+          link_checked_at: string
+          link_http_status: number
+          link_note: string
+          link_status: string
+          location: string
+          posted_at: string
+          posted_at_known: boolean
+          provider: string
+          relevance: number
+          requisition_id: string
+          resolved_url: string
+          risk_flags: string[]
+          salary: string
+          seniority: string
+          title: string
+          total_count: number
+          url: string
+          workplace_type: string
+        }[]
+      }
     }
     Enums: {
       application_status:
