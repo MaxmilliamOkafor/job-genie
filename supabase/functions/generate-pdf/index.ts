@@ -1651,8 +1651,10 @@ async function handleRawContentRequest(body: {
           company: j.company,
           title: j.title,
           dates: j.dates,
+          location: j.location,
           bullets: j.bullets,
         }));
+
         continue;
       }
 
