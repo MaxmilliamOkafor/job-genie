@@ -698,6 +698,9 @@ interface NormalisedResume {
   projects: ProjectEntry[];
   education: EducationEntry[];
   skills?: { primary?: string[]; secondary?: string[] };
+  /** Labelled skill groups exactly as written, one rendered line each. */
+  skillGroups?: Array<{ label: string; items: string[] }>;
+
   certifications: string[];
   achievements?: Array<{ title: string; date: string; description: string }>;
 }
