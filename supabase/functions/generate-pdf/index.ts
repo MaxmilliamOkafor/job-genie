@@ -132,8 +132,10 @@ const sanitizeText = (text: string | null | undefined): string => {
       .replace(/\u00B1/g, "+/-")
       .replace(/\u00D7/g, "x")
       .replace(/\u00F7/g, "/")
-      // Preserve middot (·) used as our contact separator; strip other non-ASCII
-      .replace(/[^\x00-\x7F\u00B7]/g, " ")
+      // Preserve middot (·) used as our contact separator and the pound and
+      // euro signs used in figures; strip other non-ASCII
+      .replace(/[^\x00-\x7F\u00B7\u00A3\u20AC]/g, " ")
+
       .replace(/\s+/g, " ")
       .trim()
   );
