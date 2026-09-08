@@ -3831,7 +3831,28 @@ ${
       // now routes to the skills list, which captures the same terms
       // honestly, and RULE 2's evidence gate governs what may be woven
       // into a real bullet.
-      const singleWordMissing = actualMissing.slice();
+      // A KEYWORD IS ONLY WRITTEN IN WHERE THE PROFILE SUPPORTS IT.
+      // The candidate's saved skills, experience, projects and
+      // certifications, plus any evidence line the extension supplied, are
+      // the whole permitted source. Anything else stays missing and is
+      // reported back as an unsupported requirement, because a skill the
+      // candidate cannot defend in an interview is worse than a gap.
+      const profileEvidenceText = [
+        JSON.stringify(userProfile.skills || []),
+        JSON.stringify(userProfile.professionalExperience || []),
+        JSON.stringify(userProfile.relevantProjects || []),
+        JSON.stringify(userProfile.certifications || []),
+        JSON.stringify(userProfile.education || []),
+        userProfile.coverLetter || "",
+      ].join(" \n ");
+
+      const singleWordMissing = actualMissing.filter(
+        (kw) => atsStrategy.evidence[kw.toLowerCase()] || termAppearsIn(profileEvidenceText, kw),
+      );
+      const unevidencedSkipped = actualMissing.length - singleWordMissing.length;
+      if (unevidencedSkipped > 0) {
+        console.log(`[FORCE-INJECT] Skipped ${unevidencedSkipped} keywords with no evidence in the profile`);
+      }
 
       // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
       const toInjectSingles = singleWordMissing;
