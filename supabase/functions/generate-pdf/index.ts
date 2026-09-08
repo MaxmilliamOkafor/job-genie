@@ -1719,12 +1719,23 @@ async function handleRawContentRequest(body: {
         let cur: ProjectEntry | null = null;
         for (const line of section.content) {
           if (line.startsWith("-") || line.startsWith("•") || line.startsWith("*")) {
-            if (cur) cur.bullets.push(line.replace(/^[-•*]\s*/, ""));
+            const body = line.replace(/^[-•*]\s*/, "").trim();
+            // Link lines are kept as links rather than dropped as bullets, so
+            // every project still shows its code and live addresses.
+            if (/https?:\/\//i.test(body) && /^(code|live|demo|repo|repository|source|url|link)\s*:/i.test(body)) {
+              if (cur) {
+                cur.links = cur.links || [];
+                for (const part of body.split(/\s*\|\s*/)) if (part.trim()) cur.links.push(part.trim());
+              }
+              continue;
+            }
+            if (cur) cur.bullets.push(body);
           } else {
             if (cur) projs.push(cur);
             cur = { name: line, bullets: [] };
           }
         }
+
         if (cur) projs.push(cur);
         norm.projects = projs;
         continue;
