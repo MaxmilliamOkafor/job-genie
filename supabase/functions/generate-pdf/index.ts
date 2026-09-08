@@ -1577,9 +1577,25 @@ async function handleRawContentRequest(body: {
           // starred bullet containing a hyphen ("post-launch") was read as a
           // new job header and printed as a bold heading with no dates.
           const isBulletLine = /^[-•*\u2022]/.test(line.trimStart());
+
+          // A role written on three lines (company / title / date range) put its
+          // date line through the job-header split, so the exported CV showed
+          // "January 2023 | Present" as the employer and title and lost both.
+          const isDateOnlyLine =
+            !isBulletLine &&
+            /^(?:[A-Za-z]{3,9}\.?\s+)?\d{4}\s*[-–—]\s*(?:present|current|(?:[A-Za-z]{3,9}\.?\s+)?\d{4})$/i.test(
+              line.trim(),
+            );
+          if (isDateOnlyLine) {
+            if (!currentJob) currentJob = { company: "", title: "", dates: "", bullets: [] };
+            currentJob.dates = normaliseDateRange(line.trim());
+            continue;
+          }
+
           const hasPipe = line.includes("|");
           const hasDash = /\s*[–—-]\s*/.test(line) && !isBulletLine;
           const isJobHeader = (hasPipe || hasDash) && !isBulletLine;
+
 
 
           if (isJobHeader) {
