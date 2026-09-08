@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useApplications, type Application } from '@/hooks/useApplications';
+import { useProfile } from '@/hooks/useProfile';
+
 import { Copy, Download, Eye, FileText, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -20,6 +22,8 @@ import {
 
 export default function Documents() {
   const { applications, isLoading } = useApplications();
+  const { profile } = useProfile();
+
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Application | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -159,7 +163,10 @@ export default function Documents() {
                             jobTitle: open?.job?.title,
                             company: open?.job?.company,
                             fileName: `${base}.docx`,
+                            firstName: profile?.first_name ?? '',
+                            lastName: profile?.last_name ?? '',
                           });
+
                           downloadBase64Docx(out.base64, out.fileName);
                           setExported((prev) => ({ ...prev, [`${open?.id}:${kind}`]: out.version }));
                           toast.success('Word file downloaded');

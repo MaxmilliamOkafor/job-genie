@@ -37,6 +37,9 @@ export async function generateDocx(opts: {
   jobTitle?: string;
   company?: string;
   fileName?: string;
+  /** Passed so the header carries the real name instead of guessing at the first line. */
+  firstName?: string;
+  lastName?: string;
 }): Promise<DocxResult> {
   const text = (opts.text ?? '').trim();
   if (!text) {
@@ -50,8 +53,11 @@ export async function generateDocx(opts: {
       jobTitle: opts.jobTitle ?? '',
       company: opts.company ?? '',
       fileName: opts.fileName,
+      firstName: opts.firstName ?? '',
+      lastName: opts.lastName ?? '',
     },
   });
+
 
   if (error) {
     throw new Error(error.message || 'The Word file could not be created. Nothing was downloaded.');
