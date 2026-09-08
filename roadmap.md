@@ -12,3 +12,11 @@
 - [ ] 6. Documents: DOCX/PDF export from the same reviewed text, staleness invalidation, text-preservation validation.
 - [ ] 7. Recruiter-contact provenance and confidence, inbox filtering, server-side secrets.
 - [ ] 8. Regression tests (coverage cases, eligibility gaps, stale files, phone/Unicode preservation, narrow/wide widths, keyboard).
+
+## Screening-answer memory (done)
+- Store: exact question, answer labels, field type, scope, confirmed date, review flag (profiles.learned_preferences)
+- Reuse: exact-in-scope auto, reworded = suggestion, opposite polarity never reused
+- Fresh confirmation: consent/declarations always, time-sensitive answers age out, "Ask me again"
+- Extension sync: application_answers + screening_answers + always_confirm_questions; pending_screening_answers inbox
+- Tests: tests/screeningAnswers.test.ts (bun test) 13 pass
+- Open: extension side must write pending_screening_answers and verify committed selections via selectionCommitted()
