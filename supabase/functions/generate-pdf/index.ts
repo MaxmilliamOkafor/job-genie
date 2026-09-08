@@ -124,15 +124,18 @@ const sanitizeText = (text: string | null | undefined): string => {
       .replace(/\u00A9/g, "(c)")
       .replace(/\u00AE/g, "(R)")
       .replace(/\u2122/g, "(TM)")
-      .replace(/\u20AC/g, "EUR")
-      .replace(/\u00A3/g, "GBP")
+      // Currency symbols are kept: "GBP2.6bn" misreads as a code, and both
+      // symbols exist in the document font and in ATS text extraction.
+
       .replace(/\u00A5/g, "JPY")
       .replace(/\u00B0/g, " deg")
       .replace(/\u00B1/g, "+/-")
       .replace(/\u00D7/g, "x")
       .replace(/\u00F7/g, "/")
-      // Preserve middot (·) used as our contact separator; strip other non-ASCII
-      .replace(/[^\x00-\x7F\u00B7]/g, " ")
+      // Preserve middot (·) used as our contact separator and the pound and
+      // euro signs used in figures; strip other non-ASCII
+      .replace(/[^\x00-\x7F\u00B7\u00A3\u20AC]/g, " ")
+
       .replace(/\s+/g, " ")
       .trim()
   );
@@ -183,8 +186,11 @@ interface ProjectEntry {
   role?: string;
   dates?: string;
   technologies?: string[];
+  /** Code / live links, printed once under the project. */
+  links?: string[];
   bullets: string[];
 }
+
 
 interface EducationEntry {
   degree: string;
@@ -695,6 +701,9 @@ interface NormalisedResume {
   projects: ProjectEntry[];
   education: EducationEntry[];
   skills?: { primary?: string[]; secondary?: string[] };
+  /** Labelled skill groups exactly as written, one rendered line each. */
+  skillGroups?: Array<{ label: string; items: string[] }>;
+
   certifications: string[];
   achievements?: Array<{ title: string; date: string; description: string }>;
 }
@@ -753,10 +762,12 @@ function renderResume(
   const skillGroups: Array<{ label: string; items: string[] }> = [];
   if (data.coreCompetencies?.length)
     skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skillGroups?.length) skillGroups.push(...data.skillGroups);
   if (data.skills?.primary?.length)
     skillGroups.push({ label: "Technical", items: data.skills.primary });
   if (data.skills?.secondary?.length)
     skillGroups.push({ label: "Additional", items: data.skills.secondary });
+
   if (skillGroups.length > 0) {
     r.drawSectionHeader("Technical Skills");
     r.drawSkillsBlock(skillGroups);
@@ -1493,15 +1504,24 @@ async function handleRawContentRequest(body: {
       }
       return "";
     };
-    const toYearOnly = (dateStr: string): string => {
-      if (!dateStr) return "";
-      const years = dateStr.match(/\d{4}/g);
-      const hasPresent = /present/i.test(dateStr);
-      if (hasPresent && years && years.length >= 1) return `${years[0]} - Present`;
-      if (years && years.length >= 2) return `${years[0]} - ${years[1]}`;
-      if (years && years.length === 1) return years[0];
-      return dateStr;
+    // Employment dates are printed as written, with full month names. The old
+    // helper reduced "January 2023 - Present" to "2023 - Present", which lost
+    // the month from every role on the CV.
+    const MONTHS: Record<string, string> = {
+      jan: "January", feb: "February", mar: "March", apr: "April", may: "May", jun: "June",
+      jul: "July", aug: "August", sep: "September", sept: "September", oct: "October",
+      nov: "November", dec: "December",
     };
+    const normaliseDateRange = (dateStr: string): string => {
+      if (!dateStr) return "";
+      return dateStr
+        .replace(/[\u2012-\u2015\u2212]/g, "-")
+        .replace(/\b([A-Za-z]{3,5})\.?\b/g, (m, w: string) => MONTHS[w.toLowerCase()] ?? m)
+        .replace(/\s*-\s*/g, " - ")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
     const locationPatterns = [
       /^[A-Z][a-z]+,\s*[A-Z]{2}$/,
       /^[A-Z][a-z]+,\s*[A-Z][a-z]+$/,
@@ -1538,13 +1558,21 @@ async function handleRawContentRequest(body: {
           company: string;
           title: string;
           dates: string;
+          location?: string;
           bullets: string[];
         }
+
         let currentJob: Job | null = null;
         const jobs: Job[] = [];
 
         for (const line of section.content) {
-          if (isLocation(line)) continue;
+          // A location line belongs to the role above it, so it is kept rather
+          // than discarded.
+          if (isLocation(line)) {
+            if (currentJob && !currentJob.location) currentJob.location = line.trim();
+            continue;
+          }
+
           // A bullet is a bullet whatever glyph it uses. Without "*" here, any
           // starred bullet containing a hyphen ("post-launch") was read as a
           // new job header and printed as a bold heading with no dates.
@@ -1606,7 +1634,7 @@ async function handleRawContentRequest(body: {
               }
             }
 
-            currentJob = { company, title, dates: toYearOnly(dates), bullets: [] };
+            currentJob = { company, title, dates: normaliseDateRange(dates), bullets: [] };
           } else if (isBulletLine) {
             if (currentJob) currentJob.bullets.push(line.trimStart().replace(/^[-•*\u2022]\s*/, ""));
 
@@ -1626,8 +1654,10 @@ async function handleRawContentRequest(body: {
           company: j.company,
           title: j.title,
           dates: j.dates,
+          location: j.location,
           bullets: j.bullets,
         }));
+
         continue;
       }
 
@@ -1650,17 +1680,30 @@ async function handleRawContentRequest(body: {
       }
 
       if (section.type === "SKILLS" || section.type.includes("SKILLS")) {
-        const all: string[] = [];
+        // Labelled groups are kept as separate lines. Joining them together
+        // produced one run-on line reading "Technical: Languages & Citizenship:
+        // ..., Programming: ...", which buried every group label.
+        const groups: Array<{ label: string; items: string[] }> = [];
+        const loose: string[] = [];
         for (const line of section.content) {
           const clean = line.replace(/^[-•*]\s*/, "").trim();
-          if (clean) all.push(clean);
+          if (!clean) continue;
+          const m = clean.match(/^([A-Za-z][A-Za-z0-9 &+/.\-]{1,40}):\s*(.+)$/);
+          if (m) {
+            const items = m[2].split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+            if (items.length) groups.push({ label: m[1].trim(), items });
+            continue;
+          }
+          loose.push(clean);
         }
-        const flat = all
+        const flatLoose = loose
           .join(", ")
           .split(/,\s*/)
           .map((s) => s.trim())
           .filter(Boolean);
-        norm.skills = { primary: flat };
+        if (groups.length) norm.skillGroups = groups;
+        if (flatLoose.length) norm.skills = { primary: flatLoose };
+
         continue;
       }
 
@@ -1676,12 +1719,23 @@ async function handleRawContentRequest(body: {
         let cur: ProjectEntry | null = null;
         for (const line of section.content) {
           if (line.startsWith("-") || line.startsWith("•") || line.startsWith("*")) {
-            if (cur) cur.bullets.push(line.replace(/^[-•*]\s*/, ""));
+            const body = line.replace(/^[-•*]\s*/, "").trim();
+            // Link lines are kept as links rather than dropped as bullets, so
+            // every project still shows its code and live addresses.
+            if (/https?:\/\//i.test(body) && /^(code|live|demo|repo|repository|source|url|link)\s*:/i.test(body)) {
+              if (cur) {
+                cur.links = cur.links || [];
+                for (const part of body.split(/\s*\|\s*/)) if (part.trim()) cur.links.push(part.trim());
+              }
+              continue;
+            }
+            if (cur) cur.bullets.push(body);
           } else {
             if (cur) projs.push(cur);
             cur = { name: line, bullets: [] };
           }
         }
+
         if (cur) projs.push(cur);
         norm.projects = projs;
         continue;
@@ -1913,7 +1967,16 @@ function docxExperience(e: ExperienceEntry): Paragraph[] {
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }],
     children: header,
   }));
+  // The role's own location, printed under the header so it is never confused
+  // with the company name.
+  if (e.location) {
+    out.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [TR({ text: e.location, font: DOCX_FONT, size: 19, color: DOCX_MUTED })],
+    }));
+  }
   for (const b of (e.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
+
   return out;
 }
 
@@ -1939,6 +2002,13 @@ function docxProject(p: ProjectEntry): Paragraph[] {
     }));
   }
   for (const b of (p.bullets || [])) { if (isMetadataLine(b)) continue; out.push(docxBullet(b)); }
+  if (p.links?.length) {
+    out.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [TR({ text: p.links.join("  |  "), font: DOCX_FONT, size: 19, color: DOCX_MUTED })],
+    }));
+  }
+
   return out;
 }
 
@@ -2002,9 +2072,11 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
   // folded in as a labelled line so no second "skill" heading can steal it.
   const skillGroups: Array<{ label: string; items: string[] }> = [];
   if (data.coreCompetencies?.length) skillGroups.push({ label: "Core", items: data.coreCompetencies });
+  if (data.skillGroups?.length) skillGroups.push(...data.skillGroups);
   if (data.skills?.primary?.length) skillGroups.push({ label: "Technical", items: data.skills.primary });
   if (data.skills?.secondary?.length) skillGroups.push({ label: "Additional", items: data.skills.secondary });
   if (skillGroups.length) {
+
     children.push(...docxSectionHeader("Technical Skills"));
     children.push(...docxSkills(skillGroups));
   }

@@ -1,0 +1,80 @@
+Maxmilliam Okafor
+Dublin, Ireland | (+353) 87-426-1508 | Maxokafordev@gmail.com
+https://linkedin.com/in/maxokafor/ | https://github.com/MaxmilliamOkafor
+
+PROFESSIONAL SUMMARY
+Software engineer with eight years building backend services, data platforms and machine learning systems across advertising, consulting, banking and health technology. Delivers systems that stay reliable under production load.
+
+PROFESSIONAL EXPERIENCE
+Meta | Software Engineer | January 2023 - Present
+Dublin, Ireland
+- Build and own backend services written in Python and C++ for Meta's ads delivery platform, which serves billions of requests daily, and cut response times by running downstream calls in parallel rather than in sequence.
+- Rewrote the internal campaign diagnostics tool in React, TypeScript and GraphQL. It had been slow enough that sales engineers raised tickets rather than use it, and the rewrite cleared most of that queue.
+- Deliver ranking model improvements in Python and PyTorch, including new inputs derived from advertiser bid history, which produced a revenue increase that held across a four week live test.
+- Rebuilt the PySpark and Presto pipeline behind impression reporting, cutting the overnight run from six hours to under one so the data is ready before the reporting team's deadline rather than after it.
+- Hold primary on call responsibility for two critical services. Authored the incident response documentation the team now uses, and led the review that resolved a failure which had recurred monthly for over a year.
+- Raised automated test coverage with pytest and added checks to the build pipeline that block unsafe database queries before release, which ended routine production rollbacks.
+- Mentor two junior engineers and an intern who converted to a permanent role, and author the design documents for cross team changes, including consolidating three duplicated services behind one interface.
+
+SolimHealth | AI Product Manager | August 2022 - December 2022
+Dallas, Texas, United States
+* Designed and delivered the artificial intelligence and natural language processing systems behind a dementia detection product that identifies cognitive decline early enough for clinicians to intervene.
+* Built the speech analysis pipeline with AWS Transcribe and NLTK, converting recorded patient conversations into the language measures clinicians assess, with better accuracy than the manual scoring it replaced.
+* Developed the clinician dashboard in React and TypeScript with a TensorFlow.js avatar that runs cognitive screenings in the browser, keeping patients engaged through an assessment many find uncomfortable.
+* Integrated FLUX Kontext with MongoDB for memory reconstruction, enabling each screening session to draw on the patient's own history rather than generic test material.
+* Owned the product roadmap and authored the requirements and acceptance criteria for every release across a five month contract, all of which shipped on the dates committed to the clinical team.
+* Defined the patient data and HIPAA requirements for the product, covering audit logging, role based access control and de-identification of any data used for model training.
+
+Accenture | Solutions Architect | April 2021 - July 2022
+London, United Kingdom
+• Architected a UK retail client's migration from a legacy application to AWS microservices on EKS, delivering all 47 services in 11 months and cutting annual infrastructure cost through right sizing and reserved instances.
+• Authored the Terraform modules and Helm charts the client continues to operate, reducing environment provisioning from a multi week request to a single automated pipeline run.
+• Replaced Jenkins with GitHub Actions and ArgoCD across four delivery teams and introduced Go based deployment tooling, taking the client from a release every two weeks to daily deployment.
+• Established monitoring and alerting in Prometheus, Grafana and Datadog with formal reliability targets, so production issues were detected by the platform rather than reported by customers.
+• Led the security architecture for a regulated financial services client, covering access control, credential rotation, network segmentation and encryption, and closed all but three gaps found in their ISO 27001 pre-audit.
+• Acted as technical lead on five pre-sales bids, authoring the architecture sections and presenting proposed solutions to client CTOs, across engagements totalling £3.2m.
+• Chaired the architecture review board across three client accounts and mentored four consultants through AWS certification.
+
+Citigroup | Data Analyst | August 2017 - March 2021
+London, United Kingdom
+- Rebuilt the credit risk reporting suite in SQL and Python for a £2.6bn consumer lending portfolio, replacing four conflicting sources with a single agreed set of exposure figures used daily by risk and finance.
+- Replaced a 40 tab Excel reporting pack with a Power BI and Tableau suite, cutting the month end reporting cycle from nine working days to three and removing the manual rebuild entirely.
+- Redesigned the grouping and scoring of anti money laundering alerts in Python, cutting the volume of false alerts without missing genuine cases, which enabled the investigations team to clear a two year backlog.
+- Automated the daily regulatory data feed using Airflow and SQL Server after three late submissions in a single year, and it met every deadline thereafter.
+- Led the analysis behind the IFRS 9 staging criteria review, testing it across four years of loan performance data, and presented the recommendation the risk committee adopted into policy.
+- Collected requirements from nine stakeholder groups for a data warehouse migration, authored the specification and test scripts, and led acceptance testing across three releases that went live without a defect.
+- Trained 24 analysts across the London and Belfast offices in SQL and Power BI, reducing turnaround on routine data requests to same day.
+
+TECHNICAL SKILLS
+Languages & Citizenship: English (native), French (native), Spanish (advanced), German (advanced) - EU Citizen
+Programming: Python, Java, TypeScript, C++, SQL, Node.js, React
+Cloud & Infrastructure: AWS, Azure, Google Cloud Platform, Kubernetes, Docker, Terraform
+Machine Learning: Machine Learning, Deep Learning, PyTorch, TensorFlow, NLP
+Data Engineering: Apache Spark, Airflow, Kafka, Snowflake, ETL
+Delivery: CI/CD, Jenkins, GitHub Actions
+
+PROJECTS
+SignalDesk | Python, LLMs (RAG), Kafka, FastAPI, React, AWS
+- Streams live financial news and filings through an LLM that extracts ticker level sentiment, citing the source line behind every signal and testing itself for hallucination.
+- Code: https://github.com/MaxmilliamOkafor/signaldesk | Live: https://maxmilliamokafor.github.io/signaldesk/
+
+DriftGuard | Python, MLflow, Evidently, Docker, Kubernetes, GitHub Actions
+- Open source framework that detects data and concept drift in a deployed model, then retrains, validates and canary deploys the replacement without human intervention.
+- Code: https://github.com/MaxmilliamOkafor/driftguard | Live: https://maxmilliamokafor.github.io/driftguard/
+
+LedgerLens | Python, XGBoost, SHAP, FastAPI, Fairlearn, Docker
+- Credit risk API that returns the reasons behind every score alongside a fairness audit and a published model card, with a live demo that updates both as inputs change.
+- Code: https://github.com/MaxmilliamOkafor/ledgerlens | Live: https://maxmilliamokafor.github.io/ledgerlens/
+
+CERTIFICATIONS
+AWS Certified Machine Learning - Specialty
+AWS Certified Solutions Architect - Professional
+Google Cloud Professional Machine Learning Engineer
+Microsoft Certified: Azure AI Engineer Associate
+Certified Kubernetes Administrator (CKA)
+
+EDUCATION
+Master of Science in Artificial Intelligence and Machine Learning - Distinction (3.90/4.00)
+Imperial College London
+Bachelor of Science in Computer Science - First Class Honours (3.80/4.00)
+University of Derby
