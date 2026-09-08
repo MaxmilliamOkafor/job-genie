@@ -1618,7 +1618,7 @@ async function handleRawContentRequest(body: {
               }
             }
 
-            currentJob = { company, title, dates: toYearOnly(dates), bullets: [] };
+            currentJob = { company, title, dates: normaliseDateRange(dates), bullets: [] };
           } else if (isBulletLine) {
             if (currentJob) currentJob.bullets.push(line.trimStart().replace(/^[-•*\u2022]\s*/, ""));
 
