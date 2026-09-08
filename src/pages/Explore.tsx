@@ -86,6 +86,28 @@ import {
   type JobSearchFilters,
 } from '@/lib/jobSearch';
 
+/**
+ * Career boards hand us HTML. We show the employer's own words as readable
+ * text, keeping paragraph and list breaks, and never inject their markup.
+ */
+function plainDescription(raw: string): string {
+  return raw
+    .replace(/<\s*(br|\/p|\/li|\/div|\/h[1-6])\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&rsquo;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+    .trim();
+}
+
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never';
   const diff = Date.now() - new Date(iso).getTime();
@@ -653,7 +675,7 @@ const ExplorePage = () => {
             <p className="mb-2 text-base font-medium">Description, responsibilities and requirements</p>
             {selected.description ? (
               <div className="max-h-[32rem] overflow-y-auto whitespace-pre-wrap text-base leading-relaxed text-muted-foreground">
-                {selected.description}
+                {plainDescription(selected.description)}
               </div>
             ) : (
               <div className="space-y-2 text-base text-muted-foreground">
