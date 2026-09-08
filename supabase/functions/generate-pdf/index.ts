@@ -1670,17 +1670,30 @@ async function handleRawContentRequest(body: {
       }
 
       if (section.type === "SKILLS" || section.type.includes("SKILLS")) {
-        const all: string[] = [];
+        // Labelled groups are kept as separate lines. Joining them together
+        // produced one run-on line reading "Technical: Languages & Citizenship:
+        // ..., Programming: ...", which buried every group label.
+        const groups: Array<{ label: string; items: string[] }> = [];
+        const loose: string[] = [];
         for (const line of section.content) {
           const clean = line.replace(/^[-•*]\s*/, "").trim();
-          if (clean) all.push(clean);
+          if (!clean) continue;
+          const m = clean.match(/^([A-Za-z][A-Za-z0-9 &+/.\-]{1,40}):\s*(.+)$/);
+          if (m) {
+            const items = m[2].split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+            if (items.length) groups.push({ label: m[1].trim(), items });
+            continue;
+          }
+          loose.push(clean);
         }
-        const flat = all
+        const flatLoose = loose
           .join(", ")
           .split(/,\s*/)
           .map((s) => s.trim())
           .filter(Boolean);
-        norm.skills = { primary: flat };
+        if (groups.length) norm.skillGroups = groups;
+        if (flatLoose.length) norm.skills = { primary: flatLoose };
+
         continue;
       }
 
