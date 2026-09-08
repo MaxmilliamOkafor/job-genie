@@ -556,8 +556,15 @@ const ExplorePage = () => {
         url_status: SAVED_URL_STATUS[job.link_status] ?? 'unknown',
         url_last_checked: job.link_checked_at,
       });
+      const url = job.resolved_url ?? job.url;
+      // A vacancy already in the saved list is not a failure: say so plainly.
+      if (saveError && (saveError as { code?: string }).code === '23505') {
+        setSavedUrls((prev) => new Set(prev).add(url));
+        toast.info('This vacancy is already in your saved jobs.');
+        return;
+      }
       if (saveError) throw saveError;
-      setSavedIds((prev) => new Set(prev).add(job.id));
+      setSavedUrls((prev) => new Set(prev).add(url));
       toast.success(`Saved ${job.title}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save this vacancy');
@@ -621,14 +628,14 @@ const ExplorePage = () => {
               variant="outline"
               className="gap-2 text-base"
               onClick={() => saveJob(selected)}
-              disabled={savingId === selected.id || savedIds.has(selected.id)}
+              disabled={savingId === selected.id || isSaved(selected)}
             >
               {savingId === selected.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <BookmarkPlus className="h-4 w-4" />
               )}
-              {savedIds.has(selected.id) ? 'Saved' : 'Save'}
+              {isSaved(selected) ? 'Saved' : 'Save'}
             </Button>
           </div>
 
