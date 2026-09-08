@@ -6,6 +6,15 @@ import {
   lookupAiKeyRow,
   type AiErrorCode,
 } from "../_shared/aiErrors.ts";
+import {
+  applyProjectsSection,
+  buildProjectsSection,
+  evaluateRevision,
+  measureCoverage,
+  termAppearsIn,
+  type RevisionRecord,
+} from "../_shared/coverage.ts";
+
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
 // This function calls generate-pdf server-side and returns base64 PDFs alongside the tailored text.
@@ -66,12 +75,18 @@ interface TailorRequest {
     certifications: string[];
     achievements: any[];
     atsStrategy: string;
+    // Declared because the tailoring flow reads them: projects are injected
+    // verbatim, and the spoken languages / citizenship line is built from these.
+    relevantProjects?: any[];
+    languages?: any[];
+    citizenship?: string;
     city?: string;
     country?: string;
     address?: string;
     state?: string;
     zipCode?: string;
   };
+
   includeReferral?: boolean;
   coverLetterTone?: "professional" | "enthusiastic" | "concise";
 }
@@ -2156,64 +2171,8 @@ function buildStrategyBlock(strategy: AtsStrategy): string {
   return parts.join("\n\n");
 }
 
-// ============================================================
-// WHOLE-TERM KEYWORD MATCHING
-//
-// Substring matching inflates coverage and lies about skills: "java"
-// matches "javascript", "react" matches "reactive". Matching on term
-// boundaries fixes that while preserving C++, C#, .NET, CI/CD and Node.js.
-// ============================================================
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
-function buildTermPattern(term: string): RegExp | null {
-  const t = term.trim();
-  if (!t) return null;
-  // Internal spaces, hyphens and slashes are interchangeable separators.
-  const core = escapeRegex(t)
-    .replace(/\\?\s+/g, "[\\s\\-]+")
-    .replace(/\//g, "[\\/\\-]");
-  const startsAlnum = /^[A-Za-z0-9]/.test(t);
-  const endsAlnum = /[A-Za-z0-9]$/.test(t);
-  // Trailing +, # and . are part of the term (C++, C#, .NET) and must not
-  // be followed by more word characters.
-  const prefix = startsAlnum ? "(?<![A-Za-z0-9+#])" : "";
-  const suffix = endsAlnum ? "(?![A-Za-z0-9+#])" : "(?![A-Za-z0-9])";
-  try {
-    return new RegExp(prefix + core + suffix, "i");
-  } catch {
-    return null;
-  }
-}
 
-function termAppearsIn(text: string, term: string): boolean {
-  const pattern = buildTermPattern(term);
-  if (!pattern) return false;
-  return pattern.test(text);
-}
-
-interface CoverageResult {
-  matched: string[];
-  missing: string[];
-  percent: number;
-}
-
-/** Coverage counted off real document text: matched unique terms / total unique terms. */
-function measureCoverage(text: string, terms: string[]): CoverageResult {
-  const unique = Array.from(new Set(terms.map((t) => t.trim()).filter(Boolean)));
-  const matched: string[] = [];
-  const missing: string[] = [];
-  for (const term of unique) {
-    if (termAppearsIn(text, term)) matched.push(term);
-    else missing.push(term);
-  }
-  return {
-    matched,
-    missing,
-    percent: unique.length === 0 ? 0 : Math.round((matched.length / unique.length) * 100),
-  };
-}
 
 
 serve(async (req) => {
@@ -3728,60 +3687,236 @@ ${
 
     // Deterministic SELECTED PROJECTS injection - rebuild from structured profile data
     // so project names, tech stack, and URLs are preserved verbatim (anti-fabrication).
-    if (result.tailoredResume && Array.isArray(userProfile.relevantProjects) && userProfile.relevantProjects.length > 0) {
-      const buildProjectsSection = (projects: any[]): string => {
-        const lines: string[] = ["PROJECTS", ""];
-        for (const p of projects) {
-          if (!p || typeof p !== "object") continue;
-          const name = (p.name || "").toString().trim();
-          if (!name) continue;
-          lines.push(name);
-          const techStack = Array.isArray(p.techStack)
-            ? p.techStack.filter(Boolean).join(", ")
-            : (p.techStack || "").toString().trim();
-          if (techStack) lines.push(techStack);
-          const bullets = Array.isArray(p.bullets) && p.bullets.filter(Boolean).length > 0
-            ? p.bullets
-            : [(p.description || "").toString()];
-          for (const b of bullets) {
-            const t = (b || "").toString().trim();
-            if (t) lines.push(`• ${t}`);
-          }
-          const live = (p.liveUrl || "").toString().trim();
-          const code = (p.codeUrl || "").toString().trim();
-          if (live || code) {
-            const parts: string[] = [];
-            if (live) parts.push(`Live demo: ${live}`);
-            if (code) parts.push(`Code: ${code}`);
-            lines.push(parts.join(" | "));
-          }
-          lines.push("");
-        }
-        return lines.join("\n").trimEnd();
-      };
+    // Built once here and re-applied after every accepted revision pass, so a
+    // revision can never rewrite, drop or invent a project.
+    const projectsBlock = buildProjectsSection(userProfile.relevantProjects);
+    if (result.tailoredResume && projectsBlock) {
+      result.tailoredResume = applyProjectsSection(result.tailoredResume, projectsBlock);
+      console.log(`Injected PROJECTS section (${(userProfile.relevantProjects || []).length} projects)`);
+    }
 
-      const projectsBlock = buildProjectsSection(userProfile.relevantProjects);
-      if (projectsBlock) {
-        let resume = result.tailoredResume;
-        // Strip ALL existing projects sections - case-insensitive and global, looping until no match remains.
-        const sectionRegex = /^(SELECTED PROJECTS|RELEVANT PROJECTS|KEY PROJECTS|PROJECTS)\b[^\n]*\n[\s\S]*?(?=\n[A-Z][A-Z0-9 &\/\-]{2,}\n|$)/gim;
-        while (sectionRegex.test(resume)) {
-          resume = resume.replace(sectionRegex, "");
-          // Reset lastIndex so the next global search starts from the top of the updated text
-          sectionRegex.lastIndex = 0;
-        }
-        resume = resume.replace(/\n{3,}/g, "\n\n").trim();
+    // ============================================================
+    // UP TO TWO EVIDENCE-BACKED REVISION PASSES
+    //
+    // The first draft is measured against the posting's keywords. While
+    // coverage sits below the target (90% unless the extension asks for
+    // another figure), the model is asked to work the missing terms into
+    // bullets that are ALREADY in the draft, using this candidate's saved
+    // experience and projects as the only permitted source.
+    //
+    // A pass is accepted only when it raises measured coverage AND passes
+    // the fidelity checks: no dropped section, no changed date, no invented
+    // figure, no shrinking the document. Otherwise the previous draft
+    // stands. A term with no evidence anywhere in the profile is never
+    // targeted -- it is reported back as unsupported instead.
+    // ============================================================
+    const profileEvidenceText = [
+      JSON.stringify(userProfile.skills || []),
+      JSON.stringify(userProfile.professionalExperience || []),
+      JSON.stringify(userProfile.relevantProjects || []),
+      JSON.stringify(userProfile.certifications || []),
+      JSON.stringify(userProfile.education || []),
+      userProfile.coverLetter || "",
+    ].join(" \n ");
 
-        // Insert canonical block before EDUCATION, or append if EDUCATION is missing.
-        const eduRegex = /^EDUCATION\b/m;
-        if (eduRegex.test(resume)) {
-          result.tailoredResume = resume.replace(eduRegex, projectsBlock + "\n\nEDUCATION");
-        } else {
-          result.tailoredResume = resume.trimEnd() + "\n\n" + projectsBlock + "\n";
+    const evidenceFor = (term: string): string | null => {
+      const supplied = atsStrategy.evidence[term.toLowerCase()];
+      if (supplied) return supplied;
+      if (!termAppearsIn(profileEvidenceText, term)) return null;
+      // Quote the candidate's own sentence carrying the term, so the model
+      // rewrites a real achievement rather than composing a new claim.
+      for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
+        for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
+          const text = (bullet || "").toString();
+          if (text && termAppearsIn(text, term)) return `${(role as any).company || "profile"}: ${text}`;
         }
-        console.log(`Injected PROJECTS section (${userProfile.relevantProjects.length} projects)`);
+      }
+      for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
+        const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
+          .filter(Boolean)
+          .join(" ");
+        if (text && termAppearsIn(text, term)) return `${(project as any).name || "project"}: ${text}`;
+      }
+      return "recorded in the candidate's saved skills";
+    };
+
+    const coverageTarget = atsStrategy.keywordCoverageTarget ?? 90;
+    const revisions: RevisionRecord[] = [];
+
+    if (jdKeywords.allKeywords.length > 0 && result.tailoredResume) {
+      for (let pass = 1; pass <= 2; pass++) {
+        const draftResume: string = result.tailoredResume;
+        const before = measureCoverage(`${draftResume}\n${result.tailoredCoverLetter || ""}`, jdKeywords.allKeywords);
+        if (before.percent >= coverageTarget) {
+          console.log(`[REVISION] Pass ${pass} not needed: coverage ${before.percent}% already at target ${coverageTarget}%`);
+          break;
+        }
+
+        // Only evidenced gaps are targeted, required qualifications first.
+        const requirementText = mergedRequirements.join(" \n ").toLowerCase();
+        const gaps = before.missing
+          .map((term) => ({ term, evidence: evidenceFor(term) }))
+          .filter((g): g is { term: string; evidence: string } => Boolean(g.evidence))
+          .sort((a, b) => {
+            const aReq = requirementText.includes(a.term.toLowerCase()) ? 0 : 1;
+            const bReq = requirementText.includes(b.term.toLowerCase()) ? 0 : 1;
+            return aReq - bReq || a.term.localeCompare(b.term);
+          })
+          .slice(0, 12);
+
+        if (gaps.length === 0) {
+          console.log(`[REVISION] Pass ${pass} stopped: none of the ${before.missing.length} missing terms have evidence in this profile`);
+          break;
+        }
+
+        console.log(
+          `[REVISION] Pass ${pass}: coverage ${before.percent}% of ${coverageTarget}%, targeting ${gaps.length} evidenced terms: ${gaps.map((g) => g.term).join(", ")}`,
+        );
+
+        const revisionPrompt = [
+          "Revise the CV below. This is a revision pass, not a rewrite.",
+          "",
+          "WHAT TO CHANGE. Each term listed below is missing from the CV, and the evidence line beside it comes from this candidate's own saved profile. Work the term into the EXISTING bullet that the evidence describes, in plain professional English, so the sentence still reads as one thing the candidate did. Where a term genuinely belongs in the skills list rather than an achievement, put it there instead.",
+          "",
+          gaps.map((g) => `- ${g.term}\n  evidence: ${g.evidence}`).join("\n"),
+          "",
+          "WHAT MUST NOT CHANGE. Every section heading, in the same order. Every employer, job title, location and date, character for character. Every existing figure; never introduce a figure that is not already in the draft. Never add a role, qualification, tool or eligibility the evidence above does not support. Never delete a bullet or a section to make room. Do not append terms to the end of a sentence as a keyword tail, and do not repeat a term you have already worked in.",
+          "",
+          "If a term cannot be worked in truthfully, LEAVE IT OUT and leave that bullet exactly as it is. An honest gap is the correct outcome.",
+          "",
+          'Return one JSON object and nothing else: {"tailoredResume": "...", "tailoredCoverLetter": "..."} with newlines escaped as \\n. No markdown, no code fences.',
+          "",
+          "CURRENT CV:",
+          draftResume,
+          "",
+          "CURRENT COVER LETTER:",
+          result.tailoredCoverLetter || "(none)",
+        ].join("\n");
+
+        let revisionText = "";
+        try {
+          const revisionResponse = await fetch(apiConfig.endpoint, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${userApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: apiConfig.model,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: revisionPrompt },
+              ],
+              max_tokens: apiConfig.maxTokens,
+              temperature: 0.3,
+            }),
+          });
+          if (!revisionResponse.ok) {
+            const body = await revisionResponse.text();
+            console.warn(`[REVISION] Pass ${pass} request failed (${revisionResponse.status}): ${body.slice(0, 300)}`);
+            revisions.push({
+              pass,
+              coverageBefore: before.percent,
+              coverageAfter: before.percent,
+              targetedTerms: gaps.map((g) => g.term),
+              accepted: false,
+              rejectedBecause: `revision request failed (${revisionResponse.status})`,
+              changedBullets: [],
+            });
+            break;
+          }
+          const revisionData = await revisionResponse.json();
+          revisionText = revisionData.choices?.[0]?.message?.content || "";
+          await logApiUsage(supabase, userId, usageFunctionName, revisionData.usage?.total_tokens || 0);
+        } catch (revisionError) {
+          console.warn(`[REVISION] Pass ${pass} errored:`, revisionError);
+          revisions.push({
+            pass,
+            coverageBefore: before.percent,
+            coverageAfter: before.percent,
+            targetedTerms: gaps.map((g) => g.term),
+            accepted: false,
+            rejectedBecause: "revision request errored",
+            changedBullets: [],
+          });
+          break;
+        }
+
+        // Parse the revision with the same tolerance as the first draft.
+        let revisedResume = "";
+        let revisedCover = "";
+        try {
+          const cleaned = revisionText.replace(/```json\s*/g, "").replace(/```\s*/g, "");
+          const match = cleaned.match(/\{[\s\S]*\}/);
+          const parsed = JSON.parse(match ? match[0] : cleaned);
+          revisedResume = typeof parsed.tailoredResume === "string" ? parsed.tailoredResume : "";
+          revisedCover = typeof parsed.tailoredCoverLetter === "string" ? parsed.tailoredCoverLetter : "";
+        } catch {
+          const recovered = revisionText.match(
+            /"tailoredResume"\s*:\s*"([\s\S]*?)"\s*(?=,\s*"[A-Za-z0-9_]+"\s*:|\}\s*$)/,
+          );
+          if (recovered) {
+            revisedResume = recovered[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim();
+          }
+        }
+
+        if (!revisedResume) {
+          console.warn(`[REVISION] Pass ${pass} returned no usable CV text; keeping the previous draft`);
+          revisions.push({
+            pass,
+            coverageBefore: before.percent,
+            coverageAfter: before.percent,
+            targetedTerms: gaps.map((g) => g.term),
+            accepted: false,
+            rejectedBecause: "no usable text returned",
+            changedBullets: [],
+          });
+          break;
+        }
+
+        // Same post-processing the first draft gets, so the comparison is fair
+        // and the projects section stays verbatim from the profile.
+        revisedResume = applyContentQuality(revisedResume);
+        if (projectsBlock) revisedResume = applyProjectsSection(revisedResume, projectsBlock);
+        const revisedCoverFinal = revisedCover ? applyContentQuality(revisedCover) : result.tailoredCoverLetter || "";
+
+        const verdict = evaluateRevision({
+          draft: draftResume,
+          revised: revisedResume,
+          coverLetterDraft: result.tailoredCoverLetter || "",
+          coverLetterRevised: revisedCoverFinal,
+          terms: jdKeywords.allKeywords,
+        });
+
+        if (!verdict.accept) {
+          console.warn(`[REVISION] Pass ${pass} REJECTED (${verdict.reason}); keeping the previous draft`);
+          revisions.push({
+            pass,
+            coverageBefore: verdict.coverageBefore,
+            coverageAfter: verdict.coverageAfter,
+            targetedTerms: gaps.map((g) => g.term),
+            accepted: false,
+            rejectedBecause: verdict.reason,
+            changedBullets: [],
+          });
+          break;
+        }
+
+        result.tailoredResume = revisedResume;
+        if (revisedCover) result.tailoredCoverLetter = revisedCoverFinal;
+        revisions.push({
+          pass,
+          coverageBefore: verdict.coverageBefore,
+          coverageAfter: verdict.coverageAfter,
+          targetedTerms: gaps.map((g) => g.term),
+          accepted: true,
+          changedBullets: verdict.changedBullets,
+        });
+        console.log(
+          `[REVISION] Pass ${pass} ACCEPTED: coverage ${verdict.coverageBefore}% -> ${verdict.coverageAfter}%, ${verdict.changedBullets.length} bullets changed`,
+        );
+
+        if (verdict.coverageAfter >= coverageTarget) break;
       }
     }
+
 
 
     // Ensure all required fields with our pre-calculated values
@@ -3859,14 +3994,8 @@ ${
       // the whole permitted source. Anything else stays missing and is
       // reported back as an unsupported requirement, because a skill the
       // candidate cannot defend in an interview is worse than a gap.
-      const profileEvidenceText = [
-        JSON.stringify(userProfile.skills || []),
-        JSON.stringify(userProfile.professionalExperience || []),
-        JSON.stringify(userProfile.relevantProjects || []),
-        JSON.stringify(userProfile.certifications || []),
-        JSON.stringify(userProfile.education || []),
-        userProfile.coverLetter || "",
-      ].join(" \n ");
+      // profileEvidenceText is built once, before the revision passes.
+
 
       const singleWordMissing = actualMissing.filter(
         (kw) => atsStrategy.evidence[kw.toLowerCase()] || termAppearsIn(profileEvidenceText, kw),
@@ -4003,12 +4132,36 @@ ${
         jdKeywords.allKeywords.length === 0
           ? "Not measured - no keywords found in this posting"
           : `${measured.matched.length} of ${jdKeywords.allKeywords.length} keywords (${measured.percent}%)`,
-      target: atsStrategy.keywordCoverageTarget,
+      target: atsStrategy.keywordCoverageTarget ?? coverageTarget,
       matchedTerms: measured.matched,
       missingTerms: measured.missing,
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
     };
+    // What the revision passes actually did, so the candidate sees the
+    // before/after figures and the bullets that changed rather than a score
+    // that moved for unexplained reasons.
+    result.revisionPasses = revisions.map((r) => ({
+      pass: r.pass,
+      coverageBefore: r.coverageBefore,
+      coverageAfter: r.coverageAfter,
+      targetedTerms: r.targetedTerms,
+      accepted: r.accepted,
+      rejectedBecause: r.rejectedBecause,
+      changedBullets: r.changedBullets,
+    }));
+    result.revisionSummary = revisions.length === 0
+      ? measured.percent >= coverageTarget
+        ? `No revision needed: coverage reached ${measured.percent}% on the first draft.`
+        : "No revision was attempted."
+      : revisions
+          .map((r) =>
+            r.accepted
+              ? `Pass ${r.pass}: ${r.coverageBefore}% to ${r.coverageAfter}%, ${r.changedBullets.length} bullet(s) revised.`
+              : `Pass ${r.pass}: not applied (${r.rejectedBecause}). Draft left unchanged.`,
+          )
+          .join(" ");
+
     result.keywordsMatched = measured.matched;
     result.keywordsMissing = measured.missing;
     result.matchedKeywords = measured.matched; // Alias for extension compatibility
