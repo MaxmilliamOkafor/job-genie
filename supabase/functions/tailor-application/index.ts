@@ -3776,23 +3776,12 @@ ${
     const generatedCoverText = (result.tailoredCoverLetter || "").toLowerCase();
     const combinedGeneratedText = `${generatedResumeText} ${generatedCoverText}`;
 
-    // Count how many JD keywords appear in the generated content
-    const actualMatched: string[] = [];
-    const actualMissing: string[] = [];
+    // Count how many JD keywords appear in the generated content, on whole
+    // terms only: "java" is not satisfied by "javascript".
+    const firstPass = measureCoverage(combinedGeneratedText, jdKeywords.allKeywords);
+    const actualMatched: string[] = [...firstPass.matched];
+    const actualMissing: string[] = [...firstPass.missing];
 
-    for (const keyword of jdKeywords.allKeywords) {
-      const keywordLower = keyword.toLowerCase();
-      // Check for exact or partial match
-      if (
-        combinedGeneratedText.includes(keywordLower) ||
-        combinedGeneratedText.includes(keywordLower.replace(/[.\-\/]/g, " ")) ||
-        combinedGeneratedText.includes(keywordLower.replace(/\s+/g, ""))
-      ) {
-        actualMatched.push(keyword);
-      } else {
-        actualMissing.push(keyword);
-      }
-    }
 
     // Calculate actual score from generated content
     const actualScore =
