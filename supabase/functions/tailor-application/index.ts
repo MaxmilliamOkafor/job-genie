@@ -3717,26 +3717,61 @@ ${
       userProfile.coverLetter || "",
     ].join(" \n ");
 
+    // A named tool or product is only supported when the profile actually
+    // records it. A capability phrase ("end-to-end", "ownership", "data
+    // modelling") can be supported by an achievement that demonstrates it, so
+    // those are matched through wording the candidate already used. General
+    // experience never implies a specific named tool.
+    const capabilitySynonyms: Record<string, string[]> = {
+      "end-to-end": ["end to end", "from ingestion to", "owned the full", "designed and delivered", "built and deployed"],
+      ownership: ["owned", "led", "drove", "accountable for", "took responsibility"],
+      "stakeholder management": ["stakeholders", "vp-level", "business partners", "presented findings"],
+      "data modelling": ["data model", "schema", "dimensional", "star schema"],
+      "data modeling": ["data model", "schema", "dimensional", "star schema"],
+      "data quality": ["data quality", "validation", "reconciliation", "accuracy checks"],
+      collaboration: ["collaborated", "partnered", "worked with", "cross-functional"],
+      mentoring: ["mentored", "coached", "onboarded"],
+      automation: ["automated", "automation", "scheduled"],
+      "problem solving": ["diagnosed", "root cause", "resolved", "debugged"],
+      communication: ["presented", "documented", "reported to"],
+    };
+    const evidenceSources: Array<{ label: string; text: string }> = [];
+    for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
+      for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
+        const text = (bullet || "").toString().trim();
+        if (text) evidenceSources.push({ label: (role as any).company || "profile", text });
+      }
+    }
+    for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
+      const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (text) evidenceSources.push({ label: (project as any).name || "project", text });
+    }
+
+    // Per-keyword decisions, so a skipped revision can be explained term by term.
+    const keywordDecisions: Array<{ term: string; decision: string; evidence?: string }> = [];
+
     const evidenceFor = (term: string): string | null => {
       const supplied = atsStrategy.evidence[term.toLowerCase()];
       if (supplied) return supplied;
-      if (!termAppearsIn(profileEvidenceText, term)) return null;
-      // Quote the candidate's own sentence carrying the term, so the model
-      // rewrites a real achievement rather than composing a new claim.
-      for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
-        for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
-          const text = (bullet || "").toString();
-          if (text && termAppearsIn(text, term)) return `${(role as any).company || "profile"}: ${text}`;
+      // Literal record in the profile: the strongest evidence.
+      for (const src of evidenceSources) {
+        if (termAppearsIn(src.text, term)) return `${src.label}: ${src.text}`;
+      }
+      if (termAppearsIn(profileEvidenceText, term)) return "recorded in the candidate's saved skills";
+      // Capability wording: only for capability phrases, never for tools.
+      const synonyms = capabilitySynonyms[term.toLowerCase().replace(/\s+/g, " ")];
+      if (synonyms) {
+        for (const src of evidenceSources) {
+          const lower = src.text.toLowerCase();
+          if (synonyms.some((s) => lower.includes(s))) return `${src.label}: ${src.text}`;
         }
       }
-      for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
-        const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
-          .filter(Boolean)
-          .join(" ");
-        if (text && termAppearsIn(text, term)) return `${(project as any).name || "project"}: ${text}`;
-      }
-      return "recorded in the candidate's saved skills";
+      return null;
     };
+
 
     const coverageTarget = atsStrategy.keywordCoverageTarget ?? 90;
     const revisions: RevisionRecord[] = [];
