@@ -2651,8 +2651,8 @@ Do not just list soft skills. Weave them into experience bullets:
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
 
 RULE 6 - SEARCHABILITY FIXES (worth ~10 points)
-- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - the candidate location adapts to the job's city (smartLocation) so geo-filters do not reject the application.
-- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - use the job-derived location, NOT a hardcoded address.
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - this is the candidate's own saved location. Never substitute the job's city.
+- Never write the employer's or posting's city as the candidate's location.
 - Job title from JD appears in summary (Rule 1)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
@@ -3165,7 +3165,7 @@ After rewriting, run this internal checklist:
 [ ] Are the bullets in each role still in the SOURCE order, with none moved to the front for relevance?
 [ ] Does the cover letter address skill gaps with transferable experience?
 [ ] Is "${smartLocation}" present in the header as the candidate's location?
-[ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
+[ ] Is the header location the candidate's saved location "${smartLocation}", and not the job's city?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
@@ -3268,7 +3268,7 @@ Return ONLY a single JSON object. All newlines inside string values MUST be esca
 === TARGET JOB ===
 Title: ${jobTitle}
 Company: ${company}
-Location: ${location || "Not specified"} → SMART LOCATION FOR CV: ${smartLocation}
+Location: ${location || "Not specified"} (the posting's location - NOT the candidate's). CANDIDATE LOCATION FOR CV HEADER: ${smartLocation}
 Job ID: ${jobId || "N/A"}
 Description: ${description}
 Key Requirements: ${requirements.join(", ")}
