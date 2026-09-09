@@ -4088,8 +4088,22 @@ ${
         .replace(/,\s*(?=[.;:])/g, "")
         .replace(/\s+([.,;:])/g, "$1")
         .trim();
-
+      // A sentence can still hang on a preposition once its object was removed:
+      // "and the emphasis on." Those are dropped whole, because half a sentence
+      // reads worse than one fewer sentence.
+      const danglingTail = /\b(such as|including|like|namely|on|of|with|in|for|to|at|from|around|using|and)\s*$/i;
+      result.tailoredCoverLetter = result.tailoredCoverLetter
+        .split(/\n\s*\n/)
+        .map((para) => {
+          const sentences = para.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+          if (!sentences) return para;
+          const kept = sentences.filter((sentence) => !danglingTail.test(sentence.replace(/[.!?\s]+$/, "")));
+          return (kept.length ? kept : sentences).join(" ").replace(/[ \t]{2,}/g, " ").trim();
+        })
+        .filter(Boolean)
+        .join("\n\n");
     }
+
     result.removedUnrecordedSkills = invented;
 
 
