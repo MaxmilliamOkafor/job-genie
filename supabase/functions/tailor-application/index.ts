@@ -2322,10 +2322,8 @@ serve(async (req) => {
     // role printed "New York" under the candidate's name. That is a factual
     // claim about where the candidate lives, so it now comes from the saved
     // profile only and never from the posting.
-    const smartLocation = [userProfile.city, userProfile.country]
-      .map((v) => (typeof v === "string" ? v.trim() : ""))
-      .filter(Boolean)
-      .join(", ") || "Remote";
+    const smartLocation =
+      buildCandidateLocation(userProfile.city, userProfile.country) || "Remote";
     console.log(`Header location from saved profile: ${smartLocation}`);
 
 
