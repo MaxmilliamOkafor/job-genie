@@ -4405,6 +4405,7 @@ ${
       literalCoverage: dual.literal,
       evidenceAlignment: dual.alignment,
       unsupportedRequirements,
+      lostInPostProcessing,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
       // Why each missing term was or was not worked in, term by term.
       // Terms only become final gaps after the unrecorded-tool scrub runs, so
@@ -4415,7 +4416,13 @@ ${
         if (already) return already;
         const evidence = evidenceFor(term);
         return evidence
-          ? { term, decision: "supported by saved profile but not carried into the final document", evidence }
+          ? {
+              term,
+              decision: lostInPostProcessing.some((l) => l.toLowerCase() === term.toLowerCase())
+                ? "supported by the saved profile and present in the draft, but removed by the document clean-up steps"
+                : "supported by saved profile but not carried into the final document",
+              evidence,
+            }
           : { term, decision: "left out - no saved experience or project supports this term" };
       }),
     };
@@ -4435,7 +4442,9 @@ ${
     result.revisionSummary = revisions.length === 0
       ? measured.percent >= coverageTarget
         ? `No revision needed: coverage reached ${measured.percent}% on the first draft.`
-        : "No revision was attempted."
+        : lostInPostProcessing.length > 0
+          ? `No revision was attempted: the draft was at or above target, and these terms were lost afterwards by the clean-up steps rather than missing from the draft: ${lostInPostProcessing.join(", ")}.`
+          : "No revision was attempted."
       : revisions
           .map((r) =>
             r.accepted
