@@ -1772,6 +1772,7 @@ async function handleRawContentRequest(body: {
     // ---- Render ----
     let docxBytes: Uint8Array;
     if (type === "cv") {
+      if (jobTitle) norm.targetTitle = jobTitle;
       docxBytes = await buildResumeDocxBytes(norm);
     } else {
       // The builder prints the letterhead, date, subject line, salutation and
@@ -2186,7 +2187,9 @@ async function buildCoverLetterDocxBytes(data: {
   paragraphs: string[];
 }): Promise<Uint8Array> {
   const children: Paragraph[] = [];
-  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact, data.targetTitle));
+  // The letter already carries "Re: <role>" below the date, so the header stays
+  // name and contact only - printing the role twice looked like a template bug.
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
 
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   children.push(new Paragraph({
