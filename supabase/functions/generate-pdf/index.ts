@@ -701,6 +701,8 @@ interface NormalisedResume {
   projects: ProjectEntry[];
   education: EducationEntry[];
   skills?: { primary?: string[]; secondary?: string[] };
+  /** The role applied for, printed once directly under the name. */
+  targetTitle?: string;
   /** Labelled skill groups exactly as written, one rendered line each. */
   skillGroups?: Array<{ label: string; items: string[] }>;
 
@@ -1770,6 +1772,7 @@ async function handleRawContentRequest(body: {
     // ---- Render ----
     let docxBytes: Uint8Array;
     if (type === "cv") {
+      if (jobTitle) norm.targetTitle = jobTitle;
       docxBytes = await buildResumeDocxBytes(norm);
     } else {
       // The builder prints the letterhead, date, subject line, salutation and
@@ -1924,12 +1927,23 @@ function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHype
   return out;
 }
 
-function docxHeader(name: string, contact: ContactInfo): Paragraph[] {
+function docxHeader(name: string, contact: ContactInfo, targetTitle?: string): Paragraph[] {
+  // THE TARGET ROLE LINE SURVIVES THE EXPORT.
+  // The drafted CV carried it directly under the name; the exporter used to
+  // read the header as name + contact only, so the printed document opened on a
+  // contact line and lost the one line a reviewer reads first.
+  const roleLine = (targetTitle || "").trim();
   return [
     new Paragraph({
-      spacing: { after: 120 },
+      spacing: { after: roleLine ? 40 : 120 },
       children: [TR({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
     }),
+    ...(roleLine
+      ? [new Paragraph({
+          spacing: { after: 100 },
+          children: [TR({ text: roleLine, font: DOCX_FONT, size: 24, bold: true, color: DOCX_NAVY, characterSpacing: 8 })],
+        })]
+      : []),
     new Paragraph({
       spacing: { after: 60 },
       children: docxContactChildren(contact),
@@ -2088,7 +2102,7 @@ function docxSkills(groups: Array<{ label: string; items: string[] }>): Paragrap
 
 async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array> {
   const children: Paragraph[] = [];
-  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact, data.targetTitle));
 
   if (data.summary) {
     children.push(...docxSectionHeader("Professional Summary"));
@@ -2173,6 +2187,8 @@ async function buildCoverLetterDocxBytes(data: {
   paragraphs: string[];
 }): Promise<Uint8Array> {
   const children: Paragraph[] = [];
+  // The letter already carries "Re: <role>" below the date, so the header stays
+  // name and contact only - printing the role twice looked like a template bug.
   children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
 
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });

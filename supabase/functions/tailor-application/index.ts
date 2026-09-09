@@ -4153,7 +4153,11 @@ ${
           // Letterhead, links and salutation lines are left exactly as they are.
           if (t.includes("@") || /https?:\/\/|www\.|\.(com|app|dev|io|ie|org|net)\b/i.test(t)) return line;
           if (/^(dear|sincerely|re:|date:)/i.test(t) || t.length < 40) return stripTools(line);
-          const sentences = t.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+          // A DECIMAL POINT IS NOT A SENTENCE END: splitting on it turned the
+          // candidate's own "£2.6bn" into "£2. 6bn". Mask, split, restore.
+          const DEC = "\u0001";
+          const maskedLine = t.replace(/(\d)\.(?=\d)/g, `$1${DEC}`);
+          const sentences = maskedLine.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s: string) => s.replaceAll(DEC, "."));
           if (!sentences) return stripTools(line);
           const kept = sentences
             .filter((s: string) => !carriesWordTerm(s))
@@ -4228,6 +4232,70 @@ ${
     if (result.tailoredResume) result.tailoredResume = enforceTargetRoleLine(result.tailoredResume);
 
     // ============================================================
+    // A PRACTICE THE BULLET PERFORMS IS NAMED IN THAT BULLET.
+    //
+    // "Authored the Terraform modules and Helm charts the client continues to
+    // operate" IS infrastructure as code, so a posting that requires the phrase
+    // was scored as a gap on a CV that demonstrably does the work. This names
+    // the practice inside the candidate's own sentence and changes nothing else:
+    // no tool added, no figure touched, no employer, title or date altered. It
+    // runs only where the bullet already performs the practice, and only when
+    // the shared evidence rule agrees the practice is demonstrated.
+    // ============================================================
+    const PRACTICE_WORDING: { term: string; tools: RegExp; rewrite: (line: string) => string | null }[] = [
+      {
+        term: "infrastructure as code",
+        tools: /\b(terraform|cloudformation|pulumi)\b/i,
+        rewrite: (line) => {
+          if (/infrastructure as code/i.test(line)) return null;
+          // "... modules ... with Terraform" -> "... as code with Terraform"
+          if (/\b(with|using|via|in)\s+(terraform|cloudformation|pulumi)\b/i.test(line)) {
+            return line.replace(
+              /\b(with|using|via|in)\s+(terraform|cloudformation|pulumi)\b/i,
+              (_m, prep, tool) => `${prep} ${tool} as infrastructure as code`,
+            );
+          }
+          // "Authored the Terraform modules ..." -> "Authored the Terraform infrastructure as code modules ..."
+          if (/\b(terraform|cloudformation|pulumi)\s+(modules?|templates?|stacks?|scripts?|configuration)\b/i.test(line)) {
+            return line.replace(
+              /\b(terraform|cloudformation|pulumi)\s+(modules?|templates?|stacks?|scripts?|configuration)\b/i,
+              (_m, tool, noun) => `${tool} infrastructure as code ${noun}`,
+            );
+          }
+          return null;
+        },
+      },
+    ];
+    const namePracticesInBullets = (resumeText: string): { text: string; named: string[] } => {
+      const named: string[] = [];
+      if (!resumeText) return { text: resumeText, named };
+      let text = resumeText;
+      const required = jdKeywords.allKeywords.map((k) => k.toLowerCase());
+      for (const practice of PRACTICE_WORDING) {
+        const asked = required.some((k) => k === practice.term || k === "iac" || k.replace(/\s+/g, "") === practice.term.replace(/\s+/g, ""));
+        if (!asked) continue;
+        if (evidenceOf(practice.term).tier === "unsupported") continue;
+        const lines = text.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          if (!/^\s*-\s/.test(lines[i]) || !practice.tools.test(lines[i])) continue;
+          const rewritten = practice.rewrite(lines[i]);
+          if (!rewritten || rewritten === lines[i]) continue;
+          lines[i] = rewritten;
+          named.push(`${practice.term} -> ${rewritten.trim().slice(0, 90)}`);
+          break; // once, in the bullet that earns it
+        }
+        text = lines.join("\n");
+      }
+      return { text, named };
+    };
+    if (result.tailoredResume) {
+      const practices = namePracticesInBullets(result.tailoredResume);
+      result.tailoredResume = practices.text;
+      result.practicesNamed = practices.named;
+      if (practices.named.length) console.log(`[PRACTICE] ${practices.named.join(" | ")}`);
+    }
+
+    // ============================================================
     // A GRADE IS COPIED FROM THE RECORD OR IT DOES NOT APPEAR.
     //
     // A model that reads "First Class Honours" will happily print
@@ -4273,16 +4341,25 @@ ${
       const paragraphs = letter.split(/\n{2,}/).map((para) => {
         // Salutation, Re: line, signature and contact block are structure, not prose.
         if (/^(dear|re:|sincerely|date:|kind regards|yours)/i.test(para.trim()) || /[@|]/.test(para)) return para;
-        const sentences = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+        // A DECIMAL POINT IS NOT THE END OF A SENTENCE.
+        // Splitting naively turned "£2.6bn" into "£2. 6bn" in a letter that
+        // went out - the candidate's own figure, broken in half. Decimals,
+        // initials and abbreviations are masked before the split and restored
+        // after it.
+        const MASK = "\u0001";
+        const masked = para.replace(/(\d)\.(?=\d)/g, `$1${MASK}`).replace(/\b([A-Z])\.(?=[A-Z]\.)/g, `$1${MASK}`);
+        const sentences = masked.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
         if (!sentences) return para;
-        const kept = sentences.filter((s) => {
-          if (FILLER_SENTENCE.test(s)) {
-            removed.push(s.trim());
-            return false;
-          }
-          return true;
-        });
-        return kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
+        const kept = sentences
+          .map((s) => s.replaceAll(MASK, "."))
+          .filter((s) => {
+            if (FILLER_SENTENCE.test(s)) {
+              removed.push(s.trim());
+              return false;
+            }
+            return true;
+          });
+        return kept.map((s) => s.trim()).join(" ").replace(/[ \t]{2,}/g, " ").trim();
       });
       return {
         text: paragraphs.filter((p) => p.trim()).join("\n\n"),
