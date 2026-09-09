@@ -21,6 +21,12 @@ import {
   reportCoverage,
   type EvidenceSource,
 } from "../_shared/evidence.ts";
+import {
+  CATEGORY_LABEL,
+  categoriseSkill,
+  isSoftCapability,
+  placeSkillsInSection,
+} from "../_shared/skillsPlacement.ts";
 
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
@@ -4256,74 +4262,54 @@ ${
         console.log(`[FORCE-INJECT] Skipped ${unevidencedSkipped} keywords with no evidence in the profile`);
       }
 
-      // STRATEGY B: Inject single-word keywords into existing TECHNICAL PROFICIENCIES / SKILLS section
+      // STRATEGY B: place each recovered term on the RIGHT labelled line of the
+      // existing skills section.
+      //
+      // This used to append every term to the end of whatever the section
+      // contained, which on a grouped skills section (the template this app
+      // writes) hung a comma run off the last group - Jira under Programming,
+      // Scrum under Cloud & DevOps. Placement is now decided per term and the
+      // candidate's own equivalent label is reused; a new labelled line is
+      // written only when the section has no suitable group. The languages /
+      // citizenship line is never touched.
       const toInjectSingles = singleWordMissing;
       if (toInjectSingles.length > 0) {
-        // The trailing section is optional. These used to require the
-        // skills section to be FOLLOWED by CERTIFICATIONS/EDUCATION/etc,
-        // so a CV whose skills list was the last thing on the page did
-        // not match, and Strategy 2 below then appended a SECOND
-        // TECHNICAL PROFICIENCIES heading to a document that already had
-        // one.
-        const TAIL = "(\\n\\s*(?:CERTIFICATIONS|EDUCATION|ACHIEVEMENTS|PROJECTS|REFERENCES)\\b|$)";
-        const skillsSectionPatterns = [
-          new RegExp("(TECHNICAL\\s+PROFICIENCIES\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
-          new RegExp("(TECHNICAL\\s+SKILLS\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
-          new RegExp("(SKILLS\\s*[:\\n])([\\s\\S]*?)" + TAIL, "i"),
-        ];
-
-        // "Did we add anything" and "does a section already exist" are
-        // two different questions. Conflating them meant that when the
-        // section was found but already contained every missing keyword,
-        // this fell through to Strategy 2 and created a duplicate
-        // heading for a section that was sitting right there.
-        let injected = false;
-        let sectionFound = false;
-        for (const pattern of skillsSectionPatterns) {
-          const match = resume.match(pattern);
-          if (match) {
-            sectionFound = true;
-            const sectionHeader = match[1];
-            const sectionContent = match[2];
-            const nextSection = match[3];
-
-            const sectionLower = sectionContent.toLowerCase();
-            const toInject = toInjectSingles.filter(kw => !sectionLower.includes(kw.toLowerCase()));
-
-            if (toInject.length > 0) {
-              const existingTrimmed = sectionContent.trimEnd();
-              const separator = existingTrimmed.endsWith(",") ? " " : ", ";
-              const injectedContent = `${existingTrimmed}${separator}${toInject.join(", ")}`;
-              resume = resume.replace(match[0], `${sectionHeader}${injectedContent}${nextSection}`);
-              console.log(`[FORCE-INJECT] Injected ${toInject.length} single keywords into skills section`);
-              injected = true;
-            }
-            break;
-          }
+        const placement = placeSkillsInSection(resume, toInjectSingles);
+        if (placement.added.length > 0) {
+          resume = placement.text;
+          const summary = placement.added
+            .map((a) => `${a.term} -> ${a.label}${a.created ? " (new line)" : ""}`)
+            .join("; ");
+          console.log(`[FORCE-INJECT] Placed ${placement.added.length} recorded skills: ${summary}`);
         }
-
-        // Strategy 2: If no skills section found, append one before Certifications/Education
-        if (!sectionFound && !injected && toInjectSingles.length > 0) {
-          const insertBeforePatterns = [
-            /(\n\s*CERTIFICATIONS\b)/i,
-            /(\n\s*EDUCATION\b)/i,
-            /(\n\s*ACHIEVEMENTS\b)/i,
-          ];
-
-          for (const pattern of insertBeforePatterns) {
-            const match = resume.match(pattern);
-            if (match && match.index !== undefined) {
-              const newSection = `\n\nTECHNICAL SKILLS\n${toInjectSingles.join(", ")}\n`;
-              resume = resume.substring(0, match.index) + newSection + resume.substring(match.index);
-              console.log(`[FORCE-INJECT] Created new Technical Proficiencies section with ${toInjectSingles.length} keywords`);
-              injected = true;
-              break;
+        const dupes = placement.skipped.filter((s) => s.reason === "duplicate");
+        if (dupes.length) {
+          console.log(`[FORCE-INJECT] Already present, not duplicated: ${dupes.map((d) => d.term).join(", ")}`);
+        }
+        const soft = placement.skipped.filter((s) => s.reason === "soft capability");
+        if (soft.length) {
+          console.log(`[FORCE-INJECT] Capability terms left to achievements: ${soft.map((s) => s.term).join(", ")}`);
+        }
+        // A document with no skills section at all still needs one, inserted in
+        // the template's position: after experience, before PROJECTS /
+        // CERTIFICATIONS / EDUCATION.
+        if (placement.skipped.some((s) => s.reason === "no skills section")) {
+          const eligible = toInjectSingles.filter((t) => !isSoftCapability(t));
+          if (eligible.length) {
+            const grouped = new Map<string, string[]>();
+            for (const term of eligible) {
+              const label = CATEGORY_LABEL[categoriseSkill(term)];
+              grouped.set(label, [...(grouped.get(label) ?? []), term]);
             }
-          }
-
-          if (!injected) {
-            resume += `\n\nTECHNICAL SKILLS\n${toInjectSingles.join(", ")}\n`;
-            console.log(`[FORCE-INJECT] Appended Technical Proficiencies section at end`);
+            const body = [...grouped.entries()].map(([label, items]) => `${label}: ${items.join(", ")}`).join("\n");
+            const newSection = `\n\nTECHNICAL SKILLS\n${body}\n`;
+            const anchor = resume.match(/(\n\s*(?:PROJECTS|CERTIFICATIONS|EDUCATION|ACHIEVEMENTS)\b)/i);
+            if (anchor && anchor.index !== undefined) {
+              resume = resume.substring(0, anchor.index) + newSection + resume.substring(anchor.index);
+            } else {
+              resume += newSection;
+            }
+            console.log(`[FORCE-INJECT] Created a grouped TECHNICAL SKILLS section with ${eligible.length} recorded skills`);
           }
         }
       }
