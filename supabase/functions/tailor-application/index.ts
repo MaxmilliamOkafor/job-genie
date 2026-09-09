@@ -2303,19 +2303,17 @@ serve(async (req) => {
 
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
-    // Smart location logic - extract job city and format as "[CITY] | open to relocation"
-    // Priority: 1) extractedCity from extension, 2) extract from location/description, 3) profile city
-    const smartLocation = getSmartLocation(
-      location,
-      description,
-      userProfile.city,
-      userProfile.country,
-      jobId,
-      extractedCity,
-    );
-    console.log(
-      `Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ""}`,
-    );
+    // THE HEADER LOCATION IS THE CANDIDATE'S OWN, ALWAYS.
+    // This used to adapt to the job's city, so an application to a New York
+    // role printed "New York" under the candidate's name. That is a factual
+    // claim about where the candidate lives, so it now comes from the saved
+    // profile only and never from the posting.
+    const smartLocation = [userProfile.city, userProfile.country]
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .filter(Boolean)
+      .join(", ") || "Remote";
+    console.log(`Header location from saved profile: ${smartLocation}`);
+
 
     // The extension may send a structured strategy in atsStrategy: the
     // posting's requirements, a coverage target and a keyword -> profile
@@ -2653,8 +2651,8 @@ Do not just list soft skills. Weave them into experience bullets:
 - "explain technical concepts" → "...presented findings to VP-level stakeholders..."
 
 RULE 6 - SEARCHABILITY FIXES (worth ~10 points)
-- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - the candidate location adapts to the job's city (smartLocation) so geo-filters do not reject the application.
-- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - use the job-derived location, NOT a hardcoded address.
+- Location in CV header MUST be: "${smartLocation} | ${userProfile.phone} | ${userProfile.email}" - this is the candidate's own saved location. Never substitute the job's city.
+- Never write the employer's or posting's city as the candidate's location.
 - Job title from JD appears in summary (Rule 1)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
@@ -3167,7 +3165,7 @@ After rewriting, run this internal checklist:
 [ ] Are the bullets in each role still in the SOURCE order, with none moved to the front for relevance?
 [ ] Does the cover letter address skill gaps with transferable experience?
 [ ] Is "${smartLocation}" present in the header as the candidate's location?
-[ ] Is the job-derived location "${smartLocation}" used in the header (NOT a hardcoded address)?
+[ ] Is the header location the candidate's saved location "${smartLocation}", and not the job's city?
 [ ] Are section headings ATS-standard?
 [ ] Are all metrics and achievements from the original CV (nothing fabricated)?
 [ ] Is every number reproduced EXACTLY as the source states it (nothing rounded)?
@@ -3270,7 +3268,7 @@ Return ONLY a single JSON object. All newlines inside string values MUST be esca
 === TARGET JOB ===
 Title: ${jobTitle}
 Company: ${company}
-Location: ${location || "Not specified"} → SMART LOCATION FOR CV: ${smartLocation}
+Location: ${location || "Not specified"} (the posting's location - NOT the candidate's). CANDIDATE LOCATION FOR CV HEADER: ${smartLocation}
 Job ID: ${jobId || "N/A"}
 Description: ${description}
 Key Requirements: ${requirements.join(", ")}
@@ -3719,26 +3717,61 @@ ${
       userProfile.coverLetter || "",
     ].join(" \n ");
 
+    // A named tool or product is only supported when the profile actually
+    // records it. A capability phrase ("end-to-end", "ownership", "data
+    // modelling") can be supported by an achievement that demonstrates it, so
+    // those are matched through wording the candidate already used. General
+    // experience never implies a specific named tool.
+    const capabilitySynonyms: Record<string, string[]> = {
+      "end-to-end": ["end to end", "from ingestion to", "owned the full", "designed and delivered", "built and deployed"],
+      ownership: ["owned", "led", "drove", "accountable for", "took responsibility"],
+      "stakeholder management": ["stakeholders", "vp-level", "business partners", "presented findings"],
+      "data modelling": ["data model", "schema", "dimensional", "star schema"],
+      "data modeling": ["data model", "schema", "dimensional", "star schema"],
+      "data quality": ["data quality", "validation", "reconciliation", "accuracy checks"],
+      collaboration: ["collaborated", "partnered", "worked with", "cross-functional"],
+      mentoring: ["mentored", "coached", "onboarded"],
+      automation: ["automated", "automation", "scheduled"],
+      "problem solving": ["diagnosed", "root cause", "resolved", "debugged"],
+      communication: ["presented", "documented", "reported to"],
+    };
+    const evidenceSources: Array<{ label: string; text: string }> = [];
+    for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
+      for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
+        const text = (bullet || "").toString().trim();
+        if (text) evidenceSources.push({ label: (role as any).company || "profile", text });
+      }
+    }
+    for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
+      const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (text) evidenceSources.push({ label: (project as any).name || "project", text });
+    }
+
+    // Per-keyword decisions, so a skipped revision can be explained term by term.
+    const keywordDecisions: Array<{ term: string; decision: string; evidence?: string }> = [];
+
     const evidenceFor = (term: string): string | null => {
       const supplied = atsStrategy.evidence[term.toLowerCase()];
       if (supplied) return supplied;
-      if (!termAppearsIn(profileEvidenceText, term)) return null;
-      // Quote the candidate's own sentence carrying the term, so the model
-      // rewrites a real achievement rather than composing a new claim.
-      for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
-        for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
-          const text = (bullet || "").toString();
-          if (text && termAppearsIn(text, term)) return `${(role as any).company || "profile"}: ${text}`;
+      // Literal record in the profile: the strongest evidence.
+      for (const src of evidenceSources) {
+        if (termAppearsIn(src.text, term)) return `${src.label}: ${src.text}`;
+      }
+      if (termAppearsIn(profileEvidenceText, term)) return "recorded in the candidate's saved skills";
+      // Capability wording: only for capability phrases, never for tools.
+      const synonyms = capabilitySynonyms[term.toLowerCase().replace(/\s+/g, " ")];
+      if (synonyms) {
+        for (const src of evidenceSources) {
+          const lower = src.text.toLowerCase();
+          if (synonyms.some((s) => lower.includes(s))) return `${src.label}: ${src.text}`;
         }
       }
-      for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
-        const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
-          .filter(Boolean)
-          .join(" ");
-        if (text && termAppearsIn(text, term)) return `${(project as any).name || "project"}: ${text}`;
-      }
-      return "recorded in the candidate's saved skills";
+      return null;
     };
+
 
     const coverageTarget = atsStrategy.keywordCoverageTarget ?? 90;
     const revisions: RevisionRecord[] = [];
@@ -3754,8 +3787,17 @@ ${
 
         // Only evidenced gaps are targeted, required qualifications first.
         const requirementText = mergedRequirements.join(" \n ").toLowerCase();
-        const gaps = before.missing
-          .map((term) => ({ term, evidence: evidenceFor(term) }))
+        const assessed = before.missing.map((term) => ({ term, evidence: evidenceFor(term) }));
+        if (pass === 1) {
+          for (const a of assessed) {
+            keywordDecisions.push(
+              a.evidence
+                ? { term: a.term, decision: "revision attempted - evidence found in saved profile", evidence: a.evidence }
+                : { term: a.term, decision: "left out - no saved experience or project supports this term" },
+            );
+          }
+        }
+        const gaps = assessed
           .filter((g): g is { term: string; evidence: string } => Boolean(g.evidence))
           .sort((a, b) => {
             const aReq = requirementText.includes(a.term.toLowerCase()) ? 0 : 1;
@@ -3763,6 +3805,7 @@ ${
             return aReq - bReq || a.term.localeCompare(b.term);
           })
           .slice(0, 12);
+
 
         if (gaps.length === 0) {
           console.log(`[REVISION] Pass ${pass} stopped: none of the ${before.missing.length} missing terms have evidence in this profile`);
@@ -4021,23 +4064,65 @@ ${
     }
     // A tool the profile does not record must not survive in the letter either,
     // where it would still be read as a claim and still count as coverage.
+    //
+    // Two different removals are needed. A named tool ("BigQuery", "dbt") can be
+    // cut out of a sentence and the sentence still reads. A plain capability word
+    // ("Ownership", "Collaboration") is the grammatical object of its sentence,
+    // and cutting it leaves rubble like "I also have a experience in, ensuring
+    // effective across teams" - so the whole sentence goes instead.
+    //
+    // Contact and link lines are never touched: sentence splitting on an email
+    // address or a URL breaks it ("maxokafordev@gmail. com").
     if (result.tailoredCoverLetter && invented.length) {
-      let letter: string = result.tailoredCoverLetter;
-      for (const term of invented) {
-        if (!/^[A-Za-z][A-Za-z0-9+#.\- ]{1,24}$/.test(term)) continue;
-        const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        letter = letter
-          .replace(new RegExp(`\\b${esc}\\b\\s+and\\s+`, "gi"), "")
-          .replace(new RegExp(`(,\\s*|\\s+and\\s+)\\b${esc}\\b`, "gi"), "")
-          .replace(new RegExp(`\\s*\\b${esc}\\b`, "gi"), "");
-      }
-      result.tailoredCoverLetter = letter
-        .replace(/[ \t]{2,}/g, " ")
-        .replace(/\s+,/g, ",")
-        .replace(/,\s*\./g, ".")
-        .replace(/\(\s*\)/g, "")
+      const isPlainWord = (t: string) => /^[A-Za-z][a-z]+(\s[A-Za-z][a-z]+)?$/.test(t.trim());
+      const toolTerms = invented.filter((t) => !isPlainWord(t) && /^[A-Za-z][A-Za-z0-9+#.\-/ ]{1,24}$/.test(t));
+      const wordTerms = invented.filter((t) => isPlainWord(t));
+
+      const stripTools = (text: string): string => {
+        let out = text;
+        for (const term of toolTerms) {
+          const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          out = out
+            .replace(new RegExp(`\\b${esc}\\b\\s+and\\s+`, "gi"), "")
+            .replace(new RegExp(`(,\\s*|\\s+and\\s+)\\b${esc}\\b`, "gi"), "")
+            .replace(new RegExp(`\\s*\\b${esc}\\b`, "gi"), "");
+        }
+        return out
+          .replace(/[ \t]{2,}/g, " ")
+          .replace(/\s+,/g, ",")
+          .replace(/,\s*\./g, ".")
+          .replace(/\(\s*\)/g, "")
+          .replace(/\b(to|of|with|in|on|for|and)\s+(to|of|with|in|on|for|and)\b/gi, "$1")
+          .replace(/[ ,]*\b(such as|including|like|namely)\b\s*(?=[.,;:])/gi, "")
+          .replace(/,\s*(?=[.;:])/g, "")
+          .replace(/\s+([.,;:])/g, "$1");
+      };
+
+      const danglingTail = /\b(such as|including|like|namely|on|of|with|in|for|to|at|from|around|using|and)\s*$/i;
+      const carriesWordTerm = (sentence: string) =>
+        wordTerms.some((t) => new RegExp(`\\b${t.replace(/\s+/g, "\\s+")}\\b`, "i").test(sentence));
+
+      result.tailoredCoverLetter = result.tailoredCoverLetter
+        .split(/\n/)
+        .map((line: string) => {
+          const t = line.trim();
+          if (!t) return line;
+          // Letterhead, links and salutation lines are left exactly as they are.
+          if (t.includes("@") || /https?:\/\/|www\.|\.(com|app|dev|io|ie|org|net)\b/i.test(t)) return line;
+          if (/^(dear|sincerely|re:|date:)/i.test(t) || t.length < 40) return stripTools(line);
+          const sentences = t.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+          if (!sentences) return stripTools(line);
+          const kept = sentences
+            .filter((s: string) => !carriesWordTerm(s))
+            .map((s: string) => stripTools(s))
+            .filter((s: string) => !danglingTail.test(s.replace(/[.!?\s]+$/, "")));
+          return (kept.length ? kept.join(" ") : stripTools(t)).replace(/[ \t]{2,}/g, " ").trim();
+        })
+        .join("\n")
         .trim();
     }
+
+
     result.removedUnrecordedSkills = invented;
 
 
@@ -4246,22 +4331,39 @@ ${
       jdKeywords.allKeywords,
     );
     const unsupportedRequirements = measured.missing.filter((kw) => !atsStrategy.evidence[kw.toLowerCase()]);
+    // The denominator is the DE-DUPLICATED term count, so matched + missing
+    // always adds up to it. Reporting the raw extracted length made
+    // "12 of 18" sit beside seven missing terms.
+    const coverageTotal = measured.total;
 
     result.matchScore = measured.percent;
     result.keywordCoverage = {
       matched: measured.matched.length,
-      total: jdKeywords.allKeywords.length,
+      total: coverageTotal,
       percent: measured.percent,
       label:
-        jdKeywords.allKeywords.length === 0
+        coverageTotal === 0
           ? "Not measured - no keywords found in this posting"
-          : `${measured.matched.length} of ${jdKeywords.allKeywords.length} keywords (${measured.percent}%)`,
+          : `${measured.matched.length} of ${coverageTotal} keywords (${measured.percent}%)`,
       target: atsStrategy.keywordCoverageTarget ?? coverageTarget,
       matchedTerms: measured.matched,
       missingTerms: measured.missing,
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
+      // Why each missing term was or was not worked in, term by term.
+      // Terms only become final gaps after the unrecorded-tool scrub runs, so
+      // the list is completed here against the FINAL document rather than the
+      // pre-scrub draft.
+      keywordDecisions: measured.missing.map((term) => {
+        const already = keywordDecisions.find((d) => d.term.toLowerCase() === term.toLowerCase());
+        if (already) return already;
+        const evidence = evidenceFor(term);
+        return evidence
+          ? { term, decision: "supported by saved profile but not carried into the final document", evidence }
+          : { term, decision: "left out - no saved experience or project supports this term" };
+      }),
     };
+
     // What the revision passes actually did, so the candidate sees the
     // before/after figures and the bullets that changed rather than a score
     // that moved for unexplained reasons.

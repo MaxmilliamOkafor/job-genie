@@ -43,12 +43,26 @@ export function termAppearsIn(text: string, term: string): boolean {
 export interface CoverageResult {
   matched: string[];
   missing: string[];
+  total: number;
   percent: number;
 }
 
+
 /** Coverage counted off real document text: matched unique terms / total unique terms. */
 export function measureCoverage(text: string, terms: string[]): CoverageResult {
-  const unique = Array.from(new Set(terms.map((t) => t.trim()).filter(Boolean)));
+  // Case-insensitive de-duplication. "dbt" and "Dbt" are one requirement, and
+  // counting them twice made the reported denominator disagree with the number
+  // of terms actually listed as matched and missing.
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of terms) {
+    const t = (raw || "").trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(t);
+  }
   const matched: string[] = [];
   const missing: string[] = [];
   for (const term of unique) {
@@ -58,9 +72,11 @@ export function measureCoverage(text: string, terms: string[]): CoverageResult {
   return {
     matched,
     missing,
+    total: unique.length,
     percent: unique.length === 0 ? 0 : Math.round((matched.length / unique.length) * 100),
   };
 }
+
 
 // ============================================================
 // PROJECTS SECTION, REBUILT FROM THE PROFILE
