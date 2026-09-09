@@ -197,33 +197,81 @@ export function classifyTerm(
 /** Boilerplate that is not a requirement and only dilutes the denominator. */
 const BOILERPLATE = new Set([
   "equal opportunity", "eoe", "benefits", "salary", "competitive salary", "bonus",
-  "team", "company", "role", "job", "position", "candidate", "applicant",
+  "team", "teams", "company", "companies", "role", "roles", "job", "jobs",
+  "position", "candidate", "candidates", "applicant",
   "opportunity", "responsibilities", "requirements", "qualifications",
   "years", "experience", "work", "working", "environment", "culture",
   "we", "you", "our", "your", "the role", "the team", "full time", "part time",
   "remote", "hybrid", "onsite", "office", "visa", "relocation", "pension",
   "healthcare", "insurance", "equity", "stock", "diversity", "inclusion",
+  // Vendor prefixes that only ever qualify a product name. "Apache" on its own
+  // is not a requirement; "Apache Spark" and "Apache Airflow" are, and they
+  // survive as their own terms.
+  "apache", "microsoft", "google", "amazon", "oracle", "ibm", "adobe",
 ]);
 
 /** Words that only ever appear as part of a job title phrase. */
 const TITLE_WORDS = ["senior", "junior", "lead", "principal", "staff", "mid", "head", "chief", "manager", "director"];
+
+/**
+ * Nouns that make a phrase a JOB TITLE rather than a requirement. The posting's
+ * own title is not something the candidate has to "cover": counting "Data
+ * Engineer" or "Analytics Engineer" as a requirement produced a permanent
+ * unsupported entry that pushed alignment down for every application, and
+ * "covering" it would only mean pasting the employer's title over the
+ * candidate's real history.
+ */
+const TITLE_NOUNS = ["engineer", "developer", "analyst", "scientist", "architect", "administrator", "consultant", "specialist", "officer", "designer"];
+
+function looksLikeJobTitle(key: string): boolean {
+  const words = key.split(/\s+/);
+  if (words.length > 4) return false;
+  const last = words[words.length - 1];
+  return TITLE_NOUNS.includes(last) || (words.length === 1 && TITLE_NOUNS.includes(key));
+}
+
+/**
+ * Canonical spelling for terms whose casing carries meaning. Extraction
+ * title-cases what it finds, which turned real requirements into "Etl", "Dbt"
+ * and "Fastapi" - wrong on a CV and wrong in a report the candidate reads.
+ */
+const CANONICAL_CASE: Record<string, string> = {
+  "etl": "ETL", "elt": "ELT", "dbt": "dbt", "fastapi": "FastAPI",
+  "sql": "SQL", "nosql": "NoSQL", "api": "API", "apis": "APIs",
+  "aws": "AWS", "gcp": "GCP", "ci/cd": "CI/CD", "cicd": "CI/CD",
+  "node.js": "Node.js", "nodejs": "Node.js", "next.js": "Next.js",
+  "typescript": "TypeScript", "javascript": "JavaScript",
+  "postgresql": "PostgreSQL", "mysql": "MySQL", "graphql": "GraphQL",
+  "c++": "C++", "c#": "C#", ".net": ".NET", "asp.net": "ASP.NET",
+  "pytorch": "PyTorch", "tensorflow": "TensorFlow", "nlp": "NLP",
+  "mlops": "MLOps", "devops": "DevOps", "kpi": "KPI", "kpis": "KPIs",
+  "etls": "ETL", "html": "HTML", "css": "CSS", "json": "JSON",
+  "rest": "REST", "grpc": "gRPC", "s3": "S3", "ec2": "EC2",
+  "bigquery": "BigQuery", "github actions": "GitHub Actions",
+  "power bi": "Power BI", "iac": "IaC",
+};
 
 export interface RequirementList {
   terms: string[];
   removed: string[];
 }
 
-export function buildRequirementList(rawTerms: string[], employerNames: string[] = []): RequirementList {
+export function buildRequirementList(
+  rawTerms: string[],
+  employerNames: string[] = [],
+  targetTitle = "",
+): RequirementList {
   const employers = new Set(
     employerNames.flatMap((n) => (n || "").toLowerCase().split(/[^a-z0-9+#.]+/)).filter((w) => w.length > 2),
   );
+  const target = targetTitle.toLowerCase().trim();
 
   const terms: string[] = [];
   const removed: string[] = [];
   const seen = new Map<string, string>();
 
   for (const raw of rawTerms) {
-    const term = (raw || "")
+    let term = (raw || "")
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/[\u201C\u201D]/g, '"')
       .replace(/[\u2013\u2014]/g, "-")
@@ -232,6 +280,9 @@ export function buildRequirementList(rawTerms: string[], employerNames: string[]
     if (!term) continue;
 
     const key = term.toLowerCase();
+    // Restore the spelling a human would write before the term is reported or
+    // written into a document.
+    term = CANONICAL_CASE[key] ?? term;
     if (seen.has(key)) continue;
     if (key.length < 2) { removed.push(term); continue; }
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
@@ -239,6 +290,8 @@ export function buildRequirementList(rawTerms: string[], employerNames: string[]
     if (employers.has(key)) { removed.push(term); continue; }
     // A bare seniority word carries no requirement of its own.
     if (TITLE_WORDS.includes(key)) { removed.push(term); continue; }
+    // The posting's job title is not a requirement to satisfy.
+    if (key === target || looksLikeJobTitle(key)) { removed.push(term); continue; }
     // Overlapping title phrases: "senior data engineer" and "data engineer"
     // are one requirement, so only the more specific phrase is credited.
     const stripped = key.split(/\s+/).filter((w) => !TITLE_WORDS.includes(w)).join(" ");
