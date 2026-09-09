@@ -4309,7 +4309,17 @@ ${
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
       // Why each missing term was or was not worked in, term by term.
-      keywordDecisions,
+      // Terms only become final gaps after the unrecorded-tool scrub runs, so
+      // the list is completed here against the FINAL document rather than the
+      // pre-scrub draft.
+      keywordDecisions: measured.missing.map((term) => {
+        const already = keywordDecisions.find((d) => d.term.toLowerCase() === term.toLowerCase());
+        if (already) return already;
+        const evidence = evidenceFor(term);
+        return evidence
+          ? { term, decision: "supported by saved profile but not carried into the final document", evidence }
+          : { term, decision: "left out - no saved experience or project supports this term" };
+      }),
     };
 
     // What the revision passes actually did, so the candidate sees the
