@@ -127,6 +127,24 @@ describe('one fixed requirement list per job', () => {
     const { terms } = buildRequirementList(['data quality', 'data quality checks']);
     expect(terms).toEqual(['data quality checks']);
   });
+
+  it('counts an acronym and its expansion once', () => {
+    // Both spellings in the list meant both were pushed onto the skills line,
+    // which reads as stuffing, and the denominator was inflated by a repeat.
+    const { terms, removed } = buildRequirementList(['NLP', 'Natural Language Processing', 'Python']);
+    expect(terms).toEqual(['NLP', 'Python']);
+    expect(removed).toContain('Natural Language Processing');
+  });
+
+  it('counts a qualified capability once', () => {
+    const { terms } = buildRequirementList(['Leadership', 'Technical Leadership']);
+    expect(terms).toEqual(['Technical Leadership']);
+  });
+
+  it('keeps a genuinely different product with a shared first word', () => {
+    const { terms } = buildRequirementList(['SQL', 'SQL Server']);
+    expect(terms).toEqual(['SQL', 'SQL Server']);
+  });
 });
 
 describe('literal coverage and evidence alignment stay separate', () => {
