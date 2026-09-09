@@ -3770,13 +3770,14 @@ ${
     const keywordDecisions: Array<{ term: string; decision: string; evidence?: string }> = [];
 
 
-    const coverageTarget = atsStrategy.keywordCoverageTarget ?? 90;
+    const coverageTarget = atsStrategy.keywordCoverageTarget ?? 100;
     const revisions: RevisionRecord[] = [];
 
     if (jdKeywords.allKeywords.length > 0 && result.tailoredResume) {
       for (let pass = 1; pass <= 2; pass++) {
         const draftResume: string = result.tailoredResume;
-        const before = measureCoverage(`${draftResume}\n${result.tailoredCoverLetter || ""}`, jdKeywords.allKeywords);
+        // CV TEXT ONLY: cover-letter mentions must not stop a needed CV revision.
+        const before = measureCoverage(draftResume, jdKeywords.allKeywords);
         if (before.percent >= coverageTarget) {
           console.log(`[REVISION] Pass ${pass} not needed: coverage ${before.percent}% already at target ${coverageTarget}%`);
           break;
@@ -4621,7 +4622,7 @@ ${
         coverageTotal === 0
           ? "Not measured - no keywords found in this posting"
           : `${measured.matched.length} of ${coverageTotal} keywords (${measured.percent}%)`,
-      target: atsStrategy.keywordCoverageTarget ?? coverageTarget,
+      target: atsStrategy.keywordCoverageTarget ?? 100,
       matchedTerms: measured.matched,
       missingTerms: measured.missing,
       literalCoverage: dual.literal,
