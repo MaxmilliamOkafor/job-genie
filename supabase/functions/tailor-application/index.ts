@@ -4244,22 +4244,27 @@ ${
       jdKeywords.allKeywords,
     );
     const unsupportedRequirements = measured.missing.filter((kw) => !atsStrategy.evidence[kw.toLowerCase()]);
+    // The denominator is the DE-DUPLICATED term count, so matched + missing
+    // always adds up to it. Reporting the raw extracted length made
+    // "12 of 18" sit beside seven missing terms.
+    const coverageTotal = measured.total;
 
     result.matchScore = measured.percent;
     result.keywordCoverage = {
       matched: measured.matched.length,
-      total: jdKeywords.allKeywords.length,
+      total: coverageTotal,
       percent: measured.percent,
       label:
-        jdKeywords.allKeywords.length === 0
+        coverageTotal === 0
           ? "Not measured - no keywords found in this posting"
-          : `${measured.matched.length} of ${jdKeywords.allKeywords.length} keywords (${measured.percent}%)`,
+          : `${measured.matched.length} of ${coverageTotal} keywords (${measured.percent}%)`,
       target: atsStrategy.keywordCoverageTarget ?? coverageTarget,
       matchedTerms: measured.matched,
       missingTerms: measured.missing,
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
     };
+
     // What the revision passes actually did, so the candidate sees the
     // before/after figures and the bullets that changed rather than a score
     // that moved for unexplained reasons.
