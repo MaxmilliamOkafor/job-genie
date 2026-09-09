@@ -4551,7 +4551,14 @@ ${
       evidenceAlignment: dual.alignment,
       unsupportedRequirements,
       lostInPostProcessing,
-      meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
+      meaning:
+        "Keyword coverage of the exported CV text only - the cover letter is never counted towards it. Not a pass probability or an approval.",
+      coverLetterOnly: {
+        matched: coverLetterOnlyCoverage.matched.length,
+        total: coverLetterOnlyCoverage.total,
+        percent: coverLetterOnlyCoverage.percent,
+        meaning: "Measured on the cover letter alone, reported separately and never added to the CV figure.",
+      },
       // Why each missing term was or was not worked in, term by term.
       // Terms only become final gaps after the unrecorded-tool scrub runs, so
       // the list is completed here against the FINAL document rather than the
