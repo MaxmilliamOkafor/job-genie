@@ -4082,6 +4082,10 @@ ${
         // Removing a word can leave two prepositions touching, which read as a
         // typo: "my commitment to of delivery". Keep the first one only.
         .replace(/\b(to|of|with|in|on|for|and)\s+(to|of|with|in|on|for|and)\b/gi, "$1")
+        // A scrubbed example list can leave the lead-in stranded: "tools such
+        // as." Drop the empty lead-in rather than print it.
+        .replace(/[ ,]*\b(such as|including|like|namely)\b\s*(?=[.,;:])/gi, "")
+        .replace(/,\s*(?=[.;:])/g, "")
         .replace(/\s+([.,;:])/g, "$1")
         .trim();
 
