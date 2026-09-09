@@ -173,3 +173,47 @@ describe('literal coverage and evidence alignment stay separate', () => {
     expect(report.literal).not.toBe(report.alignment);
   });
 });
+
+// ============================================================
+// A PRACTICE THE WORK PERFORMS IS ALIGNED, EVEN UNNAMED
+//
+// Provisioning environments with Terraform is infrastructure as code, and
+// presentations and training demonstrate communication. Both must register as
+// DEMONSTRATED (aligned) without ever becoming a listed skill, and without the
+// literal figure claiming the word is on the page.
+// ============================================================
+describe('practices demonstrated by real achievements', () => {
+  const sources = buildEvidenceSources({
+    professionalExperience: [
+      {
+        title: 'Cloud Engineer',
+        company: 'Accenture',
+        bullets: [
+          'Provisioned 40 AWS environments with Terraform, cutting setup time from three days to two hours',
+          'Presented quarterly platform reviews to senior leadership and ran onboarding training for eight engineers',
+        ],
+      },
+    ],
+  });
+
+  it('reads Terraform provisioning as infrastructure as code', () => {
+    const v = classifyTerm('Infrastructure as Code', sources);
+    expect(v.tier).toBe('demonstrated');
+    expect(v.evidence).toContain('Terraform');
+  });
+
+  it('reads presentations and training as communication', () => {
+    expect(classifyTerm('Communication', sources).tier).toBe('demonstrated');
+  });
+
+  it('still refuses a tool the work never names', () => {
+    expect(classifyTerm('Databricks', sources).tier).toBe('unsupported');
+  });
+
+  it('keeps the literal figure honest about the unnamed word', () => {
+    const doc = 'Provisioned 40 AWS environments with Terraform.';
+    const report = reportCoverage(doc, ['Infrastructure as Code'], sources);
+    expect(report.literal.percent).toBe(0);
+    expect(report.alignment.percent).toBe(100);
+  });
+});
