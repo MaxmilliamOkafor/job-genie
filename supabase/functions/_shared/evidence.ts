@@ -59,7 +59,25 @@ const CAPABILITY_SYNONYMS: Record<string, string[]> = {
   mentorship: ["mentor", "coached", "onboarded", "trained"],
   automation: ["automat", "scheduled", "orchestrat"],
   "problem solving": ["diagnosed", "root cause", "resolved", "debugged", "troubleshot"],
-  communication: ["presented", "documented", "reported to", "briefed", "wrote"],
+  // COMMUNICATION IS DEMONSTRATED, NOT LISTED.
+  // Presentations, training, workshops, documentation and stakeholder work all
+  // demonstrate it. This makes the requirement count as ALIGNED; it does not
+  // put the word "Communication" in a skills list, and it does not make the
+  // term literally covered. Those two figures stay separate.
+  communication: [
+    "presented", "presentation", "documented", "documentation", "reported to", "briefed", "wrote",
+    "trained", "training", "workshop", "demo", "walkthrough", "stakeholder", "liaised",
+    "explained", "chaired", "facilitated", "onboarded", "knowledge sharing", "runbook",
+  ],
+  "communication skills": [
+    "presented", "presentation", "documented", "trained", "training", "workshop",
+    "stakeholder", "briefed", "liaised", "facilitated",
+  ],
+  "verbal and written communication": ["presented", "documented", "wrote", "briefed", "training"],
+  // Provisioning infrastructure declaratively with Terraform/CloudFormation IS
+  // infrastructure as code, whether or not the candidate typed the phrase.
+  "infrastructure as code": ["terraform", "cloudformation", "pulumi", "provision", "ansible", "helm chart"],
+  iac: ["terraform", "cloudformation", "pulumi", "provision", "ansible"],
   documentation: ["documented", "documentation", "runbook"],
   "attention to detail": ["reconcil", "validation", "accuracy check", "audit"],
   leadership: ["led", "managed", "headed", "mentored"],

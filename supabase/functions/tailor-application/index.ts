@@ -2699,6 +2699,8 @@ ROLE BLOCK SHAPE: Every role is exactly: company name alone on one line, job tit
 
 BULLET STYLE: Every bullet starts with a strong past-tense verb for ended roles and present tense only for the current role. Forbidden anywhere in bullets: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", and passive voice ("was replaced by"). Keep every number from the profile's bullets (money, percentages, counts, timelines) exactly as written. Where the profile gives scope (team size, budget, users served), include it. Never append a tool or technology to a bullet unless that profile bullet already names it.
 
+NAME THE PRACTICE THE BULLET ALREADY DESCRIBES: When the posting asks for a practice and one of the candidate's own bullets already describes exactly that practice, name the practice inside that bullet in natural English, changing nothing else. A bullet that provisions cloud environments with Terraform IS infrastructure as code, so it may read "Provisioned AWS environments as code with Terraform, ..." - the tool, the scope, the numbers and the outcome all stay exactly as recorded. The same applies to declarative pipelines, containerised deployment, automated testing, and other practices the bullet plainly performs. This is wording, never a new claim: never name a practice a bullet does not perform, never add a tool, never change a figure, and never rename the employer, the dates or the scope.
+
 KEYWORD PRESERVATION IN REWRITES: When rewriting a bullet from the candidate's profile, the rewrite must not introduce any tool, technology, metric, or claim that is not present in the original bullet, and must not drop any tool or skill term the original bullet contains that the job description asks for. The rewrite may tighten the prose, but every posting-relevant term in the source bullet must survive into the rewritten bullet ("Automated the daily regulatory feed using Airflow and SQL Server" must not come back without "Airflow" when the posting asks for Airflow). If the rewrite cannot keep every posting-relevant term naturally, keep the candidate's original sentence unchanged instead.
 
 KEYWORD EXTRACTION AND CATEGORISATION: Before writing anything, read the job description and sort its terms into four buckets: (A) role and seniority terms (exact titles, close variants, domain focus such as backend, platform, data engineering, security); (B) hard and technical terms (languages, frameworks, cloud platforms, data tooling, methods and compliance standards); (C) soft and behavioural terms (leadership, ownership, cross-functional collaboration, communication, mentoring, stakeholder management, problem-solving, plus phrases such as "work across teams", "drive technical direction", "mentor junior engineers", "communicate with non-technical stakeholders"); (D) responsibility and outcome terms (design scalable systems, improve reliability or latency, own end-to-end delivery, reduce cost, increase throughput, improve developer experience). Rank each term by frequency in the posting, placement (title, must-have requirements, core responsibilities carry most weight) and repetition across sections. Select the top 12 to 25 terms that are BOTH high importance in the posting AND truthfully evidenced by the candidate's profile. Terms the profile does not evidence are discarded, not softened.
@@ -2732,6 +2734,8 @@ CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile
 PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's projects taken from the profile's relevant_projects array. For each project give the project name, its tech stack, one description line, and the live/code links VERBATIM as recorded in the profile - links are never rewritten, shortened or dropped. If the profile records no projects, omit the PROJECTS section entirely rather than inventing one.
 
 EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
+
+GRADES ARE COPIED, NEVER DERIVED: A numeric grade (a GPA, a "3.8/4.0", a percentage) may appear ONLY if that exact figure is written in the profile's education record. Never convert a classification into a number: a Distinction is not "4.0", First Class Honours is not "3.7", and a 2:1 is not "3.3". If the record holds only a classification, write only the classification.
 
 OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen.
 
@@ -3343,7 +3347,7 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - Links Line: ${userProfile.linkedin} | ${userProfile.github || ""} | ${userProfile.portfolio || ""}
    - PROFESSIONAL SUMMARY: positioning only, at most TWO sentences and at most 220 characters total, stating the held job title or level, the domain, and the value delivered. NO KEYWORDS IN THE SUMMARY - no tools, technologies, platforms, frameworks, certifications or comma-separated skill runs; those belong in TECHNICAL SKILLS and in the experience bullets. Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV. The summary must never repeat name, email, phone, LinkedIn, GitHub, portfolio, or location - those live in the header above. SUMMARY OPENS ON THE TARGET ROLE: the first sentence must position the candidate for the role being applied for, in that role's own domain language; where several titles are held, lead with the one closest to the target role, not the most senior and not the most recent. Never open with a generic descriptor of a different discipline ("Experienced Software Engineer", "Seasoned Marketing Manager") on an application for another field. It must still be true - only a title, discipline or domain the employment history actually contains; if no held title is close to the target, open on the transferable capability instead of a title (for example "Five years building risk and reporting analytics across regulated financial portfolios") rather than borrowing the target title. Complete sentences only, never a fragment such as "Experienced Software Engineer.", and written to land near 220 characters rather than far under it.
    - KEYWORD PLACEMENT: hard skills go in TECHNICAL SKILLS (12-25, labelled groups, posting's exact phrasing, never a soft skill) and each of the top 10-15 evidenced posting terms is demonstrated in action inside a PROFESSIONAL EXPERIENCE bullet. Soft skills are never listed and never get their own section - they are shown through the action and outcome of bullets ("Led a team of four engineers to...", "Partnered with product and data teams to..."). Weight the heaviest keyword integration into the most recent, most relevant role and its first one or two bullets; keep older roles lighter. Every bullet follows [strong action verb] + [skill in context] + [what changed] + [outcome], one to two lines. Figures come only from the profile, exactly as recorded; where none exists, state impact qualitatively and never invent a number.
-   - TARGET TITLE LINE: The line immediately after the candidate's name MUST be a job title the candidate's own WORK EXPERIENCE contains, spelled as they held it (e.g. "Software Engineer" when the history reads "Software Engineer, Meta, January 2023 - Present"). Every resume parser reads that line as the title held NOW, so it must never be the posting's title when the history does not contain it. Use the candidate's current (most recent) title, or an earlier title from the same history if that one matches the posting more closely. Never invent a title, never blend two titles, never borrow the posting's wording. No pipes, no skills, no company. The extension also sets this line, so never emit it twice.
+   - TARGET ROLE LINE: The line immediately after the candidate's name is the TARGET ROLE being applied for - "${jobTitle}" - on its own line, exactly once, written exactly as supplied. It is the application's subject line, not a claim about a job held: the roles actually held are stated in PROFESSIONAL EXPERIENCE, each under its own employer, and are never merged with this line. No pipes, no company name, no location, no skills, no seniority word added or removed, no second title line, and never repeated in the contact line beneath it.
    - PROFESSIONAL EXPERIENCE: roles in this shape: company name alone on one line, job title alone on the next line, date range alone on the next line ("January 2023 - Present" format, plain hyphen, full month names), then the bullets. Never join company and city with a comma ("Meta, Dublin" is forbidden - the extension attaches locations from the profile itself). Never join company and title on one line. Keep every bullet from the source role, in source order, reworded in place. Every bullet starts with a strong past-tense verb for ended roles and present tense only for the current role. Forbidden anywhere in bullets: "I", "we", "our", "responsible for", "tasked with", "duties included", "helped", "assisted with", "involved in", and passive voice. Keep every number from the profile's bullets. Never append a tool or technology to a bullet unless that profile bullet already names it.
    - TECHNICAL SKILLS: labelled groups, one per line, in the form "Group Name: item, item, item" - commas only, never pipe characters. Order the groups by relevance to this job description, most relevant first. No skill appears in two groups. Place every evidenced keyword from the job description into its correct group here rather than leaving it for the summary - the skills section is where posting keywords belong.
    - PROJECTS: Do NOT output a PROJECTS section - it is added programmatically after generation. Never render the projects data anywhere in the resume text.
@@ -3354,7 +3358,8 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
    - CERTIFICATIONS (only per the CERTIFICATIONS RULE below)
    - CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
-   - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile.
+   - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile. GRADES ARE COPIED, NEVER DERIVED: a numeric grade or GPA may appear only if that exact figure is written in the profile's education record; never convert a Distinction, First Class Honours or a 2:1 into a number.
+   - NAME THE PRACTICE THE BULLET ALREADY DESCRIBES: when the posting asks for a practice that one of the candidate's own bullets already performs, name it in that bullet in natural English and change nothing else - a bullet provisioning cloud environments with Terraform may read "Provisioned AWS environments as code with Terraform", keeping the tool, scope, figures and outcome exactly as recorded. Never name a practice a bullet does not perform and never add a tool.
 
    OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
 
@@ -3372,7 +3377,9 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
    Dear Hiring Manager,
 
-   [4 paragraphs: Hook showing genuine interest, Proof with specific metrics and achievements, Skills alignment with job requirements, Close with availability and enthusiasm]
+   [Four paragraphs, EVIDENCE FIRST. 1) Open on the single most relevant piece of the candidate's own recorded work for this posting - what was built or delivered, the method, and the recorded result. No statement of interest, no compliment. 2) A second specific achievement addressing a different requirement of this posting, quoting its figure exactly as the CV states it. 3) The connection to the work this posting describes, in that role's own terms. 4) A one-line close: availability and a request to discuss. Nothing else.
+
+   COVER LETTER: NO ENTHUSIASM, NO PRAISE, NO PREDICTIONS. These are all forbidden and must not appear in any form: expressions of excitement or eagerness ("excited", "thrilled", "delighted", "eager", "keen to", "passionate"); praise of the employer ("industry leader", "impressive", "admire", "innovative culture", "world-class team", "cutting-edge work"); and predictions about the candidate's future behaviour ("would adapt quickly", "quick learner", "hit the ground running", "confident I would thrive", "ramp up fast", "eager to learn"). A prediction is not evidence and a reviewer discounts it entirely. Every sentence must either state something the candidate has actually done, or state something the posting actually says. If a sentence does neither, delete it.
 
    Sincerely,
    ${candidateName}
@@ -4171,6 +4178,126 @@ ${
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = repairArticles(result.tailoredCoverLetter);
     if (result.tailoredResume) result.tailoredResume = repairArticles(result.tailoredResume);
 
+    // ============================================================
+    // THE TARGET ROLE LINE IS GUARANTEED, NOT HOPED FOR.
+    //
+    // The line under the name is what a reviewer reads first, and a run that
+    // dropped it left the CV opening on a contact line. It is now written
+    // deterministically: the target role, once, directly beneath the name, and
+    // kept clearly separate from the titles actually held, which stay inside
+    // PROFESSIONAL EXPERIENCE under their own employers.
+    // ============================================================
+    const enforceTargetRoleLine = (resumeText: string): string => {
+      const target = (jobTitle || "").trim();
+      if (!resumeText || !target) return resumeText;
+      const lines = resumeText.split("\n");
+      const nameIdx = lines.findIndex((l) => l.trim().toLowerCase() === candidateName.toLowerCase());
+      if (nameIdx < 0) return resumeText;
+
+      const isContact = (l: string) => /[@|]|\+\d|https?:|www\./i.test(l);
+      const looksLikeTitleLine = (l: string) =>
+        !!l.trim() && !isContact(l) && l.trim().length <= 70 && !/^[A-Z\s&]+$/.test(l.trim());
+
+      let next = nameIdx + 1;
+      while (next < lines.length && !lines[next].trim()) next++;
+
+      if (next < lines.length && lines[next].trim().toLowerCase() === target.toLowerCase()) {
+        // already correct
+      } else if (next < lines.length && looksLikeTitleLine(lines[next])) {
+        // A held title (or a blend) sitting where the target role belongs.
+        lines[next] = target;
+      } else {
+        lines.splice(nameIdx + 1, 0, target);
+      }
+
+      // Never twice, and never inside the contact block beneath it.
+      const headerEnd = Math.min(lines.length, nameIdx + 7);
+      let seen = false;
+      for (let i = nameIdx + 1; i < headerEnd; i++) {
+        if (lines[i].trim().toLowerCase() === target.toLowerCase()) {
+          if (seen) lines[i] = "";
+          seen = true;
+        } else if (isContact(lines[i])) {
+          lines[i] = lines[i]
+            .replace(new RegExp(`\\s*\\|\\s*${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "")
+            .trim();
+        }
+      }
+      return lines.filter((l, i) => !(l === "" && lines[i - 1] === "")).join("\n");
+    };
+    if (result.tailoredResume) result.tailoredResume = enforceTargetRoleLine(result.tailoredResume);
+
+    // ============================================================
+    // A GRADE IS COPIED FROM THE RECORD OR IT DOES NOT APPEAR.
+    //
+    // A model that reads "First Class Honours" will happily print
+    // "GPA: 3.7" beside it. That is an invented academic figure on a document
+    // an employer may verify, so any numeric grade that is not written in the
+    // saved education record is removed. Classifications are untouched.
+    // ============================================================
+    const stripUnrecordedGrades = (text: string): string => {
+      if (!text) return text;
+      const savedEducationText = (Array.isArray(userProfile.education) ? userProfile.education : [])
+        .map((e: any) => [e?.degree, e?.field, e?.gpa, e?.grade, e?.school, e?.institution].filter(Boolean).join(" "))
+        .join(" ");
+      const gradePattern = /(?:\bGPA[:\s]*)?\b\d(?:\.\d{1,2})?\s*\/\s*\d(?:\.\d{1,2})?\b|\bGPA[:\s]*\d(?:\.\d{1,2})?\b/gi;
+      const removed: string[] = [];
+      const cleaned = text.replace(gradePattern, (m) => {
+        const digits = m.replace(/[^\d./]/g, "");
+        if (savedEducationText.replace(/\s+/g, "").includes(digits.replace(/\s+/g, ""))) return m;
+        removed.push(m.trim());
+        return "";
+      });
+      if (removed.length) {
+        console.warn(`[EDUCATION] Removed grade figures absent from the saved record: ${removed.join(", ")}`);
+      }
+      return cleaned
+        .split("\n")
+        .map((l) => l.replace(/\s*[|,-]\s*$/, "").replace(/\(\s*\)/g, "").replace(/[ \t]{2,}/g, " ").trimEnd())
+        .join("\n");
+    };
+    if (result.tailoredResume) result.tailoredResume = stripUnrecordedGrades(result.tailoredResume);
+
+    // ============================================================
+    // THE COVER LETTER CARRIES EVIDENCE, NOT FEELINGS.
+    //
+    // Enthusiasm, employer flattery and predictions about how fast the
+    // candidate would settle in are the three things a reviewer discounts
+    // immediately, and they crowd out the achievements that do the work. Any
+    // sentence built on one of them is removed outright rather than softened.
+    // ============================================================
+    const FILLER_SENTENCE =
+      /\b(excited|exciting|thrilled|delighted|eager|keen to|passionate|enthusiasm|enthusiastic|admire|admiration|impressed|impressive|industry leader|industry-leading|innovative culture|world-class|cutting-edge|reputation for|drawn to|inspired by|adapt quickly|quickly adapt|quick learner|fast learner|hit the ground running|ramp up quickly|confident (?:that )?(?:i|my)|look(?:ing)? forward to contributing|would thrive|eager to learn)\b/i;
+    const stripFillerSentences = (letter: string): { text: string; removed: string[] } => {
+      const removed: string[] = [];
+      const paragraphs = letter.split(/\n{2,}/).map((para) => {
+        // Salutation, Re: line, signature and contact block are structure, not prose.
+        if (/^(dear|re:|sincerely|date:|kind regards|yours)/i.test(para.trim()) || /[@|]/.test(para)) return para;
+        const sentences = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+        if (!sentences) return para;
+        const kept = sentences.filter((s) => {
+          if (FILLER_SENTENCE.test(s)) {
+            removed.push(s.trim());
+            return false;
+          }
+          return true;
+        });
+        return kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
+      });
+      return {
+        text: paragraphs.filter((p) => p.trim()).join("\n\n"),
+        removed,
+      };
+    };
+    if (result.tailoredCoverLetter) {
+      const scrubbed = stripFillerSentences(result.tailoredCoverLetter);
+      result.tailoredCoverLetter = scrubbed.text;
+      result.coverLetterFillerRemoved = scrubbed.removed;
+      if (scrubbed.removed.length) {
+        console.log(`[COVER LETTER] Removed ${scrubbed.removed.length} enthusiasm/praise/prediction sentences`);
+      }
+    }
+
     result.removedUnrecordedSkills = invented;
 
 
@@ -4188,7 +4315,13 @@ ${
     // Recalculate ACTUAL match score based on generated resume content
     const generatedResumeText = (result.tailoredResume || "").toLowerCase();
     const generatedCoverText = (result.tailoredCoverLetter || "").toLowerCase();
-    const combinedGeneratedText = `${generatedResumeText} ${generatedCoverText}`;
+    // CV COVERAGE IS MEASURED ON THE CV ALONE.
+    //
+    // Blending the cover letter in inflated the figure: a term that appeared
+    // only in a letter sentence counted as covered on the CV, and the CV is the
+    // document a parser reads. The letter is measured separately and reported
+    // separately; it never raises the CV number.
+    const combinedGeneratedText = generatedResumeText;
 
     // Count how many JD keywords appear in the generated content, on whole
     // terms only: "java" is not satisfied by "javascript".
@@ -4326,7 +4459,7 @@ ${
       }
 
       // Recalculate coverage after injection, whole terms only.
-      const postInjectText = `${result.tailoredResume} ${result.tailoredCoverLetter || ""}`;
+      const postInjectText = `${result.tailoredResume}`;
       const secondPass = measureCoverage(postInjectText, jdKeywords.allKeywords);
       const finalMatched: string[] = [...secondPass.matched];
       const finalMissing: string[] = [...secondPass.missing];
@@ -4357,7 +4490,8 @@ ${
     // Measured off the EXPORTED text, against the fixed requirement list built
     // once at the top of the run, so initial, per-revision and final figures
     // are all the same denominator.
-    const finalText = `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`;
+    const finalText = `${result.tailoredResume || ""}`;
+    const coverLetterOnlyCoverage = measureCoverage(result.tailoredCoverLetter || "", jdKeywords.allKeywords);
     const measured = measureCoverage(finalText, jdKeywords.allKeywords);
 
     // TWO SEPARATE NUMBERS, NEVER BLENDED.
@@ -4417,7 +4551,14 @@ ${
       evidenceAlignment: dual.alignment,
       unsupportedRequirements,
       lostInPostProcessing,
-      meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
+      meaning:
+        "Keyword coverage of the exported CV text only - the cover letter is never counted towards it. Not a pass probability or an approval.",
+      coverLetterOnly: {
+        matched: coverLetterOnlyCoverage.matched.length,
+        total: coverLetterOnlyCoverage.total,
+        percent: coverLetterOnlyCoverage.percent,
+        meaning: "Measured on the cover letter alone, reported separately and never added to the CV figure.",
+      },
       // Why each missing term was or was not worked in, term by term.
       // Terms only become final gaps after the unrecorded-tool scrub runs, so
       // the list is completed here against the FINAL document rather than the
