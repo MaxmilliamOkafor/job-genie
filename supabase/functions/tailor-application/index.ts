@@ -21,6 +21,12 @@ import {
   reportCoverage,
   type EvidenceSource,
 } from "../_shared/evidence.ts";
+import {
+  CATEGORY_LABEL,
+  categoriseSkill,
+  isSoftCapability,
+  placeSkillsInSection,
+} from "../_shared/skillsPlacement.ts";
 
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
