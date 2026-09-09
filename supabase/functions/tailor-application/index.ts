@@ -4119,6 +4119,19 @@ ${
       const carriesWordTerm = (sentence: string) =>
         wordTerms.some((t) => new RegExp(`\\b${t.replace(/\s+/g, "\\s+")}\\b`, "i").test(sentence));
 
+      // A SCRUBBED SENTENCE IS EITHER STILL ENGLISH OR IT GOES.
+      // Removing an unrecorded tool from mid-sentence left wreckage such as
+      // "I have a experience of implementing solutions that improve operational
+      // efficiency" - ungrammatical, and empty of anything the candidate did.
+      const stub = /\b(a|an)\s+(experience|expertise|knowledge|background|exposure)\b/i;
+      const fixArticles = (s: string) =>
+        s.replace(/\ba\s+(?=(experience|expertise|extensive|advanced|internal|end-to-end|automated|analytical|early|impact|efficient|open|in-house|understanding|ability|award|hour|honest|optimised)\b)/gi, "an ");
+      const isStub = (original: string, scrubbed: string) => {
+        if (scrubbed === original) return false;
+        if (stub.test(scrubbed)) return true;
+        return scrubbed.trim().split(/\s+/).length < 10;
+      };
+
       result.tailoredCoverLetter = result.tailoredCoverLetter
         .split(/\n/)
         .map((line: string) => {
@@ -4131,9 +4144,11 @@ ${
           if (!sentences) return stripTools(line);
           const kept = sentences
             .filter((s: string) => !carriesWordTerm(s))
-            .map((s: string) => stripTools(s))
+            .map((s: string) => ({ original: s, scrubbed: fixArticles(stripTools(s)) }))
+            .filter(({ original, scrubbed }: { original: string; scrubbed: string }) => !isStub(original, scrubbed))
+            .map(({ scrubbed }: { scrubbed: string }) => scrubbed)
             .filter((s: string) => !danglingTail.test(s.replace(/[.!?\s]+$/, "")));
-          return (kept.length ? kept.join(" ") : stripTools(t)).replace(/[ \t]{2,}/g, " ").trim();
+          return (kept.length ? kept.join(" ") : fixArticles(stripTools(t))).replace(/[ \t]{2,}/g, " ").trim();
         })
         .join("\n")
         .trim();
