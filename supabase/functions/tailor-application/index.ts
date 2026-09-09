@@ -2735,6 +2735,8 @@ PROJECTS RULE: The CV MUST include a PROJECTS section listing the candidate's pr
 
 EDUCATION FORMAT: Each entry is: degree plus grade on one line ("MSc in Artificial Intelligence and Machine Learning, Distinction"), institution on the next line, graduation year on the next. Always keep grades and years from the profile - never drop them.
 
+GRADES ARE COPIED, NEVER DERIVED: A numeric grade (a GPA, a "3.8/4.0", a percentage) may appear ONLY if that exact figure is written in the profile's education record. Never convert a classification into a number: a Distinction is not "4.0", First Class Honours is not "3.7", and a 2:1 is not "3.3". If the record holds only a classification, write only the classification.
+
 OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen.
 
 RESPONSE CONTRACT: Return ONLY a single JSON object. All newlines inside string values MUST be escaped as \\n. No code fences, no text outside the JSON object.
@@ -3356,7 +3358,8 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - THE HEADLINE APPEARS ONCE: The line immediately after the candidate's name is the target job title, on its own line, and it appears exactly once. Never write a second title line, and never repeat the title in the contact line beneath it.
    - CERTIFICATIONS (only per the CERTIFICATIONS RULE below)
    - CERTIFICATIONS RULE: Omit the CERTIFICATIONS section entirely unless the profile's certifications switch is on - that is, unless the candidate profile supplies a non-empty CERTIFICATIONS list. Whether the job description mentions certification is irrelevant to this decision. When the section is included, list only certifications the profile actually records; never invent one.
-   - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile.
+   - EDUCATION: each entry is degree plus grade on one line, institution on the next line, graduation year on the next. Always keep grades and years from the profile. GRADES ARE COPIED, NEVER DERIVED: a numeric grade or GPA may appear only if that exact figure is written in the profile's education record; never convert a Distinction, First Class Honours or a 2:1 into a number.
+   - NAME THE PRACTICE THE BULLET ALREADY DESCRIBES: when the posting asks for a practice that one of the candidate's own bullets already performs, name it in that bullet in natural English and change nothing else - a bullet provisioning cloud environments with Terraform may read "Provisioned AWS environments as code with Terraform", keeping the tool, scope, figures and outcome exactly as recorded. Never name a practice a bullet does not perform and never add a tool.
 
    OUTPUT HYGIENE: Plain text only - no markdown, no asterisks, no bullet symbols other than "- " at the start of bullet lines. No em dashes anywhere; use a plain hyphen. Section headings are exactly: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content. Never emit the same section twice.
 
