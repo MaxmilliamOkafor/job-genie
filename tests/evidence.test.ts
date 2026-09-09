@@ -100,9 +100,27 @@ describe('one fixed requirement list per job', () => {
     expect(removed).toContain('benefits');
   });
 
-  it('does not give overlapping title phrases separate credit', () => {
-    const { terms } = buildRequirementList(['Data Engineer', 'Senior Data Engineer', 'Senior']);
-    expect(terms).toEqual(['Data Engineer']);
+  it('does not count the job title itself as a requirement', () => {
+    // "Covering" a job title would only mean pasting the employer's wording
+    // over the real history, and it sat in every report as a permanent gap.
+    const { terms, removed } = buildRequirementList(
+      ['Data Engineer', 'Senior Data Engineer', 'Senior', 'Analytics Engineer', 'Python'],
+      [],
+      'Data Engineer',
+    );
+    expect(terms).toEqual(['Python']);
+    expect(removed).toContain('Data Engineer');
+    expect(removed).toContain('Analytics Engineer');
+  });
+
+  it('drops bare vendor prefixes but keeps the product', () => {
+    const { terms } = buildRequirementList(['Apache', 'Apache Spark', 'Airflow']);
+    expect(terms).toEqual(['Apache Spark', 'Airflow']);
+  });
+
+  it('restores the spelling a human would write', () => {
+    const { terms } = buildRequirementList(['Etl', 'Dbt', 'Fastapi', 'Typescript', 'Cicd']);
+    expect(terms).toEqual(['ETL', 'dbt', 'FastAPI', 'TypeScript', 'CI/CD']);
   });
 
   it('does not credit a phrase already contained in a longer retained phrase', () => {
