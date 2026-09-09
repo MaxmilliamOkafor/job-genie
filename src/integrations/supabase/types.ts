@@ -668,6 +668,7 @@ export type Database = {
           country: string | null
           cover_letter: string | null
           created_at: string | null
+          criminal_record: boolean | null
           current_salary: string | null
           cv_file_name: string | null
           cv_file_path: string | null
@@ -683,6 +684,7 @@ export type Database = {
           github: string | null
           highest_education: string | null
           hispanic_latino: boolean | null
+          how_heard: string | null
           id: string
           kimi_api_key: string | null
           kimi_enabled: boolean | null
@@ -690,10 +692,14 @@ export type Database = {
           last_name: string | null
           learned_preferences: Json | null
           linkedin: string | null
+          middle_name: string | null
+          needs_accommodation: boolean | null
           notice_period: string | null
           openai_api_key: string | null
           openai_enabled: boolean | null
+          over_18: boolean | null
           phone: string | null
+          phone_type: string | null
           portfolio: string | null
           preferred_ai_provider: string | null
           professional_experience: Json | null
@@ -707,8 +713,10 @@ export type Database = {
           user_id: string
           veteran_status: boolean | null
           visa_required: boolean | null
+          was_referred: boolean | null
           willing_to_relocate: boolean | null
           work_authorized_countries: string[]
+          worked_here_before: boolean | null
           zip_code: string | null
         }
         Insert: {
@@ -724,6 +732,7 @@ export type Database = {
           country?: string | null
           cover_letter?: string | null
           created_at?: string | null
+          criminal_record?: boolean | null
           current_salary?: string | null
           cv_file_name?: string | null
           cv_file_path?: string | null
@@ -739,6 +748,7 @@ export type Database = {
           github?: string | null
           highest_education?: string | null
           hispanic_latino?: boolean | null
+          how_heard?: string | null
           id?: string
           kimi_api_key?: string | null
           kimi_enabled?: boolean | null
@@ -746,10 +756,14 @@ export type Database = {
           last_name?: string | null
           learned_preferences?: Json | null
           linkedin?: string | null
+          middle_name?: string | null
+          needs_accommodation?: boolean | null
           notice_period?: string | null
           openai_api_key?: string | null
           openai_enabled?: boolean | null
+          over_18?: boolean | null
           phone?: string | null
+          phone_type?: string | null
           portfolio?: string | null
           preferred_ai_provider?: string | null
           professional_experience?: Json | null
@@ -763,8 +777,10 @@ export type Database = {
           user_id: string
           veteran_status?: boolean | null
           visa_required?: boolean | null
+          was_referred?: boolean | null
           willing_to_relocate?: boolean | null
           work_authorized_countries?: string[]
+          worked_here_before?: boolean | null
           zip_code?: string | null
         }
         Update: {
@@ -780,6 +796,7 @@ export type Database = {
           country?: string | null
           cover_letter?: string | null
           created_at?: string | null
+          criminal_record?: boolean | null
           current_salary?: string | null
           cv_file_name?: string | null
           cv_file_path?: string | null
@@ -795,6 +812,7 @@ export type Database = {
           github?: string | null
           highest_education?: string | null
           hispanic_latino?: boolean | null
+          how_heard?: string | null
           id?: string
           kimi_api_key?: string | null
           kimi_enabled?: boolean | null
@@ -802,10 +820,14 @@ export type Database = {
           last_name?: string | null
           learned_preferences?: Json | null
           linkedin?: string | null
+          middle_name?: string | null
+          needs_accommodation?: boolean | null
           notice_period?: string | null
           openai_api_key?: string | null
           openai_enabled?: boolean | null
+          over_18?: boolean | null
           phone?: string | null
+          phone_type?: string | null
           portfolio?: string | null
           preferred_ai_provider?: string | null
           professional_experience?: Json | null
@@ -819,8 +841,10 @@ export type Database = {
           user_id?: string
           veteran_status?: boolean | null
           visa_required?: boolean | null
+          was_referred?: boolean | null
           willing_to_relocate?: boolean | null
           work_authorized_countries?: string[]
+          worked_here_before?: boolean | null
           zip_code?: string | null
         }
         Relationships: []
