@@ -3219,7 +3219,11 @@ Then output a KEYWORD COVERAGE REPORT:
 === CRITICAL: PROFESSIONAL SUMMARY MUST NOT DUPLICATE HEADER ===
 The resume header already contains: Name, Phone, Email, Location, LinkedIn, GitHub, Portfolio URLs.
 The PROFESSIONAL SUMMARY section MUST:
-- Start DIRECTLY with a qualifier like "Accomplished...", "Senior...", "Experienced..."
+- Start DIRECTLY on the candidate's positioning for the target role. Do NOT open with a
+  self-flattering adjective: "Accomplished", "Seasoned", "Experienced", "Highly skilled",
+  "Results-driven" and the like are BANNED as the opening word. Open on the discipline, the
+  span of experience or the domain instead, for example "Machine learning engineer with six
+  years..." or "Six years building..."
 - NEVER repeat the candidate name "${candidateName}"
 - NEVER repeat email "${userProfile.email}"
 - NEVER repeat phone "${userProfile.phone}"
