@@ -4064,45 +4064,64 @@ ${
     }
     // A tool the profile does not record must not survive in the letter either,
     // where it would still be read as a claim and still count as coverage.
+    //
+    // Two different removals are needed. A named tool ("BigQuery", "dbt") can be
+    // cut out of a sentence and the sentence still reads. A plain capability word
+    // ("Ownership", "Collaboration") is the grammatical object of its sentence,
+    // and cutting it leaves rubble like "I also have a experience in, ensuring
+    // effective across teams" - so the whole sentence goes instead.
+    //
+    // Contact and link lines are never touched: sentence splitting on an email
+    // address or a URL breaks it ("maxokafordev@gmail. com").
     if (result.tailoredCoverLetter && invented.length) {
-      let letter: string = result.tailoredCoverLetter;
-      for (const term of invented) {
-        if (!/^[A-Za-z][A-Za-z0-9+#.\- ]{1,24}$/.test(term)) continue;
-        const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        letter = letter
-          .replace(new RegExp(`\\b${esc}\\b\\s+and\\s+`, "gi"), "")
-          .replace(new RegExp(`(,\\s*|\\s+and\\s+)\\b${esc}\\b`, "gi"), "")
-          .replace(new RegExp(`\\s*\\b${esc}\\b`, "gi"), "");
-      }
-      result.tailoredCoverLetter = letter
-        .replace(/[ \t]{2,}/g, " ")
-        .replace(/\s+,/g, ",")
-        .replace(/,\s*\./g, ".")
-        .replace(/\(\s*\)/g, "")
-        // Removing a word can leave two prepositions touching, which read as a
-        // typo: "my commitment to of delivery". Keep the first one only.
-        .replace(/\b(to|of|with|in|on|for|and)\s+(to|of|with|in|on|for|and)\b/gi, "$1")
-        // A scrubbed example list can leave the lead-in stranded: "tools such
-        // as." Drop the empty lead-in rather than print it.
-        .replace(/[ ,]*\b(such as|including|like|namely)\b\s*(?=[.,;:])/gi, "")
-        .replace(/,\s*(?=[.;:])/g, "")
-        .replace(/\s+([.,;:])/g, "$1")
-        .trim();
-      // A sentence can still hang on a preposition once its object was removed:
-      // "and the emphasis on." Those are dropped whole, because half a sentence
-      // reads worse than one fewer sentence.
+      const isPlainWord = (t: string) => /^[A-Za-z][a-z]+(\s[A-Za-z][a-z]+)?$/.test(t.trim());
+      const toolTerms = invented.filter((t) => !isPlainWord(t) && /^[A-Za-z][A-Za-z0-9+#.\-/ ]{1,24}$/.test(t));
+      const wordTerms = invented.filter((t) => isPlainWord(t));
+
+      const stripTools = (text: string): string => {
+        let out = text;
+        for (const term of toolTerms) {
+          const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          out = out
+            .replace(new RegExp(`\\b${esc}\\b\\s+and\\s+`, "gi"), "")
+            .replace(new RegExp(`(,\\s*|\\s+and\\s+)\\b${esc}\\b`, "gi"), "")
+            .replace(new RegExp(`\\s*\\b${esc}\\b`, "gi"), "");
+        }
+        return out
+          .replace(/[ \t]{2,}/g, " ")
+          .replace(/\s+,/g, ",")
+          .replace(/,\s*\./g, ".")
+          .replace(/\(\s*\)/g, "")
+          .replace(/\b(to|of|with|in|on|for|and)\s+(to|of|with|in|on|for|and)\b/gi, "$1")
+          .replace(/[ ,]*\b(such as|including|like|namely)\b\s*(?=[.,;:])/gi, "")
+          .replace(/,\s*(?=[.;:])/g, "")
+          .replace(/\s+([.,;:])/g, "$1");
+      };
+
       const danglingTail = /\b(such as|including|like|namely|on|of|with|in|for|to|at|from|around|using|and)\s*$/i;
+      const carriesWordTerm = (sentence: string) =>
+        wordTerms.some((t) => new RegExp(`\\b${t.replace(/\s+/g, "\\s+")}\\b`, "i").test(sentence));
+
       result.tailoredCoverLetter = result.tailoredCoverLetter
-        .split(/\n\s*\n/)
-        .map((para: string) => {
-          const sentences = para.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
-          if (!sentences) return para;
-          const kept = sentences.filter((sentence: string) => !danglingTail.test(sentence.replace(/[.!?\s]+$/, "")));
-          return (kept.length ? kept : sentences).join(" ").replace(/[ \t]{2,}/g, " ").trim();
+        .split(/\n/)
+        .map((line: string) => {
+          const t = line.trim();
+          if (!t) return line;
+          // Letterhead, links and salutation lines are left exactly as they are.
+          if (t.includes("@") || /https?:\/\/|www\.|\.(com|app|dev|io|ie|org|net)\b/i.test(t)) return line;
+          if (/^(dear|sincerely|re:|date:)/i.test(t) || t.length < 40) return stripTools(line);
+          const sentences = t.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+          if (!sentences) return stripTools(line);
+          const kept = sentences
+            .filter((s: string) => !carriesWordTerm(s))
+            .map((s: string) => stripTools(s))
+            .filter((s: string) => !danglingTail.test(s.replace(/[.!?\s]+$/, "")));
+          return (kept.length ? kept.join(" ") : stripTools(t)).replace(/[ \t]{2,}/g, " ").trim();
         })
-        .filter(Boolean)
-        .join("\n\n");
+        .join("\n")
+        .trim();
     }
+
 
     result.removedUnrecordedSkills = invented;
 
