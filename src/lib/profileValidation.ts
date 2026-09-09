@@ -493,11 +493,19 @@ export const normaliseProfileForSave = <T extends Record<string, any>>(profile: 
     };
   });
 
-  next.education = (next.education || []).map((edu: any) => ({
-    ...edu,
-    start_year: String(edu.start_year ?? '').trim(),
-    end_year: String(edu.end_year ?? '').trim(),
-  }));
+  next.education = (next.education || []).map((edu: any) => {
+    const start_year = String(edu.start_year ?? '').trim();
+    const end_year = String(edu.end_year ?? '').trim();
+    return {
+      ...edu,
+      start_year,
+      end_year,
+      field_of_study: tidyText(String(edu.field_of_study ?? '')),
+      // graduation_year is a stated fact derived from the completion year only;
+      // an in-progress degree has no graduation year.
+      graduation_year: /^\d{4}$/.test(end_year) ? end_year : '',
+    };
+  });
 
   next.relevant_projects = (next.relevant_projects || []).map((p: any) => ({
     ...p,
