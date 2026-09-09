@@ -4251,11 +4251,11 @@ ${
               (_m, prep, tool) => `${prep} ${tool} as infrastructure as code`,
             );
           }
-          // "Authored the Terraform modules ..." -> "Authored the Terraform infrastructure-as-code modules ..."
+          // "Authored the Terraform modules ..." -> "Authored the Terraform infrastructure as code modules ..."
           if (/\b(terraform|cloudformation|pulumi)\s+(modules?|templates?|stacks?|scripts?|configuration)\b/i.test(line)) {
             return line.replace(
               /\b(terraform|cloudformation|pulumi)\s+(modules?|templates?|stacks?|scripts?|configuration)\b/i,
-              (_m, tool, noun) => `${tool} infrastructure-as-code ${noun}`,
+              (_m, tool, noun) => `${tool} infrastructure as code ${noun}`,
             );
           }
           return null;
