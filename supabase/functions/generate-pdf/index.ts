@@ -701,6 +701,8 @@ interface NormalisedResume {
   projects: ProjectEntry[];
   education: EducationEntry[];
   skills?: { primary?: string[]; secondary?: string[] };
+  /** The role applied for, printed once directly under the name. */
+  targetTitle?: string;
   /** Labelled skill groups exactly as written, one rendered line each. */
   skillGroups?: Array<{ label: string; items: string[] }>;
 
@@ -2099,7 +2101,7 @@ function docxSkills(groups: Array<{ label: string; items: string[] }>): Paragrap
 
 async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array> {
   const children: Paragraph[] = [];
-  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact, data.targetTitle));
 
   if (data.summary) {
     children.push(...docxSectionHeader("Professional Summary"));
@@ -2184,7 +2186,7 @@ async function buildCoverLetterDocxBytes(data: {
   paragraphs: string[];
 }): Promise<Uint8Array> {
   const children: Paragraph[] = [];
-  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact));
+  children.push(...docxHeader(data.personalInfo.name, data.personalInfo.contact, data.targetTitle));
 
   const today = new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" });
   children.push(new Paragraph({
