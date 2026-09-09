@@ -3726,69 +3726,31 @@ ${
     // stands. A term with no evidence anywhere in the profile is never
     // targeted -- it is reported back as unsupported instead.
     // ============================================================
-    const profileEvidenceText = [
-      JSON.stringify(userProfile.skills || []),
-      JSON.stringify(userProfile.professionalExperience || []),
-      JSON.stringify(userProfile.relevantProjects || []),
-      JSON.stringify(userProfile.certifications || []),
-      JSON.stringify(userProfile.education || []),
-      userProfile.coverLetter || "",
-    ].join(" \n ");
-
-    // A named tool or product is only supported when the profile actually
-    // records it. A capability phrase ("end-to-end", "ownership", "data
-    // modelling") can be supported by an achievement that demonstrates it, so
-    // those are matched through wording the candidate already used. General
-    // experience never implies a specific named tool.
-    const capabilitySynonyms: Record<string, string[]> = {
-      "end-to-end": ["end to end", "from ingestion to", "owned the full", "designed and delivered", "built and deployed"],
-      ownership: ["owned", "led", "drove", "accountable for", "took responsibility"],
-      "stakeholder management": ["stakeholders", "vp-level", "business partners", "presented findings"],
-      "data modelling": ["data model", "schema", "dimensional", "star schema"],
-      "data modeling": ["data model", "schema", "dimensional", "star schema"],
-      "data quality": ["data quality", "validation", "reconciliation", "accuracy checks"],
-      collaboration: ["collaborated", "partnered", "worked with", "cross-functional"],
-      mentoring: ["mentored", "coached", "onboarded"],
-      automation: ["automated", "automation", "scheduled"],
-      "problem solving": ["diagnosed", "root cause", "resolved", "debugged"],
-      communication: ["presented", "documented", "reported to"],
+    // ONE set of evidence rules for generation, revision AND final validation.
+    //
+    // These three stages used to disagree. The revision pass asked "does an
+    // achievement demonstrate this?", correctly wrote in accurate wording, and
+    // the final validator then asked "is this word in the skills field?" and
+    // cut the same wording straight back out. A capability the candidate
+    // demonstrably has was deleted for never having been typed into a list.
+    // Every stage now calls classifyTerm and gets the same three-way answer:
+    // explicitly recorded, demonstrated by an achievement, or unsupported.
+    // Only unsupported terms are ever removed, and nothing is invented.
+    //
+    // The job description, the employer and the tailoring instructions are
+    // deliberately NOT passed in as sources: the posting can never be evidence
+    // about the candidate.
+    const evidenceSources: EvidenceSource[] = buildEvidenceSources(userProfile);
+    const evidenceOf = (term: string) => classifyTerm(term, evidenceSources, atsStrategy.evidence);
+    /** Kept for the older call sites: the quoted evidence line, or null. */
+    const evidenceFor = (term: string): string | null => {
+      const verdict = evidenceOf(term);
+      if (verdict.tier === "unsupported") return null;
+      return verdict.source ? `${verdict.source}: ${verdict.evidence}` : (verdict.evidence ?? null);
     };
-    const evidenceSources: Array<{ label: string; text: string }> = [];
-    for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
-      for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
-        const text = (bullet || "").toString().trim();
-        if (text) evidenceSources.push({ label: (role as any).company || "profile", text });
-      }
-    }
-    for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
-      const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      if (text) evidenceSources.push({ label: (project as any).name || "project", text });
-    }
 
     // Per-keyword decisions, so a skipped revision can be explained term by term.
     const keywordDecisions: Array<{ term: string; decision: string; evidence?: string }> = [];
-
-    const evidenceFor = (term: string): string | null => {
-      const supplied = atsStrategy.evidence[term.toLowerCase()];
-      if (supplied) return supplied;
-      // Literal record in the profile: the strongest evidence.
-      for (const src of evidenceSources) {
-        if (termAppearsIn(src.text, term)) return `${src.label}: ${src.text}`;
-      }
-      if (termAppearsIn(profileEvidenceText, term)) return "recorded in the candidate's saved skills";
-      // Capability wording: only for capability phrases, never for tools.
-      const synonyms = capabilitySynonyms[term.toLowerCase().replace(/\s+/g, " ")];
-      if (synonyms) {
-        for (const src of evidenceSources) {
-          const lower = src.text.toLowerCase();
-          if (synonyms.some((s) => lower.includes(s))) return `${src.label}: ${src.text}`;
-        }
-      }
-      return null;
-    };
 
 
     const coverageTarget = atsStrategy.keywordCoverageTarget ?? 90;
