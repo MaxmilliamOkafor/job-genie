@@ -210,3 +210,30 @@ describe('changed-bullet reporting', () => {
     expect(changed[0].after).toContain('Python, SQL and Spark');
   });
 });
+
+describe('CV-only coverage for revision decisions', () => {
+  const CV = 'PROFESSIONAL EXPERIENCE\n\nMeta\nSoftware Engineer\nJanuary 2023 - Present\n• Built ingestion pipelines in Python across the Business Suite estate, halving p95 latency\n\nTECHNICAL SKILLS\nProgramming: Python';
+  const LETTER = 'I built the ingestion pipelines in Python and re-engineered the reporting layer in SQL.';
+  const TWO = ['Python', 'SQL'];
+
+  it('scores the CV alone at 50% when SQL lives only in the letter', () => {
+    expect(measureCoverage(CV, TWO).percent).toBe(50);
+    const verdict = evaluateRevision({ draft: CV, revised: CV, coverLetterDraft: LETTER, terms: TWO });
+    expect(verdict.coverageBefore).toBe(50);
+  });
+
+  it('reaches 100% when supported SQL is added to the CV', () => {
+    const revised = CV.replace('Programming: Python', 'Programming: Python, SQL');
+    const verdict = evaluateRevision({ draft: CV, revised, coverLetterDraft: LETTER, terms: TWO });
+    expect(verdict.accept).toBe(true);
+    expect(verdict.coverageAfter).toBe(100);
+  });
+
+  it('does not credit CV coverage for a change made only in the letter', () => {
+    const richerLetter = `${LETTER} SQL again, and SQL once more.`;
+    const verdict = evaluateRevision({ draft: CV, revised: CV, coverLetterDraft: LETTER, coverLetterRevised: richerLetter, terms: TWO });
+    expect(verdict.accept).toBe(false);
+    expect(verdict.reason).toBe('coverage did not improve');
+    expect(verdict.coverageAfter).toBe(50);
+  });
+});
