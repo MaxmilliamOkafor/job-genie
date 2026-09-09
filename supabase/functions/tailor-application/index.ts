@@ -4273,16 +4273,25 @@ ${
       const paragraphs = letter.split(/\n{2,}/).map((para) => {
         // Salutation, Re: line, signature and contact block are structure, not prose.
         if (/^(dear|re:|sincerely|date:|kind regards|yours)/i.test(para.trim()) || /[@|]/.test(para)) return para;
-        const sentences = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+        // A DECIMAL POINT IS NOT THE END OF A SENTENCE.
+        // Splitting naively turned "£2.6bn" into "£2. 6bn" in a letter that
+        // went out - the candidate's own figure, broken in half. Decimals,
+        // initials and abbreviations are masked before the split and restored
+        // after it.
+        const MASK = "\u0001";
+        const masked = para.replace(/(\d)\.(?=\d)/g, `$1${MASK}`).replace(/\b([A-Z])\.(?=[A-Z]\.)/g, `$1${MASK}`);
+        const sentences = masked.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
         if (!sentences) return para;
-        const kept = sentences.filter((s) => {
-          if (FILLER_SENTENCE.test(s)) {
-            removed.push(s.trim());
-            return false;
-          }
-          return true;
-        });
-        return kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
+        const kept = sentences
+          .map((s) => s.replaceAll(MASK, "."))
+          .filter((s) => {
+            if (FILLER_SENTENCE.test(s)) {
+              removed.push(s.trim());
+              return false;
+            }
+            return true;
+          });
+        return kept.map((s) => s.trim()).join(" ").replace(/[ \t]{2,}/g, " ").trim();
       });
       return {
         text: paragraphs.filter((p) => p.trim()).join("\n\n"),
