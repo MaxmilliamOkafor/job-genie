@@ -4178,6 +4178,126 @@ ${
     if (result.tailoredCoverLetter) result.tailoredCoverLetter = repairArticles(result.tailoredCoverLetter);
     if (result.tailoredResume) result.tailoredResume = repairArticles(result.tailoredResume);
 
+    // ============================================================
+    // THE TARGET ROLE LINE IS GUARANTEED, NOT HOPED FOR.
+    //
+    // The line under the name is what a reviewer reads first, and a run that
+    // dropped it left the CV opening on a contact line. It is now written
+    // deterministically: the target role, once, directly beneath the name, and
+    // kept clearly separate from the titles actually held, which stay inside
+    // PROFESSIONAL EXPERIENCE under their own employers.
+    // ============================================================
+    const enforceTargetRoleLine = (resumeText: string): string => {
+      const target = (jobTitle || "").trim();
+      if (!resumeText || !target) return resumeText;
+      const lines = resumeText.split("\n");
+      const nameIdx = lines.findIndex((l) => l.trim().toLowerCase() === candidateName.toLowerCase());
+      if (nameIdx < 0) return resumeText;
+
+      const isContact = (l: string) => /[@|]|\+\d|https?:|www\./i.test(l);
+      const looksLikeTitleLine = (l: string) =>
+        !!l.trim() && !isContact(l) && l.trim().length <= 70 && !/^[A-Z\s&]+$/.test(l.trim());
+
+      let next = nameIdx + 1;
+      while (next < lines.length && !lines[next].trim()) next++;
+
+      if (next < lines.length && lines[next].trim().toLowerCase() === target.toLowerCase()) {
+        // already correct
+      } else if (next < lines.length && looksLikeTitleLine(lines[next])) {
+        // A held title (or a blend) sitting where the target role belongs.
+        lines[next] = target;
+      } else {
+        lines.splice(nameIdx + 1, 0, target);
+      }
+
+      // Never twice, and never inside the contact block beneath it.
+      const headerEnd = Math.min(lines.length, nameIdx + 7);
+      let seen = false;
+      for (let i = nameIdx + 1; i < headerEnd; i++) {
+        if (lines[i].trim().toLowerCase() === target.toLowerCase()) {
+          if (seen) lines[i] = "";
+          seen = true;
+        } else if (isContact(lines[i])) {
+          lines[i] = lines[i]
+            .replace(new RegExp(`\\s*\\|\\s*${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "")
+            .trim();
+        }
+      }
+      return lines.filter((l, i) => !(l === "" && lines[i - 1] === "")).join("\n");
+    };
+    if (result.tailoredResume) result.tailoredResume = enforceTargetRoleLine(result.tailoredResume);
+
+    // ============================================================
+    // A GRADE IS COPIED FROM THE RECORD OR IT DOES NOT APPEAR.
+    //
+    // A model that reads "First Class Honours" will happily print
+    // "GPA: 3.7" beside it. That is an invented academic figure on a document
+    // an employer may verify, so any numeric grade that is not written in the
+    // saved education record is removed. Classifications are untouched.
+    // ============================================================
+    const stripUnrecordedGrades = (text: string): string => {
+      if (!text) return text;
+      const savedEducationText = (Array.isArray(userProfile.education) ? userProfile.education : [])
+        .map((e: any) => [e?.degree, e?.field, e?.gpa, e?.grade, e?.school, e?.institution].filter(Boolean).join(" "))
+        .join(" ");
+      const gradePattern = /(?:\bGPA[:\s]*)?\b\d(?:\.\d{1,2})?\s*\/\s*\d(?:\.\d{1,2})?\b|\bGPA[:\s]*\d(?:\.\d{1,2})?\b/gi;
+      const removed: string[] = [];
+      const cleaned = text.replace(gradePattern, (m) => {
+        const digits = m.replace(/[^\d./]/g, "");
+        if (savedEducationText.replace(/\s+/g, "").includes(digits.replace(/\s+/g, ""))) return m;
+        removed.push(m.trim());
+        return "";
+      });
+      if (removed.length) {
+        console.warn(`[EDUCATION] Removed grade figures absent from the saved record: ${removed.join(", ")}`);
+      }
+      return cleaned
+        .split("\n")
+        .map((l) => l.replace(/\s*[|,-]\s*$/, "").replace(/\(\s*\)/g, "").replace(/[ \t]{2,}/g, " ").trimEnd())
+        .join("\n");
+    };
+    if (result.tailoredResume) result.tailoredResume = stripUnrecordedGrades(result.tailoredResume);
+
+    // ============================================================
+    // THE COVER LETTER CARRIES EVIDENCE, NOT FEELINGS.
+    //
+    // Enthusiasm, employer flattery and predictions about how fast the
+    // candidate would settle in are the three things a reviewer discounts
+    // immediately, and they crowd out the achievements that do the work. Any
+    // sentence built on one of them is removed outright rather than softened.
+    // ============================================================
+    const FILLER_SENTENCE =
+      /\b(excited|exciting|thrilled|delighted|eager|keen to|passionate|enthusiasm|enthusiastic|admire|admiration|impressed|impressive|industry leader|industry-leading|innovative culture|world-class|cutting-edge|reputation for|drawn to|inspired by|adapt quickly|quickly adapt|quick learner|fast learner|hit the ground running|ramp up quickly|confident (?:that )?(?:i|my)|look(?:ing)? forward to contributing|would thrive|eager to learn)\b/i;
+    const stripFillerSentences = (letter: string): { text: string; removed: string[] } => {
+      const removed: string[] = [];
+      const paragraphs = letter.split(/\n{2,}/).map((para) => {
+        // Salutation, Re: line, signature and contact block are structure, not prose.
+        if (/^(dear|re:|sincerely|date:|kind regards|yours)/i.test(para.trim()) || /[@|]/.test(para)) return para;
+        const sentences = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+        if (!sentences) return para;
+        const kept = sentences.filter((s) => {
+          if (FILLER_SENTENCE.test(s)) {
+            removed.push(s.trim());
+            return false;
+          }
+          return true;
+        });
+        return kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
+      });
+      return {
+        text: paragraphs.filter((p) => p.trim()).join("\n\n"),
+        removed,
+      };
+    };
+    if (result.tailoredCoverLetter) {
+      const scrubbed = stripFillerSentences(result.tailoredCoverLetter);
+      result.tailoredCoverLetter = scrubbed.text;
+      result.coverLetterFillerRemoved = scrubbed.removed;
+      if (scrubbed.removed.length) {
+        console.log(`[COVER LETTER] Removed ${scrubbed.removed.length} enthusiasm/praise/prediction sentences`);
+      }
+    }
+
     result.removedUnrecordedSkills = invented;
 
 
