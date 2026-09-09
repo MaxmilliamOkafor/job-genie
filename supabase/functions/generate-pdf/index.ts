@@ -986,7 +986,7 @@ serve(async (req) => {
     let docxBytes: Uint8Array;
     if (sanitizedData.type === "resume") {
       const contact: ContactInfo = {
-        location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
+        location: normaliseLocation(cleanLocation(sanitizedData.personalInfo.location)),
         phone: sanitizedData.personalInfo.phone,
         email: sanitizedData.personalInfo.email,
         linkedin: sanitizedData.personalInfo.linkedin,
@@ -1015,7 +1015,7 @@ serve(async (req) => {
       docxBytes = await buildResumeDocxBytes(norm);
     } else if (sanitizedData.type === "cover_letter" && sanitizedData.coverLetter) {
       const contact: ContactInfo = {
-        location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
+        location: normaliseLocation(cleanLocation(sanitizedData.personalInfo.location)),
         phone: sanitizedData.personalInfo.phone,
         email: sanitizedData.personalInfo.email,
         linkedin: sanitizedData.personalInfo.linkedin,
@@ -1192,7 +1192,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
 
     if (type === "resume" && structuredCv) {
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
-      const loc = cleanLocation(locationHeader || pInfo.location || "") || "Dublin, IE";
+      const loc = normaliseLocation(cleanLocation(locationHeader || pInfo.location || ""));
       const contact: ContactInfo = {
         location: loc, phone: pInfo.phone, email: pInfo.email,
         linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
@@ -1226,7 +1226,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const loc = cleanLocation(pInfo.location || "") || "Dublin, IE";
+      const loc = normaliseLocation(cleanLocation(pInfo.location || ""));
       const contact: ContactInfo = {
         location: loc, phone: pInfo.phone, email: pInfo.email,
         linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
