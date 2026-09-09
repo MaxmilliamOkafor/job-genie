@@ -2190,9 +2190,11 @@ const Profile = () => {
                     id: crypto.randomUUID(),
                     degree: 'Degree Name',
                     institution: 'Institution Name',
+                    field_of_study: '',
                     gpa: '',
                     start_year: '',
                     end_year: '',
+                    graduation_year: '',
                     graduationDate: ''
                   };
                   updateLocalField('education', [...(localProfile.education || []), newEdu]);
@@ -2238,6 +2240,15 @@ const Profile = () => {
                         updateLocalField('education', edus);
                       }}
                       placeholder="Institution"
+                    />
+                    <Input
+                      value={edu.field_of_study || ''}
+                      onChange={(e) => {
+                        const edus = [...(localProfile.education || [])];
+                        edus[eduIndex] = { ...edus[eduIndex], field_of_study: e.target.value };
+                        updateLocalField('education', edus);
+                      }}
+                      placeholder="Field of study (e.g., Artificial Intelligence and Machine Learning)"
                     />
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1">
