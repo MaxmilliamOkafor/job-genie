@@ -144,7 +144,10 @@ function parseSkillLines(lines: string[], start: number, end: number): SkillLine
     if (idx <= 0) continue;
     const label = line.slice(0, idx).trim();
     if (!label || label.length > 40) continue;
-    if (/language|citizen/i.test(label)) continue;
+    // The spoken-languages / citizenship line is built from saved fields and is
+    // never added to. A label like "Languages & Frameworks" is a real technical
+    // group and stays eligible; a bare "Languages" is treated as the spoken one.
+    if (/citizen/i.test(label) || /^languages?$/i.test(label)) continue;
     out.push({
       index: i,
       label,
