@@ -315,8 +315,23 @@ export function buildRequirementList(
     if (dup) removed.push(t);
     return !dup;
   });
+  // An acronym and its expansion are ONE requirement. Counting "NLP" and
+  // "Natural Language Processing" separately inflated the denominator and then
+  // pushed both spellings onto the skills line, which reads like stuffing.
+  const acronyms = new Set(
+    finalTerms.filter((t) => !/\s/.test(t) && t.length >= 2 && t.length <= 6 && t === t.toUpperCase())
+      .map((t) => t.toLowerCase().replace(/[^a-z]/g, "")),
+  );
+  const deduped = finalTerms.filter((t) => {
+    const words = t.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length < 2) return true;
+    const initials = words.map((w) => w[0]).join("");
+    const isExpansion = acronyms.has(initials);
+    if (isExpansion) removed.push(t);
+    return !isExpansion;
+  });
 
-  return { terms: finalTerms, removed };
+  return { terms: deduped, removed };
 }
 
 /**
