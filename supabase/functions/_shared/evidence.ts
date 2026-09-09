@@ -304,13 +304,20 @@ export function buildRequirementList(
 
   // A phrase already fully contained in another retained multi-word phrase is
   // not separate credit ("data quality" inside "data quality checks").
+  // A single word only loses its own credit when the longer phrase merely puts a
+  // qualifier in front of it ("Leadership" under "Technical Leadership"), never
+  // when the longer phrase is a different product ("SQL" is not "SQL Server").
+  const QUALIFIERS = ["technical", "strong", "advanced", "basic", "excellent", "good", "solid", "deep", "hands-on", "proven", "apache", "modern"];
   const finalTerms = terms.filter((t) => {
     const words = t.toLowerCase().split(/\s+/);
-    if (words.length < 2) return true;
     const dup = terms.some((other) => {
       if (other === t) return false;
       const o = other.toLowerCase();
-      return o !== t.toLowerCase() && o.split(/\s+/).length > words.length && o.includes(t.toLowerCase());
+      const ow = o.split(/\s+/);
+      if (o === t.toLowerCase() || ow.length <= words.length) return false;
+      if (words.length >= 2) return o.includes(t.toLowerCase());
+      // single word: only a trailing match behind a qualifier counts as the same
+      return ow[ow.length - 1] === words[0] && ow.slice(0, -1).every((w) => QUALIFIERS.includes(w));
     });
     if (dup) removed.push(t);
     return !dup;
