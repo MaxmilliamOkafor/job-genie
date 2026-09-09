@@ -1924,12 +1924,23 @@ function docxContactChildren(contact: ContactInfo): Array<TextRun | ExternalHype
   return out;
 }
 
-function docxHeader(name: string, contact: ContactInfo): Paragraph[] {
+function docxHeader(name: string, contact: ContactInfo, targetTitle?: string): Paragraph[] {
+  // THE TARGET ROLE LINE SURVIVES THE EXPORT.
+  // The drafted CV carried it directly under the name; the exporter used to
+  // read the header as name + contact only, so the printed document opened on a
+  // contact line and lost the one line a reviewer reads first.
+  const roleLine = (targetTitle || "").trim();
   return [
     new Paragraph({
-      spacing: { after: 120 },
+      spacing: { after: roleLine ? 40 : 120 },
       children: [TR({ text: name, font: DOCX_FONT, size: 44, bold: true, color: DOCX_NAVY, characterSpacing: 4 })],
     }),
+    ...(roleLine
+      ? [new Paragraph({
+          spacing: { after: 100 },
+          children: [TR({ text: roleLine, font: DOCX_FONT, size: 24, bold: true, color: DOCX_NAVY, characterSpacing: 8 })],
+        })]
+      : []),
     new Paragraph({
       spacing: { after: 60 },
       children: docxContactChildren(contact),
