@@ -101,7 +101,9 @@ export function useProfile() {
         setProfile({
           ...data,
           authorized_countries: (data.authorized_countries as string[]) || [],
-          work_authorized_countries: ((data as any).work_authorized_countries as string[]) || ['IE'],
+          // No seeded default: an empty picker means "not stated", and Citizenship
+          // carries any EU/EEA claim on its own.
+          work_authorized_countries: ((data as any).work_authorized_countries as string[]) || [],
           professional_experience: normalizedWorkExp,
           relevant_projects: Array.isArray((data as any).relevant_projects) ? (data as any).relevant_projects : [],
           education: Array.isArray(data.education) ? data.education : [],
