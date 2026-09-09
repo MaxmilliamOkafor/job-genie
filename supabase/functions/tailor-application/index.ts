@@ -3983,6 +3983,17 @@ ${
       }
     }
 
+    // THE REVISION'S OWN HIGH-WATER MARK, KEPT FOR THE FINAL RECONCILIATION.
+    // A revision pass can report 100% and the final document still measure 88%,
+    // because the clean-up steps that follow legitimately delete terms the model
+    // wrote in without evidence. Recording what the accepted revision contained
+    // lets the final report name those terms instead of leaving two figures that
+    // silently disagree.
+    const postRevisionMatched: string[] =
+      revisions.some((r) => r.accepted) && result.tailoredResume
+        ? measureCoverage(result.tailoredResume, jdKeywords.allKeywords).matched
+        : [];
+
     // THE CONTACT LINE AND THE SKILLS LIST ARE THE CANDIDATE'S, NOT THE MODEL'S.
     // A live run produced the phone as "+353 08 742 61508" (digits reordered)
     // and listed "Dagster, dbt" -- neither is recorded in this profile, and both
