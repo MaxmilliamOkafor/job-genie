@@ -4153,7 +4153,11 @@ ${
           // Letterhead, links and salutation lines are left exactly as they are.
           if (t.includes("@") || /https?:\/\/|www\.|\.(com|app|dev|io|ie|org|net)\b/i.test(t)) return line;
           if (/^(dear|sincerely|re:|date:)/i.test(t) || t.length < 40) return stripTools(line);
-          const sentences = t.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+          // A DECIMAL POINT IS NOT A SENTENCE END: splitting on it turned the
+          // candidate's own "£2.6bn" into "£2. 6bn". Mask, split, restore.
+          const DEC = "\u0001";
+          const maskedLine = t.replace(/(\d)\.(?=\d)/g, `$1${DEC}`);
+          const sentences = maskedLine.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s: string) => s.replaceAll(DEC, "."));
           if (!sentences) return stripTools(line);
           const kept = sentences
             .filter((s: string) => !carriesWordTerm(s))
