@@ -14,6 +14,13 @@ import {
   termAppearsIn,
   type RevisionRecord,
 } from "../_shared/coverage.ts";
+import {
+  buildEvidenceSources,
+  buildRequirementList,
+  classifyTerm,
+  reportCoverage,
+  type EvidenceSource,
+} from "../_shared/evidence.ts";
 
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
@@ -2329,7 +2336,18 @@ serve(async (req) => {
 
     // Jobscan keyword extraction
     const jdKeywords = extractJobscanKeywords(description, mergedRequirements);
-    console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
+
+    // ONE FIXED REQUIREMENT LIST, built once here and never rebuilt.
+    // Initial, per-revision and final coverage are only comparable when they
+    // are measured against the same denominator, so the deduplicated list
+    // replaces the raw extraction immediately. Incidental employer names,
+    // boilerplate and overlapping title phrases are dropped rather than being
+    // counted as requirements the candidate has to satisfy.
+    const requirementList = buildRequirementList(jdKeywords.allKeywords, [company]);
+    console.log(
+      `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
+    );
+    jdKeywords.allKeywords = requirementList.terms;
 
     const strategyBlock = buildStrategyBlock(atsStrategy);
 
