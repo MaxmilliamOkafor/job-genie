@@ -4364,6 +4364,21 @@ ${
     // "12 of 18" sit beside seven missing terms.
     const coverageTotal = measured.total;
 
+    // A TERM THE DRAFT HAD AND THE FINAL DOCUMENT DOES NOT IS A LOSS, NOT A GAP.
+    // The revision gate runs on the draft, but the deterministic clean-up steps
+    // that follow (unrecorded-tool scrub, project rebuild, section rebuild) can
+    // rewrite away a bullet that carried a supported requirement. When that
+    // happens the final figure drops below target with nothing in the revision
+    // record to explain it, so name those terms explicitly.
+    const lostInPostProcessing = firstPass.matched.filter((t) =>
+      measured.missing.some((m) => m.toLowerCase() === t.toLowerCase())
+    );
+    if (lostInPostProcessing.length > 0) {
+      console.warn(
+        `[COVERAGE] Present in the draft but absent from the final document: ${lostInPostProcessing.join(", ")}`,
+      );
+    }
+
     result.matchScore = measured.percent;
     result.requirementList = {
       terms: jdKeywords.allKeywords,
