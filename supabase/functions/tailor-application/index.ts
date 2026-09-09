@@ -3765,20 +3765,38 @@ ${
           break;
         }
 
-        // Only evidenced gaps are targeted, required qualifications first.
+        // Only evidenced gaps are targeted, required qualifications first, and
+        // the tier is carried through so the revision prompt can say whether a
+        // term is a recorded tool (belongs in the skills list or a bullet as a
+        // named tool) or a capability the achievement already demonstrates
+        // (belongs inside that achievement's sentence, never asserted as a skill).
         const requirementText = mergedRequirements.join(" \n ").toLowerCase();
-        const assessed = before.missing.map((term) => ({ term, evidence: evidenceFor(term) }));
+        const assessed = before.missing.map((term) => {
+          const v = evidenceOf(term);
+          return {
+            term,
+            tier: v.tier,
+            evidence: v.tier === "unsupported" ? null : `${v.source ?? "profile"}: ${v.evidence ?? ""}`,
+          };
+        });
         if (pass === 1) {
           for (const a of assessed) {
             keywordDecisions.push(
               a.evidence
-                ? { term: a.term, decision: "revision attempted - evidence found in saved profile", evidence: a.evidence }
+                ? {
+                    term: a.term,
+                    decision:
+                      a.tier === "explicit"
+                        ? "revision attempted - explicitly recorded in the saved profile"
+                        : "revision attempted - demonstrated by a saved achievement",
+                    evidence: a.evidence,
+                  }
                 : { term: a.term, decision: "left out - no saved experience or project supports this term" },
             );
           }
         }
         const gaps = assessed
-          .filter((g): g is { term: string; evidence: string } => Boolean(g.evidence))
+          .filter((g): g is { term: string; tier: "explicit" | "demonstrated"; evidence: string } => Boolean(g.evidence))
           .sort((a, b) => {
             const aReq = requirementText.includes(a.term.toLowerCase()) ? 0 : 1;
             const bReq = requirementText.includes(b.term.toLowerCase()) ? 0 : 1;
