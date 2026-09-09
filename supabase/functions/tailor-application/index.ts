@@ -4315,7 +4315,13 @@ ${
     // Recalculate ACTUAL match score based on generated resume content
     const generatedResumeText = (result.tailoredResume || "").toLowerCase();
     const generatedCoverText = (result.tailoredCoverLetter || "").toLowerCase();
-    const combinedGeneratedText = `${generatedResumeText} ${generatedCoverText}`;
+    // CV COVERAGE IS MEASURED ON THE CV ALONE.
+    //
+    // Blending the cover letter in inflated the figure: a term that appeared
+    // only in a letter sentence counted as covered on the CV, and the CV is the
+    // document a parser reads. The letter is measured separately and reported
+    // separately; it never raises the CV number.
+    const combinedGeneratedText = generatedResumeText;
 
     // Count how many JD keywords appear in the generated content, on whole
     // terms only: "java" is not satisfied by "javascript".
@@ -4453,7 +4459,7 @@ ${
       }
 
       // Recalculate coverage after injection, whole terms only.
-      const postInjectText = `${result.tailoredResume} ${result.tailoredCoverLetter || ""}`;
+      const postInjectText = `${result.tailoredResume}`;
       const secondPass = measureCoverage(postInjectText, jdKeywords.allKeywords);
       const finalMatched: string[] = [...secondPass.matched];
       const finalMissing: string[] = [...secondPass.missing];
@@ -4484,7 +4490,8 @@ ${
     // Measured off the EXPORTED text, against the fixed requirement list built
     // once at the top of the run, so initial, per-revision and final figures
     // are all the same denominator.
-    const finalText = `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`;
+    const finalText = `${result.tailoredResume || ""}`;
+    const coverLetterOnlyCoverage = measureCoverage(result.tailoredCoverLetter || "", jdKeywords.allKeywords);
     const measured = measureCoverage(finalText, jdKeywords.allKeywords);
 
     // TWO SEPARATE NUMBERS, NEVER BLENDED.
