@@ -1455,13 +1455,19 @@ async function handleRawContentRequest(body: {
         }
       }
     }
-    if (tailoredLocation) {
-      const cleanTL = tailoredLocation
+    // THE DOCUMENT'S OWN CONTACT LINE WINS.
+    // The reviewed text already carries the candidate's saved location, while
+    // tailoredLocation has arrived from callers holding the posting's city
+    // (a header reading "Boston, US" for a Dublin-based candidate). It is now
+    // only a fallback for text that carries no location at all, and there is
+    // no hardcoded default: an absent location prints nothing rather than a
+    // guess.
+    if (!contactLoc && tailoredLocation) {
+      contactLoc = tailoredLocation
         .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, "")
         .trim();
-      if (cleanTL) contactLoc = cleanTL;
     }
-    if (!contactLoc) contactLoc = "Dublin, IE";
+    contactLoc = normaliseLocation(contactLoc);
 
     // ---- Parse links line ----
     let liUrl = "", ghUrl = "", portUrl = "";
