@@ -4154,6 +4154,16 @@ ${
         .trim();
     }
 
+    // ARTICLE AGREEMENT IS REPAIRED IN EVERY CASE, NOT ONLY AFTER A SCRUB.
+    // The model itself writes "a experience", "a extensive background"; a reader
+    // sees a careless letter, so the repair runs on both documents always.
+    const repairArticles = (text: string) =>
+      text.replace(
+        /\ba\s+(?=(experience|expertise|extensive|advanced|internal|end-to-end|automated|analytical|early|efficient|open|in-house|understanding|ability|ongoing|established|excellent|award|hour|honest|optimised|enterprise|integrated|active|accurate|independent|impact)\b)/gi,
+        "an ",
+      );
+    if (result.tailoredCoverLetter) result.tailoredCoverLetter = repairArticles(result.tailoredCoverLetter);
+    if (result.tailoredResume) result.tailoredResume = repairArticles(result.tailoredResume);
 
     result.removedUnrecordedSkills = invented;
 
