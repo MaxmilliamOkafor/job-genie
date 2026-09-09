@@ -4313,17 +4313,39 @@ ${
     // whole-term matching, so Java is never satisfied by JavaScript and
     // C++, C#, .NET and CI/CD survive intact. It is keyword coverage --
     // not an ATS pass probability, not a recruiter verdict.
-    const measured = measureCoverage(
-      `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`,
-      jdKeywords.allKeywords,
-    );
-    const unsupportedRequirements = measured.missing.filter((kw) => !atsStrategy.evidence[kw.toLowerCase()]);
+    // Measured off the EXPORTED text, against the fixed requirement list built
+    // once at the top of the run, so initial, per-revision and final figures
+    // are all the same denominator.
+    const finalText = `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`;
+    const measured = measureCoverage(finalText, jdKeywords.allKeywords);
+
+    // TWO SEPARATE NUMBERS, NEVER BLENDED.
+    //
+    // Literal keyword coverage is how many requirement terms appear verbatim in
+    // the document. Evidence-backed alignment is how many requirements the
+    // candidate's saved profile actually supports. They answer different
+    // questions: a low literal figure on a well-aligned CV means wording, a low
+    // alignment figure means the job genuinely asks for things this profile does
+    // not have. Averaging them into one score hides both.
+    const dual = reportCoverage(finalText, jdKeywords.allKeywords, evidenceSources, atsStrategy.evidence);
+    const unsupportedRequirements = dual.alignment.unsupported;
     // The denominator is the DE-DUPLICATED term count, so matched + missing
     // always adds up to it. Reporting the raw extracted length made
     // "12 of 18" sit beside seven missing terms.
     const coverageTotal = measured.total;
 
     result.matchScore = measured.percent;
+    result.requirementList = {
+      terms: jdKeywords.allKeywords,
+      total: jdKeywords.allKeywords.length,
+      removedAsNotRequirements: requirementList.removed,
+      classification: jdKeywords.allKeywords.map((term) => {
+        const v = evidenceOf(term);
+        return { term, tier: v.tier, source: v.source, evidence: v.evidence };
+      }),
+      meaning:
+        "The fixed, deduplicated requirement list for this job. Every coverage figure below is measured against exactly this list.",
+    };
     result.keywordCoverage = {
       matched: measured.matched.length,
       total: coverageTotal,
@@ -4335,6 +4357,8 @@ ${
       target: atsStrategy.keywordCoverageTarget ?? coverageTarget,
       matchedTerms: measured.matched,
       missingTerms: measured.missing,
+      literalCoverage: dual.literal,
+      evidenceAlignment: dual.alignment,
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
       // Why each missing term was or was not worked in, term by term.
