@@ -249,6 +249,11 @@ const CANONICAL_CASE: Record<string, string> = {
   "rest": "REST", "grpc": "gRPC", "s3": "S3", "ec2": "EC2",
   "bigquery": "BigQuery", "github actions": "GitHub Actions",
   "power bi": "Power BI", "iac": "IaC",
+  "mongodb": "MongoDB", "eks": "EKS", "argocd": "ArgoCD", "pyspark": "PySpark",
+  "pytest": "pytest", "presto": "Presto", "nltk": "NLTK", "mlflow": "MLflow",
+  "xgboost": "XGBoost", "shap": "SHAP", "ifrs 9": "IFRS 9", "aml": "AML",
+  "hipaa": "HIPAA", "iso 27001": "ISO 27001", "rbac": "RBAC", "llm": "LLM", "llms": "LLMs",
+  "js": "JS", "k8s": "Kubernetes", "tensorflow.js": "TensorFlow.js",
 };
 
 export interface RequirementList {
