@@ -2343,7 +2343,7 @@ serve(async (req) => {
     // replaces the raw extraction immediately. Incidental employer names,
     // boilerplate and overlapping title phrases are dropped rather than being
     // counted as requirements the candidate has to satisfy.
-    const requirementList = buildRequirementList(jdKeywords.allKeywords, [company]);
+    const requirementList = buildRequirementList(jdKeywords.allKeywords, [company], jobTitle);
     console.log(
       `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
     );
@@ -3219,7 +3219,11 @@ Then output a KEYWORD COVERAGE REPORT:
 === CRITICAL: PROFESSIONAL SUMMARY MUST NOT DUPLICATE HEADER ===
 The resume header already contains: Name, Phone, Email, Location, LinkedIn, GitHub, Portfolio URLs.
 The PROFESSIONAL SUMMARY section MUST:
-- Start DIRECTLY with a qualifier like "Accomplished...", "Senior...", "Experienced..."
+- Start DIRECTLY on the candidate's positioning for the target role. Do NOT open with a
+  self-flattering adjective: "Accomplished", "Seasoned", "Experienced", "Highly skilled",
+  "Results-driven" and the like are BANNED as the opening word. Open on the discipline, the
+  span of experience or the domain instead, for example "Machine learning engineer with six
+  years..." or "Six years building..."
 - NEVER repeat the candidate name "${candidateName}"
 - NEVER repeat email "${userProfile.email}"
 - NEVER repeat phone "${userProfile.phone}"
@@ -3418,7 +3422,7 @@ ${
       "github": "${userProfile.github}",
       "portfolio": "${userProfile.portfolio}"
     },
-    "summary": "[PURE QUALIFICATIONS ONLY - Start with 'Experienced/Senior/Accomplished...' - ZERO contact info, names, emails, phones, or URLs - those are ALREADY in header above]",
+    "summary": "[PURE QUALIFICATIONS ONLY - open on the discipline or the span of experience, NOT on a self-flattering adjective ('Accomplished', 'Seasoned', 'Experienced', 'Results-driven' are banned openers) - ZERO contact info, names, emails, phones, or URLs - those are ALREADY in header above]",
     "coreCompetencies": ["Keyword Phrase 1", "Keyword Phrase 2", "Keyword Phrase 3", "Keyword Phrase 4", "Keyword Phrase 5", "Keyword Phrase 6"],
     "experience": [
       {
@@ -4360,6 +4364,21 @@ ${
     // "12 of 18" sit beside seven missing terms.
     const coverageTotal = measured.total;
 
+    // A TERM THE DRAFT HAD AND THE FINAL DOCUMENT DOES NOT IS A LOSS, NOT A GAP.
+    // The revision gate runs on the draft, but the deterministic clean-up steps
+    // that follow (unrecorded-tool scrub, project rebuild, section rebuild) can
+    // rewrite away a bullet that carried a supported requirement. When that
+    // happens the final figure drops below target with nothing in the revision
+    // record to explain it, so name those terms explicitly.
+    const lostInPostProcessing = firstPass.matched.filter((t) =>
+      measured.missing.some((m) => m.toLowerCase() === t.toLowerCase())
+    );
+    if (lostInPostProcessing.length > 0) {
+      console.warn(
+        `[COVERAGE] Present in the draft but absent from the final document: ${lostInPostProcessing.join(", ")}`,
+      );
+    }
+
     result.matchScore = measured.percent;
     result.requirementList = {
       terms: jdKeywords.allKeywords,
@@ -4386,6 +4405,7 @@ ${
       literalCoverage: dual.literal,
       evidenceAlignment: dual.alignment,
       unsupportedRequirements,
+      lostInPostProcessing,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
       // Why each missing term was or was not worked in, term by term.
       // Terms only become final gaps after the unrecorded-tool scrub runs, so
@@ -4396,7 +4416,13 @@ ${
         if (already) return already;
         const evidence = evidenceFor(term);
         return evidence
-          ? { term, decision: "supported by saved profile but not carried into the final document", evidence }
+          ? {
+              term,
+              decision: lostInPostProcessing.some((l) => l.toLowerCase() === term.toLowerCase())
+                ? "supported by the saved profile and present in the draft, but removed by the document clean-up steps"
+                : "supported by saved profile but not carried into the final document",
+              evidence,
+            }
           : { term, decision: "left out - no saved experience or project supports this term" };
       }),
     };
@@ -4416,7 +4442,9 @@ ${
     result.revisionSummary = revisions.length === 0
       ? measured.percent >= coverageTarget
         ? `No revision needed: coverage reached ${measured.percent}% on the first draft.`
-        : "No revision was attempted."
+        : lostInPostProcessing.length > 0
+          ? `No revision was attempted: the draft was at or above target, and these terms were lost afterwards by the clean-up steps rather than missing from the draft: ${lostInPostProcessing.join(", ")}.`
+          : "No revision was attempted."
       : revisions
           .map((r) =>
             r.accepted
