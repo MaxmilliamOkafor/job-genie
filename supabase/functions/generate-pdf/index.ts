@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { normaliseLocation } from "../_shared/location.ts";
 import {
   PDFDocument,
   rgb,
