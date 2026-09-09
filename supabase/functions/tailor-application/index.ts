@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildCandidateLocation } from "../_shared/location.ts";
 import {
   aiErrorResponse,
   classifyProviderStatus,
@@ -2321,10 +2322,8 @@ serve(async (req) => {
     // role printed "New York" under the candidate's name. That is a factual
     // claim about where the candidate lives, so it now comes from the saved
     // profile only and never from the posting.
-    const smartLocation = [userProfile.city, userProfile.country]
-      .map((v) => (typeof v === "string" ? v.trim() : ""))
-      .filter(Boolean)
-      .join(", ") || "Remote";
+    const smartLocation =
+      buildCandidateLocation(userProfile.city, userProfile.country) || "Remote";
     console.log(`Header location from saved profile: ${smartLocation}`);
 
 
@@ -3984,6 +3983,17 @@ ${
       }
     }
 
+    // THE REVISION'S OWN HIGH-WATER MARK, KEPT FOR THE FINAL RECONCILIATION.
+    // A revision pass can report 100% and the final document still measure 88%,
+    // because the clean-up steps that follow legitimately delete terms the model
+    // wrote in without evidence. Recording what the accepted revision contained
+    // lets the final report name those terms instead of leaving two figures that
+    // silently disagree.
+    const postRevisionMatched: string[] =
+      revisions.some((r) => r.accepted) && result.tailoredResume
+        ? measureCoverage(result.tailoredResume, jdKeywords.allKeywords).matched
+        : [];
+
     // THE CONTACT LINE AND THE SKILLS LIST ARE THE CANDIDATE'S, NOT THE MODEL'S.
     // A live run produced the phone as "+353 08 742 61508" (digits reordered)
     // and listed "Dagster, dbt" -- neither is recorded in this profile, and both
@@ -4593,7 +4603,8 @@ ${
     // rewrite away a bullet that carried a supported requirement. When that
     // happens the final figure drops below target with nothing in the revision
     // record to explain it, so name those terms explicitly.
-    const lostInPostProcessing = firstPass.matched.filter((t) =>
+    const draftHighWaterMark = Array.from(new Set([...firstPass.matched, ...postRevisionMatched]));
+    const lostInPostProcessing = draftHighWaterMark.filter((t) =>
       measured.missing.some((m) => m.toLowerCase() === t.toLowerCase())
     );
     if (lostInPostProcessing.length > 0) {
@@ -4981,6 +4992,19 @@ ${
 
           console.log(`PDF generated successfully: ${fileName}, size: ${uint8Array.length} bytes`);
           return { pdf: base64, fileName };
+        } else if (contentType.includes("application/json")) {
+          // generate-pdf returns a JSON envelope carrying base64 DOCX bytes.
+          // Treating that as an unexpected type made every attachment report
+          // "failed" even though the document had been generated correctly.
+          const body = await pdfRes.json().catch(() => null);
+          const base64 = body?.docx || body?.pdf || null;
+          if (base64) {
+            if (body?.fileName) fileName = body.fileName;
+            console.log(`Document generated successfully: ${fileName}, base64 length: ${base64.length}`);
+            return { pdf: base64, fileName };
+          }
+          console.error(`generate-pdf returned JSON without document bytes: ${JSON.stringify(body)?.slice(0, 200)}`);
+          return { pdf: null, fileName };
         } else {
           // Unexpected response type
           console.error(`Unexpected response type from generate-pdf: ${contentType}`);

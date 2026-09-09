@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { normaliseLocation } from "../_shared/location.ts";
 import {
   PDFDocument,
   rgb,
@@ -985,7 +986,7 @@ serve(async (req) => {
     let docxBytes: Uint8Array;
     if (sanitizedData.type === "resume") {
       const contact: ContactInfo = {
-        location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
+        location: normaliseLocation(cleanLocation(sanitizedData.personalInfo.location)),
         phone: sanitizedData.personalInfo.phone,
         email: sanitizedData.personalInfo.email,
         linkedin: sanitizedData.personalInfo.linkedin,
@@ -1014,7 +1015,7 @@ serve(async (req) => {
       docxBytes = await buildResumeDocxBytes(norm);
     } else if (sanitizedData.type === "cover_letter" && sanitizedData.coverLetter) {
       const contact: ContactInfo = {
-        location: cleanLocation(sanitizedData.personalInfo.location) || "Dublin, IE",
+        location: normaliseLocation(cleanLocation(sanitizedData.personalInfo.location)),
         phone: sanitizedData.personalInfo.phone,
         email: sanitizedData.personalInfo.email,
         linkedin: sanitizedData.personalInfo.linkedin,
@@ -1191,7 +1192,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
 
     if (type === "resume" && structuredCv) {
       const locationHeader = buildLocationHeaderFromStructuredCv(pInfo);
-      const loc = cleanLocation(locationHeader || pInfo.location || "") || "Dublin, IE";
+      const loc = normaliseLocation(cleanLocation(locationHeader || pInfo.location || ""));
       const contact: ContactInfo = {
         location: loc, phone: pInfo.phone, email: pInfo.email,
         linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
@@ -1225,7 +1226,7 @@ async function handleStructuredCvRequest(body: StructuredCvRequest): Promise<Res
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const loc = cleanLocation(pInfo.location || "") || "Dublin, IE";
+      const loc = normaliseLocation(cleanLocation(pInfo.location || ""));
       const contact: ContactInfo = {
         location: loc, phone: pInfo.phone, email: pInfo.email,
         linkedin: pInfo.linkedin, github: pInfo.github, portfolio: pInfo.portfolio,
@@ -1273,7 +1274,7 @@ async function handleRawContentRequest(body: {
 }): Promise<Response> {
   const {
     content,
-    type = "cv",
+    type: rawType = "cv",
     tailoredLocation,
     jobTitle,
     fileName,
@@ -1281,6 +1282,14 @@ async function handleRawContentRequest(body: {
     lastName,
     summary: passedSummary,
   } = body;
+
+  // A CV ASKED FOR BY ANOTHER NAME IS STILL A CV.
+  // Only the literal "cv" reached the resume renderer, so a caller sending
+  // "resume" (the extension's own wording) had a full CV rendered through the
+  // cover-letter path: letterhead, "Dear Hiring Manager" and every section
+  // flattened into paragraphs. Type names are normalised instead.
+  const t = String(rawType).toLowerCase().replace(/[^a-z]/g, "");
+  const type = t === "coverletter" || t === "letter" ? "coverletter" : "cv";
 
   console.log(
     "[generate-pdf] Raw content request, tailoredLocation:",
@@ -1455,13 +1464,19 @@ async function handleRawContentRequest(body: {
         }
       }
     }
-    if (tailoredLocation) {
-      const cleanTL = tailoredLocation
+    // THE DOCUMENT'S OWN CONTACT LINE WINS.
+    // The reviewed text already carries the candidate's saved location, while
+    // tailoredLocation has arrived from callers holding the posting's city
+    // (a header reading "Boston, US" for a Dublin-based candidate). It is now
+    // only a fallback for text that carries no location at all, and there is
+    // no hardcoded default: an absent location prints nothing rather than a
+    // guess.
+    if (!contactLoc && tailoredLocation) {
+      contactLoc = tailoredLocation
         .replace(/\s*\|?\s*open\s+to\s+relocation\s*/gi, "")
         .trim();
-      if (cleanTL) contactLoc = cleanTL;
     }
-    if (!contactLoc) contactLoc = "Dublin, IE";
+    contactLoc = normaliseLocation(contactLoc);
 
     // ---- Parse links line ----
     let liUrl = "", ghUrl = "", portUrl = "";
