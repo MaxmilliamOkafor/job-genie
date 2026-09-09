@@ -4024,9 +4024,16 @@ ${
             const item = raw.trim();
             if (!item) continue;
             const key = item.toLowerCase().replace(/\s*\(.*\)$/, "").trim();
+            // THE SAME EVIDENCE RULE THE REVISION PASS USED.
+            // This line used to require the term to be present in the skills
+            // field, which deleted accurate wording a revision had just added
+            // on the strength of an achievement. A term now survives when it is
+            // recorded anywhere in the profile OR demonstrated by a saved
+            // achievement; only genuinely unsupported items are cut.
             const recorded =
               profileSkillTerms.has(key) ||
-              key.split(/\s+/).every((w) => profileSkillTerms.has(w));
+              key.split(/\s+/).every((w) => profileSkillTerms.has(w)) ||
+              evidenceOf(key).tier !== "unsupported";
             if (recorded) kept.push(item);
             else invented.push(item);
           }
