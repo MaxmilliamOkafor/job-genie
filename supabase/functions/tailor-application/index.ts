@@ -4190,12 +4190,12 @@ ${
       // the whole permitted source. Anything else stays missing and is
       // reported back as an unsupported requirement, because a skill the
       // candidate cannot defend in an interview is worse than a gap.
-      // profileEvidenceText is built once, before the revision passes.
-
-
-      const singleWordMissing = actualMissing.filter(
-        (kw) => atsStrategy.evidence[kw.toLowerCase()] || termAppearsIn(profileEvidenceText, kw),
-      );
+      // It uses evidenceOf, the same rule as the revision pass and the final
+      // validator, so a term is never added here that validation would strip.
+      // Only EXPLICIT records may be added to the skills list: a capability
+      // demonstrated by an achievement belongs in that achievement's sentence,
+      // not asserted as a listed skill.
+      const singleWordMissing = actualMissing.filter((kw) => evidenceOf(kw).tier === "explicit");
       const unevidencedSkipped = actualMissing.length - singleWordMissing.length;
       if (unevidencedSkipped > 0) {
         console.log(`[FORCE-INJECT] Skipped ${unevidencedSkipped} keywords with no evidence in the profile`);
