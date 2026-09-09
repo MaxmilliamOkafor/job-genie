@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ALTER COLUMN work_authorized_countries SET DEFAULT '{}'::text[];
