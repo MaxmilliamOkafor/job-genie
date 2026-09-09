@@ -267,6 +267,7 @@ const CANONICAL_CASE: Record<string, string> = {
   "rest": "REST", "grpc": "gRPC", "s3": "S3", "ec2": "EC2",
   "bigquery": "BigQuery", "github actions": "GitHub Actions",
   "power bi": "Power BI", "iac": "IaC",
+  "infrastructure as code": "Infrastructure as Code",
   "mongodb": "MongoDB", "eks": "EKS", "argocd": "ArgoCD", "pyspark": "PySpark",
   "pytest": "pytest", "presto": "Presto", "nltk": "NLTK", "mlflow": "MLflow",
   "xgboost": "XGBoost", "shap": "SHAP", "ifrs 9": "IFRS 9", "aml": "AML",
