@@ -3372,7 +3372,9 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
 
    Dear Hiring Manager,
 
-   [4 paragraphs: Hook showing genuine interest, Proof with specific metrics and achievements, Skills alignment with job requirements, Close with availability and enthusiasm]
+   [Four paragraphs, EVIDENCE FIRST. 1) Open on the single most relevant piece of the candidate's own recorded work for this posting - what was built or delivered, the method, and the recorded result. No statement of interest, no compliment. 2) A second specific achievement addressing a different requirement of this posting, quoting its figure exactly as the CV states it. 3) The connection to the work this posting describes, in that role's own terms. 4) A one-line close: availability and a request to discuss. Nothing else.
+
+   COVER LETTER: NO ENTHUSIASM, NO PRAISE, NO PREDICTIONS. These are all forbidden and must not appear in any form: expressions of excitement or eagerness ("excited", "thrilled", "delighted", "eager", "keen to", "passionate"); praise of the employer ("industry leader", "impressive", "admire", "innovative culture", "world-class team", "cutting-edge work"); and predictions about the candidate's future behaviour ("would adapt quickly", "quick learner", "hit the ground running", "confident I would thrive", "ramp up fast", "eager to learn"). A prediction is not evidence and a reviewer discounts it entirely. Every sentence must either state something the candidate has actually done, or state something the posting actually says. If a sentence does neither, delete it.
 
    Sincerely,
    ${candidateName}
