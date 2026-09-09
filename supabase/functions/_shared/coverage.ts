@@ -34,11 +34,30 @@ export function buildTermPattern(term: string): RegExp | null {
   }
 }
 
+/**
+ * A NEGATED MENTION IS NOT COVERAGE.
+ *
+ * "While I have not directly worked with Scala" contains the word Scala, so a
+ * plain match counted it as covered and the reported figure claimed a skill the
+ * sentence explicitly disclaims. Only a mention that is not preceded by a
+ * negation counts.
+ */
+const NEGATION = /\b(no|not|never|without|lacking|limited|minimal|zero|nor|neither)\b[^.!?;]{0,80}$/i;
+
 export function termAppearsIn(text: string, term: string): boolean {
   const pattern = buildTermPattern(term);
   if (!pattern) return false;
-  return pattern.test(text);
+  const global = new RegExp(pattern.source, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = global.exec(text)) !== null) {
+    const before = text.slice(Math.max(0, m.index - 120), m.index);
+    const clause = before.split(/[.!?;\n]/).pop() ?? before;
+    if (!NEGATION.test(clause)) return true;
+    if (m.index === global.lastIndex) global.lastIndex++;
+  }
+  return false;
 }
+
 
 export interface CoverageResult {
   matched: string[];

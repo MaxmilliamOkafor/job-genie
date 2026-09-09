@@ -40,10 +40,27 @@ export function buildTermPattern(term: string): RegExp | null {
   }
 }
 
+/**
+ * A negated mention is not coverage: "I have not worked with Scala" contains the
+ * term but disclaims the skill, so only non-negated mentions count. Mirrors the
+ * server-side rule in supabase/functions/_shared/coverage.ts.
+ */
+const NEGATION = /\b(no|not|never|without|lacking|limited|minimal|zero|nor|neither)\b[^.!?;]{0,80}$/i;
+
 export function termAppearsIn(text: string, term: string): boolean {
   const pattern = buildTermPattern(term);
-  return pattern ? pattern.test(text) : false;
+  if (!pattern) return false;
+  const global = new RegExp(pattern.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = global.exec(text)) !== null) {
+    const before = text.slice(Math.max(0, m.index - 120), m.index);
+    const clause = before.split(/[.!?;\n]/).pop() ?? before;
+    if (!NEGATION.test(clause)) return true;
+    if (m.index === global.lastIndex) global.lastIndex++;
+  }
+  return false;
 }
+
 
 export function measureCoverage(text: string, terms: string[]): CoverageResult {
   const unique = Array.from(new Set(terms.map((t) => t.trim()).filter(Boolean)));
