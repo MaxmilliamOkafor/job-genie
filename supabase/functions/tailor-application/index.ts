@@ -4094,10 +4094,10 @@ ${
       const danglingTail = /\b(such as|including|like|namely|on|of|with|in|for|to|at|from|around|using|and)\s*$/i;
       result.tailoredCoverLetter = result.tailoredCoverLetter
         .split(/\n\s*\n/)
-        .map((para) => {
+        .map((para: string) => {
           const sentences = para.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
           if (!sentences) return para;
-          const kept = sentences.filter((sentence) => !danglingTail.test(sentence.replace(/[.!?\s]+$/, "")));
+          const kept = sentences.filter((sentence: string) => !danglingTail.test(sentence.replace(/[.!?\s]+$/, "")));
           return (kept.length ? kept : sentences).join(" ").replace(/[ \t]{2,}/g, " ").trim();
         })
         .filter(Boolean)
