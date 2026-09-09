@@ -43,8 +43,10 @@ export function termAppearsIn(text: string, term: string): boolean {
 export interface CoverageResult {
   matched: string[];
   missing: string[];
+  total: number;
   percent: number;
 }
+
 
 /** Coverage counted off real document text: matched unique terms / total unique terms. */
 export function measureCoverage(text: string, terms: string[]): CoverageResult {
