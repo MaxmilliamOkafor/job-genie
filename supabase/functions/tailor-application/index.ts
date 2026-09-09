@@ -14,6 +14,13 @@ import {
   termAppearsIn,
   type RevisionRecord,
 } from "../_shared/coverage.ts";
+import {
+  buildEvidenceSources,
+  buildRequirementList,
+  classifyTerm,
+  reportCoverage,
+  type EvidenceSource,
+} from "../_shared/evidence.ts";
 
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
@@ -2329,7 +2336,18 @@ serve(async (req) => {
 
     // Jobscan keyword extraction
     const jdKeywords = extractJobscanKeywords(description, mergedRequirements);
-    console.log(`Extracted ${jdKeywords.allKeywords.length} keywords from JD`);
+
+    // ONE FIXED REQUIREMENT LIST, built once here and never rebuilt.
+    // Initial, per-revision and final coverage are only comparable when they
+    // are measured against the same denominator, so the deduplicated list
+    // replaces the raw extraction immediately. Incidental employer names,
+    // boilerplate and overlapping title phrases are dropped rather than being
+    // counted as requirements the candidate has to satisfy.
+    const requirementList = buildRequirementList(jdKeywords.allKeywords, [company]);
+    console.log(
+      `Extracted ${jdKeywords.allKeywords.length} keywords from JD; fixed requirement list has ${requirementList.terms.length} (dropped ${requirementList.removed.length}: ${requirementList.removed.slice(0, 12).join(", ")})`,
+    );
+    jdKeywords.allKeywords = requirementList.terms;
 
     const strategyBlock = buildStrategyBlock(atsStrategy);
 
@@ -3708,69 +3726,31 @@ ${
     // stands. A term with no evidence anywhere in the profile is never
     // targeted -- it is reported back as unsupported instead.
     // ============================================================
-    const profileEvidenceText = [
-      JSON.stringify(userProfile.skills || []),
-      JSON.stringify(userProfile.professionalExperience || []),
-      JSON.stringify(userProfile.relevantProjects || []),
-      JSON.stringify(userProfile.certifications || []),
-      JSON.stringify(userProfile.education || []),
-      userProfile.coverLetter || "",
-    ].join(" \n ");
-
-    // A named tool or product is only supported when the profile actually
-    // records it. A capability phrase ("end-to-end", "ownership", "data
-    // modelling") can be supported by an achievement that demonstrates it, so
-    // those are matched through wording the candidate already used. General
-    // experience never implies a specific named tool.
-    const capabilitySynonyms: Record<string, string[]> = {
-      "end-to-end": ["end to end", "from ingestion to", "owned the full", "designed and delivered", "built and deployed"],
-      ownership: ["owned", "led", "drove", "accountable for", "took responsibility"],
-      "stakeholder management": ["stakeholders", "vp-level", "business partners", "presented findings"],
-      "data modelling": ["data model", "schema", "dimensional", "star schema"],
-      "data modeling": ["data model", "schema", "dimensional", "star schema"],
-      "data quality": ["data quality", "validation", "reconciliation", "accuracy checks"],
-      collaboration: ["collaborated", "partnered", "worked with", "cross-functional"],
-      mentoring: ["mentored", "coached", "onboarded"],
-      automation: ["automated", "automation", "scheduled"],
-      "problem solving": ["diagnosed", "root cause", "resolved", "debugged"],
-      communication: ["presented", "documented", "reported to"],
+    // ONE set of evidence rules for generation, revision AND final validation.
+    //
+    // These three stages used to disagree. The revision pass asked "does an
+    // achievement demonstrate this?", correctly wrote in accurate wording, and
+    // the final validator then asked "is this word in the skills field?" and
+    // cut the same wording straight back out. A capability the candidate
+    // demonstrably has was deleted for never having been typed into a list.
+    // Every stage now calls classifyTerm and gets the same three-way answer:
+    // explicitly recorded, demonstrated by an achievement, or unsupported.
+    // Only unsupported terms are ever removed, and nothing is invented.
+    //
+    // The job description, the employer and the tailoring instructions are
+    // deliberately NOT passed in as sources: the posting can never be evidence
+    // about the candidate.
+    const evidenceSources: EvidenceSource[] = buildEvidenceSources(userProfile);
+    const evidenceOf = (term: string) => classifyTerm(term, evidenceSources, atsStrategy.evidence);
+    /** Kept for the older call sites: the quoted evidence line, or null. */
+    const evidenceFor = (term: string): string | null => {
+      const verdict = evidenceOf(term);
+      if (verdict.tier === "unsupported") return null;
+      return verdict.source ? `${verdict.source}: ${verdict.evidence}` : (verdict.evidence ?? null);
     };
-    const evidenceSources: Array<{ label: string; text: string }> = [];
-    for (const role of Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : []) {
-      for (const bullet of Array.isArray((role as any)?.bullets) ? (role as any).bullets : []) {
-        const text = (bullet || "").toString().trim();
-        if (text) evidenceSources.push({ label: (role as any).company || "profile", text });
-      }
-    }
-    for (const project of Array.isArray(userProfile.relevantProjects) ? userProfile.relevantProjects : []) {
-      const text = [(project as any)?.description, ...(Array.isArray((project as any)?.bullets) ? (project as any).bullets : [])]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      if (text) evidenceSources.push({ label: (project as any).name || "project", text });
-    }
 
     // Per-keyword decisions, so a skipped revision can be explained term by term.
     const keywordDecisions: Array<{ term: string; decision: string; evidence?: string }> = [];
-
-    const evidenceFor = (term: string): string | null => {
-      const supplied = atsStrategy.evidence[term.toLowerCase()];
-      if (supplied) return supplied;
-      // Literal record in the profile: the strongest evidence.
-      for (const src of evidenceSources) {
-        if (termAppearsIn(src.text, term)) return `${src.label}: ${src.text}`;
-      }
-      if (termAppearsIn(profileEvidenceText, term)) return "recorded in the candidate's saved skills";
-      // Capability wording: only for capability phrases, never for tools.
-      const synonyms = capabilitySynonyms[term.toLowerCase().replace(/\s+/g, " ")];
-      if (synonyms) {
-        for (const src of evidenceSources) {
-          const lower = src.text.toLowerCase();
-          if (synonyms.some((s) => lower.includes(s))) return `${src.label}: ${src.text}`;
-        }
-      }
-      return null;
-    };
 
 
     const coverageTarget = atsStrategy.keywordCoverageTarget ?? 90;
@@ -3785,20 +3765,38 @@ ${
           break;
         }
 
-        // Only evidenced gaps are targeted, required qualifications first.
+        // Only evidenced gaps are targeted, required qualifications first, and
+        // the tier is carried through so the revision prompt can say whether a
+        // term is a recorded tool (belongs in the skills list or a bullet as a
+        // named tool) or a capability the achievement already demonstrates
+        // (belongs inside that achievement's sentence, never asserted as a skill).
         const requirementText = mergedRequirements.join(" \n ").toLowerCase();
-        const assessed = before.missing.map((term) => ({ term, evidence: evidenceFor(term) }));
+        const assessed = before.missing.map((term) => {
+          const v = evidenceOf(term);
+          return {
+            term,
+            tier: v.tier,
+            evidence: v.tier === "unsupported" ? null : `${v.source ?? "profile"}: ${v.evidence ?? ""}`,
+          };
+        });
         if (pass === 1) {
           for (const a of assessed) {
             keywordDecisions.push(
               a.evidence
-                ? { term: a.term, decision: "revision attempted - evidence found in saved profile", evidence: a.evidence }
+                ? {
+                    term: a.term,
+                    decision:
+                      a.tier === "explicit"
+                        ? "revision attempted - explicitly recorded in the saved profile"
+                        : "revision attempted - demonstrated by a saved achievement",
+                    evidence: a.evidence,
+                  }
                 : { term: a.term, decision: "left out - no saved experience or project supports this term" },
             );
           }
         }
         const gaps = assessed
-          .filter((g): g is { term: string; evidence: string } => Boolean(g.evidence))
+          .filter((g): g is { term: string; tier: "explicit" | "demonstrated"; evidence: string } => Boolean(g.evidence))
           .sort((a, b) => {
             const aReq = requirementText.includes(a.term.toLowerCase()) ? 0 : 1;
             const bReq = requirementText.includes(b.term.toLowerCase()) ? 0 : 1;
@@ -3821,7 +3819,15 @@ ${
           "",
           "WHAT TO CHANGE. Each term listed below is missing from the CV, and the evidence line beside it comes from this candidate's own saved profile. Work the term into the EXISTING bullet that the evidence describes, in plain professional English, so the sentence still reads as one thing the candidate did. Where a term genuinely belongs in the skills list rather than an achievement, put it there instead.",
           "",
-          gaps.map((g) => `- ${g.term}\n  evidence: ${g.evidence}`).join("\n"),
+          gaps
+            .map((g) =>
+              `- ${g.term} (${
+                g.tier === "explicit"
+                  ? "recorded in the profile: may be named as a tool or listed under skills"
+                  : "demonstrated by the achievement below: work it into that achievement's own sentence, never assert it as a listed skill"
+              })\n  evidence: ${g.evidence}`
+            )
+            .join("\n"),
           "",
           "WHAT MUST NOT CHANGE. Every section heading, in the same order. Every employer, job title, location and date, character for character. Every existing figure; never introduce a figure that is not already in the draft. Never add a role, qualification, tool or eligibility the evidence above does not support. Never delete a bullet or a section to make room. Do not append terms to the end of a sentence as a keyword tail, and do not repeat a term you have already worked in.",
           "",
@@ -4044,9 +4050,16 @@ ${
             const item = raw.trim();
             if (!item) continue;
             const key = item.toLowerCase().replace(/\s*\(.*\)$/, "").trim();
+            // THE SAME EVIDENCE RULE THE REVISION PASS USED.
+            // This line used to require the term to be present in the skills
+            // field, which deleted accurate wording a revision had just added
+            // on the strength of an achievement. A term now survives when it is
+            // recorded anywhere in the profile OR demonstrated by a saved
+            // achievement; only genuinely unsupported items are cut.
             const recorded =
               profileSkillTerms.has(key) ||
-              key.split(/\s+/).every((w) => profileSkillTerms.has(w));
+              key.split(/\s+/).every((w) => profileSkillTerms.has(w)) ||
+              evidenceOf(key).tier !== "unsupported";
             if (recorded) kept.push(item);
             else invented.push(item);
           }
@@ -4203,12 +4216,12 @@ ${
       // the whole permitted source. Anything else stays missing and is
       // reported back as an unsupported requirement, because a skill the
       // candidate cannot defend in an interview is worse than a gap.
-      // profileEvidenceText is built once, before the revision passes.
-
-
-      const singleWordMissing = actualMissing.filter(
-        (kw) => atsStrategy.evidence[kw.toLowerCase()] || termAppearsIn(profileEvidenceText, kw),
-      );
+      // It uses evidenceOf, the same rule as the revision pass and the final
+      // validator, so a term is never added here that validation would strip.
+      // Only EXPLICIT records may be added to the skills list: a capability
+      // demonstrated by an achievement belongs in that achievement's sentence,
+      // not asserted as a listed skill.
+      const singleWordMissing = actualMissing.filter((kw) => evidenceOf(kw).tier === "explicit");
       const unevidencedSkipped = actualMissing.length - singleWordMissing.length;
       if (unevidencedSkipped > 0) {
         console.log(`[FORCE-INJECT] Skipped ${unevidencedSkipped} keywords with no evidence in the profile`);
@@ -4326,17 +4339,39 @@ ${
     // whole-term matching, so Java is never satisfied by JavaScript and
     // C++, C#, .NET and CI/CD survive intact. It is keyword coverage --
     // not an ATS pass probability, not a recruiter verdict.
-    const measured = measureCoverage(
-      `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`,
-      jdKeywords.allKeywords,
-    );
-    const unsupportedRequirements = measured.missing.filter((kw) => !atsStrategy.evidence[kw.toLowerCase()]);
+    // Measured off the EXPORTED text, against the fixed requirement list built
+    // once at the top of the run, so initial, per-revision and final figures
+    // are all the same denominator.
+    const finalText = `${result.tailoredResume || ""}\n${result.tailoredCoverLetter || ""}`;
+    const measured = measureCoverage(finalText, jdKeywords.allKeywords);
+
+    // TWO SEPARATE NUMBERS, NEVER BLENDED.
+    //
+    // Literal keyword coverage is how many requirement terms appear verbatim in
+    // the document. Evidence-backed alignment is how many requirements the
+    // candidate's saved profile actually supports. They answer different
+    // questions: a low literal figure on a well-aligned CV means wording, a low
+    // alignment figure means the job genuinely asks for things this profile does
+    // not have. Averaging them into one score hides both.
+    const dual = reportCoverage(finalText, jdKeywords.allKeywords, evidenceSources, atsStrategy.evidence);
+    const unsupportedRequirements = dual.alignment.unsupported;
     // The denominator is the DE-DUPLICATED term count, so matched + missing
     // always adds up to it. Reporting the raw extracted length made
     // "12 of 18" sit beside seven missing terms.
     const coverageTotal = measured.total;
 
     result.matchScore = measured.percent;
+    result.requirementList = {
+      terms: jdKeywords.allKeywords,
+      total: jdKeywords.allKeywords.length,
+      removedAsNotRequirements: requirementList.removed,
+      classification: jdKeywords.allKeywords.map((term) => {
+        const v = evidenceOf(term);
+        return { term, tier: v.tier, source: v.source, evidence: v.evidence };
+      }),
+      meaning:
+        "The fixed, deduplicated requirement list for this job. Every coverage figure below is measured against exactly this list.",
+    };
     result.keywordCoverage = {
       matched: measured.matched.length,
       total: coverageTotal,
@@ -4348,6 +4383,8 @@ ${
       target: atsStrategy.keywordCoverageTarget ?? coverageTarget,
       matchedTerms: measured.matched,
       missingTerms: measured.missing,
+      literalCoverage: dual.literal,
+      evidenceAlignment: dual.alignment,
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
       // Why each missing term was or was not worked in, term by term.
