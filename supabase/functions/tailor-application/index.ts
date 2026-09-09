@@ -4980,6 +4980,19 @@ ${
 
           console.log(`PDF generated successfully: ${fileName}, size: ${uint8Array.length} bytes`);
           return { pdf: base64, fileName };
+        } else if (contentType.includes("application/json")) {
+          // generate-pdf returns a JSON envelope carrying base64 DOCX bytes.
+          // Treating that as an unexpected type made every attachment report
+          // "failed" even though the document had been generated correctly.
+          const body = await pdfRes.json().catch(() => null);
+          const base64 = body?.docx || body?.pdf || null;
+          if (base64) {
+            if (body?.fileName) fileName = body.fileName;
+            console.log(`Document generated successfully: ${fileName}, base64 length: ${base64.length}`);
+            return { pdf: base64, fileName };
+          }
+          console.error(`generate-pdf returned JSON without document bytes: ${JSON.stringify(body)?.slice(0, 200)}`);
+          return { pdf: null, fileName };
         } else {
           // Unexpected response type
           console.error(`Unexpected response type from generate-pdf: ${contentType}`);
