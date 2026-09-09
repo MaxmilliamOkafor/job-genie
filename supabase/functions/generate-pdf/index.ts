@@ -1274,7 +1274,7 @@ async function handleRawContentRequest(body: {
 }): Promise<Response> {
   const {
     content,
-    type = "cv",
+    type: rawType = "cv",
     tailoredLocation,
     jobTitle,
     fileName,
@@ -1282,6 +1282,14 @@ async function handleRawContentRequest(body: {
     lastName,
     summary: passedSummary,
   } = body;
+
+  // A CV ASKED FOR BY ANOTHER NAME IS STILL A CV.
+  // Only the literal "cv" reached the resume renderer, so a caller sending
+  // "resume" (the extension's own wording) had a full CV rendered through the
+  // cover-letter path: letterhead, "Dear Hiring Manager" and every section
+  // flattened into paragraphs. Type names are normalised instead.
+  const t = String(rawType).toLowerCase().replace(/[^a-z]/g, "");
+  const type = t === "coverletter" || t === "letter" ? "coverletter" : "cv";
 
   console.log(
     "[generate-pdf] Raw content request, tailoredLocation:",
