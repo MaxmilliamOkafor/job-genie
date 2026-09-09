@@ -3819,7 +3819,15 @@ ${
           "",
           "WHAT TO CHANGE. Each term listed below is missing from the CV, and the evidence line beside it comes from this candidate's own saved profile. Work the term into the EXISTING bullet that the evidence describes, in plain professional English, so the sentence still reads as one thing the candidate did. Where a term genuinely belongs in the skills list rather than an achievement, put it there instead.",
           "",
-          gaps.map((g) => `- ${g.term}\n  evidence: ${g.evidence}`).join("\n"),
+          gaps
+            .map((g) =>
+              `- ${g.term} (${
+                g.tier === "explicit"
+                  ? "recorded in the profile: may be named as a tool or listed under skills"
+                  : "demonstrated by the achievement below: work it into that achievement's own sentence, never assert it as a listed skill"
+              })\n  evidence: ${g.evidence}`
+            )
+            .join("\n"),
           "",
           "WHAT MUST NOT CHANGE. Every section heading, in the same order. Every employer, job title, location and date, character for character. Every existing figure; never introduce a figure that is not already in the draft. Never add a role, qualification, tool or eligibility the evidence above does not support. Never delete a bullet or a section to make room. Do not append terms to the end of a sentence as a keyword tail, and do not repeat a term you have already worked in.",
           "",
