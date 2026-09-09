@@ -4603,7 +4603,8 @@ ${
     // rewrite away a bullet that carried a supported requirement. When that
     // happens the final figure drops below target with nothing in the revision
     // record to explain it, so name those terms explicitly.
-    const lostInPostProcessing = firstPass.matched.filter((t) =>
+    const draftHighWaterMark = Array.from(new Set([...firstPass.matched, ...postRevisionMatched]));
+    const lostInPostProcessing = draftHighWaterMark.filter((t) =>
       measured.missing.some((m) => m.toLowerCase() === t.toLowerCase())
     );
     if (lostInPostProcessing.length > 0) {
