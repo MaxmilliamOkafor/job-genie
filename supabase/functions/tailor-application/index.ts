@@ -4308,6 +4308,8 @@ ${
       missingTerms: measured.missing,
       unsupportedRequirements,
       meaning: "Keyword coverage of the final document. Not a pass probability or an approval.",
+      // Why each missing term was or was not worked in, term by term.
+      keywordDecisions,
     };
 
     // What the revision passes actually did, so the candidate sees the
