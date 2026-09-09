@@ -2303,19 +2303,17 @@ serve(async (req) => {
 
     console.log(`[User ${userId}] Tailoring application for ${jobTitle} at ${company}`);
 
-    // Smart location logic - extract job city and format as "[CITY] | open to relocation"
-    // Priority: 1) extractedCity from extension, 2) extract from location/description, 3) profile city
-    const smartLocation = getSmartLocation(
-      location,
-      description,
-      userProfile.city,
-      userProfile.country,
-      jobId,
-      extractedCity,
-    );
-    console.log(
-      `Smart location determined: ${smartLocation}${extractedCity ? ` (from extension: ${extractedCity})` : ""}`,
-    );
+    // THE HEADER LOCATION IS THE CANDIDATE'S OWN, ALWAYS.
+    // This used to adapt to the job's city, so an application to a New York
+    // role printed "New York" under the candidate's name. That is a factual
+    // claim about where the candidate lives, so it now comes from the saved
+    // profile only and never from the posting.
+    const smartLocation = [userProfile.city, userProfile.country]
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .filter(Boolean)
+      .join(", ") || "Remote";
+    console.log(`Header location from saved profile: ${smartLocation}`);
+
 
     // The extension may send a structured strategy in atsStrategy: the
     // posting's requirements, a coverage target and a keyword -> profile
