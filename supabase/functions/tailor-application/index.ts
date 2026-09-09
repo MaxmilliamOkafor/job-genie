@@ -3787,8 +3787,17 @@ ${
 
         // Only evidenced gaps are targeted, required qualifications first.
         const requirementText = mergedRequirements.join(" \n ").toLowerCase();
-        const gaps = before.missing
-          .map((term) => ({ term, evidence: evidenceFor(term) }))
+        const assessed = before.missing.map((term) => ({ term, evidence: evidenceFor(term) }));
+        if (pass === 1) {
+          for (const a of assessed) {
+            keywordDecisions.push(
+              a.evidence
+                ? { term: a.term, decision: "revision attempted - evidence found in saved profile", evidence: a.evidence }
+                : { term: a.term, decision: "left out - no saved experience or project supports this term" },
+            );
+          }
+        }
+        const gaps = assessed
           .filter((g): g is { term: string; evidence: string } => Boolean(g.evidence))
           .sort((a, b) => {
             const aReq = requirementText.includes(a.term.toLowerCase()) ? 0 : 1;
@@ -3796,6 +3805,7 @@ ${
             return aReq - bReq || a.term.localeCompare(b.term);
           })
           .slice(0, 12);
+
 
         if (gaps.length === 0) {
           console.log(`[REVISION] Pass ${pass} stopped: none of the ${before.missing.length} missing terms have evidence in this profile`);
