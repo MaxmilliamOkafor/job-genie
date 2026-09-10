@@ -4570,6 +4570,85 @@ ${
       result.forceInjectedCount = finalMatched.length - (jdKeywords.allKeywords.length - actualMissing.length - finalMissing.length);
     }
 
+    // ============================================================
+    // THE SUMMARY IS THE LINE THAT DECIDES WHETHER THE REST IS READ.
+    //
+    // A live run opened with "Manager of Payroll Operations with a strong
+    // background in ... operational excellence" above an employment block of
+    // Software Engineer, AI Product Manager, Solutions Architect and Data
+    // Analyst: a title never held, and nothing checkable. The shape is now
+    // enforced deterministically after the model writes:
+    //   <held title> working across <2-3 evidenced posting requirements>.
+    //   <strongest outcome with its figure>; <second outcome with its figure>.
+    // Facts are not invented here - the title comes from the employment
+    // history, the scope terms from the posting where a bullet evidences them,
+    // and the figures verbatim from the candidate's own bullets.
+    // ============================================================
+    const summarySectionOf = (text: string): { body: string; start: number; end: number } | null => {
+      const lines = (text || "").split("\n");
+      const start = lines.findIndex((l) => /^\s*PROFESSIONAL\s+SUMMARY\s*$/i.test(l));
+      if (start < 0) return null;
+      let end = start + 1;
+      while (end < lines.length && !/^[A-Z][A-Z\s&]{4,}$/.test(lines[end].trim())) end++;
+      return { body: lines.slice(start + 1, end).join(" ").replace(/\s+/g, " ").trim(), start, end };
+    };
+
+    const experienceBulletsOf = (text: string): string[] => {
+      const lines = (text || "").split("\n");
+      const start = lines.findIndex((l) => /^\s*PROFESSIONAL\s+EXPERIENCE\s*$/i.test(l));
+      if (start < 0) return [];
+      let end = start + 1;
+      while (end < lines.length && !/^(TECHNICAL SKILLS|PROJECTS|CERTIFICATIONS|EDUCATION)$/i.test(lines[end].trim())) end++;
+      return lines
+        .slice(start + 1, end)
+        .filter((l) => /^\s*[-•*]\s+\S/.test(l))
+        .map((l) => l.trim());
+    };
+
+    const profileRoles = Array.isArray(userProfile.professionalExperience) ? userProfile.professionalExperience : [];
+    const summaryContext: SummaryContext = {
+      heldTitles: profileRoles.map((r: any) => String(r?.title || "").trim()).filter(Boolean),
+      targetTitle: jobTitle || "",
+      requirements: jdKeywords.allKeywords,
+      experienceBullets: experienceBulletsOf(result.tailoredResume || ""),
+      employers: profileRoles.map((r: any) => String(r?.company || "").trim()).filter(Boolean),
+      places: [
+        userProfile.city,
+        userProfile.country,
+        ...profileRoles.map((r: any) => String(r?.location || "").split(",")[0]),
+      ]
+        .map((p: any) => String(p || "").trim())
+        .filter(Boolean),
+    };
+
+    const currentSummary = summarySectionOf(result.tailoredResume || "");
+    const summaryDecision = enforceSummaryShape(
+      currentSummary?.body || result.resumeStructured?.summary || "",
+      summaryContext,
+    );
+    if (summaryDecision.rebuilt) {
+      console.warn(
+        `[SUMMARY] Rebuilt to the required shape. Violations: ${summaryDecision.violations.join("; ")}`,
+      );
+    }
+    if (summaryDecision.summary) {
+      if (currentSummary) {
+        const lines = (result.tailoredResume || "").split("\n");
+        lines.splice(currentSummary.start + 1, currentSummary.end - currentSummary.start - 1, summaryDecision.summary, "");
+        result.tailoredResume = lines.join("\n");
+      }
+      if (result.resumeStructured) result.resumeStructured.summary = summaryDecision.summary;
+    }
+    result.summaryShape = {
+      summary: summaryDecision.summary,
+      rebuilt: summaryDecision.rebuilt,
+      violations: summaryDecision.violations,
+      meaning:
+        "Two sentences, 150-220 characters: a held job title, the posting requirements the experience evidences, then two figures joined with a semicolon.",
+    };
+
+
+
     // MEASURED COVERAGE, NOT A PROMISE.
     // The number reported is counted off the final document text with
     // whole-term matching, so Java is never satisfied by JavaScript and
