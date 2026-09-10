@@ -4242,19 +4242,35 @@ ${
         lines.splice(nameIdx + 1, 0, target);
       }
 
-      // Never twice, and never inside the contact block beneath it.
+      // Never twice, never a shortened variant beside it, and never inside the
+      // contact block beneath it. A CV went out reading "Manager, Payroll
+      // Operations - Sub Saharan" on one line and "Manager, Payroll Operations"
+      // on the next because two writers each produced one. One writer, one line:
+      // the posting's title character for character, region and team included.
       const headerEnd = Math.min(lines.length, nameIdx + 7);
+      const norm = (s: string) => s.trim().toLowerCase().replace(/[\s,\-–—/]+/g, " ").trim();
+      const targetNorm = norm(target);
       let seen = false;
       for (let i = nameIdx + 1; i < headerEnd; i++) {
-        if (lines[i].trim().toLowerCase() === target.toLowerCase()) {
+        const line = lines[i];
+        if (line.trim().toLowerCase() === target.toLowerCase()) {
           if (seen) lines[i] = "";
           seen = true;
-        } else if (isContact(lines[i])) {
-          lines[i] = lines[i]
+        } else if (isContact(line)) {
+          lines[i] = line
             .replace(new RegExp(`\\s*\\|\\s*${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "")
             .trim();
+        } else if (
+          seen &&
+          line.trim() &&
+          looksLikeTitleLine(line) &&
+          (targetNorm.startsWith(norm(line)) || norm(line).startsWith(targetNorm))
+        ) {
+          // A shortened or padded restatement of the same title.
+          lines[i] = "";
         }
       }
+
       return lines.filter((l, i) => !(l === "" && lines[i - 1] === "")).join("\n");
     };
     if (result.tailoredResume) result.tailoredResume = enforceTargetRoleLine(result.tailoredResume);
