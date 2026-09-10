@@ -2682,15 +2682,29 @@ RULE 6 - SEARCHABILITY FIXES (worth ~10 points)
 - Section headings use standard ATS-readable labels: "Work Experience", "Education", "Skills", "Certifications"
 - Do NOT use tables, columns, graphics, or text boxes
 
-RULE 7 - PROFESSIONAL SUMMARY (replaces any existing summary length guidance)
-The PROFESSIONAL SUMMARY is positioning only, at most TWO sentences and at most 220 characters total.
-It states the held job title or level, the domain, and the value the candidate delivers. Nothing else.
-NO KEYWORD STUFFING IN THE SUMMARY: the summary must NOT list tools, technologies, platforms, frameworks or certifications, and must not contain a comma-separated run of skills. Posting keywords belong in TECHNICAL SKILLS and, above all, in PROFESSIONAL EXPERIENCE bullets - never in the summary.
-Acceptable style: "Senior data engineer with a record of delivering reliable, scalable regulatory reporting platforms and leading small delivery teams in regulated environments."
-Never write "seeking", "looking for", or "open to opportunities". No first-person pronouns anywhere in the CV.
-SUMMARY OPENS ON THE TARGET ROLE: The first sentence of PROFESSIONAL SUMMARY must position the candidate for the role being applied for, in that role's own domain language. Where the candidate holds several titles, lead with the one closest to the target role, not the most senior and not the most recent. Never open with a generic descriptor of a different discipline ("Experienced Software Engineer", "Seasoned Marketing Manager") on an application for another field. The sentence must still be true: it may only name a title, discipline or domain the employment history actually contains. If no held title is close to the target, open on the transferable capability instead of a title (for example "Five years building risk and reporting analytics across regulated financial portfolios") rather than borrowing the target title.
-SUMMARY LENGTH: The whole summary must be at most 220 characters, which is two rendered lines. Write it to land near that limit, not far under it. A one-clause summary is not a summary.
-NO SENTENCE FRAGMENTS: The summary must be complete sentences. "Experienced Software Engineer." on its own is a stub, not a summary.
+RULE 7 - PROFESSIONAL SUMMARY (replaces any earlier summary guidance)
+The summary is read as a description of the PERSON, so it must be true and checkable. Write exactly this shape, two sentences, 150 to 220 characters in total, no more:
+
+<a job title the employment history actually contains> working across <two or three requirements from this posting that the EXPERIENCE section evidences>. <strongest outcome with its figure>; <second outcome with its figure>.
+
+Worked example: "Solutions Architect working across regulatory reporting, process improvement and stakeholder management. Rebuilt a credit risk reporting suite for a GBP 2.6bn portfolio; cut month-end close from nine working days to three."
+
+NEVER IN THE SUMMARY:
+- A job title the candidate has not held. The headline under the name carries the target role; the summary must lead with the HELD title closest to the posting, never the posting's title itself.
+- Employer names (they are already in the employment block below).
+- Total years of experience ("with nine years") - an age proxy, and the dates are on the page.
+- Place names (Dublin, London, Belfast).
+- Any adjective describing the candidate: accomplished, seasoned, passionate, dynamic, results-driven, highly motivated, proven track record, strong background, operational excellence.
+- Any self-rating: expert, world-class, exceptional, or a seniority above the actual title.
+- First person ("I", "my"), and "seeking", "looking for", "open to opportunities".
+- Tools, technologies, platforms, certifications or any comma-separated run of skills - those belong in TECHNICAL SKILLS and in the bullets.
+
+THE SCOPE CLAUSE: two or three requirements in the POSTING'S OWN WORDING, and only where a PROFESSIONAL EXPERIENCE bullet evidences them. A term appearing only in the skills list is a word on a page, not work done. If fewer than two qualify, write NO scope clause at all and let the outcomes carry the sentence. Never pad it - "working across audit" alone names a scope narrower than the job.
+
+THE OUTCOMES, ranked highest first: (1) a before and after ("from nine working days to three", "from six hours to under one"); (2) a magnitude (GBP 2.6bn, billions of requests daily, 47 services, 40,000 cases); (3) a percentage; (4) a plain count. Use TWO outcomes joined with a SEMICOLON, never as two separate sentences. Use the profile's figures exactly as written: never round, never drop a figure to shorten a sentence, never invent one. A spelled-out number is fine and often better ("nine working days to three" beats "9 to 3").
+
+Every figure in the profile's bullets must survive verbatim into the bullets, because the summary is assembled from the strongest quantified bullet on the page.
+
 
 
 RULE 8 - SECTION ORDER, HEADINGS, ROLE BLOCKS, BULLETS, ACRONYMS, SKILLS, EDUCATION AND OUTPUT HYGIENE
