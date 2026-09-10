@@ -4617,13 +4617,25 @@ ${
     // history, the scope terms from the posting where a bullet evidences them,
     // and the figures verbatim from the candidate's own bullets.
     // ============================================================
-    const summarySectionOf = (text: string): { body: string; start: number; end: number } | null => {
+    const summarySectionOf = (
+      text: string,
+    ): { body: string; start: number; end: number; inline: boolean } | null => {
       const lines = (text || "").split("\n");
-      const start = lines.findIndex((l) => /^\s*PROFESSIONAL\s+SUMMARY\s*$/i.test(l));
+      // Heading on its own line, or inline with the text ("PROFESSIONAL SUMMARY: ...").
+      let start = lines.findIndex((l) => /^\s*PROFESSIONAL\s+SUMMARY\s*$/i.test(l));
+      if (start >= 0) {
+        let end = start + 1;
+        while (end < lines.length && !/^[A-Z][A-Z\s&]{4,}$/.test(lines[end].trim())) end++;
+        return { body: lines.slice(start + 1, end).join(" ").replace(/\s+/g, " ").trim(), start, end, inline: false };
+      }
+      start = lines.findIndex((l) => /^\s*PROFESSIONAL\s+SUMMARY\s*:\s*\S/i.test(l));
       if (start < 0) return null;
-      let end = start + 1;
-      while (end < lines.length && !/^[A-Z][A-Z\s&]{4,}$/.test(lines[end].trim())) end++;
-      return { body: lines.slice(start + 1, end).join(" ").replace(/\s+/g, " ").trim(), start, end };
+      return {
+        body: lines[start].replace(/^\s*PROFESSIONAL\s+SUMMARY\s*:\s*/i, "").replace(/\s+/g, " ").trim(),
+        start,
+        end: start + 1,
+        inline: true,
+      };
     };
 
     const experienceBulletsOf = (text: string): string[] => {
@@ -4667,7 +4679,12 @@ ${
     if (summaryDecision.summary) {
       if (currentSummary) {
         const lines = (result.tailoredResume || "").split("\n");
-        lines.splice(currentSummary.start + 1, currentSummary.end - currentSummary.start - 1, summaryDecision.summary, "");
+        if (currentSummary.inline) {
+          // Heading and text shared one line; normalise to heading on its own line.
+          lines.splice(currentSummary.start, 1, "PROFESSIONAL SUMMARY", summaryDecision.summary, "");
+        } else {
+          lines.splice(currentSummary.start + 1, currentSummary.end - currentSummary.start - 1, summaryDecision.summary, "");
+        }
         result.tailoredResume = lines.join("\n");
       }
       if (result.resumeStructured) result.resumeStructured.summary = summaryDecision.summary;
@@ -4870,10 +4887,10 @@ ${
         // PRIORITY 2: Try to extract from raw resume text
         // Try multiple patterns to find the Professional Summary section
         const summaryPatterns = [
-          /\bPROFESSIONAL\s+SUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|TECHNICAL\s+SKILLS)\b)/i,
-          /\bSUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
-          /\bPROFILE\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
-          /\bABOUT\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
+          /\bPROFESSIONAL\s+SUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:PROFESSIONAL\s+EXPERIENCE|WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS|TECHNICAL\s+SKILLS)\b)/i,
+          /\bSUMMARY\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:PROFESSIONAL\s+EXPERIENCE|WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
+          /\bPROFILE\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:PROFESSIONAL\s+EXPERIENCE|WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
+          /\bABOUT\b\s*:?\s*([\s\S]*?)(?=\n\s*(?:PROFESSIONAL\s+EXPERIENCE|WORK\s+EXPERIENCE|EXPERIENCE|EMPLOYMENT|EDUCATION|SKILLS|CERTIFICATIONS|PROJECTS|ACHIEVEMENTS)\b)/i,
         ];
 
         let summary = "";

@@ -128,7 +128,8 @@ export function evidencedRequirements(requirements: string[], experienceBullets:
   const seen = new Set<string>();
   for (const raw of requirements) {
     const term = (raw || "").trim();
-    if (!term || term.length > 40) continue;
+    // Under three letters a "term" is a verb or abbreviation (go, do), not a scope.
+    if (!term || term.length < 3 || term.length > 40) continue;
     const key = term.toLowerCase();
     if (seen.has(key)) continue;
     if (!hasWord(body, term)) continue;
@@ -187,18 +188,44 @@ export function outcomeClause(line: string): string {
 }
 
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
+const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** Trims a clause at its own comma boundaries, never dropping the figure. */
 export function shortenClause(clause: string, maxLen: number): string {
   const text = clause.trim();
   if (text.length <= maxLen) return text;
   const parts = text.split(/,\s+/);
+  // Prefer the longest leading run that keeps the figure.
   for (let i = parts.length - 1; i > 0; i--) {
     const candidate = parts.slice(0, i).join(", ");
     if (rankOutcome(candidate) > 0 && candidate.length <= maxLen) return candidate;
   }
+  // The figure may sit after a long lead-in ("Rebuilt the ... pipeline ...,
+  // reducing the run from six hours to under one"), so no prefix fits. Fall
+  // back to the longest comma-window, at any position, that carries it.
+  for (let len = parts.length; len > 0; len--) {
+    for (let start = 0; start + len <= parts.length; start++) {
+      const candidate = parts.slice(start, start + len).join(", ");
+      if (rankOutcome(candidate) > 0 && candidate.length <= maxLen) {
+        // Budget left over and the window starts mid-clause: reclaim the tail
+        // of the lead-in, word by word, so context is not needlessly dropped.
+        let best = candidate;
+        if (start > 0) {
+          const leadWords = parts[start - 1].split(/\s+/);
+          for (let k = 1; k <= leadWords.length; k++) {
+            const wider = `${leadWords.slice(-k).join(" ")}, ${candidate}`;
+            if (wider.length <= maxLen) best = wider;
+            else break;
+          }
+          // A fragment opening on a conjunction or preposition reads as an editing error.
+          best = best.replace(/^(and|the|a|an|of|to|for|behind|across|through|with|over|under|before|after|into|on|in|at|by)\s+/i, "");
+        }
+        return best;
+      }
+    }
+  }
   // No boundary keeps the figure inside the budget, so keep the figure and the
-  // full clause: a figure is never dropped to make a sentence shorter.
+  // full clause: a figure is never dropped or cut to make a sentence shorter.
   return text;
 }
 
@@ -281,7 +308,7 @@ export function buildSummary(ctx: SummaryContext): string {
   const assemble = (terms: string[], clauseBudget: number) => {
     const shortened = outcomes.map((c) => shortenClause(c, clauseBudget));
     const outcomeSentence =
-      shortened.length >= 2 ? `${shortened[0]}; ${lowerFirst(shortened[1])}.` : `${shortened[0]}.`;
+      shortened.length >= 2 ? `${upperFirst(shortened[0])}; ${lowerFirst(shortened[1])}.` : `${upperFirst(shortened[0])}.`;
     const lead = terms.length >= 2 ? `${title} working across ${joinScope(terms)}.` : `${title}.`;
     return `${lead} ${outcomeSentence}`.replace(/\s+/g, " ").trim();
   };
@@ -295,6 +322,7 @@ export function buildSummary(ctx: SummaryContext): string {
     assemble(scopeTerms.slice(0, 2), 65),
     assemble([], 110),
     assemble([], 85),
+    assemble([], 65),
   ];
   const fits = attempts.find((t) => t.length >= MIN_LEN && t.length <= MAX_LEN);
   if (fits) return fits;
