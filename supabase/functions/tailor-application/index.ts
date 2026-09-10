@@ -28,6 +28,8 @@ import {
   isSoftCapability,
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
+import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
+
 
 
 // We reuse the existing generate-pdf backend function to keep a single client call per job.
