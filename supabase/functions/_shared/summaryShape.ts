@@ -188,6 +188,21 @@ export function outcomeClause(line: string): string {
 
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 
+/** Trims a clause at its own comma boundaries, never dropping the figure. */
+export function shortenClause(clause: string, maxLen: number): string {
+  const text = clause.trim();
+  if (text.length <= maxLen) return text;
+  const parts = text.split(/,\s+/);
+  for (let i = parts.length - 1; i > 0; i--) {
+    const candidate = parts.slice(0, i).join(", ");
+    if (rankOutcome(candidate) > 0 && candidate.length <= maxLen) return candidate;
+  }
+  // No boundary keeps the figure inside the budget, so keep the figure and the
+  // full clause: a figure is never dropped to make a sentence shorter.
+  return text;
+}
+
+
 /** The two strongest quantified bullets, highest rank first, no repeats. */
 export function pickOutcomes(experienceBullets: string[]): string[] {
   const scored = experienceBullets
@@ -262,22 +277,32 @@ export function buildSummary(ctx: SummaryContext): string {
   if (!title || outcomes.length === 0) return "";
 
   const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 3);
-  const outcomeSentence =
-    outcomes.length >= 2
-      ? `${outcomes[0]}; ${lowerFirst(outcomes[1])}.`
-      : `${outcomes[0]}.`;
 
-  const assemble = (terms: string[]) => {
+  const assemble = (terms: string[], clauseBudget: number) => {
+    const shortened = outcomes.map((c) => shortenClause(c, clauseBudget));
+    const outcomeSentence =
+      shortened.length >= 2 ? `${shortened[0]}; ${lowerFirst(shortened[1])}.` : `${shortened[0]}.`;
     const lead = terms.length >= 2 ? `${title} working across ${joinScope(terms)}.` : `${title}.`;
     return `${lead} ${outcomeSentence}`.replace(/\s+/g, " ").trim();
   };
 
-  let text = assemble(scopeTerms);
-  // Trim by the rules: third scope term first, then the scope clause, never a figure.
-  if (text.length > MAX_LEN && scopeTerms.length === 3) text = assemble(scopeTerms.slice(0, 2));
-  if (text.length > MAX_LEN) text = assemble([]);
-  return text;
+  // Trim in this order and never touch a figure: the third scope term, then the
+  // outcome clauses at their own comma boundaries, then the scope clause.
+  const attempts: string[] = [
+    assemble(scopeTerms, 110),
+    assemble(scopeTerms.slice(0, 2), 110),
+    assemble(scopeTerms.slice(0, 2), 85),
+    assemble(scopeTerms.slice(0, 2), 65),
+    assemble([], 110),
+    assemble([], 85),
+  ];
+  const fits = attempts.find((t) => t.length >= MIN_LEN && t.length <= MAX_LEN);
+  if (fits) return fits;
+  const underMax = attempts.filter((t) => t.length <= MAX_LEN);
+  if (underMax.length) return underMax.sort((a, b) => b.length - a.length)[0];
+  return attempts[attempts.length - 1];
 }
+
 
 /**
  * Returns the summary to use: the model's own when it satisfies the shape,
