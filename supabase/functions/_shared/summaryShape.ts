@@ -224,25 +224,8 @@ export function shortenClause(clause: string, maxLen: number): string {
       }
     }
   }
-  // No comma boundary fits either (a long figure clause with no internal comma).
-  // Cut at a word boundary: everything up to and including the figure stays,
-  // trailing words after it may go. The figure itself is never dropped.
-  const words = text.split(/\s+/);
-  let kept = "";
-  let figureSeen = false;
-  for (const word of words) {
-    const next = kept ? `${kept} ${word}` : word;
-    if (!figureSeen) {
-      kept = next;
-      if (rankOutcome(kept) > 0) figureSeen = true;
-      continue;
-    }
-    if (next.length > maxLen) break;
-    kept = next;
-  }
-  if (figureSeen && kept.length <= maxLen && kept.length < text.length) return kept;
-  // Even the figure alone exceeds the budget: keep the full clause rather than
-  // drop the figure.
+  // No boundary keeps the figure inside the budget, so keep the figure and the
+  // full clause: a figure is never dropped or cut to make a sentence shorter.
   return text;
 }
 
