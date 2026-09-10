@@ -277,7 +277,6 @@ export function buildSummary(ctx: SummaryContext): string {
   if (!title || outcomes.length === 0) return "";
 
   const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 3);
-  const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 3);
 
   const assemble = (terms: string[], clauseBudget: number) => {
     const shortened = outcomes.map((c) => shortenClause(c, clauseBudget));
