@@ -7,6 +7,7 @@ import {
   pickHeldTitle,
   pickOutcomes,
   rankOutcome,
+  shortenClause,
   type SummaryContext,
 } from '../supabase/functions/_shared/summaryShape.ts';
 
@@ -117,5 +118,38 @@ describe('enforcement of a bad live summary', () => {
     expect(findViolations('My work as a Solutions Architect with nine years in Dublin.', CTX)).toEqual(
       expect.arrayContaining(['first person', 'total years of experience']),
     );
+  });
+});
+
+describe('long lead-in clauses', () => {
+  const LONG_BULLETS = [
+    '- Rebuilt the PySpark and Presto pipeline behind impression reporting, reducing the overnight run from six hours to under one, ensuring data readiness before the reporting team\'s deadline',
+    '- Replaced a 40-tab Excel reporting pack with a Power BI and Tableau suite',
+    '- Maintained documentation for the reporting platform',
+  ];
+  const LONG_CTX: SummaryContext = {
+    heldTitles: ['AI Product Manager', 'Solutions Architect', 'Data Analyst'],
+    targetTitle: 'Engineering Manager, International',
+    requirements: ['Communication'],
+    experienceBullets: LONG_BULLETS,
+    employers: ['Meta'],
+    places: ['Dublin'],
+  };
+
+  it('still lands within 150 to 220 characters when no comma prefix fits', () => {
+    const built = buildSummary(LONG_CTX);
+    expect(built.length).toBeGreaterThanOrEqual(150);
+    expect(built.length).toBeLessThanOrEqual(220);
+    expect(built).toContain('six hours to under one');
+    expect(built).toContain('40-tab');
+    expect(findViolations(built, LONG_CTX)).toEqual([]);
+  });
+
+  it('shortenClause falls back to a comma window that keeps the figure', () => {
+    const clause =
+      "Rebuilt the PySpark and Presto pipeline behind impression reporting, reducing the overnight run from six hours to under one, ensuring data readiness before the reporting team's deadline";
+    const shortened = shortenClause(clause, 85);
+    expect(shortened.length).toBeLessThanOrEqual(85);
+    expect(shortened).toContain('six hours to under one');
   });
 });
