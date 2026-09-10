@@ -188,6 +188,21 @@ export function outcomeClause(line: string): string {
 
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 
+/** Trims a clause at its own comma boundaries, never dropping the figure. */
+export function shortenClause(clause: string, maxLen: number): string {
+  const text = clause.trim();
+  if (text.length <= maxLen) return text;
+  const parts = text.split(/,\s+/);
+  for (let i = parts.length - 1; i > 0; i--) {
+    const candidate = parts.slice(0, i).join(", ");
+    if (rankOutcome(candidate) > 0 && candidate.length <= maxLen) return candidate;
+  }
+  // No boundary keeps the figure inside the budget, so keep the figure and the
+  // full clause: a figure is never dropped to make a sentence shorter.
+  return text;
+}
+
+
 /** The two strongest quantified bullets, highest rank first, no repeats. */
 export function pickOutcomes(experienceBullets: string[]): string[] {
   const scored = experienceBullets
