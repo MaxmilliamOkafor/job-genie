@@ -3451,7 +3451,7 @@ ${
       "github": "${userProfile.github}",
       "portfolio": "${userProfile.portfolio}"
     },
-    "summary": "[PURE QUALIFICATIONS ONLY - open on the discipline or the span of experience, NOT on a self-flattering adjective ('Accomplished', 'Seasoned', 'Experienced', 'Results-driven' are banned openers) - ZERO contact info, names, emails, phones, or URLs - those are ALREADY in header above]",
+    "summary": "[TWO sentences, 150-220 chars: '<a job title the employment history contains> working across <2-3 posting requirements the EXPERIENCE section evidences>. <strongest outcome with its figure>; <second outcome with its figure>.' No unheld title, no employer name, no total years, no place name, no adjective describing the candidate, no self-rating, no first person, no contact details]",
     "coreCompetencies": ["Keyword Phrase 1", "Keyword Phrase 2", "Keyword Phrase 3", "Keyword Phrase 4", "Keyword Phrase 5", "Keyword Phrase 6"],
     "experience": [
       {
