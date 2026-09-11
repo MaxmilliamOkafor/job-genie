@@ -121,8 +121,24 @@ describe('enforcement of a bad live summary', () => {
   });
 
   it('rejects first person, total years and a place name', () => {
-    expect(findViolations('My work as a Solutions Architect with nine years in Dublin.', CTX)).toEqual(
-      expect.arrayContaining(['first person', 'total years of experience']),
+    const violations = findViolations('My work as a Solutions Architect with nine years in Dublin.', CTX);
+    expect(violations).toEqual(expect.arrayContaining(['first person', 'total years of experience']));
+    expect(violations.some((v) => v === 'place name: Dublin')).toBe(true);
+  });
+
+  it('rejects an employer opening claim, an unverifiable adjective and a self-rating', () => {
+    const employerOpening = findViolations(
+      'Meta professional. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+      CTX,
+    );
+    expect(employerOpening).toEqual(expect.arrayContaining(['employer name: Meta', 'opener is not a held job title']));
+
+    const adjectiveAndRating = findViolations(
+      'Solutions Architect with a dynamic and expert background. Built reporting for a GBP 2.6bn portfolio; cut month-end close from nine working days to three.',
+      CTX,
+    );
+    expect(adjectiveAndRating).toEqual(
+      expect.arrayContaining(['banned phrase: dynamic', 'banned phrase: expert']),
     );
   });
 
