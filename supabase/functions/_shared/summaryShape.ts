@@ -423,7 +423,20 @@ export function buildSummary(ctx: SummaryContext): string {
   const fits = attempts.find((t) => t.length >= MIN_LEN && t.length <= MAX_LEN);
   if (fits) return fits;
   const underMax = attempts.filter((t) => t.length <= MAX_LEN);
-  if (underMax.length) return underMax.sort((a, b) => b.length - a.length)[0];
+  if (underMax.length) {
+    const longest = underMax.sort((a, b) => b.length - a.length)[0];
+    if (longest.length < MIN_LEN && outcomes.length >= 2) {
+      const first = outcomes[0].replace(
+        /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
+        (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
+      ).split(/,\s+/)[0];
+      const expanded = `${title}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
+      if (expanded.length >= MIN_LEN && expanded.length <= MAX_LEN && findViolations(expanded, ctx).length === 0) {
+        return expanded;
+      }
+    }
+    return longest;
+  }
   return attempts[attempts.length - 1];
 }
 
