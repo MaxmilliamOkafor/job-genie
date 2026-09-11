@@ -34,6 +34,12 @@ Extract keywords into these categories:
 For each category, extract the most important keywords as an array of strings.
 Also provide a "priority_keywords" array with the TOP 15 most critical keywords for ATS matching (ranked by importance).
 
+NEVER EXTRACT BENEFITS, LOGISTICS OR BOILERPLATE. These are not requirements and a candidate cannot evidence them: competitive salary, 401k, dental, vision, paid time off, PTO, health insurance, stock options, bonus, full-time, part-time, hybrid, remote, equal opportunity, fast-paced, apply now, submit resume, notice period, visa sponsorship, pension.
+Do NOT over-filter: reliability, availability, automation, scalability, observability, collaboration and stakeholder management ARE real requirements on technical and management postings. Keep them.
+
+ONE ENTRY PER REQUIREMENT, NOT ONE PER PHRASING. "payroll", "global payroll" and "payroll management" are one requirement - return the canonical form ("payroll") once. Same for "Linux systems"/"Linux", "AI"/"AI building", and "performance management"/"feedback"/"team performance". Collapse synonyms and qualifier variants, and return the canonical wording rather than the posting's incidental wording. Aim for 12 to 20 distinct requirements in priority_keywords plus required_skills combined; if you are producing 30+ strings, they are not all requirements.
+
+
 Return ONLY valid JSON with this exact structure:
 {
   "required_skills": ["skill1", "skill2"],
