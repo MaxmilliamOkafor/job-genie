@@ -246,7 +246,7 @@ export function shortenClause(clause: string, maxLen: number): string {
     /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
     (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
   );
-  if (coordinated !== text && rankOutcome(coordinated) > 0 && coordinated.length <= maxLen + 25) {
+  if (coordinated !== text && rankOutcome(coordinated) > 0 && coordinated.length <= maxLen + 40) {
     return coordinated;
   }
   const parts = text.split(/,\s+/);
