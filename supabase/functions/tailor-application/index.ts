@@ -2531,14 +2531,11 @@ Rule 0 wins. Lose the keyword, save the candidate's credibility.
 
 RULE 1 - JOB TITLE IN SUMMARY (evidence-capped)
 The summary must never assert a job title the rest of the CV cannot support.
-- If the candidate's own work history contains the SAME or a CLOSELY
-  EQUIVALENT title, the summary MAY use the JD's wording for it.
-- If it does NOT (a genuine career pivot), the summary MUST NOT claim that
-  title. Instead, mirror the JD's vocabulary through skills and domain
-  language that the CV genuinely evidences, and open with what the
-  candidate actually is (e.g. "Software engineer with data analytics and
-  delivery experience across ...").
-- NEVER open the summary with a bare title claim as its first words.
+- Open with a title copied from the candidate's own employment history.
+- Choose by distinctive words only. Manager, senior, lead, principal,
+  director, officer, analyst, engineer and coordinator never establish a fit.
+- If no distinctive word matches, use the current held role.
+- Never use the posting title unless it is character-for-character a held title.
 - The job title may never appear in a requisition-number form; posting
   noise (req numbers, JR-/REQ- codes, "(Remote)") must never appear in
   the CV or cover letter.
@@ -2641,12 +2638,7 @@ anywhere in the source CV. Every one came from the job description.
 - Missing keywords that cannot be honestly claimed are reported in
   KEYWORDS OMITTED. That is the correct outcome, not a failure.
 
-Rewrite the skills section as:
-  Technical Skills: [list ALL hard skill keywords from the JD that the candidate can legitimately claim, comma-separated, exact spelling]
-  Platforms & Tools: [all platforms, cloud services, devtools]
-  Methodologies: [ETL, CI/CD, distributed systems, data modelling, etc.]
-  Soft Skills: [all soft skill keywords from the JD, exact phrasing]
-This section alone can close 15-20 points of the gap. THERE IS NO UPPER LIMIT: list EVERY JD skill, tool and technology the candidate's history evidences, however many that is. There is no lower limit either. A floor is what causes padding -- it is satisfied by adding terms nobody can be proficient in ("b2b", "enterprise", "fast-paced"), which a recruiter reads instantly as machine-assembled and which the candidate cannot defend if asked. Maximum coverage means maximum EVIDENCED coverage: leave out only what the history does not support at all.
+Rewrite TECHNICAL SKILLS as labelled group lines such as "Programming:", "Cloud & DevOps:" and "Data Engineering:". Use each label once, cap each line at ten items, use commas only, and never flatten the section into one comma list. Include only hard skills the candidate can legitimately claim; soft capabilities belong in experience bullets.
 
 RULE 3 - EXPERIENCE BULLETS: INJECT WEIGHTED TERMS (subject to Rule 0)
 For each role in work history:
@@ -3203,7 +3195,7 @@ After rewriting, run this internal checklist:
 [ ] Are ALL Phase 1 hard skill keywords present at least once?
 [ ] Are ALL soft skill keywords present (in bullets or skills section)?
 [ ] Are ALL multi-word JD phrases (verb phrases from responsibilities/requirements) present VERBATIM?
-[ ] Are the top 5 keywords in the Professional Summary?
+[ ] Does the Professional Summary contain only 2-3 posting requirements evidenced by experience, with no skill run?
 [ ] Are the JD terms SPREAD across the experience bullets rather than crammed into the first one, with no sentence carrying more than two, and the most recent role carrying the largest share?
 [ ] Does every Tier 1 term in the summary or Core Competencies have a bullet underneath that proves it? If not, move it down or omit it - a declared skill with nothing beneath it is what reads as machine-assembled.
 [ ] Is any single term repeated more than three times across the CV? Presence is what is scored; the rest is padding a human notices.
@@ -3231,7 +3223,7 @@ After rewriting, run this internal checklist:
 [ ] Is "metricsWorthAdding" populated (or empty because every bullet is quantified)?
 [ ] Could an average applicant for this role have written the summary? If yes, rewrite it.
 [ ] Do weighted/repeated JD terms appear more than once in the CV?
-[ ] Does the years of experience in the summary match the JD requirement?
+[ ] Does the summary omit total years of experience entirely?
 If any box is unchecked, fix it before outputting.
 
 ---

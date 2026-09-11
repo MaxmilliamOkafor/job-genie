@@ -138,7 +138,18 @@ export function buildEvidenceSources(profile: any): EvidenceSource[] {
   }
   for (const e of Array.isArray(profile?.education) ? profile.education : []) {
     if (typeof e === "string") push("education", e, "record");
-    else push("education", [(e as any)?.degree, (e as any)?.field, (e as any)?.institution].filter(Boolean).join(", "), "record");
+    else push(
+      "education",
+      [
+        (e as any)?.degree,
+        (e as any)?.field_of_study,
+        (e as any)?.field,
+        (e as any)?.major,
+        (e as any)?.school,
+        (e as any)?.institution,
+      ].filter(Boolean).join(", "),
+      "record",
+    );
   }
 
   // Demonstrations: achievement bullets on real roles, and project work.
