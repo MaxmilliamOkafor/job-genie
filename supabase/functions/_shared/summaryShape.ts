@@ -237,6 +237,20 @@ export function shortenClause(clause: string, maxLen: number): string {
     if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
   }
 
+  // The figure sits behind a long lead-in with no comma to cut at. Start the
+  // clause at the verb that carries the change ("cutting the overnight run from
+  // six hours to under one") - readable, and every figure intact.
+  for (let start = 1; start < words.length - 2; start++) {
+    const first = words[start].toLowerCase().replace(/[^a-z]/g, "");
+    if (!/(ing|ed)$/.test(first) || first.length < 4) continue;
+    for (let end = words.length; end > start + 2; end--) {
+      let candidate = words.slice(start, end).join(" ").replace(/[,;:\-]+$/, "");
+      while (DANGLING.test(candidate)) candidate = candidate.replace(DANGLING, "");
+      if (candidate.length > maxLen) continue;
+      if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
+    }
+  }
+
   // Nothing legible fits: keep the figure and the full clause. A figure is never
   // dropped or cut to make a sentence shorter.
   return text;
