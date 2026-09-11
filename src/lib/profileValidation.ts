@@ -496,11 +496,15 @@ export const normaliseProfileForSave = <T extends Record<string, any>>(profile: 
   next.education = (next.education || []).map((edu: any) => {
     const start_year = String(edu.start_year ?? '').trim();
     const end_year = String(edu.end_year ?? '').trim();
+    const degree = String(edu.degree ?? '');
     return {
       ...edu,
       start_year,
       end_year,
-      field_of_study: tidyText(String(edu.field_of_study ?? '')),
+      // The parser often folds the subject into the degree string ("BSc Computer
+      // Science") and leaves field_of_study empty. Autofill and evidence matching
+      // both read field_of_study, so the subject is recovered from the degree.
+      field_of_study: tidyText(String(edu.field_of_study ?? '')) || subjectFromDegree(degree),
       // graduation_year is a stated fact derived from the completion year only;
       // an in-progress degree has no graduation year.
       graduation_year: /^\d{4}$/.test(end_year) ? end_year : '',
