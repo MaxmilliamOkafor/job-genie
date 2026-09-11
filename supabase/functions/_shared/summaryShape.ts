@@ -192,7 +192,16 @@ const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.sli
 
 /** Trims a clause at its own comma boundaries, never dropping the figure. */
 export function shortenClause(clause: string, maxLen: number): string {
-  const text = clause.trim();
+  let text = clause.trim();
+  if (text.length <= maxLen) return text;
+  // An explanatory tail states why the change mattered; the figure states what
+  // changed. When the clause is over budget the tail goes first, and only if the
+  // figure survives without it.
+  const tail = text.search(/\s+(so that|so the|so it|rather than|which meant|in order to|allowing|enabling|meaning)\s+/i);
+  if (tail > 20) {
+    const trimmed = text.slice(0, tail).replace(/[,;:\-]+$/, "").trim();
+    if (rankOutcome(trimmed) > 0) text = trimmed;
+  }
   if (text.length <= maxLen) return text;
   const parts = text.split(/,\s+/);
   // Prefer the longest leading run that keeps the figure.
