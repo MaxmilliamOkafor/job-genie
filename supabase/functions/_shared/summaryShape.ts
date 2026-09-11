@@ -84,7 +84,7 @@ const YEARS_OF_EXPERIENCE =
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const hasWord = (haystack: string, needle: string) =>
-  new RegExp(`(^|[^a-z0-9+#./])${escapeRe(needle.toLowerCase())}([^a-z0-9+#./]|$)`, "i").test(haystack.toLowerCase());
+  new RegExp(`(^|[^a-z0-9+#./])${escapeRe(needle.toLowerCase())}(?=[^a-z0-9+#./]|$)`, "i").test(haystack.toLowerCase());
 
 const stripBullet = (line: string) => line.replace(/^\s*[-•*]\s*/, "").trim();
 
