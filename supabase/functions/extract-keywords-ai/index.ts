@@ -230,6 +230,24 @@ serve(async (req) => {
       });
     }
 
+    // Benefits, logistics and boilerplate never leave this function, and each
+    // requirement is returned once rather than once per phrasing. The extension
+    // measures coverage against these terms, so a phrasing variant here
+    // silently inflates the denominator.
+    const clean = (list: unknown): string[] =>
+      collapseRequirements(
+        (Array.isArray(list) ? list : []).map((k) => String(k || "").trim()).filter((k) => k && !isFurniture(k)),
+        50,
+      ).terms;
+
+    for (const key of [
+      "required_skills", "preferred_skills", "experience_requirements",
+      "education_requirements", "key_responsibilities", "soft_skills",
+      "tools_and_platforms", "industry_keywords", "priority_keywords",
+    ]) {
+      keywords[key] = clean(keywords[key]);
+    }
+
     // Build categorized output for the extension UI
     const allKeywords = [
       ...(keywords.priority_keywords || []),
@@ -239,20 +257,20 @@ serve(async (req) => {
       ...(keywords.soft_skills || []),
     ];
 
-    // STABILIZED: Limit to 50 keywords total for comprehensive matching
-    const uniqueKeywords = [...new Set(allKeywords.map(k => k.toLowerCase()))].slice(0, 50);
-    const highPriority: string[] = (keywords.priority_keywords || []).slice(0, 15);
-    const mediumPriority: string[] = [
-      ...(keywords.required_skills || []),
-      ...(keywords.tools_and_platforms || []),
-    ].filter((k: string) => !highPriority.map((h: string) => h.toLowerCase()).includes(k.toLowerCase())).slice(0, 20);
-    const lowPriority: string[] = [
-      ...(keywords.preferred_skills || []),
-      ...(keywords.soft_skills || []),
-    ].filter((k: string) => 
-      !highPriority.map((h: string) => h.toLowerCase()).includes(k.toLowerCase()) &&
-      !mediumPriority.map((m: string) => m.toLowerCase()).includes(k.toLowerCase())
-    ).slice(0, 15);
+    // One entry per requirement: 12-20 is the honest range for a typical posting.
+    const uniqueKeywords = collapseRequirements(allKeywords, 20).terms;
+    const highPriority: string[] = collapseRequirements(keywords.priority_keywords || [], 15).terms;
+    const mediumPriority: string[] = collapseRequirements(
+      [...(keywords.required_skills || []), ...(keywords.tools_and_platforms || [])],
+      20,
+    ).terms.filter((k: string) => !highPriority.some((h) => h.toLowerCase() === k.toLowerCase()));
+    const lowPriority: string[] = collapseRequirements(
+      [...(keywords.preferred_skills || []), ...(keywords.soft_skills || [])],
+      15,
+    ).terms.filter((k: string) =>
+      !highPriority.some((h) => h.toLowerCase() === k.toLowerCase()) &&
+      !mediumPriority.some((m) => m.toLowerCase() === k.toLowerCase())
+    );
 
     const result = {
       structured: keywords,
@@ -262,6 +280,7 @@ serve(async (req) => {
       lowPriority,
       total: uniqueKeywords.length,
     };
+
 
     // BENCHMARK: Total processing time
     benchmarks.totalTime = Date.now() - benchmarks.startTime;
