@@ -23,12 +23,16 @@
 export interface SummaryContext {
   /** Titles the employment history actually contains, most relevant first is not required. */
   heldTitles: string[];
+  /** Current role title, used when the posting shares no distinctive title words. */
+  currentTitle?: string;
   /** The posting's title - used only to pick the closest HELD title, never emitted. */
   targetTitle: string;
   /** Requirement phrases in the posting's own wording. */
   requirements: string[];
   /** Bullet lines from PROFESSIONAL EXPERIENCE (leading "- " optional). */
   experienceBullets: string[];
+  /** Original profile bullets, preferred for outcome prose and verbatim figures. */
+  outcomeBullets?: string[];
   /** Employer names, so they can never appear. */
   employers?: string[];
   /** Place names (city, country, role locations), so they can never appear. */
@@ -88,20 +92,26 @@ const stripBullet = (line: string) => line.replace(/^\s*[-•*]\s*/, "").trim();
  * Held title selection
  * ------------------------------------------------------------------ */
 
+const RANK_WORDS = new Set([
+  "manager", "senior", "sr", "lead", "principal", "director", "officer",
+  "analyst", "engineer", "coordinator", "junior", "jr", "staff", "head", "chief",
+]);
+
 const tokens = (s: string) =>
   s
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 2 && !["and", "the", "for", "of", "with"].includes(t));
+    .filter((t) => t.length > 2 && !["and", "the", "for", "of", "with"].includes(t) && !RANK_WORDS.has(t));
 
 /** The held title closest to the posting's title. Never the posting's own title. */
-export function pickHeldTitle(heldTitles: string[], targetTitle: string): string {
+export function pickHeldTitle(heldTitles: string[], targetTitle: string, currentTitle?: string): string {
   const held = heldTitles.map((t) => (t || "").trim()).filter(Boolean);
   if (!held.length) return "";
+  const current = (currentTitle || "").trim();
   const target = new Set(tokens(targetTitle || ""));
-  let best = held[0];
-  let bestScore = -1;
+  let best = current && held.some((title) => title.toLowerCase() === current.toLowerCase()) ? current : held[0];
+  let bestScore = 0;
   for (const title of held) {
     const overlap = tokens(title).filter((t) => target.has(t)).length;
     // Ties resolve to the earliest listed title (most recent role first in profile).
@@ -190,6 +200,31 @@ export function outcomeClause(line: string): string {
 const lowerFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.slice(1) : s);
 
+const ACTION_OPENING = /^(?:achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced)\b/i;
+const FRAGMENT_OPENING = /^[^,.;]{2,50},\s+(?:cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i;
+const FINITE_PARTICIPLE: Record<string, string> = {
+  cutting: "Cut",
+  reducing: "Reduced",
+  increasing: "Increased",
+  improving: "Improved",
+  replacing: "Replaced",
+  saving: "Saved",
+  delivering: "Delivered",
+  supporting: "Supported",
+  processing: "Processed",
+};
+
+const finiteOpening = (clause: string) => clause.replace(
+  /^(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
+  (word) => FINITE_PARTICIPLE[word.toLowerCase()] || word,
+);
+
+/** Outcome prose must open with a finite action verb, never a noun-plus-participle fragment. */
+export function isGrammaticalOutcome(clause: string): boolean {
+  const text = stripBullet(clause);
+  return ACTION_OPENING.test(text) && !FRAGMENT_OPENING.test(text);
+}
+
 /** Trims a clause at its own comma boundaries, never dropping the figure. */
 export function shortenClause(clause: string, maxLen: number): string {
   let text = clause.trim();
@@ -203,6 +238,24 @@ export function shortenClause(clause: string, maxLen: number): string {
     if (rankOutcome(trimmed) > 0) text = trimmed;
   }
   if (text.length <= maxLen) return text;
+  // Keep a finite opening verb while compressing a comma-participle outcome:
+  // "Rebuilt the pipeline, reducing the run..." becomes
+  // "Rebuilt the pipeline and reduced the run..." rather than the fragment
+  // "Impression reporting, reducing...".
+  const coordinated = text.replace(
+    /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
+    (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
+  );
+  if (coordinated !== text && rankOutcome(coordinated) > 0) {
+    let grammatical = coordinated;
+    const coordinatedParts = grammatical.split(/,\s+/);
+    while (coordinatedParts.length > 1 && grammatical.length > maxLen + 40) {
+      coordinatedParts.pop();
+      const candidate = coordinatedParts.join(", ").trim();
+      if (rankOutcome(candidate) > 0) grammatical = candidate;
+    }
+    if (grammatical.length <= maxLen) return grammatical;
+  }
   const parts = text.split(/,\s+/);
   // Prefer the longest leading run that keeps the figure.
   for (let i = parts.length - 1; i > 0; i--) {
@@ -229,7 +282,10 @@ export function shortenClause(clause: string, maxLen: number): string {
           // A fragment opening on a conjunction or preposition reads as an editing error.
           best = best.replace(/^(and|the|a|an|of|to|for|behind|across|through|with|over|under|before|after|into|on|in|at|by)\s+/i, "");
         }
-        return best;
+        const cleanCandidate = finiteOpening(candidate);
+        if (isGrammaticalOutcome(cleanCandidate)) return cleanCandidate;
+        const cleanBest = finiteOpening(best);
+        if (isGrammaticalOutcome(cleanBest)) return cleanBest;
       }
     }
   }
@@ -258,7 +314,8 @@ export function shortenClause(clause: string, maxLen: number): string {
       let candidate = words.slice(start, end).join(" ").replace(/[,;:\-]+$/, "");
       while (DANGLING.test(candidate)) candidate = candidate.replace(DANGLING, "");
       if (candidate.length > maxLen) continue;
-      if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
+      candidate = finiteOpening(candidate);
+      if (rankOutcome(candidate) > 0 && candidate.length > 12 && isGrammaticalOutcome(candidate)) return candidate;
     }
   }
 
@@ -272,7 +329,7 @@ export function shortenClause(clause: string, maxLen: number): string {
 export function pickOutcomes(experienceBullets: string[]): string[] {
   const scored = experienceBullets
     .map((line, index) => ({ clause: outcomeClause(line), rank: rankOutcome(line), index }))
-    .filter((c) => c.rank > 0 && c.clause.length > 12)
+    .filter((c) => c.rank > 0 && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
     .sort((a, b) => (b.rank - a.rank) || (a.index - b.index));
   const out: string[] = [];
   for (const candidate of scored) {
@@ -310,7 +367,7 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   // The opener must be a title the history contains, never the posting's title.
   const opener = text.split(/[.,;]/)[0] || "";
   const held = ctx.heldTitles.filter(Boolean);
-  const openerHasHeldTitle = held.some((t) => hasWord(opener, t));
+  const openerHasHeldTitle = held.some((t) => new RegExp(`^\\s*${escapeRe(t)}(?:\\b|$)`, "i").test(opener));
   if (!openerHasHeldTitle) problems.push("opener is not a held job title");
   if (
     ctx.targetTitle &&
@@ -326,6 +383,7 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
   if (!outcomeSentence.includes(";")) problems.push("outcomes not joined with a semicolon");
   const halves = outcomeSentence.split(";").map((h) => h.trim()).filter(Boolean);
   if (halves.length < 2 || halves.some((h) => rankOutcome(h) === 0)) problems.push("fewer than two figures");
+  if (halves.some((h) => !isGrammaticalOutcome(h))) problems.push("ungrammatical outcome clause");
   if (sentences.length > 2) problems.push("more than two sentences");
 
   return problems;
@@ -337,8 +395,8 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
 
 /** Builds the required shape from the profile and posting. Empty when no figure exists. */
 export function buildSummary(ctx: SummaryContext): string {
-  const title = pickHeldTitle(ctx.heldTitles, ctx.targetTitle);
-  const outcomes = pickOutcomes(ctx.experienceBullets);
+  const title = pickHeldTitle(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle);
+  const outcomes = pickOutcomes(ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets);
   if (!title || outcomes.length === 0) return "";
 
   const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 3);
@@ -365,7 +423,20 @@ export function buildSummary(ctx: SummaryContext): string {
   const fits = attempts.find((t) => t.length >= MIN_LEN && t.length <= MAX_LEN);
   if (fits) return fits;
   const underMax = attempts.filter((t) => t.length <= MAX_LEN);
-  if (underMax.length) return underMax.sort((a, b) => b.length - a.length)[0];
+  if (underMax.length) {
+    const longest = underMax.sort((a, b) => b.length - a.length)[0];
+    if (longest.length < MIN_LEN && outcomes.length >= 2) {
+      const first = outcomes[0].replace(
+        /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
+        (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
+      ).split(/,\s+/)[0];
+      const expanded = `${title}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
+      if (expanded.length >= MIN_LEN && expanded.length <= MAX_LEN && findViolations(expanded, ctx).length === 0) {
+        return expanded;
+      }
+    }
+    return longest;
+  }
   return attempts[attempts.length - 1];
 }
 

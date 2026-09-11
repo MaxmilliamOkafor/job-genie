@@ -8,6 +8,7 @@ import {
   pickOutcomes,
   rankOutcome,
   shortenClause,
+  isGrammaticalOutcome,
   type SummaryContext,
 } from '../supabase/functions/_shared/summaryShape.ts';
 
@@ -33,6 +34,11 @@ describe('held title selection', () => {
     expect(pickHeldTitle(['Software Engineer', 'Data Analyst'], 'Manager, Payroll Operations')).toBe(
       'Software Engineer',
     );
+  });
+
+  it('ignores generic rank words and falls back to the current role without distinctive overlap', () => {
+    expect(pickHeldTitle(['AI Product Manager', 'Solutions Architect'], 'Manager, Payroll Operations', 'AI Product Manager')).toBe('AI Product Manager');
+    expect(pickHeldTitle(['Senior Analyst', 'Data Engineer'], 'Senior Data Platform Lead', 'Senior Analyst')).toBe('Data Engineer');
   });
 });
 
@@ -118,6 +124,13 @@ describe('enforcement of a bad live summary', () => {
     expect(findViolations('My work as a Solutions Architect with nine years in Dublin.', CTX)).toEqual(
       expect.arrayContaining(['first person', 'total years of experience']),
     );
+  });
+
+  it('requires the held title to begin the opener and rejects noun-participle fragments', () => {
+    const valid = buildSummary(CTX);
+    expect(findViolations(`Evidence-led ${valid}`, CTX)).toContain('opener is not a held job title');
+    expect(isGrammaticalOutcome('Impression reporting, cutting the overnight run from six hours to under one')).toBe(false);
+    expect(isGrammaticalOutcome('Cut the overnight run from six hours to under one')).toBe(true);
   });
 });
 

@@ -168,7 +168,7 @@ const HEADING = /^[A-Z][A-Z0-9 &/-]{3,}$/;
 export interface PlacementResult {
   text: string;
   added: Array<{ term: string; label: string; created: boolean }>;
-  skipped: Array<{ term: string; reason: "duplicate" | "soft capability" | "no skills section" }>;
+  skipped: Array<{ term: string; reason: "duplicate" | "soft capability" | "no skills section" | "group full" }>;
   /** The skills section before and after, for reporting. */
   before: string;
   after: string;
@@ -234,6 +234,10 @@ export function placeSkillsInSection(resume: string, terms: string[]): Placement
         isNew = true;
       }
     }
+    if (target.items.length >= 10) {
+      skipped.push({ term, reason: "group full" });
+      continue;
+    }
     target.items.push(term);
     present.add(key);
     added.push({ term, label: target.label, created: isNew || target.index === -1 });
@@ -255,4 +259,46 @@ export function placeSkillsInSection(resume: string, terms: string[]): Placement
 
   const after = out.slice(start, end + newLines.length).join("\n");
   return { text: out.join("\n"), added, skipped, before, after };
+}
+
+/** Merges duplicate labels and caps every labelled skills line at ten items. */
+export function normaliseSkillsSection(resume: string): string {
+  const lines = resume.split("\n");
+  const heading = lines.findIndex((line) => /^\s*TECHNICAL\s+SKILLS\s*$/i.test(line));
+  if (heading < 0) return resume;
+  let end = heading + 1;
+  while (end < lines.length && !(/^\s*[A-Z][A-Z0-9 &/-]{3,}\s*$/.test(lines[end]) && !lines[end].includes(":"))) end++;
+
+  const order: string[] = [];
+  const labels = new Map<string, string>();
+  const items = new Map<string, string[]>();
+  const seenSkills = new Set<string>();
+  const untouched: string[] = [];
+  for (const line of lines.slice(heading + 1, end)) {
+    const match = line.trim().match(/^([^:]{1,40}):\s*(.+)$/);
+    if (!match) {
+      if (line.trim()) untouched.push(line.trim());
+      continue;
+    }
+    const key = match[1].trim().toLowerCase();
+    if (!items.has(key)) {
+      order.push(key);
+      labels.set(key, match[1].trim());
+      items.set(key, []);
+    }
+    const bucket = items.get(key);
+    if (!bucket) continue;
+    for (const raw of match[2].split(",")) {
+      const item = raw.trim();
+      const itemKey = item.toLowerCase().replace(/\s*\(.*\)$/, "").trim();
+      if (!item || seenSkills.has(itemKey) || bucket.length >= 10) continue;
+      seenSkills.add(itemKey);
+      bucket.push(item);
+    }
+  }
+  const grouped = order
+    .map((key) => `${labels.get(key)}: ${(items.get(key) || []).join(", ")}`)
+    .filter((line) => !/:\s*$/.test(line));
+  lines.splice(heading + 1, end - heading - 1, ...grouped, ...untouched);
+  return lines.join("\n");
 }

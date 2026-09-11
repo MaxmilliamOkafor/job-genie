@@ -17,6 +17,12 @@ describe('benefits, logistics and boilerplate are not requirements', () => {
       expect(isFurniture(term)).toBe(false);
     }
   });
+
+  it('drops experience-duration and generic degree screening criteria', () => {
+    for (const term of ['7+ years', '5 years experience', '3-5 years', 'minimum 8 years', "Bachelor's degree"]) {
+      expect(isFurniture(term)).toBe(true);
+    }
+  });
 });
 
 describe('one entry per requirement, not one per phrasing', () => {

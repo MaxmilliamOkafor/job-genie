@@ -419,17 +419,20 @@ export const validateEducationEntry = (edu: any): string[] => {
   const s = String(edu?.start_year ?? '').trim();
   const e = String(edu?.end_year ?? '').trim();
 
+  const yearPart = (value: string) => value.match(/(?:19|20)\d{2}/)?.[0] || '';
+  const startYear = yearPart(s);
+  const endYear = yearPart(e);
   const badYear = (y: string) => !/^\d{4}$/.test(y) || Number(y) < MIN_YEAR || Number(y) > max;
 
   if (!s) errors.push(`${label}: From (year) is required.`);
-  else if (badYear(s)) errors.push(`${label}: From (year) must be 4 digits between ${MIN_YEAR} and ${max}.`);
+  else if (badYear(startYear)) errors.push(`${label}: From must include a year between ${MIN_YEAR} and ${max}.`);
 
   if (!e) errors.push(`${label}: To (year) is required.`);
-  else if (e !== 'Present' && badYear(e)) {
-    errors.push(`${label}: To (year) must be 4 digits between ${MIN_YEAR} and ${max}.`);
+  else if (e !== 'Present' && badYear(endYear)) {
+    errors.push(`${label}: To must include a year between ${MIN_YEAR} and ${max}.`);
   }
 
-  if (/^\d{4}$/.test(s) && /^\d{4}$/.test(e) && Number(e) < Number(s)) {
+  if (startYear && endYear && Number(endYear) < Number(startYear)) {
     errors.push(`${label}: To (year) cannot be earlier than From (year).`);
   }
 
