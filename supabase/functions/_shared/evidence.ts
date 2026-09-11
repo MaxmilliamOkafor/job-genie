@@ -228,6 +228,129 @@ const BOILERPLATE = new Set([
   "apache", "microsoft", "google", "amazon", "oracle", "ibm", "adobe",
 ]);
 
+/**
+ * Benefits, logistics and application boilerplate. A candidate cannot evidence a
+ * dental plan, so these must never enter the requirement list in the first
+ * place. Kept deliberately narrow: "reliability", "availability", "automation",
+ * "scalability", "observability", "collaboration" and "stakeholder management"
+ * are real requirements on technical and management postings and must survive.
+ */
+const FURNITURE = [
+  "competitive salary", "competitive pay", "salary range", "401k", "401(k)",
+  "dental", "vision", "dental insurance", "vision insurance", "health insurance",
+  "medical insurance", "health cover", "paid time off", "pto", "holiday allowance",
+  "annual leave", "parental leave", "maternity leave", "paternity leave",
+  "sick leave", "stock options", "share options", "rsu", "rsus", "bonus",
+  "bonus scheme", "signing bonus", "perks", "wellness", "gym membership",
+  "free lunch", "full-time", "full time", "part-time", "part time", "permanent",
+  "contract", "temporary", "internship", "hybrid", "remote", "onsite",
+  "on-site", "work from home", "flexible hours", "flexible working",
+  "equal opportunity", "equal opportunity employer", "eoe", "affirmative action",
+  "background check", "drug screening", "fast-paced", "fast paced",
+  "fast-paced environment", "dynamic environment", "apply now", "submit resume",
+  "submit your resume", "submit cv", "how to apply", "join us", "about us",
+  "our mission", "why join", "reference number", "job id", "requisition id",
+  "start date", "notice period", "relocation assistance", "visa sponsorship",
+  "pension", "pension scheme", "life insurance", "employee discount",
+];
+
+const FURNITURE_SET = new Set(FURNITURE);
+
+/** True when a term is benefits, logistics or application boilerplate. */
+export function isFurniture(term: string): boolean {
+  const key = (term || "").toLowerCase().trim().replace(/\s+/g, " ");
+  if (!key) return true;
+  if (FURNITURE_SET.has(key)) return true;
+  // Phrases that only ever describe the package or the process.
+  return /\b(salary|compensation|benefit|benefits|insurance|401k|pto|vacation|holiday|perk|perks|bonus|equity vest|apply|application process|recruiter|interview process|eoe|equal opportunity)\b/.test(
+    key,
+  );
+}
+
+/**
+ * Qualifier words and generic trailing nouns that turn one requirement into
+ * three phrasings. "payroll", "global payroll" and "payroll management" are one
+ * thing; the stem is what identifies the requirement.
+ */
+const VARIANT_QUALIFIERS = new Set([
+  "global", "international", "regional", "overall", "general", "end-to-end",
+  "end", "to", "strong", "solid", "proven", "deep", "advanced", "excellent",
+  "good", "hands-on", "practical", "extensive", "demonstrable", "relevant",
+  "modern", "enterprise", "full", "complete", "core", "day-to-day",
+]);
+
+const GENERIC_TAILS = new Set([
+  "management", "managing", "operations", "operation", "systems", "system",
+  "skills", "skill", "building", "build", "development", "processes", "process",
+  "activities", "practices", "practice", "administration", "delivery",
+  "knowledge", "expertise", "ability", "abilities", "understanding",
+  "background", "capability", "capabilities",
+]);
+
+/** Requirement phrasings that are the same ask under different words. */
+const REQUIREMENT_ALIASES: Record<string, string> = {
+  "people management": "team leadership",
+  "line management": "team leadership",
+  "team management": "team leadership",
+  "managing people": "team leadership",
+  "feedback": "performance management",
+  "team performance": "performance management",
+  "performance reviews": "performance management",
+  "artificial intelligence": "AI",
+  "ai building": "AI",
+  "ai development": "AI",
+  "machine learning models": "machine learning",
+  "stakeholder engagement": "stakeholder management",
+  "stakeholder communication": "stakeholder management",
+  "cross functional": "cross-functional",
+  "continuous integration": "CI/CD",
+  "continuous delivery": "CI/CD",
+  "continuous deployment": "CI/CD",
+};
+
+function variantStem(term: string): string {
+  const words = term
+    .toLowerCase()
+    .replace(/[^a-z0-9+#./\- ]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((w) => !VARIANT_QUALIFIERS.has(w));
+  while (words.length > 1 && GENERIC_TAILS.has(words[words.length - 1])) words.pop();
+  const stem = words.join(" ");
+  // Never collapse a term to nothing, and never merge single words that mean
+  // different things ("reliability" keeps its own stem).
+  return stem || term.toLowerCase().trim();
+}
+
+/**
+ * One entry per requirement. Qualifier and phrasing variants collapse onto the
+ * canonical form, so a posting saying "payroll", "global payroll" and "payroll
+ * management" contributes one requirement rather than three.
+ */
+export function collapseRequirements(terms: string[], max = 20): { terms: string[]; removed: string[] } {
+  const removed: string[] = [];
+  const byStem = new Map<string, string>();
+  for (const raw of terms) {
+    const term = (raw || "").trim();
+    if (!term) continue;
+    const aliased = REQUIREMENT_ALIASES[term.toLowerCase()] ?? term;
+    const stem = variantStem(aliased);
+    const held = byStem.get(stem);
+    if (!held) {
+      byStem.set(stem, aliased);
+      continue;
+    }
+    // Prefer the canonical (shortest, least-qualified) wording.
+    const keep = aliased.length < held.length ? aliased : held;
+    const drop = keep === held ? aliased : held;
+    byStem.set(stem, keep);
+    removed.push(drop);
+  }
+  const kept = Array.from(byStem.values());
+  if (kept.length > max) removed.push(...kept.slice(max));
+  return { terms: kept.slice(0, max), removed };
+}
+
 /** Words that only ever appear as part of a job title phrase. */
 const TITLE_WORDS = ["senior", "junior", "lead", "principal", "staff", "mid", "head", "chief", "manager", "director"];
 
