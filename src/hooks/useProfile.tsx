@@ -142,6 +142,33 @@ export function useProfile() {
         ...(updates.professional_experience ? { professional_experience: normalizeWorkExperience(updates.professional_experience as any) } : {}),
       };
 
+      // Skills are written from two places: this page and the browser extension.
+      // A blind write from a page loaded before the extension added a skill would
+      // silently delete it, so anything present in the database but absent from
+      // the copy this page started with is merged back in. Skills the user
+      // removed in this session stay removed.
+      if (Array.isArray(safeUpdates.skills)) {
+        const norm = (s: any) => String(s?.name ?? s ?? '').trim().toLowerCase().replace(/[^a-z0-9+#.]/g, '');
+        const { data: fresh, error: readError } = await supabase
+          .from('profiles')
+          .select('skills')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (readError) throw readError;
+
+        const remote = Array.isArray((fresh as any)?.skills) ? ((fresh as any).skills as any[]) : [];
+        const baseline = new Set((profile.skills || []).map(norm));
+        const local = safeUpdates.skills as any[];
+        const localKeys = new Set(local.map(norm));
+        const addedElsewhere = remote.filter((s) => {
+          const key = norm(s);
+          return key && !baseline.has(key) && !localKeys.has(key);
+        });
+        if (addedElsewhere.length) safeUpdates.skills = [...local, ...addedElsewhere];
+      }
+
+
+
       const { error } = await supabase
         .from('profiles')
         .update(safeUpdates)
