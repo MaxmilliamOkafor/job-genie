@@ -5,9 +5,9 @@
 - [x] 4a. Screening-answer editor storing exact question text, answer, scope and confirmation timestamp; exposed as an `application_answers` question-to-answer map. Never infers work authorisation.
 
 ## Open
-- [ ] 9. Enforce grammatical, evidence-led summaries; ignore rank words when matching held titles and fall back to the current role.
+- [x] 9. Enforce grammatical, evidence-led summaries; ignore rank words when matching held titles, fall back to the current role, and reject bias-prone opening claims.
 - [ ] 10. Keep education dates in profile data but remove them from tailored CVs; restore a missing EDUCATION section before responding.
-- [ ] 11. Confirm stale-tab skill merging and newest-first profile display remain intact.
+- [x] 11. Confirm stale-tab skill merging and newest-first profile display remain intact.
 - [ ] 12. Exclude screening criteria from extracted requirements while preserving canonical 12-20 requirement lists.
 - [ ] 13. Enforce one labelled TECHNICAL SKILLS line per category with no more than ten entries.
 - [ ] 14. Backfill the two supplied education rows without overwriting the pending Derby degree title.
