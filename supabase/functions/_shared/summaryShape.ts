@@ -224,8 +224,21 @@ export function shortenClause(clause: string, maxLen: number): string {
       }
     }
   }
-  // No boundary keeps the figure inside the budget, so keep the figure and the
-  // full clause: a figure is never dropped or cut to make a sentence shorter.
+  // No comma boundary fits. Trim trailing words AFTER the figure, so every
+  // figure survives verbatim and only the explanatory tail goes. A trim that
+  // would leave a dangling conjunction or preposition ("Power BI and") is
+  // rejected rather than shipped.
+  const DANGLING = /\s+(and|or|with|to|the|a|an|of|for|in|on|at|by|from|so|that|than|into|as|before|after|using|across|through)$/i;
+  const words = text.split(/\s+/);
+  for (let end = words.length - 1; end > 3; end--) {
+    let candidate = words.slice(0, end).join(" ").replace(/[,;:\-]+$/, "");
+    while (DANGLING.test(candidate)) candidate = candidate.replace(DANGLING, "");
+    if (candidate.length > maxLen) continue;
+    if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
+  }
+
+  // Nothing legible fits: keep the figure and the full clause. A figure is never
+  // dropped or cut to make a sentence shorter.
   return text;
 }
 
