@@ -433,6 +433,8 @@ export function buildRequirementList(
     if (seen.has(key)) continue;
     if (key.length < 2) { removed.push(term); continue; }
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
+    // Benefits, logistics and application boilerplate are not requirements.
+    if (isFurniture(key)) { removed.push(term); continue; }
     // Incidental employer names are not skills.
     if (employers.has(key)) { removed.push(term); continue; }
     // A bare seniority word carries no requirement of its own.
@@ -485,7 +487,10 @@ export function buildRequirementList(
     return !isExpansion;
   });
 
-  return { terms: deduped, removed };
+  // One entry per requirement, capped so the denominator stays honest.
+  const collapsed = collapseRequirements(deduped);
+  removed.push(...collapsed.removed);
+  return { terms: collapsed.terms, removed };
 }
 
 /**
