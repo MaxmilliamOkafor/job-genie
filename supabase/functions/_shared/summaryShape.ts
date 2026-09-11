@@ -238,6 +238,17 @@ export function shortenClause(clause: string, maxLen: number): string {
     if (rankOutcome(trimmed) > 0) text = trimmed;
   }
   if (text.length <= maxLen) return text;
+  // Keep a finite opening verb while compressing a comma-participle outcome:
+  // "Rebuilt the pipeline, reducing the run..." becomes
+  // "Rebuilt the pipeline and reduced the run..." rather than the fragment
+  // "Impression reporting, reducing...".
+  const coordinated = text.replace(
+    /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
+    (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
+  );
+  if (coordinated !== text && rankOutcome(coordinated) > 0 && coordinated.length <= maxLen + 25) {
+    return coordinated;
+  }
   const parts = text.split(/,\s+/);
   // Prefer the longest leading run that keeps the figure.
   for (let i = parts.length - 1; i > 0; i--) {
