@@ -153,3 +153,20 @@ describe('long lead-in clauses', () => {
     expect(shortened).toContain('six hours to under one');
   });
 });
+
+describe('a clause with no comma at all', () => {
+  const CLAUSE =
+    "Rebuilt the PySpark and Presto pipeline behind impression reporting reducing the overnight run from six hours to under one so the data is ready before the reporting team's deadline rather than after it";
+
+  it('keeps the figure verbatim inside the budget', () => {
+    const shortened = shortenClause(CLAUSE, 110);
+    expect(shortened.length).toBeLessThanOrEqual(110);
+    expect(shortened).toContain('six hours to under one');
+  });
+
+  it('opens on the verb, never on a noun fragment or a dangling word', () => {
+    const shortened = shortenClause(CLAUSE, 110);
+    expect(shortened.startsWith('reporting')).toBe(false);
+    expect(/\s(and|with|to|the|of|so)$/i.test(shortened)).toBe(false);
+  });
+});

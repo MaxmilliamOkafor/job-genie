@@ -395,6 +395,23 @@ export const combinedSkillsPreview = (skills: SkillLike[] = []): string[] => {
 /* 1. Education years                                                  */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Recovers the subject from a degree string when the parser folded them
+ * together. "BSc Computer Science" and "Master of Science in AI" both carry a
+ * field of study that autofill and evidence matching need on its own.
+ */
+export const subjectFromDegree = (degree: string): string => {
+  const raw = String(degree || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  const inMatch = raw.match(/\bin\s+(.+)$/i);
+  if (inMatch) return tidyText(inMatch[1]);
+  const stripped = raw.replace(
+    /^(b\.?sc|m\.?sc|b\.?a|m\.?a|b\.?eng|m\.?eng|bachelor(?:'?s)?(?:\s+of\s+\w+)?|master(?:'?s)?(?:\s+of\s+\w+)?|ph\.?d|doctorate|mba|hnd|diploma|certificate|degree)\b[\s.,:-]*/i,
+    '',
+  );
+  return stripped.trim() === raw ? '' : tidyText(stripped);
+};
+
 export const validateEducationEntry = (edu: any): string[] => {
   const errors: string[] = [];
   const max = maxYear();
@@ -496,11 +513,15 @@ export const normaliseProfileForSave = <T extends Record<string, any>>(profile: 
   next.education = (next.education || []).map((edu: any) => {
     const start_year = String(edu.start_year ?? '').trim();
     const end_year = String(edu.end_year ?? '').trim();
+    const degree = String(edu.degree ?? '');
     return {
       ...edu,
       start_year,
       end_year,
-      field_of_study: tidyText(String(edu.field_of_study ?? '')),
+      // The parser often folds the subject into the degree string ("BSc Computer
+      // Science") and leaves field_of_study empty. Autofill and evidence matching
+      // both read field_of_study, so the subject is recovered from the degree.
+      field_of_study: tidyText(String(edu.field_of_study ?? '')) || subjectFromDegree(degree),
       // graduation_year is a stated fact derived from the completion year only;
       // an in-progress degree has no graduation year.
       graduation_year: /^\d{4}$/.test(end_year) ? end_year : '',

@@ -57,6 +57,7 @@ import {
 // Countries offered for work authorisation live in a shared module so the
 // extension payload and the chips below stay in sync.
 import { WORK_AUTH_OPTIONS } from '@/lib/workAuthCountries';
+import { ProfileCompleteness } from '@/components/profile/ProfileCompleteness';
 
 
 // Default ATS answers that pass knockout questions
@@ -485,6 +486,10 @@ const Profile = () => {
           </div>
         </div>
 
+        <ProfileCompleteness profile={localProfile} />
+
+
+
         {/* CV Upload */}
         <CVUpload
           cvFileName={localProfile.cv_file_name}
@@ -753,7 +758,7 @@ const Profile = () => {
         {/* API Usage Chart */}
         <ApiUsageChart />
 
-        <Card>
+        <Card id="section-personal">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5" />
@@ -891,7 +896,7 @@ const Profile = () => {
         </Card>
 
         {/* ATS Knockout Questions */}
-        <Card>
+        <Card id="section-work-auth">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-green-500" />
@@ -1095,7 +1100,7 @@ const Profile = () => {
         </Card>
 
         {/* Skills - Editable */}
-        <Card>
+        <Card id="section-skills">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Award className="h-5 w-5" />
@@ -1138,6 +1143,34 @@ const Profile = () => {
                 </Button>
               </div>
             )}
+            {/* Most recently added first, so anything the extension claimed on your
+                behalf is visible and can be removed straight away. */}
+            {(localProfile.skills || []).length > 0 && (
+              <div className="mb-4 rounded-lg border bg-muted/40 p-3">
+                <p className="text-xs font-medium text-foreground mb-2">
+                  Most recently added
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(localProfile.skills || [])
+                    .map((skill: any, index: number) => ({ skill, index }))
+                    .reverse()
+                    .slice(0, 12)
+                    .map(({ skill, index }) => (
+                      <span
+                        key={`${skill.name}-${index}`}
+                        className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground"
+                      >
+                        {skill.name}
+                        <X
+                          className="h-3 w-3 cursor-pointer hover:text-destructive"
+                          onClick={() => removeSkill(index)}
+                        />
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+
             {/* Display skills grouped by category with comma separation */}
             {(() => {
               const skills = localProfile.skills || [];
@@ -2173,7 +2206,7 @@ const Profile = () => {
         </Card>
 
         {/* Education */}
-        <Card>
+        <Card id="section-education">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />

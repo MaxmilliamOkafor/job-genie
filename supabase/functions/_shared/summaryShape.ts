@@ -192,7 +192,16 @@ const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.sli
 
 /** Trims a clause at its own comma boundaries, never dropping the figure. */
 export function shortenClause(clause: string, maxLen: number): string {
-  const text = clause.trim();
+  let text = clause.trim();
+  if (text.length <= maxLen) return text;
+  // An explanatory tail states why the change mattered; the figure states what
+  // changed. When the clause is over budget the tail goes first, and only if the
+  // figure survives without it.
+  const tail = text.search(/\s+(so that|so the|so it|rather than|which meant|in order to|allowing|enabling|meaning)\s+/i);
+  if (tail > 20) {
+    const trimmed = text.slice(0, tail).replace(/[,;:\-]+$/, "").trim();
+    if (rankOutcome(trimmed) > 0) text = trimmed;
+  }
   if (text.length <= maxLen) return text;
   const parts = text.split(/,\s+/);
   // Prefer the longest leading run that keeps the figure.
@@ -224,8 +233,37 @@ export function shortenClause(clause: string, maxLen: number): string {
       }
     }
   }
-  // No boundary keeps the figure inside the budget, so keep the figure and the
-  // full clause: a figure is never dropped or cut to make a sentence shorter.
+  // No comma boundary fits. Trim trailing words AFTER the figure, so every
+  // figure survives verbatim and only the explanatory tail goes. A trim that
+  // would leave a dangling conjunction or preposition ("Power BI and") is
+  // rejected rather than shipped.
+  const DANGLING = /\s+(and|or|with|to|the|a|an|of|for|in|on|at|by|from|so|that|than|into|as|before|after|using|across|through)$/i;
+  const words = text.split(/\s+/);
+  for (let end = words.length - 1; end > 3; end--) {
+    let candidate = words.slice(0, end).join(" ").replace(/[,;:\-]+$/, "");
+    while (DANGLING.test(candidate)) candidate = candidate.replace(DANGLING, "");
+    if (candidate.length > maxLen) continue;
+    if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
+  }
+
+  // The figure sits behind a long lead-in with no comma to cut at. Start the
+  // clause at the verb that carries the change ("cutting the overnight run from
+  // six hours to under one") - readable, and every figure intact.
+  // Nearest participle to the figure first: an earlier one is usually a noun
+  // ("impression reporting reducing...") and reads as an editing error.
+  for (let start = words.length - 3; start >= 1; start--) {
+    const first = words[start].toLowerCase().replace(/[^a-z]/g, "");
+    if (!/(ing|ed)$/.test(first) || first.length < 4) continue;
+    for (let end = words.length; end > start + 2; end--) {
+      let candidate = words.slice(start, end).join(" ").replace(/[,;:\-]+$/, "");
+      while (DANGLING.test(candidate)) candidate = candidate.replace(DANGLING, "");
+      if (candidate.length > maxLen) continue;
+      if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
+    }
+  }
+
+  // Nothing legible fits: keep the figure and the full clause. A figure is never
+  // dropped or cut to make a sentence shorter.
   return text;
 }
 
