@@ -395,6 +395,23 @@ export const combinedSkillsPreview = (skills: SkillLike[] = []): string[] => {
 /* 1. Education years                                                  */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Recovers the subject from a degree string when the parser folded them
+ * together. "BSc Computer Science" and "Master of Science in AI" both carry a
+ * field of study that autofill and evidence matching need on its own.
+ */
+export const subjectFromDegree = (degree: string): string => {
+  const raw = String(degree || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  const inMatch = raw.match(/\bin\s+(.+)$/i);
+  if (inMatch) return tidyText(inMatch[1]);
+  const stripped = raw.replace(
+    /^(b\.?sc|m\.?sc|b\.?a|m\.?a|b\.?eng|m\.?eng|bachelor(?:'?s)?(?:\s+of\s+\w+)?|master(?:'?s)?(?:\s+of\s+\w+)?|ph\.?d|doctorate|mba|hnd|diploma|certificate|degree)\b[\s.,:-]*/i,
+    '',
+  );
+  return stripped.trim() === raw ? '' : tidyText(stripped);
+};
+
 export const validateEducationEntry = (edu: any): string[] => {
   const errors: string[] = [];
   const max = maxYear();
