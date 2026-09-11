@@ -254,7 +254,7 @@ export function shortenClause(clause: string, maxLen: number): string {
       const candidate = coordinatedParts.join(", ").trim();
       if (rankOutcome(candidate) > 0) grammatical = candidate;
     }
-    if (grammatical.length <= maxLen + 40) return grammatical;
+    if (grammatical.length <= maxLen) return grammatical;
   }
   const parts = text.split(/,\s+/);
   // Prefer the longest leading run that keeps the figure.
