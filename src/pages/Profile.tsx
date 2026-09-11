@@ -485,6 +485,10 @@ const Profile = () => {
           </div>
         </div>
 
+        <ProfileCompleteness profile={localProfile} />
+
+
+
         {/* CV Upload */}
         <CVUpload
           cvFileName={localProfile.cv_file_name}
