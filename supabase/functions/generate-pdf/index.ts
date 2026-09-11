@@ -84,6 +84,26 @@ interface ResumeData {
   candidateName?: string;
 }
 
+const normaliseSkillGroups = (groups: Array<{ label: string; items: string[] }>) => {
+  const byLabel = new Map<string, { label: string; items: string[] }>();
+  const seenItems = new Set<string>();
+  for (const group of groups) {
+    const label = String(group?.label || "").trim();
+    if (!label) continue;
+    const key = label.toLowerCase();
+    const current = byLabel.get(key) || { label, items: [] };
+    for (const raw of Array.isArray(group?.items) ? group.items : []) {
+      const item = String(raw || "").trim();
+      const itemKey = item.toLowerCase().replace(/\s*\(.*\)$/, "").trim();
+      if (!item || seenItems.has(itemKey) || current.items.length >= 10) continue;
+      current.items.push(item);
+      seenItems.add(itemKey);
+    }
+    byLabel.set(key, current);
+  }
+  return [...byLabel.values()].filter((group) => group.items.length > 0);
+};
+
 // ============================================================
 // SANITIZATION / DATE-STRIP HELPERS (preserved verbatim)
 // ============================================================
@@ -771,9 +791,10 @@ function renderResume(
   if (data.skills?.secondary?.length)
     skillGroups.push({ label: "Additional", items: data.skills.secondary });
 
-  if (skillGroups.length > 0) {
+  const groupedSkills = normaliseSkillGroups(skillGroups);
+  if (groupedSkills.length > 0) {
     r.drawSectionHeader("Technical Skills");
-    r.drawSkillsBlock(skillGroups);
+    r.drawSkillsBlock(groupedSkills);
   }
 
   if (data.projects && data.projects.length > 0) {
@@ -1113,6 +1134,7 @@ function profileToResumeData(profile: Record<string, unknown>): ResumeData {
     ? (profile.education as Array<Record<string, unknown>>).map((edu) => ({
         degree: (edu.degree as string) || "",
         school: (edu.institution as string) || (edu.school as string) || "",
+        // Education dates are stored for application forms, never printed on CVs.
         dates: "",
         gpa: (edu.gpa as string) || "",
       }))
@@ -1705,7 +1727,13 @@ async function handleRawContentRequest(body: {
 
       if (section.type.includes("EDUCATION")) {
         const edus: EducationEntry[] = [];
-        for (const line of section.content) {
+        const content = section.content.filter((line) => {
+          const text = line.trim();
+          return !/^(?:class\s+of\s+)?(?:19|20)\d{2}(?:\s*[-–—]\s*(?:19|20)\d{2})?$/i.test(text) &&
+            !/^(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:19|20)\d{2}(?:\s*[-–—]\s*(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(?:19|20)\d{2})?$/i.test(text);
+        });
+        for (let i = 0; i < content.length; i++) {
+          const line = content[i];
           if (line.includes("|")) {
             const parts = line.split("|").map((p) => p.trim());
             edus.push({
@@ -1714,7 +1742,9 @@ async function handleRawContentRequest(body: {
               dates: "",
             });
           } else {
-            edus.push({ degree: line, school: "", dates: "" });
+            const school = content[i + 1] && !content[i + 1].includes("|") ? content[i + 1] : "";
+            edus.push({ degree: line, school, dates: "" });
+            if (school) i++;
           }
         }
         norm.education = edus;
@@ -2144,10 +2174,11 @@ async function buildResumeDocxBytes(data: NormalisedResume): Promise<Uint8Array>
   if (data.skillGroups?.length) skillGroups.push(...data.skillGroups);
   if (data.skills?.primary?.length) skillGroups.push({ label: "Technical", items: data.skills.primary });
   if (data.skills?.secondary?.length) skillGroups.push({ label: "Additional", items: data.skills.secondary });
-  if (skillGroups.length) {
+  const groupedSkills = normaliseSkillGroups(skillGroups);
+  if (groupedSkills.length) {
 
     children.push(...docxSectionHeader("Technical Skills"));
-    children.push(...docxSkills(skillGroups));
+    children.push(...docxSkills(groupedSkills));
   }
 
   if (data.projects?.length) {
