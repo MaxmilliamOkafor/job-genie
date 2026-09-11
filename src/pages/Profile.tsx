@@ -57,6 +57,7 @@ import {
 // Countries offered for work authorisation live in a shared module so the
 // extension payload and the chips below stay in sync.
 import { WORK_AUTH_OPTIONS } from '@/lib/workAuthCountries';
+import { ProfileCompleteness } from '@/components/profile/ProfileCompleteness';
 
 
 // Default ATS answers that pass knockout questions
