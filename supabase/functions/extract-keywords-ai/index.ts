@@ -25,8 +25,8 @@ Any American English spelling is an INSTANT FAILURE.
 Extract keywords into these categories:
 1. required_skills: Hard technical skills explicitly required (programming languages, frameworks, tools)
 2. preferred_skills: Skills that are nice-to-have or preferred but not mandatory
-3. experience_requirements: Specific experience requirements (years of experience, domains)
-4. education_requirements: Education-related requirements (degrees, certifications)
+3. experience_requirements: Specific domain experience only; NEVER years or duration criteria
+4. education_requirements: Named specialist qualifications/certifications only; NEVER generic degree requirements
 5. key_responsibilities: Key job responsibilities and duties
 6. soft_skills: Soft skills and interpersonal abilities mentioned
 7. tools_and_platforms: Specific tools, platforms, and software mentioned
@@ -36,6 +36,7 @@ For each category, extract the most important keywords as an array of strings.
 Also provide a "priority_keywords" array with the TOP 15 most critical keywords for ATS matching (ranked by importance).
 
 NEVER EXTRACT BENEFITS, LOGISTICS OR BOILERPLATE. These are not requirements and a candidate cannot evidence them: competitive salary, 401k, dental, vision, paid time off, PTO, health insurance, stock options, bonus, full-time, part-time, hybrid, remote, equal opportunity, fast-paced, apply now, submit resume, notice period, visa sponsorship, pension.
+NEVER EXTRACT SCREENING CRITERIA as keywords: "7+ years", "5 years experience", "3-5 years", "minimum 8 years", "Bachelor's degree", or equivalent duration and generic degree checks. Employment dates and education records answer these separately; they do not belong on a skills line.
 Do NOT over-filter: reliability, availability, automation, scalability, observability, collaboration and stakeholder management ARE real requirements on technical and management postings. Keep them.
 
 ONE ENTRY PER REQUIREMENT, NOT ONE PER PHRASING. "payroll", "global payroll" and "payroll management" are one requirement - return the canonical form ("payroll") once. Same for "Linux systems"/"Linux", "AI"/"AI building", and "performance management"/"feedback"/"team performance". Collapse synonyms and qualifier variants, and return the canonical wording rather than the posting's incidental wording. Aim for 12 to 20 distinct requirements in priority_keywords plus required_skills combined; if you are producing 30+ strings, they are not all requirements.

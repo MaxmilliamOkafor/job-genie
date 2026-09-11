@@ -261,6 +261,11 @@ export function isFurniture(term: string): boolean {
   const key = (term || "").toLowerCase().trim().replace(/\s+/g, " ");
   if (!key) return true;
   if (FURNITURE_SET.has(key)) return true;
+  // These are answered by dated employment/education records or application
+  // questions. They are not skills and must not become permanent CV misses.
+  if (/\b(?:minimum\s+)?\d+\s*(?:\+|plus)?\s*years?(?:\s+of)?\s+experience\b/.test(key)) return true;
+  if (/\b\d+\s*-\s*\d+\s*years?(?:\s+of)?(?:\s+experience)?\b/.test(key)) return true;
+  if (/\b(?:bachelor'?s?|master'?s?|doctoral|doctorate|phd)\s+(?:degree\s+)?(?:in\b.*)?$/.test(key)) return true;
   // Phrases that only ever describe the package or the process.
   return /\b(salary|compensation|benefit|benefits|insurance|401k|pto|vacation|holiday|perk|perks|bonus|equity vest|apply|application process|recruiter|interview process|eoe|equal opportunity)\b/.test(
     key,
@@ -306,6 +311,7 @@ const REQUIREMENT_ALIASES: Record<string, string> = {
   "continuous integration": "CI/CD",
   "continuous delivery": "CI/CD",
   "continuous deployment": "CI/CD",
+  "postgres": "PostgreSQL",
 };
 
 function variantStem(term: string): string {

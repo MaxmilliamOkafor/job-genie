@@ -3,6 +3,7 @@ import {
   categoriseSkill,
   isSoftCapability,
   placeSkillsInSection,
+  normaliseSkillsSection,
 } from '../supabase/functions/_shared/skillsPlacement.ts';
 
 const DRAFT = `MAXMILLIAM OKAFOR
@@ -99,5 +100,16 @@ describe('placement into an existing grouped section', () => {
     const noSkills = DRAFT.replace(/TECHNICAL SKILLS[\s\S]*?\n\nPROJECTS/, 'PROJECTS');
     const r = placeSkillsInSection(noSkills, ['Java']);
     expect(r.skipped[0].reason).toBe('no skills section');
+  });
+
+  it('merges duplicate labels and caps each labelled line at ten entries', () => {
+    const crowded = DRAFT.replace(
+      'Programming: Python, SQL',
+      'Programming: Python, SQL, Java, Go, Rust, C, C++, C#, JavaScript, TypeScript, Ruby\nProgramming: Kotlin, Swift',
+    );
+    const normalised = normaliseSkillsSection(crowded);
+    expect(normalised.match(/^Programming:/gm)?.length).toBe(1);
+    const programming = normalised.split('\n').find((line) => line.startsWith('Programming:')) || '';
+    expect(programming.split(': ')[1].split(', ')).toHaveLength(10);
   });
 });
