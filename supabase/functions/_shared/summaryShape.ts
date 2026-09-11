@@ -246,8 +246,15 @@ export function shortenClause(clause: string, maxLen: number): string {
     /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
     (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
   );
-  if (coordinated !== text && rankOutcome(coordinated) > 0 && coordinated.length <= maxLen + 40) {
-    return coordinated;
+  if (coordinated !== text && rankOutcome(coordinated) > 0) {
+    let grammatical = coordinated;
+    const coordinatedParts = grammatical.split(/,\s+/);
+    while (coordinatedParts.length > 1 && grammatical.length > maxLen + 40) {
+      coordinatedParts.pop();
+      const candidate = coordinatedParts.join(", ").trim();
+      if (rankOutcome(candidate) > 0) grammatical = candidate;
+    }
+    if (grammatical.length <= maxLen + 40) return grammatical;
   }
   const parts = text.split(/,\s+/);
   // Prefer the longest leading run that keeps the figure.
