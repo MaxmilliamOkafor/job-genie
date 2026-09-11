@@ -753,7 +753,7 @@ const Profile = () => {
         {/* API Usage Chart */}
         <ApiUsageChart />
 
-        <Card>
+        <Card id="section-personal">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5" />
@@ -891,7 +891,7 @@ const Profile = () => {
         </Card>
 
         {/* ATS Knockout Questions */}
-        <Card>
+        <Card id="section-work-auth">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-green-500" />
@@ -1095,7 +1095,7 @@ const Profile = () => {
         </Card>
 
         {/* Skills - Editable */}
-        <Card>
+        <Card id="section-skills">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Award className="h-5 w-5" />
@@ -2201,7 +2201,7 @@ const Profile = () => {
         </Card>
 
         {/* Education */}
-        <Card>
+        <Card id="section-education">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
