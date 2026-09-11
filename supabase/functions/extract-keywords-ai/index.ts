@@ -7,6 +7,7 @@ import {
   lookupAiKeyRow,
   type AiErrorCode,
 } from "../_shared/aiErrors.ts";
+import { collapseRequirements, isFurniture } from "../_shared/evidence.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
