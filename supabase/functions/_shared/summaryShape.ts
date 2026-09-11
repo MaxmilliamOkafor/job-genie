@@ -249,7 +249,9 @@ export function shortenClause(clause: string, maxLen: number): string {
   // The figure sits behind a long lead-in with no comma to cut at. Start the
   // clause at the verb that carries the change ("cutting the overnight run from
   // six hours to under one") - readable, and every figure intact.
-  for (let start = 1; start < words.length - 2; start++) {
+  // Nearest participle to the figure first: an earlier one is usually a noun
+  // ("impression reporting reducing...") and reads as an editing error.
+  for (let start = words.length - 3; start >= 1; start--) {
     const first = words[start].toLowerCase().replace(/[^a-z]/g, "");
     if (!/(ing|ed)$/.test(first) || first.length < 4) continue;
     for (let end = words.length; end > start + 2; end--) {
