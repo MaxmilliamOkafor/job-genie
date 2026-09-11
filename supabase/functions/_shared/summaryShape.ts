@@ -202,6 +202,22 @@ const upperFirst = (s: string) => (/^[a-z]/.test(s) ? s[0].toUpperCase() + s.sli
 
 const ACTION_OPENING = /^(?:achieved|automated|built|created|cut|delivered|designed|developed|directed|drove|enabled|established|generated|implemented|improved|increased|launched|led|managed|migrated|optimised|reduced|replaced|resolved|scaled|streamlined|transformed|saved|supported|owned|rebuilt|re-engineered|processed|maintained|deployed|introduced)\b/i;
 const FRAGMENT_OPENING = /^[^,.;]{2,50},\s+(?:cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i;
+const FINITE_PARTICIPLE: Record<string, string> = {
+  cutting: "Cut",
+  reducing: "Reduced",
+  increasing: "Increased",
+  improving: "Improved",
+  replacing: "Replaced",
+  saving: "Saved",
+  delivering: "Delivered",
+  supporting: "Supported",
+  processing: "Processed",
+};
+
+const finiteOpening = (clause: string) => clause.replace(
+  /^(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
+  (word) => FINITE_PARTICIPLE[word.toLowerCase()] || word,
+);
 
 /** Outcome prose must open with a finite action verb, never a noun-plus-participle fragment. */
 export function isGrammaticalOutcome(clause: string): boolean {
@@ -248,7 +264,10 @@ export function shortenClause(clause: string, maxLen: number): string {
           // A fragment opening on a conjunction or preposition reads as an editing error.
           best = best.replace(/^(and|the|a|an|of|to|for|behind|across|through|with|over|under|before|after|into|on|in|at|by)\s+/i, "");
         }
-        return best;
+        const cleanCandidate = finiteOpening(candidate);
+        if (isGrammaticalOutcome(cleanCandidate)) return cleanCandidate;
+        const cleanBest = finiteOpening(best);
+        if (isGrammaticalOutcome(cleanBest)) return cleanBest;
       }
     }
   }
@@ -277,7 +296,8 @@ export function shortenClause(clause: string, maxLen: number): string {
       let candidate = words.slice(start, end).join(" ").replace(/[,;:\-]+$/, "");
       while (DANGLING.test(candidate)) candidate = candidate.replace(DANGLING, "");
       if (candidate.length > maxLen) continue;
-      if (rankOutcome(candidate) > 0 && candidate.length > 12) return candidate;
+      candidate = finiteOpening(candidate);
+      if (rankOutcome(candidate) > 0 && candidate.length > 12 && isGrammaticalOutcome(candidate)) return candidate;
     }
   }
 

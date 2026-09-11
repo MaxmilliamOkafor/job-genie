@@ -274,9 +274,9 @@ export function isFurniture(term: string): boolean {
   if (FURNITURE_SET.has(key)) return true;
   // These are answered by dated employment/education records or application
   // questions. They are not skills and must not become permanent CV misses.
-  if (/\b(?:minimum\s+)?\d+\s*(?:\+|plus)?\s*years?(?:\s+of)?\s+experience\b/.test(key)) return true;
-  if (/\b\d+\s*-\s*\d+\s*years?(?:\s+of)?(?:\s+experience)?\b/.test(key)) return true;
-  if (/\b(?:bachelor'?s?|master'?s?|doctoral|doctorate|phd)\s+(?:degree\s+)?(?:in\b.*)?$/.test(key)) return true;
+  if (/^(?:minimum\s+)?\d+\s*(?:\+|plus)?\s*years?(?:(?:\s+of)?\s+experience)?$/.test(key)) return true;
+  if (/^\d+\s*-\s*\d+\s*years?(?:(?:\s+of)?\s+experience)?$/.test(key)) return true;
+  if (/^(?:bachelor(?:'s|s)?|master(?:'s|s)?|doctoral|doctorate|phd)(?:\s+degree)?(?:\s+in\s+.+)?$/.test(key)) return true;
   // Phrases that only ever describe the package or the process.
   return /\b(salary|compensation|benefit|benefits|insurance|401k|pto|vacation|holiday|perk|perks|bonus|equity vest|apply|application process|recruiter|interview process|eoe|equal opportunity)\b/.test(
     key,
