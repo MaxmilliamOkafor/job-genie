@@ -1138,6 +1138,34 @@ const Profile = () => {
                 </Button>
               </div>
             )}
+            {/* Most recently added first, so anything the extension claimed on your
+                behalf is visible and can be removed straight away. */}
+            {(localProfile.skills || []).length > 0 && (
+              <div className="mb-4 rounded-lg border bg-muted/40 p-3">
+                <p className="text-xs font-medium text-foreground mb-2">
+                  Most recently added
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(localProfile.skills || [])
+                    .map((skill: any, index: number) => ({ skill, index }))
+                    .reverse()
+                    .slice(0, 12)
+                    .map(({ skill, index }) => (
+                      <span
+                        key={`${skill.name}-${index}`}
+                        className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground"
+                      >
+                        {skill.name}
+                        <X
+                          className="h-3 w-3 cursor-pointer hover:text-destructive"
+                          onClick={() => removeSkill(index)}
+                        />
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
+
             {/* Display skills grouped by category with comma separation */}
             {(() => {
               const skills = localProfile.skills || [];
