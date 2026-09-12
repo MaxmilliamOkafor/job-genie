@@ -39,10 +39,30 @@ const typeTone: Record<string, string> = {
 
 export default function FollowUp() {
   const { user } = useAuth();
+  const { applications } = useApplications();
   const [detections, setDetections] = useState<Detection[]>([]);
   const [sent, setSent] = useState<SentEmail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<string>('');
+
+  const contactTarget = useMemo(() => {
+    const app = applications.find((a) => a.job_id === selectedJob);
+    if (!app?.job) return null;
+    return {
+      jobKey: app.job.url || app.job.id,
+      jobId: app.job.id,
+      company: app.job.company,
+      jobUrl: app.job.url,
+      employerUrls: [],
+      jobDescription: null,
+    };
+  }, [applications, selectedJob]);
+
+  useEffect(() => {
+    if (!selectedJob && applications[0]?.job_id) setSelectedJob(applications[0].job_id);
+  }, [applications, selectedJob]);
+
 
   const load = async () => {
     if (!user) return;
