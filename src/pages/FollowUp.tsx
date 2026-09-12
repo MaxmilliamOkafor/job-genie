@@ -127,9 +127,46 @@ export default function FollowUp() {
         ) : (
           <Tabs defaultValue="inbox" className="space-y-4">
             <TabsList>
+              <TabsTrigger value="contacts">Contacts</TabsTrigger>
               <TabsTrigger value="inbox">Detected replies ({detections.length})</TabsTrigger>
               <TabsTrigger value="sent">Sent ({sent.length})</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="contacts" className="space-y-3">
+              <Card>
+                <CardContent className="flex flex-wrap items-center gap-3 py-4">
+                  <span className="text-sm text-muted-foreground">Job</span>
+                  <Select value={selectedJob} onValueChange={setSelectedJob}>
+                    <SelectTrigger className="w-[420px] max-w-full">
+                      <SelectValue placeholder="Choose an application" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {applications
+                        .filter((a) => a.job)
+                        .map((a) => (
+                          <SelectItem key={a.job_id} value={a.job_id}>
+                            {a.job!.title} - {a.job!.company}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </CardContent>
+              </Card>
+
+              {contactTarget ? (
+                <ContactPanel
+                  target={contactTarget}
+                  jobTitle={applications.find((a) => a.job_id === selectedJob)?.job?.title ?? null}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="py-10 text-sm text-muted-foreground">
+                    Choose an application to look for published recruiting contacts.
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
 
             <TabsContent value="inbox" className="space-y-3">
               {detections.length === 0 ? (
