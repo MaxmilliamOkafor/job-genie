@@ -335,6 +335,95 @@ export type Database = {
         }
         Relationships: []
       }
+      job_contacts: {
+        Row: {
+          checked_at: string
+          company: string | null
+          contact_identity: string | null
+          contact_page_url: string | null
+          contact_type: string
+          created_at: string
+          discovery_method: string | null
+          email: string | null
+          first_seen_at: string
+          id: string
+          job_id: string | null
+          job_key: string
+          last_seen_at: string
+          mailbox_verified: boolean
+          name: string | null
+          profile_url: string | null
+          removed_at: string | null
+          requires_review: boolean
+          source_context: string | null
+          source_url: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+          verification_status: string
+        }
+        Insert: {
+          checked_at?: string
+          company?: string | null
+          contact_identity?: string | null
+          contact_page_url?: string | null
+          contact_type?: string
+          created_at?: string
+          discovery_method?: string | null
+          email?: string | null
+          first_seen_at?: string
+          id?: string
+          job_id?: string | null
+          job_key: string
+          last_seen_at?: string
+          mailbox_verified?: boolean
+          name?: string | null
+          profile_url?: string | null
+          removed_at?: string | null
+          requires_review?: boolean
+          source_context?: string | null
+          source_url?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+          verification_status?: string
+        }
+        Update: {
+          checked_at?: string
+          company?: string | null
+          contact_identity?: string | null
+          contact_page_url?: string | null
+          contact_type?: string
+          created_at?: string
+          discovery_method?: string | null
+          email?: string | null
+          first_seen_at?: string
+          id?: string
+          job_id?: string | null
+          job_key?: string
+          last_seen_at?: string
+          mailbox_verified?: boolean
+          name?: string | null
+          profile_url?: string | null
+          removed_at?: string | null
+          requires_review?: boolean
+          source_context?: string | null
+          source_url?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_contacts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_pool: {
         Row: {
           company: string
@@ -703,6 +792,7 @@ export type Database = {
           portfolio: string | null
           preferred_ai_provider: string | null
           professional_experience: Json | null
+          provider_enrichment_enabled: boolean
           race_ethnicity: string | null
           relevant_projects: Json | null
           security_clearance: boolean | null
@@ -767,6 +857,7 @@ export type Database = {
           portfolio?: string | null
           preferred_ai_provider?: string | null
           professional_experience?: Json | null
+          provider_enrichment_enabled?: boolean
           race_ethnicity?: string | null
           relevant_projects?: Json | null
           security_clearance?: boolean | null
@@ -831,6 +922,7 @@ export type Database = {
           portfolio?: string | null
           preferred_ai_provider?: string | null
           professional_experience?: Json | null
+          provider_enrichment_enabled?: boolean
           race_ethnicity?: string | null
           relevant_projects?: Json | null
           security_clearance?: boolean | null
