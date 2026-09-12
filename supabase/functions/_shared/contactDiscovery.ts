@@ -329,7 +329,13 @@ export function emailHitsFromHtml(html: string): RawEmailHit[] {
   while ((m = mailto.exec(html || '')) !== null) {
     const email = decodeURIComponent(m[1]).trim();
     if (!email.includes('@')) continue;
-    hits.push({ email, context: contextAround(text, email) || stripTags(m[2]), method: 'mailto' });
+    // A mailto address usually never appears as page text, so the context is
+    // read from the markup surrounding the link.
+    const around = stripTags(
+      (html || '').slice(Math.max(0, m.index - 400), m.index + m[0].length + 400),
+    );
+    hits.push({ email, context: contextAround(text, email) || around, method: 'mailto' });
+
   }
 
   let t: RegExpExecArray | null;
