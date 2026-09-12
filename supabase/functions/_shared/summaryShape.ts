@@ -83,8 +83,15 @@ const YEARS_OF_EXPERIENCE =
   /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\+?\s*(\+)?\s*years?\b(?![^.]*\bfrom\b)/i;
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// A trailing full stop ends a word ("in Dublin."), but a dot inside a token
+// does not (".NET", "node.js"), so sentence-final punctuation is allowed while
+// dotted technology names stay intact.
 const hasWord = (haystack: string, needle: string) =>
-  new RegExp(`(^|[^a-z0-9+#./])${escapeRe(needle.toLowerCase())}(?=[^a-z0-9+#./]|$)`, "i").test(haystack.toLowerCase());
+  new RegExp(
+    `(^|[^a-z0-9+#./])${escapeRe(needle.toLowerCase())}(?=\\.(?![a-z0-9])|[^a-z0-9+#./]|$)`,
+    "i",
+  ).test(haystack.toLowerCase());
+
 
 const stripBullet = (line: string) => line.replace(/^\s*[-•*]\s*/, "").trim();
 
