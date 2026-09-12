@@ -31,6 +31,8 @@ const Settings = () => {
           </CardContent>
         </Card>
 
+        <ProviderEnrichmentSetting />
+
         <Card className="border-success/30 bg-success/5">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
