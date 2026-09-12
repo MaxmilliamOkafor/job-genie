@@ -2,7 +2,9 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { atsPlatforms } from '@/data/mockJobs';
+import { ProviderEnrichmentSetting } from '@/components/contacts/ProviderEnrichmentSetting';
 import { Building2, Zap } from 'lucide-react';
+
 
 const Settings = () => {
   return (
@@ -28,6 +30,8 @@ const Settings = () => {
             </div>
           </CardContent>
         </Card>
+
+        <ProviderEnrichmentSetting />
 
         <Card className="border-success/30 bg-success/5">
           <CardContent className="pt-6">

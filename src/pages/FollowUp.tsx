@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppLayout, ViewHeader } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useApplications } from '@/hooks/useApplications';
+import { ContactPanel } from '@/components/contacts/ContactPanel';
 import { Loader2, Inbox, Send } from 'lucide-react';
+
 
 interface Detection {
   id: string;
@@ -35,10 +39,30 @@ const typeTone: Record<string, string> = {
 
 export default function FollowUp() {
   const { user } = useAuth();
+  const { applications } = useApplications();
   const [detections, setDetections] = useState<Detection[]>([]);
   const [sent, setSent] = useState<SentEmail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<string>('');
+
+  const contactTarget = useMemo(() => {
+    const app = applications.find((a) => a.job_id === selectedJob);
+    if (!app?.job) return null;
+    return {
+      jobKey: app.job.url || app.job.id,
+      jobId: app.job.id,
+      company: app.job.company,
+      jobUrl: app.job.url,
+      employerUrls: [],
+      jobDescription: null,
+    };
+  }, [applications, selectedJob]);
+
+  useEffect(() => {
+    if (!selectedJob && applications[0]?.job_id) setSelectedJob(applications[0].job_id);
+  }, [applications, selectedJob]);
+
 
   const load = async () => {
     if (!user) return;
@@ -103,9 +127,46 @@ export default function FollowUp() {
         ) : (
           <Tabs defaultValue="inbox" className="space-y-4">
             <TabsList>
+              <TabsTrigger value="contacts">Contacts</TabsTrigger>
               <TabsTrigger value="inbox">Detected replies ({detections.length})</TabsTrigger>
               <TabsTrigger value="sent">Sent ({sent.length})</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="contacts" className="space-y-3">
+              <Card>
+                <CardContent className="flex flex-wrap items-center gap-3 py-4">
+                  <span className="text-sm text-muted-foreground">Job</span>
+                  <Select value={selectedJob} onValueChange={setSelectedJob}>
+                    <SelectTrigger className="w-[420px] max-w-full">
+                      <SelectValue placeholder="Choose an application" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {applications
+                        .filter((a) => a.job)
+                        .map((a) => (
+                          <SelectItem key={a.job_id} value={a.job_id}>
+                            {a.job!.title} - {a.job!.company}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </CardContent>
+              </Card>
+
+              {contactTarget ? (
+                <ContactPanel
+                  target={contactTarget}
+                  jobTitle={applications.find((a) => a.job_id === selectedJob)?.job?.title ?? null}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="py-10 text-sm text-muted-foreground">
+                    Choose an application to look for published recruiting contacts.
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
 
             <TabsContent value="inbox" className="space-y-3">
               {detections.length === 0 ? (

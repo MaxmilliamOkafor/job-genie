@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.validate-kimi-key]
 verify_jwt = false
+
+[functions.find-job-contacts]
+verify_jwt = false
