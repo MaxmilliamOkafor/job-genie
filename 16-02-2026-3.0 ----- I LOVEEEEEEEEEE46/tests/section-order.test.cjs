@@ -224,13 +224,19 @@ try { prompt = read('../supabase/functions/tailor-application/index.ts'); } catc
 if (!prompt) {
   console.log('  SKIP  tailoring prompt not present in this checkout');
 } else {
-  const at = (label) => prompt.indexOf('    - ' + label);
+  // The printed order is PROFESSIONAL SUMMARY -> PROFESSIONAL EXPERIENCE ->
+  // TECHNICAL SKILLS -> PROJECTS -> CERTIFICATIONS -> EDUCATION. There is no
+  // CORE COMPETENCIES section any more, and the experience heading is
+  // PROFESSIONAL EXPERIENCE, so the spec is asserted in those terms.
+  const orderLine = (prompt.match(/SECTION ORDER AND HEADINGS: Output sections[^\n]*/) || [''])[0];
+  const at = (label) => orderLine.indexOf(label);
   const spec = [
-    ['CORE COMPETENCIES', at('CORE COMPETENCIES')],
-    ['WORK EXPERIENCE', at('WORK EXPERIENCE')],
+    ['PROFESSIONAL SUMMARY', at('PROFESSIONAL SUMMARY')],
+    ['PROFESSIONAL EXPERIENCE', at('PROFESSIONAL EXPERIENCE')],
     ['TECHNICAL SKILLS', at('TECHNICAL SKILLS')],
+    ['PROJECTS', at('PROJECTS')],
     ['CERTIFICATIONS', at('CERTIFICATIONS')],
-    ['EDUCATION', at('EDUCATION (LAST)')],
+    ['EDUCATION', at('EDUCATION.')],
   ];
   for (const [label, idx] of spec) t('  the spec names ' + label, idx > 0, 'not found');
   const positions = spec.map(([, i]) => i);
@@ -238,7 +244,7 @@ if (!prompt) {
     positions.every((v, i) => i === 0 || v > positions[i - 1]),
     'the spec lists them in a different order: ' + JSON.stringify(positions));
   t('  ...and says why education is last',
-    /EDUCATION \(LAST\)[\s\S]{0,400}?graduate convention/.test(prompt),
+    /EDUCATION IS LAST[\s\S]{0,400}?graduate convention/.test(prompt),
     'without the reason it gets reordered back by the next edit');
 
   console.log('\n  THE JSON SCHEMA MUST NOT PULL THE OTHER WAY');
