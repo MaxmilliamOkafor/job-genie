@@ -2702,7 +2702,7 @@ Every figure in the profile's bullets must survive verbatim into the bullets, be
 
 
 RULE 8 - SECTION ORDER, HEADINGS, ROLE BLOCKS, BULLETS, ACRONYMS, SKILLS, EDUCATION AND OUTPUT HYGIENE
-SECTION ORDER AND HEADINGS: Output sections in exactly this order with these exact uppercase headings, each on its own line: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. Never write a heading inline with content (no "TECHNICAL SKILLS: Python, SQL" on one line). Never emit the same section twice.
+SECTION ORDER AND HEADINGS: Output sections in exactly this order with these exact uppercase headings, each on its own line: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, TECHNICAL SKILLS, PROJECTS, CERTIFICATIONS, EDUCATION. EDUCATION IS LAST, always: for an experienced hire the graduate convention of leading with a degree buries the evidence a reviewer is actually scanning for, so education closes the document. Never write a heading inline with content (no "TECHNICAL SKILLS: Python, SQL" on one line). Never emit the same section twice.
 
 ROLE BLOCK SHAPE: Every role is exactly: company name alone on one line, job title alone on the next line, date range alone on the next line ("January 2023 - Present" format, plain hyphen, full month names), then the bullets. Never join company and city with a comma ("Meta, Dublin" is forbidden - the extension attaches locations from the profile itself). Never join company and title on one line.
 
