@@ -134,13 +134,17 @@ if (!prompt) {
     !/TWO LINES MAXIMUM/.test(prompt),
     'it was removed deliberately: it fought the keyword-density rules the '
       + 'ATS score depends on');
-  t('  the summary is written so passing feels like a mistake',
-    /PASSING WOULD FEEL LIKE A MISTAKE/i.test(prompt));
-  t('  ...with filler phrases banned by name',
-    /results-driven/.test(prompt) && /team player/.test(prompt));
+  // The summary is no longer written to be persuasive; it is written to a
+  // fixed shape (held title, scope clause from the posting, two outcomes
+  // with their own figures) so it can be checked rather than admired.
+  t('  the summary is held to a fixed, checkable shape',
+    /two sentences, 150 to 220 characters/.test(prompt),
+    'without the shape it drifts back into persuasion');
+  t('  ...with filler adjectives banned by name',
+    /results-driven/.test(prompt) && /passionate/.test(prompt));
   t('  ...and still fenced by the evidence rules',
-    /SUBJECT TO RULES -1 AND 0/.test(prompt),
-    'a persuasive summary must not become an inflated one');
+    /NEVER IN THE SUMMARY[\s\S]{0,900}?never invented/.test(prompt),
+    'a summary must not become an inflated one');
   // A quota of "2-3 quantified results per role" sat in the same sentence
   // as "never invent numbers". With a source CV that has fewer, the model
   // can satisfy only one of those -- and it satisfied the quota, inventing
