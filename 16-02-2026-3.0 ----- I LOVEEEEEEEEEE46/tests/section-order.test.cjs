@@ -236,7 +236,7 @@ if (!prompt) {
     ['TECHNICAL SKILLS', at('TECHNICAL SKILLS')],
     ['PROJECTS', at('PROJECTS')],
     ['CERTIFICATIONS', at('CERTIFICATIONS')],
-    ['EDUCATION', at('EDUCATION,')],
+    ['EDUCATION', at('EDUCATION.')],
   ];
   for (const [label, idx] of spec) t('  the spec names ' + label, idx > 0, 'not found');
   const positions = spec.map(([, i]) => i);
