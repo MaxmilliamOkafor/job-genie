@@ -572,8 +572,18 @@ const CANONICAL_CASE: Record<string, string> = {
   "pytest": "pytest", "presto": "Presto", "nltk": "NLTK", "mlflow": "MLflow",
   "xgboost": "XGBoost", "shap": "SHAP", "ifrs 9": "IFRS 9", "aml": "AML",
   "hipaa": "HIPAA", "iso 27001": "ISO 27001", "rbac": "RBAC", "llm": "LLM", "llms": "LLMs",
-  "js": "JS", "tensorflow.js": "TensorFlow.js",
+  "js": "JS", "ts": "TS", "tensorflow.js": "TensorFlow.js",
+  // CASE-LOCKED ACRONYMS. An ATS keyword screen is case-sensitive for these, so
+  // no lowercasing or title-casing pass may touch them. "IT" must never become
+  // "it", and "P&L", "C#" and "C++" keep their punctuation.
+  "ai": "AI", "ml": "ML", "xml": "XML", "yaml": "YAML", "ecs": "ECS",
+  "rds": "RDS", "sre": "SRE", "slo": "SLO", "slos": "SLOs", "sla": "SLA",
+  "slas": "SLAs", "qa": "QA", "ux": "UX", "ui": "UI", "sap": "SAP",
+  "hris": "HRIS", "kyc": "KYC", "gtm": "GTM", "okr": "OKR", "okrs": "OKRs",
+  "p&l": "P&L", "str": "STR", "sop": "SOP", "sops": "SOPs", "adp": "ADP",
+  "php": "PHP", "c": "C", "r": "R", "it": "IT",
 };
+
 
 export interface RequirementList {
   terms: string[];
