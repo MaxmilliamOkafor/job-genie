@@ -3,6 +3,8 @@ import {
   buildRequirementList,
   collapseRequirements,
   isFurniture,
+  isLiftedProse,
+  salvageRequirement,
 } from '../supabase/functions/_shared/evidence.ts';
 
 describe('benefits, logistics and boilerplate are not requirements', () => {
@@ -70,5 +72,46 @@ describe('one entry per requirement, not one per phrasing', () => {
     expect(terms.length).toBeLessThanOrEqual(20);
     expect(terms).toContain('payroll');
     expect(terms).not.toContain('dental');
+  });
+});
+
+describe('lifted prose is not a keyword', () => {
+  it('rejects sentences cut out of the posting', () => {
+    for (const term of [
+      'experience at a competitor',
+      'building for internal users',
+      'experience in a fast-paced environment',
+      'Kubernetes is a plus',
+      'SaaS experience preferred',
+    ]) {
+      expect(isLiftedProse(term)).toBe(true);
+    }
+  });
+
+  it('returns the skill inside the sentence, or nothing', () => {
+    expect(salvageRequirement('Kubernetes is a plus')).toBe('Kubernetes');
+    expect(salvageRequirement('SaaS experience preferred')).toBe('SaaS');
+    expect(salvageRequirement('building for internal users')).toBe('Internal Tools');
+    expect(salvageRequirement('experience with Terraform')).toBe('Terraform');
+    expect(salvageRequirement('experience at a competitor')).toBe(null);
+    expect(salvageRequirement('experience in a fast-paced environment')).toBe(null);
+  });
+
+  it('keeps real requirements, including the as-a-service family', () => {
+    for (const term of ['reliability', 'observability', 'stakeholder management', 'decision making', 'operational efficiency', 'customer success', 'Internal Tools', 'Infrastructure as a Service', 'Platform as a Service', 'software as a service']) {
+      expect(isLiftedProse(term)).toBe(false);
+    }
+  });
+
+  it('drops lifted prose from the requirement list and salvages the skill', () => {
+    const { terms } = buildRequirementList(
+      ['Kubernetes is a plus', 'experience at a competitor', 'building for internal users', 'Terraform', 'observability'],
+      ['Meta'],
+      'Platform Engineer',
+    );
+    expect(terms).toContain('Kubernetes');
+    expect(terms).toContain('Internal Tools');
+    expect(terms).toContain('observability');
+    expect(terms.some((t) => t.toLowerCase().includes('competitor'))).toBe(false);
   });
 });

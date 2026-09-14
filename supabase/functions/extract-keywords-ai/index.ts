@@ -7,7 +7,7 @@ import {
   lookupAiKeyRow,
   type AiErrorCode,
 } from "../_shared/aiErrors.ts";
-import { collapseRequirements, isFurniture } from "../_shared/evidence.ts";
+import { collapseRequirements, isFurniture, isLiftedProse, salvageRequirement } from "../_shared/evidence.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,6 +40,11 @@ NEVER EXTRACT SCREENING CRITERIA as keywords: "7+ years", "5 years experience", 
 Do NOT over-filter: reliability, availability, automation, scalability, observability, collaboration and stakeholder management ARE real requirements on technical and management postings. Keep them.
 
 ONE ENTRY PER REQUIREMENT, NOT ONE PER PHRASING. "payroll", "global payroll" and "payroll management" are one requirement - return the canonical form ("payroll") once. Same for "Linux systems"/"Linux", "AI"/"AI building", and "performance management"/"feedback"/"team performance". Collapse synonyms and qualifier variants, and return the canonical wording rather than the posting's incidental wording. Aim for 12 to 20 distinct requirements in priority_keywords plus required_skills combined; if you are producing 30+ strings, they are not all requirements.
+
+NEVER RETURN A SENTENCE OR CLAUSE LIFTED FROM THE POSTING. A keyword is the NAME of a skill, tool or capability - never a phrase from the job description. These are all WRONG and must never be returned: "experience at a competitor", "building for internal users", "experience in a fast-paced environment", "Kubernetes is a plus", "SaaS experience preferred". No CV contains those strings and no ATS filters on them. Return the SKILL inside the sentence instead: "building for internal users" -> "Internal Tools"; "Kubernetes is a plus" -> "Kubernetes"; "SaaS experience preferred" -> "SaaS"; "experience at a competitor" -> return nothing. Strip every "experience with/in", "knowledge of", "ability to", "is a plus", "preferred", "desirable" wrapper. No pronouns (you, we, our), no articles, no verbs, maximum four words per keyword.
+KEEP these real requirements: reliability, availability, automation, scalability, observability, collaboration, stakeholder management, ownership, decision making, operational efficiency, customer success, internal tools, Infrastructure as a Service, Platform as a Service, software as a service.
+
+
 
 
 Return ONLY valid JSON with this exact structure:
@@ -236,11 +241,18 @@ serve(async (req) => {
     // requirement is returned once rather than once per phrasing. The extension
     // measures coverage against these terms, so a phrasing variant here
     // silently inflates the denominator.
+    // Sentences lifted from the posting are reduced to the skill they name, or
+    // dropped: a chip like "Kubernetes is a plus" can only ever read as a miss.
     const clean = (list: unknown): string[] =>
       collapseRequirements(
-        (Array.isArray(list) ? list : []).map((k) => String(k || "").trim()).filter((k) => k && !isFurniture(k)),
+        (Array.isArray(list) ? list : [])
+          .map((k) => String(k || "").trim())
+          .filter((k) => k && !isFurniture(k))
+          .map((k) => (isLiftedProse(k) ? salvageRequirement(k) : k))
+          .filter((k): k is string => Boolean(k)),
         50,
       ).terms;
+
 
     for (const key of [
       "required_skills", "preferred_skills", "experience_requirements",

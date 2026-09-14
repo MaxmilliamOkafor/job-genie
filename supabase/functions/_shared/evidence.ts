@@ -285,7 +285,105 @@ export function isFurniture(term: string): boolean {
   );
 }
 
+// ============================================================
+// LIFTED PROSE IS NOT A KEYWORD
+//
+// "experience at a competitor", "Kubernetes is a plus" and "building for
+// internal users" are sentences cut out of the posting. No CV contains those
+// strings and no ATS filters on them, so they can only ever show as a
+// permanent miss. Where a sentence names a real skill, the skill is returned
+// on its own; where it names none, nothing is returned.
+// ============================================================
+
+/** Phrases whose meaning IS a skill, even though the posting wrote a sentence. */
+const PROSE_SALVAGE: Record<string, string> = {
+  "building for internal users": "Internal Tools",
+  "building for internal teams": "Internal Tools",
+  "internal users": "Internal Tools",
+  "internal customers": "Internal Tools",
+  "internal tooling": "Internal Tools",
+  "internal tools": "Internal Tools",
+  "internal platforms": "Internal Tools",
+};
+
 /**
+ * Multi-word requirements that legitimately contain an article or a preposition.
+ * "Infrastructure as a Service" is a real requirement; the generic article test
+ * must not delete it.
+ */
+const ARTICLE_ALLOWLIST = new Set([
+  "infrastructure as a service", "platform as a service", "software as a service",
+  "desktop as a service", "database as a service", "function as a service",
+  "everything as a service", "data as a service",
+]);
+
+/** Sentence scaffolding that only ever wraps a requirement, never is one. */
+const PROSE_LEADS = [
+  /^(?:prior|previous|proven|demonstrated|demonstrable|strong|solid|deep|extensive|hands-on|practical|relevant|significant)\s+/,
+  /^(?:experience|experienced|expertise|knowledge|familiarity|familiar|understanding|background|exposure|track record|comfort|comfortable|ability|able|willingness|willing|passion|passionate|interest|interested|desire|proficiency|proficient|fluency|fluent|competence|competency|skills?)\s+(?:at|in|with|of|using|on|for|to|around|across)\s+(?:a|an|the)?\s*/,
+  /^(?:you|we|they|it)\s+/,
+  /^(?:must|should|would)\s+(?:have|be)\s+/,
+];
+
+const PROSE_TAILS = [
+  /\s+(?:is|are|would be|will be)\s+(?:a\s+)?(?:plus|bonus|advantage|benefit|desirable|preferred|required|essential|nice to have)\.?$/,
+  /\s+(?:a\s+)?(?:plus|bonus|advantage|nice to have|preferred|desirable|required|essential|mandatory|beneficial|advantageous)\.?$/,
+  /\s+(?:experience|expertise|knowledge|familiarity|understanding|background|exposure|skills?)\.?$/,
+];
+
+/** Words that only appear when a sentence, not a requirement, was extracted. */
+const PROSE_MARKERS = /\b(?:you|your|we|our|us|they|their|who|whom|whose|will|would|should|must|can|able|ability|willing|willingness|passion|passionate|interested|looking for|seeking|ideally|preferably|etc|environment|competitor|competitors|candidate|candidates)\b/;
+
+/** True when a term is a clause lifted from the posting rather than a requirement. */
+export function isLiftedProse(term: string): boolean {
+  const key = (term || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/\.$/, "");
+  if (!key) return true;
+  if (ARTICLE_ALLOWLIST.has(key)) return false;
+  // A phrase that is already its own canonical skill name is not prose; one that
+  // maps to a different name still needs salvaging.
+  if (PROSE_SALVAGE[key] && PROSE_SALVAGE[key].toLowerCase() === key) return false;
+
+  const words = key.split(" ");
+  // A requirement is a name, not a clause. Five or more words is prose.
+  if (words.length >= 5) return true;
+  if (PROSE_MARKERS.test(key)) return true;
+  // Articles and conjunctions belong to sentences, not to requirement names.
+  if (/(^|\s)(?:a|an|the|and|or|but|that|which|with|for|from|into|about)(\s|$)/.test(key) && words.length > 2) return true;
+  // A finite verb makes it a clause.
+  if (/\b(?:is|are|was|were|has|have|had|do|does|need|needs|require|requires|include|includes|prefer|prefers|help|helps|drive|drives)\b/.test(key)) return true;
+  return false;
+}
+
+/**
+ * Reduces a lifted clause to the requirement it names, or drops it. Returns null
+ * when the sentence names nothing a candidate could evidence.
+ */
+export function salvageRequirement(term: string): string | null {
+  let key = (term || "").trim().replace(/\s+/g, " ").replace(/[.;,]+$/, "");
+  if (!key) return null;
+  const direct = PROSE_SALVAGE[key.toLowerCase()];
+  if (direct) return direct;
+  if (ARTICLE_ALLOWLIST.has(key.toLowerCase())) return key;
+
+  // Peel the sentence scaffolding off, repeatedly: "SaaS experience preferred"
+  // becomes "SaaS", "Kubernetes is a plus" becomes "Kubernetes".
+  for (let pass = 0; pass < 4; pass++) {
+    const before = key;
+    for (const tail of PROSE_TAILS) key = key.replace(tail, "");
+    for (const lead of PROSE_LEADS) key = key.replace(lead, "");
+    key = key.trim().replace(/[.;,]+$/, "");
+    if (key === before) break;
+  }
+  if (!key) return null;
+  const salvaged = PROSE_SALVAGE[key.toLowerCase()];
+  if (salvaged) return salvaged;
+  if (isFurniture(key)) return null;
+  if (isLiftedProse(key)) return null;
+  return key;
+}
+
+/**
+
  * Qualifier words and generic trailing nouns that turn one requirement into
  * three phrasings. "payroll", "global payroll" and "payroll management" are one
  * thing; the stem is what identifies the requirement.
@@ -470,11 +568,22 @@ export function buildRequirementList(
       .replace(/^[^A-Za-z0-9.+#]+|[^A-Za-z0-9.+#)]+$/g, "");
     if (!term) continue;
 
+    // Sentences lifted out of the posting are reduced to the skill they name,
+    // or dropped. "Kubernetes is a plus" is Kubernetes; "experience at a
+    // competitor" is nothing at all.
+    if (isLiftedProse(term)) {
+      const salvaged = salvageRequirement(term);
+      if (!salvaged) { removed.push(term); continue; }
+      if (salvaged.toLowerCase() !== term.toLowerCase()) removed.push(term);
+      term = salvaged;
+    }
+
     const key = term.toLowerCase();
     // Restore the spelling a human would write before the term is reported or
     // written into a document.
     term = CANONICAL_CASE[key] ?? term;
     if (seen.has(key)) continue;
+
     if (key.length < 2) { removed.push(term); continue; }
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
