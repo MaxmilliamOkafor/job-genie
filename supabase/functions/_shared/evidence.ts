@@ -274,8 +274,10 @@ export function isFurniture(term: string): boolean {
   if (FURNITURE_SET.has(key)) return true;
   // These are answered by dated employment/education records or application
   // questions. They are not skills and must not become permanent CV misses.
-  if (/^(?:minimum\s+)?\d+\s*(?:\+|plus)?\s*years?(?:(?:\s+of)?\s+experience)?$/.test(key)) return true;
-  if (/^\d+\s*-\s*\d+\s*years?(?:(?:\s+of)?\s+experience)?$/.test(key)) return true;
+  // "7+ years", "minimum 8 years", "10+ years of relevant experience".
+  const YEARS_TAIL = "(?:\\s+of)?(?:\\s+[a-z-]+){0,3}?\\s+experience";
+  if (new RegExp(`^(?:minimum\\s+|at least\\s+)?\\d+\\s*(?:\\+|plus)?\\s*years?(?:${YEARS_TAIL})?$`).test(key)) return true;
+  if (new RegExp(`^\\d+\\s*-\\s*\\d+\\s*years?(?:${YEARS_TAIL})?$`).test(key)) return true;
   if (/^(?:bachelor(?:'s|s)?|master(?:'s|s)?|doctoral|doctorate|phd)(?:\s+degree)?(?:\s+in\s+.+)?$/.test(key)) return true;
   // Phrases that only ever describe the package or the process.
   return /\b(salary|compensation|benefit|benefits|insurance|401k|pto|vacation|holiday|perk|perks|bonus|equity vest|apply|application process|recruiter|interview process|eoe|equal opportunity)\b/.test(
@@ -325,13 +327,38 @@ const REQUIREMENT_ALIASES: Record<string, string> = {
   "postgres": "PostgreSQL",
 };
 
+/**
+ * Compound modifiers hang off a head noun: "AI-driven" is the same requirement
+ * as "AI". "Remote-first" and "cloud-native" name their own thing, so only the
+ * modifier suffixes listed here are stripped.
+ */
+const MODIFIER_SUFFIXES = ["driven", "focused", "heavy", "based", "led", "oriented", "centric", "intensive", "enabled", "powered"];
+
+/**
+ * Adjective and noun forms of one word are one requirement: "scrappy" and
+ * "scrappiness", "ownership" and "owner". Deliberately narrow so that
+ * "reliability", "availability" and "observability" keep their own identities.
+ */
+function wordStem(word: string): string {
+  let w = word;
+  for (const suffix of MODIFIER_SUFFIXES) {
+    if (w.endsWith(`-${suffix}`)) w = w.slice(0, -(suffix.length + 1));
+  }
+  if (w.length > 5 && w.endsWith("iness")) w = `${w.slice(0, -5)}y`;
+  else if (w.length > 5 && w.endsWith("ness")) w = w.slice(0, -4);
+  if (w.length > 6 && w.endsWith("ship")) w = w.slice(0, -4);
+  if (w.length > 4 && w.endsWith("er")) w = w.slice(0, -2);
+  return w;
+}
+
 function variantStem(term: string): string {
   const words = term
     .toLowerCase()
     .replace(/[^a-z0-9+#./\- ]/g, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .filter((w) => !VARIANT_QUALIFIERS.has(w));
+    .filter((w) => !VARIANT_QUALIFIERS.has(w))
+    .map(wordStem);
   while (words.length > 1 && GENERIC_TAILS.has(words[words.length - 1])) words.pop();
   const stem = words.join(" ");
   // Never collapse a term to nothing, and never merge single words that mean

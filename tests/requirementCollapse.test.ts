@@ -19,9 +19,33 @@ describe('benefits, logistics and boilerplate are not requirements', () => {
   });
 
   it('drops experience-duration and generic degree screening criteria', () => {
-    for (const term of ['7+ years', '5 years experience', '3-5 years', 'minimum 8 years', "Bachelor's degree"]) {
+    for (const term of ['7+ years', '5 years experience', '3-5 years', 'minimum 8 years', "Bachelor's degree", '10+ years of relevant experience']) {
       expect(isFurniture(term)).toBe(true);
     }
+  });
+
+  it('keeps ownership, decision making, operational efficiency and customer success', () => {
+    for (const term of ['ownership', 'decision making', 'operational efficiency', 'customer success']) {
+      expect(isFurniture(term)).toBe(false);
+    }
+  });
+});
+
+describe('word forms and compound modifiers are one requirement', () => {
+  it('collapses adjective and noun forms', () => {
+    expect(collapseRequirements(['scrappy', 'scrappiness']).terms).toEqual(['scrappy']);
+    expect(collapseRequirements(['ownership', 'owner']).terms.length).toBe(1);
+  });
+
+  it('collapses a compound modifier onto its head noun', () => {
+    expect(collapseRequirements(['AI', 'AI-driven']).terms).toEqual(['AI']);
+    expect(collapseRequirements(['data-driven', 'data']).terms.length).toBe(1);
+    expect(collapseRequirements(['SQL', 'SQL-heavy']).terms).toEqual(['SQL']);
+  });
+
+  it('leaves terms that name their own thing separate', () => {
+    expect(collapseRequirements(['Remote-first', 'cloud-native']).terms.length).toBe(2);
+    expect(collapseRequirements(['reliability', 'availability', 'observability']).terms.length).toBe(3);
   });
 });
 
