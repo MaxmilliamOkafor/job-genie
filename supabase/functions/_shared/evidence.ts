@@ -399,7 +399,9 @@ export function salvageRequirement(term: string): string | null {
   const salvaged = PROSE_SALVAGE[key.toLowerCase()];
   if (salvaged) return salvaged;
   if (isFurniture(key)) return null;
+  if (DEAD_SALVAGE.test(key.toLowerCase())) return null;
   if (isLiftedProse(key)) return null;
+
   return key;
 }
 
