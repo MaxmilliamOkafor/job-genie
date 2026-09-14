@@ -321,9 +321,17 @@ const ARTICLE_ALLOWLIST = new Set([
 const PROSE_LEADS = [
   /^(?:prior|previous|proven|demonstrated|demonstrable|strong|solid|deep|extensive|hands-on|practical|relevant|significant)\s+/,
   /^(?:experience|experienced|expertise|knowledge|familiarity|familiar|understanding|background|exposure|track record|comfort|comfortable|ability|able|willingness|willing|passion|passionate|interest|interested|desire|proficiency|proficient|fluency|fluent|competence|competency|skills?)\s+(?:at|in|with|of|using|on|for|to|around|across)\s+(?:a|an|the)?\s*/,
+  /^(?:worked|working|work)\s+(?:at|in|with|on|for|across)\s+(?:a|an|the)?\s*/,
   /^(?:you|we|they|it)\s+/,
   /^(?:must|should|would)\s+(?:have|be)\s+/,
 ];
+
+/**
+ * Words a salvage can land on that name nothing a candidate could evidence.
+ * "experience at a competitor" reduces to "competitor", which is not a skill.
+ */
+const DEAD_SALVAGE = /\b(?:competitor|competitors|startup|startups|scaleup|environment|environments|candidate|candidates|company|companies|team player|degree|culture|setting|workplace)\b/;
+
 
 const PROSE_TAILS = [
   /\s+(?:is|are|would be|will be)\s+(?:a\s+)?(?:plus|bonus|advantage|benefit|desirable|preferred|required|essential|nice to have)\.?$/,
@@ -331,10 +339,24 @@ const PROSE_TAILS = [
   /\s+(?:experience|expertise|knowledge|familiarity|understanding|background|exposure|skills?)\.?$/,
 ];
 
-/** Words that only appear when a sentence, not a requirement, was extracted. */
-const PROSE_MARKERS = /\b(?:you|your|we|our|us|they|their|who|whom|whose|will|would|should|must|can|able|ability|willing|willingness|passion|passionate|interested|looking for|seeking|ideally|preferably|etc|environment|competitor|competitors|candidate|candidates)\b/;
+/** Pronouns only ever appear when a sentence, not a requirement, was extracted. */
+const PROSE_MARKERS = /\b(?:you|your|we|our|us|they|their|them|who|whom|whose)\b/;
 
-/** True when a term is a clause lifted from the posting rather than a requirement. */
+/** Experience wording that, followed later by an article, marks a lifted clause. */
+const EXPERIENCE_OPENER = /^(?:prior|previous|proven|demonstrated|demonstrable|strong|solid|deep|extensive|hands-on|practical|relevant|significant)?\s*(?:experience|experienced|experiences|worked|working|work|background|familiarity|familiar|exposure|knowledge|understanding|comfortable|comfort|proven)\b/;
+
+/** Preference wording: a requirement is never phrased as a preference. */
+const PREFERENCE_WORDING = /\b(?:preferably|ideally|nice to have|nice-to-have|bonus)\b|\bis\s+a\s+plus\b|\b(?:preferred|desirable)\s*\.?$/;
+
+/**
+ * True when a term is a clause lifted from the posting rather than a requirement.
+ *
+ * Deliberately narrow: filtering out a real skill is unrecoverable downstream,
+ * while a stray chip is merely visible. So there is no verb rule (gerunds such
+ * as "Machine Learning" and "Automated Testing" are noun phrases) and no
+ * word-count rule (certifications like "AWS Certified Solutions Architect
+ * Associate" run to five words). When in doubt, let it through.
+ */
 export function isLiftedProse(term: string): boolean {
   const key = (term || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/\.$/, "");
   if (!key) return true;
@@ -343,16 +365,15 @@ export function isLiftedProse(term: string): boolean {
   // maps to a different name still needs salvaging.
   if (PROSE_SALVAGE[key] && PROSE_SALVAGE[key].toLowerCase() === key) return false;
 
-  const words = key.split(" ");
-  // A requirement is a name, not a clause. Five or more words is prose.
-  if (words.length >= 5) return true;
   if (PROSE_MARKERS.test(key)) return true;
-  // Articles and conjunctions belong to sentences, not to requirement names.
-  if (/(^|\s)(?:a|an|the|and|or|but|that|which|with|for|from|into|about)(\s|$)/.test(key) && words.length > 2) return true;
-  // A finite verb makes it a clause.
-  if (/\b(?:is|are|was|were|has|have|had|do|does|need|needs|require|requires|include|includes|prefer|prefers|help|helps|drive|drives)\b/.test(key)) return true;
+  if (PREFERENCE_WORDING.test(key)) return true;
+  // "experience at a competitor", "worked at a startup", "experience in a
+  // fast-paced environment": experience wording plus an article. "experience
+  // with Python" and "Infrastructure as a Service" are untouched.
+  if (EXPERIENCE_OPENER.test(key) && /(^|\s)(?:a|an|the)(\s|$)/.test(key.replace(EXPERIENCE_OPENER, ""))) return true;
   return false;
 }
+
 
 /**
  * Reduces a lifted clause to the requirement it names, or drops it. Returns null
@@ -378,7 +399,9 @@ export function salvageRequirement(term: string): string | null {
   const salvaged = PROSE_SALVAGE[key.toLowerCase()];
   if (salvaged) return salvaged;
   if (isFurniture(key)) return null;
+  if (DEAD_SALVAGE.test(key.toLowerCase())) return null;
   if (isLiftedProse(key)) return null;
+
   return key;
 }
 
@@ -571,7 +594,7 @@ export function buildRequirementList(
     // Sentences lifted out of the posting are reduced to the skill they name,
     // or dropped. "Kubernetes is a plus" is Kubernetes; "experience at a
     // competitor" is nothing at all.
-    if (isLiftedProse(term)) {
+    if (isLiftedProse(term) || PROSE_SALVAGE[term.toLowerCase().trim()]) {
       const salvaged = salvageRequirement(term);
       if (!salvaged) { removed.push(term); continue; }
       if (salvaged.toLowerCase() !== term.toLowerCase()) removed.push(term);

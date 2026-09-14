@@ -76,15 +76,28 @@ describe('one entry per requirement, not one per phrasing', () => {
 });
 
 describe('lifted prose is not a keyword', () => {
-  it('rejects sentences cut out of the posting', () => {
+  it('rejects experience wording with an article, and preference wording', () => {
     for (const term of [
       'experience at a competitor',
-      'building for internal users',
+      'worked at a startup',
       'experience in a fast-paced environment',
+      'preferably a degree',
       'Kubernetes is a plus',
       'SaaS experience preferred',
     ]) {
       expect(isLiftedProse(term)).toBe(true);
+    }
+  });
+
+  it('never filters a gerund skill, a long certification or plain experience wording', () => {
+    for (const term of [
+      'Machine Learning', 'Deep Learning', 'Data Engineering', 'Data Modelling',
+      'Software Engineering', 'Natural Language Processing', 'Automated Testing',
+      'Unit Testing', 'Shell Scripting', 'Monitoring', 'Forecasting', 'Spring Boot',
+      'AWS Certified Solutions Architect Associate', 'Managing a Team',
+      'experience with Python', 'working knowledge of SQL',
+    ]) {
+      expect(isLiftedProse(term)).toBe(false);
     }
   });
 
@@ -95,6 +108,7 @@ describe('lifted prose is not a keyword', () => {
     expect(salvageRequirement('experience with Terraform')).toBe('Terraform');
     expect(salvageRequirement('experience at a competitor')).toBe(null);
     expect(salvageRequirement('experience in a fast-paced environment')).toBe(null);
+    expect(salvageRequirement('worked at a startup')).toBe(null);
   });
 
   it('keeps real requirements, including the as-a-service family', () => {
