@@ -151,3 +151,40 @@ describe("the posting's own shorthand is returned, not a long form", () => {
     expect(terms).toContain('AML');
   });
 });
+
+describe('recognised names survive, lifted fragments do not', () => {
+  it('keeps the five names that collide with an article/pronoun rule', () => {
+    const names = [
+      'Infrastructure as Code',
+      'Software as a Service',
+      'Know Your Customer',
+      'A/B Testing',
+      'Managing a Team',
+    ];
+    for (const name of names) {
+      expect(isLiftedProse(name)).toBe(false);
+      const { terms } = buildRequirementList([name], [], '');
+      expect(terms.length).toBe(1);
+    }
+  });
+
+  it('still drops fragments lifted out of a paragraph', () => {
+    for (const frag of ['experience with a modern stack', 'you will be working with']) {
+      const { terms } = buildRequirementList([frag], [], '');
+      expect(terms.some((t) => t.toLowerCase() === frag)).toBe(false);
+    }
+  });
+});
+
+describe('acronym case is never altered', () => {
+  it('returns each case-locked acronym exactly', () => {
+    const locked = ['AI','ML','NLP','LLM','SQL','HTML','CSS','JSON','XML','YAML','AWS','GCP','EKS','ECS','RDS','SRE','SLO','SLA','ETL','ELT','KPI','QA','UX','CI/CD','REST','SAP','HRIS','AML','KYC','GTM','OKR','P&L','STR','SOP','ADP','PHP','C','C#','C++','R','JS','TS','IT'];
+    const { terms } = buildRequirementList(locked, [], '');
+    for (const acronym of locked) expect(terms).toContain(acronym);
+  });
+
+  it('never lowercases IT and never strips punctuation from P&L, C# or C++', () => {
+    const { terms } = buildRequirementList(['it', 'p&l', 'c#', 'c++'], [], '');
+    expect(terms).toEqual(['IT', 'P&L', 'C#', 'C++']);
+  });
+});
