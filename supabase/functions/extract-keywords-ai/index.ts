@@ -15,7 +15,11 @@ const corsHeaders = {
 };
 
 // Resume-Matcher style structured keyword extraction prompt
-const EXTRACT_KEYWORDS_PROMPT = `You are an expert ATS (Applicant Tracking System) keyword extractor. Analyse the job description and extract structured keywords that are critical for CV matching.
+const EXTRACT_KEYWORDS_PROMPT = `You are an expert ATS (Applicant Tracking System) keyword extractor. Analyse the job description and LIST EVERY DISTINCT SKILL, TOOL OR CAPABILITY THIS POSTING ASKS FOR, INCLUDING ANY THAT APPEAR ONLY ONCE.
+
+COMPLETENESS BEFORE IMPORTANCE: frequency and prominence ORDER the result, they do NOT decide what is in it. A requirement stated a single time in the responsibilities is still a requirement and MUST be returned - e.g. "a team that ships well" -> "Delivery"; "two roadmaps with one team" -> "Roadmap Management"; "you can judge a technical tradeoff" -> "Technical Tradeoffs". A requirement you never return can never be matched or counted, so omission is the one failure nothing downstream can repair. When in doubt, include it.
+A word that appears ONLY in the benefits, culture or company-description paragraphs is NOT a requirement - keep excluding those.
+
 
 CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
 ALL output MUST use British English spelling. This is NON-NEGOTIABLE.
