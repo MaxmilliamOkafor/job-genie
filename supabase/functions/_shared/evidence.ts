@@ -565,11 +565,22 @@ export function buildRequirementList(
       .replace(/^[^A-Za-z0-9.+#]+|[^A-Za-z0-9.+#)]+$/g, "");
     if (!term) continue;
 
+    // Sentences lifted out of the posting are reduced to the skill they name,
+    // or dropped. "Kubernetes is a plus" is Kubernetes; "experience at a
+    // competitor" is nothing at all.
+    if (isLiftedProse(term)) {
+      const salvaged = salvageRequirement(term);
+      if (!salvaged) { removed.push(term); continue; }
+      if (salvaged.toLowerCase() !== term.toLowerCase()) removed.push(term);
+      term = salvaged;
+    }
+
     const key = term.toLowerCase();
     // Restore the spelling a human would write before the term is reported or
     // written into a document.
     term = CANONICAL_CASE[key] ?? term;
     if (seen.has(key)) continue;
+
     if (key.length < 2) { removed.push(term); continue; }
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
