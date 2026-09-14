@@ -129,3 +129,25 @@ describe('lifted prose is not a keyword', () => {
     expect(terms.some((t) => t.toLowerCase().includes('competitor'))).toBe(false);
   });
 });
+
+describe("the posting's own shorthand is returned, not a long form", () => {
+  it('keeps Postgres and K8s exactly as the posting wrote them', () => {
+    const { terms } = buildRequirementList(['Postgres', 'K8s'], [], '');
+    expect(terms).toEqual(['Postgres', 'K8s']);
+  });
+
+  it('still keeps the long forms when the posting uses those instead', () => {
+    const { terms } = buildRequirementList(['PostgreSQL', 'Kubernetes'], [], '');
+    expect(terms).toEqual(['PostgreSQL', 'Kubernetes']);
+  });
+
+  it('keeps short compliance acronyms on a fintech posting', () => {
+    const { terms } = buildRequirementList(
+      ['KYC', 'AML', 'sanctions screening', 'transaction monitoring', 'Python'],
+      ['Mercury'],
+      'Compliance Analyst',
+    );
+    expect(terms).toContain('KYC');
+    expect(terms).toContain('AML');
+  });
+});
