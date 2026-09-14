@@ -632,7 +632,10 @@ export function buildRequirementList(
     term = CANONICAL_CASE[key] ?? term;
     if (seen.has(key)) continue;
 
-    if (key.length < 2) { removed.push(term); continue; }
+    // "C" and "R" are languages an ATS screens on, so the minimum-length rule
+    // has to spare them.
+    if (key.length < 2 && !SINGLE_LETTER_SKILLS.has(key)) { removed.push(term); continue; }
+
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
     if (isFurniture(key)) { removed.push(term); continue; }
