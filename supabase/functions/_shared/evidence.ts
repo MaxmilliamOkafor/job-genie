@@ -594,7 +594,7 @@ export function buildRequirementList(
     // Sentences lifted out of the posting are reduced to the skill they name,
     // or dropped. "Kubernetes is a plus" is Kubernetes; "experience at a
     // competitor" is nothing at all.
-    if (isLiftedProse(term)) {
+    if (isLiftedProse(term) || PROSE_SALVAGE[term.toLowerCase().trim()]) {
       const salvaged = salvageRequirement(term);
       if (!salvaged) { removed.push(term); continue; }
       if (salvaged.toLowerCase() !== term.toLowerCase()) removed.push(term);
