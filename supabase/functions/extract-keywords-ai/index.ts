@@ -15,7 +15,11 @@ const corsHeaders = {
 };
 
 // Resume-Matcher style structured keyword extraction prompt
-const EXTRACT_KEYWORDS_PROMPT = `You are an expert ATS (Applicant Tracking System) keyword extractor. Analyse the job description and extract structured keywords that are critical for CV matching.
+const EXTRACT_KEYWORDS_PROMPT = `You are an expert ATS (Applicant Tracking System) keyword extractor. Analyse the job description and LIST EVERY DISTINCT SKILL, TOOL OR CAPABILITY THIS POSTING ASKS FOR, INCLUDING ANY THAT APPEAR ONLY ONCE.
+
+COMPLETENESS BEFORE IMPORTANCE: frequency and prominence ORDER the result, they do NOT decide what is in it. A requirement stated a single time in the responsibilities is still a requirement and MUST be returned - e.g. "a team that ships well" -> "Delivery"; "two roadmaps with one team" -> "Roadmap Management"; "you can judge a technical tradeoff" -> "Technical Tradeoffs". A requirement you never return can never be matched or counted, so omission is the one failure nothing downstream can repair. When in doubt, include it.
+A word that appears ONLY in the benefits, culture or company-description paragraphs is NOT a requirement - keep excluding those.
+
 
 CRITICAL LANGUAGE RULE - BRITISH ENGLISH ONLY:
 ALL output MUST use British English spelling. This is NON-NEGOTIABLE.
@@ -32,17 +36,22 @@ Extract keywords into these categories:
 7. tools_and_platforms: Specific tools, platforms, and software mentioned
 8. industry_keywords: Industry-specific terminology and buzzwords
 
-For each category, extract the most important keywords as an array of strings.
-Also provide a "priority_keywords" array with the TOP 15 most critical keywords for ATS matching (ranked by importance).
+For each category, list EVERY keyword the posting asks for, ordered with the most prominent first.
+Also provide a "priority_keywords" array with the most critical keywords for ATS matching, ranked by importance. priority_keywords ORDERS the requirements; it does not shorten the full lists.
+
 
 NEVER EXTRACT BENEFITS, LOGISTICS OR BOILERPLATE. These are not requirements and a candidate cannot evidence them: competitive salary, 401k, dental, vision, paid time off, PTO, health insurance, stock options, bonus, full-time, part-time, hybrid, remote, equal opportunity, fast-paced, apply now, submit resume, notice period, visa sponsorship, pension.
 NEVER EXTRACT SCREENING CRITERIA as keywords: "7+ years", "5 years experience", "3-5 years", "minimum 8 years", "Bachelor's degree", or equivalent duration and generic degree checks. Employment dates and education records answer these separately; they do not belong on a skills line.
 Do NOT over-filter: reliability, availability, automation, scalability, observability, collaboration and stakeholder management ARE real requirements on technical and management postings. Keep them.
 
-ONE ENTRY PER REQUIREMENT, NOT ONE PER PHRASING. "payroll", "global payroll" and "payroll management" are one requirement - return the canonical form ("payroll") once. Same for "Linux systems"/"Linux", "AI"/"AI building", and "performance management"/"feedback"/"team performance". Collapse synonyms and qualifier variants, and return the canonical wording rather than the posting's incidental wording. Aim for 12 to 20 distinct requirements in priority_keywords plus required_skills combined; if you are producing 30+ strings, they are not all requirements.
+ONE ENTRY PER REQUIREMENT, NOT ONE PER PHRASING. "payroll", "global payroll" and "payroll management" are one requirement - return the canonical form ("payroll") once. Same for "Linux systems"/"Linux", "AI"/"AI building", and "performance management"/"feedback"/"team performance". Collapse synonyms and qualifier variants. Collapsing duplicate PHRASINGS is required; dropping a DISTINCT requirement because the posting mentioned it once is forbidden.
 
-NEVER RETURN A SENTENCE OR CLAUSE LIFTED FROM THE POSTING. A keyword is the NAME of a skill, tool, capability or certification - never a phrase from the job description. These are all WRONG and must never be returned: "experience at a competitor", "worked at a startup", "experience in a fast-paced environment", "preferably a degree", "Kubernetes is a plus", "SaaS experience preferred". No CV contains those strings and no ATS filters on them. Return the SKILL inside the sentence instead: "building for internal users" -> "Internal Tools"; "Kubernetes is a plus" -> "Kubernetes"; "SaaS experience preferred" -> "SaaS"; "experience at a competitor" -> return nothing. Strip every "is a plus", "preferred", "desirable", "preferably", "ideally", "nice to have" wrapper, and never open a keyword with experience wording followed by an article. No pronouns (you, we, our).
+RETURN THE POSTING'S OWN STRING. If the posting says "Postgres", return "Postgres", not "PostgreSQL"; "K8s" stays "K8s". A literal keyword screen searches for the string the posting wrote.
+NEVER CHANGE THE CASE OF AN ACRONYM. Return exactly: AI, ML, NLP, LLM, SQL, HTML, CSS, JSON, XML, YAML, AWS, GCP, EKS, ECS, RDS, SRE, SLO, SLA, ETL, ELT, KPI, QA, UX, CI/CD, REST, SAP, HRIS, AML, KYC, GTM, OKR, P&L, STR, SOP, ADP, PHP, C, C#, C++, R, JS, TS, IT. "IT" must never be written "it", and P&L, C# and C++ keep their punctuation.
+
+NEVER RETURN A SENTENCE OR CLAUSE LIFTED FROM THE POSTING. The test is "is this a sentence or a clause", NOT "does it contain an article or a pronoun". If the string is a recognised NAME for a skill, tool, regulation or methodology, KEEP IT whatever words it contains: Infrastructure as Code, Software as a Service, Know Your Customer, A/B Testing, Managing a Team. If it reads as a fragment lifted out of a paragraph ("experience with a modern stack", "you will be working with", "experience at a competitor", "worked at a startup", "Kubernetes is a plus", "SaaS experience preferred"), return the SKILL inside it or nothing: "building for internal users" -> "Internal Tools"; "Kubernetes is a plus" -> "Kubernetes"; "SaaS experience preferred" -> "SaaS"; "experience at a competitor" -> nothing. Strip "is a plus", "preferred", "desirable", "preferably", "ideally", "nice to have" wrappers.
 DO RETURN gerund skill names and full certification names in full: Machine Learning, Deep Learning, Data Engineering, Software Engineering, Natural Language Processing, Automated Testing, Unit Testing, Shell Scripting, Monitoring, Forecasting, AWS Certified Solutions Architect Associate, Certified Information Systems Security Professional. Length is not a fault; a real requirement is never dropped for being five words long.
+
 
 KEEP these real requirements: reliability, availability, automation, scalability, observability, collaboration, stakeholder management, ownership, decision making, operational efficiency, customer success, internal tools, Infrastructure as a Service, Platform as a Service, software as a service.
 
@@ -277,17 +286,19 @@ serve(async (req) => {
       ...(keywords.soft_skills || []),
     ];
 
-    // One entry per requirement: 12-20 is the honest range for a typical posting.
-    const uniqueKeywords = collapseRequirements(allKeywords, 20).terms;
-    const highPriority: string[] = collapseRequirements(keywords.priority_keywords || [], 15).terms;
+    // Duplicate phrasings collapse, but a distinct requirement is never cut for
+    // being past a cap: an unextracted requirement can never be matched.
+    const uniqueKeywords = collapseRequirements(allKeywords, 60).terms;
+    const highPriority: string[] = collapseRequirements(keywords.priority_keywords || [], 25).terms;
     const mediumPriority: string[] = collapseRequirements(
       [...(keywords.required_skills || []), ...(keywords.tools_and_platforms || [])],
-      20,
+      40,
     ).terms.filter((k: string) => !highPriority.some((h) => h.toLowerCase() === k.toLowerCase()));
     const lowPriority: string[] = collapseRequirements(
       [...(keywords.preferred_skills || []), ...(keywords.soft_skills || [])],
-      15,
+      30,
     ).terms.filter((k: string) =>
+
       !highPriority.some((h) => h.toLowerCase() === k.toLowerCase()) &&
       !mediumPriority.some((m) => m.toLowerCase() === k.toLowerCase())
     );

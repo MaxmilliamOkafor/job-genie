@@ -307,15 +307,25 @@ const PROSE_SALVAGE: Record<string, string> = {
 };
 
 /**
- * Multi-word requirements that legitimately contain an article or a preposition.
- * "Infrastructure as a Service" is a real requirement; the generic article test
- * must not delete it.
+ * Recognised NAMES of skills, tools, regulations and methodologies. A name is
+ * kept whatever words it happens to contain: "Know Your Customer" is the KYC
+ * regulation, "Software as a Service" is SaaS, "A/B Testing" is a method.
+ * The test is "is this a sentence or a clause", not "does it contain an article
+ * or a pronoun" - a generic article/pronoun test destroys real skills.
  */
-const ARTICLE_ALLOWLIST = new Set([
+const NAMED_SKILLS = new Set([
   "infrastructure as a service", "platform as a service", "software as a service",
   "desktop as a service", "database as a service", "function as a service",
   "everything as a service", "data as a service",
+  "infrastructure as code", "configuration as code", "policy as code",
+  "know your customer", "know your business", "know your customer (kyc)",
+  "a/b testing", "a/b tests", "managing a team", "managing a p&l",
+  "leading a team", "building a team", "voice of the customer",
+  "train the trainer", "the cloud",
 ]);
+/** Backwards-compatible alias: the article test became a named-skill test. */
+const ARTICLE_ALLOWLIST = NAMED_SKILLS;
+
 
 /** Sentence scaffolding that only ever wraps a requirement, never is one. */
 const PROSE_LEADS = [
@@ -491,7 +501,10 @@ function variantStem(term: string): string {
  * canonical form, so a posting saying "payroll", "global payroll" and "payroll
  * management" contributes one requirement rather than three.
  */
-export function collapseRequirements(terms: string[], max = 20): { terms: string[]; removed: string[] } {
+// Duplicate PHRASINGS collapse here; a distinct requirement is never cut for
+// sitting past a cap, so the default ceiling is generous rather than tight.
+export function collapseRequirements(terms: string[], max = 60): { terms: string[]; removed: string[] } {
+
   const removed: string[] = [];
   const byStem = new Map<string, string>();
   for (const raw of terms) {
@@ -562,10 +575,24 @@ const CANONICAL_CASE: Record<string, string> = {
   "pytest": "pytest", "presto": "Presto", "nltk": "NLTK", "mlflow": "MLflow",
   "xgboost": "XGBoost", "shap": "SHAP", "ifrs 9": "IFRS 9", "aml": "AML",
   "hipaa": "HIPAA", "iso 27001": "ISO 27001", "rbac": "RBAC", "llm": "LLM", "llms": "LLMs",
-  "js": "JS", "tensorflow.js": "TensorFlow.js",
+  "js": "JS", "ts": "TS", "tensorflow.js": "TensorFlow.js",
+  // CASE-LOCKED ACRONYMS. An ATS keyword screen is case-sensitive for these, so
+  // no lowercasing or title-casing pass may touch them. "IT" must never become
+  // "it", and "P&L", "C#" and "C++" keep their punctuation.
+  "ai": "AI", "ml": "ML", "xml": "XML", "yaml": "YAML", "ecs": "ECS",
+  "rds": "RDS", "sre": "SRE", "slo": "SLO", "slos": "SLOs", "sla": "SLA",
+  "slas": "SLAs", "qa": "QA", "ux": "UX", "ui": "UI", "sap": "SAP",
+  "hris": "HRIS", "kyc": "KYC", "gtm": "GTM", "okr": "OKR", "okrs": "OKRs",
+  "p&l": "P&L", "str": "STR", "sop": "SOP", "sops": "SOPs", "adp": "ADP",
+  "php": "PHP", "c": "C", "r": "R", "it": "IT",
 };
 
+
+/** Single-letter names that really are skills. */
+const SINGLE_LETTER_SKILLS = new Set(["c", "r"]);
+
 export interface RequirementList {
+
   terms: string[];
   removed: string[];
 }
@@ -609,7 +636,10 @@ export function buildRequirementList(
     term = CANONICAL_CASE[key] ?? term;
     if (seen.has(key)) continue;
 
-    if (key.length < 2) { removed.push(term); continue; }
+    // "C" and "R" are languages an ATS screens on, so the minimum-length rule
+    // has to spare them.
+    if (key.length < 2 && !SINGLE_LETTER_SKILLS.has(key)) { removed.push(term); continue; }
+
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
     if (isFurniture(key)) { removed.push(term); continue; }
