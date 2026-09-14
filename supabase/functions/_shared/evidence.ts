@@ -501,7 +501,10 @@ function variantStem(term: string): string {
  * canonical form, so a posting saying "payroll", "global payroll" and "payroll
  * management" contributes one requirement rather than three.
  */
-export function collapseRequirements(terms: string[], max = 20): { terms: string[]; removed: string[] } {
+// Duplicate PHRASINGS collapse here; a distinct requirement is never cut for
+// sitting past a cap, so the default ceiling is generous rather than tight.
+export function collapseRequirements(terms: string[], max = 60): { terms: string[]; removed: string[] } {
+
   const removed: string[] = [];
   const byStem = new Map<string, string>();
   for (const raw of terms) {
