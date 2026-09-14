@@ -321,9 +321,17 @@ const ARTICLE_ALLOWLIST = new Set([
 const PROSE_LEADS = [
   /^(?:prior|previous|proven|demonstrated|demonstrable|strong|solid|deep|extensive|hands-on|practical|relevant|significant)\s+/,
   /^(?:experience|experienced|expertise|knowledge|familiarity|familiar|understanding|background|exposure|track record|comfort|comfortable|ability|able|willingness|willing|passion|passionate|interest|interested|desire|proficiency|proficient|fluency|fluent|competence|competency|skills?)\s+(?:at|in|with|of|using|on|for|to|around|across)\s+(?:a|an|the)?\s*/,
+  /^(?:worked|working|work)\s+(?:at|in|with|on|for|across)\s+(?:a|an|the)?\s*/,
   /^(?:you|we|they|it)\s+/,
   /^(?:must|should|would)\s+(?:have|be)\s+/,
 ];
+
+/**
+ * Words a salvage can land on that name nothing a candidate could evidence.
+ * "experience at a competitor" reduces to "competitor", which is not a skill.
+ */
+const DEAD_SALVAGE = /\b(?:competitor|competitors|startup|startups|scaleup|environment|environments|candidate|candidates|company|companies|team player|degree|culture|setting|workplace)\b/;
+
 
 const PROSE_TAILS = [
   /\s+(?:is|are|would be|will be)\s+(?:a\s+)?(?:plus|bonus|advantage|benefit|desirable|preferred|required|essential|nice to have)\.?$/,
