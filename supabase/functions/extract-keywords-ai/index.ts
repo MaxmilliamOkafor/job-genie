@@ -36,8 +36,9 @@ Extract keywords into these categories:
 7. tools_and_platforms: Specific tools, platforms, and software mentioned
 8. industry_keywords: Industry-specific terminology and buzzwords
 
-For each category, extract the most important keywords as an array of strings.
-Also provide a "priority_keywords" array with the TOP 15 most critical keywords for ATS matching (ranked by importance).
+For each category, list EVERY keyword the posting asks for, ordered with the most prominent first.
+Also provide a "priority_keywords" array with the most critical keywords for ATS matching, ranked by importance. priority_keywords ORDERS the requirements; it does not shorten the full lists.
+
 
 NEVER EXTRACT BENEFITS, LOGISTICS OR BOILERPLATE. These are not requirements and a candidate cannot evidence them: competitive salary, 401k, dental, vision, paid time off, PTO, health insurance, stock options, bonus, full-time, part-time, hybrid, remote, equal opportunity, fast-paced, apply now, submit resume, notice period, visa sponsorship, pension.
 NEVER EXTRACT SCREENING CRITERIA as keywords: "7+ years", "5 years experience", "3-5 years", "minimum 8 years", "Bachelor's degree", or equivalent duration and generic degree checks. Employment dates and education records answer these separately; they do not belong on a skills line.
