@@ -241,11 +241,18 @@ serve(async (req) => {
     // requirement is returned once rather than once per phrasing. The extension
     // measures coverage against these terms, so a phrasing variant here
     // silently inflates the denominator.
+    // Sentences lifted from the posting are reduced to the skill they name, or
+    // dropped: a chip like "Kubernetes is a plus" can only ever read as a miss.
     const clean = (list: unknown): string[] =>
       collapseRequirements(
-        (Array.isArray(list) ? list : []).map((k) => String(k || "").trim()).filter((k) => k && !isFurniture(k)),
+        (Array.isArray(list) ? list : [])
+          .map((k) => String(k || "").trim())
+          .filter((k) => k && !isFurniture(k))
+          .map((k) => (isLiftedProse(k) ? salvageRequirement(k) : k))
+          .filter((k): k is string => Boolean(k)),
         50,
       ).terms;
+
 
     for (const key of [
       "required_skills", "preferred_skills", "experience_requirements",
