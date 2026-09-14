@@ -307,15 +307,25 @@ const PROSE_SALVAGE: Record<string, string> = {
 };
 
 /**
- * Multi-word requirements that legitimately contain an article or a preposition.
- * "Infrastructure as a Service" is a real requirement; the generic article test
- * must not delete it.
+ * Recognised NAMES of skills, tools, regulations and methodologies. A name is
+ * kept whatever words it happens to contain: "Know Your Customer" is the KYC
+ * regulation, "Software as a Service" is SaaS, "A/B Testing" is a method.
+ * The test is "is this a sentence or a clause", not "does it contain an article
+ * or a pronoun" - a generic article/pronoun test destroys real skills.
  */
-const ARTICLE_ALLOWLIST = new Set([
+const NAMED_SKILLS = new Set([
   "infrastructure as a service", "platform as a service", "software as a service",
   "desktop as a service", "database as a service", "function as a service",
   "everything as a service", "data as a service",
+  "infrastructure as code", "configuration as code", "policy as code",
+  "know your customer", "know your business", "know your customer (kyc)",
+  "a/b testing", "a/b tests", "managing a team", "managing a p&l",
+  "leading a team", "building a team", "voice of the customer",
+  "train the trainer", "the cloud",
 ]);
+/** Backwards-compatible alias: the article test became a named-skill test. */
+const ARTICLE_ALLOWLIST = NAMED_SKILLS;
+
 
 /** Sentence scaffolding that only ever wraps a requirement, never is one. */
 const PROSE_LEADS = [
