@@ -445,7 +445,6 @@ const REQUIREMENT_ALIASES: Record<string, string> = {
   "continuous integration": "CI/CD",
   "continuous delivery": "CI/CD",
   "continuous deployment": "CI/CD",
-  "postgres": "PostgreSQL",
 };
 
 /**
@@ -541,6 +540,9 @@ function looksLikeJobTitle(key: string): boolean {
  * title-cases what it finds, which turned real requirements into "Etl", "Dbt"
  * and "Fastapi" - wrong on a CV and wrong in a report the candidate reads.
  */
+// Shorthand a posting actually uses ("Postgres", "K8s") is NOT rewritten to its
+// long form here. The extension pairs the posting's own string against the CV,
+// so normalising it away silently loses the match it was built to win.
 const CANONICAL_CASE: Record<string, string> = {
   "etl": "ETL", "elt": "ELT", "dbt": "dbt", "fastapi": "FastAPI",
   "sql": "SQL", "nosql": "NoSQL", "api": "API", "apis": "APIs",
@@ -560,7 +562,7 @@ const CANONICAL_CASE: Record<string, string> = {
   "pytest": "pytest", "presto": "Presto", "nltk": "NLTK", "mlflow": "MLflow",
   "xgboost": "XGBoost", "shap": "SHAP", "ifrs 9": "IFRS 9", "aml": "AML",
   "hipaa": "HIPAA", "iso 27001": "ISO 27001", "rbac": "RBAC", "llm": "LLM", "llms": "LLMs",
-  "js": "JS", "k8s": "Kubernetes", "tensorflow.js": "TensorFlow.js",
+  "js": "JS", "tensorflow.js": "TensorFlow.js",
 };
 
 export interface RequirementList {
