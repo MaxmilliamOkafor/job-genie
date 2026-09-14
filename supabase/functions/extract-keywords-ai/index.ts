@@ -286,17 +286,19 @@ serve(async (req) => {
       ...(keywords.soft_skills || []),
     ];
 
-    // One entry per requirement: 12-20 is the honest range for a typical posting.
-    const uniqueKeywords = collapseRequirements(allKeywords, 20).terms;
-    const highPriority: string[] = collapseRequirements(keywords.priority_keywords || [], 15).terms;
+    // Duplicate phrasings collapse, but a distinct requirement is never cut for
+    // being past a cap: an unextracted requirement can never be matched.
+    const uniqueKeywords = collapseRequirements(allKeywords, 60).terms;
+    const highPriority: string[] = collapseRequirements(keywords.priority_keywords || [], 25).terms;
     const mediumPriority: string[] = collapseRequirements(
       [...(keywords.required_skills || []), ...(keywords.tools_and_platforms || [])],
-      20,
+      40,
     ).terms.filter((k: string) => !highPriority.some((h) => h.toLowerCase() === k.toLowerCase()));
     const lowPriority: string[] = collapseRequirements(
       [...(keywords.preferred_skills || []), ...(keywords.soft_skills || [])],
-      15,
+      30,
     ).terms.filter((k: string) =>
+
       !highPriority.some((h) => h.toLowerCase() === k.toLowerCase()) &&
       !mediumPriority.some((m) => m.toLowerCase() === k.toLowerCase())
     );
