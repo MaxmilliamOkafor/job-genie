@@ -339,7 +339,10 @@ export function isLiftedProse(term: string): boolean {
   const key = (term || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/\.$/, "");
   if (!key) return true;
   if (ARTICLE_ALLOWLIST.has(key)) return false;
-  if (PROSE_SALVAGE[key]) return false;
+  // A phrase that is already its own canonical skill name is not prose; one that
+  // maps to a different name still needs salvaging.
+  if (PROSE_SALVAGE[key] && PROSE_SALVAGE[key].toLowerCase() === key) return false;
+
   const words = key.split(" ");
   // A requirement is a name, not a clause. Five or more words is prose.
   if (words.length >= 5) return true;
