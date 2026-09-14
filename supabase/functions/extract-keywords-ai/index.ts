@@ -249,6 +249,10 @@ serve(async (req) => {
           .map((k) => String(k || "").trim())
           .filter((k) => k && !isFurniture(k))
           .map((k) => (isLiftedProse(k) ? salvageRequirement(k) : k))
+          // A gerund skill ("Machine Learning") and a five-word certification
+          // ("AWS Certified Solutions Architect Associate") are requirements,
+          // not prose; filtering one out is unrecoverable downstream.
+
           .filter((k): k is string => Boolean(k)),
         50,
       ).terms;
