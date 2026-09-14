@@ -588,7 +588,11 @@ const CANONICAL_CASE: Record<string, string> = {
 };
 
 
+/** Single-letter names that really are skills. */
+const SINGLE_LETTER_SKILLS = new Set(["c", "r"]);
+
 export interface RequirementList {
+
   terms: string[];
   removed: string[];
 }
