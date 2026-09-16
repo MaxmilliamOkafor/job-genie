@@ -426,6 +426,9 @@ const VARIANT_QUALIFIERS = new Set([
   "end", "to", "strong", "solid", "proven", "deep", "advanced", "excellent",
   "good", "hands-on", "practical", "extensive", "demonstrable", "relevant",
   "modern", "enterprise", "full", "complete", "core", "day-to-day",
+  // "ad-hoc data analysis" is "data analysis"; "custom reports" is "reports".
+  "ad-hoc", "ad", "hoc", "custom", "bespoke", "various", "multiple", "complex",
+  "detailed",
 ]);
 
 const GENERIC_TAILS = new Set([
@@ -434,6 +437,8 @@ const GENERIC_TAILS = new Set([
   "activities", "practices", "practice", "administration", "delivery",
   "knowledge", "expertise", "ability", "abilities", "understanding",
   "background", "capability", "capabilities",
+  // "forecasting models" is "forecasting"; "reporting suite" is "reporting".
+  "models", "model", "suite", "suites",
 ]);
 
 /** Requirement phrasings that are the same ask under different words. */
@@ -643,6 +648,9 @@ export function buildRequirementList(
     if (BOILERPLATE.has(key)) { removed.push(term); continue; }
     // Benefits, logistics and application boilerplate are not requirements.
     if (isFurniture(key)) { removed.push(term); continue; }
+    // An output, a quality or a mood is not a skill: "custom reports" and
+    // "independence" can only ever show as a permanent miss.
+    if (isGenericOutcome(key)) { removed.push(term); continue; }
     // Incidental employer names are not skills.
     if (employers.has(key)) { removed.push(term); continue; }
     // A bare seniority word carries no requirement of its own.
@@ -734,4 +742,116 @@ export function reportCoverage(
     literal: { matched, missing, total: terms.length, percent: pct(matched.length) },
     alignment: { supported, unsupported, total: terms.length, percent: pct(supported.length) },
   };
+}
+
+// ============================================================
+// GENERIC OUTPUT AND CULTURE WORDING IS NOT A REQUIREMENT
+//
+// "data-driven recommendations", "custom reports", "ad-hoc data analysis",
+// "complex data sets", "independence", "warmth": none of these appears in a
+// skills section, so none can ever match. The skill is what is wanted
+// ("Forecasting", "Data Analysis"), never the deliverable the posting named or
+// the temperament its culture paragraph advertised.
+// ============================================================
+
+/** Exact phrases that name an output, a quality or a mood, never a skill. */
+const GENERIC_OUTCOMES = new Set([
+  "recommendations", "recommendation", "data-driven recommendations",
+  "reports", "custom reports", "regular reports", "reporting requests",
+  "analysis", "analyses", "ad-hoc analysis", "ad hoc analysis",
+  "ad-hoc data analysis", "ad hoc data analysis", "ad-hoc requests",
+  "data sets", "datasets", "data set", "complex data sets", "complex datasets",
+  "large data sets", "large datasets", "insights", "actionable insights",
+  "deliverables", "results", "outcomes", "impact", "tasks", "daily tasks",
+  "day-to-day tasks", "duties", "responsibilities", "projects",
+  "independence", "autonomy", "warmth", "humility", "positivity", "enthusiasm",
+  "passion", "curiosity", "grit", "hustle", "fun", "kindness", "empathy",
+  "sales performance", "business performance", "high standards",
+  "attention", "initiative", "self-starter", "self starter", "go-getter",
+  "go the extra mile", "extra mile", "team player", "can-do attitude",
+  "hard work", "work ethic", "flexibility", "adaptability", "resilience",
+]);
+
+/** Qualifier + generic head noun: "custom reports", "complex data sets". */
+const OUTCOME_QUALIFIER =
+  /^(?:complex|ad-hoc|ad hoc|custom|bespoke|various|multiple|large|high-quality|high quality|detailed|data-driven|regular|day-to-day)\s+/;
+const OUTCOME_HEAD =
+  /^(?:reports?|reporting|analysis|analyses|data ?sets?|recommendations?|insights?|requests?|tasks?|projects?|deliverables?|dashboards?|spreadsheets?|documents?|files?|problems?|questions?)$/;
+
+/**
+ * True when the string names an output, a quality or a mood rather than a skill.
+ * The test the user set: would this string appear in a skills section?
+ */
+export function isGenericOutcome(term: string): boolean {
+  const key = (term || "").toLowerCase().trim().replace(/\s+/g, " ").replace(/[.,;]+$/, "");
+  if (!key) return true;
+  if (NAMED_SKILLS.has(key)) return false;
+  if (GENERIC_OUTCOMES.has(key)) return true;
+  const stripped = key.replace(OUTCOME_QUALIFIER, "").trim();
+  if (stripped !== key && OUTCOME_HEAD.test(stripped)) return true;
+  // "Onboarding" is never bare: IT, employee and customer onboarding are three
+  // different requirements, and a bare chip cannot be matched to any of them.
+  if (key === "onboarding" || key === "on-boarding") return true;
+  return false;
+}
+
+// ============================================================
+// ONLY SECTIONS THAT STATE REQUIREMENTS ARE READ
+//
+// "Benefits Administration" reached a CV from an employee benefits list,
+// "Training" from a training budget, "Mentorship" from a mentorship programme,
+// "Ownership" from equity. A statement in the benefits section is a promise to
+// the employee, however skill-shaped its words are, so those sections are
+// removed BEFORE the model ever sees the posting.
+// ============================================================
+
+const NON_REQUIREMENT_HEADING =
+  /(benefit|perks?|compensation|salary|remuneration|equity|stock|pension|what (?:we|you'll) (?:offer|get)|why (?:join|work)|about (?:us|the (?:company|role|team)|our)|who we are|our (?:story|values|culture|mission|team|people)|values|culture|diversity|inclusion|belonging|equal (?:employment )?opportunity|eeo|e-verify|legal|privacy|data protection|gdpr|accommodation|disability|how to apply|application (?:process|instructions)|hiring process|interview process|next steps|life at|our offer|package)/i;
+
+const REQUIREMENT_HEADING =
+  /(requirement|qualification|skills?|experience|responsibilit|duties|what you'?ll do|what you'?ll bring|what we'?re looking for|about you|you (?:will|should) have|must have|nice to have|the role|role overview|day to day|day-to-day|tech stack|technologies)/i;
+
+function looksLikeHeading(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.length > 80) return false;
+  if (t.endsWith(":")) return true;
+  if (/[.!?]$/.test(t)) return false;
+  const words = t.split(/\s+/);
+  if (words.length > 8) return false;
+  return t === t.toUpperCase() || /^[A-Z]/.test(t);
+}
+
+/**
+ * Removes benefits, perks, compensation, company description, values and
+ * culture, legal/EEO, privacy and application-instruction sections. A section
+ * whose heading names requirements is always kept, and prose with no headings
+ * at all is returned untouched rather than silently emptied.
+ */
+export function stripNonRequirementSections(
+  jobDescription: string,
+): { text: string; removedSections: string[] } {
+  const lines = (jobDescription || "").split(/\r?\n/);
+  const kept: string[] = [];
+  const removedSections: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    if (looksLikeHeading(line)) {
+      const heading = line.trim();
+      if (REQUIREMENT_HEADING.test(heading)) skipping = false;
+      else if (NON_REQUIREMENT_HEADING.test(heading)) {
+        skipping = true;
+        removedSections.push(heading.replace(/:$/, ""));
+        continue;
+      } else skipping = false;
+    }
+    if (!skipping) kept.push(line);
+  }
+
+  const text = kept.join("\n").trim();
+  // Never hand the model an empty posting because the headings were unusual.
+  if (text.length < Math.min(400, (jobDescription || "").trim().length * 0.3)) {
+    return { text: (jobDescription || "").trim(), removedSections: [] };
+  }
+  return { text, removedSections };
 }
