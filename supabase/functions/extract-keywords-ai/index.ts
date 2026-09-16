@@ -214,7 +214,9 @@ serve(async (req) => {
     // The posting is fenced as untrusted data; no instruction inside it is followed.
     const untrustedBlock = `<untrusted_job_description>\n${truncatedJD.replace(/<\/?untrusted_job_description>/gi, "")}\n</untrusted_job_description>`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    let response: Response;
+    try {
+    response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIKey}`,
@@ -235,6 +237,30 @@ serve(async (req) => {
       // failure, never as an empty 200.
       signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     });
+    } catch (err) {
+      const aborted = (err as any)?.name === 'TimeoutError' || (err as any)?.name === 'AbortError';
+      console.error('OpenAI request failed', { aborted, message: (err as any)?.message });
+      // NEVER an empty 200: the extension must be able to tell a slow service
+      // from a posting with no keywords in it.
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        'extract-keywords-ai',
+        {
+          error: aborted ? `Keyword extraction timed out after ${MODEL_TIMEOUT_MS}ms` : 'Keyword extraction could not reach the AI provider',
+          errorCode: 'ai_upstream',
+          userMessage: aborted
+            ? 'Keyword extraction took too long and was stopped. Try again, or use local extraction for this posting.'
+            : 'Keyword extraction could not reach the AI provider. Check your connection and try again.',
+          provider: 'OpenAI',
+          providerStatus: aborted ? 504 : 502,
+          retryable: true,
+        },
+        corsHeaders,
+        (err as any)?.message,
+        aborted ? 504 : 502,
+      );
+    }
 
     // BENCHMARK: API call time
     benchmarks.apiCallTime = Date.now() - benchmarks.startTime;
@@ -301,6 +327,9 @@ serve(async (req) => {
         (Array.isArray(list) ? list : [])
           .map((k) => String(k || "").trim())
           .filter((k) => k && !isFurniture(k))
+          // An output, a quality or a mood is not a skill: "custom reports",
+          // "complex data sets", "independence" can only ever read as a miss.
+          .filter((k) => !isGenericOutcome(k))
           .map((k) => (isLiftedProse(k) ? salvageRequirement(k) : k))
           // A gerund skill ("Machine Learning") and a five-word certification
           // ("AWS Certified Solutions Architect Associate") are requirements,
@@ -362,6 +391,27 @@ serve(async (req) => {
 
     console.log(`[User ${userId}] Extracted ${result.total} keywords (${highPriority.length} high, ${mediumPriority.length} med, ${lowPriority.length} low priority)`);
     console.log(`[BENCHMARK] JD: ${benchmarks.jdLength} chars (truncated: ${benchmarks.truncatedLength}), API: ${benchmarks.apiCallTime}ms, Parse: ${benchmarks.parseTime}ms, Total: ${benchmarks.totalTime}ms, Keywords: ${benchmarks.keywordCount}`);
+
+    // An empty extraction is a FAILURE state, not a successful empty answer:
+    // a 200 with no keywords is indistinguishable from a broken service.
+    if (result.total === 0) {
+      return await aiErrorResponse(
+        supabase,
+        userId,
+        'extract-keywords-ai',
+        {
+          error: 'No keywords could be extracted from this job description',
+          errorCode: 'ai_upstream',
+          userMessage: 'No keywords could be extracted from this posting. It may hold no stated requirements, or the text may not have loaded fully.',
+          provider: 'OpenAI',
+          providerStatus: 422,
+          retryable: false,
+        },
+        corsHeaders,
+        `model returned ${JSON.stringify(keywords).slice(0, 300)}`,
+        422,
+      );
+    }
 
     return new Response(JSON.stringify({
       ...result,
