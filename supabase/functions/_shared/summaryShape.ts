@@ -409,12 +409,26 @@ export function shortenClause(clause: string, maxLen: number): string {
 }
 
 
-/** The two strongest quantified bullets, highest rank first, no repeats. */
-export function pickOutcomes(experienceBullets: string[]): string[] {
+/**
+ * The two strongest quantified bullets, no repeats.
+ *
+ * Ranked by a before-and-after, then a magnitude, then a percentage, then a
+ * count - but an outcome the posting cares about is chosen over the biggest
+ * number on the CV: a coaching posting is better served by "trained 24 analysts
+ * across two offices" than by a batch job going from six hours to one.
+ */
+export function pickOutcomes(experienceBullets: string[], requirements: string[] = []): string[] {
+  const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
+  const relevance = (line: string) => (wanted.some((r) => hasWord(line, r)) ? 1 : 0);
   const scored = experienceBullets
-    .map((line, index) => ({ clause: outcomeClause(line), rank: rankOutcome(line), index }))
+    .map((line, index) => ({
+      clause: outcomeClause(line),
+      rank: rankOutcome(line),
+      relevant: relevance(line),
+      index,
+    }))
     .filter((c) => c.rank > 0 && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
-    .sort((a, b) => (b.rank - a.rank) || (a.index - b.index));
+    .sort((a, b) => (b.relevant - a.relevant) || (b.rank - a.rank) || (a.index - b.index));
   const out: string[] = [];
   for (const candidate of scored) {
     if (out.some((o) => o.toLowerCase() === candidate.clause.toLowerCase())) continue;
