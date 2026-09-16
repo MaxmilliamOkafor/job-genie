@@ -79,7 +79,14 @@ function yearsFields(text: string): Set<string>[] {
   const fields: Set<string>[] = [];
   for (const match of text.matchAll(YEARS_SPAN)) {
     const after = text.slice((match.index ?? 0) + match[0].length);
-    const phrase = after.match(/^\s*(?:of|in|as)?\s*([^.,;]{0,60})/i)?.[1] ?? "";
+    // Only the words immediately naming the field count: reading further would
+    // sweep in the other side of the comparison and hide the mismatch.
+    const raw = after.match(/^\s*(?:of|in|as)?\s*([^.,;]{0,60})/i)?.[1] ?? "";
+    const phrase = raw
+      .split(/\b(?:that|which|meets?|meeting|satisfies|covers?|and|but|to|for)\b/i)[0]
+      .split(/\s+/)
+      .slice(0, 5)
+      .join(" ");
     fields.push(fieldTokens(phrase));
   }
   return fields;
