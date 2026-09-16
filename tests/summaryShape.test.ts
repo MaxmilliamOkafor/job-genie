@@ -5,6 +5,7 @@ import {
   evidencedRequirements,
   findViolations,
   pickHeldTitle,
+  deriveField,
   pickOutcomes,
   rankOutcome,
   shortenClause,
