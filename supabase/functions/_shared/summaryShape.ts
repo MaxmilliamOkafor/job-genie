@@ -462,18 +462,24 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
     if (place && place.length > 2 && hasWord(text, place)) problems.push(`place name: ${place}`);
   }
 
-  // The opener must be a title the history contains, never the posting's title.
-  const opener = text.split(/[.,;]/)[0] || "";
+  // The summary describes the person by field, never by a job title. A title in
+  // the first line a screener reads is a claim about the profession, and on an
+  // application to another field it is the wrong one.
+  const sentencesAll = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
+  const firstSentence = sentencesAll[0] || "";
+  if (!/^background in\s+\S/i.test(text)) problems.push("does not open with the field");
   const held = ctx.heldTitles.filter(Boolean);
-  const openerHasHeldTitle = held.some((t) => new RegExp(`^\\s*${escapeRe(t)}(?:\\b|$)`, "i").test(opener));
-  if (!openerHasHeldTitle) problems.push("opener is not a held job title");
-  if (
-    ctx.targetTitle &&
-    !held.some((t) => t.toLowerCase() === ctx.targetTitle.trim().toLowerCase()) &&
-    hasWord(opener, ctx.targetTitle)
-  ) {
-    problems.push("opener claims the posting's title");
+  for (const title of held) {
+    if (title.length > 2 && hasWord(firstSentence, title)) problems.push(`job title claimed: ${title}`);
   }
+  if (ctx.targetTitle && ctx.targetTitle.trim().length > 2 && hasWord(text, ctx.targetTitle)) {
+    problems.push("states the posting's title");
+  }
+  // A comma-separated run of short noun phrases is a skills list, not a summary.
+  if (/(?:[A-Za-z0-9+#.\-]+(?:\s+[A-Za-z0-9+#.\-]+)?,\s+){2,}/.test(firstSentence)) {
+    problems.push("comma-separated skill run");
+  }
+
 
   // Two outcomes joined with a semicolon, both carrying a figure.
   const sentences = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
