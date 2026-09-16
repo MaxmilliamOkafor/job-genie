@@ -4,10 +4,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import Profile from './Profile';
 import Settings from './Settings';
 import { ScreeningAnswersEditor } from '@/components/profile/ScreeningAnswersEditor';
+import { ExcludedKeywordsEditor } from '@/components/profile/ExcludedKeywordsEditor';
 
 const TABS = [
   { value: 'profile', label: 'Profile', element: <Profile /> },
   { value: 'answers', label: 'Screening answers', element: <ScreeningAnswersEditor /> },
+  { value: 'excluded', label: 'Excluded terms', element: <ExcludedKeywordsEditor /> },
   { value: 'preferences', label: 'Preferences', element: <Settings /> },
 ];
 
