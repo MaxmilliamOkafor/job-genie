@@ -30,6 +30,7 @@ import {
   placeSkillsInSection,
 } from "../_shared/skillsPlacement.ts";
 import { enforceSummaryShape, type SummaryContext } from "../_shared/summaryShape.ts";
+import { sanitiseDocument } from "../_shared/truthfulness.ts";
 import { enforceEducationSection } from "../_shared/resumeSections.ts";
 import { chooseHeadline, enforceCoverLetterOriginality, isEmployerNameLine } from "../_shared/coverLetter.ts";
 
@@ -4710,6 +4711,7 @@ ${
     const summaryContext: SummaryContext = {
       heldTitles: profileRoles.map((r: any) => String(r?.title || "").trim()).filter(Boolean),
       currentTitle: String(currentRole?.title || "").trim(),
+      field: String(userProfile.field || userProfile.profession || userProfile.discipline || "").trim(),
       targetTitle: jobTitle || "",
       requirements: jdKeywords.allKeywords,
       experienceBullets: experienceBulletsOf(result.tailoredResume || ""),

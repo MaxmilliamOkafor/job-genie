@@ -9,15 +9,23 @@
  *
  * This module holds one shape and enforces it:
  *
- *   <held job title> working across <2-3 posting requirements the EXPERIENCE
- *   section evidences>. <strongest outcome with its figure>; <second outcome
- *   with its figure>.
+ *   Background in <the candidate's actual field, in that field's own words>,
+ *   with strengths in <two capabilities the EXPERIENCE section evidences>.
+ *   <strongest outcome with its figure>; <second outcome with its figure>.
  *
- * It decides nothing about facts: titles come from the employment history,
- * scope terms from the posting's own wording where an experience bullet
- * evidences them, figures verbatim from the bullets. Never a title not held,
- * never an employer, place name, total years, self-describing adjective,
- * self-rating or first person.
+ * It does NOT open with a held job title. On an application to another field a
+ * held title announces the wrong profession in the first line a screener reads,
+ * and on a pivot it is the least relevant true thing on the page. Naming the
+ * field and the strengths says what transfers without claiming a job never held.
+ *
+ * It decides nothing about facts: the field comes from the employment history,
+ * strength terms from the posting's own wording where an experience bullet
+ * evidences them, figures verbatim from the bullets. Never a job title, never an
+ * employer, place name, total years, self-describing adjective, self-rating,
+ * first person, or a comma-separated run of tools.
+ *
+ * No closing sentence names the target role: the extension's recruiter audit
+ * appends one, and two of them read as a draft nobody finished.
  */
 
 export interface SummaryContext {
@@ -25,7 +33,9 @@ export interface SummaryContext {
   heldTitles: string[];
   /** Current role title, used when the posting shares no distinctive title words. */
   currentTitle?: string;
-  /** The posting's title - used only to pick the closest HELD title, never emitted. */
+  /** The candidate's field in its own words, when the profile states it. */
+  field?: string;
+  /** The posting's title - never emitted, and never allowed in the summary. */
   targetTitle: string;
   /** Requirement phrases in the posting's own wording. */
   requirements: string[];
@@ -129,6 +139,73 @@ export function pickHeldTitle(heldTitles: string[], targetTitle: string, current
   }
   return best;
 }
+
+/* ------------------------------------------------------------------ *
+ * The field, in the field's own words
+ * ------------------------------------------------------------------ */
+
+/**
+ * A rank word is not a field, but it does tell you what the work is called:
+ * an engineer works in engineering, an analyst in analysis. The held title is
+ * used only to name the field; it is never printed as a title claim.
+ */
+const RANK_TO_FIELD: Record<string, string> = {
+  engineer: "engineering",
+  engineering: "engineering",
+  developer: "development",
+  architect: "architecture",
+  analyst: "analysis",
+  analytics: "analytics",
+  scientist: "science",
+  manager: "management",
+  management: "management",
+  lead: "leadership",
+  leader: "leadership",
+  director: "leadership",
+  head: "leadership",
+  principal: "practice",
+  officer: "operations",
+  coordinator: "coordination",
+  administrator: "administration",
+  consultant: "consulting",
+  designer: "design",
+  specialist: "practice",
+  technician: "technical operations",
+  operator: "operations",
+  associate: "practice",
+};
+
+const FIELD_STOPWORDS = new Set(["senior", "sr", "junior", "jr", "staff", "chief", "of", "the", "and", "a", "an", "at"]);
+
+/**
+ * The candidate's field, in that field's own words: "Data Analyst" becomes
+ * "data analysis", "Software Engineer" becomes "software engineering",
+ * "AI Product Manager" becomes "AI product management". A profile that states
+ * its own field wins outright.
+ */
+export function deriveField(heldTitles: string[], targetTitle = "", currentTitle?: string, stated?: string): string {
+  const explicit = (stated || "").trim();
+  if (explicit) return explicit;
+  const source = pickHeldTitle(heldTitles, targetTitle, currentTitle) || (currentTitle || "").trim();
+  if (!source) return "";
+  const words = source
+    .replace(/[,/|()]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .filter((w) => !FIELD_STOPWORDS.has(w.toLowerCase()));
+  if (!words.length) return "";
+  const rendered: string[] = [];
+  for (const word of words) {
+    const noun = RANK_TO_FIELD[word.toLowerCase()];
+    // Acronyms keep their case; everything else reads as prose.
+    const plain = word.length > 1 && word === word.toUpperCase() ? word : word.toLowerCase();
+    rendered.push(noun ?? plain);
+  }
+  return rendered.join(" ").replace(/\s+/g, " ").trim();
+}
+
+
 
 /* ------------------------------------------------------------------ *
  * Scope clause
@@ -332,12 +409,26 @@ export function shortenClause(clause: string, maxLen: number): string {
 }
 
 
-/** The two strongest quantified bullets, highest rank first, no repeats. */
-export function pickOutcomes(experienceBullets: string[]): string[] {
+/**
+ * The two strongest quantified bullets, no repeats.
+ *
+ * Ranked by a before-and-after, then a magnitude, then a percentage, then a
+ * count - but an outcome the posting cares about is chosen over the biggest
+ * number on the CV: a coaching posting is better served by "trained 24 analysts
+ * across two offices" than by a batch job going from six hours to one.
+ */
+export function pickOutcomes(experienceBullets: string[], requirements: string[] = []): string[] {
+  const wanted = requirements.map((r) => (r || "").trim()).filter((r) => r.length > 2);
+  const relevance = (line: string) => (wanted.some((r) => hasWord(line, r)) ? 1 : 0);
   const scored = experienceBullets
-    .map((line, index) => ({ clause: outcomeClause(line), rank: rankOutcome(line), index }))
+    .map((line, index) => ({
+      clause: outcomeClause(line),
+      rank: rankOutcome(line),
+      relevant: relevance(line),
+      index,
+    }))
     .filter((c) => c.rank > 0 && c.clause.length > 12 && isGrammaticalOutcome(c.clause))
-    .sort((a, b) => (b.rank - a.rank) || (a.index - b.index));
+    .sort((a, b) => (b.relevant - a.relevant) || (b.rank - a.rank) || (a.index - b.index));
   const out: string[] = [];
   for (const candidate of scored) {
     if (out.some((o) => o.toLowerCase() === candidate.clause.toLowerCase())) continue;
@@ -371,18 +462,24 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
     if (place && place.length > 2 && hasWord(text, place)) problems.push(`place name: ${place}`);
   }
 
-  // The opener must be a title the history contains, never the posting's title.
-  const opener = text.split(/[.,;]/)[0] || "";
+  // The summary describes the person by field, never by a job title. A title in
+  // the first line a screener reads is a claim about the profession, and on an
+  // application to another field it is the wrong one.
+  const sentencesAll = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
+  const firstSentence = sentencesAll[0] || "";
+  if (!/^background in\s+\S/i.test(text)) problems.push("does not open with the field");
   const held = ctx.heldTitles.filter(Boolean);
-  const openerHasHeldTitle = held.some((t) => new RegExp(`^\\s*${escapeRe(t)}(?:\\b|$)`, "i").test(opener));
-  if (!openerHasHeldTitle) problems.push("opener is not a held job title");
-  if (
-    ctx.targetTitle &&
-    !held.some((t) => t.toLowerCase() === ctx.targetTitle.trim().toLowerCase()) &&
-    hasWord(opener, ctx.targetTitle)
-  ) {
-    problems.push("opener claims the posting's title");
+  for (const title of held) {
+    if (title.length > 2 && hasWord(firstSentence, title)) problems.push(`job title claimed: ${title}`);
   }
+  if (ctx.targetTitle && ctx.targetTitle.trim().length > 2 && hasWord(text, ctx.targetTitle)) {
+    problems.push("states the posting's title");
+  }
+  // A comma-separated run of short noun phrases is a skills list, not a summary.
+  if (/(?:[A-Za-z0-9+#.\-]+(?:\s+[A-Za-z0-9+#.\-]+)?,\s+){2,}/.test(firstSentence)) {
+    problems.push("comma-separated skill run");
+  }
+
 
   // Two outcomes joined with a semicolon, both carrying a figure.
   const sentences = text.split(/(?<!\d)\.(?!\d)/).map((s) => s.trim()).filter(Boolean);
@@ -402,27 +499,36 @@ export function findViolations(summary: string, ctx: SummaryContext): string[] {
 
 /** Builds the required shape from the profile and posting. Empty when no figure exists. */
 export function buildSummary(ctx: SummaryContext): string {
-  const title = pickHeldTitle(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle);
-  const outcomes = pickOutcomes(ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets);
-  if (!title || outcomes.length === 0) return "";
+  const field = deriveField(ctx.heldTitles, ctx.targetTitle, ctx.currentTitle, ctx.field);
+  const outcomes = pickOutcomes(
+    ctx.outcomeBullets?.length ? ctx.outcomeBullets : ctx.experienceBullets,
+    ctx.requirements,
+  );
+  if (!field || outcomes.length === 0) return "";
 
-  const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 3);
+  // Strength terms must be in the posting's wording and evidenced by an
+  // experience bullet, never by the skills list alone. Fewer than two qualifying
+  // and the clause is omitted rather than padded.
+  const scopeTerms = evidencedRequirements(ctx.requirements, ctx.experienceBullets, 2);
 
   const assemble = (terms: string[], clauseBudget: number) => {
     const shortened = outcomes.map((c) => shortenClause(c, clauseBudget));
     const outcomeSentence =
       shortened.length >= 2 ? `${upperFirst(shortened[0])}; ${lowerFirst(shortened[1])}.` : `${upperFirst(shortened[0])}.`;
-    const lead = terms.length >= 2 ? `${title} working across ${joinScope(terms)}.` : `${title}.`;
+    const lead =
+      terms.length >= 2
+        ? `Background in ${field}, with strengths in ${lowerFirst(terms[0])} and ${lowerFirst(terms[1])}.`
+        : `Background in ${field}.`;
     return `${lead} ${outcomeSentence}`.replace(/\s+/g, " ").trim();
   };
 
-  // Trim in this order and never touch a figure: the third scope term, then the
-  // outcome clauses at their own comma boundaries, then the scope clause.
+
+  // Trim in this order and never touch a figure: the outcome clauses at their
+  // own comma boundaries, then the strengths clause.
   const attempts: string[] = [
     assemble(scopeTerms, 110),
-    assemble(scopeTerms.slice(0, 2), 110),
-    assemble(scopeTerms.slice(0, 2), 85),
-    assemble(scopeTerms.slice(0, 2), 65),
+    assemble(scopeTerms, 85),
+    assemble(scopeTerms, 65),
     assemble([], 110),
     assemble([], 85),
     assemble([], 65),
@@ -437,7 +543,7 @@ export function buildSummary(ctx: SummaryContext): string {
         /,\s+(cutting|reducing|increasing|improving|replacing|saving|delivering|supporting|processing)\b/i,
         (_match, word: string) => ` and ${(FINITE_PARTICIPLE[word.toLowerCase()] || word).toLowerCase()}`,
       ).split(/,\s+/)[0];
-      const expanded = `${title}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
+      const expanded = `Background in ${field}. ${upperFirst(first)}; ${lowerFirst(shortenClause(outcomes[1], 85))}.`;
       if (expanded.length >= MIN_LEN && expanded.length <= MAX_LEN && findViolations(expanded, ctx).length === 0) {
         return expanded;
       }
