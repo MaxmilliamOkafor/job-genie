@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS excluded_keywords jsonb NOT NULL DEFAULT '[]'::jsonb;

@@ -58,6 +58,8 @@ export interface Profile {
   preferred_ai_provider: string | null;
   openai_enabled: boolean;
   kimi_enabled: boolean;
+  /** Stored exactly as written by this site and the extension: never reordered or deduplicated. */
+  excluded_keywords: any[];
 }
 
 export function useProfile() {
@@ -125,6 +127,9 @@ export function useProfile() {
           preferred_ai_provider: (data as any).preferred_ai_provider || 'openai',
           openai_enabled: (data as any).openai_enabled ?? true,
           kimi_enabled: (data as any).kimi_enabled ?? true,
+          excluded_keywords: Array.isArray((data as any).excluded_keywords)
+            ? ((data as any).excluded_keywords as any[])
+            : [],
         });
       }
     } catch (error) {

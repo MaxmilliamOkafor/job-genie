@@ -767,6 +767,7 @@ export type Database = {
           education: Json | null
           email: string | null
           excluded_companies: string[] | null
+          excluded_keywords: Json
           expected_salary: string | null
           first_name: string | null
           gender: string | null
@@ -832,6 +833,7 @@ export type Database = {
           education?: Json | null
           email?: string | null
           excluded_companies?: string[] | null
+          excluded_keywords?: Json
           expected_salary?: string | null
           first_name?: string | null
           gender?: string | null
@@ -897,6 +899,7 @@ export type Database = {
           education?: Json | null
           email?: string | null
           excluded_companies?: string[] | null
+          excluded_keywords?: Json
           expected_salary?: string | null
           first_name?: string | null
           gender?: string | null
