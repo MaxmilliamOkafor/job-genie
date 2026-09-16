@@ -9,15 +9,23 @@
  *
  * This module holds one shape and enforces it:
  *
- *   <held job title> working across <2-3 posting requirements the EXPERIENCE
- *   section evidences>. <strongest outcome with its figure>; <second outcome
- *   with its figure>.
+ *   Background in <the candidate's actual field, in that field's own words>,
+ *   with strengths in <two capabilities the EXPERIENCE section evidences>.
+ *   <strongest outcome with its figure>; <second outcome with its figure>.
  *
- * It decides nothing about facts: titles come from the employment history,
- * scope terms from the posting's own wording where an experience bullet
- * evidences them, figures verbatim from the bullets. Never a title not held,
- * never an employer, place name, total years, self-describing adjective,
- * self-rating or first person.
+ * It does NOT open with a held job title. On an application to another field a
+ * held title announces the wrong profession in the first line a screener reads,
+ * and on a pivot it is the least relevant true thing on the page. Naming the
+ * field and the strengths says what transfers without claiming a job never held.
+ *
+ * It decides nothing about facts: the field comes from the employment history,
+ * strength terms from the posting's own wording where an experience bullet
+ * evidences them, figures verbatim from the bullets. Never a job title, never an
+ * employer, place name, total years, self-describing adjective, self-rating,
+ * first person, or a comma-separated run of tools.
+ *
+ * No closing sentence names the target role: the extension's recruiter audit
+ * appends one, and two of them read as a draft nobody finished.
  */
 
 export interface SummaryContext {
@@ -25,7 +33,9 @@ export interface SummaryContext {
   heldTitles: string[];
   /** Current role title, used when the posting shares no distinctive title words. */
   currentTitle?: string;
-  /** The posting's title - used only to pick the closest HELD title, never emitted. */
+  /** The candidate's field in its own words, when the profile states it. */
+  field?: string;
+  /** The posting's title - never emitted, and never allowed in the summary. */
   targetTitle: string;
   /** Requirement phrases in the posting's own wording. */
   requirements: string[];
