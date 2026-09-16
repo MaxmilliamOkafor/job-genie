@@ -3404,6 +3404,13 @@ ${JSON.stringify(userProfile.relevantProjects || [], null, 2)}
    - The company name MUST be "${company}" - never use generic placeholders like "your company" or "the company"
    - COMPANY-FIRST BALANCE: Address the company directly - use 'you/your/${company}' at least as often as 'I/my'. Every paragraph must contain at least one sentence about the company's needs or mission, not the candidate.
 
+   THE LETTER MUST NOT RESTATE THE CV (measured: two paragraphs of a real letter shared 61% and 41% of their content words with CV bullets). The reviewer reads both documents, so a restated bullet wastes the one page that can say something new.
+   - Lead EVERY paragraph with the employer's problem, not the candidate's history. The first sentence of a paragraph must be about ${company}, the role, or the work the posting describes.
+   - AT MOST ONE past example per paragraph, ONE sentence long, and only as proof of a forward-looking claim. Never two achievements in one paragraph.
+   - NEVER reuse the wording of a CV bullet. If a bullet reads "Architected a UK retail client's migration to AWS microservices, delivering all 47 services in 11 months", the letter may not restate that achievement at all - pick a different angle or a different point. Any sentence sharing 45% or more of its content words with a bullet is deleted automatically before the letter is exported, so writing one wastes the paragraph.
+   - AT LEAST ONE paragraph must say something specific to ${company} drawn from the posting: their scale, their market, or the problem this role exists to solve.
+   - The CLOSING is exactly TWO sentences and restates nothing.
+
    GAP MITIGATION (CRITICAL - from Rule 13):
    - In paragraph 3, address ANY JD requirements the candidate does NOT directly have
    - For each gap, demonstrate transferable experience or adjacent skills
