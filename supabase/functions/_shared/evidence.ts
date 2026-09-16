@@ -426,6 +426,9 @@ const VARIANT_QUALIFIERS = new Set([
   "end", "to", "strong", "solid", "proven", "deep", "advanced", "excellent",
   "good", "hands-on", "practical", "extensive", "demonstrable", "relevant",
   "modern", "enterprise", "full", "complete", "core", "day-to-day",
+  // "ad-hoc data analysis" is "data analysis"; "custom reports" is "reports".
+  "ad-hoc", "ad", "hoc", "custom", "bespoke", "various", "multiple", "complex",
+  "detailed", "data-driven",
 ]);
 
 const GENERIC_TAILS = new Set([
@@ -434,6 +437,8 @@ const GENERIC_TAILS = new Set([
   "activities", "practices", "practice", "administration", "delivery",
   "knowledge", "expertise", "ability", "abilities", "understanding",
   "background", "capability", "capabilities",
+  // "forecasting models" is "forecasting"; "reporting suite" is "reporting".
+  "models", "model", "modelling"[0] === "" ? "" : "suite", "suites",
 ]);
 
 /** Requirement phrasings that are the same ask under different words. */
