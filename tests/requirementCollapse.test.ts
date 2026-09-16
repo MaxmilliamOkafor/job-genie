@@ -3,7 +3,9 @@ import {
   buildRequirementList,
   collapseRequirements,
   isFurniture,
+  isGenericOutcome,
   isLiftedProse,
+  stripNonRequirementSections,
   salvageRequirement,
 } from '../supabase/functions/_shared/evidence.ts';
 
@@ -186,5 +188,95 @@ describe('acronym case is never altered', () => {
   it('never lowercases IT and never strips punctuation from P&L, C# or C++', () => {
     const { terms } = buildRequirementList(['it', 'p&l', 'c#', 'c++'], [], '');
     expect(terms).toEqual(['IT', 'P&L', 'C#', 'C++']);
+  });
+});
+
+
+describe('a deliverable, a quality or a mood is not a keyword', () => {
+  it('drops the fragments that reached a CV from one posting', () => {
+    for (const term of [
+      'data-driven recommendations', 'sales performance', 'custom reports',
+      'ad-hoc data analysis', 'independence', 'complex data sets',
+    ]) {
+      expect(isGenericOutcome(term)).toBe(true);
+    }
+  });
+
+  it('keeps the skills those fragments were hiding', () => {
+    for (const term of [
+      'Forecasting', 'Data Analysis', 'Reporting', 'Machine Learning',
+      'Software as a Service', 'Managing a Team', 'A/B Testing', 'SQL',
+    ]) {
+      expect(isGenericOutcome(term)).toBe(false);
+    }
+  });
+
+  it('never returns Onboarding bare', () => {
+    expect(isGenericOutcome('Onboarding')).toBe(true);
+    expect(isGenericOutcome('Employee Onboarding')).toBe(false);
+    expect(isGenericOutcome('Customer Onboarding')).toBe(false);
+  });
+
+  it('keeps them out of the requirement list too', () => {
+    const { terms } = buildRequirementList([
+      'Forecasting', 'custom reports', 'independence', 'Python', 'complex data sets',
+    ]);
+    expect(terms).toContain('Forecasting');
+    expect(terms).toContain('Python');
+    expect(terms.join(' | ').toLowerCase()).not.toContain('reports');
+    expect(terms.join(' | ').toLowerCase()).not.toContain('independence');
+  });
+});
+
+describe('one requirement, returned once, in its shortest skill form', () => {
+  it('collapses forecasting models onto forecasting', () => {
+    const { terms } = collapseRequirements(['Forecasting', 'forecasting models']);
+    expect(terms).toEqual(['Forecasting']);
+  });
+
+  it('collapses ad-hoc data analysis onto data analysis', () => {
+    const { terms } = collapseRequirements(['Data Analysis', 'ad-hoc data analysis']);
+    expect(terms).toEqual(['Data Analysis']);
+  });
+});
+
+describe('only sections that state requirements are read', () => {
+  const posting = [
+    'About the role',
+    'You will build forecasting models in Python.',
+    '',
+    'Requirements',
+    'Strong SQL. Experience with Airflow.',
+    '',
+    'Benefits',
+    'We administer your benefits, including dental and a training budget.',
+    'A mentorship programme and equity so you feel ownership.',
+    '',
+    'Our culture',
+    'We hire for warmth and humility.',
+    '',
+    'Equal Employment Opportunity',
+    'We are an equal opportunity employer.',
+  ].join('\n');
+
+  it('keeps the requirement sections', () => {
+    const { text } = stripNonRequirementSections(posting);
+    expect(text).toContain('forecasting models');
+    expect(text).toContain('SQL');
+    expect(text).toContain('Airflow');
+  });
+
+  it('removes benefits, culture and EEO wording before the model sees it', () => {
+    const { text, removedSections } = stripNonRequirementSections(posting);
+    expect(text).not.toContain('dental');
+    expect(text).not.toContain('mentorship');
+    expect(text).not.toContain('warmth');
+    expect(text).not.toContain('equal opportunity employer');
+    expect(removedSections.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('returns the posting untouched when it has no headings to work from', () => {
+    const flat = 'Build data pipelines in Python and SQL, own delivery, and forecast demand.';
+    expect(stripNonRequirementSections(flat).text).toBe(flat);
   });
 });
