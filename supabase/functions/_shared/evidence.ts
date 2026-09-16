@@ -438,7 +438,7 @@ const GENERIC_TAILS = new Set([
   "knowledge", "expertise", "ability", "abilities", "understanding",
   "background", "capability", "capabilities",
   // "forecasting models" is "forecasting"; "reporting suite" is "reporting".
-  "models", "model", "modelling"[0] === "" ? "" : "suite", "suites",
+  "models", "model", "suite", "suites",
 ]);
 
 /** Requirement phrasings that are the same ask under different words. */
