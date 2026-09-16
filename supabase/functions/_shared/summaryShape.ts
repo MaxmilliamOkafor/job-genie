@@ -141,6 +141,73 @@ export function pickHeldTitle(heldTitles: string[], targetTitle: string, current
 }
 
 /* ------------------------------------------------------------------ *
+ * The field, in the field's own words
+ * ------------------------------------------------------------------ */
+
+/**
+ * A rank word is not a field, but it does tell you what the work is called:
+ * an engineer works in engineering, an analyst in analysis. The held title is
+ * used only to name the field; it is never printed as a title claim.
+ */
+const RANK_TO_FIELD: Record<string, string> = {
+  engineer: "engineering",
+  engineering: "engineering",
+  developer: "development",
+  architect: "architecture",
+  analyst: "analysis",
+  analytics: "analytics",
+  scientist: "science",
+  manager: "management",
+  management: "management",
+  lead: "leadership",
+  leader: "leadership",
+  director: "leadership",
+  head: "leadership",
+  principal: "practice",
+  officer: "operations",
+  coordinator: "coordination",
+  administrator: "administration",
+  consultant: "consulting",
+  designer: "design",
+  specialist: "practice",
+  technician: "technical operations",
+  operator: "operations",
+  associate: "practice",
+};
+
+const FIELD_STOPWORDS = new Set(["senior", "sr", "junior", "jr", "staff", "chief", "of", "the", "and", "a", "an", "at"]);
+
+/**
+ * The candidate's field, in that field's own words: "Data Analyst" becomes
+ * "data analysis", "Software Engineer" becomes "software engineering",
+ * "AI Product Manager" becomes "AI product management". A profile that states
+ * its own field wins outright.
+ */
+export function deriveField(heldTitles: string[], targetTitle = "", currentTitle?: string, stated?: string): string {
+  const explicit = (stated || "").trim();
+  if (explicit) return explicit;
+  const source = pickHeldTitle(heldTitles, targetTitle, currentTitle) || (currentTitle || "").trim();
+  if (!source) return "";
+  const words = source
+    .replace(/[,/|()]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .filter((w) => !FIELD_STOPWORDS.has(w.toLowerCase()));
+  if (!words.length) return "";
+  const rendered: string[] = [];
+  for (const word of words) {
+    const noun = RANK_TO_FIELD[word.toLowerCase()];
+    // Acronyms keep their case; everything else reads as prose.
+    const plain = word.length > 1 && word === word.toUpperCase() ? word : word.toLowerCase();
+    rendered.push(noun ?? plain);
+  }
+  return rendered.join(" ").replace(/\s+/g, " ").trim();
+}
+
+
+
+/* ------------------------------------------------------------------ *
  * Scope clause
  * ------------------------------------------------------------------ */
 
