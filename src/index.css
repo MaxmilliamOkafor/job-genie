@@ -7,33 +7,33 @@
 @layer base {
   :root {
     /* Job Genie workspace: navy surfaces, violet navigation, teal actions */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 240 37% 7%;
+    --foreground: 240 20% 93%;
 
-    --card: 222 44% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 240 30% 12%;
+    --card-foreground: 240 20% 93%;
 
-    --popover: 222 44% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 30% 12%;
+    --popover-foreground: 240 20% 93%;
 
-    --primary: 171 77% 64%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 258 88% 68%;
+    --primary-foreground: 240 37% 7%;
 
-    --secondary: 222 33% 20%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 240 26% 17%;
+    --secondary-foreground: 240 20% 93%;
 
-    --muted: 222 33% 20%;
-    --muted-foreground: 215 25% 74%;
+    --muted: 240 26% 17%;
+    --muted-foreground: 240 15% 72%;
 
-    --accent: 252 95% 85%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 187 82% 60%;
+    --accent-foreground: 240 37% 7%;
 
     --destructive: 0 72% 58%;
-    --destructive-foreground: 222 47% 11%;
+    --destructive-foreground: 240 37% 7%;
 
-    --border: 222 28% 24%;
-    --input: 222 28% 24%;
-    --ring: 171 77% 64%;
+    --border: 240 24% 21%;
+    --input: 240 24% 21%;
+    --ring: 187 82% 60%;
 
     --radius: 0.75rem;
 
