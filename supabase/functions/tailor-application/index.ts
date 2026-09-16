@@ -4439,6 +4439,29 @@ ${
       if (scrubbed.removed.length) {
         console.log(`[COVER LETTER] Removed ${scrubbed.removed.length} enthusiasm/praise/prediction sentences`);
       }
+
+      // THE LETTER MUST NOT RESTATE THE CV.
+      // Any sentence sharing 45% or more of its content words with a CV bullet
+      // is the same claim read twice, and at most one past example survives per
+      // paragraph - used as proof of a forward-looking claim, never as history.
+      const cvBullets = (result.tailoredResume || "")
+        .split("\n")
+        .filter((l: string) => /^\s*[-•*]\s+\S/.test(l))
+        .map((l: string) => l.trim());
+      const original = enforceCoverLetterOriginality(result.tailoredCoverLetter, cvBullets);
+      result.tailoredCoverLetter = original.text;
+      result.coverLetterRestatementRemoved = original.removedSentences;
+      result.coverLetterOverlap = {
+        maxSentenceOverlap: Math.round(original.maxSentenceOverlap * 100),
+        paragraphOverlaps: original.paragraphOverlaps.map((p) => Math.round(p * 100)),
+        meaning:
+          "Percentage of a sentence's or paragraph's content words that also appear in a single CV bullet, measured on the exported letter. Anything at 45% or above was removed.",
+      };
+      if (original.removedSentences.length) {
+        console.warn(
+          `[COVER LETTER] Removed ${original.removedSentences.length} sentence(s) restating the CV or repeating a past example`,
+        );
+      }
     }
 
     result.removedUnrecordedSkills = invented;
